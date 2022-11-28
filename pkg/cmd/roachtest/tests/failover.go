@@ -76,25 +76,24 @@ func runFailoverNonSystemCrash(ctx context.Context, t test.Test, c cluster.Clust
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
 
 	t.Status("configuring cluster")
 	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
-	conn2 := c.Conn(ctx, t.L(), 1) // for updates, while we're reading from conn
 	rows, err := conn.QueryContext(ctx, `SELECT target FROM [SHOW ALL ZONE CONFIGURATIONS]`)
 	require.NoError(t, err)
 	for rows.Next() {
 		var target string
 		require.NoError(t, rows.Scan(&target))
-		_, err = conn2.ExecContext(ctx, fmt.Sprintf(
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(
 			`ALTER %s CONFIGURE ZONE USING num_replicas = 3, constraints = '[-node4, -node5, -node6]'`,
 			target))
 		require.NoError(t, err)
 	}
 	require.NoError(t, rows.Err())
-	require.NoError(t, conn2.Close())
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
