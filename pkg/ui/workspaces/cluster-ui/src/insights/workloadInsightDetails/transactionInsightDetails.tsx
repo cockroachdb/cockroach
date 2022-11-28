@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useContext, useEffect } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { ArrowLeft } from "@cockroachlabs/icons";
@@ -38,6 +38,7 @@ import {
   InsightRecommendation,
   TransactionInsightEventDetails,
 } from "../types";
+import { SortSetting } from "../../sortedtable";
 
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
@@ -96,6 +97,10 @@ export const TransactionInsightDetails: React.FC<
   insightError,
   match,
 }) => {
+  const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "insights",
+  });
   const isCockroachCloud = useContext(CockroachCloudContext);
   const executionID = getMatchParamByName(match, executionIdAttr);
   const noInsights = !insightEventDetails;
@@ -200,6 +205,8 @@ export const TransactionInsightDetails: React.FC<
                     <InsightsSortedTable
                       columns={insightsColumns}
                       data={tableData}
+                      sortSetting={insightsSortSetting}
+                      onChangeSortSetting={setInsightsSortSetting}
                     />
                   </Col>
                 </Row>

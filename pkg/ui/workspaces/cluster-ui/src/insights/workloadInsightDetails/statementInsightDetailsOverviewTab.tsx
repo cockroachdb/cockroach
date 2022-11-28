@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useContext, useMemo } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { Col, Row } from "antd";
 import {
   InsightsSortedTable,
@@ -22,6 +22,7 @@ import {
   InsightRecommendation,
   StatementInsightEvent,
 } from "../types";
+import { SortSetting } from "../../sortedtable";
 import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
 
@@ -76,7 +77,6 @@ const insightsTableData = (
               description: insight.description,
             },
           };
-          break;
         case InsightNameEnum.planRegression:
           return {
             type: "PlanRegression",
@@ -129,6 +129,10 @@ export const StatementInsightDetailsOverviewTab: React.FC<
 
   const insightDetails = insightEventDetails;
   const tableData = insightsTableData(insightDetails);
+  const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "insights",
+  });
 
   return (
     <section className={cx("section")}>
@@ -203,7 +207,12 @@ export const StatementInsightDetailsOverviewTab: React.FC<
       </Row>
       <Row gutter={24} className={tableCx("margin-bottom")}>
         <Col>
-          <InsightsSortedTable columns={insightsColumns} data={tableData} />
+          <InsightsSortedTable
+            sortSetting={insightsSortSetting}
+            onChangeSortSetting={setInsightsSortSetting}
+            columns={insightsColumns}
+            data={tableData}
+          />
         </Col>
       </Row>
     </section>
