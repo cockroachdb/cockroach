@@ -113,7 +113,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1086,10 +1086,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		var systemDeps upgrade.SystemDeps
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
-				NodeLiveness:      nodeLiveness,
-				Dialer:            cfg.nodeDialer,
-				RangeDescIterator: rangedesciter.New(cfg.db),
-				DB:                cfg.db,
+				NodeLiveness:     nodeLiveness,
+				Dialer:           cfg.nodeDialer,
+				RangeDescScanner: rangedesc.NewScanner(cfg.db),
+				DB:               cfg.db,
 			})
 			systemDeps = upgrade.SystemDeps{
 				Cluster:          c,
