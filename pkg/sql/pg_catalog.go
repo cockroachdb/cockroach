@@ -2268,6 +2268,188 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 	},
 }
 
+func addPgProcBuiltinRow(nspOid *tree.DOid, name string, addRow func(...tree.Datum) error) error {
+	props, overloads := builtinsregistry.GetBuiltinProperties(name)
+	isAggregate := props.Class == tree.AggregateClass
+	isWindow := props.Class == tree.WindowClass
+	for _, builtin := range overloads {
+		dName := tree.NewDName(name)
+		dSrc := tree.NewDString(name)
+
+		var retType tree.Datum
+		isRetSet := false
+		if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
+			var retOid oid.Oid
+			if fixedRetType.Family() == types.TupleFamily && builtin.IsGenerator() {
+				isRetSet = true
+				// Functions returning tables with zero, or more than one
+				// columns are marked to return "anyelement"
+				// (e.g. `unnest`)
+				retOid = oid.T_anyelement
+				if len(fixedRetType.TupleContents()) == 1 {
+					// Functions returning tables with exactly one column
+					// are marked to return the type of that column
+					// (e.g. `generate_series`).
+					retOid = fixedRetType.TupleContents()[0].Oid()
+				}
+			} else {
+				retOid = fixedRetType.Oid()
+			}
+			retType = tree.NewDOid(retOid)
+		}
+
+		argTypes := builtin.Types
+		dArgTypes := tree.NewDArray(types.Oid)
+		for _, argType := range argTypes.Types() {
+			if err := dArgTypes.Append(tree.NewDOid(argType.Oid())); err != nil {
+				return err
+			}
+		}
+
+		var argmodes tree.Datum
+		var variadicType tree.Datum
+		switch v := argTypes.(type) {
+		case tree.VariadicType:
+			if len(v.FixedTypes) == 0 {
+				argmodes = proArgModeVariadic
+			} else {
+				ary := tree.NewDArray(types.String)
+				for range v.FixedTypes {
+					if err := ary.Append(tree.NewDString("i")); err != nil {
+						return err
+					}
+				}
+				if err := ary.Append(tree.NewDString("v")); err != nil {
+					return err
+				}
+				argmodes = ary
+			}
+			variadicType = tree.NewDOid(v.VarType.Oid())
+		case tree.HomogeneousType:
+			argmodes = proArgModeVariadic
+			argType := types.Any
+			oid := argType.Oid()
+			variadicType = tree.NewDOid(oid)
+		default:
+			argmodes = tree.DNull
+			variadicType = oidZero
+		}
+		provolatile, proleakproof := builtin.Volatility.ToPostgres()
+		proisstrict := !builtin.CalledOnNullInput
+
+		err := addRow(
+			tree.NewDOid(builtin.Oid),                // oid
+			dName,                                    // proname
+			nspOid,                                   // pronamespace
+			tree.DNull,                               // proowner
+			oidZero,                                  // prolang
+			tree.DNull,                               // procost
+			tree.DNull,                               // prorows
+			variadicType,                             // provariadic
+			tree.DNull,                               // protransform
+			tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
+			tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
+			tree.DBoolFalse,                          // prosecdef
+			tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
+			tree.MakeDBool(tree.DBool(proisstrict)),  // proisstrict
+			tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
+			tree.NewDString(provolatile),             // provolatile
+			tree.DNull,                               // proparallel
+			tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
+			tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
+			retType,                                         // prorettype
+			tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
+			tree.DNull,                                      // proallargtypes
+			argmodes,                                        // proargmodes
+			tree.DNull,                                      // proargnames
+			tree.DNull,                                      // proargdefaults
+			tree.DNull,                                      // protrftypes
+			dSrc,                                            // prosrc
+			tree.DNull,                                      // probin
+			tree.DNull,                                      // proconfig
+			tree.DNull,                                      // proacl
+			// These columns were automatically created by pg_catalog_test's missing column generator.
+			tree.DNull, // prokind
+			tree.DNull, // prosupport
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addPgProcUDFRow(
+	h oidHasher,
+	scDesc catalog.SchemaDescriptor,
+	fnDesc catalog.FunctionDescriptor,
+	addRow func(...tree.Datum) error,
+) error {
+	isStrict := fnDesc.GetNullInputBehavior() != catpb.Function_CALLED_ON_NULL_INPUT
+	argTypes := tree.NewDArray(types.Oid)
+	argModes := tree.NewDArray(types.String)
+	var argNames tree.Datum
+	argNamesArray := tree.NewDArray(types.String)
+	foundAnyArgNames := false
+	for _, param := range fnDesc.GetParams() {
+		if err := argTypes.Append(tree.NewDOid(param.Type.Oid())); err != nil {
+			return err
+		}
+		// We only support IN arguments at the moment.
+		if err := argModes.Append(tree.NewDString("i")); err != nil {
+			return err
+		}
+		if len(param.Name) > 0 {
+			foundAnyArgNames = true
+		}
+		if err := argNamesArray.Append(tree.NewDString(param.Name)); err != nil {
+			return err
+		}
+	}
+	argNames = tree.DNull
+	if foundAnyArgNames {
+		argNames = argNamesArray
+	}
+
+	return addRow(
+		tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
+		tree.NewDName(fnDesc.GetName()),                 // proname
+		schemaOid(scDesc.GetID()),                       // pronamespace
+		h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
+		// In postgres oid of sql language is 14, need to add a mapping if
+		// we are going to support more languages.
+		tree.NewDOid(14), // prolang
+		tree.DNull,       // procost
+		tree.DNull,       // prorows
+		oidZero,          // provariadic
+		tree.DNull,       // protransform
+		tree.DBoolFalse,  // proisagg
+		tree.DBoolFalse,  // proiswindow
+		tree.DBoolFalse,  // prosecdef
+		tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),            // proleakproof
+		tree.MakeDBool(tree.DBool(isStrict)),                         // proisstrict
+		tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset
+		tree.NewDString(funcVolatility(fnDesc.GetVolatility())),      // provolatile
+		tree.DNull, // proparallel
+		tree.NewDInt(tree.DInt(len(fnDesc.GetParams()))), // pronargs
+		tree.NewDInt(tree.DInt(0)),                       // pronargdefaults
+		tree.NewDOid(fnDesc.GetReturnType().Type.Oid()),  // prorettype
+		tree.NewDOidVectorFromDArray(argTypes),           // proargtypes
+		tree.DNull,                                       // proallargtypes
+		argModes,                                         // proargmodes
+		argNames,                                         // proargnames
+		tree.DNull,                                       // proargdefaults
+		tree.DNull,                                       // protrftypes
+		tree.NewDString(fnDesc.GetFunctionBody()),        // prosrc
+		tree.DNull,                                       // probin
+		tree.DNull,                                       // proconfig
+		tree.DNull,                                       // proacl
+		// These columns were automatically created by pg_catalog_test's missing column generator.
+		tree.DNull, // prokind
+		tree.DNull, // prosupport
+	)
+}
+
 var pgCatalogProcTable = virtualSchemaTable{
 	comment: `built-in functions (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
@@ -2279,6 +2461,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		// the downside is that the NamespaceOid would change if pg_catalog.pg_proc
 		// is selected from a different database. But this is probably fine for
 		// builtin function since they don't really belong to any database.
+
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				nspOid := tree.NewDOid(catconstants.PgCatalogID)
@@ -2293,112 +2476,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					if unicode.IsUpper(first) {
 						continue
 					}
-					props, overloads := builtinsregistry.GetBuiltinProperties(name)
-					isAggregate := props.Class == tree.AggregateClass
-					isWindow := props.Class == tree.WindowClass
-					for _, builtin := range overloads {
-						dName := tree.NewDName(name)
-						dSrc := tree.NewDString(name)
-
-						var retType tree.Datum
-						isRetSet := false
-						if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
-							var retOid oid.Oid
-							if fixedRetType.Family() == types.TupleFamily && builtin.IsGenerator() {
-								isRetSet = true
-								// Functions returning tables with zero, or more than one
-								// columns are marked to return "anyelement"
-								// (e.g. `unnest`)
-								retOid = oid.T_anyelement
-								if len(fixedRetType.TupleContents()) == 1 {
-									// Functions returning tables with exactly one column
-									// are marked to return the type of that column
-									// (e.g. `generate_series`).
-									retOid = fixedRetType.TupleContents()[0].Oid()
-								}
-							} else {
-								retOid = fixedRetType.Oid()
-							}
-							retType = tree.NewDOid(retOid)
-						}
-
-						argTypes := builtin.Types
-						dArgTypes := tree.NewDArray(types.Oid)
-						for _, argType := range argTypes.Types() {
-							if err := dArgTypes.Append(tree.NewDOid(argType.Oid())); err != nil {
-								return err
-							}
-						}
-
-						var argmodes tree.Datum
-						var variadicType tree.Datum
-						switch v := argTypes.(type) {
-						case tree.VariadicType:
-							if len(v.FixedTypes) == 0 {
-								argmodes = proArgModeVariadic
-							} else {
-								ary := tree.NewDArray(types.String)
-								for range v.FixedTypes {
-									if err := ary.Append(tree.NewDString("i")); err != nil {
-										return err
-									}
-								}
-								if err := ary.Append(tree.NewDString("v")); err != nil {
-									return err
-								}
-								argmodes = ary
-							}
-							variadicType = tree.NewDOid(v.VarType.Oid())
-						case tree.HomogeneousType:
-							argmodes = proArgModeVariadic
-							argType := types.Any
-							oid := argType.Oid()
-							variadicType = tree.NewDOid(oid)
-						default:
-							argmodes = tree.DNull
-							variadicType = oidZero
-						}
-						provolatile, proleakproof := builtin.Volatility.ToPostgres()
-						proisstrict := !builtin.CalledOnNullInput
-
-						err := addRow(
-							tree.NewDOid(builtin.Oid),                // oid
-							dName,                                    // proname
-							nspOid,                                   // pronamespace
-							tree.DNull,                               // proowner
-							oidZero,                                  // prolang
-							tree.DNull,                               // procost
-							tree.DNull,                               // prorows
-							variadicType,                             // provariadic
-							tree.DNull,                               // protransform
-							tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
-							tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
-							tree.DBoolFalse,                          // prosecdef
-							tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
-							tree.MakeDBool(tree.DBool(proisstrict)),  // proisstrict
-							tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
-							tree.NewDString(provolatile),             // provolatile
-							tree.DNull,                               // proparallel
-							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
-							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
-							retType,                                         // prorettype
-							tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
-							tree.DNull,                                      // proallargtypes
-							argmodes,                                        // proargmodes
-							tree.DNull,                                      // proargnames
-							tree.DNull,                                      // proargdefaults
-							tree.DNull,                                      // protrftypes
-							dSrc,                                            // prosrc
-							tree.DNull,                                      // probin
-							tree.DNull,                                      // proconfig
-							tree.DNull,                                      // proacl
-							// These columns were automatically created by pg_catalog_test's missing column generator.
-							tree.DNull, // prokind
-							tree.DNull, // prosupport
-						)
-						if err != nil {
-							return err
-						}
+					err := addPgProcBuiltinRow(nspOid, name, addRow)
+					if err != nil {
+						return err
 					}
 				}
 				return nil
@@ -2419,72 +2499,62 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						if err != nil {
 							return err
 						}
-						isStrict := fnDesc.GetNullInputBehavior() != catpb.Function_CALLED_ON_NULL_INPUT
-						argTypes := tree.NewDArray(types.Oid)
-						argModes := tree.NewDArray(types.String)
-						var argNames tree.Datum
-						argNamesArray := tree.NewDArray(types.String)
-						foundAnyArgNames := false
-						for _, param := range fnDesc.GetParams() {
-							if err := argTypes.Append(tree.NewDOid(param.Type.Oid())); err != nil {
-								return err
-							}
-							// We only support IN arguments at the moment.
-							if err := argModes.Append(tree.NewDString("i")); err != nil {
-								return err
-							}
-							if len(param.Name) > 0 {
-								foundAnyArgNames = true
-							}
-							if err := argNamesArray.Append(tree.NewDString(param.Name)); err != nil {
-								return err
-							}
-						}
-						argNames = tree.DNull
-						if foundAnyArgNames {
-							argNames = argNamesArray
-						}
 
-						return addRow(
-							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
-							tree.NewDName(fnDesc.GetName()),                 // proname
-							schemaOid(scDesc.GetID()),                       // pronamespace
-							h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
-							// In postgres oid of sql language is 14, need to add a mapping if
-							// we are going to support more languages.
-							tree.NewDOid(14), // prolang
-							tree.DNull,       // procost
-							tree.DNull,       // prorows
-							oidZero,          // provariadic
-							tree.DNull,       // protransform
-							tree.DBoolFalse,  // proisagg
-							tree.DBoolFalse,  // proiswindow
-							tree.DBoolFalse,  // prosecdef
-							tree.MakeDBool(tree.DBool(fnDesc.GetLeakProof())),            // proleakproof
-							tree.MakeDBool(tree.DBool(isStrict)),                         // proisstrict
-							tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset
-							tree.NewDString(funcVolatility(fnDesc.GetVolatility())),      // provolatile
-							tree.DNull, // proparallel
-							tree.NewDInt(tree.DInt(len(fnDesc.GetParams()))), // pronargs
-							tree.NewDInt(tree.DInt(0)),                       // pronargdefaults
-							tree.NewDOid(fnDesc.GetReturnType().Type.Oid()),  // prorettype
-							tree.NewDOidVectorFromDArray(argTypes),           // proargtypes
-							tree.DNull,                                       // proallargtypes
-							argModes,                                         // proargmodes
-							argNames,                                         // proargnames
-							tree.DNull,                                       // proargdefaults
-							tree.DNull,                                       // protrftypes
-							tree.NewDString(fnDesc.GetFunctionBody()),        // prosrc
-							tree.DNull,                                       // probin
-							tree.DNull,                                       // proconfig
-							tree.DNull,                                       // proacl
-							// These columns were automatically created by pg_catalog_test's missing column generator.
-							tree.DNull, // prokind
-							tree.DNull, // prosupport
-						)
+						return addPgProcUDFRow(h, scDesc, fnDesc, addRow)
 					})
 				})
 			})
+	},
+	indexes: []virtualIndex{
+		{
+			incomplete: false,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, dbContext catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error) (bool, error) {
+				h := makeOidHasher()
+				coid := tree.MustBeDOid(unwrappedConstraint)
+				ooid := coid.Oid
+
+				name, overload, err := p.ResolveFunctionByOID(ctx, ooid)
+				if err != nil {
+					if errors.Is(err, tree.ErrFunctionUndefined) {
+						return false, nil //nolint:returnerrcheck
+					}
+					return false, err
+				}
+
+				if overload.IsUDF {
+					fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
+						ctx, p.Txn(), descpb.ID(overload.Oid),
+						tree.ObjectLookupFlags{
+							CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+						},
+					)
+					if err != nil {
+						return false, err
+					}
+
+					scDesc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.Txn(), descpb.ID(ooid), tree.SchemaLookupFlags{Required: true},
+					)
+					if err != nil {
+						return false, err
+					}
+
+					err = addPgProcUDFRow(h, scDesc, fnDesc, addRow)
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+
+				} else {
+					err := addPgProcBuiltinRow(tree.NewDOid(catconstants.PgCatalogID), name, addRow)
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+				}
+			},
+		},
 	},
 }
 
