@@ -632,3 +632,9 @@ func (*internalServer) TenantSettings(
 ) error {
 	panic("unimplemented")
 }
+
+func (*internalServer) GetRangeDescriptors(
+	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+) error {
+	panic("unimplemented")
+}

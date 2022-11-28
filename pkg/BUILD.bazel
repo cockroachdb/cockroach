@@ -3052,7 +3052,7 @@ GET_X_DATA_TARGETS = [
     "//pkg/util/quantile:get_x_data",
     "//pkg/util/quotapool:get_x_data",
     "//pkg/util/randutil:get_x_data",
-    "//pkg/util/rangedesciter:get_x_data",
+    "//pkg/util/rangedesc:get_x_data",
     "//pkg/util/retry:get_x_data",
     "//pkg/util/ring:get_x_data",
     "//pkg/util/schedulerlatency:get_x_data",
