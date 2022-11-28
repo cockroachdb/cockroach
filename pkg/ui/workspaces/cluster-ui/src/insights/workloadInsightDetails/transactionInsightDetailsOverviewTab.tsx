@@ -26,12 +26,15 @@ import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import { ContentionEvent, TxnInsightDetails } from "../types";
 
 import classNames from "classnames/bind";
-import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import { CockroachCloudContext } from "../../contexts";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
 
+import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
+import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+
+const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
 
 export interface TransactionInsightDetailsStateProps {
@@ -101,16 +104,16 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   return (
     <div>
-      <section className={tableCx("section")}>
+      <section className={cx("section")}>
         <Row gutter={24}>
-          <Col className="gutter-row" span={24}>
+          <Col span={24}>
             <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
           </Col>
         </Row>
         {insightDetails && (
           <>
-            <Row gutter={24}>
-              <Col className="gutter-row" span={12}>
+            <Row gutter={24} type="flex">
+              <Col span={12}>
                 <SummaryCard>
                   <SummaryCardItem
                     label="Start Time"
@@ -135,7 +138,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                   />
                 </SummaryCard>
               </Col>
-              <Col className="gutter-row" span={12}>
+              <Col span={12}>
                 <SummaryCard>
                   <SummaryCardItem
                     label="Number of Retries"
@@ -167,7 +170,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
               </Col>
             </Row>
             <Row gutter={24} className={tableCx("margin-bottom")}>
-              <Col className="gutter-row" span={24}>
+              <Col span={24}>
                 <InsightsSortedTable
                   columns={insightsColumns}
                   data={insightRecs}
@@ -180,7 +183,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
       {blockingExecutions?.length && insightDetails && (
         <section className={tableCx("section")}>
           <Row gutter={24}>
-            <Col className="gutter-row">
+            <Col>
               <Heading type="h5">
                 {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
                   insightDetails.transactionExecutionID,
