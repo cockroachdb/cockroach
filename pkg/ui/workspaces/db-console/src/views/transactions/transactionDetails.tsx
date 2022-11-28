@@ -42,6 +42,7 @@ export const selectTransaction = createSelector(
       return {
         isLoading: true,
         transaction: null,
+        lastUpdated: null,
       };
     }
     const txnFingerprintId = getMatchParamByName(
@@ -57,6 +58,7 @@ export const selectTransaction = createSelector(
     return {
       isLoading: false,
       transaction: transaction,
+      lastUpdated: transactionState?.setAt?.utc(),
     };
   },
 );
@@ -67,7 +69,10 @@ export default withRouter(
       state: AdminUIState,
       props: TransactionDetailsProps,
     ): TransactionDetailsStateProps => {
-      const { isLoading, transaction } = selectTransaction(state, props);
+      const { isLoading, transaction, lastUpdated } = selectTransaction(
+        state,
+        props,
+      );
       return {
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
@@ -80,6 +85,7 @@ export default withRouter(
           txnFingerprintIdAttr,
         ),
         isLoading: isLoading,
+        lastUpdated: lastUpdated,
       };
     },
     {

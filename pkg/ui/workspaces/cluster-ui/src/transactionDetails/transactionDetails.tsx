@@ -67,8 +67,9 @@ import {
   timeScaleToString,
   toDateRange,
 } from "../timeScaleDropdown";
-import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import moment from "moment";
 
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -88,6 +89,7 @@ export interface TransactionDetailsStateProps {
   transaction: Transaction;
   transactionFingerprintId: string;
   isLoading: boolean;
+  lastUpdated: moment.Moment | null;
 }
 
 export interface TransactionDetailsDispatchProps {
@@ -122,6 +124,8 @@ export class TransactionDetails extends React.Component<
   TransactionDetailsProps,
   TState
 > {
+  refreshDataTimeout: NodeJS.Timeout;
+
   constructor(props: TransactionDetailsProps) {
     super(props);
     this.state = {
@@ -142,7 +146,7 @@ export class TransactionDetails extends React.Component<
     // where the value 10/30 min is selected on the Metrics page.
     const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
     if (ts !== this.props.timeScale) {
-      this.props.onTimeScaleChange(ts);
+      this.changeTimeScale(ts);
     }
   }
 
@@ -184,18 +188,64 @@ export class TransactionDetails extends React.Component<
     }
   };
 
+  changeTimeScale = (ts: TimeScale): void => {
+    if (this.props.onTimeScaleChange) {
+      this.props.onTimeScaleChange(ts);
+    }
+    this.resetPolling(ts.key);
+  };
+
+  clearRefreshDataTimeout() {
+    if (this.refreshDataTimeout != null) {
+      clearTimeout(this.refreshDataTimeout);
+    }
+  }
+
+  // Schedule the next data request depending on the time
+  // range key.
+  resetPolling(key: string) {
+    this.clearRefreshDataTimeout();
+    if (key !== "Custom") {
+      this.refreshDataTimeout = setTimeout(
+        this.refreshData,
+        300000, // 5 minutes
+      );
+    }
+  }
+
   refreshData = (prevTransactionFingerprintId: string): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
     this.getTransactionStateInfo(prevTransactionFingerprintId);
+    this.resetPolling(this.props.timeScale.key);
   };
 
   componentDidMount(): void {
     this.refreshData("");
+    // For the first data fetch for this page, we refresh if there are:
+    // - Last updated is null (no statements fetched previously)
+    // - The time interval is not custom, i.e. we have a moving window
+    // in which case we poll every 5 minutes. For the first fetch we will
+    // calculate the next time to refresh based on when the data was last
+    // updated.
+    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
+      const now = moment();
+      const nextRefresh =
+        this.props.lastUpdated?.clone().add(5, "minutes") || now;
+      setTimeout(
+        this.refreshData,
+        Math.max(0, nextRefresh.diff(now, "milliseconds")),
+        this.props.transactionFingerprintId,
+      );
+    }
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
     }
+  }
+
+  componentWillUnmount(): void {
+    this.clearRefreshDataTimeout();
   }
 
   componentDidUpdate(prevProps: TransactionDetailsProps): void {
@@ -272,7 +322,7 @@ export class TransactionDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>

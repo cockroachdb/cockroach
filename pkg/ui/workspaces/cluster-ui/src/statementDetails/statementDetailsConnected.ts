@@ -45,7 +45,8 @@ import { StatementDetailsRequest } from "../api";
 import { TimeScale } from "../timeScaleDropdown";
 import { getMatchParamByName, statementAttr } from "../util";
 type IDuration = google.protobuf.IDuration;
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const CreateStatementDiagnosticsReportRequest =
   cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
@@ -56,10 +57,8 @@ const CancelStatementDiagnosticsReportRequest =
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
-  const { statementDetails, isLoading, lastError } = selectStatementDetails(
-    state,
-    props,
-  );
+  const { statementDetails, isLoading, lastError, lastUpdated } =
+    selectStatementDetails(state, props);
   return {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
@@ -67,6 +66,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     latestQuery: state.adminUI.sqlDetailsStats.latestQuery,
     latestFormattedQuery: state.adminUI.sqlDetailsStats.latestFormattedQuery,
     statementsError: lastError,
+    lastUpdated: lastUpdated,
     timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
@@ -129,7 +129,7 @@ const mapDispatchToProps = (
       }),
     );
   },
-  onTabChanged: tabName =>
+  onTabChanged: (tabName) =>
     dispatch(
       analyticsActions.track({
         name: "Tab Changed",

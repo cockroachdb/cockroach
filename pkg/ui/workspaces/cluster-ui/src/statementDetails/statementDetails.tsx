@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode, useEffect } from "react";
+import React, { ReactNode } from "react";
 import { Col, Row, Tabs } from "antd";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Text, InlineAlert } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Location } from "history";
 import _, { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
@@ -71,8 +70,10 @@ import {
 import { Delayed } from "../delayed";
 import moment from "moment";
 type IDuration = google.protobuf.IDuration;
-type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type StatementDetailsResponse =
+  cockroach.server.serverpb.StatementDetailsResponse;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const { TabPane } = Tabs;
 
@@ -119,6 +120,7 @@ export interface StatementDetailsStateProps {
   latestQuery: string;
   latestFormattedQuery: string;
   statementsError: Error | null;
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   nodeNames: { [nodeId: string]: string };
   nodeRegions: { [nodeId: string]: string };
@@ -135,15 +137,13 @@ const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
-function getStatementDetailsRequest(
-  timeScale: TimeScale,
-  statementFingerprintID: string,
-  location: Location,
+function getStatementDetailsRequestFromProps(
+  props: StatementDetailsProps,
 ): cockroach.server.serverpb.StatementDetailsRequest {
-  const [start, end] = toRoundedDateRange(timeScale);
+  const [start, end] = toRoundedDateRange(props.timeScale);
   return new cockroach.server.serverpb.StatementDetailsRequest({
-    fingerprint_id: statementFingerprintID,
-    app_names: queryByName(location, appNamesAttr)?.split(","),
+    fingerprint_id: props.statementFingerprintID,
+    app_names: queryByName(props.location, appNamesAttr)?.split(","),
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -188,6 +188,8 @@ export class StatementDetails extends React.Component<
   StatementDetailsState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+  refreshDataTimeout: NodeJS.Timeout;
+
   constructor(props: StatementDetailsProps) {
     super(props);
     const searchParams = new URLSearchParams(props.history.location.search);
@@ -206,7 +208,7 @@ export class StatementDetails extends React.Component<
     // where the value 10/30 min is selected on the Metrics page.
     const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
     if (ts !== this.props.timeScale) {
-      this.props.onTimeScaleChange(ts);
+      this.changeTimeScale(ts);
     }
   }
 
@@ -222,17 +224,33 @@ export class StatementDetails extends React.Component<
   hasDiagnosticReports = (): boolean =>
     this.props.diagnosticsReports.length > 0;
 
-  refreshStatementDetails = (
-    timeScale: TimeScale,
-    statementFingerprintID: string,
-    location: Location,
-  ): void => {
-    const req = getStatementDetailsRequest(
-      timeScale,
-      statementFingerprintID,
-      location,
-    );
+  changeTimeScale = (ts: TimeScale): void => {
+    if (this.props.onTimeScaleChange) {
+      this.props.onTimeScaleChange(ts);
+    }
+    this.resetPolling(ts.key);
+  };
+
+  clearRefreshDataTimeout() {
+    if (this.refreshDataTimeout !== null) {
+      clearTimeout(this.refreshDataTimeout);
+    }
+  }
+
+  resetPolling(key: string) {
+    this.clearRefreshDataTimeout();
+    if (key !== "Custom") {
+      this.refreshDataTimeout = setTimeout(
+        this.refreshStatementDetails,
+        300000, // 5 minutes
+      );
+    }
+  }
+
+  refreshStatementDetails = (): void => {
+    const req = getStatementDetailsRequestFromProps(this.props);
     this.props.refreshStatementDetails(req);
+    this.resetPolling(this.props.timeScale.key);
   };
 
   handleResize = (): void => {
@@ -248,13 +266,24 @@ export class StatementDetails extends React.Component<
   };
 
   componentDidMount(): void {
+    this.refreshStatementDetails();
     window.addEventListener("resize", this.handleResize);
     this.handleResize();
-    this.refreshStatementDetails(
-      this.props.timeScale,
-      this.props.statementFingerprintID,
-      this.props.location,
-    );
+    // For the first data fetch for this page, we refresh if there are:
+    // - Last updated is null (no statement details fetched previously)
+    // - The time interval is not custom, i.e. we have a moving window
+    // in which case we poll every 5 minutes. For the first fetch we will
+    // calculate the next time to refresh based on when the data was last
+    // updated.
+    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
+      const now = moment();
+      const nextRefresh =
+        this.props.lastUpdated?.clone().add(5, "minutes") || now;
+      setTimeout(
+        this.refreshStatementDetails,
+        Math.max(0, nextRefresh.diff(now, "milliseconds")),
+      );
+    }
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
@@ -272,11 +301,7 @@ export class StatementDetails extends React.Component<
       prevProps.statementFingerprintID != this.props.statementFingerprintID ||
       prevProps.location != this.props.location
     ) {
-      this.refreshStatementDetails(
-        this.props.timeScale,
-        this.props.statementFingerprintID,
-        this.props.location,
-      );
+      this.refreshStatementDetails();
     }
 
     if (!this.props.isTenant) {
@@ -523,15 +548,14 @@ export class StatementDetails extends React.Component<
       total_count,
       implicit_txn,
     } = this.props.statementDetails.statement.metadata;
-    const {
-      statement_statistics_per_aggregated_ts,
-    } = this.props.statementDetails;
+    const { statement_statistics_per_aggregated_ts } =
+      this.props.statementDetails;
 
     const nodes: string[] = unique(
-      (stats.nodes || []).map(node => node.toString()),
+      (stats.nodes || []).map((node) => node.toString()),
     ).sort();
     const regions = unique(
-      (stats.nodes || []).map(node => nodeRegions[node.toString()]),
+      (stats.nodes || []).map((node) => nodeRegions[node.toString()]),
     ).sort();
 
     const lastExec =
@@ -562,27 +586,24 @@ export class StatementDetails extends React.Component<
           : 0,
     );
 
-    const executionAndPlanningTimeseries: AlignedData = generateExecuteAndPlanningTimeseries(
-      statsPerAggregatedTs,
-    );
+    const executionAndPlanningTimeseries: AlignedData =
+      generateExecuteAndPlanningTimeseries(statsPerAggregatedTs);
     const executionAndPlanningOps: Partial<Options> = {
       axes: [{}, { label: "Time Spent" }],
       series: [{}, { label: "Execution" }, { label: "Planning" }],
       width: cardWidth,
     };
 
-    const rowsProcessedTimeseries: AlignedData = generateRowsProcessedTimeseries(
-      statsPerAggregatedTs,
-    );
+    const rowsProcessedTimeseries: AlignedData =
+      generateRowsProcessedTimeseries(statsPerAggregatedTs);
     const rowsProcessedOps: Partial<Options> = {
       axes: [{}, { label: "Rows" }],
       series: [{}, { label: "Rows Read" }, { label: "Rows Written" }],
       width: cardWidth,
     };
 
-    const execRetriesTimeseries: AlignedData = generateExecRetriesTimeseries(
-      statsPerAggregatedTs,
-    );
+    const execRetriesTimeseries: AlignedData =
+      generateExecRetriesTimeseries(statsPerAggregatedTs);
     const execRetriesOps: Partial<Options> = {
       axes: [{}, { label: "Retries" }],
       series: [{}, { label: "Retries" }],
@@ -590,9 +611,8 @@ export class StatementDetails extends React.Component<
       width: cardWidth,
     };
 
-    const execCountTimeseries: AlignedData = generateExecCountTimeseries(
-      statsPerAggregatedTs,
-    );
+    const execCountTimeseries: AlignedData =
+      generateExecCountTimeseries(statsPerAggregatedTs);
     const execCountOps: Partial<Options> = {
       axes: [{}, { label: "Execution Counts" }],
       series: [{}, { label: "Execution Counts" }],
@@ -600,9 +620,8 @@ export class StatementDetails extends React.Component<
       width: cardWidth,
     };
 
-    const contentionTimeseries: AlignedData = generateContentionTimeseries(
-      statsPerAggregatedTs,
-    );
+    const contentionTimeseries: AlignedData =
+      generateContentionTimeseries(statsPerAggregatedTs);
     const contentionOps: Partial<Options> = {
       axes: [{}, { label: "Contention" }],
       series: [{}, { label: "Contention" }],
@@ -643,7 +662,7 @@ export class StatementDetails extends React.Component<
                       <Text>Nodes</Text>
                       <Text>
                         {intersperse<ReactNode>(
-                          nodes.map(n => <NodeLink node={n} key={n} />),
+                          nodes.map((n) => <NodeLink node={n} key={n} />),
                           ", ",
                         )}
                       </Text>
@@ -662,7 +681,7 @@ export class StatementDetails extends React.Component<
                   <Text>Application Name</Text>
                   <Text>
                     {intersperse<ReactNode>(
-                      app_names.map(a => <AppLink app={a} key={a} />),
+                      app_names.map((a) => <AppLink app={a} key={a} />),
                       ", ",
                     )}
                   </Text>
@@ -768,7 +787,7 @@ export class StatementDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>

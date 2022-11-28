@@ -28,9 +28,24 @@ import {
   reducer,
   SQLDetailsStatsReducerState,
 } from "./statementDetails.reducer";
-export type StatementDetailsRequest = cockroach.server.serverpb.StatementDetailsRequest;
+
+import moment from "moment";
+
+const lastUpdated = moment();
+
+export type StatementDetailsRequest =
+  cockroach.server.serverpb.StatementDetailsRequest;
 
 describe("SQLDetailsStats sagas", () => {
+  let spy: jest.SpyInstance;
+  beforeAll(() => {
+    spy = jest.spyOn(moment, "utc").mockImplementation(() => lastUpdated);
+  });
+
+  afterAll(() => {
+    spy.mockRestore();
+  });
+
   const action: PayloadAction<StatementDetailsRequest> = {
     payload: cockroach.server.serverpb.StatementDetailsRequest.create({
       fingerprint_id: "SELECT * FROM crdb_internal.node_build_info",
@@ -40,8 +55,8 @@ describe("SQLDetailsStats sagas", () => {
   };
   const key =
     "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0";
-  const SQLDetailsStatsResponse = new cockroach.server.serverpb.StatementDetailsResponse(
-    {
+  const SQLDetailsStatsResponse =
+    new cockroach.server.serverpb.StatementDetailsResponse({
       statement: {
         metadata: {
           query: "SELECT * FROM crdb_internal.node_build_info",
@@ -631,8 +646,7 @@ describe("SQLDetailsStats sagas", () => {
         },
       ],
       internal_app_name_prefix: "$ internal",
-    },
-  );
+    });
 
   const stmtDetailsStatsAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getStatementDetails), SQLDetailsStatsResponse],
@@ -659,12 +673,14 @@ describe("SQLDetailsStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLDetailsStatsReducerState>({
           cachedData: {
-            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
-              data: SQLDetailsStatsResponse,
-              lastError: null,
-              valid: true,
-              inFlight: false,
-            },
+            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0":
+              {
+                data: SQLDetailsStatsResponse,
+                lastError: null,
+                valid: true,
+                inFlight: false,
+                lastUpdated: lastUpdated,
+              },
           },
           latestQuery: "",
           latestFormattedQuery: "",
@@ -685,12 +701,14 @@ describe("SQLDetailsStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLDetailsStatsReducerState>({
           cachedData: {
-            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
-              data: null,
-              lastError: error,
-              valid: false,
-              inFlight: false,
-            },
+            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0":
+              {
+                data: null,
+                lastError: error,
+                valid: false,
+                inFlight: false,
+                lastUpdated: lastUpdated,
+              },
           },
           latestQuery: "",
           latestFormattedQuery: "",

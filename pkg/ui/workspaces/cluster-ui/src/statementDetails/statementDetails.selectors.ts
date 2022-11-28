@@ -22,7 +22,10 @@ import {
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
-type StatementDetailsResponseMessage = cockroach.server.serverpb.StatementDetailsResponse;
+import moment from "moment";
+
+type StatementDetailsResponseMessage =
+  cockroach.server.serverpb.StatementDetailsResponse;
 
 export const selectStatementDetails = createSelector(
   (_state: AppState, props: RouteComponentProps): string =>
@@ -40,6 +43,7 @@ export const selectStatementDetails = createSelector(
     statementDetails: StatementDetailsResponseMessage;
     isLoading: boolean;
     lastError: Error;
+    lastUpdated: moment.Moment | null;
   } => {
     // Since the aggregation interval is 1h, we want to round the selected timeScale to include
     // the full hour. If a timeScale is between 14:32 - 15:17 we want to search for values
@@ -58,13 +62,19 @@ export const selectStatementDetails = createSelector(
         statementDetails: statementDetailsStatsData[key].data,
         isLoading: statementDetailsStatsData[key].inFlight,
         lastError: statementDetailsStatsData[key].lastError,
+        lastUpdated: statementDetailsStatsData[key].lastUpdated,
       };
     }
-    return { statementDetails: null, isLoading: true, lastError: null };
+    return {
+      statementDetails: null,
+      isLoading: true,
+      lastError: null,
+      lastUpdated: null,
+    };
   },
 );
 
 export const selectStatementDetailsUiConfig = createSelector(
   (state: AppState) => state.adminUI.uiConfig.pages.statementDetails,
-  statementDetailsUiConfig => statementDetailsUiConfig,
+  (statementDetailsUiConfig) => statementDetailsUiConfig,
 );

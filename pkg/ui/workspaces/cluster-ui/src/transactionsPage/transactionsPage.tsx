@@ -185,6 +185,24 @@ export class TransactionsPage extends React.Component<
     };
   };
 
+  clearRefreshDataTimeout(): void {
+    if (this.refreshDataTimeout != null) {
+      clearTimeout(this.refreshDataTimeout);
+    }
+  }
+
+  // Schedule the next data request depending on the time
+  // range key.
+  resetPolling(key: string): void {
+    this.clearRefreshDataTimeout();
+    if (key !== "Custom") {
+      this.refreshDataTimeout = setTimeout(
+        this.refreshData,
+        300000, // 5 minutes
+      );
+    }
+  }
+
   refreshData = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
@@ -367,27 +385,25 @@ export class TransactionsPage extends React.Component<
     const nodes = isTenant
       ? []
       : Object.keys(nodeRegions)
-          .map(n => Number(n))
+          .map((n) => Number(n))
           .sort();
     const regions = isTenant
       ? []
-      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+      : unique(nodes.map((node) => nodeRegions[node.toString()])).sort();
     // We apply the search filters and app name filters prior to aggregating across Node IDs
     // in order to match what's done on the Statements Page.
     //
     // TODO(davidh): Once the redux layer for TransactionsPage is added to this repo,
     // extract this work into the selector
-    const {
-      transactions: filteredTransactions,
-      activeFilters,
-    } = filterTransactions(
-      searchTransactionsData(search, data?.transactions || [], statements),
-      filters,
-      internal_app_name_prefix,
-      statements,
-      nodeRegions,
-      isTenant,
-    );
+    const { transactions: filteredTransactions, activeFilters } =
+      filterTransactions(
+        searchTransactionsData(search, data?.transactions || [], statements),
+        filters,
+        internal_app_name_prefix,
+        statements,
+        nodeRegions,
+        isTenant,
+      );
 
     const appNames = getTrxAppFilterOptions(
       data?.transactions || [],
@@ -419,7 +435,7 @@ export class TransactionsPage extends React.Component<
               appNames={appNames}
               regions={regions}
               timeLabel={"Transaction fingerprint"}
-              nodes={nodes.map(n => "n" + n)}
+              nodes={nodes.map((n) => "n" + n)}
               activeFilters={activeFilters}
               filters={filters}
               showRegions={regions.length > 1}
@@ -447,16 +463,16 @@ export class TransactionsPage extends React.Component<
             error={this.props?.error}
             render={() => {
               const { pagination } = this.state;
-              const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
-                filteredTransactions,
-                statements,
-              ).map(t => ({
-                stats_data: t.stats_data,
-                node_id: t.node_id,
-                regionNodes: isTenant
-                  ? []
-                  : generateRegionNode(t, statements, nodeRegions),
-              }));
+              const transactionsToDisplay: TransactionInfo[] =
+                aggregateAcrossNodeIDs(filteredTransactions, statements).map(
+                  (t) => ({
+                    stats_data: t.stats_data,
+                    node_id: t.node_id,
+                    regionNodes: isTenant
+                      ? []
+                      : generateRegionNode(t, statements, nodeRegions),
+                  }),
+                );
               const { current, pageSize } = pagination;
               const hasData = data.transactions?.length > 0;
               const isUsedFilter = search?.length > 0;
@@ -470,8 +486,10 @@ export class TransactionsPage extends React.Component<
                 isTenant,
                 search,
               )
-                .filter(c => !(c.name === "regionNodes" && regions.length < 2))
-                .filter(c => !(isTenant && c.hideIfTenant));
+                .filter(
+                  (c) => !(c.name === "regionNodes" && regions.length < 2),
+                )
+                .filter((c) => !(isTenant && c.hideIfTenant));
 
               const isColumnSelected = (
                 c: ColumnDescriptor<TransactionInfo>,
@@ -490,7 +508,7 @@ export class TransactionsPage extends React.Component<
               // values based on stored user selections in local storage and default column configs.
               // Columns that are set to alwaysShow are filtered from the list.
               const tableColumns = columns
-                .filter(c => !c.alwaysShow)
+                .filter((c) => !c.alwaysShow)
                 .map(
                   (c): SelectOption => ({
                     label: getLabel(
@@ -503,7 +521,7 @@ export class TransactionsPage extends React.Component<
                 );
 
               // List of all columns that will be displayed based on the column selection.
-              const displayColumns = columns.filter(c => isColumnSelected(c));
+              const displayColumns = columns.filter((c) => isColumnSelected(c));
 
               const period = timeScaleToString(this.props.timeScale);
 
