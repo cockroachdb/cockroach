@@ -485,6 +485,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.stream_partition(stream_id: int, partition_spec: bytes) -> bytes`:                                                      1550,
 	`crdb_internal.table_span(table_id: int) -> bytes[]`:                                                                                  1321,
 	`crdb_internal.tenant_span(tenant_id: int) -> bytes[]`:                                                                                1320,
+	`crdb_internal.tenant_span(tenant_name: string) -> bytes[]`:                                                                           2047,
 	`crdb_internal.testing_callback(name: string) -> int`:                                                                                 321,
 	`crdb_internal.to_json_as_changefeed_with_flags(tuple, string...) -> bytes`:                                                           470,
 	`crdb_internal.trace_id() -> int`:                                                                                                     1290,
