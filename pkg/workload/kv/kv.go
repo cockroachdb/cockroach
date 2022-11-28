@@ -67,6 +67,7 @@ const (
 type kv struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
+	timeout   time.Duration
 
 	batchSize                            int
 	minBlockSizeBytes, maxBlockSizeBytes int
@@ -153,6 +154,7 @@ var kvMeta = workload.Meta{
 		g.flags.IntVar(&g.insertCount, `insert-count`, 0,
 			`Number of rows to insert before beginning the workload. Keys are inserted `+
 				`uniformly over the key range.`)
+		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -515,6 +517,12 @@ type kvOp struct {
 }
 
 func (o *kvOp) run(ctx context.Context) (retErr error) {
+	if o.config.timeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, o.config.timeout)
+		defer cancel()
+	}
+
 	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
