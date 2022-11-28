@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -506,7 +507,7 @@ func suspectedFullRangeDeletion(ms enginepb.MVCCStats) bool {
 type replicaGCer struct {
 	repl                *Replica
 	count               int32 // update atomically
-	admissionController KVAdmissionController
+	admissionController kvadmission.Controller
 	storeID             roachpb.StoreID
 }
 
@@ -533,7 +534,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	ba.Add(&req)
 	// Since we are talking directly to the replica, we need to explicitly do
 	// admission control here, as we are bypassing server.Node.
-	var admissionHandle AdmissionHandle
+	var admissionHandle kvadmission.Handle
 	if r.admissionController != nil {
 		pri := admissionpb.WorkPriority(gc.AdmissionPriority.Get(&r.repl.ClusterSettings().SV))
 		ba.AdmissionHeader = roachpb.AdmissionHeader{

@@ -302,7 +302,6 @@ const (
 	// supported in cloud storage and KMS.
 	SupportAssumeRoleAuth
 
-	// FixUserfileRelatedDescriptorCorruption adds a migration which uses
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
 	FixUserfileRelatedDescriptorCorruption

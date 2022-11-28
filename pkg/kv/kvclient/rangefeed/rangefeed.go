@@ -55,6 +55,7 @@ type DB interface {
 		startFrom hlc.Timestamp,
 		withDiff bool,
 		eventC chan<- kvcoord.RangeFeedMessage,
+		opts ...kvcoord.RangeFeedOption,
 	) error
 
 	// Scan encapsulates scanning a key span at a given point in time. The method
@@ -287,6 +288,11 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 	// draining when the rangefeed fails.
 	eventCh := make(chan kvcoord.RangeFeedMessage)
 
+	var rangefeedOpts []kvcoord.RangeFeedOption
+	if f.scanConfig.overSystemTable {
+		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
+	}
+
 	for i := 0; r.Next(); i++ {
 		ts := frontier.Frontier()
 		if log.ExpensiveLogEnabled(ctx, 1) {
@@ -296,7 +302,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
-			return f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh)
+			return f.client.RangeFeed(ctx, f.spans, ts, f.withDiff, eventCh, rangefeedOpts...)
 		}
 		processEventsTask := func(ctx context.Context) error {
 			return f.processEvents(ctx, frontier, eventCh)

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -386,7 +387,7 @@ func NewNode(
 		spanConfigAccessor:    spanConfigAccessor,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
-	n.storeCfg.KVAdmissionController = kvserver.MakeKVAdmissionController(
+	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
 		kvAdmissionQ, elasticCPUGrantCoord.ElasticCPUWorkQueue, storeGrantCoords, cfg.Settings,
 	)
 	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
@@ -846,7 +847,7 @@ func (n *Node) registerEnginesForDiskStatsMap(
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
 func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
-	clusterProvisionedBandwidth := kvserver.ProvisionedBandwidthForAdmissionControl.Get(
+	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
 		&n.storeCfg.Settings.SV)
 	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(
 		context.Background(), clusterProvisionedBandwidth, status.GetDiskCounters)
@@ -874,13 +875,13 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.
-func (n *Node) GetTenantWeights() kvserver.TenantWeights {
-	weights := kvserver.TenantWeights{
+func (n *Node) GetTenantWeights() kvadmission.TenantWeights {
+	weights := kvadmission.TenantWeights{
 		Node: make(map[uint64]uint32),
 	}
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		sw := make(map[uint64]uint32)
-		weights.Stores = append(weights.Stores, kvserver.TenantWeightsForStore{
+		weights.Stores = append(weights.Stores, kvadmission.TenantWeightsForStore{
 			StoreID: store.StoreID(),
 			Weights: sw,
 		})
@@ -1082,7 +1083,7 @@ func (n *Node) batchInternal(
 		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
 	}
 
-	var writeBytes *kvserver.StoreWriteBytes
+	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()

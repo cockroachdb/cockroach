@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -45,7 +46,7 @@ import (
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	var writeBytes *StoreWriteBytes
+	var writeBytes *kvadmission.StoreWriteBytes
 	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
 	writeBytes.Release()
 	return br, pErr
@@ -55,7 +56,7 @@ func (s *Store) Send(
 // *StoreWriteBytes return value.
 func (s *Store) SendWithWriteBytes(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {
+) (br *roachpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)

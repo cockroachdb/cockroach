@@ -442,7 +442,7 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	defer cancel()
 	stream1 := &dummyStream{t: t, ctx: ctx, name: "rangefeed1", recv: make(chan *roachpb.RangeFeedEvent)}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
-		err := tc.repls[0].RangeFeed(args, stream1).GoError()
+		err := tc.repls[0].RangeFeed(args, stream1, nil /* pacer */).GoError()
 		if ctx.Err() != nil {
 			return // main goroutine stopping
 		}
@@ -496,7 +496,7 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	// the breaker.
 	stream2 := &dummyStream{t: t, ctx: ctx, name: "rangefeed2", recv: make(chan *roachpb.RangeFeedEvent)}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
-		err := tc.repls[0].RangeFeed(args, stream2).GoError()
+		err := tc.repls[0].RangeFeed(args, stream2, nil /* pacer */).GoError()
 		if ctx.Err() != nil {
 			return // main goroutine stopping
 		}

@@ -278,7 +278,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	}, hlc.Timestamp{WallTime: 4}, iter, true /* withDiff */)
 
 	require.Zero(t, r.metrics.RangeFeedCatchUpScanNanos.Count())
-	require.NoError(t, r.maybeRunCatchUpScan())
+	require.NoError(t, r.maybeRunCatchUpScan(context.Background()))
 	require.True(t, iter.closed)
 	require.NotZero(t, r.metrics.RangeFeedCatchUpScanNanos.Count())
 

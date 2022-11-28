@@ -132,6 +132,7 @@ go_library(
         "//pkg/kv/kvserver/gc",
         "//pkg/kv/kvserver/idalloc",
         "//pkg/kv/kvserver/intentresolver",
+        "//pkg/kv/kvserver/kvadmission",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness",
