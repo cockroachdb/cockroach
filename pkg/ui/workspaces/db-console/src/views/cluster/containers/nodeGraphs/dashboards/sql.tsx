@@ -211,6 +211,58 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Service Latency: SQL Statements, 99.99th percentile"
+      tooltip={
+        <div>
+          Over the last minute, this node executed 99.99% of SQL statements
+          within this time.&nbsp;
+          <em>
+            This time only includes SELECT, INSERT, UPDATE and DELETE statements
+            and does not include network latency between the node and client.
+          </em>
+        </div>
+      }
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {_.map(nodeIDs, node => (
+          <Metric
+            key={node}
+            name="cr.node.sql.service.latency-p99.99"
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Service Latency: SQL Statements, 99.9th percentile"
+      tooltip={
+        <div>
+          Over the last minute, this node executed 99.9% of SQL statements
+          within this time.&nbsp;
+          <em>
+            This time only includes SELECT, INSERT, UPDATE and DELETE statements
+            and does not include network latency between the node and client.
+          </em>
+        </div>
+      }
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {_.map(nodeIDs, node => (
+          <Metric
+            key={node}
+            name="cr.node.sql.service.latency-p99.9"
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Service Latency: SQL Statements, 99th percentile"
       tooltip={
         <div>
