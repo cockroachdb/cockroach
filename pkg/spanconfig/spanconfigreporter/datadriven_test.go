@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -222,7 +222,7 @@ type mockCluster struct {
 
 var _ spanconfigreporter.Liveness = &mockCluster{}
 var _ constraint.StoreResolver = &mockCluster{}
-var _ rangedesciter.Iterator = &mockCluster{}
+var _ rangedesc.Scanner = &mockCluster{}
 var _ spanconfig.StoreReader = &mockCluster{}
 
 func newMockCluster(
@@ -259,7 +259,7 @@ func (s *mockCluster) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.Store
 	}, true
 }
 
-// Iterate implements rangedesciter.Iterator.
+// Iterate implements rangedesc.Iterator.
 func (s *mockCluster) Iterate(
 	_ context.Context, _ int, _ func(), _ roachpb.Span, fn func(...roachpb.RangeDescriptor) error,
 ) error {

@@ -16,7 +16,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
-        "//pkg/util/rangedesciter",
+        "//pkg/util/rangedesc",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -48,7 +48,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/util/rangedesciter",
+        "//pkg/util/rangedesc",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
