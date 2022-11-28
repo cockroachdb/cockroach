@@ -15,7 +15,7 @@ import "antd/lib/col/style";
 import "antd/lib/row/style";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import { TxnContentionInsightDetailsRequest } from "src/api";
 import {
@@ -115,8 +115,9 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                   <SummaryCardItem
                     label="Start Time"
                     value={
-                      insightDetails.startTime?.format(DATE_FORMAT_24_UTC) ??
-                      "no samples"
+                      insightDetails.startTime?.format(
+                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+                      ) ?? "no samples"
                     }
                   />
                   <SummaryCardItem label="Rows Read" value={rowsRead} />
