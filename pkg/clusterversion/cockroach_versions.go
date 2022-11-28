@@ -170,8 +170,6 @@ const (
 	VPrimordial4
 	VPrimordial5
 	VPrimordial6
-	VPrimordial7
-	VPrimordial8
 	VPrimordialMax
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
