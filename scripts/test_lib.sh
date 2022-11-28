@@ -78,7 +78,7 @@ function tool_get_bin {
     go install ${GOBINARGS:-} "${tool}" || return 2
   else
     # shellcheck disable=SC2086
-    run_for_module ./tools/mod run go install ${GOBINARGS:-} "${tool}" || return 2
+    run_for_module ./tools/mod go install ${GOBINARGS:-} "${tool}" || return 2
   fi
 
   # remove the version suffix, such as removing "/v3" from "go.etcd.io/etcd/v3".
