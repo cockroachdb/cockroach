@@ -16,15 +16,22 @@ import {
   ContentionEvent,
   InsightExecEnum,
 } from "../types";
-import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";
+import {
+  insightsTableTitles,
+  QueriesCell,
+  TransactionDetailsLink,
+} from "../workloadInsights/util";
+import { TimeScale } from "../../timeScaleDropdown";
 
 interface InsightDetailsTableProps {
   data: ContentionEvent[];
   execType: InsightExecEnum;
+  setTimeScale?: (tw: TimeScale) => void;
 }
 
 export function makeInsightDetailsColumns(
   execType: InsightExecEnum,
+  setTimeScale: (tw: TimeScale) => void,
 ): ColumnDescriptor<ContentionEvent>[] {
   return [
     {
@@ -36,7 +43,12 @@ export function makeInsightDetailsColumns(
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: ContentionEvent) => String(item.fingerprintID),
+      cell: (item: ContentionEvent) =>
+        TransactionDetailsLink(
+          item.fingerprintID,
+          item.startTime,
+          setTimeScale,
+        ),
       sort: (item: ContentionEvent) => item.fingerprintID,
     },
     {
@@ -87,7 +99,7 @@ export function makeInsightDetailsColumns(
 export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
-  const columns = makeInsightDetailsColumns(props.execType);
+  const columns = makeInsightDetailsColumns(props.execType, props.setTimeScale);
   return (
     <SortedTable className="statements-table" columns={columns} {...props} />
   );

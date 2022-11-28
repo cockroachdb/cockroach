@@ -191,6 +191,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 <WaitTimeDetailsTable
                   data={blockingExecutions}
                   execType={insightDetails.execType}
+                  setTimeScale={setTimeScale}
                 />
               </div>
             </Col>
