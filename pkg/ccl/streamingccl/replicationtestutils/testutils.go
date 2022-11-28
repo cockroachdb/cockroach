@@ -12,6 +12,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
+	"testing"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -28,9 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"net/url"
-	"testing"
-	"time"
 )
 
 type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner)
