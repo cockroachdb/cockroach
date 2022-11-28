@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -610,8 +609,8 @@ https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
 	unimplemented: true,
 }
 
-func getOwnerOID(ctx context.Context, p eval.Planner, desc catalog.Descriptor) (tree.Datum, error) {
-	owner, err := getOwnerOfPrivilegeObject(ctx, p, desc)
+func getOwnerOID(ctx context.Context, p *planner, desc catalog.Descriptor) (tree.Datum, error) {
+	owner, err := p.getOwnerOfPrivilegeObject(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -619,10 +618,8 @@ func getOwnerOID(ctx context.Context, p eval.Planner, desc catalog.Descriptor) (
 	return h.UserOid(owner), nil
 }
 
-func getOwnerName(
-	ctx context.Context, p eval.Planner, desc catalog.Descriptor,
-) (tree.Datum, error) {
-	owner, err := getOwnerOfPrivilegeObject(ctx, p, desc)
+func getOwnerName(ctx context.Context, p *planner, desc catalog.Descriptor) (tree.Datum, error) {
+	owner, err := p.getOwnerOfPrivilegeObject(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -2830,7 +2827,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		// Populating table descriptor dependencies with roles
 		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
-				privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
+				privDesc, err := p.getPrivilegeDescriptor(ctx, table)
 				if err != nil {
 					return err
 				}
@@ -2993,7 +2990,7 @@ var (
 
 func addPGTypeRowForTable(
 	ctx context.Context,
-	p eval.Planner,
+	p *planner,
 	h oidHasher,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
