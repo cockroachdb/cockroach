@@ -60,6 +60,9 @@ id  name   status
 statement error tenant "seven" does not exist
 SHOW TENANT seven
 
+statement error tenant "two" does not have an active replication job
+SHOW TENANT two WITH REPLICATION STATUS
+
 # Test creating a tenant with the same name as an existing tenant, but a unique
 # ID.
 statement error tenant with name "three" already exists
