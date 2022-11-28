@@ -13,7 +13,6 @@
 package dbdesc
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -519,16 +517,9 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 	desc.DeclarativeSchemaChangerState = state
 }
 
-// GetObjectType implements the PrivilegeObject interface.
+// GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Database
-}
-
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (desc *immutable) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	return desc.GetPrivileges(), nil
 }
 
 // SkipNamespace implements the descriptor interface.

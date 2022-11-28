@@ -400,3 +400,13 @@ func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 func (o ObjectType) IsDescriptorBacked() bool {
 	return isDescriptorBacked[o]
 }
+
+// Object represents an object that can have privileges. The privileges
+// can either live on the descriptor or in the system.privileges table.
+type Object interface {
+	// GetObjectType returns the privilege.ObjectType of the Object.
+	GetObjectType() ObjectType
+	// GetName returns the name of the object. For example, the name of a
+	// table, schema or database.
+	GetName() string
+}
