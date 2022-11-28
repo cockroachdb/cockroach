@@ -2,9 +2,9 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "rangedesciter",
-    srcs = ["rangedesciter.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/util/rangedesciter",
+    name = "rangedesc",
+    srcs = ["rangedesc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/rangedesc",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
@@ -16,15 +16,15 @@ go_library(
 )
 
 go_test(
-    name = "rangedesciter_test",
+    name = "rangedesc_test",
     srcs = [
         "main_test.go",
-        "rangedesciter_test.go",
+        "rangedesc_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
-        ":rangedesciter",
+        ":rangedesc",
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
