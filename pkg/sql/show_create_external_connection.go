@@ -89,7 +89,7 @@ func (p *planner) ShowCreateExternalConnection(
 		ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 			ConnectionName: name,
 		}
-		isOwner, err := IsOwner(ctx, p, ecPrivilege, p.User())
+		isOwner, err := isOwner(ctx, p, ecPrivilege, p.User())
 		if err != nil {
 			return nil, err
 		}

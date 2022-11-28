@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -87,7 +86,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	// Note: Implicit types for virtual tables are hardcoded to have USAGE
 	// privileges and this can't be modified. The virtual table itself does have
 	// synthetic privileges (as of v22.2), but accessing those requires a planner
-	// by using GetPrivilegeDescriptor(ctx, planner).
+	// by using getPrivilegeDescriptor.
 	// It is fine to hardcode USAGE for implicit types for virtual tables since
 	// nothing about those types is sensitive.
 	tablePrivs := descriptor.GetPrivileges()
@@ -384,16 +383,8 @@ func (v TableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.Descri
 	return nil
 }
 
-// GetObjectType implements the PrivilegeObject interface.
+// GetObjectType implements the Object interface.
 func (v TableImplicitRecordType) GetObjectType() privilege.ObjectType {
 	v.panicNotSupported("GetObjectType")
 	return ""
-}
-
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (v TableImplicitRecordType) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	v.panicNotSupported("GetPrivilegeDescriptor")
-	return nil, nil
 }

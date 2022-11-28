@@ -516,7 +516,7 @@ func (p *planner) logOperationalEventsOnlyExternally(
 // call to this method elsewhere must find a way to ensure that
 // contributors who later add features do not have to remember to call
 // this to get it right.
-func (p *planner) maybeAudit(privilegeObject catalog.PrivilegeObject, priv privilege.Kind) {
+func (p *planner) maybeAudit(privilegeObject privilege.Object, priv privilege.Kind) {
 	tableDesc, ok := privilegeObject.(catalog.TableDescriptor)
 	if !ok || tableDesc.GetAuditMode() == descpb.TableDescriptor_DISABLED {
 		return
