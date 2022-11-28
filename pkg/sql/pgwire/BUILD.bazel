@@ -13,6 +13,7 @@ go_library(
         "hba_conf.go",
         "ident_map_conf.go",
         "pre_serve.go",
+        "pre_serve_options.go",
         "role_mapper.go",
         "server.go",
         "types.go",
