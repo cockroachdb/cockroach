@@ -13,7 +13,11 @@ import { Link } from "react-router-dom";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { StatementInsightEvent, TxnInsightDetails } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
-import { DATE_FORMAT, Duration, limitText } from "src/util";
+import {
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
+  Duration,
+  limitText,
+} from "src/util";
 
 const stmtColumns: ColumnDescriptor<StatementInsightEvent>[] = [
   {
@@ -46,14 +50,16 @@ const stmtColumns: ColumnDescriptor<StatementInsightEvent>[] = [
   },
   {
     name: "startTime",
-    title: "Start Time",
-    cell: (item: StatementInsightEvent) => item.startTime.format(DATE_FORMAT),
+    title: "Start Time (UTC)",
+    cell: (item: StatementInsightEvent) =>
+      item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
     sort: (item: StatementInsightEvent) => item.startTime.unix(),
   },
   {
     name: "endTime",
-    title: "End Time",
-    cell: (item: StatementInsightEvent) => item.endTime.format(DATE_FORMAT),
+    title: "End Time (UTC)",
+    cell: (item: StatementInsightEvent) =>
+      item.endTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
     sort: (item: StatementInsightEvent) => item.endTime.unix(),
   },
   {

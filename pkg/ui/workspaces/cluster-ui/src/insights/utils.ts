@@ -460,7 +460,7 @@ export function getStmtInsightRecommendations(
     indexRecommendations: insightDetails.indexRecommendations,
     databaseName: insightDetails.databaseName,
     elapsedTimeMillis: insightDetails.elapsedTimeMillis,
-    contentionTime: insightDetails.totalContentionTime.asMilliseconds(),
+    contentionTime: insightDetails.totalContentionTime?.asMilliseconds(),
   };
 
   const recs: InsightRecommendation[] = insightDetails.insights?.map(insight =>
