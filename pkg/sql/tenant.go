@@ -819,18 +819,3 @@ WHERE id = $1`, tenantID, tenantName); err != nil {
 
 	return nil
 }
-
-// GetTenantInfo implements the tree.TenantOperator interface.
-func (p *planner) GetTenantInfo(
-	ctx context.Context, tenantName roachpb.TenantName,
-) (*descpb.TenantInfo, error) {
-	if err := p.RequireAdminRole(ctx, "show tenant"); err != nil {
-		return nil, err
-	}
-
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "show"); err != nil {
-		return nil, err
-	}
-
-	return GetTenantRecordByName(ctx, p.execCfg, p.Txn(), tenantName)
-}

@@ -172,6 +172,9 @@ func NewStreamClient(
 // GetFirstActiveClient iterates through each provided stream address
 // and returns the first client it's able to successfully Dial.
 func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client, error) {
+	if len(streamAddresses) == 0 {
+		return nil, errors.Newf("failed to connect, no partition addresses")
+	}
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
