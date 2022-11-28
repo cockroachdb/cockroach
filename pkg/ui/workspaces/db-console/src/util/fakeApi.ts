@@ -21,6 +21,7 @@ const {
   TableDetailsResponse,
   TableStatsResponse,
   TableIndexStatsResponse,
+  NodesResponse,
 } = cockroach.server.serverpb;
 
 // These test-time functions provide typesafe wrappers around fetchMock,
@@ -72,7 +73,7 @@ export function buildSQLApiDatabasesResponse(databases: string[]) {
       owner: "root",
       primary_region: null,
       secondary_region: null,
-      regions: [],
+      regions: ["gcp-europe-west1", "gcp-europe-west2"],
       survival_goal: null,
     };
   });
@@ -200,6 +201,12 @@ export function stubDatabaseDetails(
     DatabaseDetailsResponse.encode(response),
     API_PREFIX,
   );
+}
+
+export function stubNodesUI(
+  response: cockroach.server.serverpb.INodesResponseExternal,
+) {
+  stubGet(`/nodes_ui`, NodesResponse.encode(response), STATUS_PREFIX);
 }
 
 export function stubTableDetails(

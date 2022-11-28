@@ -37,8 +37,13 @@ export function createNodesByRegionMap(
 // { regionA: [1, 2], regionB: [2, 3] }
 // to:
 // regionA(n1, n2), regionB(n2,n3), ...
+// If the cluster is a tenant cluster, then we redact node info
+// and only display the region name, e.g.
+// regionA(n1, n2), regionB(n2,n3), ... becomes:
+// regionA, regionB, ...
 export function nodesByRegionMapToString(
   nodesByRegion: Record<string, number[]>,
+  isTenant: boolean,
 ): string {
   // Sort the nodes on each key.
   const regions = Object.keys(nodesByRegion).sort();
@@ -49,7 +54,9 @@ export function nodesByRegionMapToString(
   return regions
     .map((region: string) => {
       const nodes = nodesByRegion[region];
-      return `${region}(${nodes.map(id => `n${id}`).join(",")})`;
+      return isTenant
+        ? `${region}`
+        : `${region}(${nodes.map(id => `n${id}`).join(",")})`;
     })
     .join(", ");
 }
@@ -61,10 +68,13 @@ export function nodesByRegionMapToString(
 export function getNodesByRegionString(
   nodes: number[],
   nodeRegions: Record<string, string>,
+  isTenant: boolean,
 ): string {
-  return nodesByRegionMapToString(createNodesByRegionMap(nodes, nodeRegions));
+  return nodesByRegionMapToString(
+    createNodesByRegionMap(nodes, nodeRegions),
+    isTenant,
+  );
 }
-
 // makeTimestamp converts a string to a google.protobuf.Timestamp object.
 export function makeTimestamp(date: string): Timestamp {
   return new protos.google.protobuf.Timestamp({
