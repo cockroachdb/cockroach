@@ -1804,6 +1804,10 @@ func (t *logicTest) setup(
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
+	// Prevent a lint failure "this function is unused" when
+	// bazel.BuiltWithBazel returns false below.
+	_ = t.newTestServerCluster
+
 	if cfg.UseCockroachGoTestserver {
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
