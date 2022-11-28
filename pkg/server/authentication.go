@@ -144,6 +144,7 @@ func (s *authenticationServer) UserLogin(
 			"no username was provided",
 		)
 	}
+	fmt.Println("grpc login method")
 
 	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
 	// case-insensitive. Therefore we need to normalize the username

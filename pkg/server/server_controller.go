@@ -180,6 +180,7 @@ const TenantSelectCookieName = `tenant`
 func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantName := r.Header.Get(TenantSelectHeader)
+	var isMultiTenantScoped bool
 	if tenantName == "" {
 		// Try a cookie instead.
 		if c, _ := r.Cookie(TenantSelectCookieName); c != nil {
@@ -190,6 +191,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		// TODO(knz): Make the default tenant route for HTTP configurable.
 		// See: https://github.com/cockroachdb/cockroach/issues/91741
 		tenantName = catconstants.SystemTenantName
+		isMultiTenantScoped = true
 	}
 	s, err := c.get(ctx, tenantName)
 	if err != nil {
@@ -198,59 +200,67 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "cannot find tenant")
 		return
 	}
-	if r.URL.Path == loginPath {
-		c.routeLogin(tenantName).ServeHTTP(w, r)
-		return
-	}
-	if r.URL.Path == logoutPath {
-		c.routeLogout(tenantName).ServeHTTP(w, r)
-		return
+	// if the client didnt specify tenant name call these for login/logout.
+	if isMultiTenantScoped {
+		if r.URL.Path == loginPath {
+			c.routeLogin().ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == logoutPath {
+			c.routeLogout(tenantName).ServeHTTP(w, r)
+			return
+		}
 	}
 	s.getHTTPHandlerFn()(w, r)
 }
 
 type sessionWriter struct {
-	w    http.ResponseWriter
-	buf  bytes.Buffer
-	code int
+	header http.Header
+	buf    bytes.Buffer
+	code   int
 }
 
 func (sw *sessionWriter) Header() http.Header {
-	return sw.w.Header()
+	fmt.Printf("~~~~~~Header method: %+v\n", sw.header)
+	return sw.header
 }
 
-func (sw *sessionWriter) WriteHeader(statusCode int) {
-	sw.code = statusCode
+func (sw *sessionWriter) WriteHeader(_ int) {
+	sw.code = http.StatusContinue
 }
 
 func (sw *sessionWriter) Write(data []byte) (int, error) {
 	return sw.buf.Write(data)
 }
 
-func (c *serverController) getCurrentServers() map[string]serverEntry {
-	servers := make(map[string]serverEntry)
+func (c *serverController) getCurrentTenantNames() []string {
+	var serverNames []string
 	c.mu.Lock()
-	for name, server := range c.mu.servers {
-		servers[name] = server
+	for name := range c.mu.servers {
+		serverNames = append(serverNames, name)
 	}
 	c.mu.Unlock()
-	return servers
+	return serverNames
 }
 
-func (c *serverController) routeLogin(tenantName string) http.Handler {
+// login for all tenant, find better nane
+func (c *serverController) routeLogin() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		servers := c.getCurrentServers()
-		sw := &sessionWriter{w: w}
+		tenantNames := c.getCurrentTenantNames()
 		var sessionsStr string
-		for name := range servers {
+		for _, name := range tenantNames { // system, app0
+			fmt.Println(name)
+			sw := &sessionWriter{header: w.Header().Clone()}
+			newReq := r.Clone(ctx)
 			server, err := c.get(ctx, name)
 			if err != nil {
 				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
 				w.WriteHeader(http.StatusInternalServerError)
 			}
-			server.getHTTPHandlerFn().ServeHTTP(sw, r)
+			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
 			setCookieHeader := sw.Header().Get("set-cookie")
+			fmt.Printf("~~~~~~routeLogin: %+v\n", sw.Header())
 			if len(setCookieHeader) == 0 {
 				log.Warningf(ctx, "unable to find session cookie for tenant %q", name)
 			} else {
@@ -262,13 +272,6 @@ func (c *serverController) routeLogin(tenantName string) http.Handler {
 			sessionsStr = sessionsStr[:len(sessionsStr)-1]
 		}
 		cookie := http.Cookie{
-			Name:     TenantSelectCookieName,
-			Value:    tenantName,
-			Path:     "/",
-			HttpOnly: false,
-		}
-		http.SetCookie(w, &cookie)
-		cookie = http.Cookie{
 			Name:     SessionCookieName,
 			Value:    sessionsStr,
 			Path:     "/",
@@ -282,25 +285,18 @@ func (c *serverController) routeLogin(tenantName string) http.Handler {
 func (c *serverController) routeLogout(tenantName string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		servers := c.getCurrentServers()
-		for name := range servers {
+		tenantNames := c.getCurrentTenantNames()
+		for _, name := range tenantNames {
+			sw := &sessionWriter{header: w.Header().Clone()}
+			newReq := r.Clone(ctx)
 			server, err := c.get(ctx, name)
 			if err != nil {
 				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
 				w.WriteHeader(http.StatusInternalServerError)
 			}
-			server.getHTTPHandlerFn().ServeHTTP(w, r)
+			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
 		}
-		// Clear cookies.
 		cookie := http.Cookie{
-			Name:     TenantSelectCookieName,
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Expires:  timeutil.Unix(0, 0),
-		}
-		http.SetCookie(w, &cookie)
-		cookie = http.Cookie{
 			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
