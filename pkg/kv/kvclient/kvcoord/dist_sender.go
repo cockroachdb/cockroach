@@ -1957,6 +1957,31 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *roachpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
+
+	getReplicaSliceFilter := func(
+		ctx context.Context, routingPolicy roachpb.RoutingPolicy, hasLeasedholderInfo bool,
+	) ReplicaSliceFilter {
+		// Filter the replicas to only those that are relevant to the routing policy.
+		// NB: When changing leaseholder policy constraint_status_report should be
+		// updated appropriately.
+		switch routingPolicy {
+		case roachpb.RoutingPolicy_LEASEHOLDER:
+			if hasLeasedholderInfo {
+				return OnlyPotentialLeaseholders
+			}
+			// If we don't know where the leaseholder is, we ought to send to the
+			// nearest replica; it likely knows exactly where the leaseholder might
+			// be. Also, it might be the case that this is a global table and the
+			// read can be served directly.
+			fallthrough
+		case roachpb.RoutingPolicy_NEAREST:
+			return AllExtantReplicas
+		default:
+			log.Fatalf(ctx, "unknown routing policy: %s", routingPolicy)
+			return -1 // unreachable
+		}
+	}
+
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	if ba.RoutingPolicy == roachpb.RoutingPolicy_LEASEHOLDER &&
@@ -1965,20 +1990,9 @@ func (ds *DistSender) sendToReplicas(
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
 
-	// Filter the replicas to only those that are relevant to the routing policy.
-	// NB: When changing leaseholder policy constraint_status_report should be
-	// updated appropriately.
-	var replicaFilter ReplicaSliceFilter
-	switch ba.RoutingPolicy {
-	case roachpb.RoutingPolicy_LEASEHOLDER:
-		replicaFilter = OnlyPotentialLeaseholders
-	case roachpb.RoutingPolicy_NEAREST:
-		replicaFilter = AllExtantReplicas
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
-	}
-	desc := routing.Desc()
 	leaseholder := routing.Leaseholder()
+	replicaFilter := getReplicaSliceFilter(ctx, ba.RoutingPolicy, leaseholder != nil)
+	desc := routing.Desc()
 	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, replicaFilter)
 	if err != nil {
 		return nil, err
