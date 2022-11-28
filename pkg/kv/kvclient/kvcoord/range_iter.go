@@ -103,7 +103,8 @@ func (ri *RangeIterator) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPol
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
-	return ri.token.ClosedTimestampPolicy()
+	const defaultPolicy = roachpb.LAG_BY_CLUSTER_SETTING
+	return ri.token.ClosedTimestampPolicy(defaultPolicy)
 }
 
 // Token returns the eviction token corresponding to the range
