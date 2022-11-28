@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
 import {
@@ -88,8 +88,18 @@ export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
   const columns = makeInsightDetailsColumns(props.execType);
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "contention",
+  });
   return (
-    <SortedTable className="statements-table" columns={columns} {...props} />
+    <SortedTable
+      className="statements-table"
+      columns={columns}
+      sortSetting={sortSetting}
+      onChangeSortSetting={setSortSetting}
+      {...props}
+    />
   );
 };
 

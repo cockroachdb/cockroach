@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
@@ -31,6 +31,7 @@ import { CockroachCloudContext } from "../../contexts";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
+import { SortSetting } from "../../sortedtable";
 
 const tableCx = classNames.bind(insightTableStyles);
 
@@ -55,6 +56,10 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   insightDetails,
   setTimeScale,
 }) => {
+  const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "insights",
+  });
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightQueries =
@@ -171,6 +176,8 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 <InsightsSortedTable
                   columns={insightsColumns}
                   data={insightRecs}
+                  sortSetting={insightsSortSetting}
+                  onChangeSortSetting={setInsightsSortSetting}
                 />
               </Col>
             </Row>
