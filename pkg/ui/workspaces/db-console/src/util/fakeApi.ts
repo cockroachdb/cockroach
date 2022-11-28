@@ -21,6 +21,7 @@ const {
   TableDetailsResponse,
   TableStatsResponse,
   TableIndexStatsResponse,
+  NodesResponse,
 } = cockroach.server.serverpb;
 
 // These test-time functions provide typesafe wrappers around fetchMock,
@@ -80,6 +81,12 @@ export function stubDatabaseDetails(
     DatabaseDetailsResponse.encode(response),
     API_PREFIX,
   );
+}
+
+export function stubNodesUI(
+  response: cockroach.server.serverpb.INodesResponseExternal,
+) {
+  stubGet(`/nodes_ui`, NodesResponse.encode(response), STATUS_PREFIX);
 }
 
 export function stubTableDetails(

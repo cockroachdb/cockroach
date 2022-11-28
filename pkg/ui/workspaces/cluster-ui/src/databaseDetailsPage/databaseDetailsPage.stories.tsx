@@ -27,6 +27,7 @@ import {
 
 import * as H from "history";
 import moment from "moment";
+import { defaultFilters } from "src/queryFilter";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabaseDetailsPageProps = {
@@ -49,6 +50,9 @@ const withLoadingIndicator: DatabaseDetailsPageProps = {
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  search: null,
+  filters: defaultFilters,
+  nodeRegions: {},
   location: history.location,
   history,
   match: {
@@ -79,6 +83,9 @@ const withoutData: DatabaseDetailsPageProps = {
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  search: null,
+  filters: defaultFilters,
+  nodeRegions: {},
   location: history.location,
   history,
   match: {
@@ -144,6 +151,9 @@ const withData: DatabaseDetailsPageProps = {
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
   refreshTableStats: () => {},
+  search: null,
+  filters: defaultFilters,
+  nodeRegions: {},
   location: history.location,
   history,
   match: {
