@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var changefeedRetryOptions = retry.Options{
@@ -340,7 +341,7 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 	}
 
-	jobDescription, err := changefeedJobDescription(changefeedStmt.CreateChangefeed, sinkURI, opts)
+	jobDescription, err := changefeedJobDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -812,7 +813,10 @@ func validateSink(
 }
 
 func changefeedJobDescription(
-	changefeed *tree.CreateChangefeed, sinkURI string, opts changefeedbase.StatementOptions,
+	ctx context.Context,
+	changefeed *tree.CreateChangefeed,
+	sinkURI string,
+	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
@@ -825,6 +829,8 @@ func changefeedJobDescription(
 	}
 
 	cleanedSinkURI = redactUser(cleanedSinkURI)
+
+	logSanitizedChangefeedDestination(ctx, cleanedSinkURI)
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
@@ -848,6 +854,10 @@ func redactUser(uri string) string {
 		u.User = url.User(`redacted`)
 	}
 	return u.String()
+}
+
+func logSanitizedChangefeedDestination(ctx context.Context, destination string) {
+	log.Ops.Infof(ctx, "changefeed planning to connect to destination %v", redact.Safe(destination))
 }
 
 func validateDetailsAndOptions(
