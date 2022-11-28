@@ -5504,6 +5504,35 @@ value if you rely on the HLC for accuracy.`,
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
 		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tenant_name", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				tenantName := roachpb.TenantName(name)
+				tenantInfo, err := evalCtx.Tenant.GetTenantInfo(ctx, tenantName)
+				if err != nil {
+					return nil, err
+				}
+				start := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantInfo.ID))
+				end := start.PrefixEnd()
+
+				result := tree.NewDArray(types.Bytes)
+				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
+					return nil, err
+				}
+
+				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
+					return nil, err
+				}
+
+				return result, nil
+			},
+			Info:       "This function returns the span that contains the keys for the given tenant.",
+			Volatility: volatility.Immutable,
+		},
 	),
 	"crdb_internal.table_span": makeBuiltin(
 		tree.FunctionProperties{

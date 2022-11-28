@@ -561,6 +561,9 @@ type TenantOperator interface {
 	// It returns an error if the tenant does not exist.
 	GCTenant(ctx context.Context, tenantID uint64) error
 
+	// GetTenantInfo returns information about the specified tenant.
+	GetTenantInfo(ctx context.Context, tenantName roachpb.TenantName) (*descpb.TenantInfo, error)
+
 	// UpdateTenantResourceLimits reconfigures the tenant resource limits.
 	// See multitenant.TenantUsageServer for more details on the arguments.
 	UpdateTenantResourceLimits(
