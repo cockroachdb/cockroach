@@ -1812,6 +1812,15 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				clusterIdentifierHint,
 		},
 		{
+			name: "composite db name",
+			params: map[string]string{
+				"database": "happy-koala-7.my.db",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "my.db"},
+		},
+		{
 			name: "invalid cluster identifier in database param",
 			params: map[string]string{
 				// Cluster names need to be between 6 to 100 alphanumeric characters.

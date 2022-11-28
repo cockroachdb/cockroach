@@ -768,7 +768,7 @@ func parseDatabaseParam(databaseParam string) (clusterIdentifier, databaseName s
 		return "", "", nil
 	}
 
-	parts := strings.Split(databaseParam, ".")
+	parts := strings.SplitN(databaseParam, ".", 2)
 
 	// Database param provided without cluster name.
 	if len(parts) <= 1 {
@@ -778,7 +778,7 @@ func parseDatabaseParam(databaseParam string) (clusterIdentifier, databaseName s
 	clusterIdentifier, databaseName = parts[0], parts[1]
 
 	// Ensure that the param is in the right format if the delimiter is provided.
-	if len(parts) > 2 || clusterIdentifier == "" || databaseName == "" {
+	if clusterIdentifier == "" || databaseName == "" {
 		return "", "", errors.New("invalid database param")
 	}
 
