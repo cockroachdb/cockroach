@@ -351,7 +351,7 @@ export const statementDetailsReducerObj = new KeyedCachedDataReducer(
   api.getStatementDetails,
   statementDetailsActionNamespace,
   statementDetailsRequestToID,
-  moment.duration(5, "m"),
+  null,
   moment.duration(30, "m"),
 );
 
