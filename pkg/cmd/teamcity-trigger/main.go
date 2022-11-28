@@ -72,8 +72,8 @@ func runTC(queueBuild func(string, map[string]string)) {
 		// By default, run each package for up to 100 iterations.
 		maxRuns := 100
 
-		// By default, run each package for up to 1h.
-		maxTime := 1 * time.Hour
+		// By default, run each package for up to 2h.
+		maxTime := 2 * time.Hour
 
 		// By default, fail the stress run on the first test failure.
 		maxFails := 1
