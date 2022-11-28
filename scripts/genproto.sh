@@ -34,22 +34,22 @@ echo "  - grpc-gateway-root:       ${GRPC_GATEWAY_ROOT}"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
 # directories containing protos to be built
-DIRS="./raft/raftpb"
+DIRS="./raftpb"
 
 log_callout -e "\\nRunning gofast (gogo) proto generation..."
 
 for dir in ${DIRS}; do
-  run pushd "${dir}"
-    run protoc --gofast_out=plugins=grpc:. -I=".:${GOGOPROTO_PATH}:${RAFT_ROOT_DIR}/..:${RAFT_ROOT_DIR}:${GRPC_GATEWAY_ROOT}/third_party/googleapis" \
+  pushd "${dir}"
+    protoc --gofast_out=plugins=grpc:. -I=".:${GOGOPROTO_PATH}:${RAFT_ROOT_DIR}/..:${RAFT_ROOT_DIR}:${GRPC_GATEWAY_ROOT}/third_party/googleapis" \
       --plugin="${GOFAST_BIN}" ./**/*.proto
 
-    run sed -i.bak -E 's|"raft/raftpb"|"go.etcd.io/etcd/raft/v3/raftpb"|g' ./**/*.pb.go
-    run sed -i.bak -E 's|"google/protobuf"|"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"|g' ./**/*.pb.go
+    sed -i.bak -E 's|"raft/raftpb"|"go.etcd.io/etcd/raft/v3/raftpb"|g' ./**/*.pb.go
+    sed -i.bak -E 's|"google/protobuf"|"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"|g' ./**/*.pb.go
 
     rm -f ./**/*.bak
-    run gofmt -s -w ./**/*.pb.go
+    gofmt -s -w ./**/*.pb.go
     run_go_tool "golang.org/x/tools/cmd/goimports" -w ./**/*.pb.go
-  run popd
+  popd
 done
 
 log_success -e "\\n./genproto SUCCESS"
