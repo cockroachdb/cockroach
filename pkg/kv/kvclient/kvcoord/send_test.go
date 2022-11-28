@@ -113,6 +113,12 @@ func (n Node) TenantSettings(
 	panic("unimplemented")
 }
 
+func (n Node) GetRangeDescriptors(
+	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {

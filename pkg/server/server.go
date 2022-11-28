@@ -901,6 +901,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
 		eventsServer:             eventsServer,
+		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 	})
 	if err != nil {
 		return nil, err

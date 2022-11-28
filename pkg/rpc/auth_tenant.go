@@ -124,6 +124,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
+	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
+		return a.authGetRangeDescriptors(tenID, req.(*roachpb.GetRangeDescriptorsRequest))
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
@@ -150,6 +153,12 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
 	}
 	return nil
+}
+
+func (a tenantAuthorizer) authGetRangeDescriptors(
+	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
+) error {
+	return validateSpan(tenID, args.Span)
 }
 
 func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {

@@ -362,6 +362,10 @@ type sqlServerArgs struct {
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
+
+	// rangeDescIteratorFactory is used to construct iterators over range
+	// descriptors.
+	rangeDescIteratorFactory rangedesc.IteratorFactory
 }
 
 type monitorAndMetrics struct {
@@ -858,6 +862,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
+		RangeDescIteratorFactory:  cfg.rangeDescIteratorFactory,
 		SyntheticPrivilegeCache: cacheutil.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
 
