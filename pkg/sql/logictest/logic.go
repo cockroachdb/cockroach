@@ -1804,6 +1804,10 @@ func (t *logicTest) setup(
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
+	// Prevent a lint failure "this function is unused" when
+	// bazel.BuiltWithBazel returns false below.
+	_ = t.newTestServerCluster
+
 	if cfg.UseCockroachGoTestserver {
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
@@ -1823,6 +1827,11 @@ func (t *logicTest) setup(
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		// Prevent a lint failure "this function is unused" when
+		// bazel.BuiltWithBazel returns false above.
+		_ = bootstrapBinaryPath
+
 		localBinaryPath, found := bazel.FindBinary("pkg/cmd/cockroach-short/cockroach-short_/", "cockroach-short")
 		if !found {
 			t.Fatal(errors.New("cockroach binary not found"))
