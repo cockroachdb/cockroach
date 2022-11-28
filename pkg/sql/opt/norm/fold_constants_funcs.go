@@ -411,6 +411,16 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 		default:
 			return nil, false, nil
 		}
+	case oid.T_regproc, oid.T_regprocedure:
+		switch inputFamily {
+		case types.StringFamily, types.OidFamily, types.IntFamily:
+			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
+			if err != nil {
+				return nil, false, err
+			}
+
+			dOid = tree.MustBeDOid(cDatum)
+		}
 	default:
 		return nil, false, nil
 	}

@@ -221,8 +221,10 @@ var none = struct{}{}
 // Add any function that cannot be automatically detected.
 var mappedPopulateFunctions = map[string]string{
 	// Currently pg_type cannot be found automatically by this code because it is
-	// not the populate function.
-	"addPGTypeRow": "PGCatalogType",
+	// not the populate function. Same for pg_proc.
+	"addPGTypeRow":        "PGCatalogType",
+	"addPgProcUDFRow":     "PGCatalogProc",
+	"addPgProcBuiltinRow": "PgCatalogProc",
 }
 
 // schemaCodeFixer have specific configurations to fix the files with virtual
