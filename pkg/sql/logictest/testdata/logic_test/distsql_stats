@@ -1958,11 +1958,6 @@ SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
 
 # Test single column partial statistics creation.
 
-# Disable auto stats collection to avoid new full stats collection
-# when inserting values into the extremes in the table.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
-
 statement ok
 CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (c, d));
 
@@ -2085,6 +2080,16 @@ INSERT INTO a_null VALUES (NULL), (1), (2);
 statement ok
 CREATE STATISTICS a_null_stat ON a FROM a_null;
 
+let $a_null_stats
+SHOW STATISTICS USING JSON FOR TABLE a_null
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE a_null INJECT STATISTICS '$a_null_stats'
+
 statement ok
 INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
 
@@ -2116,6 +2121,16 @@ INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
 statement ok
 CREATE STATISTICS sd ON a FROM d_desc;
 
+let $d_desc_stats
+SHOW STATISTICS USING JSON FOR TABLE d_desc;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE d_desc INJECT STATISTICS '$d_desc_stats'
+
 statement ok
 INSERT INTO d_desc VALUES (0, 0), (5, 50);
 
@@ -2145,6 +2160,16 @@ INSERT INTO d_desc VALUES (NULL, NULL), (NULL, 2);
 
 statement ok
 CREATE STATISTICS sdn ON a FROM d_desc;
+
+let $d_desc_null_stats
+SHOW STATISTICS USING JSON FOR TABLE d_desc;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE d_desc INJECT STATISTICS '$d_desc_null_stats'
 
 statement ok
 CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
@@ -2176,13 +2201,26 @@ statement error pq: table xy does not contain a non-partial forward index with y
 CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
 
 statement ok
-DELETE FROM a_null WHERE a IS NOT NULL;
+CREATE TABLE only_null (a INT, INDEX (a));
 
 statement ok
-CREATE STATISTICS a_null_stat ON a FROM a_null;
+INSERT INTO only_null VALUES (NULL), (NULL), (NULL);
+
+statement ok
+CREATE STATISTICS only_null_stat ON a FROM only_null;
+
+let $only_null_stat
+SHOW STATISTICS USING JSON FOR TABLE only_null;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE only_null INJECT STATISTICS '$only_null_stat';
 
 statement error pq: only NULL values exist in the index, so partial stats cannot be collected
-CREATE STATISTICS only_null_partial ON a FROM a_null USING EXTREMES;
+CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
 
 statement ok
 CREATE INDEX ON xy (y) WHERE y > 5;
