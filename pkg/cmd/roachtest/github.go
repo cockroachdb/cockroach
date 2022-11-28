@@ -63,6 +63,15 @@ func (g *githubIssues) createPostRequest(t test.Test, message string) issues.Pos
 	var mention []string
 	var projColID int
 
+	// Issues posted from roachtest are identifiable as such and
+	// they are also release blockers (this label may be removed
+	// by a human upon closer investigation).
+	spec := t.Spec().(*registry.TestSpec)
+	labels := []string{"O-roachtest"}
+	if !spec.NonReleaseBlocker {
+		labels = append(labels, "release-blocker")
+	}
+
 	teams, err := g.teamLoader()
 	if err != nil {
 		t.Fatalf("could not load teams: %v", err)
@@ -71,6 +80,9 @@ func (g *githubIssues) createPostRequest(t test.Test, message string) issues.Pos
 	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
+			if label := teams[alias].Label; label != "" {
+				labels = append(labels, label)
+			}
 		}
 		projColID = teams[sl[0]].TriageColumnID
 	}
@@ -81,15 +93,6 @@ func (g *githubIssues) createPostRequest(t test.Test, message string) issues.Pos
 	}
 
 	artifacts := fmt.Sprintf("/%s", t.Name())
-
-	// Issues posted from roachtest are identifiable as such and
-	// they are also release blockers (this label may be removed
-	// by a human upon closer investigation).
-	spec := t.Spec().(*registry.TestSpec)
-	labels := []string{"O-roachtest"}
-	if !spec.NonReleaseBlocker {
-		labels = append(labels, "release-blocker")
-	}
 
 	clusterParams := map[string]string{
 		roachtestPrefix("cloud"): spec.Cluster.Cloud,

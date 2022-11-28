@@ -29,7 +29,8 @@ var (
 	teamsYaml = `cockroachdb/unowned:
   aliases:
     cockroachdb/rfc-prs: other
-  triage_column_id: 0`
+  triage_column_id: 0
+  label: T-testeng`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
@@ -196,6 +197,7 @@ func TestCreatePostRequest(t *testing.T) {
 			if !c.nonReleaseBlocker {
 				require.True(t, contains(req.ExtraLabels, nil, "release-blocker"))
 			}
+			require.Contains(t, req.ExtraLabels, "T-testeng")
 		}
 	}
 }
