@@ -340,9 +340,6 @@ type sqlServerArgs struct {
 	// Used to watch settings and descriptor changes.
 	rangeFeedFactory *rangefeed.Factory
 
-	// Used to query valid regions on the server.
-	regionsServer serverpb.RegionsServer
-
 	// Used to query status information useful for debugging on the server.
 	tenantStatusServer serverpb.TenantStatusServer
 
@@ -847,7 +844,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DistSQLSrv:                distSQLServer,
 		NodesStatusServer:         cfg.nodesStatusServer,
 		SQLStatusServer:           cfg.sqlStatusServer,
-		RegionsServer:             cfg.regionsServer,
 		SessionRegistry:           cfg.sessionRegistry,
 		ClosedSessionCache:        cfg.closedSessionCache,
 		ContentionRegistry:        contentionRegistry,
