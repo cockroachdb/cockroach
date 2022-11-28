@@ -2527,6 +2527,41 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 				})
 			})
 	},
+	indexes: []virtualIndex{
+		{
+			incomplete: false,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error) (bool, error) {
+				coid := tree.MustBeDOid(unwrappedConstraint)
+				ooid := coid.Oid
+
+				fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
+					ctx, p.Txn(), descpb.ID(ooid),
+					tree.ObjectLookupFlags{
+						CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+					},
+				)
+				if err != nil {
+					return false, err
+				}
+
+				ownerOID, err := getOwnerOID(ctx, p, fnDesc)
+				if err != nil {
+					return false, err
+				}
+
+				fnOid := fnDesc.GetID()
+				if err := addRow(
+					tree.NewDOid(oid.Oid(fnOid)),      //oid
+					tree.NewDString(fnDesc.GetName()), //proname
+					ownerOID,                          //proowner
+				); err != nil {
+					return false, err
+				}
+				return true, nil
+			},
+		},
+	},
 }
 
 var pgCatalogRangeTable = virtualSchemaTable{

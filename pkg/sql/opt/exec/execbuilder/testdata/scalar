@@ -996,6 +996,43 @@ vectorized: true
       spans: FULL SCAN
 
 query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = 1::regproc
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  estimated row count: 10 (missing stats)
+  table: pg_proc@pg_proc_oid_idx
+  spans: [/array_agg - /array_agg]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = 'upper'::regproc
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  estimated row count: 10 (missing stats)
+  table: pg_proc@pg_proc_oid_idx
+  spans: [/upper - /upper]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = 'upper(string)'::regprocedure
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  estimated row count: 10 (missing stats)
+  table: pg_proc@pg_proc_oid_idx
+  spans: [/upper - /upper]
+
+
+query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
 ----
 distribution: local
@@ -1006,6 +1043,17 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: pg_attribute@pg_attribute_attrelid_idx
   spans: [/t - /t]
+
+query T
+select 12345::regprocedure::string
+----
+12345
+
+query T
+select '12345'::regprocedure::string
+----
+12345
+
 
 query T
 EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass
@@ -1093,7 +1141,6 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/boolean[] - /boolean[]]
-
 
 query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
