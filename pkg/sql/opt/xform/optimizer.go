@@ -655,7 +655,7 @@ func (o *Optimizer) enforceProps(
 		return o.optimizeEnforcer(state, getEnforcer, required, member)
 	}
 
-	if !required.Ordering.Any() && member.Op() != opt.ExplainOp {
+	if ordering.CanEnforce(member, &required.Ordering) {
 		// Try Sort enforcer that requires no ordering from its input.
 		getEnforcer := func() memo.RelExpr {
 			enforcer := o.getScratchSort()
