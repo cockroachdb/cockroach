@@ -499,6 +499,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
+        "//pkg/util/rangedesc:rangedesciter",
         "//pkg/util/retry",
         "//pkg/util/ring",
         "//pkg/util/stop",

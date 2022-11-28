@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 )
 
 // rangeDescPageSize controls the page size when iterating through range
@@ -73,7 +73,7 @@ type Reporter struct {
 		//   problem, we can explicitly generate a snapshot like we do for
 		//   liveness.
 		Liveness
-		rangedesciter.Iterator
+		rangedesc.Iterator
 		constraint.StoreResolver
 		spanconfig.StoreReader
 	}
@@ -89,7 +89,7 @@ func New(
 	liveness Liveness,
 	resolver constraint.StoreResolver,
 	reader spanconfig.StoreReader,
-	iterator rangedesciter.Iterator,
+	iterator rangedesc.Iterator,
 	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
 ) *Reporter {

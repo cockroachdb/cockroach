@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
 )
@@ -43,7 +43,7 @@ type ClusterConfig struct {
 	Dialer NodeDialer
 
 	// RangeDescIterator iterates through all range descriptors.
-	RangeDescIterator rangedesciter.Iterator
+	RangeDescIterator rangedesc.Iterator
 
 	// DB provides access the kv.DB instance backing the cluster.
 	//

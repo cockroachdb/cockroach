@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rangedesciter
+package rangedesc
 
 import (
 	"context"
@@ -60,26 +60,39 @@ type Iterator interface {
 	) error
 }
 
+// Scanner scans range descriptors in the system.
+type Scanner interface {
+	// Scan returns a list of range descriptors for ranges that overlap with the
+	// supplied span.
+	Scan(context.Context, roachpb.Span) ([]roachpb.RangeDescriptor, error)
+}
+
 // DB is a database handle to a CRDB cluster.
 type DB interface {
 	Txn(ctx context.Context, retryable func(context.Context, *kv.Txn) error) error
 }
 
-// iteratorImpl is a concrete (private) implementation of the Iterator
-// interface.
-type iteratorImpl struct {
+// impl is a concrete (private) implementation of the Iterator and Scanner
+// interfaces.
+type impl struct {
 	db DB
 }
 
-// New returns an Iterator.
-func New(db DB) Iterator {
-	return &iteratorImpl{db: db}
+// NewIterator returns an Iterator.
+func NewIterator(db DB) Iterator {
+	return &impl{db: db}
 }
 
-var _ Iterator = &iteratorImpl{}
+// NewScanner returns a Scanner.
+func NewScanner(db DB) Scanner {
+	return &impl{db: db}
+}
+
+var _ Scanner = &impl{}
+var _ Iterator = &impl{}
 
 // Iterate implements the Iterator interface.
-func (i *iteratorImpl) Iterate(
+func (i *impl) Iterate(
 	ctx context.Context,
 	pageSize int,
 	init func(),
@@ -177,4 +190,20 @@ func (i *iteratorImpl) Iterate(
 			}),
 		)
 	})
+}
+
+// Scan implements the Scanner interface.
+func (i *impl) Scan(ctx context.Context, span roachpb.Span) ([]roachpb.RangeDescriptor, error) {
+	var rangeDescriptors []roachpb.RangeDescriptor
+	err := i.Iterate(ctx, 0 /* pageSize */, func() {
+		rangeDescriptors = rangeDescriptors[:0] // retryable
+	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
+		rangeDescriptors = append(rangeDescriptors, descriptors...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return rangeDescriptors, nil
 }

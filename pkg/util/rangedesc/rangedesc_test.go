@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rangedesciter_test
+package rangedesc_test
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +84,7 @@ func TestEverythingIterator(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			iter := rangedesciter.New(kvDB)
+			iter := rangedesc.NewIterator(kvDB)
 			for _, pageSize := range []int{1, 5, 10, 50} {
 				var numDescs int
 				init := func() { numDescs = 0 }
@@ -104,7 +104,7 @@ func TestEverythingIterator(t *testing.T) {
 	}
 }
 
-// TestDataDriven is a data-driven test for rangedesciter. The following syntax
+// TestDataDriven is a data-driven test for rangedesc. The following syntax
 // is provided:
 //
 //   - "iter" [page-size=<int>] [scope=<int>]
@@ -118,7 +118,7 @@ func TestDataDriven(t *testing.T) {
 		server, _, kvDB := serverutils.StartServer(t, params)
 		defer server.Stopper().Stop(context.Background())
 
-		iter := rangedesciter.New(kvDB)
+		iter := rangedesc.NewIterator(kvDB)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var buf strings.Builder
 
