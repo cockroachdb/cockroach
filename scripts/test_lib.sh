@@ -68,6 +68,12 @@ function run_for_module {
   )
 }
 
+# tool_pkg_dir [pkg] - returns absolute path to a directory that stores given pkg.
+# The pkg versions must be defined in ./tools/mod directory.
+function tool_pkg_dir {
+  run_for_module ./tools/mod go list -f '{{.Dir}}' "${1}"
+}
+
 # tool_get_bin [tool] - returns absolute path to a tool binary (or returns error)
 function tool_get_bin {
   local tool="$1"
@@ -89,4 +95,15 @@ function tool_get_bin {
   fi
 
   run_for_module ./tools/mod go list -f '{{.Target}}' "${pkg_part}"
+}
+
+# tool_get_bin [tool]
+function run_go_tool {
+  local cmdbin
+  if ! cmdbin=$(GOARCH="" tool_get_bin "${1}"); then
+    log_warning "Failed to install tool '${1}'"
+    return 2
+  fi
+  shift 1
+  GOARCH="" "${cmdbin}" "$@" || return 2
 }
