@@ -408,6 +408,38 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 		default:
 			return nil, false, nil
 		}
+	case oid.T_regproc:
+		switch inputFamily {
+		case types.StringFamily, types.OidFamily, types.IntFamily:
+			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
+			if err != nil {
+				return nil, false, err
+			}
+			dOid = tree.NewDOidWithType(tree.MustBeDOid(cDatum).Oid, types.RegProc)
+
+			procName, overload, err := c.f.catalog.ResolveFunctionByOID(c.f.ctx, dOid.Oid)
+			if err != nil {
+				return nil, false, err
+			}
+
+			dOid = tree.NewDOidWithTypeAndName(overload.Oid, types.RegProc, procName)
+		}
+	case oid.T_regprocedure:
+		switch inputFamily {
+		case types.StringFamily, types.OidFamily, types.IntFamily:
+			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
+			if err != nil {
+				return nil, false, err
+			}
+			dOid = tree.NewDOidWithType(tree.MustBeDOid(cDatum).Oid, types.RegProcedure)
+
+			procName, overload, err := c.f.catalog.ResolveFunctionByOID(c.f.ctx, dOid.Oid)
+			if err != nil {
+				return nil, false, err
+			}
+
+			dOid = tree.NewDOidWithTypeAndName(overload.Oid, types.RegProcedure, procName)
+		}
 	default:
 		return nil, false, nil
 	}
