@@ -192,6 +192,7 @@ func (p *Manager) Protect(
 		return nil, err
 	}
 	return func(ctx context.Context) error {
+		// Remove the protected timestamp.
 		return p.Unprotect(ctx, job)
 	}, nil
 }
@@ -203,13 +204,19 @@ func (p *Manager) Protect(
 func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 	return p.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Fetch the protected timestamp UUID from the job, if one exists.
-		protectedtsID := getProtectedTSOnJob(job.Details())
-		if protectedtsID == nil {
+		if getProtectedTSOnJob(job.Details()) == nil {
 			return nil
 		}
 		// If we do find one then we need to clean up the protected timestamp,
 		// and remove it from the job.
 		return job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			// The job will get refreshed, so check one more time the protected
+			// timestamp still exists. The callback returned from Protect works
+			// on a previously cached copy.
+			protectedtsID := getProtectedTSOnJob(md.Payload.UnwrapDetails())
+			if protectedtsID == nil {
+				return nil
+			}
 			updatedDetails := setProtectedTSOnJob(job.Details(), nil)
 			md.Payload.Details = jobspb.WrapPayloadDetails(updatedDetails)
 			ju.UpdatePayload(md.Payload)
