@@ -225,7 +225,7 @@ type Validator interface {
 	ValidateCheckConstraint(
 		ctx context.Context,
 		tbl catalog.TableDescriptor,
-		constraint catalog.Constraint,
+		constraint catalog.CheckConstraint,
 		override sessiondata.InternalExecutorOverride,
 	) error
 }

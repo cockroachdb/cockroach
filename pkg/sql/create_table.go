@@ -766,20 +766,16 @@ func ResolveUniqueWithoutIndexConstraint(
 	}
 
 	// Verify we are not writing a constraint over the same name.
-	constraintInfo, err := tbl.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
 	if constraintName == "" {
 		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
 			func(p string) bool {
-				_, ok := constraintInfo[p]
-				return ok
+				c, _ := tbl.FindConstraintWithName(p)
+				return c != nil
 			},
 		)
 	} else {
-		if _, ok := constraintInfo[constraintName]; ok {
+		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -976,21 +972,17 @@ func ResolveFK(
 	// or else we can hit other checks that break things with
 	// undesired error codes, e.g. #42858.
 	// It may be removable after #37255 is complete.
-	constraintInfo, err := tbl.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = tabledesc.GenerateUniqueName(
 			tabledesc.ForeignKeyConstraintName(tbl.GetName(), d.FromCols.ToStrings()),
 			func(p string) bool {
-				_, ok := constraintInfo[p]
-				return ok
+				c, _ := tbl.FindConstraintWithName(p)
+				return c != nil
 			},
 		)
 	} else {
-		if _, ok := constraintInfo[constraintName]; ok {
+		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -1034,12 +1026,6 @@ func ResolveFK(
 		}
 	}
 
-	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
-	if err != nil {
-		return err
-	}
-
 	var validity descpb.ConstraintValidity
 	if ts != NewTable {
 		if validationBehavior == tree.ValidationSkip {
@@ -1069,7 +1055,13 @@ func ResolveFK(
 		tbl.AddForeignKeyMutation(&ref, descpb.DescriptorMutation_ADD)
 	}
 
-	return nil
+	c, err := tbl.FindConstraintWithID(ref.ConstraintID)
+	if err != nil {
+		return errors.HandleAsAssertionFailure(err)
+	}
+	// Ensure that there is a unique constraint on the referenced side to use.
+	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
+	return err
 }
 
 // CreatePartitioning returns a set of implicit columns and a new partitioning

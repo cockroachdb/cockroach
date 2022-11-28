@@ -67,14 +67,9 @@ func (p *planner) CommentOnConstraint(
 }
 
 func (n *commentOnConstraintNode) startExec(params runParams) error {
-	info, err := n.tableDesc.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
-
 	constraintName := string(n.n.Constraint)
-	constraint, ok := info[constraintName]
-	if !ok {
+	constraint, _ := n.tableDesc.FindConstraintWithName(constraintName)
+	if constraint == nil {
 		return pgerror.Newf(pgcode.UndefinedObject,
 			"constraint %q of relation %q does not exist", constraintName, n.tableDesc.GetName())
 	}
@@ -83,7 +78,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
 		err := n.metadataUpdater.UpsertConstraintComment(
 			n.tableDesc.GetID(),
-			constraint.ConstraintID,
+			constraint.GetConstraintID(),
 			*n.n.Comment,
 		)
 		if err != nil {
@@ -92,7 +87,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	} else {
 		err := n.metadataUpdater.DeleteConstraintComment(
 			n.tableDesc.GetID(),
-			constraint.ConstraintID,
+			constraint.GetConstraintID(),
 		)
 		if err != nil {
 			return err

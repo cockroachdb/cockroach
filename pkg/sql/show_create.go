@@ -111,10 +111,10 @@ func ShowCreateTable(
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
 	// exclude check mutations below, for consistency.
 	if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
-		if err := desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+		for _, fk := range desc.OutboundForeignKeys() {
 			fkCtx := tree.NewFmtCtx(tree.FmtSimple)
 			fkCtx.WriteString(",\n\tCONSTRAINT ")
-			fkCtx.FormatNameP(&fk.Name)
+			fkCtx.FormatName(fk.GetName())
 			fkCtx.WriteString(" ")
 			// Passing in EmptySearchPath causes the schema name to show up in the
 			// constraint definition, which we need for `cockroach dump` output to be
@@ -123,20 +123,17 @@ func ShowCreateTable(
 				&fkCtx.Buffer,
 				dbPrefix,
 				desc,
-				fk,
+				fk.ForeignKeyDesc(),
 				lCtx,
 				sessiondata.EmptySearchPath,
 			); err != nil {
 				if displayOptions.FKDisplayMode == OmitMissingFKClausesFromCreate {
-					return nil
+					continue
 				}
 				// When FKDisplayMode == IncludeFkClausesInCreate.
-				return err
+				return "", err
 			}
 			f.WriteString(fkCtx.String())
-			return nil
-		}); err != nil {
-			return "", err
 		}
 	}
 	for _, idx := range desc.PublicNonPrimaryIndexes() {

@@ -1428,18 +1428,17 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				}
 			}
-			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
-				if fk := constraint.AsForeignKey(); fk != nil && fk.Validity == descpb.ConstraintValidity_Unvalidated {
-					// Add backreference on the referenced table (which could be the same table)
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
-					if err != nil {
+			if fk := m.AsForeignKey(); fk != nil && fk.Adding() &&
+				fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
+				// Add backreference on the referenced table (which could be the same table)
+				backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
+				if err != nil {
+					return err
+				}
+				backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk.ForeignKeyDesc())
+				if backrefTable != scTable {
+					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
 						return err
-					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk)
-					if backrefTable != scTable {
-						if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
-							return err
-						}
 					}
 				}
 			}
@@ -2002,14 +2001,14 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed.
-			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
+			if constraint := m.AsConstraintWithoutIndex(); constraint != nil && constraint.Adding() {
 				log.Warningf(ctx, "dropping constraint %s", constraint)
 				if err := sc.maybeDropValidatingConstraint(ctx, scTable, constraint); err != nil {
 					return err
 				}
 				// Get the foreign key backreferences to remove.
 				if fk := constraint.AsForeignKey(); fk != nil {
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
 					if err != nil {
 						return err
 					}
@@ -3222,11 +3221,9 @@ func isCurrentMutationDiscarded(
 	colToCheck := make([]descpb.ColumnID, 0, 1)
 	// Both NOT NULL related updates and check constraint updates
 	// involving this column will get canceled out by a drop column.
-	if constraint := currentMutation.AsConstraint(); constraint != nil {
-		if colID := constraint.NotNullColumnID(); colID != 0 {
-			colToCheck = append(colToCheck, colID)
-		} else if ck := constraint.AsCheck(); ck != nil {
-			colToCheck = ck.ColumnIDs
+	if ck := currentMutation.AsCheck(); ck != nil {
+		for i, n := 0, ck.NumReferencedColumns(); i < n; i++ {
+			colToCheck = append(colToCheck, ck.GetReferencedColumnID(i))
 		}
 	}
 

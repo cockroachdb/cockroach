@@ -11,8 +11,6 @@
 package tabledesc
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -435,15 +433,10 @@ func (desc *wrapper) validateOutboundFKBackReference(
 		return nil
 	}
 
-	found := false
-	_ = referencedTable.ForeachInboundFK(func(backref *descpb.ForeignKeyConstraint) error {
-		if !found && backref.OriginTableID == desc.ID && backref.Name == fk.Name {
-			found = true
+	for _, backref := range referencedTable.InboundForeignKeys() {
+		if backref.GetOriginTableID() == desc.ID && backref.GetName() == fk.Name {
+			return nil
 		}
-		return nil
-	})
-	if found {
-		return nil
 	}
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
@@ -461,15 +454,10 @@ func (desc *wrapper) validateInboundFK(
 		return errors.AssertionFailedf("origin table %q (%d) is dropped",
 			originTable.GetName(), originTable.GetID())
 	}
-	found := false
-	_ = originTable.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		if !found && fk.ReferencedTableID == desc.ID && fk.Name == backref.Name {
-			found = true
+	for _, fk := range originTable.OutboundForeignKeys() {
+		if fk.GetReferencedTableID() == desc.ID && fk.GetName() == backref.Name {
+			return nil
 		}
-		return nil
-	})
-	if found {
-		return nil
 	}
 	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 		backref.Name, desc.Name, originTable.GetName())
@@ -668,11 +656,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	if err := desc.CheckUniqueConstraints(); err != nil {
-		vea.Report(err)
-		return
-	}
-
 	// Validate mutations and exit early if any of these are deeply corrupted.
 	{
 		var mutationIDs util.FastIntSet
@@ -719,11 +702,12 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Only validate column families, constraints, and indexes if this is
 	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
+		desc.validateConstraintNamesAndIDs(vea)
 		newErrs := []error{
 			desc.validateColumnFamilies(columnsByID),
 			desc.validateCheckConstraints(columnsByID),
 			desc.validateUniqueWithoutIndexConstraints(columnsByID),
-			desc.validateTableIndexes(columnsByID, vea),
+			desc.validateTableIndexes(columnsByID),
 			desc.validatePartitioning(),
 		}
 		hasErrs := false
@@ -736,7 +720,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if hasErrs {
 			return
 		}
-		desc.validateConstraintIDs(vea)
+
 	}
 
 	// Ensure that mutations cannot be queued if a primary key change, TTL change
@@ -865,15 +849,20 @@ func ValidateNotVisibleIndex(
 		return notices
 	}
 
-	notice := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		// Case 2: The given index is an index on a child table that may be useful
-		// for FK check.
-		if index.IsHelpfulOriginIndex(fk.OriginColumnIDs) {
-			return notices
-		}
+	if index.IsPartial() || index.NumKeyColumns() == 0 {
 		return nil
-	})
-	return notice
+	}
+	firstKeyColID := index.GetKeyColumnID(0)
+	for _, fk := range tableDesc.OutboundForeignKeys() {
+		for i, n := 0, fk.NumOriginColumns(); i < n; i++ {
+			if fk.GetOriginColumnID(i) == firstKeyColID {
+				// Case 2: The given index is an index on a child table that may be useful
+				// for FK check.
+				return notices
+			}
+		}
+	}
+	return nil
 }
 
 // ValidateOnUpdate returns an error if there is a column with both a foreign
@@ -886,53 +875,64 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		}
 	}
 
-	_ = desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		if fk.OnUpdate == catpb.ForeignKeyAction_NO_ACTION ||
-			fk.OnUpdate == catpb.ForeignKeyAction_RESTRICT {
-			return nil
+	for _, fk := range desc.OutboundForeignKeys() {
+		if fk.OnUpdate() == catpb.ForeignKeyAction_NO_ACTION ||
+			fk.OnUpdate() == catpb.ForeignKeyAction_RESTRICT {
+			continue
 		}
-		for _, fkCol := range fk.OriginColumnIDs {
+		for i, n := 0, fk.NumOriginColumns(); i < n; i++ {
+			fkCol := fk.GetOriginColumnID(i)
 			if onUpdateCols.Contains(fkCol) {
 				col, err := desc.FindColumnWithID(fkCol)
 				if err != nil {
-					return err
+					errReportFn(err)
+				} else {
+					errReportFn(pgerror.Newf(pgcode.InvalidTableDefinition,
+						"cannot specify both ON UPDATE expression and a foreign key"+
+							" ON UPDATE action for column %q",
+						col.ColName(),
+					))
 				}
-				errReportFn(pgerror.Newf(pgcode.InvalidTableDefinition,
-					"cannot specify both ON UPDATE expression and a foreign key"+
-						" ON UPDATE action for column %q",
-					col.ColName(),
-				))
 			}
 		}
-		return nil
-	})
+	}
 }
 
-func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulator) {
+func (desc *wrapper) validateConstraintNamesAndIDs(vea catalog.ValidationErrorAccumulator) {
 	if !desc.IsTable() {
 		return
 	}
-	constraints, err := desc.GetConstraintInfo()
-	if err != nil {
-		vea.Report(err)
-		return
-	}
-	// Sort the names to get deterministic behaviour, since
-	// constraints are stored in a map.
-	orderedNames := make([]string, 0, len(constraints))
-	for name := range constraints {
-		orderedNames = append(orderedNames, name)
-	}
-	sort.Strings(orderedNames)
-	for _, name := range orderedNames {
-		constraint := constraints[name]
-		if constraint.ConstraintID == 0 {
-			vea.Report(errors.AssertionFailedf("constraint ID was missing for constraint: %s with name %q",
-				constraint.Kind,
-				name))
-
+	constraints := desc.AllConstraints()
+	names := make(map[string]descpb.ConstraintID, len(constraints))
+	idToName := make(map[descpb.ConstraintID]string, len(constraints))
+	for _, c := range constraints {
+		if c.GetConstraintID() == 0 {
+			vea.Report(errors.AssertionFailedf(
+				"constraint ID was missing for constraint %q",
+				c.GetName()))
+		} else if c.GetConstraintID() >= desc.NextConstraintID {
+			vea.Report(errors.AssertionFailedf(
+				"constraint %q has ID %d not less than NextConstraintID value %d for table",
+				c.GetName(), c.GetConstraintID(), desc.NextConstraintID))
 		}
+		if c.GetName() == "" {
+			vea.Report(pgerror.Newf(pgcode.Syntax, "empty constraint name"))
+		}
+		if !c.Dropped() {
+			if otherID, found := names[c.GetName()]; found && c.GetConstraintID() != otherID {
+				vea.Report(pgerror.Newf(pgcode.DuplicateObject,
+					"duplicate constraint name: %q", c.GetName()))
+			}
+			names[c.GetName()] = c.GetConstraintID()
+		}
+		if other, found := idToName[c.GetConstraintID()]; found {
+			vea.Report(pgerror.Newf(pgcode.DuplicateObject,
+				"constraint ID %d in constraint %q already in use by %q",
+				c.GetConstraintID(), c.GetName(), other))
+		}
+		idToName[c.GetConstraintID()] = c.GetName()
 	}
+
 }
 
 func (desc *wrapper) validateColumns() error {
@@ -1114,17 +1114,18 @@ func (desc *wrapper) validateColumnFamilies(columnsByID map[descpb.ColumnID]cata
 func (desc *wrapper) validateCheckConstraints(
 	columnsByID map[descpb.ColumnID]catalog.Column,
 ) error {
-	for _, chk := range desc.AllActiveAndInactiveChecks() {
+	for _, chk := range desc.CheckConstraints() {
 		// Verify that the check's column IDs are valid.
-		for _, colID := range chk.ColumnIDs {
+		for i, n := 0, chk.NumReferencedColumns(); i < n; i++ {
+			colID := chk.GetReferencedColumnID(i)
 			_, ok := columnsByID[colID]
 			if !ok {
-				return errors.Newf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
+				return errors.Newf("check constraint %q contains unknown column \"%d\"", chk.GetName(), colID)
 			}
 		}
 
 		// Verify that the check's expression is valid.
-		expr, err := parser.ParseExpr(chk.Expr)
+		expr, err := parser.ParseExpr(chk.GetExpr())
 		if err != nil {
 			return err
 		}
@@ -1134,7 +1135,7 @@ func (desc *wrapper) validateCheckConstraints(
 		}
 		if !valid {
 			return errors.Newf("check constraint %q refers to unknown columns in expression: %s",
-				chk.Name, chk.Expr)
+				chk.GetName(), chk.GetExpr())
 		}
 	}
 	return nil
@@ -1146,38 +1147,39 @@ func (desc *wrapper) validateCheckConstraints(
 func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 	columnsByID map[descpb.ColumnID]catalog.Column,
 ) error {
-	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		if len(c.Name) == 0 {
+	for _, c := range desc.UniqueConstraintsWithoutIndex() {
+		if len(c.GetName()) == 0 {
 			return pgerror.Newf(pgcode.Syntax, "empty unique without index constraint name")
 		}
 
 		// Verify that the table ID is valid.
-		if c.TableID != desc.ID {
+		if c.ParentTableID() != desc.ID {
 			return errors.Newf(
 				"TableID mismatch for unique without index constraint %q: \"%d\" doesn't match descriptor: \"%d\"",
-				c.Name, c.TableID, desc.ID,
+				c.GetName(), c.ParentTableID(), desc.ID,
 			)
 		}
 
 		// Verify that the constraint's column IDs are valid and unique.
 		var seen util.FastIntSet
-		for _, colID := range c.ColumnIDs {
+		for i, n := 0, c.NumKeyColumns(); i < n; i++ {
+			colID := c.GetKeyColumnID(i)
 			_, ok := columnsByID[colID]
 			if !ok {
 				return errors.Newf(
-					"unique without index constraint %q contains unknown column \"%d\"", c.Name, colID,
+					"unique without index constraint %q contains unknown column \"%d\"", c.GetName(), colID,
 				)
 			}
 			if seen.Contains(int(colID)) {
 				return errors.Newf(
-					"unique without index constraint %q contains duplicate column \"%d\"", c.Name, colID,
+					"unique without index constraint %q contains duplicate column \"%d\"", c.GetName(), colID,
 				)
 			}
 			seen.Add(int(colID))
 		}
 
 		if c.IsPartial() {
-			expr, err := parser.ParseExpr(c.Predicate)
+			expr, err := parser.ParseExpr(c.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -1188,8 +1190,8 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 			if !valid {
 				return errors.Newf(
 					"partial unique without index constraint %q refers to unknown columns in predicate: %s",
-					c.Name,
-					c.Predicate,
+					c.GetName(),
+					c.GetPredicate(),
 				)
 			}
 		}
@@ -1203,9 +1205,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *wrapper) validateTableIndexes(
-	columnsByID map[descpb.ColumnID]catalog.Column, vea catalog.ValidationErrorAccumulator,
-) error {
+func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalog.Column) error {
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}

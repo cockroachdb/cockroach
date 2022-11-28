@@ -196,9 +196,9 @@ func (m *visitor) RemoveForeignKeyBackReference(
 		if err != nil {
 			return err
 		}
-		for _, fk := range tbl.AllActiveAndInactiveForeignKeys() {
-			if fk.ConstraintID == op.OriginConstraintID {
-				name = fk.Name
+		for _, fk := range tbl.OutboundForeignKeys() {
+			if fk.GetConstraintID() == op.OriginConstraintID {
+				name = fk.GetName()
 				break
 			}
 		}
@@ -355,8 +355,8 @@ func (m *visitor) UpdateBackReferencesInSequences(
 				forwardRefs.Add(col.GetOwnsSequenceID(i))
 			}
 		} else {
-			for _, c := range tbl.AllActiveAndInactiveChecks() {
-				ids, err := sequenceIDsInExpr(c.Expr)
+			for _, c := range tbl.CheckConstraints() {
+				ids, err := sequenceIDsInExpr(c.GetExpr())
 				if err != nil {
 					return err
 				}

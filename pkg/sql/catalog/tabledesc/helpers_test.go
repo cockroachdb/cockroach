@@ -46,7 +46,7 @@ func ValidateConstraints(immI catalog.TableDescriptor) error {
 		return errors.Errorf("expected immutable descriptor")
 	}
 	cea := &constraintValidationErrorAccumulator{}
-	imm.validateConstraintIDs(cea)
+	imm.validateConstraintNamesAndIDs(cea)
 	if cea.Errors == nil {
 		return nil
 	}

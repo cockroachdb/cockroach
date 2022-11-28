@@ -307,26 +307,17 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
-			for conName, con := range conInfo {
-				// Only Check constraints are included.
-				if con.Kind != descpb.ConstraintTypeCheck {
-					continue
-				}
-				conNameStr := tree.NewDString(conName)
+			for _, ck := range table.EnforcedCheckConstraints() {
 				// Like with pg_catalog.pg_constraint, Postgres wraps the check
 				// constraint expression in two pairs of parentheses.
-				chkExprStr := tree.NewDString(fmt.Sprintf("((%s))", con.Details))
+				chkExprStr := tree.NewDString(fmt.Sprintf("((%s))", ck.GetExpr()))
 				if err := addRow(
-					dbNameStr,  // constraint_catalog
-					scNameStr,  // constraint_schema
-					conNameStr, // constraint_name
-					chkExprStr, // check_clause
+					dbNameStr,                     // constraint_catalog
+					scNameStr,                     // constraint_schema
+					tree.NewDString(ck.GetName()), // constraint_name
+					chkExprStr,                    // check_clause
 				); err != nil {
 					return err
 				}
@@ -759,37 +750,44 @@ https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
-			scNameStr := tree.NewDString(sc.GetName())
 			dbNameStr := tree.NewDString(db.GetName())
-
-			for conName, con := range conInfo {
-				conTable := table
-				conCols := con.Columns
-				conNameStr := tree.NewDString(conName)
-				if con.Kind == descpb.ConstraintTypeFK {
-					// For foreign key constraint, constraint_column_usage
-					// identifies the table/columns that the foreign key
-					// references.
-					conTable = tabledesc.NewBuilder(con.ReferencedTable).BuildImmutableTable()
-					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
+			scNameStr := tree.NewDString(sc.GetName())
+			for _, c := range table.AllConstraints() {
+				conNameStr := tree.NewDString(c.GetName())
+				refSchema := sc
+				refTable := table
+				var cols []catalog.Column
+				if ck := c.AsCheck(); ck != nil {
+					cols = table.CheckConstraintColumns(ck)
+				} else if fk := c.AsForeignKey(); fk != nil {
+					var err error
+					refTable, err = tableLookup.getTableByID(fk.GetReferencedTableID())
 					if err != nil {
-						return err
+						return errors.NewAssertionErrorWithWrappedErrf(err,
+							"error resolving table %d referenced in foreign key %q in table %q",
+							fk.GetReferencedTableID(), fk.GetName(), table.GetName())
 					}
+					refSchema, err = tableLookup.getSchemaByID(refTable.GetParentSchemaID())
+					if err != nil {
+						return errors.NewAssertionErrorWithWrappedErrf(err,
+							"error resolving schema %d referenced in foreign key %q in table %q",
+							refTable.GetParentSchemaID(), fk.GetName(), table.GetName())
+					}
+					cols = refTable.ForeignKeyReferencedColumns(fk)
+				} else if uwi := c.AsUniqueWithIndex(); uwi != nil {
+					cols = table.IndexKeyColumns(uwi)
+				} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
+					cols = table.UniqueWithoutIndexColumns(uwoi)
 				}
-				tableNameStr := tree.NewDString(conTable.GetName())
-				for _, col := range conCols {
+				for _, col := range cols {
 					if err := addRow(
-						dbNameStr,            // table_catalog
-						scNameStr,            // table_schema
-						tableNameStr,         // table_name
-						tree.NewDString(col), // column_name
-						dbNameStr,            // constraint_catalog
-						scNameStr,            // constraint_schema
-						conNameStr,           // constraint_name
+						dbNameStr,                            // table_catalog
+						tree.NewDString(refSchema.GetName()), // table_schema
+						tree.NewDString(refTable.GetName()),  // table_name
+						tree.NewDString(col.GetName()),       // column_name
+						dbNameStr,                            // constraint_catalog
+						scNameStr,                            // constraint_schema
+						conNameStr,                           // constraint_name
 					); err != nil {
 						return err
 					}
@@ -813,41 +811,36 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
-			for conName, con := range conInfo {
+			for _, c := range table.AllConstraints() {
+				cstNameStr := tree.NewDString(c.GetName())
+				var cols []catalog.Column
 				// Only Primary Key, Foreign Key, and Unique constraints are included.
-				switch con.Kind {
-				case descpb.ConstraintTypePK:
-				case descpb.ConstraintTypeFK:
-				case descpb.ConstraintTypeUnique:
-				default:
-					continue
+				if fk := c.AsForeignKey(); fk != nil {
+					cols = table.ForeignKeyOriginColumns(fk)
+				} else if uwi := c.AsUniqueWithIndex(); uwi != nil {
+					cols = table.IndexKeyColumns(uwi)
+				} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
+					cols = table.UniqueWithoutIndexColumns(uwoi)
 				}
-
-				cstNameStr := tree.NewDString(conName)
-
-				for pos, col := range con.Columns {
+				for pos, col := range cols {
 					ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
 					uniquePos := tree.DNull
-					if con.Kind == descpb.ConstraintTypeFK {
+					if c.AsForeignKey() != nil {
 						uniquePos = ordinalPos
 					}
 					if err := addRow(
-						dbNameStr,            // constraint_catalog
-						scNameStr,            // constraint_schema
-						cstNameStr,           // constraint_name
-						dbNameStr,            // table_catalog
-						scNameStr,            // table_schema
-						tbNameStr,            // table_name
-						tree.NewDString(col), // column_name
-						ordinalPos,           // ordinal_position, 1-indexed
-						uniquePos,            // position_in_unique_constraint
+						dbNameStr,                      // constraint_catalog
+						scNameStr,                      // constraint_schema
+						cstNameStr,                     // constraint_name
+						dbNameStr,                      // table_catalog
+						scNameStr,                      // table_schema
+						tbNameStr,                      // table_name
+						tree.NewDString(col.GetName()), // column_name
+						ordinalPos,                     // ordinal_position, 1-indexed
+						uniquePos,                      // position_in_unique_constraint
 					); err != nil {
 						return err
 					}
@@ -920,35 +913,36 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
-			return table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-				refTable, err := tableLookup.getTableByID(fk.ReferencedTableID)
+			for _, fk := range table.OutboundForeignKeys() {
+				refTable, err := tableLookup.getTableByID(fk.GetReferencedTableID())
 				if err != nil {
 					return err
 				}
 				var matchType = tree.DNull
-				if r, ok := matchOptionMap[fk.Match]; ok {
+				if r, ok := matchOptionMap[fk.Match()]; ok {
 					matchType = r
 				}
-				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
-					refTable, fk.ReferencedColumnIDs,
-				)
+				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(refTable, fk)
 				if err != nil {
 					return err
 				}
-				return addRow(
+				if err := addRow(
 					dbNameStr,                                // constraint_catalog
 					scNameStr,                                // constraint_schema
-					tree.NewDString(fk.Name),                 // constraint_name
+					tree.NewDString(fk.GetName()),            // constraint_name
 					dbNameStr,                                // unique_constraint_catalog
 					scNameStr,                                // unique_constraint_schema
 					tree.NewDString(refConstraint.GetName()), // unique_constraint_name
 					matchType,                                // match_option
-					dStringForFKAction(fk.OnUpdate),          // update_rule
-					dStringForFKAction(fk.OnDelete),          // delete_rule
+					dStringForFKAction(fk.OnUpdate()),        // update_rule
+					dStringForFKAction(fk.OnDelete()),        // delete_rule
 					tbNameStr,                                // table_name
 					tree.NewDString(refTable.GetName()),      // referenced_table_name
-				)
-			})
+				); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	},
 }
@@ -1276,26 +1270,29 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 				table catalog.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
-				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-				if err != nil {
-					return err
-				}
-
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
 
-				for conName, c := range conInfo {
+				for _, c := range table.AllConstraints() {
+					kind := descpb.ConstraintTypeUnique
+					if c.AsCheck() != nil {
+						kind = descpb.ConstraintTypeCheck
+					} else if c.AsForeignKey() != nil {
+						kind = descpb.ConstraintTypeFK
+					} else if u := c.AsUniqueWithIndex(); u != nil && u.Primary() {
+						kind = descpb.ConstraintTypePK
+					}
 					if err := addRow(
-						dbNameStr,                       // constraint_catalog
-						scNameStr,                       // constraint_schema
-						tree.NewDString(conName),        // constraint_name
-						dbNameStr,                       // table_catalog
-						scNameStr,                       // table_schema
-						tbNameStr,                       // table_name
-						tree.NewDString(string(c.Kind)), // constraint_type
-						yesOrNoDatum(false),             // is_deferrable
-						yesOrNoDatum(false),             // initially_deferred
+						dbNameStr,                     // constraint_catalog
+						scNameStr,                     // constraint_schema
+						tree.NewDString(c.GetName()),  // constraint_name
+						dbNameStr,                     // table_catalog
+						scNameStr,                     // table_schema
+						tbNameStr,                     // table_name
+						tree.NewDString(string(kind)), // constraint_type
+						yesOrNoDatum(false),           // is_deferrable
+						yesOrNoDatum(false),           // initially_deferred
 					); err != nil {
 						return err
 					}

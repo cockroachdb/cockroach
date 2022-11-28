@@ -137,7 +137,7 @@ func getDeprecatedTenantsDescriptor() *descpb.TableDescriptor {
 		NextIndexID:      2,
 		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
 		NextMutationID:   1,
-		NextConstraintID: 1,
+		NextConstraintID: 2,
 		FormatVersion:    descpb.InterleavedFormatVersion,
 	}
 }

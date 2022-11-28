@@ -854,17 +854,16 @@ func newOptTable(
 
 	// Add unique without index constraints. Constraints for implicitly
 	// partitioned unique indexes will be added below.
-	ot.uniqueConstraints = make([]optUniqueConstraint, 0, len(ot.desc.GetUniqueWithoutIndexConstraints()))
-	for i := range ot.desc.GetUniqueWithoutIndexConstraints() {
-		u := &ot.desc.GetUniqueWithoutIndexConstraints()[i]
-		ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-			name:         u.Name,
+	ot.uniqueConstraints = make([]optUniqueConstraint, len(ot.desc.EnforcedUniqueConstraintsWithoutIndex()))
+	for i, u := range ot.desc.EnforcedUniqueConstraintsWithoutIndex() {
+		ot.uniqueConstraints[i] = optUniqueConstraint{
+			name:         u.GetName(),
 			table:        ot.ID(),
-			columns:      u.ColumnIDs,
-			predicate:    u.Predicate,
+			columns:      u.CollectKeyColumnIDs().Ordered(),
+			predicate:    u.GetPredicate(),
 			withoutIndex: true,
-			validity:     u.Validity,
-		})
+			validity:     u.GetConstraintValidity(),
+		}
 	}
 
 	// Build the indexes.
@@ -957,34 +956,32 @@ func newOptTable(
 		}
 	}
 
-	_ = ot.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+	for _, fk := range ot.desc.OutboundForeignKeys() {
 		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
-			name:              fk.Name,
+			name:              fk.GetName(),
 			originTable:       ot.ID(),
-			originColumns:     fk.OriginColumnIDs,
-			referencedTable:   cat.StableID(fk.ReferencedTableID),
-			referencedColumns: fk.ReferencedColumnIDs,
-			validity:          fk.Validity,
-			match:             fk.Match,
-			deleteAction:      fk.OnDelete,
-			updateAction:      fk.OnUpdate,
+			originColumns:     fk.ForeignKeyDesc().OriginColumnIDs,
+			referencedTable:   cat.StableID(fk.GetReferencedTableID()),
+			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
+			validity:          fk.GetConstraintValidity(),
+			match:             fk.Match(),
+			deleteAction:      fk.OnDelete(),
+			updateAction:      fk.OnUpdate(),
 		})
-		return nil
-	})
-	_ = ot.desc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+	}
+	for _, fk := range ot.desc.InboundForeignKeys() {
 		ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
-			name:              fk.Name,
-			originTable:       cat.StableID(fk.OriginTableID),
-			originColumns:     fk.OriginColumnIDs,
+			name:              fk.GetName(),
+			originTable:       cat.StableID(fk.GetOriginTableID()),
+			originColumns:     fk.ForeignKeyDesc().OriginColumnIDs,
 			referencedTable:   ot.ID(),
-			referencedColumns: fk.ReferencedColumnIDs,
-			validity:          fk.Validity,
-			match:             fk.Match,
-			deleteAction:      fk.OnDelete,
-			updateAction:      fk.OnUpdate,
+			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
+			validity:          fk.GetConstraintValidity(),
+			match:             fk.Match(),
+			deleteAction:      fk.OnDelete(),
+			updateAction:      fk.OnUpdate(),
 		})
-		return nil
-	})
+	}
 
 	ot.primaryFamily.init(ot, &desc.GetFamilies()[0])
 	ot.families = make([]optFamily, len(desc.GetFamilies())-1)
@@ -1018,12 +1015,12 @@ func newOptTable(
 		}
 	}
 	// Move all existing and synthesized checks into the opt table.
-	activeChecks := desc.ActiveChecks()
+	activeChecks := desc.EnforcedCheckConstraints()
 	ot.checkConstraints = make([]cat.CheckConstraint, 0, len(activeChecks)+len(synthesizedChecks))
 	for i := range activeChecks {
 		ot.checkConstraints = append(ot.checkConstraints, cat.CheckConstraint{
-			Constraint: activeChecks[i].Expr,
-			Validated:  activeChecks[i].Validity == descpb.ConstraintValidity_Validated,
+			Constraint: activeChecks[i].GetExpr(),
+			Validated:  activeChecks[i].GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 		})
 	}
 	ot.checkConstraints = append(ot.checkConstraints, synthesizedChecks...)
@@ -2214,15 +2211,15 @@ func (ot *optVirtualTable) Statistic(i int) cat.TableStatistic {
 
 // CheckCount is part of the cat.Table interface.
 func (ot *optVirtualTable) CheckCount() int {
-	return len(ot.desc.ActiveChecks())
+	return len(ot.desc.EnforcedCheckConstraints())
 }
 
 // Check is part of the cat.Table interface.
 func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
-	check := ot.desc.ActiveChecks()[i]
+	check := ot.desc.EnforcedCheckConstraints()[i]
 	return cat.CheckConstraint{
-		Constraint: check.Expr,
-		Validated:  check.Validity == descpb.ConstraintValidity_Validated,
+		Constraint: check.GetExpr(),
+		Validated:  check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 	}
 }
 

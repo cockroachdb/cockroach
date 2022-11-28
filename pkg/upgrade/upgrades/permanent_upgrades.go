@@ -57,20 +57,6 @@ func addRootUser(
           `
 	_, err = deps.InternalExecutor.Exec(
 		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser)
-	if err != nil {
-		return err
-	}
-
-	// Add the CREATELOGIN option to roles that already have CREATEROLE.
-	const upsertCreateRoleStmt = `
-     UPSERT INTO system.role_options (username, option, value)
-        SELECT username, 'CREATELOGIN', NULL
-          FROM system.role_options
-         WHERE option = 'CREATEROLE'
-     `
-	_, err = deps.InternalExecutor.Exec(
-		ctx, "add CREATELOGIN where a role already has CREATEROLE", nil, /* txn */
-		upsertCreateRoleStmt)
 	return err
 }
 
