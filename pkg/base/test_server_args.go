@@ -153,6 +153,12 @@ type TestServerArgs struct {
 	// or if some of the functionality being tested is not accessible from
 	// within tenants.
 	DisableDefaultTestTenant bool
+
+	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
+	// if not disabled starts the asynchronous goroutine that checks for
+	// CockroachDB upgrades and periodically reports diagnostics to
+	// Cockroach Labs. Should remain disabled during unit testing.
+	StartDiagnosticsReporting bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -311,4 +317,10 @@ type TestTenantArgs struct {
 	// heapprofiler. If empty, no heap profiles will be collected during the test.
 	// If set, this directory should be cleaned up after the test completes.
 	HeapProfileDirName string
+
+	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
+	// if not disabled starts the asynchronous goroutine that checks for
+	// CockroachDB upgrades and periodically reports diagnostics to
+	// Cockroach Labs. Should remain disabled during unit testing.
+	StartDiagnosticsReporting bool
 }

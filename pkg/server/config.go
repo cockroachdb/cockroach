@@ -204,6 +204,18 @@ type BaseConfig struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
+
+	// StartDiagnosticsReporting starts the asynchronous goroutine that
+	// checks for CockroachDB upgrades and periodically reports
+	// diagnostics to Cockroach Labs.
+	// Should remain disabled during unit testing.
+	StartDiagnosticsReporting bool
+
+	// DisableHTTPListener prevents this server from starting a TCP
+	// listener for the HTTP service. Instead, it is expected that some
+	// other service (typically, the serverController) will accept and
+	// route requests instead.
+	DisableHTTPListener bool
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
