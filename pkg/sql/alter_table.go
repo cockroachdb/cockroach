@@ -1403,6 +1403,12 @@ func insertJSONStatistic(
 			histogram)
 		return err
 	}
+
+	var predicateValue interface{}
+	if s.PartialPredicate != "" {
+		predicateValue = s.PartialPredicate
+	}
+
 	_ /* rows */, err := ie.Exec(
 		ctx,
 		"insert-stats",
@@ -1428,7 +1434,7 @@ func insertJSONStatistic(
 		s.NullCount,
 		s.AvgSize,
 		histogram,
-		s.PartialPredicate,
+		predicateValue,
 	)
 	return err
 }
