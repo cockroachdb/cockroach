@@ -902,6 +902,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		settingsStorage:          settingsWriter,
 		eventsServer:             eventsServer,
 		admissionPacerFactory:    gcoords.Elastic,
+		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 	})
 	if err != nil {
 		return nil, err

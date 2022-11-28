@@ -156,6 +156,10 @@ type TestTenantInterface interface {
 	// system tenant).
 	Codec() keys.SQLCodec
 
+	// RangeDescIteratorFactory returns the underlying rangedesc.IteratorFactory
+	// as an interface{}.
+	RangeDescIteratorFactory() interface{}
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.

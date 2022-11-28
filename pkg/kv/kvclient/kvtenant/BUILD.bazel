@@ -21,6 +21,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/log",
+        "//pkg/util/rangedesc",
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
     ],

@@ -1923,3 +1923,23 @@ func (n *Node) SpanConfigConformance(
 	}
 	return &roachpb.SpanConfigConformanceResponse{Report: report}, nil
 }
+
+// GetRangeDescriptors implements the roachpb.InternalServer interface.
+func (n *Node) GetRangeDescriptors(
+	args *roachpb.GetRangeDescriptorsRequest, stream roachpb.Internal_GetRangeDescriptorsServer,
+) error {
+	iter, err := n.execCfg.RangeDescIteratorFactory.NewIterator(stream.Context(), args.Span)
+	if err != nil {
+		return err
+	}
+
+	var rangeDescriptors []roachpb.RangeDescriptor
+	for iter.Valid() {
+		rangeDescriptors = append(rangeDescriptors, iter.CurRangeDescriptor())
+		iter.Next()
+	}
+
+	return stream.Send(&roachpb.GetRangeDescriptorsResponse{
+		RangeDescriptors: rangeDescriptors,
+	})
+}
