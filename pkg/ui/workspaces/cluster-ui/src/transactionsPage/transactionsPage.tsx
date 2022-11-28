@@ -196,7 +196,7 @@ export class TransactionsPage extends React.Component<
     }
   }
 
-  // Scheudle the next data request depending on the time
+  // Schedule the next data request depending on the time
   // range key.
   resetPolling(key: string): void {
     this.clearRefreshDataTimeout();
