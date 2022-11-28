@@ -1,0 +1,12 @@
+name: Go Vulnerability Checker
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "1.19.3"
+      - run: date
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
