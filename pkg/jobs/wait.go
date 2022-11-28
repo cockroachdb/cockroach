@@ -36,11 +36,11 @@ func (r *Registry) NotifyToAdoptJobs() {
 	}
 }
 
-// NotifyToResume is used to notify the registry that it should attempt
-// to resume the specified jobs. The assumption is that these jobs were
-// created by this registry and thus are pre-claimed by it. This bypasses
-// the loop to discover jobs already claimed by this registry. If the jobs
-// turn out to not be claimed by this registry, it's not a problem.
+// NotifyToResume is used to notify the registry that it should attempt to
+// resume the specified jobs. The assumption is that these jobs were created by
+// this registry and thus are pre-claimed by it. This bypasses the loop to
+// discover jobs already claimed by this registry. Jobs that are not claimed by
+// this registry are silently ignored.
 func (r *Registry) NotifyToResume(ctx context.Context, jobs ...jobspb.JobID) {
 	m := newJobIDSet(jobs...)
 	_ = r.stopper.RunAsyncTask(ctx, "resume-jobs", func(ctx context.Context) {
