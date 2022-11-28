@@ -116,11 +116,6 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
-// Connector is capable of find the region of every node in the cluster.
-// This is necessary for region validation for zone configurations and
-// multi-region primitives.
-var _ serverpb.RegionsServer = (*Connector)(nil)
-
 // Connector is capable of finding debug information about the current
 // tenant within the cluster. This is necessary for things such as
 // debug zip and range reports.
@@ -415,7 +410,7 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
-// Regions implements the serverpb.RegionsServer interface.
+// Regions implements the serverpb.TenantStatusServer interface.
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
 ) (resp *serverpb.RegionsResponse, _ error) {

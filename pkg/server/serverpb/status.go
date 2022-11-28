@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
-// SQLStatusServer is a smaller version of the serverpb.StatusInterface which
+// SQLStatusServer is a smaller version of the serverpb.StatusServer which
 // includes only the methods used by the SQL subsystem.
 type SQLStatusServer interface {
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
@@ -71,20 +71,14 @@ type NodesStatusServer interface {
 	ListNodesInternal(context.Context, *NodesRequest) (*NodesResponse, error)
 }
 
-// RegionsServer is the subset of the serverpb.StatusInterface that is used
-// by the SQL system to query for available regions.
-// It is available for tenants.
-type RegionsServer interface {
-	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
-}
-
-// TenantStatusServer is the subset of the serverpb.StatusInterface that is
+// TenantStatusServer is the subset of the serverpb.StatusServer that is
 // used by tenants to query for debug information, such as tenant-specific
 // range reports.
 //
 // It is available for all tenants.
 type TenantStatusServer interface {
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
+	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

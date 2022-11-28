@@ -913,7 +913,6 @@ func makeTenantSQLServerArgs(
 		circularJobRegistry:      circularJobRegistry,
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
-		regionsServer:            tenantConnect,
 		tenantStatusServer:       tenantConnect,
 		costController:           costController,
 		monitorAndMetrics:        monitorAndMetrics,
