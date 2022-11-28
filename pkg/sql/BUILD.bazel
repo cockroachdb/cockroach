@@ -307,6 +307,7 @@ go_library(
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/repstream",
+        "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

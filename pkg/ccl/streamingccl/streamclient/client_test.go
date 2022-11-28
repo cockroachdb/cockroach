@@ -122,6 +122,15 @@ func (t testStreamSubscription) Err() error {
 	return nil
 }
 
+func TestGetFirstActiveClientEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var streamAddresses []string
+	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
+	require.ErrorContains(t, err, "failed to connect, no partition addresses")
+	require.Nil(t, activeClient)
+}
+
 func TestGetFirstActiveClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -777,13 +777,18 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 
 // ShowTenant represents a SHOW TENANT statement.
 type ShowTenant struct {
-	Name Name
+	Name            Expr
+	WithReplication bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TENANT ")
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.Name)
+
+	if node.WithReplication {
+		ctx.WriteString(" WITH REPLICATION STATUS")
+	}
 }
 
 // ShowHistogram represents a SHOW HISTOGRAM statement.
