@@ -265,7 +265,7 @@ go_library(
         "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
-        "//pkg/util/rangedesciter",
+        "//pkg/util/rangedesc",
         "//pkg/util/retry",
         "//pkg/util/schedulerlatency",
         "//pkg/util/stop",

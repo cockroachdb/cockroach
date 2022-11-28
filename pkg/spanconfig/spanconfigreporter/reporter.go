@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 )
 
 // rangeDescPageSize controls the page size when iterating through range
@@ -73,7 +73,7 @@ type Reporter struct {
 		//   problem, we can explicitly generate a snapshot like we do for
 		//   liveness.
 		Liveness
-		rangedesciter.Iterator
+		rangedesc.Scanner
 		constraint.StoreResolver
 		spanconfig.StoreReader
 	}
@@ -89,7 +89,7 @@ func New(
 	liveness Liveness,
 	resolver constraint.StoreResolver,
 	reader spanconfig.StoreReader,
-	iterator rangedesciter.Iterator,
+	scanner rangedesc.Scanner,
 	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
 ) *Reporter {
@@ -99,7 +99,7 @@ func New(
 	}
 	r.dep.Liveness = liveness
 	r.dep.StoreResolver = resolver
-	r.dep.Iterator = iterator
+	r.dep.Scanner = scanner
 	r.dep.StoreReader = reader
 	return r
 }
@@ -122,7 +122,7 @@ func (r *Reporter) SpanConfigConformance(
 
 	isLiveMap := r.dep.Liveness.GetIsLiveMap()
 	for _, span := range spans {
-		if err := r.dep.Iterate(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
+		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
 			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },
 			span,
 			func(descriptors ...roachpb.RangeDescriptor) error {
