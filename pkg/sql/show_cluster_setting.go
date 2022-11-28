@@ -155,7 +155,7 @@ func getShowClusterSettingPlanColumns(
 	switch val.(type) {
 	case *settings.IntSetting:
 		dType = types.Int
-	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.VersionSetting, *settings.EnumSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.VersionSetting, *settings.EnumSetting, *settings.ProtobufSetting:
 		dType = types.String
 	case *settings.BoolSetting:
 		dType = types.Bool
@@ -197,7 +197,7 @@ func planShowClusterSetting(
 					}
 					d = tree.NewDInt(tree.DInt(v))
 				case *settings.StringSetting, *settings.EnumSetting,
-					*settings.ByteSizeSetting, *settings.VersionSetting:
+					*settings.ByteSizeSetting, *settings.VersionSetting, *settings.ProtobufSetting:
 					v, err := val.DecodeToString(encoded)
 					if err != nil {
 						return nil, err

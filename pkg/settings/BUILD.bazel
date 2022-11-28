@@ -16,6 +16,7 @@ go_library(
         "float.go",
         "int.go",
         "masked.go",
+        "protobuf.go",
         "registry.go",
         "setting.go",
         "string.go",
@@ -29,10 +30,13 @@ go_library(
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 

@@ -988,7 +988,7 @@ func validateZoneAttrsAndLocalities(
 		}
 		return validateZoneAttrsAndLocalitiesForSystemTenant(ctx, ss.ListNodesInternal, zone)
 	}
-	return validateZoneLocalitiesForSecondaryTenants(ctx, execCfg.RegionsServer.Regions, zone)
+	return validateZoneLocalitiesForSecondaryTenants(ctx, execCfg.TenantStatusServer.Regions, zone)
 }
 
 // validateZoneAttrsAndLocalitiesForSystemTenant performs all the constraint/
@@ -1046,13 +1046,13 @@ func validateZoneAttrsAndLocalitiesForSystemTenant(
 // validateZoneLocalitiesForSecondaryTenants performs all the constraint/lease
 // preferences validation for secondary tenants. Secondary tenants are only
 // allowed to reference locality attributes as they only have access to region
-// information via the RegionServer. Even then, they're only allowed to
-// reference the "region" and "zone" tiers.
+// information via the serverpb.TenantStatusServer. Even then, they're only
+// allowed to reference the "region" and "zone" tiers.
 //
 // Unlike the system tenant, we also validate prohibited constraints. This is
 // because secondary tenant must operate in the narrow view exposed via the
-// RegionServer and are not allowed to configure arbitrary constraints
-// (required or otherwise).
+// serverpb.TenantStatusServer and are not allowed to configure arbitrary
+// constraints (required or otherwise).
 func validateZoneLocalitiesForSecondaryTenants(
 	ctx context.Context, getRegions regionsGetter, zone *zonepb.ZoneConfig,
 ) error {

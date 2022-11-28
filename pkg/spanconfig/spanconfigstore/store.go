@@ -28,12 +28,22 @@ import (
 // using the gossip backed system config span to instead using the span configs
 // infrastructure. It has no effect if COCKROACH_DISABLE_SPAN_CONFIGS
 // is set.
-// TODO(richardjcai): We can likely remove this.
+//
+// TODO(irfansharif): We should remove this.
 var EnabledSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.store.enabled",
 	`use the span config infrastructure in KV instead of the system config span`,
 	true,
+)
+
+// FallbackConfigOverride is a hidden cluster setting to override the fallback
+// config used for ranges with no explicit span configs set.
+var FallbackConfigOverride = settings.RegisterProtobufSetting(
+	settings.SystemOnly,
+	"spanconfig.store.fallback_config_override",
+	"override the fallback used for ranges with no explicit span configs set",
+	&roachpb.SpanConfig{},
 )
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
@@ -47,17 +57,23 @@ type Store struct {
 		systemSpanConfigStore *systemSpanConfigStore
 	}
 
-	// TODO(irfansharif): We're using a static fall back span config here, we
-	// could instead have this track the host tenant's RANGE DEFAULT config, or
-	// go a step further and use the tenant's own RANGE DEFAULT instead if the
-	// key is within the tenant's keyspace. We'd have to thread that through the
-	// KVAccessor interface by reserving special keys for these default configs.
-
 	settings *cluster.Settings
+
 	// fallback is the span config we'll fall back on in the absence of
 	// something more specific.
+	//
+	// TODO(irfansharif): We're using a static[1] fallback span config here, we
+	// could instead have this directly track the host tenant's RANGE DEFAULT
+	// config, or go a step further and use the tenant's own RANGE DEFAULT
+	// instead if the key is within the tenant's keyspace. We'd have to thread
+	// that through the KVAccessor interface by reserving special keys for these
+	// default configs.
+	//
+	// [1]: Modulo the private spanconfig.store.fallback_config_override, which
+	//      applies globally.
 	fallback roachpb.SpanConfig
-	knobs    *spanconfig.TestingKnobs
+
+	knobs *spanconfig.TestingKnobs
 }
 
 var _ spanconfig.Store = &Store{}
@@ -113,9 +129,16 @@ func (s *Store) getSpanConfigForKeyRLocked(
 ) (roachpb.SpanConfig, error) {
 	conf, found := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
 	if !found {
-		conf = s.fallback
+		conf = s.getFallbackConfig()
 	}
 	return s.mu.systemSpanConfigStore.combine(key, conf)
+}
+
+func (s *Store) getFallbackConfig() roachpb.SpanConfig {
+	if conf := FallbackConfigOverride.Get(&s.settings.SV).(*roachpb.SpanConfig); !conf.IsEmpty() {
+		return *conf
+	}
+	return s.fallback
 }
 
 // Apply is part of the spanconfig.StoreWriter interface.
