@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -58,7 +59,15 @@ type Connector interface {
 	// (e.g. is the Range being requested owned by the requesting tenant?).
 	rangecache.RangeDescriptorDB
 
-	// TenantStatusServer is the subset of the serverpb.StatusServer that is
+	// IteratorFactory allows secondary tenants to access Range Metadata in the
+	// form of iterators that return RangeDescriptors. Iterators are constructed
+	// through delegated GetRangeDescriptors requests; the rationale behind
+	// proxying requests is similar to the RangeDescriptorDB interface -- doing so
+	// ensures SQL-only tenants are not able to access Range Metadata for Ranges
+	// not owned by the requesting tenant.
+	rangedesc.IteratorFactory
+
+	// TenantStatusServer is the subset of the serverpb.StatusInterface that is
 	// used by the SQL system to query for debug information, such as tenant-specific
 	// range reports.
 	serverpb.TenantStatusServer
