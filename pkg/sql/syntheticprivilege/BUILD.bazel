@@ -15,13 +15,11 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/security/username",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt/cat",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catid",
-        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
     ],

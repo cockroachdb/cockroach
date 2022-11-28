@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -358,15 +357,6 @@ type Planner interface {
 
 	// IsActive returns if the version specified by key is active.
 	IsActive(ctx context.Context, key clusterversion.Key) bool
-
-	// SynthesizePrivilegeDescriptor synthesizes a
-	// PrivilegeDescriptor given a SyntheticPrivilegeObject's path
-	// from system.privileges.
-	SynthesizePrivilegeDescriptor(
-		ctx context.Context,
-		privilegeObjectPath string,
-		privilegeObjectType privilege.ObjectType,
-	) (*catpb.PrivilegeDescriptor, error)
 
 	// GetMultiregionConfig synthesizes a new multiregion.RegionConfig describing
 	// the multiregion properties of the database identified via databaseID. The
