@@ -28,7 +28,7 @@ import {
 import { StatusIcon } from "src/activeExecutions/statusIcon";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr } from "../util";
+import { executionIdAttr, DATE_FORMAT_24_UTC } from "src/util";
 
 import styles from "../statementDetails/statementDetails.module.scss";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
@@ -114,38 +114,34 @@ export const ActiveTransactionDetails: React.FC<
           </Col>
         </Row>
         {transaction && (
-          <Row gutter={24}>
+          <Row gutter={24} type="flex">
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
-                <Row>
-                  <Col>
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.START_TIME}
-                      value={transaction.start.format(
-                        "MMM D, YYYY [at] H:mm (UTC)",
-                      )}
-                    />
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.ELAPSED_TIME}
-                      value={Duration(
-                        transaction.elapsedTime.asMilliseconds() * 1e6,
-                      )}
-                    />
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.STATUS}
-                      value={
-                        <>
-                          <StatusIcon status={transaction.status} />
-                          {transaction.status}
-                        </>
-                      }
-                    />
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.PRIORITY}
-                      value={capitalize(transaction.priority)}
-                    />
-                  </Col>
-                </Row>
+                <SummaryCardItem
+                  label={ActiveTxnInsightsLabels.START_TIME}
+                  value={transaction.start.format(
+                    "MMM D, YYYY [at] H:mm (UTC)",
+                  )}
+                />
+                <SummaryCardItem
+                  label={ActiveTxnInsightsLabels.ELAPSED_TIME}
+                  value={Duration(
+                    transaction.elapsedTime.asMilliseconds() * 1e6,
+                  )}
+                />
+                <SummaryCardItem
+                  label={ActiveTxnInsightsLabels.STATUS}
+                  value={
+                    <>
+                      <StatusIcon status={transaction.status} />
+                      {transaction.status}
+                    </>
+                  }
+                />
+                <SummaryCardItem
+                  label={ActiveTxnInsightsLabels.PRIORITY}
+                  value={capitalize(transaction.priority)}
+                />
               </SummaryCard>
             </Col>
             <Col className="gutter-row" span={12}>
