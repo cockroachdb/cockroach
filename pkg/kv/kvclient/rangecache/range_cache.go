@@ -86,6 +86,11 @@ const (
 	ReadFromLeaseholder = roachpb.READ_UNCOMMITTED
 )
 
+// UnknownClosedTimestampPolicy is used to mark on a CacheEntry that the closed
+// timestamp policy is not known. This value is never serialized into
+// RangeInfo or any other message which uses the type.
+const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
+
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by RangeCache to
 // initially retrieve information which will be cached.
@@ -376,11 +381,16 @@ func (et EvictionToken) LeaseSeq() roachpb.LeaseSequence {
 }
 
 // ClosedTimestampPolicy returns the cache's current understanding of the
-// range's closed timestamp policy. If no policy is known, the default policy of
-// LAG_BY_CLUSTER_SETTING is returned.
-func (et EvictionToken) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+// range's closed timestamp policy. If no policy is known, the _default
+// is returned.
+func (et EvictionToken) ClosedTimestampPolicy(
+	_default roachpb.RangeClosedTimestampPolicy,
+) roachpb.RangeClosedTimestampPolicy {
 	if !et.Valid() {
 		panic("invalid ClosedTimestampPolicy() call on empty EvictionToken")
+	}
+	if et.closedts == UnknownClosedTimestampPolicy {
+		return _default
 	}
 	return et.closedts
 }
@@ -969,10 +979,10 @@ func tryLookupImpl(
 		// We don't have any lease information.
 		lease: roachpb.Lease{},
 		// We don't know the closed timestamp policy.
-		closedts: roachpb.LAG_BY_CLUSTER_SETTING,
+		closedts: UnknownClosedTimestampPolicy,
 	}
 	for i, preR := range preRs {
-		newEntries[i+1] = &CacheEntry{desc: preR}
+		newEntries[i+1] = &CacheEntry{desc: preR, closedts: UnknownClosedTimestampPolicy}
 	}
 	insertedEntries := rc.insertLockedInner(ctx, newEntries)
 	// entry corresponds to rs[0], which is the descriptor covering the key
@@ -1007,7 +1017,7 @@ func tryLookupImpl(
 		entry = &CacheEntry{
 			desc:     rs[0],
 			lease:    roachpb.Lease{},
-			closedts: roachpb.LAG_BY_CLUSTER_SETTING,
+			closedts: UnknownClosedTimestampPolicy,
 		}
 	}
 	if len(rs) == 1 {
