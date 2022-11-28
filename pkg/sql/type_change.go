@@ -832,8 +832,8 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 		}
 
 		// Examine all check constraints.
-		for _, chk := range desc.AllActiveAndInactiveChecks() {
-			foundUsage, err := findUsagesOfEnumValue(chk.Expr, member, typeDesc.ID)
+		for _, chk := range desc.CheckConstraints() {
+			foundUsage, err := findUsagesOfEnumValue(chk.GetExpr(), member, typeDesc.ID)
 			if err != nil {
 				return err
 			}

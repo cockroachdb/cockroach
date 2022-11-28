@@ -295,8 +295,11 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 					addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
 					addedIndexes = append(addedIndexes, idx.GetID())
 				}
-			} else if c := m.AsConstraint(); c != nil {
-				isValidating := c.GetConstraintValidity() == descpb.ConstraintValidity_Validating || c.NotNullColumnID() != 0
+			} else if c := m.AsConstraintWithoutIndex(); c != nil {
+				isValidating := c.GetConstraintValidity() == descpb.ConstraintValidity_Validating
+				if ck := c.AsCheck(); ck != nil && !isValidating {
+					isValidating = ck.IsNotNullColumnConstraint()
+				}
 				isSkippingValidation, err := shouldSkipConstraintValidation(tableDesc, c)
 				if err != nil {
 					return err
@@ -321,7 +324,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				needColumnBackfill = needColumnBackfill || catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
 				// no-op. Handled in (*schemaChanger).done by queueing an index gc job.
-			} else if c := m.AsConstraint(); c != nil {
+			} else if c := m.AsConstraintWithoutIndex(); c != nil {
 				constraintsToDrop = append(constraintsToDrop, c)
 			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil || m.AsModifyRowLevelTTL() != nil {
 				// The backfiller doesn't need to do anything here.
@@ -410,11 +413,11 @@ func shouldSkipConstraintValidation(
 	}
 
 	// The check constraint on shard column is always on the shard column itself.
-	if len(check.ColumnIDs) != 1 {
+	if check.NumReferencedColumns() != 1 {
 		return false, nil
 	}
 
-	checkCol, err := tableDesc.FindColumnWithID(check.ColumnIDs[0])
+	checkCol, err := tableDesc.FindColumnWithID(check.GetReferencedColumnID(0))
 	if err != nil {
 		return false, err
 	}
@@ -438,7 +441,7 @@ func (sc *SchemaChanger) dropConstraints(
 	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
 		if fk := c.AsForeignKey(); fk != nil {
-			id := fk.ReferencedTableID
+			id := fk.GetReferencedTableID()
 			if id != sc.descID {
 				fksByBackrefTable[id] = append(fksByBackrefTable[id], c)
 			}
@@ -477,7 +480,7 @@ func (sc *SchemaChanger) dropConstraints(
 					if def.Name != constraint.GetName() {
 						continue
 					}
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
 					if err != nil {
 						return err
 					}
@@ -580,7 +583,7 @@ func (sc *SchemaChanger) addConstraints(
 	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
 		if fk := c.AsForeignKey(); fk != nil {
-			id := fk.ReferencedTableID
+			id := fk.GetReferencedTableID()
 			if id != sc.descID {
 				fksByBackrefTable[id] = append(fksByBackrefTable[id], c)
 			}
@@ -616,7 +619,7 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !found {
-					scTable.Checks = append(scTable.Checks, ck)
+					scTable.Checks = append(scTable.Checks, ck.CheckDesc())
 				}
 			} else if fk := constraint.AsForeignKey(); fk != nil {
 				var foundExisting bool
@@ -639,8 +642,8 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !foundExisting {
-					scTable.OutboundFKs = append(scTable.OutboundFKs, *fk)
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					scTable.OutboundFKs = append(scTable.OutboundFKs, *fk.ForeignKeyDesc())
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
 					if err != nil {
 						return err
 					}
@@ -653,11 +656,11 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = tabledesc.FindFKReferencedUniqueConstraint(backrefTable, fk.ReferencedColumnIDs)
+					_, err = tabledesc.FindFKReferencedUniqueConstraint(backrefTable, fk)
 					if err != nil {
 						return err
 					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk)
+					backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk.ForeignKeyDesc())
 
 					// Note that this code may add the same descriptor to the batch
 					// multiple times if it is referenced multiple times. That's fine as
@@ -689,7 +692,8 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !found {
-					scTable.UniqueWithoutIndexConstraints = append(scTable.UniqueWithoutIndexConstraints, *uwi)
+					scTable.UniqueWithoutIndexConstraints =
+						append(scTable.UniqueWithoutIndexConstraints, *uwi.UniqueWithoutIndexDesc())
 				}
 			}
 		}
@@ -780,9 +784,9 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if ck := c.AsCheck(); ck != nil {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, ie, ck.Expr,
+						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, ie, ck.GetExpr(),
 					); err != nil {
-						if c.NotNullColumnID() != 0 {
+						if ck.IsNotNullColumnConstraint() {
 							// TODO (lucy): This should distinguish between constraint
 							// validation errors and other types of unexpected errors, and
 							// return a different error code in the former case
@@ -1518,15 +1522,11 @@ func (e InvalidIndexesError) Error() string {
 func ValidateCheckConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	constraint catalog.Constraint,
+	checkConstraint catalog.CheckConstraint,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-	ck := constraint.AsCheck()
-	if ck == nil {
-		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetName())
-	}
 
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 	if err != nil {
@@ -1544,7 +1544,7 @@ func ValidateCheckConstraint(
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
 		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.Expr,
+			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, checkConstraint.GetExpr(),
 				tableDesc.(*tabledesc.Mutable), ie)
 		})
 	})
@@ -2385,7 +2385,7 @@ func runSchemaChangesInTxn(
 				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
 					return err
 				}
-			} else if c := m.AsConstraint(); c != nil {
+			} else if c := m.AsConstraintWithoutIndex(); c != nil {
 				// This is processed later. Do not proceed to MakeMutationComplete.
 				constraintAdditionMutations = append(constraintAdditionMutations, c)
 				continue
@@ -2410,7 +2410,7 @@ func runSchemaChangesInTxn(
 				); err != nil {
 					return err
 				}
-			} else if c := m.AsConstraint(); c != nil {
+			} else if c := m.AsConstraintWithoutIndex(); c != nil {
 				if c.AsCheck() != nil {
 					for i := range tableDesc.Checks {
 						if tableDesc.Checks[i].Name == c.GetName() {
@@ -2457,17 +2457,17 @@ func runSchemaChangesInTxn(
 		}
 		if ck := c.AsCheck(); ck != nil {
 			ctu.ConstraintType = descpb.ConstraintToUpdate_CHECK
-			ctu.Check = *ck
-			if c.NotNullColumnID() != 0 {
+			ctu.Check = *ck.CheckDesc()
+			if ck.IsNotNullColumnConstraint() {
 				ctu.ConstraintType = descpb.ConstraintToUpdate_NOT_NULL
-				ctu.NotNullColumn = c.NotNullColumnID()
+				ctu.NotNullColumn = ck.GetReferencedColumnID(0)
 			}
 		} else if fk := c.AsForeignKey(); fk != nil {
 			ctu.ConstraintType = descpb.ConstraintToUpdate_FOREIGN_KEY
-			ctu.ForeignKey = *fk
+			ctu.ForeignKey = *fk.ForeignKeyDesc()
 		} else if uwi := c.AsUniqueWithoutIndex(); uwi != nil {
 			ctu.ConstraintType = descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
-			ctu.UniqueWithoutIndexConstraint = *uwi
+			ctu.UniqueWithoutIndexConstraint = *uwi.UniqueWithoutIndexDesc()
 		} else {
 			return errors.AssertionFailedf("unknown constraint type: %s", c)
 		}
@@ -2487,13 +2487,13 @@ func runSchemaChangesInTxn(
 	// mutations applied, it can be used for validating check/FK constraints.
 	for _, c := range constraintAdditionMutations {
 		if check := c.AsCheck(); check != nil {
-			if check.Validity == descpb.ConstraintValidity_Validating {
+			if check.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				if err := planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateCheckInTxn(ctx, &planner.semaCtx, planner.SessionData(), tableDesc, txn, ie, check.Expr)
+					return validateCheckInTxn(ctx, &planner.semaCtx, planner.SessionData(), tableDesc, txn, ie, check.GetExpr())
 				}); err != nil {
 					return err
 				}
-				check.Validity = descpb.ConstraintValidity_Validated
+				check.CheckDesc().Validity = descpb.ConstraintValidity_Validated
 			}
 		} else if fk := c.AsForeignKey(); fk != nil {
 			// We can't support adding a validated foreign key constraint in the same
@@ -2508,9 +2508,9 @@ func runSchemaChangesInTxn(
 			// schema change framework eventually.
 			//
 			// For now, just always add the FK as unvalidated.
-			fk.Validity = descpb.ConstraintValidity_Unvalidated
+			fk.ForeignKeyDesc().Validity = descpb.ConstraintValidity_Unvalidated
 		} else if uwi := c.AsUniqueWithoutIndex(); uwi != nil {
-			if uwi.Validity == descpb.ConstraintValidity_Validating {
+			if uwi.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				if err := planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 					return validateUniqueWithoutIndexConstraintInTxn(
 						ctx,
@@ -2523,7 +2523,7 @@ func runSchemaChangesInTxn(
 				}); err != nil {
 					return err
 				}
-				uwi.Validity = descpb.ConstraintValidity_Validated
+				uwi.UniqueWithoutIndexDesc().Validity = descpb.ConstraintValidity_Validated
 			}
 		} else {
 			return errors.AssertionFailedf("unsupported constraint type: %s", c)
@@ -2536,22 +2536,22 @@ func runSchemaChangesInTxn(
 	// update the table descriptor directly.
 	for _, c := range constraintAdditionMutations {
 		if ck := c.AsCheck(); ck != nil {
-			tableDesc.Checks = append(tableDesc.Checks, ck)
+			tableDesc.Checks = append(tableDesc.Checks, ck.CheckDesc())
 		} else if fk := c.AsForeignKey(); fk != nil {
 			var referencedTableDesc *tabledesc.Mutable
 			// We don't want to lookup/edit a second copy of the same table.
-			selfReference := tableDesc.ID == fk.ReferencedTableID
+			selfReference := tableDesc.ID == fk.GetReferencedTableID()
 			if selfReference {
 				referencedTableDesc = tableDesc
 			} else {
-				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), planner.Txn())
 				if err != nil {
-					return errors.Wrapf(err, "error resolving referenced table ID %d", fk.ReferencedTableID)
+					return errors.Wrapf(err, "error resolving referenced table ID %d", fk.GetReferencedTableID())
 				}
 				referencedTableDesc = lookup
 			}
-			referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs, *fk)
-			tableDesc.OutboundFKs = append(tableDesc.OutboundFKs, *fk)
+			referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs, *fk.ForeignKeyDesc())
+			tableDesc.OutboundFKs = append(tableDesc.OutboundFKs, *fk.ForeignKeyDesc())
 
 			// Write the other table descriptor here if it's not the current table
 			// we're already modifying.
@@ -2565,7 +2565,7 @@ func runSchemaChangesInTxn(
 				}
 			}
 		} else if uwi := c.AsUniqueWithoutIndex(); uwi != nil {
-			tableDesc.UniqueWithoutIndexConstraints = append(tableDesc.UniqueWithoutIndexConstraints, *uwi)
+			tableDesc.UniqueWithoutIndexConstraints = append(tableDesc.UniqueWithoutIndexConstraints, *uwi.UniqueWithoutIndexDesc())
 		} else {
 			return errors.AssertionFailedf("unsupported constraint type: %s", c)
 		}

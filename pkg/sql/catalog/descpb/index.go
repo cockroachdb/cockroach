@@ -64,22 +64,6 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	return nil
 }
 
-// IsHelpfulOriginIndex returns whether the index may be a helpful index for
-// performing foreign key checks and cascades for a foreign key with the given
-// origin columns. Given the originColIDs for foreign key constraint, the index
-// could be useful for FK check if the first column covered by the index is
-// present in FK constraint columns.
-func (desc *IndexDescriptor) IsHelpfulOriginIndex(originColIDs ColumnIDs) bool {
-	isHelpfulOriginIndex := len(desc.KeyColumnIDs) > 0 && originColIDs.Contains(desc.KeyColumnIDs[0])
-	return !desc.IsPartial() && isHelpfulOriginIndex
-}
-
-// IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
-// key constraint with the provided set of originColIDs.
-func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
-	return !desc.IsPartial() && ColumnIDs(desc.KeyColumnIDs).HasPrefix(originColIDs)
-}
-
 // explicitColumnIDsWithoutShardColumn returns explicit column ids of the index
 // excluding the shard column.
 func (desc *IndexDescriptor) explicitColumnIDsWithoutShardColumn() ColumnIDs {
@@ -99,9 +83,9 @@ func (desc *IndexDescriptor) implicitColumnIDs() ColumnIDs {
 	return desc.KeyColumnIDs[:desc.Partitioning.NumImplicitColumns]
 }
 
-// IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
-// It returns whether the index can serve as a referenced index for a foreign
-// key constraint with the provided set of referencedColumnIDs.
+// IsValidReferencedUniqueConstraint returns whether the index can serve
+// as a referenced index for a foreign key constraint with the provided set
+// of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	explicitColumnIDs := desc.explicitColumnIDsWithoutShardColumn()
 	allColumnIDs := append(explicitColumnIDs, desc.implicitColumnIDs()...)

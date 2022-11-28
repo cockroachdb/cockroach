@@ -467,14 +467,14 @@ func (p *planner) RevalidateUniqueConstraint(
 	}
 
 	// Check UNIQUE WITHOUT INDEX constraints.
-	for _, uc := range tableDesc.GetUniqueWithoutIndexConstraints() {
-		if uc.Name == constraintName {
+	for _, uc := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
+		if uc.GetName() == constraintName {
 			return validateUniqueConstraint(
 				ctx,
 				tableDesc,
-				uc.Name,
-				uc.ColumnIDs,
-				uc.Predicate,
+				uc.GetName(),
+				uc.CollectKeyColumnIDs().Ordered(),
+				uc.GetPredicate(),
 				p.ExecCfg().InternalExecutor,
 				p.Txn(),
 				p.User(),
@@ -500,31 +500,8 @@ func (p *planner) IsConstraintActive(
 	if err != nil {
 		return false, err
 	}
-	constraints, err := tableDesc.GetConstraintInfo()
-	if err != nil {
-		return false, err
-	}
-	cnst := constraints[constraintName]
-	validated := !cnst.Unvalidated
-	// For foreign keys we only care what the outbound foreign key state,
-	// shows for the constraint. Since we need to know if this constraint
-	// will be active on inserts.
-	if cnst.Kind == descpb.ConstraintTypeFK {
-		validated = false
-		err := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-			if fk.Name != constraintName {
-				return nil
-			}
-			validated = fk.Validity == descpb.ConstraintValidity_Validated ||
-				fk.Validity == descpb.ConstraintValidity_Validating ||
-				fk.Validity == descpb.ConstraintValidity_Unvalidated
-			return nil
-		})
-		if err != nil {
-			return false, err
-		}
-	}
-	return validated, nil
+	constraint, _ := tableDesc.FindConstraintWithName(constraintName)
+	return constraint != nil && constraint.IsEnforced(), nil
 }
 
 // HasVirtualUniqueConstraints returns true if the table has one or more
@@ -535,8 +512,8 @@ func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
 			return true
 		}
 	}
-	for _, uc := range tableDesc.GetUniqueWithoutIndexConstraints() {
-		if uc.Validity == descpb.ConstraintValidity_Validated {
+	for _, uc := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
+		if uc.IsConstraintValidated() {
 			return true
 		}
 	}
@@ -579,14 +556,14 @@ func RevalidateUniqueConstraintsInTable(
 	}
 
 	// Check UNIQUE WITHOUT INDEX constraints.
-	for _, uc := range tableDesc.GetUniqueWithoutIndexConstraints() {
-		if uc.Validity == descpb.ConstraintValidity_Validated {
+	for _, uc := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
+		if uc.IsConstraintValidated() {
 			if err := validateUniqueConstraint(
 				ctx,
 				tableDesc,
-				uc.Name,
-				uc.ColumnIDs,
-				uc.Predicate,
+				uc.GetName(),
+				uc.CollectKeyColumnIDs().Ordered(),
+				uc.GetPredicate(),
 				ie,
 				txn,
 				user,
@@ -860,7 +837,7 @@ func checkMutationInput(
 			"mismatched check constraint columns: expected %d, got %d", checkOrds.Len(), len(checkVals))
 	}
 
-	checks := tabDesc.ActiveChecks()
+	checks := tabDesc.EnforcedCheckConstraints()
 	colIdx := 0
 	for i := range checks {
 		if !checkOrds.Contains(i) {
@@ -873,16 +850,16 @@ func checkMutationInput(
 			// Failed to satisfy CHECK constraint, so unwrap the serialized
 			// check expression to display to the user.
 			expr, err := schemaexpr.FormatExprForDisplay(
-				ctx, tabDesc, checks[i].Expr, semaCtx, sessionData, tree.FmtParsable,
+				ctx, tabDesc, checks[i].GetExpr(), semaCtx, sessionData, tree.FmtParsable,
 			)
 			if err != nil {
 				// If we ran into an error trying to read the check constraint, wrap it
 				// and return.
-				return pgerror.WithConstraintName(errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", checks[i].Expr), checks[i].Name)
+				return pgerror.WithConstraintName(errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", checks[i].GetExpr()), checks[i].GetName())
 			}
 			return pgerror.WithConstraintName(pgerror.Newf(
 				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", expr,
-			), checks[i].Name)
+			), checks[i].GetName())
 		}
 		colIdx++
 	}

@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -412,53 +411,43 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	constraints, err := tableDesc.GetConstraintInfoWithLookup(func(id descpb.ID) (catalog.TableDescriptor, error) {
-		return p.Descriptors().GetImmutableTableByID(ctx, p.Txn(), id, tree.ObjectLookupFlagsWithRequired())
-	})
-	if err != nil {
-		return nil, err
-	}
-
+	var constraints []catalog.Constraint
 	// Keep only the constraints specified by the constraints in
 	// constraintNames.
 	if constraintNames != nil {
-		wantedConstraints := make(map[string]descpb.ConstraintDetail)
 		for _, constraintName := range constraintNames {
-			if v, ok := constraints[string(constraintName)]; ok {
-				wantedConstraints[string(constraintName)] = v
-			} else {
+			c, _ := tableDesc.FindConstraintWithName(string(constraintName))
+			if c == nil {
 				return nil, pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", constraintName, tableDesc.GetName())
 			}
+			constraints = append(constraints, c)
 		}
-		constraints = wantedConstraints
+	} else {
+		constraints = tableDesc.EnforcedConstraints()
 	}
 
 	// Populate results with all constraints on the table.
 	for _, constraint := range constraints {
-		switch constraint.Kind {
-		case descpb.ConstraintTypeCheck:
-			results = append(results, newSQLCheckConstraintCheckOperation(
-				tableName,
-				tableDesc,
-				constraint.CheckConstraint,
-				asOf,
-			))
-		case descpb.ConstraintTypeFK:
-			results = append(results, newSQLForeignKeyCheckOperation(
-				tableName,
-				tableDesc,
-				constraint,
-				asOf,
-			))
-		case descpb.ConstraintTypePK, descpb.ConstraintTypeUnique:
-			results = append(results, newSQLUniqueConstraintCheckOperation(
-				tableName,
-				tableDesc,
-				constraint,
-				asOf,
-			))
+		var op checkOperation
+		if ck := constraint.AsCheck(); ck != nil {
+			op = newSQLCheckConstraintCheckOperation(tableName, tableDesc, ck, asOf)
+		} else if fk := constraint.AsForeignKey(); fk != nil {
+			referencedTable, err := p.Descriptors().GetImmutableTableByID(
+				ctx, p.Txn(), fk.GetReferencedTableID(), tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return nil, err
+			}
+			op = newSQLForeignKeyCheckOperation(tableName, tableDesc, fk, referencedTable, asOf)
+		} else if uwi := constraint.AsUniqueWithIndex(); uwi != nil {
+			op = newSQLUniqueWithIndexConstraintCheckOperation(tableName, tableDesc, uwi, asOf)
+		} else if uwoi := constraint.AsUniqueWithoutIndex(); uwoi != nil {
+			op = newSQLUniqueWithoutIndexConstraintCheckOperation(tableName, tableDesc, uwoi, asOf)
+		} else {
+			return nil, errors.AssertionFailedf("unknown constraint type %T", constraint)
 		}
+		results = append(results, op)
 	}
 	return results, nil
 }

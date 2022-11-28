@@ -659,25 +659,16 @@ func TestUnvalidateConstraints(t *testing.T) {
 	if err := desc.AllocateIDs(ctx, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatal(err)
 	}
-	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {
-		return desc.ImmutableCopy().(catalog.TableDescriptor), nil
-	}
 
-	before, err := desc.GetConstraintInfoWithLookup(lookup)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c, ok := before["fk"]; !ok || c.Unvalidated {
-		t.Fatalf("expected to find a validated constraint fk before, found %v", c)
+	before, _ := desc.FindConstraintWithName("fk")
+	if before == nil || !before.IsConstraintValidated() {
+		t.Fatalf("expected to find a validated constraint fk before, found %v", before)
 	}
 	desc.InvalidateFKConstraints()
 
-	after, err := desc.GetConstraintInfoWithLookup(lookup)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c, ok := after["fk"]; !ok || !c.Unvalidated {
-		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", c)
+	after, _ := desc.FindConstraintWithName("fk")
+	if after == nil || before.IsConstraintValidated() {
+		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", after)
 	}
 }
 

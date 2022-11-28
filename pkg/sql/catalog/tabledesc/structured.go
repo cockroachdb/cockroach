@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -197,126 +196,12 @@ func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, er
 	return name, nil
 }
 
-// AllActiveAndInactiveChecks implements the TableDescriptor interface.
-func (desc *wrapper) AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint {
-	// A check constraint could be both on the table descriptor and in the
-	// list of mutations while the constraint is validated for existing rows. In
-	// that case, the constraint is in the Validating state, and we avoid
-	// including it twice. (Note that even though unvalidated check constraints
-	// cannot be added as of 19.1, they can still exist if they were created under
-	// previous versions.)
-	checks := make([]*descpb.TableDescriptor_CheckConstraint, 0, len(desc.Checks))
-	for _, c := range desc.Checks {
-		// While a constraint is being validated for existing rows or being dropped,
-		// the constraint is present both on the table descriptor and in the
-		// mutations list in the Validating or Dropping state, so those constraints
-		// are excluded here to avoid double-counting.
-		if c.Validity != descpb.ConstraintValidity_Validating &&
-			c.Validity != descpb.ConstraintValidity_Dropping {
-			checks = append(checks, c)
-		}
-	}
-	for _, m := range desc.Mutations {
-		if c := m.GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
-			// Any mutations that are dropped should be
-			// excluded to avoid returning duplicates.
-			if m.Direction != descpb.DescriptorMutation_DROP {
-				checks = append(checks, &c.Check)
-			}
-		}
-	}
-	return checks
-}
-
-// GetColumnFamilyForShard returns the column family that a newly added shard column
-// should be assigned to, given the set of columns it's computed from.
-//
-// This is currently the column family of the first column in the set of index columns.
-func GetColumnFamilyForShard(desc *Mutable, idxColumns []string) string {
-	for _, f := range desc.Families {
-		for _, fCol := range f.ColumnNames {
-			if fCol == idxColumns[0] {
-				return f.Name
-			}
-		}
-	}
-	return ""
-}
-
-// AllActiveAndInactiveUniqueWithoutIndexConstraints implements the
-// TableDescriptor interface.
-func (desc *wrapper) AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint {
-	ucs := make([]*descpb.UniqueWithoutIndexConstraint, 0, len(desc.UniqueWithoutIndexConstraints))
-	for i := range desc.UniqueWithoutIndexConstraints {
-		uc := &desc.UniqueWithoutIndexConstraints[i]
-		// While a constraint is being validated for existing rows or being dropped,
-		// the constraint is present both on the table descriptor and in the
-		// mutations list in the Validating or Dropping state, so those constraints
-		// are excluded here to avoid double-counting.
-		if uc.Validity != descpb.ConstraintValidity_Validating &&
-			uc.Validity != descpb.ConstraintValidity_Dropping {
-			ucs = append(ucs, uc)
-		}
-	}
-	for i := range desc.Mutations {
-		if c := desc.Mutations[i].GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
-			ucs = append(ucs, &c.UniqueWithoutIndexConstraint)
-		}
-	}
-	return ucs
-}
-
-// AllActiveAndInactiveForeignKeys implements the TableDescriptor interface.
-func (desc *wrapper) AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint {
-	fks := make([]*descpb.ForeignKeyConstraint, 0, len(desc.OutboundFKs))
-	for i := range desc.OutboundFKs {
-		fk := &desc.OutboundFKs[i]
-		// While a constraint is being validated for existing rows or being dropped,
-		// the constraint is present both on the table descriptor and in the
-		// mutations list in the Validating or Dropping state, so those constraints
-		// are excluded here to avoid double-counting.
-		if fk.Validity != descpb.ConstraintValidity_Validating && fk.Validity != descpb.ConstraintValidity_Dropping {
-			fks = append(fks, fk)
-		}
-	}
-	for i := range desc.Mutations {
-		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
-			fks = append(fks, &c.ForeignKey)
-		}
-	}
-	return fks
-}
-
 // ForeachDependedOnBy implements the TableDescriptor interface.
 func (desc *wrapper) ForeachDependedOnBy(
 	f func(dep *descpb.TableDescriptor_Reference) error,
 ) error {
 	for i := range desc.DependedOnBy {
 		if err := f(&desc.DependedOnBy[i]); err != nil {
-			return iterutil.Map(err)
-		}
-	}
-	return nil
-}
-
-// ForeachOutboundFK implements the TableDescriptor interface.
-func (desc *wrapper) ForeachOutboundFK(
-	f func(constraint *descpb.ForeignKeyConstraint) error,
-) error {
-	for i := range desc.OutboundFKs {
-		if err := f(&desc.OutboundFKs[i]); err != nil {
-			return iterutil.Map(err)
-		}
-	}
-	return nil
-}
-
-// ForeachInboundFK calls f for every inbound foreign key in desc until an
-// error is returned.
-func (desc *wrapper) ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error {
-	for i := range desc.InboundFKs {
-		if err := f(&desc.InboundFKs[i]); err != nil {
 			return iterutil.Map(err)
 		}
 	}
@@ -1341,50 +1226,37 @@ func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
 // DropConstraint drops a constraint, either by removing it from the table
 // descriptor or by queuing a mutation for a schema change.
 func (desc *Mutable) DropConstraint(
-	ctx context.Context,
-	name string,
-	detail descpb.ConstraintDetail,
-	removeFK func(*Mutable, *descpb.ForeignKeyConstraint) error,
-	settings *cluster.Settings,
+	constraint catalog.Constraint, removeFKBackRef func(catalog.ForeignKeyConstraint) error,
 ) error {
-	switch detail.Kind {
-	case descpb.ConstraintTypePK:
-		{
-			primaryIndex := desc.PrimaryIndex
+	if u := constraint.AsUniqueWithIndex(); u != nil {
+		if u.Primary() {
+			primaryIndex := u.IndexDescDeepCopy()
 			primaryIndex.Disabled = true
 			desc.SetPrimaryIndex(primaryIndex)
+			return nil
 		}
-		return nil
+		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
+			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
+			tree.ErrNameString(u.GetName()))
+	}
+	if constraint.Adding() {
+		return unimplemented.NewWithIssuef(42844,
+			"constraint %q in the middle of being added, try again later", constraint.GetName())
+	}
+	if constraint.Dropped() {
+		return unimplemented.NewWithIssuef(42844,
+			"constraint %q in the middle of being dropped", constraint.GetName())
+	}
 
-	case descpb.ConstraintTypeUnique:
-		if detail.Index != nil {
-			return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
-				"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
-				tree.ErrNameStringP(&detail.Index.Name))
-		}
-		if detail.UniqueWithoutIndexConstraint == nil {
-			return errors.AssertionFailedf(
-				"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
-			)
-		}
-		if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
-			return unimplemented.NewWithIssueDetailf(42844,
-				"drop-constraint-unique-validating",
-				"constraint %q in the middle of being added, try again later", name)
-		}
-		if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Dropping {
-			return unimplemented.NewWithIssueDetailf(42844,
-				"drop-constraint-unique-mutation",
-				"constraint %q in the middle of being dropped", name)
-		}
+	if uwoi := constraint.AsUniqueWithoutIndex(); uwoi != nil {
 		// Search through the descriptor's unique constraints and delete the
 		// one that we're supposed to be deleting.
 		for i := range desc.UniqueWithoutIndexConstraints {
 			ref := &desc.UniqueWithoutIndexConstraints[i]
-			if ref.Name == name {
+			if ref.Name == uwoi.GetName() {
 				// If the constraint is unvalidated, there's no assumption that it must
 				// hold for all rows, so it can be dropped immediately.
-				if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Unvalidated {
+				if uwoi.IsConstraintUnvalidated() {
 					desc.UniqueWithoutIndexConstraints = append(
 						desc.UniqueWithoutIndexConstraints[:i], desc.UniqueWithoutIndexConstraints[i+1:]...,
 					)
@@ -1395,24 +1267,15 @@ func (desc *Mutable) DropConstraint(
 				return nil
 			}
 		}
-
-	case descpb.ConstraintTypeCheck:
-		if detail.CheckConstraint.Validity == descpb.ConstraintValidity_Validating {
-			return unimplemented.NewWithIssueDetailf(42844, "drop-constraint-check-mutation",
-				"constraint %q in the middle of being added, try again later", name)
-		}
-		if detail.CheckConstraint.Validity == descpb.ConstraintValidity_Dropping {
-			return unimplemented.NewWithIssueDetailf(42844, "drop-constraint-check-mutation",
-				"constraint %q in the middle of being dropped", name)
-		}
+	} else if ck := constraint.AsCheck(); ck != nil {
 		for i, c := range desc.Checks {
-			if c.Name == name {
+			if c.Name == ck.GetName() {
 				// If the constraint is unvalidated, there's no assumption that it must
 				// hold for all rows, so it can be dropped immediately.
 				// We also drop the constraint immediately instead of queuing a mutation
 				// unless the cluster is fully upgraded to 19.2, for backward
 				// compatibility.
-				if detail.CheckConstraint.Validity == descpb.ConstraintValidity_Unvalidated {
+				if ck.IsConstraintUnvalidated() {
 					desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
 					return nil
 				}
@@ -1421,28 +1284,17 @@ func (desc *Mutable) DropConstraint(
 				return nil
 			}
 		}
-
-	case descpb.ConstraintTypeFK:
-		if detail.FK.Validity == descpb.ConstraintValidity_Validating {
-			return unimplemented.NewWithIssueDetailf(42844,
-				"drop-constraint-fk-validating",
-				"constraint %q in the middle of being added, try again later", name)
-		}
-		if detail.FK.Validity == descpb.ConstraintValidity_Dropping {
-			return unimplemented.NewWithIssueDetailf(42844,
-				"drop-constraint-fk-mutation",
-				"constraint %q in the middle of being dropped", name)
-		}
+	} else if fk := constraint.AsForeignKey(); fk != nil {
 		// Search through the descriptor's foreign key constraints and delete the
 		// one that we're supposed to be deleting.
 		for i := range desc.OutboundFKs {
 			ref := &desc.OutboundFKs[i]
-			if ref.Name == name {
+			if ref.Name == fk.GetName() {
 				// If the constraint is unvalidated, there's no assumption that it must
 				// hold for all rows, so it can be dropped immediately.
-				if detail.FK.Validity == descpb.ConstraintValidity_Unvalidated {
+				if fk.IsConstraintUnvalidated() {
 					// Remove the backreference.
-					if err := removeFK(desc, detail.FK); err != nil {
+					if err := removeFKBackRef(fk); err != nil {
 						return err
 					}
 					desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
@@ -1453,114 +1305,49 @@ func (desc *Mutable) DropConstraint(
 				return nil
 			}
 		}
-
-	default:
-		return unimplemented.Newf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
-			"constraint %q has unsupported type", tree.ErrNameString(name))
 	}
-
-	// Check if the constraint can be found in a mutation, complain appropriately.
-	for i := range desc.Mutations {
-		m := &desc.Mutations[i]
-		if m.GetConstraint() != nil && m.GetConstraint().Name == name {
-			switch m.Direction {
-			case descpb.DescriptorMutation_ADD:
-				return unimplemented.NewWithIssueDetailf(42844,
-					"drop-constraint-mutation",
-					"constraint %q in the middle of being added, try again later", name)
-			case descpb.DescriptorMutation_DROP:
-				return unimplemented.NewWithIssueDetailf(42844,
-					"drop-constraint-mutation",
-					"constraint %q in the middle of being dropped", name)
-			}
-		}
-	}
-	return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
+	return errors.AssertionFailedf("constraint %q not found on table %q", constraint.GetName(), desc.Name)
 }
 
 // RenameConstraint renames a constraint.
 func (desc *Mutable) RenameConstraint(
-	detail descpb.ConstraintDetail,
-	oldName, newName string,
+	constraint catalog.Constraint,
+	newName string,
 	dependentViewRenameError func(string, descpb.ID) error,
-	renameFK func(*Mutable, *descpb.ForeignKeyConstraint, string) error,
+	renameFK func(*Mutable, catalog.ForeignKeyConstraint, string) error,
 ) error {
-	switch detail.Kind {
-	case descpb.ConstraintTypePK:
+	if u := constraint.AsUniqueWithIndex(); u != nil {
 		for _, tableRef := range desc.DependedOnBy {
-			if tableRef.IndexID != detail.Index.ID {
+			if tableRef.IndexID != u.GetID() {
 				continue
 			}
 			return dependentViewRenameError("index", tableRef.ID)
 		}
-		idx, err := desc.FindIndexWithID(detail.Index.ID)
-		if err != nil {
-			return err
-		}
-		idx.IndexDesc().Name = newName
+		u.IndexDesc().Name = newName
 		return nil
-
-	case descpb.ConstraintTypeUnique:
-		if detail.Index != nil {
-			for _, tableRef := range desc.DependedOnBy {
-				if tableRef.IndexID != detail.Index.ID {
-					continue
-				}
-				return dependentViewRenameError("index", tableRef.ID)
-			}
-			idx, err := desc.FindIndexWithID(detail.Index.ID)
-			if err != nil {
-				return err
-			}
-			idx.IndexDesc().Name = newName
-		} else if detail.UniqueWithoutIndexConstraint != nil {
-			if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
-				return unimplemented.NewWithIssueDetailf(42844,
-					"rename-constraint-unique-mutation",
-					"constraint %q in the middle of being added, try again later",
-					tree.ErrNameStringP(&detail.UniqueWithoutIndexConstraint.Name))
-			}
-			detail.UniqueWithoutIndexConstraint.Name = newName
-		} else {
-			return errors.AssertionFailedf(
-				"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
-			)
-		}
-		return nil
-
-	case descpb.ConstraintTypeFK:
-		if detail.FK.Validity == descpb.ConstraintValidity_Validating {
-			return unimplemented.NewWithIssueDetailf(42844,
-				"rename-constraint-fk-mutation",
-				"constraint %q in the middle of being added, try again later",
-				tree.ErrNameStringP(&detail.FK.Name))
-		}
-		// Update the name on the referenced table descriptor.
-		if err := renameFK(desc, detail.FK, newName); err != nil {
-			return err
-		}
-		// Update the name on this table descriptor.
-		fk, err := desc.FindFKByName(detail.FK.Name)
-		if err != nil {
-			return err
-		}
-		fk.Name = newName
-		return nil
-
-	case descpb.ConstraintTypeCheck:
-		if detail.CheckConstraint.Validity == descpb.ConstraintValidity_Validating {
-			return unimplemented.NewWithIssueDetailf(42844,
-				"rename-constraint-check-mutation",
-				"constraint %q in the middle of being added, try again later",
-				tree.ErrNameStringP(&detail.CheckConstraint.Name))
-		}
-		detail.CheckConstraint.Name = newName
-		return nil
-
-	default:
-		return unimplemented.Newf(fmt.Sprintf("rename-constraint-%s", detail.Kind),
-			"constraint %q has unsupported type", tree.ErrNameString(oldName))
 	}
+	switch constraint.GetConstraintValidity() {
+	case descpb.ConstraintValidity_Validating:
+		return unimplemented.NewWithIssuef(42844,
+			"constraint %q in the middle of being added, try again later",
+			tree.ErrNameString(constraint.GetName()))
+	}
+
+	if ck := constraint.AsCheck(); ck != nil {
+		ck.CheckDesc().Name = newName
+	} else if fk := constraint.AsForeignKey(); fk != nil {
+		// Update the name on the referenced table descriptor.
+		if err := renameFK(desc, fk, newName); err != nil {
+			return err
+		}
+		fk.ForeignKeyDesc().Name = newName
+	} else if uwoi := constraint.AsUniqueWithoutIndex(); uwoi != nil {
+		uwoi.UniqueWithoutIndexDesc().Name = newName
+	} else {
+		return unimplemented.Newf(fmt.Sprintf("rename-constraint-%T", constraint),
+			"constraint %q has unsupported type", tree.ErrNameString(constraint.GetName()))
+	}
+	return nil
 }
 
 // GetIndexMutationCapabilities implements the TableDescriptor interface.
@@ -1977,15 +1764,15 @@ func (desc *Mutable) AddUniqueWithoutIndexMutation(
 // to add the new constraint name.
 // TODO(mgartner): Move this to schemaexpr.CheckConstraintBuilder.
 func MakeNotNullCheckConstraint(
-	colName string,
-	colID descpb.ColumnID,
-	constraintID descpb.ConstraintID,
-	inuseNames map[string]struct{},
-	validity descpb.ConstraintValidity,
+	tbl catalog.TableDescriptor, col catalog.Column, validity descpb.ConstraintValidity,
 ) *descpb.TableDescriptor_CheckConstraint {
-	name := fmt.Sprintf("%s_auto_not_null", colName)
+	name := fmt.Sprintf("%s_auto_not_null", col.GetName())
 	// If generated name isn't unique, attempt to add a number to the end to
 	// get a unique name, as in generateNameForCheckConstraint().
+	inuseNames := make(map[string]struct{})
+	for _, c := range tbl.AllConstraints() {
+		inuseNames[c.GetName()] = struct{}{}
+	}
 	if _, ok := inuseNames[name]; ok {
 		i := 1
 		for {
@@ -1997,21 +1784,18 @@ func MakeNotNullCheckConstraint(
 			i++
 		}
 	}
-	if inuseNames != nil {
-		inuseNames[name] = struct{}{}
-	}
 
 	expr := &tree.IsNotNullExpr{
-		Expr: &tree.ColumnItem{ColumnName: tree.Name(colName)},
+		Expr: &tree.ColumnItem{ColumnName: tree.Name(col.GetName())},
 	}
 
 	return &descpb.TableDescriptor_CheckConstraint{
 		Name:                name,
 		Expr:                tree.Serialize(expr),
 		Validity:            validity,
-		ColumnIDs:           []descpb.ColumnID{colID},
+		ColumnIDs:           []descpb.ColumnID{col.GetID()},
 		IsNonNullConstraint: true,
-		ConstraintID:        constraintID,
+		ConstraintID:        tbl.GetNextConstraintID(),
 	}
 }
 
@@ -2194,6 +1978,7 @@ func (desc *Mutable) addIndexMutationMaybeWithTempIndex(m descpb.DescriptorMutat
 			tempIndex.UseDeletePreservingEncoding = true
 			tempIndex.ID = 0
 			tempIndex.Name = ""
+			tempIndex.ConstraintID = 0
 			m2 := descpb.DescriptorMutation{
 				Descriptor_: &descpb.DescriptorMutation_Index{Index: &tempIndex},
 				Direction:   descpb.DescriptorMutation_ADD,
@@ -2372,71 +2157,14 @@ func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
-// ColumnsUsed returns the IDs of the columns used in the check constraint's
-// expression. v2.0 binaries will populate this during table creation, but older
-// binaries will not, in which case this needs to be computed when requested.
-//
-// TODO(nvanbenschoten): we can remove this in v2.1 and replace it with a sql
-// migration to backfill all descpb.TableDescriptor_CheckConstraint.ColumnIDs slices.
-// See #22322.
-func (desc *wrapper) ColumnsUsed(
-	cc *descpb.TableDescriptor_CheckConstraint,
-) ([]descpb.ColumnID, error) {
-	if len(cc.ColumnIDs) > 0 {
-		// Already populated.
-		return cc.ColumnIDs, nil
-	}
-
-	parsed, err := parser.ParseExpr(cc.Expr)
-	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.Syntax,
-			"could not parse check constraint %s", cc.Expr)
-	}
-
-	var colIDsUsed catalog.TableColSet
-	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		if vBase, ok := expr.(tree.VarName); ok {
-			v, err := vBase.NormalizeVarName()
-			if err != nil {
-				return false, nil, err
-			}
-			if c, ok := v.(*tree.ColumnItem); ok {
-				col, err := desc.FindColumnWithName(c.ColumnName)
-				if err != nil || col.Dropped() {
-					return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
-						"column %q not found for constraint %q",
-						c.ColumnName, parsed.String())
-				}
-				colIDsUsed.Add(col.GetID())
-			}
-			return false, v, nil
-		}
-		return true, expr, nil
-	}
-	if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
-		return nil, err
-	}
-
-	cc.ColumnIDs = make([]descpb.ColumnID, 0, colIDsUsed.Len())
-	for colID, ok := colIDsUsed.Next(0); ok; colID, ok = colIDsUsed.Next(colID + 1) {
-		cc.ColumnIDs = append(cc.ColumnIDs, colID)
-	}
-	sort.Sort(descpb.ColumnIDs(cc.ColumnIDs))
-	return cc.ColumnIDs, nil
-}
-
 // CheckConstraintUsesColumn implements the TableDescriptor interface.
 func (desc *wrapper) CheckConstraintUsesColumn(
 	cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID,
 ) (bool, error) {
-	colsUsed, err := desc.ColumnsUsed(cc)
-	if err != nil {
-		return false, err
-	}
-	i := sort.Search(len(colsUsed), func(i int) bool {
-		return colsUsed[i] >= colID
+	i := sort.Search(len(cc.ColumnIDs), func(i int) bool {
+		return cc.ColumnIDs[i] >= colID
 	})
-	return i < len(colsUsed) && colsUsed[i] == colID, nil
+	return i < len(cc.ColumnIDs) && cc.ColumnIDs[i] == colID, nil
 }
 
 // GetFamilyOfColumn returns the ColumnFamilyDescriptor for the
@@ -2497,11 +2225,6 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 		refs[c.ID] = struct{}{}
 	}
 	return refs, nil
-}
-
-// ActiveChecks implements the TableDescriptor interface.
-func (desc *immutable) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
-	return desc.allChecks
 }
 
 // IsShardColumn implements the TableDescriptor interface.
