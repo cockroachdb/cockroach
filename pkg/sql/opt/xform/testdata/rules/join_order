@@ -2016,14 +2016,14 @@ Join Tree #2
 Vertexes
   A:
     scan abc [as=a2]
-  B:
+  C:
     distinct-on
      └── scan abc [as=a5]
 Edges
-  a2.c = a5.c [inner, ses=AB, tes=AB, rules=()]
-Joining AB
-  A B [inner, refs=AB]
-  B A [inner, refs=AB]
+  a2.c = a5.c [inner, ses=AC, tes=AC, rules=()]
+Joining AC
+  A C [inner, refs=AC]
+  C A [inner, refs=AC]
 Joins Considered: 2
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -2038,7 +2038,7 @@ Join Tree #3
    └── filters
         └── a1.a = a2.a
 Vertexes
-  C:
+  D:
     scan abc [as=a1]
   A:
     scan abc [as=a2]
@@ -2046,16 +2046,16 @@ Vertexes
     scan abc [as=a5]
 Edges
   a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
-  a1.a = a2.a [inner, ses=CA, tes=CA, rules=()]
-Joining CA
-  C A [inner, refs=CA]
-  A C [inner, refs=CA]
+  a1.a = a2.a [inner, ses=DA, tes=DA, rules=()]
+Joining DA
+  D A [inner, refs=DA]
+  A D [inner, refs=DA]
 Joining AB
   A B [semi, refs=AB]
-Joining CAB
-  C AB [inner, refs=CA]
-  AB C [inner, refs=CA]
-  CA B [semi, refs=AB]
+Joining DAB
+  D AB [inner, refs=DA]
+  AB D [inner, refs=DA]
+  DA B [semi, refs=AB]
 Joins Considered: 6
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -2074,30 +2074,30 @@ Join Tree #4
    └── filters
         └── a2.b = a3.b
 Vertexes
-  C:
+  D:
     scan abc [as=a1]
-  A:
+  E:
     semi-join (hash)
      ├── scan abc [as=a2]
      ├── scan abc [as=a5]
      └── filters
           └── a2.c = a5.c
-  D:
+  F:
     scan abc [as=a3]
 Edges
-  a1.a = a2.a [inner, ses=CA, tes=CA, rules=()]
-  a2.b = a3.b [inner, ses=AD, tes=AD, rules=()]
-Joining CA
-  C A [inner, refs=CA]
-  A C [inner, refs=CA]
-Joining AD
-  A D [inner, refs=AD]
-  D A [inner, refs=AD]
-Joining CAD
-  C AD [inner, refs=CA]
-  AD C [inner, refs=CA]
-  CA D [inner, refs=AD]
-  D CA [inner, refs=AD]
+  a1.a = a2.a [inner, ses=DE, tes=DE, rules=()]
+  a2.b = a3.b [inner, ses=EF, tes=EF, rules=()]
+Joining DE
+  D E [inner, refs=DE]
+  E D [inner, refs=DE]
+Joining EF
+  E F [inner, refs=EF]
+  F E [inner, refs=EF]
+Joining DEF
+  D EF [inner, refs=DE]
+  EF D [inner, refs=DE]
+  DE F [inner, refs=EF]
+  F DE [inner, refs=EF]
 Joins Considered: 8
 --------------------------------------------------------------------------------
 Join Tree #5
@@ -2120,7 +2120,7 @@ Join Tree #5
    └── filters
         └── a3.a = a4.a
 Vertexes
-  C:
+  G:
     inner-join (hash)
      ├── scan abc [as=a1]
      ├── semi-join (hash)
@@ -2130,24 +2130,24 @@ Vertexes
      │         └── a2.c = a5.c
      └── filters
           └── a1.a = a2.a
-  D:
+  F:
     scan abc [as=a3]
-  E:
+  H:
     scan abc [as=a4]
 Edges
-  a2.b = a3.b [inner, ses=CD, tes=CD, rules=()]
-  a3.a = a4.a [inner, ses=DE, tes=DE, rules=()]
-Joining CD
-  C D [inner, refs=CD]
-  D C [inner, refs=CD]
-Joining DE
-  D E [inner, refs=DE]
-  E D [inner, refs=DE]
-Joining CDE
-  C DE [inner, refs=CD]
-  DE C [inner, refs=CD]
-  CD E [inner, refs=DE]
-  E CD [inner, refs=DE]
+  a2.b = a3.b [inner, ses=GF, tes=GF, rules=()]
+  a3.a = a4.a [inner, ses=FH, tes=FH, rules=()]
+Joining GF
+  G F [inner, refs=GF]
+  F G [inner, refs=GF]
+Joining FH
+  F H [inner, refs=FH]
+  H F [inner, refs=FH]
+Joining GFH
+  G FH [inner, refs=GF]
+  FH G [inner, refs=GF]
+  GF H [inner, refs=FH]
+  H GF [inner, refs=FH]
 Joins Considered: 8
 ================================================================================
 Final Plan
@@ -2267,29 +2267,29 @@ Vertexes
      ├── scan bx
      └── filters
           └── x IS NOT NULL
-  C:
+  D:
     distinct-on
      └── scan cy
 Edges
   a = x [inner, ses=AB, tes=AB, rules=()]
-  x = y [inner, ses=BC, tes=BC, rules=()]
-  a = y [inner, ses=AC, tes=AC, rules=()]
+  x = y [inner, ses=BD, tes=BD, rules=()]
+  a = y [inner, ses=AD, tes=AD, rules=()]
 Joining AB
   A B [inner, refs=AB]
   B A [inner, refs=AB]
-Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
-Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
-Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
-  AB C [inner, refs=BC]
-  C AB [inner, refs=BC]
+Joining AD
+  A D [inner, refs=AD]
+  D A [inner, refs=AD]
+Joining BD
+  B D [inner, refs=BD]
+  D B [inner, refs=BD]
+Joining ABD
+  A BD [inner, refs=AB]
+  BD A [inner, refs=AB]
+  B AD [inner, refs=AB]
+  AD B [inner, refs=AB]
+  AB D [inner, refs=BD]
+  D AB [inner, refs=BD]
 Joins Considered: 12
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -2320,13 +2320,13 @@ Vertexes
           └── x IS NOT NULL
   C:
     scan cy
-  D:
+  E:
     scan dz
 Edges
   a = x [inner, ses=AB, tes=AB, rules=()]
   x = y [semi, ses=BC, tes=BC, rules=()]
-  a = z [inner, ses=AD, tes=AD, rules=(C->B)]
-  x = z [inner, ses=BD, tes=BD, rules=()]
+  a = z [inner, ses=AE, tes=AE, rules=(C->B)]
+  x = z [inner, ses=BE, tes=BE, rules=()]
 Joining AB
   A B [inner, refs=AB]
   B A [inner, refs=AB]
@@ -2336,31 +2336,31 @@ Joining ABC
   A BC [inner, refs=AB]
   BC A [inner, refs=AB]
   AB C [semi, refs=BC]
-Joining AD
-  A D [inner, refs=AD]
-  D A [inner, refs=AD]
-Joining BD
-  B D [inner, refs=BD]
-  D B [inner, refs=BD]
-Joining ABD
-  A BD [inner, refs=AB]
-  BD A [inner, refs=AB]
-  B AD [inner, refs=AB]
-  AD B [inner, refs=AB]
-  AB D [inner, refs=AD]
-  D AB [inner, refs=AD]
-Joining BCD
-  BD C [semi, refs=BC]
-  BC D [inner, refs=BD]
-  D BC [inner, refs=BD]
-Joining ABCD
-  A BCD [inner, refs=AB]
-  BCD A [inner, refs=AB]
-  ABD C [semi, refs=BC]
-  BC AD [inner, refs=AB]
-  AD BC [inner, refs=AB]
-  ABC D [inner, refs=AD]
-  D ABC [inner, refs=AD]
+Joining AE
+  A E [inner, refs=AE]
+  E A [inner, refs=AE]
+Joining BE
+  B E [inner, refs=BE]
+  E B [inner, refs=BE]
+Joining ABE
+  A BE [inner, refs=AB]
+  BE A [inner, refs=AB]
+  B AE [inner, refs=AB]
+  AE B [inner, refs=AB]
+  AB E [inner, refs=AE]
+  E AB [inner, refs=AE]
+Joining BCE
+  BE C [semi, refs=BC]
+  BC E [inner, refs=BE]
+  E BC [inner, refs=BE]
+Joining ABCE
+  A BCE [inner, refs=AB]
+  BCE A [inner, refs=AB]
+  ABE C [semi, refs=BC]
+  BC AE [inner, refs=AB]
+  AE BC [inner, refs=AB]
+  ABC E [inner, refs=AE]
+  E ABC [inner, refs=AE]
 Joins Considered: 26
 ================================================================================
 Final Plan
@@ -2688,3 +2688,168 @@ inner-join (lookup t88659)
  │    └── filters (true)
  └── filters
       └── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+
+# Regression test for #90761 - don't drop LeftJoin filter when there are enough
+# InnerJoin edges to "link" all relations and the LeftJoin doesn't get
+# simplified.
+exec-ddl
+CREATE TABLE t90761 (a INT, b INT, c INT);
+----
+
+# The 't2.b > t4.b' filter should not be dropped.
+reorderjoins disable=RejectNullsUnderJoinRight
+SELECT 1
+FROM t90761 AS t1
+JOIN t90761 AS t2
+  LEFT JOIN t90761 AS t3
+    JOIN t90761 AS t4 ON true
+  ON t2.b > t4.b
+ON t1.a = t4.a AND t1.c = t2.c;
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  inner-join (cross)
+   ├── scan t90761 [as=t3]
+   ├── scan t90761 [as=t4]
+   └── filters (true)
+Vertexes
+  A:
+    scan t90761 [as=t3]
+  B:
+    scan t90761 [as=t4]
+Edges
+  cross [inner, ses=, tes=AB, rules=()]
+Joining AB
+  A B [inner, refs=]
+  B A [inner, refs=]
+Joins Considered: 2
+--------------------------------------------------------------------------------
+Join Tree #2
+--------------------------------------------------------------------------------
+  left-join (cross)
+   ├── scan t90761 [as=t2]
+   ├── inner-join (cross)
+   │    ├── scan t90761 [as=t3]
+   │    ├── scan t90761 [as=t4]
+   │    └── filters (true)
+   └── filters
+        └── t2.b > t4.b
+Vertexes
+  C:
+    scan t90761 [as=t2]
+  A:
+    scan t90761 [as=t3]
+  B:
+    scan t90761 [as=t4]
+Edges
+  cross [inner, ses=, tes=AB, rules=()]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=()]
+Joining AB
+  A B [inner, refs=]
+  B A [inner, refs=]
+Joining CAB
+  C AB [left, refs=CB]
+Joins Considered: 3
+--------------------------------------------------------------------------------
+Join Tree #3
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── scan t90761 [as=t1]
+   ├── left-join (cross)
+   │    ├── scan t90761 [as=t2]
+   │    ├── inner-join (cross)
+   │    │    ├── scan t90761 [as=t3]
+   │    │    ├── scan t90761 [as=t4]
+   │    │    └── filters (true)
+   │    └── filters
+   │         └── t2.b > t4.b
+   └── filters
+        ├── t1.a = t4.a
+        └── t1.c = t2.c
+Vertexes
+  D:
+    scan t90761 [as=t1]
+  C:
+    scan t90761 [as=t2]
+  A:
+    scan t90761 [as=t3]
+  B:
+    scan t90761 [as=t4]
+Edges
+  cross [inner, ses=, tes=AB, rules=()]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=()]
+  t1.a = t4.a [inner, ses=DB, tes=DCB, rules=()]
+  t1.c = t2.c [inner, ses=DC, tes=DC, rules=()]
+Joining DC
+  D C [inner, refs=DC]
+  C D [inner, refs=DC]
+Joining DCB
+  DC B [inner, refs=DB]
+  B DC [inner, refs=DB]
+Joining AB
+  A B [inner, refs=]
+  B A [inner, refs=]
+Joining CAB
+  C AB [left, refs=CB]
+Joining DCAB
+  D CAB [inner, refs=DCB]
+  CAB D [inner, refs=DCB]
+  DC AB [left, refs=CB]
+Joins Considered: 10
+================================================================================
+Final Plan
+================================================================================
+project
+ ├── columns: "?column?":25!null
+ ├── fd: ()-->(25)
+ ├── inner-join (hash)
+ │    ├── columns: t1.a:1!null t1.c:3!null t2.b:8 t2.c:9!null t4.a:19!null t4.b:20
+ │    ├── fd: (1)==(19), (19)==(1), (3)==(9), (9)==(3)
+ │    ├── right-join (cross)
+ │    │    ├── columns: t2.b:8 t2.c:9 t4.a:19 t4.b:20
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: t4.a:19 t4.b:20
+ │    │    │    ├── scan t90761 [as=t3]
+ │    │    │    ├── scan t90761 [as=t4]
+ │    │    │    │    └── columns: t4.a:19 t4.b:20
+ │    │    │    └── filters (true)
+ │    │    ├── scan t90761 [as=t2]
+ │    │    │    └── columns: t2.b:8 t2.c:9
+ │    │    └── filters
+ │    │         └── t2.b:8 > t4.b:20 [outer=(8,20), constraints=(/8: (/NULL - ]; /20: (/NULL - ])]
+ │    ├── scan t90761 [as=t1]
+ │    │    └── columns: t1.a:1 t1.c:3
+ │    └── filters
+ │         ├── t1.a:1 = t4.a:19 [outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
+ │         └── t1.c:3 = t2.c:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+ └── projections
+      └── 1 [as="?column?":25]
+
+# The 't2.b > t4.b' filter should not be dropped. Case with 'IS NOT NULL'
+# instead of a disabled rule.
+opt format=hide-all
+SELECT 1
+FROM t90761 AS t1
+JOIN t90761 AS t2
+  LEFT JOIN t90761 AS t3
+    JOIN t90761 AS t4 ON true
+  ON t2.b > t4.b
+ON (t1.a = t4.a OR t4.a IS NULL) AND t1.c = t2.c;
+----
+project
+ ├── inner-join (hash)
+ │    ├── right-join (cross)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── scan t90761 [as=t3]
+ │    │    │    ├── scan t90761 [as=t4]
+ │    │    │    └── filters (true)
+ │    │    ├── scan t90761 [as=t2]
+ │    │    └── filters
+ │    │         └── t2.b > t4.b
+ │    ├── scan t90761 [as=t1]
+ │    └── filters
+ │         ├── (t1.a = t4.a) OR (t4.a IS NULL)
+ │         └── t1.c = t2.c
+ └── projections
+      └── 1
