@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -58,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -269,6 +267,7 @@ func NewTenantServer(
 		args.Settings,
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
+		nil, /* serverTickleFn */
 	)
 
 	// Create a drain server.
@@ -327,27 +326,21 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	// Load the TLS configuration for the HTTP server.
-	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
-	if err != nil {
-		return err
-	}
+	// If DisableHTTPListener is set, we are relying on the HTTP request
+	// routing performed by the serverController.
+	if !s.sqlServer.cfg.DisableHTTPListener {
+		// Load the TLS configuration for the HTTP server.
+		uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
+		if err != nil {
+			return err
+		}
 
-	// connManager tracks incoming connections accepted via listeners
-	// and automatically closes them when the stopper indicates a
-	// shutdown.
-	// This handles both:
-	// - HTTP connections for the admin UI with an optional TLS handshake over HTTP.
-	// - SQL client connections with a TLS handshake over TCP.
-	// (gRPC connections are handled separately via s.grpc and perform
-	// their TLS handshake on their own)
-	connManager := netutil.MakeServer(workersCtx, s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
-
-	// Start the admin UI server. This opens the HTTP listen socket,
-	// optionally sets up TLS, and dispatches the server worker for the
-	// web UI.
-	if err := s.http.start(ctx, workersCtx, connManager, uiTLSConfig, s.stopper); err != nil {
-		return err
+		// Start the admin UI server. This opens the HTTP listen socket,
+		// optionally sets up TLS, and dispatches the server worker for the
+		// web UI.
+		if err := startHTTPService(ctx, workersCtx, s.sqlServer.cfg, uiTLSConfig, s.stopper, s.http.baseHandler); err != nil {
+			return err
+		}
 	}
 
 	// Initialize the external storage builders configuration params now that the
@@ -581,11 +574,15 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.sqlServer.cfg.TestingKnobs,
-		connManager,
 		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
+	}
+
+	// If enabled, start reporting diagnostics.
+	if s.sqlServer.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut() {
+		s.startDiagnostics(workersCtx)
 	}
 
 	// Enable the Obs Server.
@@ -641,7 +638,6 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 	if err := s.sqlServer.startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.connManager,
 		s.sqlServer.pgL,
 		&s.sqlServer.cfg.SocketFile,
 	); err != nil {
@@ -684,9 +680,9 @@ func (s *SQLServerWrapper) LogicalClusterID() uuid.UUID {
 	return s.sqlServer.LogicalClusterID()
 }
 
-// StartDiagnostics begins the diagnostic loop of this tenant server.
+// startDiagnostics begins the diagnostic loop of this tenant server.
 // Used in cli/mt_start_sql.go.
-func (s *SQLServerWrapper) StartDiagnostics(ctx context.Context) {
+func (s *SQLServerWrapper) startDiagnostics(ctx context.Context) {
 	s.sqlServer.StartDiagnostics(ctx)
 }
 

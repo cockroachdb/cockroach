@@ -197,19 +197,20 @@ func makeAdminAuthzCheckHandler(
 	})
 }
 
-// start starts the network listener for the HTTP interface
+// startHTTPService starts the network listener for the HTTP interface
 // and also starts accepting incoming HTTP connections.
-func (s *httpServer) start(
+func startHTTPService(
 	ctx, workersCtx context.Context,
-	connManager netutil.Server,
+	cfg *BaseConfig,
 	uiTLSConfig *tls.Config,
 	stopper *stop.Stopper,
+	handler http.HandlerFunc,
 ) error {
-	httpLn, err := ListenAndUpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
+	httpLn, err := ListenAndUpdateAddrs(ctx, &cfg.HTTPAddr, &cfg.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return err
 	}
-	log.Eventf(ctx, "listening on http port %s", s.cfg.HTTPAddr)
+	log.Eventf(ctx, "listening on http port %s", cfg.HTTPAddr)
 
 	// The HTTP listener shutdown worker, which closes everything under
 	// the HTTP port when the stopper indicates we are shutting down.
@@ -247,14 +248,14 @@ func (s *httpServer) start(
 		if err := stopper.RunAsyncTask(workersCtx, "serve-health", func(context.Context) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				if HSTSEnabled.Get(&s.cfg.Settings.SV) {
+				if HSTSEnabled.Get(&cfg.Settings.SV) {
 					w.Header().Set(hstsHeaderKey, hstsHeaderValue)
 				}
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
 			})
-			mux.Handle(healthPath, http.HandlerFunc(s.baseHandler))
+			mux.Handle(healthPath, handler)
 
-			plainRedirectServer := netutil.MakeServer(workersCtx, stopper, uiTLSConfig, mux)
+			plainRedirectServer := netutil.MakeHTTPServer(workersCtx, stopper, nil /* tlsConfig */, mux)
 
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		}); err != nil {
@@ -263,6 +264,10 @@ func (s *httpServer) start(
 
 		httpLn = tls.NewListener(tlsL, uiTLSConfig)
 	}
+
+	// The connManager is responsible for tearing down the net.Conn
+	// objects when the stopper tells us to shut down.
+	connManager := netutil.MakeHTTPServer(workersCtx, stopper, uiTLSConfig, handler)
 
 	// Serve the HTTP endpoint. This will be the original httpLn
 	// listening on --http-addr without TLS if uiTLSConfig was

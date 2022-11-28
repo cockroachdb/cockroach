@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -50,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -88,7 +89,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
@@ -156,7 +156,12 @@ type Server struct {
 
 	spanConfigSubscriber spanconfig.KVSubscriber
 
+	// TODO(knz): pull this down under the serverController.
 	sqlServer *SQLServer
+
+	// serverController is responsible for on-demand instantiation
+	// of services.
+	serverController *serverController
 
 	// Created in NewServer but initialized (made usable) in `(*Server).PreStart`.
 	externalStorageBuilder *externalStorageBuilder
@@ -936,12 +941,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
+	// Create a server controller.
+	sc := newServerController(ctx, stopper,
+		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer})
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		cfg.BaseConfig.AmbientCtx,
 		st,
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
+		// TODO(knz): Remove this once
+		// https://github.com/cockroachdb/cockroach/issues/84585 is
+		// implemented.
+		func(ctx context.Context, name string) error {
+			d, err := sc.getOrCreateServer(ctx, name)
+			if err != nil {
+				return err
+			}
+			return errors.Newf("server found with type %T", d)
+		},
 	)
 
 	// Create a drain server.
@@ -990,6 +1009,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
+		serverController:       sc,
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
@@ -1117,20 +1137,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// connManager tracks incoming connections accepted via listeners
-	// and automatically closes them when the stopper indicates a
-	// shutdown.
-	// This handles both:
-	// - HTTP connections for the admin UI with an optional TLS handshake over HTTP.
-	// - SQL client connections with a TLS handshake over TCP.
-	// (gRPC connections are handled separately via s.grpc and perform
-	// their TLS handshake on their own)
-	connManager := netutil.MakeServer(workersCtx, s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
-
 	// Start the admin UI server. This opens the HTTP listen socket,
 	// optionally sets up TLS, and dispatches the server worker for the
 	// web UI.
-	if err := s.http.start(ctx, workersCtx, connManager, uiTLSConfig, s.stopper); err != nil {
+	if err := startHTTPService(ctx,
+		workersCtx, &s.cfg.BaseConfig, uiTLSConfig, s.stopper, s.serverController.httpMux); err != nil {
 		return err
 	}
 
@@ -1705,11 +1716,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
-		connManager,
 		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
+	}
+
+	// If enabled, start reporting diagnostics.
+	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut() {
+		s.startDiagnostics(workersCtx)
 	}
 
 	// Enable the Obs Server.
@@ -1777,7 +1792,6 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 	if err := s.sqlServer.startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.connManager,
 		s.sqlServer.pgL,
 		&s.cfg.SocketFile,
 	); err != nil {
@@ -1820,10 +1834,8 @@ func (s *Server) LogicalClusterID() uuid.UUID {
 	return s.sqlServer.LogicalClusterID()
 }
 
-// StartDiagnostics starts periodic diagnostics reporting and update checking.
-// NOTE: This is not called in PreStart so that it's disabled by default for
-// testing.
-func (s *Server) StartDiagnostics(ctx context.Context) {
+// startDiagnostics starts periodic diagnostics reporting and update checking.
+func (s *Server) startDiagnostics(ctx context.Context) {
 	s.updates.PeriodicallyCheckForUpdates(ctx, s.stopper)
 	s.sqlServer.StartDiagnostics(ctx)
 }
@@ -1856,4 +1868,22 @@ func (s *Server) Drain(
 	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	return s.drain.runDrain(ctx, verbose)
+}
+
+// MakeServerOptionsForURL creates the input for MakeURLForServer().
+// Beware of not calling this too early; the server address
+// is finalized late in the network initialization sequence.
+func MakeServerOptionsForURL(
+	baseCfg *base.Config,
+) (clientsecopts.ClientSecurityOptions, clientsecopts.ServerParameters) {
+	clientConnOptions := clientsecopts.ClientSecurityOptions{
+		Insecure: baseCfg.Insecure,
+		CertsDir: baseCfg.SSLCertsDir,
+	}
+	serverParams := clientsecopts.ServerParameters{
+		ServerAddr:      baseCfg.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+	return clientConnOptions, serverParams
 }

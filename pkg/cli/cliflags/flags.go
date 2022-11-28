@@ -137,6 +137,18 @@ control is not returned to the shell until the server is ready to
 accept requests.`,
 	}
 
+	DisableInMemoryTenant = FlagInfo{
+		Name:        "disable-in-memory-tenant",
+		Description: `Do not start a secondary tenant in-memory.`,
+	}
+
+	// TODO(knz): Remove this once https://github.com/cockroachdb/cockroach/issues/84604
+	// is addressed.
+	SecondaryTenantPortOffset = FlagInfo{
+		Name:        "secondary-tenant-port-offset",
+		Description: "TCP port number offset to use for the secondary in-memory tenant.",
+	}
+
 	SQLMem = FlagInfo{
 		Name: "max-sql-memory",
 		Description: `

@@ -178,9 +178,6 @@ type SQLServer struct {
 
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
-	// connManager is the connection manager to use to set up additional
-	// SQL listeners in AcceptClients().
-	connManager netutil.Server
 
 	// isReady is the health status of the node. When true, the node is healthy;
 	// load balancers and connection management tools treat the node as "ready".
@@ -1278,7 +1275,6 @@ func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
-	connManager netutil.Server,
 	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
@@ -1345,7 +1341,6 @@ func (s *SQLServer) preStart(
 		}
 	}
 
-	s.connManager = connManager
 	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
@@ -1505,11 +1500,7 @@ func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
 // startServeSQL starts accepting incoming SQL connections over TCP.
 // It also starts listening on the Unix socket, if that was configured.
 func (s *SQLServer) startServeSQL(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	connManager netutil.Server,
-	pgL net.Listener,
-	socketFileCfg *string,
+	ctx context.Context, stopper *stop.Stopper, pgL net.Listener, socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
@@ -1517,10 +1508,14 @@ func (s *SQLServer) startServeSQL(
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := makeTCPKeepAliveManager()
 
+	// The connManager is responsible for tearing down the net.Conn
+	// objects when the stopper tells us to shut down.
+	connManager := netutil.MakeTCPServer(ctx, stopper)
+
 	_ = stopper.RunAsyncTaskEx(pgCtx,
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {
-			err := connManager.ServeWith(ctx, stopper, pgL, func(ctx context.Context, conn net.Conn) {
+			err := connManager.ServeWith(ctx, pgL, func(ctx context.Context, conn net.Conn) {
 				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 				tcpKeepAlive.configure(connCtx, conn)
 
@@ -1572,7 +1567,7 @@ func (s *SQLServer) startServeSQL(
 		if err := stopper.RunAsyncTaskEx(pgCtx,
 			stop.TaskOpts{TaskName: "unix-listener", SpanOpt: stop.SterileRootSpan},
 			func(ctx context.Context) {
-				err := connManager.ServeWith(ctx, stopper, unixLn, func(ctx context.Context, conn net.Conn) {
+				err := connManager.ServeWith(ctx, unixLn, func(ctx context.Context, conn net.Conn) {
 					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 					if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 						log.Ops.Errorf(connCtx, "%v", err)

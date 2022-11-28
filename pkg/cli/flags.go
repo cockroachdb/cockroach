@@ -537,6 +537,11 @@ func init() {
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+
+		// TODO(knz): Remove this port offset mechanism once we implement
+		// a shared listener. See: https://github.com/cockroachdb/cockroach/issues/84585
+		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortOffset, cliflags.SecondaryTenantPortOffset)
+		_ = f.MarkHidden(cliflags.SecondaryTenantPortOffset.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
@@ -1137,6 +1142,9 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(host, port)
 	}
 	serverCfg.LocalityAddresses = localityAdvertiseHosts
+
+	// Ensure that diagnostic reporting is enabled for server startup commands.
+	serverCfg.StartDiagnosticsReporting = true
 
 	return nil
 }
