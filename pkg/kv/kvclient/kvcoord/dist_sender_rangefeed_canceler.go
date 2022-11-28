@@ -49,14 +49,35 @@ type stuckRangeFeedCanceler struct {
 	resetTimerAfter time.Time
 	activeThreshold time.Duration
 
-	_stuck int32 // atomic
+	// _state manages canceler state transitions.
+	//  do():
+	//         inactive <-----
+	//            |           |
+	//     ----active----     |
+	//     |             |    |
+	//   timeout        ok    |
+	//     |             |-----
+	//   stuck
+	// If timeout occurs outside do(), it is ignored.
+	_state int32 // atomic
+
+	// A testing knob to notify when timer triggers.
+	afterTimerTrigger func()
 }
+
+type state int32
+
+const (
+	inactive state = iota
+	active
+	stuck
+)
 
 // stuck returns true if the stuck detection got triggered.
 // If this returns true, the cancel function will be invoked
 // shortly, if it hasn't already.
 func (w *stuckRangeFeedCanceler) stuck() bool {
-	return atomic.LoadInt32(&w._stuck) != 0
+	return atomic.LoadInt32(&w._state) == int32(stuck)
 }
 
 // stop releases the active timer, if any. It should be invoked
@@ -69,13 +90,14 @@ func (w *stuckRangeFeedCanceler) stop() {
 	}
 }
 
-// ping notifies the canceler that the rangefeed has received an
-// event, i.e. is making progress.
-func (w *stuckRangeFeedCanceler) ping() {
+// do invokes callback cb, arranging for cancellation to happen if the callback
+// takes too long to complete.  Returns errRestartStuckRange if cb took excessive
+// amount of time.
+func (w *stuckRangeFeedCanceler) do(cb func() error) error {
 	threshold := w.threshold()
 	if threshold == 0 {
 		w.stop()
-		return
+		return cb()
 	}
 
 	mkTimer := func() {
@@ -86,14 +108,22 @@ func (w *stuckRangeFeedCanceler) ping() {
 		// ping() event arrives at 29.999s, the timer should only fire
 		// at 90s, not 60s.
 		w.t = time.AfterFunc(3*threshold/2, func() {
-			// NB: important to store _stuck before canceling, since we
-			// want the caller to be able to detect stuck() after ctx
-			// cancels.
-			atomic.StoreInt32(&w._stuck, 1)
-			w.cancel()
+			if w.afterTimerTrigger != nil {
+				defer w.afterTimerTrigger()
+			}
+
+			// NB: trigger cancellation only if currently active.
+			if atomic.CompareAndSwapInt32(&w._state, int32(active), int32(stuck)) {
+				w.cancel()
+			}
 		})
 		w.resetTimerAfter = timeutil.Now().Add(threshold / 2)
 	}
+
+	if !atomic.CompareAndSwapInt32(&w._state, int32(inactive), int32(active)) {
+		return errRestartStuckRange
+	}
+	defer atomic.CompareAndSwapInt32(&w._state, int32(active), int32(inactive))
 
 	if w.t == nil {
 		mkTimer()
@@ -101,6 +131,8 @@ func (w *stuckRangeFeedCanceler) ping() {
 		w.stop()
 		mkTimer()
 	}
+
+	return cb()
 }
 
 // newStuckRangeFeedCanceler sets up a canceler with the provided
