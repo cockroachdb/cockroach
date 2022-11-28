@@ -18,6 +18,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -3961,6 +3963,10 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		return nil, err
 	}
 
+	if err = logAndSanitizeExportDestination(ctx, n.destination); err != nil {
+		return nil, err
+	}
+
 	var core execinfrapb.ProcessorCoreUnion
 	core.Exporter = &execinfrapb.ExportSpec{
 		Destination: n.destination,
@@ -3983,6 +3989,15 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	// The CSVWriter produces the same columns as the EXPORT statement.
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(colinfo.ExportColumns))
 	return plan, nil
+}
+
+func logAndSanitizeExportDestination(ctx context.Context, dest string) error {
+	clean, err := cloud.SanitizeExternalStorageURI(dest, nil)
+	if err != nil {
+		return err
+	}
+	log.Ops.Infof(ctx, "export planning to connect to destination %v", redact.Safe(clean))
+	return nil
 }
 
 // checkScanParallelizationIfLocal returns whether the plan contains scanNodes

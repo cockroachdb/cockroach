@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -769,6 +770,9 @@ func backupPlanHook(
 			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
 				return err
 			}
+			if err = logAndSanitizeKmsURIs(ctx, encryptionParams.RawKmsUris...); err != nil {
+				return err
+			}
 		}
 
 		var revisionHistory bool
@@ -935,6 +939,10 @@ func backupPlanHook(
 			initialDetails.IncrementalFrom, p.ExecCfg())
 		if err != nil {
 			return err
+		}
+
+		if err := logAndSanitizeBackupDestinations(ctx, append(to, incrementalFrom...)...); err != nil {
+			return errors.Wrap(err, "logging backup destinations")
 		}
 
 		// The backup job needs to lay a claim on the bucket it is writing to, to
@@ -1109,6 +1117,28 @@ func backupPlanHook(
 		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+func logAndSanitizeKmsURIs(ctx context.Context, kmsURIs ...string) error {
+	for _, dest := range kmsURIs {
+		clean, err := cloud.RedactKMSURI(dest)
+		if err != nil {
+			return err
+		}
+		log.Ops.Infof(ctx, "backup planning to connect to KMS destination %v", redact.Safe(clean))
+	}
+	return nil
+}
+
+func logAndSanitizeBackupDestinations(ctx context.Context, backupDestinations ...string) error {
+	for _, dest := range backupDestinations {
+		clean, err := cloud.SanitizeExternalStorageURI(dest, nil)
+		if err != nil {
+			return err
+		}
+		log.Ops.Infof(ctx, "backup planning to connect to destination %v", redact.Safe(clean))
+	}
+	return nil
 }
 
 func collectTelemetry(

@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
@@ -307,7 +308,7 @@ func createChangefeedJobRecord(
 		// Still serialize the experimental_ form for backwards compatibility
 	}
 
-	jobDescription, err := changefeedJobDescription(p, changefeedStmt.CreateChangefeed, sinkURI, opts)
+	jobDescription, err := changefeedJobDescription(ctx, p, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +707,11 @@ func validateSink(
 }
 
 func changefeedJobDescription(
-	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
+	ctx context.Context,
+	p sql.PlanHookState,
+	changefeed *tree.CreateChangefeed,
+	sinkURI string,
+	opts map[string]string,
 ) (string, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
@@ -719,6 +724,8 @@ func changefeedJobDescription(
 	}
 
 	cleanedSinkURI = redactUser(cleanedSinkURI)
+
+	logSanitizedChangefeedDestination(ctx, cleanedSinkURI)
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
@@ -745,6 +752,10 @@ func redactUser(uri string) string {
 		u.User = url.User(`redacted`)
 	}
 	return u.String()
+}
+
+func logSanitizedChangefeedDestination(ctx context.Context, destination string) {
+	log.Ops.Infof(ctx, "changefeed planning to connect to destination %v", redact.Safe(destination))
 }
 
 // validateNonNegativeDuration returns a nil error if optValue can be
