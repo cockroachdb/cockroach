@@ -760,7 +760,7 @@ func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string,
 	for key := range curOrHistSplits {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys) // for determinism
+	sort.Strings(keys)
 	if len(keys) == 0 {
 		// No splits.
 		return uint64ToKey(0), uint64ToKey(math.MaxUint64)
