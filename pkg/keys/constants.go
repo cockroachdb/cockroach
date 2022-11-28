@@ -293,12 +293,12 @@ var (
 	RangeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("store-idgen")))
-	//
 	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("status-")))
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
-	//
+	// StartupMigrationPrefix specifies the key prefix to store all migration details.
+	StartupMigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 	// TimeseriesKeyMax is the maximum value for any timeseries data.
