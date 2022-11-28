@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -577,6 +579,10 @@ type TenantOperator interface {
 
 	// GetTenantInfo returns information about the specified tenant.
 	GetTenantInfo(ctx context.Context, tenantName roachpb.TenantName) (*descpb.TenantInfo, error)
+
+	// GetTenantReplicationInfo returns stream replication related information
+	// about the tenant.
+	GetTenantReplicationInfo(ctx context.Context, replicationJobId jobspb.JobID) (*streampb.StreamIngestionStats, error)
 
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.

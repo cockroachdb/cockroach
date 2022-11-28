@@ -923,6 +923,7 @@ show_tables_stmt ::=
 
 show_tenant_stmt ::=
 	'SHOW' 'TENANT' name
+	| 'SHOW' 'TENANT' name 'WITH' 'REPLICATION' 'STATUS'
 
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'

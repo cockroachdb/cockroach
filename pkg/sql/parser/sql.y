@@ -5420,11 +5420,21 @@ backup_kms:
 
 // %Help: SHOW TENANT - display tenant information
 // %Category: Misc
-// %Text: SHOW TENANT
+// %Text: SHOW TENANT <name> WITH REPLICATION STATUS
 show_tenant_stmt:
   SHOW TENANT name
   {
-   $$.val = &tree.ShowTenant{Name: tree.Name($3)}
+   $$.val = &tree.ShowTenant{
+     Name: tree.Name($3),
+     WithReplication: false,
+   }
+  }
+| SHOW TENANT name WITH REPLICATION STATUS
+  {
+   $$.val = &tree.ShowTenant{
+     Name: tree.Name($3),
+     WithReplication: true,
+   }
   }
 | SHOW TENANT error // SHOW HELP: SHOW TENANT
 

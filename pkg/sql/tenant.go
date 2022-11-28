@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -833,4 +834,19 @@ func (p *planner) GetTenantInfo(
 	}
 
 	return GetTenantRecordByName(ctx, p.execCfg, p.Txn(), tenantName)
+}
+
+// GetTenantReplicationInfo implements the tree.TenantOperator interface.
+func (p *planner) GetTenantReplicationInfo(
+	ctx context.Context, replicationJobId jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
+	mgr, err := p.EvalContext().StreamManagerFactory.GetStreamIngestManager(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := mgr.GetStreamIngestionStats(ctx, replicationJobId)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
 }

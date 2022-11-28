@@ -268,3 +268,14 @@ var TenantColumns = ResultColumns{
 	{Name: "name", Typ: types.String},
 	{Name: "status", Typ: types.String},
 }
+
+var TenantColumnsWithReplication = ResultColumns{
+	{Name: "id", Typ: types.Int},
+	{Name: "name", Typ: types.String},
+	{Name: "status", Typ: types.String},
+	{Name: "source_tenant_name", Typ: types.String},
+	{Name: "source_cluster_uri", Typ: types.String},
+	{Name: "replication_job_id", Typ: types.Int},
+	{Name: "latest_fully_replicated_time", Typ: types.Timestamp},
+	{Name: "protected_time", Typ: types.Timestamp},
+}

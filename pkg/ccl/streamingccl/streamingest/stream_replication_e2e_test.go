@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1243,4 +1244,45 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 			testProtectedTimestampManagement(t, pauseBeforeTerminal, completeReplication)
 		})
 	})
+}
+
+func TestTenantStreamingShowTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	testStartTime := timeutil.Now()
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	c.waitUntilHighWatermark(c.srcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	var (
+		id            int
+		dest          string
+		status        string
+		source        string
+		sourceUri     string
+		jobId         int
+		maxReplTime   time.Time
+		protectedTime time.Time
+	)
+	row := c.destSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.destTenantName))
+	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime)
+	require.Equal(t, 2, id)
+	require.Equal(t, "destination", dest)
+	require.Equal(t, "ADD", status)
+	require.Equal(t, "source", source)
+	pgPrefix := "postgres://"
+	require.Equal(t, pgPrefix, sourceUri[:len(pgPrefix)])
+	require.Equal(t, ingestionJobID, jobId)
+	require.Less(t, maxReplTime, timeutil.Now())
+	require.Less(t, protectedTime, timeutil.Now())
+	require.Greater(t, maxReplTime, testStartTime)
+	require.Greater(t, protectedTime, testStartTime)
 }
