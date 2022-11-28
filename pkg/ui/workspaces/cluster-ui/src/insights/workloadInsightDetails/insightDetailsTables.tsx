@@ -10,7 +10,7 @@
 
 import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
-import { DATE_FORMAT, Duration } from "src/util";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
 import { EventExecution, InsightExecEnum } from "../types";
 import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";
 
@@ -44,7 +44,8 @@ export function makeInsightDetailsColumns(
     {
       name: "contentionStartTime",
       title: insightsTableTitles.contentionStartTime(execType),
-      cell: (item: EventExecution) => item.startTime.format(DATE_FORMAT),
+      cell: (item: EventExecution) =>
+        item.startTime.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
       sort: (item: EventExecution) => item.startTime.unix(),
     },
     {
