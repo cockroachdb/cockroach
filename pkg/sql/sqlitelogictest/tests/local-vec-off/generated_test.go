@@ -76,6 +76,9 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		MaxSQLMemoryLimit: 512 << 20, // 512 MiB
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
 		DisableSmallEngineBlocks:                     true,
+		// Some sqlite tests with very low bytes limit value are too slow, so
+		// ensure 3 KiB lower bound.
+		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }

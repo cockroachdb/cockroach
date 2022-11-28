@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -3999,6 +4000,9 @@ type TestServerArgs struct {
 	// If set, then we will disable the metamorphic randomization of
 	// smallEngineBlocks variable.
 	DisableSmallEngineBlocks bool
+	// If positive, it provides a lower bound for the default-batch-bytes-limit
+	// metamorphic constant.
+	BatchBytesLimitLowerBound int64
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
@@ -4093,6 +4097,15 @@ func RunLogicTest(
 	if serverArgsCopy.ForceProductionValues {
 		if err := coldata.SetBatchSizeForTests(coldata.DefaultColdataBatchSize); err != nil {
 			panic(errors.Wrapf(err, "could not set batch size for test"))
+		}
+	} else if serverArgsCopy.BatchBytesLimitLowerBound > 0 {
+		// If we're not forcing the production values, but we're asked to have a
+		// lower bound on the batch bytes limit, then check whether the lower
+		// bound is already satisfied and update the value if not.
+		min := rowinfra.BytesLimit(serverArgsCopy.BatchBytesLimitLowerBound)
+		if rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */) < min {
+			value := min + rowinfra.BytesLimit(rng.Intn(100<<10))
+			rowinfra.SetDefaultBatchBytesLimitForTests(value)
 		}
 	}
 	hasOverride, overriddenBackupRestoreProbability := logictestbase.ReadBackupRestoreProbabilityOverride(t, path)
