@@ -198,4 +198,4 @@ This approach introduces a problem when removing a member from a two-member clus
 
 ## Go docs
 
-More detailed development documentation can be found in go docs: https://pkg.go.dev/go.etcd.io/etcd/raft/v3.
+More detailed development documentation can be found in go docs: https://pkg.go.dev/go.etcd.io/raft/v3.
