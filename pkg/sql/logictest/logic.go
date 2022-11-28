@@ -1233,6 +1233,10 @@ func getFreePort() (int, error) {
 	return port, err
 }
 
+// Prevent a lint failure "this value is never used" in
+// `(*logicTest).setup` when bazel.BuiltWithBazel returns false.
+var _ = ((*logicTest)(nil)).newTestServerCluster
+
 // newTestServerCluster creates a 3-node cluster using the cockroach-go library.
 // bootstrapBinaryPath is given by the config's CockroachGoBootstrapVersion.
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
@@ -1823,6 +1827,11 @@ func (t *logicTest) setup(
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		// Prevent a lint failure "this value is never used" when
+		// bazel.BuiltWithBazel returns false above.
+		_ = bootstrapBinaryPath
+
 		localBinaryPath, found := bazel.FindBinary("pkg/cmd/cockroach-short/cockroach-short_/", "cockroach-short")
 		if !found {
 			t.Fatal(errors.New("cockroach binary not found"))
