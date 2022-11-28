@@ -760,6 +760,10 @@ func (t *TestTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
 }
 
+func (t *TestTenant) RangeDescriptorScanner() interface{} {
+	return t.SQLServer.execCfg.RangeDescScanner
+}
+
 // Codec is part of the TestTenantInterface.
 func (t *TestTenant) Codec() keys.SQLCodec {
 	return t.execCfg.Codec
@@ -1536,6 +1540,11 @@ func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 
 func (ts *TestServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
+}
+
+// RangeDescriptorScanner is part of the TestServerInterface.
+func (ts *TestServer) RangeDescriptorScanner() interface{} {
+	return ts.sqlServer.execCfg.RangeDescScanner
 }
 
 type testServerFactoryImpl struct{}

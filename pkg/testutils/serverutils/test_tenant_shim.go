@@ -156,6 +156,10 @@ type TestTenantInterface interface {
 	// system tenant).
 	Codec() keys.SQLCodec
 
+	// RangeDescriptorScanner returns the underlying rangedesc.Scanner as an
+	// interface{}.
+	RangeDescriptorScanner() interface{}
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.

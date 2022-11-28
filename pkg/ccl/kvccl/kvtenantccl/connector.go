@@ -450,6 +450,42 @@ func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
 }
 
+// Scan implements the rangedesc.Scanner interface.
+func (c *Connector) Scan(
+	ctx context.Context, span roachpb.Span,
+) (rangeDescriptors []roachpb.RangeDescriptor, _ error) {
+	for ctx.Err() == nil {
+		rangeDescriptors = rangeDescriptors[:0] // clear out.
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		stream, err := client.GetRangeDescriptors(ctx, &roachpb.GetRangeDescriptorsRequest{
+			Span: span,
+		})
+		if err != nil {
+			log.Warningf(ctx, "error issuing GetRangeDescriptors RPC: %v", err)
+			c.tryForgetClient(ctx, client)
+			continue
+		}
+
+		for {
+			e, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return rangeDescriptors, nil
+				}
+				// Soft RPC error. Drop client and retry.
+				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
+				c.tryForgetClient(ctx, client)
+				break
+			}
+			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
+		}
+	}
+	return nil, ctx.Err()
+}
+
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
 func (c *Connector) TokenBucket(
 	ctx context.Context, in *roachpb.TokenBucketRequest,

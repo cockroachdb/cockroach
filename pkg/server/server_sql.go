@@ -368,6 +368,9 @@ type sqlServerArgs struct {
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
+
+	// rangeDescScanner is used to retrieve range descriptors.
+	rangeDescScanner rangedesc.Scanner
 }
 
 type monitorAndMetrics struct {
@@ -865,6 +868,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
+		RangeDescScanner:          cfg.rangeDescScanner,
 		SyntheticPrivilegeCache: cacheutil.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
 

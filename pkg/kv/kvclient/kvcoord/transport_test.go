@@ -241,3 +241,9 @@ func (m *mockInternalClient) TenantSettings(
 ) (roachpb.Internal_TenantSettingsClient, error) {
 	return nil, fmt.Errorf("unsupported TenantSettings call")
 }
+
+func (n *mockInternalClient) GetRangeDescriptors(
+	context.Context, *roachpb.GetRangeDescriptorsRequest, ...grpc.CallOption,
+) (roachpb.Internal_GetRangeDescriptorsClient, error) {
+	return nil, fmt.Errorf("unsupported GetRangeDescriptors call")
+}

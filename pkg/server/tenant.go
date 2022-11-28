@@ -920,6 +920,7 @@ func makeTenantSQLServerArgs(
 		grpc:                     grpcServer,
 		eventsServer:             eventsServer,
 		externalStorageBuilder:   esb,
+		rangeDescScanner:         tenantConnect,
 	}, nil
 }
 

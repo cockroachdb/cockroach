@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
@@ -57,6 +58,13 @@ type Connector interface {
 	// through existing KV nodes while being subject to additional validation
 	// (e.g. is the Range being requested owned by the requesting tenant?).
 	rangecache.RangeDescriptorDB
+
+	// Scanner provides access to Range Metadata in the form of RangeDescriptors
+	// through delegated GetRangeDescriptors requests. Similar to the rationale
+	// behind proxying requests made on behalf of the RangeDescriptorDB interface,
+	// this ensures SQL-only tenants are not able to access Range Metadata for
+	// Ranges not owned by the requesting tenant.
+	rangedesc.Scanner
 
 	// RegionsServer provides access to a tenant's available regions. This is
 	// necessary for region validation for zone configurations and multi-region
