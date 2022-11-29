@@ -1198,6 +1198,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   bytes_read_var      FLOAT NOT NULL,
   rows_read_avg       FLOAT NOT NULL,
   rows_read_var       FLOAT NOT NULL,
+  rows_written_avg    FLOAT NOT NULL,
+  rows_written_var    FLOAT NOT NULL,
   network_bytes_avg   FLOAT,
   network_bytes_var   FLOAT,
   network_msgs_avg    FLOAT,
@@ -1303,6 +1305,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.GetVariance(stats.Stats.Count))),   // bytes_read_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.Mean)),                              // rows_read_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.GetVariance(stats.Stats.Count))),    // rows_read_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsWritten.Mean)),                           // rows_written_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsWritten.GetVariance(stats.Stats.Count))), // rows_written_var
 				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),        // network_bytes_avg
 				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),        // network_bytes_var
 				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),     // network_msgs_avg
@@ -3662,15 +3666,11 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 
-		// Map node descriptors to localities
-		descriptors, err := getAllNodeDescriptors(p)
+		resp, err := p.ExecCfg().TenantStatusServer.NodeLocality(ctx, &serverpb.NodeLocalityRequest{})
 		if err != nil {
 			return nil, nil, err
 		}
-		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
-		for _, desc := range descriptors {
-			nodeIDToLocality[desc.NodeID] = desc.Locality
-		}
+		nodeIDToLocality := resp.NodeLocalities
 
 		var desc roachpb.RangeDescriptor
 

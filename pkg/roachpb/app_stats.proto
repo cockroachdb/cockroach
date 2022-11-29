@@ -61,23 +61,23 @@ message StatementStatistics {
 
   // Phase latencies:
 
-  // IdleLat is the time spent in an open transaction waiting
+  // IdleLat is the time spent in seconds in an open transaction waiting
   // for the client to send the statement.
   optional NumericStat idle_lat = 28 [(gogoproto.nullable) = false];
 
-  // ParseLat is the time to transform the SQL string into an AST.
+  // ParseLat is the time in seconds to transform the SQL string into an AST.
   optional NumericStat parse_lat = 6 [(gogoproto.nullable) = false];
 
-  // PlanLat is the time to transform the AST into a logical query plan.
+  // PlanLat is the time spent in seconds to transform the AST into a logical query plan.
   optional NumericStat plan_lat = 7 [(gogoproto.nullable) = false];
 
-  // RunLat is the time to run the query and fetch/compute the result rows.
+  // RunLat is the time in seconds to run the query and fetch/compute the result rows.
   optional NumericStat run_lat = 8 [(gogoproto.nullable) = false];
 
-  // ServiceLat is the time to service the query, from start of parse to end of execute.
+  // ServiceLat is the time in seconds to service the query, from start of parse to end of execute.
   optional NumericStat service_lat = 9 [(gogoproto.nullable) = false];
 
-  // OverheadLat is the difference between ServiceLat and the sum of parse+plan+run latencies.
+  // OverheadLat is the difference (seconds) between ServiceLat and the sum of parse+plan+run latencies.
   // We store it separately (as opposed to computing it post-hoc) because the combined
   // variance for the overhead cannot be derived from the variance of the separate latencies.
   optional NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
@@ -138,14 +138,14 @@ message TransactionStatistics {
   // across all statements.
   optional NumericStat num_rows = 3 [(gogoproto.nullable) = false];
 
-  // ServiceLat is the time to service the transaction, from the time a
+  // ServiceLat is the time in seconds to service the transaction, from the time a
   // transaction was received to end of execution.
   optional NumericStat service_lat = 4 [(gogoproto.nullable) = false];
 
-  // RetryLat is the amount of time spent retrying the transaction.
+  // RetryLat is the amount of time in seconds spent retrying the transaction.
   optional NumericStat retry_lat = 5 [(gogoproto.nullable) = false];
 
-  // CommitLat is the amount of time required to commit the transaction after
+  // CommitLat is the amount of time in seconds required to commit the transaction after
   // all statement operations have been applied.
   optional NumericStat commit_lat = 6 [(gogoproto.nullable) = false];
 
@@ -313,7 +313,7 @@ message ExecStats {
   // MaxMemUsage collects the maximum memory usage that occurred on a node.
   optional NumericStat max_mem_usage = 3 [(gogoproto.nullable) = false];
 
-  // ContentionTime collects the time this statement spent contending.
+  // ContentionTime collects the time in seconds this statement spent contending.
   optional NumericStat contention_time = 4 [(gogoproto.nullable) = false];
 
   // NetworkMessages collects the number of messages that were sent over the

@@ -7,8 +7,8 @@ splitting at /Meta2/"middle"
 iter
 ----
 - r1:/Meta{1/-2/}
-- r54:/Meta2/{-middle}
-- r55:/{Meta2/middle-System/NodeLiveness}
+- r55:/Meta2/{-middle}
+- r56:/{Meta2/middle-System/NodeLiveness}
 - r2:/System/NodeLiveness{-Max}
 - r3:/System/{NodeLivenessMax-tsd}
 - r4:/System{/tsd-tse}
@@ -60,19 +60,20 @@ iter
 - r50:/Table/{48-50}
 - r51:/Table/5{0-1}
 - r52:/Table/5{1-2}
-- r53:/{Table/52-Max}
-iteration through /M{in-ax} (page-size=1) found 55/55 descriptors
+- r53:/Table/5{2-3}
+- r54:/{Table/53-Max}
+iteration through /M{in-ax} (page-size=1) found 56/56 descriptors
 
 # Scanning through just meta1 is unnaffected by these splits.
 iter scope=3
 ----
 - r1:/Meta{1/-2/}
-iteration through /M{in-eta2/} (page-size=1) found 1/55 descriptors
+iteration through /M{in-eta2/} (page-size=1) found 1/56 descriptors
 
 # Scanning through both meta{1,2} does surface these descriptors.
 iter scope=4 page-size=2
 ----
 - r1:/Meta{1/-2/}
-- r54:/Meta2/{-middle}
-- r55:/{Meta2/middle-System/NodeLiveness}
-iteration through /{Meta1/-System} (page-size=2) found 3/55 descriptors
+- r55:/Meta2/{-middle}
+- r56:/{Meta2/middle-System/NodeLiveness}
+iteration through /{Meta1/-System} (page-size=2) found 3/56 descriptors
