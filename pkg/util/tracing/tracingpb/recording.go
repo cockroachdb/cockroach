@@ -176,6 +176,44 @@ func (r Recording) String() string {
 	return buf.String()
 }
 
+// RedactedString is like string but redacted.
+func (r Recording) RedactedString() string {
+	if len(r) == 0 {
+		return "<empty recording>"
+	}
+
+	var buf strings.Builder
+	start := r[0].StartTime
+	writeLogs := func(logs []traceLogData) {
+		for _, entry := range logs {
+			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
+				1000*entry.Timestamp.Sub(start).Seconds(),
+				1000*entry.timeSincePrev.Seconds(),
+				strings.Repeat("    ", entry.depth+1))
+			fmt.Fprint(&buf, entry.Msg.Redact())
+			buf.WriteByte('\n')
+		}
+	}
+
+	logs := r.visitSpan(r[0], 0 /* depth */)
+	writeLogs(logs)
+
+	// Check if there's any orphan spans (spans for which the parent is missing).
+	// This shouldn't happen, but we're protecting against incomplete traces. For
+	// example, ingesting of remote spans through DistSQL is complex. Orphan spans
+	// would not be reflected in the output string at all without this.
+	orphans := r.OrphanSpans()
+	if len(orphans) > 0 {
+		// This shouldn't happen.
+		buf.WriteString("orphan spans (trace is missing spans):\n")
+		for _, o := range orphans {
+			logs := r.visitSpan(o, 0 /* depth */)
+			writeLogs(logs)
+		}
+	}
+	return buf.String()
+}
+
 // OrphanSpans returns the spans with parents missing from the recording.
 func (r Recording) OrphanSpans() []RecordedSpan {
 	spanIDs := make(map[SpanID]struct{})

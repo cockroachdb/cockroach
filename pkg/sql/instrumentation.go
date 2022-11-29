@@ -194,6 +194,8 @@ type instrumentationHelper struct {
 
 	// indexesUsed list the indexes used in the query with format tableID@indexID.
 	indexesUsed []string
+
+	previousRedactable bool
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -343,6 +345,10 @@ func (ih *instrumentationHelper) Setup(
 		// testing callback.
 		recType = tracingpb.RecordingVerbose
 	}
+	if ih.explainFlags.Redact&explain.RedactPII != 0 {
+		ih.previousRedactable = cfg.AmbientCtx.Tracer.Redactable()
+		cfg.AmbientCtx.Tracer.SetRedactable(true)
+	}
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
 	return newCtx, true
@@ -415,6 +421,9 @@ func (ih *instrumentationHelper) Finish(
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
 		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
+		if ih.explainFlags.Redact&explain.RedactPII != 0 {
+			cfg.AmbientCtx.Tracer.SetRedactable(ih.previousRedactable)
+		}
 	}
 
 	// If there was a communication error already, no point in setting any

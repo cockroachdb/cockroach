@@ -346,7 +346,13 @@ func (b *stmtBundleBuilder) addTrace(flags explain.RedactFlags) {
 	}
 
 	// The JSON is not very human-readable, so we include another format too.
-	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", stmt, b.trace.String()))
+	var text string
+	if flags.Has(explain.RedactPII) {
+		text = b.trace.RedactedString()
+	} else {
+		text = b.trace.String()
+	}
+	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", stmt, text))
 
 	// Note that we're going to include the non-anonymized statement in the trace.
 	// But then again, nothing in the trace is anonymized.

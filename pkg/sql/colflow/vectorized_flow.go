@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -240,6 +241,10 @@ func (f *vectorizedFlow) Setup(
 		return ctx, nil, err
 	}
 	log.VEvent(ctx, 2, "setting up vectorized flow")
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
+		log.VEventf(ctx, 2, "redactable: %v", sp.Redactable())
+	}
+	log.VEventf(ctx, 2, "should this be redacted? %s", redact.Unsafe("foo"))
 	recordingStats := false
 	if execstats.ShouldCollectStats(ctx, f.FlowCtx.CollectStats) {
 		recordingStats = true
