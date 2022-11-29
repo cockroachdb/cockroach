@@ -80,7 +80,7 @@ func configureGRPCGateway(
 	stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// loopback handles the HTTP <-> RPC loopback connection.
-	loopback := newLoopbackListener(workersCtx, stopper)
+	loopback := netutil.NewLoopbackListener(workersCtx, stopper)
 
 	waitQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
