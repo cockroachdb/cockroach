@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,13 +42,13 @@ type relocateNode struct {
 type relocateRun struct {
 	lastRangeStartKey []byte
 
-	// storeMap caches information about stores seen in relocation strings (to
+	// storeIDToNodeIDCache caches information about stores seen in relocation strings (to
 	// avoid looking them up for every row).
-	storeMap map[roachpb.StoreID]roachpb.NodeID
+	storeIDToNodeIDCache map[roachpb.StoreID]roachpb.NodeID
 }
 
 func (n *relocateNode) startExec(runParams) error {
-	n.run.storeMap = make(map[roachpb.StoreID]roachpb.NodeID)
+	n.run.storeIDToNodeIDCache = make(map[roachpb.StoreID]roachpb.NodeID)
 	return nil
 }
 
@@ -84,28 +85,47 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			)
 		}
 		relocation := data[0].(*tree.DArray)
-		if n.subjectReplicas != tree.RelocateNonVoters && len(relocation.Array) == 0 {
+		relocationArray := relocation.Array
+		if n.subjectReplicas != tree.RelocateNonVoters && len(relocationArray) == 0 {
 			// We cannot remove all voters.
 			return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
 		}
 
-		// Create an array of the desired replication targets.
-		relocationTargets = make([]roachpb.ReplicationTarget, len(relocation.Array))
-		for i, d := range relocation.Array {
+		// Collect storeIDs.
+		storeIDs := make([]roachpb.StoreID, len(relocationArray))
+		for i, d := range relocationArray {
 			if d == tree.DNull {
 				return false, errors.Errorf("NULL value in relocation array for EXPERIMENTAL_RELOCATE")
 			}
-			storeID := roachpb.StoreID(*d.(*tree.DInt))
-			nodeID, ok := n.run.storeMap[storeID]
+			storeIDs[i] = roachpb.StoreID(*d.(*tree.DInt))
+		}
+
+		// Populate storeIDToNodeIDCache if necessary.
+		var missingStoreIDs []roachpb.StoreID
+		storeIDToNodeIDCache := n.run.storeIDToNodeIDCache
+		for _, storeID := range storeIDs {
+			_, ok := storeIDToNodeIDCache[storeID]
 			if !ok {
-				// Lookup the store in gossip.
-				storeDesc, err := lookupStoreDesc(storeID, params)
-				if err != nil {
-					return false, err
-				}
-				nodeID = storeDesc.Node.NodeID
-				n.run.storeMap[storeID] = nodeID
+				missingStoreIDs = append(missingStoreIDs, storeID)
 			}
+		}
+		if len(missingStoreIDs) > 0 {
+			resp, err := params.extendedEvalCtx.TenantStatusServer.StoreIDToNodeID(
+				params.ctx,
+				&serverpb.StoreIDToNodeIDRequest{StoreIDs: missingStoreIDs},
+			)
+			if err != nil {
+				return false, err
+			}
+			for storeID, nodeID := range resp.StoreIDToNodeID {
+				storeIDToNodeIDCache[storeID] = nodeID
+			}
+		}
+
+		// Use storeIDToNodeIDCache to create an array of the desired replication targets.
+		relocationTargets = make([]roachpb.ReplicationTarget, len(storeIDs))
+		for i, storeID := range storeIDs {
+			nodeID := storeIDToNodeIDCache[storeID]
 			relocationTargets[i] = roachpb.ReplicationTarget{NodeID: nodeID, StoreID: storeID}
 		}
 	}

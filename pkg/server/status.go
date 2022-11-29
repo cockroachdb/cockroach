@@ -1402,6 +1402,25 @@ func (s *statusServer) NodeLocality(
 	return &serverpb.NodeLocalityResponse{NodeLocalities: res}, nil
 }
 
+// StoreIDToNodeID implements the serverpb.StatusServer interface.
+func (s *statusServer) StoreIDToNodeID(
+	ctx context.Context, req *serverpb.StoreIDToNodeIDRequest,
+) (*serverpb.StoreIDToNodeIDResponse, error) {
+	storeIDs := req.StoreIDs
+	storeIDsToNodeIDs := make(map[roachpb.StoreID]roachpb.NodeID, len(storeIDs))
+	var storeDesc roachpb.StoreDescriptor
+	for _, storeID := range storeIDs {
+		gossipStoreKey := gossip.MakeStoreDescKey(storeID)
+		if err := s.gossip.GetInfoProto(gossipStoreKey, &storeDesc); err != nil {
+			return nil, errors.Wrapf(err, "error looking up store %d", storeID)
+		}
+		storeIDsToNodeIDs[storeID] = storeDesc.Node.NodeID
+	}
+	return &serverpb.StoreIDToNodeIDResponse{
+		StoreIDToNodeID: storeIDsToNodeIDs,
+	}, nil
+}
+
 func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.RegionsResponse {
 	regionsToZones := make(map[string]map[string]struct{})
 	for _, node := range nr.Nodes {

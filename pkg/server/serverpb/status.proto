@@ -316,6 +316,21 @@ message NodeLocalityResponse{
   ];
 }
 
+message StoreIDToNodeIDRequest{
+  repeated int32 store_ids = 1 [
+    (gogoproto.customname) = "StoreIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+}
+
+message StoreIDToNodeIDResponse{
+  map<int32, int32> store_id_to_node_id = 1 [
+    (gogoproto.customname) = "StoreIDToNodeID",
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
+    (gogoproto.castvalue) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
+
 // NodesListRequest requests list of all nodes.
 // The nodes are KV nodes when the cluster is a single
 // tenant cluster or the host cluster in case of multi-tenant
@@ -1910,6 +1925,9 @@ service Status {
 
   // NodeLocality retrieves the locality of the node with the given ID.
   rpc NodeLocality(NodeLocalityRequest) returns (NodeLocalityResponse) {}
+
+  // StoreIDToNodeID retrieves node IDs with the given store IDs.
+  rpc StoreIDToNodeID(StoreIDToNodeIDRequest) returns (StoreIDToNodeIDResponse) {}
 
   // NodesList returns all available nodes with their addresses.
   rpc NodesList(NodesListRequest) returns (NodesListResponse) {}

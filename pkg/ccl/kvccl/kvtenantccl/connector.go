@@ -410,7 +410,7 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
-// Regions implements the serverpb.TenantStatusServer interface
+// Regions implements the serverpb.TenantStatusServer interface.
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
 ) (resp *serverpb.RegionsResponse, retErr error) {
@@ -421,7 +421,7 @@ func (c *Connector) Regions(
 	return
 }
 
-// NodeLocality implements the serverpb.TenantStatusServer interface
+// NodeLocality implements the serverpb.TenantStatusServer interface.
 func (c *Connector) NodeLocality(
 	ctx context.Context, req *serverpb.NodeLocalityRequest,
 ) (resp *serverpb.NodeLocalityResponse, retErr error) {
@@ -432,7 +432,18 @@ func (c *Connector) NodeLocality(
 	return
 }
 
-// TenantRanges implements the serverpb.TenantStatusServer interface
+// StoreIDToNodeID implements the serverpb.TenantStatusServer interface.
+func (c *Connector) StoreIDToNodeID(
+	ctx context.Context, req *serverpb.StoreIDToNodeIDRequest,
+) (resp *serverpb.StoreIDToNodeIDResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, c *client) (err error) {
+		resp, err = c.StoreIDToNodeID(ctx, req)
+		return
+	})
+	return
+}
+
+// TenantRanges implements the serverpb.TenantStatusServer interface.
 func (c *Connector) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
 ) (resp *serverpb.TenantRangesResponse, retErr error) {

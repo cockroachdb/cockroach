@@ -73,6 +73,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/NodeLocality":
 		return nil // no restriction to usage of this endpoint by tenants
 
+	case "/cockroach.server.serverpb.Status/StoreIDToNodeID":
+		return nil // no restriction to usage of this endpoint by tenants
+
 	case "/cockroach.server.serverpb.Status/Statements":
 		return a.authTenant(tenID)
 

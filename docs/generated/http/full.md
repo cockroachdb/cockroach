@@ -262,6 +262,64 @@ Support status: [reserved](#support-status)
 
 
 
+## StoreIDToNodeID
+
+
+
+StoreIDToNodeID retrieves node IDs with the given store IDs.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| store_ids | [int32](#cockroach.server.serverpb.StoreIDToNodeIDRequest-int32) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| store_id_to_node_id | [StoreIDToNodeIDResponse.StoreIdToNodeIdEntry](#cockroach.server.serverpb.StoreIDToNodeIDResponse-cockroach.server.serverpb.StoreIDToNodeIDResponse.StoreIdToNodeIdEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.StoreIDToNodeIDResponse-cockroach.server.serverpb.StoreIDToNodeIDResponse.StoreIdToNodeIdEntry"></a>
+#### StoreIDToNodeIDResponse.StoreIdToNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.StoreIDToNodeIDResponse-int32) |  |  |  |
+| value | [int32](#cockroach.server.serverpb.StoreIDToNodeIDResponse-int32) |  |  |  |
+
+
+
+
+
+
 ## NodesList
 
 

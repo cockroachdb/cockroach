@@ -80,6 +80,7 @@ type TenantStatusServer interface {
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 	NodeLocality(context.Context, *NodeLocalityRequest) (*NodeLocalityResponse, error)
+	StoreIDToNodeID(context.Context, *StoreIDToNodeIDRequest) (*StoreIDToNodeIDResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
