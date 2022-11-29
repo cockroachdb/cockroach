@@ -108,11 +108,11 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // parallelization, and which have reasonable memory consumption
 // should be marked with t.Parallel().
 func TestLint(t *testing.T) {
-	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
+	crdb, err := build.Import(filepath.Join(cockroachDB, "pkg", "cmd", "cockroach"), "", build.FindOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pkgDir := filepath.Join(crdb.Dir, "pkg")
+	pkgDir := filepath.Dir(filepath.Dir(crdb.Dir))
 
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 

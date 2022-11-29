@@ -116,7 +116,7 @@ back to this document and perform these steps:
 * [ ] Run `./dev generate bazel` to refresh `distdir_files.bzl`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
-* [ ] Bump the go version in `go.mod`. You may also need to rerun `make vendor_rebuild` if vendoring has changed.
+* [ ] Bump the go version in `go.mod`. 
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
 * [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
@@ -187,11 +187,6 @@ file on your local branch, 2) push a commit containing this import to the `vendo
    references the dependency. This ensures cockroach's make file will properly add the package(s) to the vendor directory. Note that IDEs may bicker that
    these import's paths don't exist. That's ok!
 5. Run `go mod tidy` to ensure stale dependencies are removed.
-6. Run `make vendor_rebuild` to add the package to the vendor directory. Note this command will only
-   add packages you have imported in the codebase (and any of the package's dependencies), so you
-   may want to add import statements for each package you plan to use (i.e. repeat step 3 a couple times).
-7. Run `cd vendor && git diff && cd ..`  to ensure the vendor directory contains the package(s)
-   you imported
 8. Run `make buildshort` to ensure your code compiles.
 9. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
    Note that you need engineer permissions to mirror dependencies; if you want to get the Bazel build
@@ -253,8 +248,7 @@ To achieve this, proceed as follows:
 
 ### Removing a dependency
 
-When a dependency has been removed, run `go mod tidy` and then `make vendor_rebuild`.
-Then follow the [Pushing the Dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule) steps.
+When a dependency has been removed, run `go mod tidy`.
 
 ## Working With Submodules
 
@@ -326,12 +320,12 @@ changes on top of it. For example:
       + Reset to it: `cd vendor && git reset --hard REF`
 2. In `cockroach/cockroachdb`, amend the commit that contained the dirty vendor pointer.
 3. Try pulling/rebasing again, and if that works, rebuild your local vendor repo with
-`go mod tidy` and `make vendor_rebuild`
+`go mod tidy`
 4. Push the clean vendor changes to the remote vendor submodule, following the [Pushing the Dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
 
 Note: you may also observe conflicts in `go.mod` and `go.sum`. Resolve the conflict like
 any vanilla conflict on `cockroach/cockroachdb`, preferring master's
-version. Then, `make vendor_rebuild` to re-add your local changes to `go.
+version. Then re-add your local changes to `go.
 mod` and `go.sum`.
 ### Recovering from a broken vendor directory
 
