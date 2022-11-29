@@ -463,7 +463,11 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`deleteRange`, t.Result)
 		}
 	case *DeleteRangeUsingTombstoneOperation:
-		if v.checkNonAmbError(op, t.Result) {
+		if v.checkNonAmbError(op, t.Result, func(err error) bool {
+			// TODO(during review): is it "wanted" that an unhandled WTO can bubble up
+			// here?
+			return errors.HasType(err, (*roachpb.AmbiguousResultError)(nil))
+		}) {
 			break
 		}
 		// NB: MVCC range deletions aren't allowed in transactions (and can't be
@@ -1095,7 +1099,7 @@ func (v *validator) checkAtomicUncommitted(atomicType string, txnObservations []
 //
 // Writing operations usually want to call checkNonAmbError instead.
 //
-// Note that in a Batch each operation inherits the outcome of the batch as a
+// Note that in a Batch each operation inherits the outcome of the Batch as a
 // whole, which means that a read operation may result in an
 // AmbiguousResultError (which it presumably didn't cause). Ideally Batch would
 // track this more precisely but until it does we're just going to allow
@@ -1107,7 +1111,10 @@ func (v *validator) checkAtomicUncommitted(atomicType string, txnObservations []
 func (v *validator) checkError(
 	op Operation, r Result, extraExceptions ...func(err error) bool,
 ) (ambiguous, hadError bool) {
-	sl := []func(error) bool{exceptAmbiguous, exceptOmitted, exceptRetry}
+	sl := []func(error) bool{
+		exceptAmbiguous, exceptOmitted, exceptRetry,
+		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
 }
@@ -1119,8 +1126,10 @@ func (v *validator) checkError(
 //
 // This is typically called by operations that may write, since these always
 // want to emit observedWrites in case the operation actually did commit.
-func (v *validator) checkNonAmbError(op Operation, r Result) bool {
-	isAmb, isErr := v.checkError(op, r)
+func (v *validator) checkNonAmbError(
+	op Operation, r Result, extraExceptions ...func(error) bool,
+) bool {
+	isAmb, isErr := v.checkError(op, r, extraExceptions...)
 	return isErr && !isAmb
 }
 

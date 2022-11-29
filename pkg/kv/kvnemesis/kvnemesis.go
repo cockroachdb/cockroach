@@ -13,7 +13,11 @@ package kvnemesis
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 
@@ -24,16 +28,44 @@ import (
 
 type loggerKey struct{}
 
-func l(ctx context.Context, debug bool, format string, args ...interface{}) {
-	if logger := ctx.Value(loggerKey{}); logger != nil && !debug {
-		if t, ok := logger.(interface {
-			Helper()
-		}); ok {
-			t.Helper()
-		}
-		logger.(Logger).Logf(format, args...)
+type logLogger struct {
+	dir string
+	seq int32 // atomic
+}
+
+func (l *logLogger) WriteFile(basename string, contents string) string {
+	f, err := os.Create(filepath.Join(l.dir, basename))
+	if err != nil {
+		return err.Error()
 	}
-	log.InfofDepth(ctx, 2, format, args...)
+	defer f.Close()
+	_, err = io.WriteString(f, contents)
+	if err != nil {
+		return err.Error()
+	}
+	return f.Name()
+}
+
+func (l *logLogger) Helper() { /* no-op */ }
+
+func (l *logLogger) Logf(format string, args ...interface{}) {
+	log.InfofDepth(context.Background(), 2, format, args...)
+}
+
+func l(ctx context.Context, basename string, format string, args ...interface{}) (optFile string) {
+	var logger Logger
+	logger, _ = ctx.Value(loggerKey{}).(Logger)
+	if logger == nil {
+		logger = &logLogger{dir: os.TempDir()}
+	}
+	logger.Helper()
+
+	if basename != "" {
+		return logger.WriteFile(basename, fmt.Sprintf(format, args...))
+	}
+
+	logger.Logf(format, args...)
+	return ""
 }
 
 // RunNemesis generates and applies a series of Operations to exercise the KV
@@ -72,28 +104,34 @@ func RunNemesis(
 
 	workerFn := func(ctx context.Context, workerIdx int) error {
 		workerName := fmt.Sprintf(`%d`, workerIdx)
-		var buf strings.Builder
+		stepIdx := -1
 		for atomic.AddInt64(&stepsStartedAtomic, 1) <= int64(numSteps) {
+			stepIdx++
 			step := g.RandStep(rng)
-
-			buf.Reset()
-			fmt.Fprintf(&buf, "step:")
-			step.format(&buf, formatCtx{indent: `  ` + workerName + ` PRE  `})
 			trace, err := a.Apply(ctx, &step)
-			buf.WriteString(trace.String())
-			step.Trace = buf.String()
+
+			stepPrefix := fmt.Sprintf("w%d_step%d", workerIdx, stepIdx)
+			step.Trace = l(ctx, fmt.Sprintf("%s_trace", stepPrefix), "%s", trace.String())
+
+			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
+
+			prefix := ` OP  `
 			if err != nil {
-				buf.Reset()
-				step.format(&buf, formatCtx{indent: `  ` + workerName + ` ERR `})
-				l(ctx, false, "error: %+v\n\n%s", err, buf.String())
+				prefix = ` ERR `
+			}
+
+			{
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "  before: %s", step.Before)
+				step.format(&buf, formatCtx{indent: `  ` + workerName + prefix})
+				fmt.Fprintf(&buf, "\n  after: %s", step.After)
+				basename := fmt.Sprintf("%s_%T", stepPrefix, reflect.Indirect(reflect.ValueOf(step.Op.GetValue())).Interface())
+				l(ctx, basename, "%s", &buf)
+			}
+
+			if err != nil {
 				return err
 			}
-			buf.Reset()
-			fmt.Fprintf(&buf, "\n  before: %s", step.Before)
-			step.format(&buf, formatCtx{indent: `  ` + workerName + ` OP  `})
-			fmt.Fprintf(&buf, "\n  after: %s", step.After)
-			l(ctx, true, "%v", buf.String())
-			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
 		}
 		return nil
 	}
@@ -121,19 +159,35 @@ func RunNemesis(
 	failures = append(failures, env.CheckConsistency(ctx, dataSpan)...)
 
 	if len(failures) > 0 {
-		l(ctx, false, "reproduction steps:\n%s", printRepro(stepsByWorker))
-		l(ctx, false, "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
+		var failuresFile string
+		{
+			var buf strings.Builder
+			for _, err := range failures {
+				l(ctx, "", "%s", err)
+				fmt.Fprintf(&buf, "%+v\n", err)
+				fmt.Fprintln(&buf, strings.Repeat("=", 80))
+			}
+			failuresFile = l(ctx, "failures", "%s", &buf)
+		}
 
+		reproFile := l(ctx, "repro.go", "// Reproduction steps:\n%s", printRepro(stepsByWorker))
+		rangefeedFile := l(ctx, "kvs-rangefeed.txt", "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
+		var kvsFile string
 		scanKVs, err := dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
 		if err != nil {
-			log.Infof(ctx, "could not scan actual latest values: %+v", err)
+			l(ctx, "", "could not scan actual latest values: %+v", err)
 		} else {
 			var kvsBuf strings.Builder
 			for _, kv := range scanKVs {
 				fmt.Fprintf(&kvsBuf, "  %s %s -> %s\n", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 			}
-			l(ctx, false, "kvs (scan of latest values according to crdb):\n%s", kvsBuf.String())
+			kvsFile = l(ctx, "kvs-scan.txt", "kvs (scan of latest values according to crdb):\n%s", kvsBuf.String())
 		}
+		l(ctx, "", `failures(verbose): %s
+repro steps: %s
+rangefeed KVs: %s
+scan KVs: %s`,
+			failuresFile, reproFile, rangefeedFile, kvsFile)
 	}
 
 	return failures, nil
@@ -150,12 +204,14 @@ func printRepro(stepsByWorker [][]Step) string {
 			buf.WriteString("\n")
 			buf.WriteString(fctx.indent)
 			step.Op.format(&buf, fctx)
-			buf.WriteString(step.Trace)
+			if len(step.Trace) > 0 {
+				fmt.Fprintf(&buf, "\n  // ^-- trace in: %s\n", step.Trace)
+			}
 			buf.WriteString("\n")
 		}
 		buf.WriteString("\n  return nil\n")
-		buf.WriteString("})\n")
+		buf.WriteString("})\n\n")
 	}
-	buf.WriteString("g.Wait()\n")
+	buf.WriteString("require.NoError(t, g.Wait())\n")
 	return buf.String()
 }

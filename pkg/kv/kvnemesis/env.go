@@ -25,7 +25,9 @@ import (
 
 // Logger is the log sink used by kvnemesis.
 type Logger interface {
+	Helper()
 	Logf(string, ...interface{})
+	WriteFile(basename string, contents string) string
 }
 
 // Env manipulates the environment (cluster settings, zone configurations) that
