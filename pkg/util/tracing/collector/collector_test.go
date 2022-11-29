@@ -12,14 +12,20 @@ package collector_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -125,8 +131,15 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	remoteTracer := tc.Server(1).TracerI().(*tracing.Tracer)
 
 	traceCollector := collector.New(
-		tc.Server(0).NodeDialer().(*nodedialer.Dialer),
-		tc.Server(0).NodeLiveness().(*liveness.NodeLiveness), localTracer)
+		localTracer,
+		func(ctx context.Context) ([]roachpb.NodeID, error) {
+			nodeIDs := make([]roachpb.NodeID, len(tc.Servers))
+			for i := range tc.Servers {
+				nodeIDs[i] = tc.Server(i).NodeID()
+			}
+			return nodeIDs, nil
+		},
+		tc.Server(0).NodeDialer().(*nodedialer.Dialer))
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
@@ -190,5 +203,78 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 					span: root2.child
 						tags: _unfinished=1 _verbose=1
 	`))
+	})
+}
+
+// Test that crdb_internal.cluster_inflight_traces works, both in tenants and in
+// mixed nodes.
+func TestClusterInflightTraces(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ccl.TestingEnableEnterprise() // We'll create tenants.
+	defer ccl.TestingDisableEnterprise()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// We'll create our own tenants, to ensure they exist as opposed to them
+			// being created randomly.
+			DisableDefaultTestTenant: true,
+		},
+	}
+
+	testutils.RunTrueAndFalse(t, "tenant", func(t *testing.T, tenant bool) {
+		tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
+		defer tc.Stopper().Stop(ctx)
+
+		var t0, t1 *tracing.Tracer
+		var servers []serverutils.TestTenantInterface
+		if tenant {
+			tenantID := roachpb.MustMakeTenantID(10)
+			tenants := make([]serverutils.TestTenantInterface, len(tc.Servers))
+			for i := range tc.Servers {
+				tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+				require.NoError(t, err)
+				tenants[i] = tenant
+			}
+			t0 = tenants[0].Tracer()
+			t1 = tenants[1].Tracer()
+			servers = tenants
+		} else {
+			t0 = tc.Servers[0].Tracer()
+			t1 = tc.Servers[1].Tracer()
+			servers = []serverutils.TestTenantInterface{tc.Servers[0], tc.Servers[1]}
+		}
+
+		localTraceID, _, cleanup := setupTraces(t0, t1)
+		defer cleanup()
+
+		for _, s := range servers {
+			pgURL, cleanupPGUrl := sqlutils.PGUrl(t, s.SQLAddr(), "Tenant", url.User(username.RootUser))
+			defer cleanupPGUrl()
+			db, err := gosql.Open("postgres", pgURL.String())
+			defer db.Close()
+			require.NoError(t, err)
+
+			rows, err := db.Query("SELECT node_id, trace_str FROM crdb_internal.cluster_inflight_traces WHERE trace_id=$1 ORDER BY node_id", localTraceID)
+			require.NoError(t, err)
+
+			expSpans := map[int][]string{
+				1: {"root", "root.child", "root.child.remotechilddone"},
+				2: {"root.child.remotechild"},
+			}
+			for rows.Next() {
+				var nodeID int
+				var trace string
+				require.NoError(t, rows.Scan(&nodeID, &trace))
+				exp, ok := expSpans[nodeID]
+				require.True(t, ok)
+				delete(expSpans, nodeID) // Consume this entry; we'll check that they were all consumed.
+				for _, span := range exp {
+					require.Contains(t, trace, "=== operation:"+span)
+				}
+			}
+			require.Len(t, expSpans, 0)
+		}
 	})
 }
