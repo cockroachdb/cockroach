@@ -390,6 +390,14 @@ type Context struct {
 	clientStreamInterceptors []grpc.StreamClientInterceptor
 
 	logClosingConnEvery log.EveryN
+
+	// loopbackDialFn, when non-nil, is used for local dials.
+	loopbackDialFn func(context.Context) (net.Conn, error)
+}
+
+// SetLoopbackDialer configures the loopback dialer function.
+func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
+	c.loopbackDialFn = loopbackDialFn
 }
 
 // connKey is used as key in the Context.conns map.
@@ -1787,37 +1795,44 @@ func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
 func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context, target string, class ConnectionClass,
 ) (*grpc.ClientConn, error) {
-	dialOpts, err := rpcCtx.grpcDialOptions(target, class, true /* overNetwork */)
+	overNetwork := true
+	if rpcCtx.loopbackDialFn != nil && rpcCtx.Config.AdvertiseAddr == target {
+		overNetwork = false
+	}
+	dialOpts, err := rpcCtx.grpcDialOptions(target, class, overNetwork)
 	if err != nil {
 		return nil, err
 	}
 
-	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
-	// ~second range. Note that we only retry once (see onlyOnceDialer) so we only
-	// hit the first backoff (BaseDelay). Note also that this delay serves as a
-	// sort of circuit breaker, since it will make sure that we're not trying to
-	// dial a down node in a tight loop. This is not a great mechanism but it's
-	// what we have right now. Higher levels have some protection (node dialer
-	// circuit breakers) but not all connection attempts go through that.
-	backoffConfig := backoff.DefaultConfig
+	if overNetwork {
+		// Lower the MaxBackoff (which defaults to ~minutes) to something in the
+		// ~second range. Note that we only retry once (see onlyOnceDialer) so we only
+		// hit the first backoff (BaseDelay). Note also that this delay serves as a
+		// sort of circuit breaker, since it will make sure that we're not trying to
+		// dial a down node in a tight loop. This is not a great mechanism but it's
+		// what we have right now. Higher levels have some protection (node dialer
+		// circuit breakers) but not all connection attempts go through that.
+		backoffConfig := backoff.DefaultConfig
 
-	// We need to define a MaxBackoff but it should never be used due to
-	// our setup with onlyOnceDialer below. So note that our choice here is
-	// inconsequential assuming all works as designed.
-	backoff := time.Second
-	if backoff > minConnectionTimeout {
-		// This is for testing where we set a small minConnectionTimeout.
-		// gRPC will internally round up the min connection timeout to the max
-		// backoff. This can be unintuitive and so we opt out of it by lowering the
-		// max backoff.
-		backoff = minConnectionTimeout
+		// We need to define a MaxBackoff but it should never be used due to
+		// our setup with onlyOnceDialer below. So note that our choice here is
+		// inconsequential assuming all works as designed.
+		backoff := time.Second
+		if backoff > minConnectionTimeout {
+			// This is for testing where we set a small minConnectionTimeout.
+			// gRPC will internally round up the min connection timeout to the max
+			// backoff. This can be unintuitive and so we opt out of it by lowering the
+			// max backoff.
+			backoff = minConnectionTimeout
+		}
+		backoffConfig.BaseDelay = backoff
+		backoffConfig.MaxDelay = backoff
+		dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff:           backoffConfig,
+			MinConnectTimeout: minConnectionTimeout}))
+		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	}
-	backoffConfig.BaseDelay = backoff
-	backoffConfig.MaxDelay = backoff
-	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
-		Backoff:           backoffConfig,
-		MinConnectTimeout: minConnectionTimeout}))
-	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
+
 	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(initialConnWindowSize))
 	if class == RangefeedClass {
 		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rangefeedInitialWindowSize))
@@ -1825,21 +1840,28 @@ func (rpcCtx *Context) grpcDialRaw(
 		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
 	}
 
-	dialer := onlyOnceDialer{}
-	dialerFunc := dialer.dial
-	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
-		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
-		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
-			latency)
-		dialer := artificialLatencyDialer{
-			dialerFunc: dialerFunc,
-			latency:    latency,
-			enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
+	var dialerFn dialerFunc
+	if overNetwork {
+		dialer := onlyOnceDialer{}
+		dialerFn = dialer.dial
+		if rpcCtx.Knobs.InjectedLatencyOracle != nil {
+			latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
+			log.VEventf(ctx, 1, "connecting with simulated latency %dms",
+				latency)
+			dialer := artificialLatencyDialer{
+				dialerFunc: dialerFn,
+				latency:    latency,
+				enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
+			}
+			dialerFn = dialer.dial
 		}
-		dialerFunc = dialer.dial
+	} else {
+		dialerFn = func(ctx context.Context, _ string) (net.Conn, error) {
+			return rpcCtx.loopbackDialFn(ctx)
+		}
 	}
 	dialOpts = append(dialOpts,
-		grpc.WithContextDialer(dialerFunc),
+		grpc.WithContextDialer(dialerFn),
 		// We throw this one in for good measure, but it only disables the retries
 		// for RPCs that were already pending (which are opt in anyway, and we don't
 		// opt in). It doesn't disable what gRPC calls "transparent retries" (RPC
