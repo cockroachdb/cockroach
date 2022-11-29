@@ -454,22 +454,13 @@ func (p *pebbleIterator) NextEngineKeyWithLimit(
 
 // NextKey implements the MVCCIterator interface.
 func (p *pebbleIterator) NextKey() {
-	// Even though NextKey() is not allowed for switching direction by the
-	// MVCCIterator interface, pebbleIterator works correctly even when
-	// switching direction. So we set mvccDirIsReverse = false.
 	if p.mvccDirIsReverse {
-		// Switching directions.
-		p.mvccDirIsReverse = false
-		p.mvccDone = false
+		panic("switching directions via NextKey is prohibited")
 	}
 	if p.mvccDone {
 		return
 	}
 	if valid, err := p.Valid(); err != nil || !valid {
-		return
-	}
-	p.keyBuf = append(p.keyBuf[:0], p.UnsafeKey().Key...)
-	if !p.iter.Next() {
 		return
 	}
 
@@ -487,30 +478,7 @@ func (p *pebbleIterator) NextKey() {
 		}
 		return
 	}
-
-	// If the Next() call above didn't move to a different key, seek to it.
-	if p.UnsafeKey().Key.Equal(p.keyBuf) {
-		// This is equivalent to:
-		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
-		seekKey := append(p.keyBuf, 0, 0)
-		p.iter.SeekGE(seekKey)
-		// If there's a range key straddling the seek point (e.g. a-c when seeking
-		// to b), it will be surfaced first as a bare range key. However, unless it
-		// started exactly at the seek key then it has already been emitted, so we
-		// step past it to the next key, which may be either a point key or range
-		// key starting past the seek key.
-		//
-		// NB: We have to be careful to use p.iter methods below, rather than
-		// pebbleIterator methods, since seekKey is an already-encoded roachpb.Key
-		// in raw Pebble key form.
-		if p.iter.Valid() {
-			if hasPoint, hasRange := p.iter.HasPointAndRange(); !hasPoint && hasRange {
-				if startKey, _ := p.iter.RangeBounds(); bytes.Compare(startKey, seekKey) < 0 {
-					p.iter.Next()
-				}
-			}
-		}
-	}
+	p.iter.NextPrefix()
 }
 
 // UnsafeKey implements the MVCCIterator interface.
