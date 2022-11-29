@@ -734,7 +734,16 @@ func uint64FromKey(k string) uint64 {
 }
 
 func randKey(rng *rand.Rand) string {
-	return uint64ToKey(rng.Uint64())
+	// Avoid the endpoints because having point writes at the
+	// endpoints complicates randRangeSpan.
+	n := rng.Uint64()
+	if n == 0 {
+		n++
+	}
+	if n == math.MaxUint64 {
+		n--
+	}
+	return uint64ToKey(n)
 }
 
 func uint64ToKey(n uint64) string {
@@ -744,13 +753,6 @@ func uint64ToKey(n uint64) string {
 	key := GeneratorDataSpan().Key
 	key = encoding.EncodeStringAscending(key, s)
 	return string(key)
-}
-
-func min(a, b uint64) uint64 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // Interprets the provided map as the split points of the key space and returns
@@ -771,18 +773,25 @@ func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string,
 		return keys[idx-1], uint64ToKey(math.MaxUint64)
 	}
 	if idx == 0 {
-		// First range.
-		if keys[idx] != uint64ToKey(0) {
-			return uint64ToKey(0), keys[idx]
-		}
-		idx++
-		// Fall through.
+		// First range. We avoid having splits at 0 so this will be a well-formed
+		// range. (If it isn't, we'll likely catch an error because we'll send an
+		// ill-formed request and kvserver will error it out).
+		return uint64ToKey(0), keys[0]
 	}
 	return keys[idx-1], keys[idx]
 }
 
 func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
-	k, _ := randRangeSpan(rng, m)
+	if len(m) == 0 {
+		return randKey(rng)
+	}
+	k, ek := randRangeSpan(rng, m)
+	// If there is only one key in the map we will get [0,x) or [x,max)
+	// back and want to return `x` to avoid the endpoints, which are
+	// reserved.
+	if uint64FromKey(k) == 0 {
+		return ek
+	}
 	return k
 }
 

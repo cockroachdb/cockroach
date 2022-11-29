@@ -185,3 +185,20 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		t.Errorf("failure:\n%+v", failure)
 	}
 }
+
+// TestRunReproductionSteps is a helper that allows quickly running a kvnemesis
+// history.
+func TestRunReproductionSteps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.IgnoreLint(t, "test unskipped only on demand")
+	ctx := context.Background()
+
+	const n = 1 // number of nodes
+
+	tc := testcluster.StartTestCluster(t, n, base.TestClusterArgs{})
+	db0 := tc.Server(0).DB()
+	_, _ = db0, ctx
+
+	// Paste a repro as printed by kvnemesis here.
+}
