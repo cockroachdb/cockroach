@@ -250,7 +250,7 @@ func TestingSetScannedRowProgressFrequency(val int64) func() {
 func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
 		if !tr.scanStarted {
-			err := tr.startScan(tr.Ctx)
+			err := tr.startScan(tr.Ctx())
 			if err != nil {
 				tr.MoveToDraining(err)
 				break
@@ -265,7 +265,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			return nil, meta
 		}
 
-		row, err := tr.fetcher.NextRow(tr.Ctx)
+		row, err := tr.fetcher.NextRow(tr.Ctx())
 		if row == nil || err != nil {
 			tr.MoveToDraining(err)
 			break
@@ -286,7 +286,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 func (tr *tableReader) close() {
 	if tr.InternalClose() {
 		if tr.fetcher != nil {
-			tr.fetcher.Close(tr.Ctx)
+			tr.fetcher.Close(tr.Ctx())
 		}
 	}
 }
@@ -302,13 +302,13 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	tr.scanStats = execinfra.GetScanStats(tr.Ctx, tr.ExecStatsTrace)
+	tr.scanStats = execinfra.GetScanStats(tr.Ctx(), tr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
 			KVTime:         is.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx, tr.ExecStatsTrace)),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx(), tr.ExecStatsTrace)),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
@@ -321,13 +321,13 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	if !tr.ignoreMisplannedRanges {
 		nodeID, ok := tr.FlowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(tr.Ctx, tr.SpansCopy, nodeID, tr.FlowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(tr.Ctx(), tr.SpansCopy, nodeID, tr.FlowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx, tr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx(), tr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 

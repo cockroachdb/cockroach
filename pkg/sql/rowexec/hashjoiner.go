@@ -155,7 +155,7 @@ func newHashJoiner(
 	}
 
 	return h, h.hashTable.Init(
-		h.Ctx,
+		h.Ctx(),
 		shouldMarkRightSide(h.joinType),
 		h.rightSource.OutputTypes(),
 		h.eqCols[rightSide],
@@ -187,7 +187,7 @@ func (h *hashJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) 
 		case hjEmittingRightUnmatched:
 			h.runningState, row, meta = h.emitRightUnmatched()
 		default:
-			log.Fatalf(h.Ctx, "unsupported state: %d", h.runningState)
+			log.Fatalf(h.Ctx(), "unsupported state: %d", h.runningState)
 		}
 
 		if row == nil && meta == nil {
@@ -233,14 +233,14 @@ func (h *hashJoiner) build() (hashJoinerState, rowenc.EncDatumRow, *execinfrapb.
 				return hjStateUnknown, nil, h.DrainHelper()
 			}
 			// If hashTable is in-memory, pre-reserve the memory needed to mark.
-			if err = h.hashTable.ReserveMarkMemoryMaybe(h.Ctx); err != nil {
+			if err = h.hashTable.ReserveMarkMemoryMaybe(h.Ctx()); err != nil {
 				h.MoveToDraining(err)
 				return hjStateUnknown, nil, h.DrainHelper()
 			}
 			return hjReadingLeftSide, nil, nil
 		}
 
-		err = h.hashTable.AddRow(h.Ctx, row)
+		err = h.hashTable.AddRow(h.Ctx(), row)
 		// Regardless of the underlying row container (disk backed or in-memory
 		// only), we cannot do anything about an error if it occurs.
 		if err != nil {
@@ -274,7 +274,7 @@ func (h *hashJoiner) readLeftSide() (
 		// hjEmittingRightUnmatched if unmatched rows on the right side need to
 		// be emitted, otherwise finish.
 		if shouldEmitUnmatchedRow(rightSide, h.joinType) {
-			i := h.hashTable.NewUnmarkedIterator(h.Ctx)
+			i := h.hashTable.NewUnmarkedIterator(h.Ctx())
 			i.Rewind()
 			h.emittingRightUnmatchedState.iter = i
 			return hjEmittingRightUnmatched, nil, nil
@@ -288,14 +288,14 @@ func (h *hashJoiner) readLeftSide() (
 	h.probingRowState.row = row
 	h.probingRowState.matched = false
 	if h.probingRowState.iter == nil {
-		i, err := h.hashTable.NewBucketIterator(h.Ctx, row, h.eqCols[leftSide])
+		i, err := h.hashTable.NewBucketIterator(h.Ctx(), row, h.eqCols[leftSide])
 		if err != nil {
 			h.MoveToDraining(err)
 			return hjStateUnknown, nil, h.DrainHelper()
 		}
 		h.probingRowState.iter = i
 	} else {
-		if err := h.probingRowState.iter.Reset(h.Ctx, row); err != nil {
+		if err := h.probingRowState.iter.Reset(h.Ctx(), row); err != nil {
 			h.MoveToDraining(err)
 			return hjStateUnknown, nil, h.DrainHelper()
 		}
@@ -356,7 +356,7 @@ func (h *hashJoiner) probeRow() (
 	h.probingRowState.matched = true
 	shouldEmit := true
 	if shouldMarkRightSide(h.joinType) {
-		if i.IsMarked(h.Ctx) {
+		if i.IsMarked(h.Ctx()) {
 			switch h.joinType {
 			case descpb.RightSemiJoin:
 				// The row from the right already had a match and was emitted
@@ -373,7 +373,7 @@ func (h *hashJoiner) probeRow() (
 				// whether we have a corresponding unmarked row from the right.
 				h.probingRowState.matched = false
 			}
-		} else if err := i.Mark(h.Ctx); err != nil {
+		} else if err := i.Mark(h.Ctx()); err != nil {
 			h.MoveToDraining(err)
 			return hjStateUnknown, nil, h.DrainHelper()
 		}
@@ -446,16 +446,16 @@ func (h *hashJoiner) emitRightUnmatched() (
 
 func (h *hashJoiner) close() {
 	if h.InternalClose() {
-		h.hashTable.Close(h.Ctx)
+		h.hashTable.Close(h.Ctx())
 		if h.probingRowState.iter != nil {
 			h.probingRowState.iter.Close()
 		}
 		if h.emittingRightUnmatchedState.iter != nil {
 			h.emittingRightUnmatchedState.iter.Close()
 		}
-		h.MemMonitor.Stop(h.Ctx)
+		h.MemMonitor.Stop(h.Ctx())
 		if h.diskMonitor != nil {
-			h.diskMonitor.Stop(h.Ctx)
+			h.diskMonitor.Stop(h.Ctx())
 		}
 	}
 }

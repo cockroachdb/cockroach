@@ -147,7 +147,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			// First, make sure to close its ValueGenerator from the previous
 			// input row (if it exists).
 			if ps.gens[i] != nil {
-				ps.gens[i].Close(ps.Ctx)
+				ps.gens[i].Close(ps.Ctx())
 				ps.gens[i] = nil
 			}
 
@@ -165,7 +165,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 			// Store the generator before Start so that it'll be closed even if
 			// Start returns an error.
 			ps.gens[i] = gen
-			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
+			if err := gen.Start(ps.Ctx(), ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -186,7 +186,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 			numCols := int(ps.spec.NumColsPerGen[i])
 			if !ps.done[i] {
 				// Yes; check whether this source still has some values available.
-				hasVals, err := gen.Next(ps.Ctx)
+				hasVals, err := gen.Next(ps.Ctx())
 				if err != nil {
 					return false, err
 				}
@@ -297,7 +297,7 @@ func (ps *projectSetProcessor) close() {
 	ps.InternalCloseEx(func() {
 		for _, gen := range ps.gens {
 			if gen != nil {
-				gen.Close(ps.Ctx)
+				gen.Close(ps.Ctx())
 			}
 		}
 	})

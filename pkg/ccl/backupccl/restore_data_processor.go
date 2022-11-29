@@ -568,8 +568,8 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		prog.ProgressDetails = *details
 	case meta := <-rd.metaCh:
 		return nil, meta
-	case <-rd.Ctx.Done():
-		rd.MoveToDraining(rd.Ctx.Err())
+	case <-rd.Ctx().Done():
+		rd.MoveToDraining(rd.Ctx().Err())
 		return nil, rd.DrainHelper()
 	}
 

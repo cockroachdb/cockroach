@@ -673,7 +673,7 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 			meta = jr.DrainHelper()
 			jr.runningState = jrStateUnknown
 		default:
-			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
+			log.Fatalf(jr.Ctx(), "unsupported state: %d", jr.runningState)
 		}
 		if row == nil && meta == nil {
 			continue
@@ -816,7 +816,7 @@ func (jr *joinReader) readInput() (
 	}
 
 	if len(jr.scratchInputRows) == 0 {
-		log.VEventf(jr.Ctx, 1, "no more input rows")
+		log.VEventf(jr.Ctx(), 1, "no more input rows")
 		if outRow != nil {
 			return jrReadyToDrain, outRow, nil
 		}
@@ -824,7 +824,7 @@ func (jr *joinReader) readInput() (
 		jr.MoveToDraining(nil)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
-	log.VEventf(jr.Ctx, 1, "read %d input rows", len(jr.scratchInputRows))
+	log.VEventf(jr.Ctx(), 1, "read %d input rows", len(jr.scratchInputRows))
 
 	if jr.groupingState != nil && len(jr.scratchInputRows) > 0 {
 		jr.updateGroupingStateForNonEmptyBatch()
@@ -875,7 +875,7 @@ func (jr *joinReader) readInput() (
 		sort.Sort(spans)
 	}
 
-	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
+	log.VEventf(jr.Ctx(), 1, "scanning %d spans", len(spans))
 	// Note that the fetcher takes ownership of the spans slice - it will modify
 	// it and perform the memory accounting. We don't care about the
 	// modification here, but we want to be conscious about the memory
@@ -883,12 +883,12 @@ func (jr *joinReader) readInput() (
 	// joinReaderStrategy doesn't account for any memory used by the spans.
 	if jr.usesStreamer {
 		var kvBatchFetcher *row.TxnKVStreamer
-		kvBatchFetcher, err = row.NewTxnKVStreamer(jr.Ctx, jr.streamerInfo.Streamer, spans, jr.keyLocking)
+		kvBatchFetcher, err = row.NewTxnKVStreamer(jr.Ctx(), jr.streamerInfo.Streamer, spans, jr.keyLocking)
 		if err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
-		err = jr.fetcher.StartScanFrom(jr.Ctx, kvBatchFetcher, jr.FlowCtx.TraceKV)
+		err = jr.fetcher.StartScanFrom(jr.Ctx(), kvBatchFetcher, jr.FlowCtx.TraceKV)
 	} else {
 		var bytesLimit rowinfra.BytesLimit
 		if !jr.shouldLimitBatches {
@@ -900,7 +900,7 @@ func (jr *joinReader) readInput() (
 			}
 		}
 		err = jr.fetcher.StartScan(
-			jr.Ctx, jr.txn, spans, bytesLimit, rowinfra.NoRowLimit,
+			jr.Ctx(), jr.txn, spans, bytesLimit, rowinfra.NoRowLimit,
 			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
@@ -931,7 +931,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		// Fetch the next row and tell the strategy to process it.
-		lookedUpRow, err := jr.fetcher.NextRow(jr.Ctx)
+		lookedUpRow, err := jr.fetcher.NextRow(jr.Ctx())
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
@@ -943,7 +943,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		jr.rowsRead++
 		jr.curBatchRowsRead++
 
-		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, lookedUpRow, key); err != nil {
+		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx(), lookedUpRow, key); err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
 		} else if nextState != jrPerformingLookup {
@@ -970,13 +970,13 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			// collection phase.
 			sort.Sort(spans)
 
-			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
+			log.VEventf(jr.Ctx(), 1, "scanning %d remote spans", len(spans))
 			bytesLimit := rowinfra.DefaultBatchBytesLimit
 			if !jr.shouldLimitBatches {
 				bytesLimit = rowinfra.NoBytesLimit
 			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.txn, spans, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx(), jr.txn, spans, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				jr.MoveToDraining(err)
@@ -986,8 +986,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 	}
 
-	log.VEvent(jr.Ctx, 1, "done joining rows")
-	jr.strategy.prepareToEmit(jr.Ctx)
+	log.VEvent(jr.Ctx(), 1, "done joining rows")
+	jr.strategy.prepareToEmit(jr.Ctx())
 
 	return jrEmittingRows, nil
 }
@@ -999,7 +999,7 @@ func (jr *joinReader) emitRow() (
 	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
-	rowToEmit, nextState, err := jr.strategy.nextRowToEmit(jr.Ctx)
+	rowToEmit, nextState, err := jr.strategy.nextRowToEmit(jr.Ctx())
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -1056,31 +1056,31 @@ func (jr *joinReader) ConsumerClosed() {
 func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
-			jr.fetcher.Close(jr.Ctx)
+			jr.fetcher.Close(jr.Ctx())
 		}
 		if jr.usesStreamer {
 			// We have to cleanup the streamer after closing the fetcher because
 			// the latter might release some memory tracked by the budget of the
 			// streamer.
 			if jr.streamerInfo.Streamer != nil {
-				jr.streamerInfo.Streamer.Close(jr.Ctx)
+				jr.streamerInfo.Streamer.Close(jr.Ctx())
 			}
-			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
-			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
+			jr.streamerInfo.budgetAcc.Close(jr.Ctx())
+			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx())
 			if jr.streamerInfo.diskMonitor != nil {
-				jr.streamerInfo.diskMonitor.Stop(jr.Ctx)
+				jr.streamerInfo.diskMonitor.Stop(jr.Ctx())
 			}
 		}
-		jr.strategy.close(jr.Ctx)
-		jr.memAcc.Close(jr.Ctx)
+		jr.strategy.close(jr.Ctx())
+		jr.memAcc.Close(jr.Ctx())
 		if jr.limitedMemMonitor != nil {
-			jr.limitedMemMonitor.Stop(jr.Ctx)
+			jr.limitedMemMonitor.Stop(jr.Ctx())
 		}
 		if jr.MemMonitor != nil {
-			jr.MemMonitor.Stop(jr.Ctx)
+			jr.MemMonitor.Stop(jr.Ctx())
 		}
 		if jr.diskMonitor != nil {
-			jr.diskMonitor.Stop(jr.Ctx)
+			jr.diskMonitor.Stop(jr.Ctx())
 		}
 	}
 }
@@ -1096,14 +1096,14 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	jr.scanStats = execinfra.GetScanStats(jr.Ctx, jr.ExecStatsTrace)
+	jr.scanStats = execinfra.GetScanStats(jr.Ctx(), jr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx, jr.ExecStatsTrace)),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx(), jr.ExecStatsTrace)),
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
@@ -1129,7 +1129,7 @@ func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.rowsRead
 	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
-	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx(), jr.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
