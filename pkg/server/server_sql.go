@@ -237,7 +237,8 @@ type sqlServerOptionalKVArgs struct {
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
 // are only available if the SQL server runs as part of a standalone SQL node.
 type sqlServerOptionalTenantArgs struct {
-	tenantConnect kvtenant.Connector
+	tenantConnect    kvtenant.Connector
+	promRuleExporter *metric.PrometheusRuleExporter
 }
 
 type sqlServerArgs struct {

@@ -1706,13 +1706,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.runtime,         /* runtimeStatsSampler */
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
-		newAPIV2Server(ctx, &apiV2ServerOpts{
-			admin:            s.admin,
-			status:           s.status,
+		newAPIV2SystemServer(ctx, &apiV2ServerOpts{
+			admin:            s.admin.adminServer,
+			status:           s.status.statusServer,
 			promRuleExporter: s.promRuleExporter,
 			sqlServer:        s.sqlServer,
 			db:               s.db,
-		}), /* apiServer */
+		}, s.admin, s.status), /* apiServer */
 	); err != nil {
 		return err
 	}
