@@ -2287,6 +2287,8 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -2307,7 +2309,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 
 	// A schema change that fails.
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// This query stays blocked until the end of the test.
 		_, _ = sqlDB.Exec(`ALTER TABLE t.test DROP column v`)
 	}()
