@@ -464,10 +464,7 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	attemptsMade := 0
 	for {
 		// Acquire a fresh lease.
-		didAcquire, err := acquireNodeLease(ctx, m, id)
-		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
-			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(AcquireFreshestBlock, id)
-		}
+		didAcquire, err := acquireNodeLease(ctx, m, id, AcquireFreshestBlock)
 		if err != nil {
 			return err
 		}
@@ -490,7 +487,9 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 // being dropped or offline, the error will be of type inactiveTableError.
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
-func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, error) {
+func acquireNodeLease(
+	ctx context.Context, m *Manager, id descpb.ID, typ AcquireType,
+) (bool, error) {
 	start := timeutil.Now()
 	log.VEventf(ctx, 2, "acquiring lease for descriptor %d", id)
 	var toRelease *storedLease
@@ -531,6 +530,9 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		}
 		return true, nil
 	})
+	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
+		m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(typ, id)
+	}
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
@@ -634,17 +636,19 @@ func purgeOldVersions(
 	return err
 }
 
-// AcquireBlockType is the type of blocking result event when
+// AcquireType is the type of blocking result event when
 // calling LeaseAcquireResultBlockEvent.
-type AcquireBlockType int
+type AcquireType int
 
 const (
 	// AcquireBlock denotes the LeaseAcquireResultBlockEvent is
 	// coming from descriptorState.acquire().
-	AcquireBlock AcquireBlockType = iota
+	AcquireBlock AcquireType = iota
 	// AcquireFreshestBlock denotes the LeaseAcquireResultBlockEvent is
 	// from descriptorState.acquireFreshestFromStore().
 	AcquireFreshestBlock
+	// AcquireBackground happens due to periodic background refreshes.
+	AcquireBackground
 )
 
 // Manager manages acquiring and releasing per-descriptor leases. It also
@@ -982,14 +986,10 @@ func (m *Manager) Acquire(
 				t.markAcquisitionStart(ctx)
 				defer t.markAcquisitionDone(ctx)
 				// Renew lease and retry. This will block until the lease is acquired.
-				_, errLease := acquireNodeLease(ctx, m, id)
+				_, errLease := acquireNodeLease(ctx, m, id, AcquireBlock)
 				return errLease
 			}(); err != nil {
 				return nil, err
-			}
-
-			if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
-				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(AcquireBlock, id)
 			}
 
 		case errors.Is(err, errReadOlderVersion):
@@ -1243,7 +1243,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 					}
 				}
 
-				if _, err := acquireNodeLease(ctx, m, id); err != nil {
+				if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
 					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
