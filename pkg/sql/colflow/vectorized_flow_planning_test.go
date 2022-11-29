@@ -56,7 +56,7 @@ func TestVectorizedPlanning(t *testing.T) {
 			"        └ *colexec.invariantsChecker",
 			"          └ *colexecutils.CancelChecker",
 			"            └ *colexec.invariantsChecker",
-			"              └ *colfetcher.ColBatchScan",
+			"              └ *colfetcher.ColBatchDirectScan",
 		}
 		for rows.Next() {
 			var actual string

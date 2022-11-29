@@ -73,17 +73,17 @@ SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello'
 ├ Node 1
 │ └ *colrpc.Outbox
 │   └ *rowexec.joinReader
-│     └ *colfetcher.ColBatchScan
+│     └ *colfetcher.ColBatchDirectScan
 ├ Node 2
 │ └ *colexec.ParallelUnorderedSynchronizer
 │   ├ *colrpc.Inbox
 │   ├ *rowexec.joinReader
-│   │ └ *colfetcher.ColBatchScan
+│   │ └ *colfetcher.ColBatchDirectScan
 │   └ *colrpc.Inbox
 └ Node 3
   └ *colrpc.Outbox
     └ *rowexec.joinReader
-      └ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchDirectScan
 
 query I nodeidx=1
 SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello')
