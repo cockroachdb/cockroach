@@ -171,7 +171,8 @@ func DeriveRejectNullCols(in memo.RelExpr, disabledRules util.FastIntSet) opt.Co
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(1).(memo.RelExpr).Relational().OutputCols)
 
 	case opt.RightJoinOp:
-		if disabledRules.Contains(int(opt.RejectNullsRightJoin)) {
+		if disabledRules.Contains(int(opt.RejectNullsRightJoin)) ||
+			disabledRules.Contains(int(opt.CommuteRightJoin)) {
 			// Avoid rule cycles.
 			break
 		}
