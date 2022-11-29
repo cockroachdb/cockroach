@@ -1,0 +1,15 @@
+@import "src/core/index.module";
+
+.bold-link {
+  font-weight: $font-weight--bold;
+
+  &:hover {
+    color: $colors--link;
+    text-decoration: underline;
+  }
+}
+
+.regular-link:hover {
+  color: $colors--link;
+  text-decoration: underline;
+}
