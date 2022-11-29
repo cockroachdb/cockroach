@@ -961,27 +961,23 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 // nextKey advances to the next user key.
 func (p *pebbleMVCCScanner) nextKey() bool {
-	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
-
-	for i := 0; i < p.itersBeforeSeek; i++ {
+	if p.reverse && p.peeked {
+		// If the parent iterator is in reverse because we've peeked, then we
+		// can step the iterator once to land back onto the current key before
+		// we fallthrough to call NextKey.
 		if !p.iterNext() {
 			return false
 		}
-		if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
-			p.incrementItersBeforeSeek()
-			return true
-		}
+		// Fallthrough to NextKey.
 	}
-
-	p.decrementItersBeforeSeek()
-	// We're pointed at a different version of the same key. Fall back to
-	// seeking to the next key. We append a NUL to account for the "next-key".
-	// Note that we cannot rely on curUnsafeKey.Key being unchanged even though
-	// we are at a different version of the same key -- the underlying
-	// MVCCIterator is free to mutate the backing for p.curUnsafeKey.Key
-	// arbitrarily. Therefore we use p.keyBuf here which we have handy.
-	p.keyBuf = append(p.keyBuf, 0)
-	return p.iterSeek(MVCCKey{Key: p.keyBuf})
+	p.parent.NextKey()
+	if !p.iterValid() {
+		return false
+	}
+	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
+		return false
+	}
+	return p.updateCurrent()
 }
 
 // backwardLatestVersion backs up the iterator to the latest version for the
