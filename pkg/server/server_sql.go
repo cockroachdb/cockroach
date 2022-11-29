@@ -1314,8 +1314,8 @@ func (s *SQLServer) preStart(
 		); err != nil {
 			return err
 		}
-		// Acquire our instance ID.
-		instanceID, err := s.sqlInstanceStorage.CreateInstance(
+		// Acquire our instance row.
+		instance, err := s.sqlInstanceStorage.CreateInstance(
 			ctx, session.ID(), session.Expiration(), s.cfg.AdvertiseAddr, s.distSQLServer.Locality)
 		if err != nil {
 			return err
@@ -1329,16 +1329,16 @@ func (s *SQLServer) preStart(
 		// Hand the instance ID to everybody who needs it, unless the sqlIDContainer
 		// has already been initialized with a node ID. IN that case we don't need to
 		// initialize a SQL instance ID in this case as this is not a SQL pod server.
-		if err := s.setInstanceID(ctx, instanceID, session.ID()); err != nil {
+		log.Infof(ctx, "bound sqlinstance: %v", instance)
+		if err := s.setInstanceID(ctx, instance.InstanceID, session.ID()); err != nil {
 			return err
 		}
 		// Start the instance provider. This needs to come after we've allocated our
 		// instance ID because the instances reader needs to see our own instance;
-		// we might be the only SQL server available, and if the reader doesn't see
+		// we might be the only SQL server available, especially when we have not
+		// received data from the rangefeed yet, and if the reader doesn't see
 		// it, we'd be unable to plan any queries.
-		if err := s.sqlInstanceReader.Start(ctx); err != nil {
-			return err
-		}
+		s.sqlInstanceReader.Start(ctx, instance)
 	}
 
 	s.pgL = pgL

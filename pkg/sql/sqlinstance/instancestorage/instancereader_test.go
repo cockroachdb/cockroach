@@ -67,12 +67,33 @@ func TestReader(t *testing.T) {
 	t.Run("unstarted-reader", func(t *testing.T) {
 		_, _, _, reader := setup(t)
 		_, err := reader.GetInstance(ctx, 1)
-		require.ErrorIs(t, err, sqlinstance.NotStartedError)
+		require.ErrorIs(t, err, sqlinstance.NonExistentInstanceError)
 	})
+	t.Run("read-without-waiting", func(t *testing.T) {
+		storage, slStorage, clock, reader := setup(t)
+		sessionID := makeSession()
+		const addr = "addr"
+		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
+		// Set a high enough expiration to ensure the session stays
+		// live through the test.
+		const expiration = 10 * time.Minute
+		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
+		instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
+		require.NoError(t, err)
+		err = slStorage.Insert(ctx, sessionID, sessionExpiry)
+		require.NoError(t, err)
+		reader.Start(ctx, instance)
 
+		// Attempt to get instance without waiting.
+		instanceInfo, err := reader.GetInstance(ctx, instance.InstanceID)
+		require.NoError(t, err)
+		require.Equal(t, addr, instanceInfo.InstanceAddr)
+		require.Equal(t, locality, instanceInfo.Locality)
+	})
 	t.Run("basic-get-instance-data", func(t *testing.T) {
 		storage, slStorage, clock, reader := setup(t)
-		require.NoError(t, reader.Start(ctx))
+		reader.Start(ctx, sqlinstance.InstanceInfo{})
+		require.NoError(t, reader.WaitForStarted(ctx))
 		sessionID := makeSession()
 		const addr = "addr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
@@ -81,7 +102,7 @@ func TestReader(t *testing.T) {
 		const expiration = 10 * time.Minute
 		{
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			id, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +111,7 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instanceInfo, err := reader.GetInstance(ctx, id)
+				instanceInfo, err := reader.GetInstance(ctx, instance.InstanceID)
 				if err != nil {
 					return err
 				}
@@ -109,7 +130,8 @@ func TestReader(t *testing.T) {
 		// live through the test.
 		const expiration = 10 * time.Minute
 		storage, slStorage, clock, reader := setup(t)
-		require.NoError(t, reader.Start(ctx))
+		reader.Start(ctx, sqlinstance.InstanceInfo{})
+		require.NoError(t, reader.WaitForStarted(ctx))
 
 		// Set up expected test data.
 		region := enum.One
@@ -205,7 +227,7 @@ func TestReader(t *testing.T) {
 			sessionID := makeSession()
 			locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			id, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addresses[2], locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addresses[2], locality)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -219,7 +241,13 @@ func TestReader(t *testing.T) {
 					return err
 				}
 				sortInstances(instances)
-				return testOutputFn([]base.SQLInstanceID{id}, []string{addresses[2]}, []sqlliveness.SessionID{sessionID}, []roachpb.Locality{locality}, instances)
+				return testOutputFn(
+					[]base.SQLInstanceID{instance.InstanceID},
+					[]string{addresses[2]},
+					[]sqlliveness.SessionID{sessionID},
+					[]roachpb.Locality{locality},
+					instances,
+				)
 			})
 		}
 	})
@@ -228,7 +256,8 @@ func TestReader(t *testing.T) {
 		// live through the test.
 		const expiration = 10 * time.Minute
 		storage, slStorage, clock, reader := setup(t)
-		require.NoError(t, reader.Start(ctx))
+		reader.Start(ctx, sqlinstance.InstanceInfo{})
+		require.NoError(t, reader.WaitForStarted(ctx))
 		// Create three instances and release one.
 		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
