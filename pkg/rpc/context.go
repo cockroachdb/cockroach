@@ -388,6 +388,41 @@ type Context struct {
 	clientStreamInterceptors []grpc.StreamClientInterceptor
 
 	logClosingConnEvery log.EveryN
+
+	// loopbackDialFn, when non-nil, is used when the target of the dial
+	// is ourselves (== AdvertiseAddr).
+	//
+	// This special case is not merely a performance optimization: it
+	// ensures that we are always able to self-dial. Reasons that could
+	// block a self-dial, and have been seen in the wild, include:
+	//
+	// - DNS is not ready so AdvertiseAddr does not resolve.
+	// - firewall rule only allows other machines to connect to our
+	//   listen/external address, not ourselves.
+	// - TCP port shortage on the local interface.
+	//
+	// The loopback listener is guaranteed to never talk to the OS'
+	// TCP stack and thus always avoids any TCP-related shortcoming.
+	//
+	// Note that this mechanism is separate (and fully independent) from
+	// the one used to provide the RestrictedInternalClient interface
+	// via DialInternalClient(). RestrictedInternalClient is an
+	// optimization for the "hot path" of KV batch requests, that takes
+	// many shortcuts through our abstraction stack to provide direct Go
+	// function calls for API functions, without the overhead of data
+	// serialization/deserialization.
+	//
+	// At this stage, we only plan to use this optimization for the
+	// small set of RPC endpoints it was designed for. The "common case"
+	// remains the regular gRPC protocol using ser/deser over a link.
+	// The loopbackDialFn fits under that common case by transporting
+	// the gRPC protocol over an in-memory pipe.
+	loopbackDialFn func(context.Context) (net.Conn, error)
+}
+
+// SetLoopbackDialer configures the loopback dialer function.
+func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
+	c.loopbackDialFn = loopbackDialFn
 }
 
 // connKey is used as key in the Context.conns map.
@@ -575,6 +610,15 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		heartbeatInterval:   opts.Config.RPCHeartbeatInterval,
 		heartbeatTimeout:    opts.Config.RPCHeartbeatTimeout,
 		logClosingConnEvery: log.Every(time.Second),
+	}
+
+	if opts.Knobs.NoLoopbackDialer {
+		// The test has decided it doesn't need/want a loopback dialer.
+		// Ensure we still have a working dial function in that case.
+		rpcCtx.loopbackDialFn = func(ctx context.Context) (net.Conn, error) {
+			d := onlyOnceDialer{}
+			return d.dial(ctx, opts.Config.AdvertiseAddr)
+		}
 	}
 
 	// We only monitor remote clocks in server-to-server connections.
@@ -1861,7 +1905,12 @@ func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
 func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context, target string, class ConnectionClass,
 ) (*grpc.ClientConn, error) {
-	dialOpts, err := rpcCtx.GRPCDialOptions(ctx, target, class)
+	transport := tcpTransport
+	if rpcCtx.Config.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+		// See the explanation on loopbackDialFn for an explanation about this.
+		transport = loopbackTransport
+	}
+	dialOpts, err := rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
 	if err != nil {
 		return nil, err
 	}

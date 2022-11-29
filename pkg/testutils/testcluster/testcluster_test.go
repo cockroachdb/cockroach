@@ -214,6 +214,8 @@ func TestStopServer(t *testing.T) {
 		MaxOffset: server1.Clock().MaxOffset(),
 		Stopper:   tc.Stopper(),
 		Settings:  server1.ClusterSettings(),
+
+		ClientOnly: true,
 	})
 	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID(),
 		rpc.DefaultClass).Connect(ctx)

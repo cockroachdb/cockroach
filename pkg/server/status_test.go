@@ -367,6 +367,7 @@ func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *r
 		MaxOffset: ts.Clock().MaxOffset(),
 		Stopper:   ts.Stopper(),
 		Settings:  ts.ClusterSettings(),
+		Knobs:     rpc.ContextTestingKnobs{NoLoopbackDialer: true},
 	})
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let

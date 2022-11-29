@@ -21,6 +21,9 @@ import (
 // interface used by the DistSender. Besides the auto-generated gRPC client,
 // this interface is also implemented by rpc.internalClientAdapter which
 // bypasses gRPC to call into the local Node.
+//
+// For a more contextualized explanation, see the comment that decorates
+// (*rpc.Context).loopbackDialFn.
 type RestrictedInternalClient interface {
 	Batch(ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error)
 	RangeFeed(ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption) (roachpb.Internal_RangeFeedClient, error)
