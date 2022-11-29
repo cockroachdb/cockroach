@@ -1379,14 +1379,58 @@ func (rpcCtx *Context) ConnHealth(
 // GRPCNetworkDialOptions returns suitable `grpc.DialOption`s necessary to connect
 // to a server created with `NewServer` over the network.
 func (rpcCtx *Context) GRPCNetworkDialOptions() ([]grpc.DialOption, error) {
-	return rpcCtx.grpcDialOptions("", DefaultClass)
+	return rpcCtx.grpcDialOptions("", DefaultClass, true /* overNetwork */)
+}
+
+// GRPCLoopbackDialOptions returns the minimal `grpc.DialOption`s necessary to connect
+// to a server created with `NewServer` using an in-memory pipe.
+func (rpcCtx *Context) GRPCLoopbackDialOptions() ([]grpc.DialOption, error) {
+	return rpcCtx.grpcDialOptions("", DefaultClass, false /* overNetwork */)
 }
 
 // grpcDialOptions produces dial options suitable for connecting to the given target and class.
 func (rpcCtx *Context) grpcDialOptions(
-	target string, class ConnectionClass,
-) ([]grpc.DialOption, error) {
-	var dialOpts []grpc.DialOption
+	target string, class ConnectionClass, overNetwork bool,
+) (dialOpts []grpc.DialOption, err error) {
+	commonOpts, err := rpcCtx.dialOptsCommon()
+	if err != nil {
+		return nil, err
+	}
+	dialOpts = append(dialOpts, commonOpts...)
+
+	if overNetwork {
+		netOpts, err := rpcCtx.dialOptsNetwork(target, class)
+		if err != nil {
+			return nil, err
+		}
+		dialOpts = append(dialOpts, netOpts...)
+	} else {
+		localOpts, err := rpcCtx.dialOptsLocal()
+		if err != nil {
+			return nil, err
+		}
+		dialOpts = append(dialOpts, localOpts...)
+	}
+	return dialOpts, nil
+}
+
+// dialOptsLocal computes options used only for loopback connections.
+func (rpcCtx *Context) dialOptsLocal() (dialOpts []grpc.DialOption, err error) {
+	// We need to include a TLS overlay even for loopback connections,
+	// because currently a non-insecure server always refuses non-TLS
+	// incoming connections, and inspects the TLS certs to determine the
+	// identity of the client peer.
+	//
+	// We can elide TLS for loopback connections when we add a non-TLS
+	// way to identify peers, i.e. fix these issues:
+	// https://github.com/cockroachdb/cockroach/issues/54007
+	// https://github.com/cockroachdb/cockroach/issues/91996
+	return rpcCtx.dialOptsNetworkCredentials()
+}
+
+// dialOptsNetworkCredentials computes options that determines how the
+// RPC client authenticates itself to the remote server.
+func (rpcCtx *Context) dialOptsNetworkCredentials() (dialOpts []grpc.DialOption, err error) {
 	if rpcCtx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
@@ -1403,15 +1447,17 @@ func (rpcCtx *Context) grpcDialOptions(
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	}
 
-	// The limiting factor for lowering the max message size is the fact
-	// that a single large kv can be sent over the network in one message.
-	// Our maximum kv size is unlimited, so we need this to be very large.
-	//
-	// TODO(peter,tamird): need tests before lowering.
-	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(
-		grpc.MaxCallRecvMsgSize(math.MaxInt32),
-		grpc.MaxCallSendMsgSize(math.MaxInt32),
-	))
+	return dialOpts, nil
+}
+
+// dialOptsNetwork compute options used only for over-the-network RPC connections.
+func (rpcCtx *Context) dialOptsNetwork(
+	target string, class ConnectionClass,
+) (dialOpts []grpc.DialOption, err error) {
+	dialOpts, err = rpcCtx.dialOptsNetworkCredentials()
+	if err != nil {
+		return nil, err
+	}
 
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
@@ -1427,18 +1473,6 @@ func (rpcCtx *Context) grpcDialOptions(
 	// [1]: https://github.com/grpc/grpc-go/blob/c0736608/Documentation/proxy.md
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 
-	// Append a testing stream interceptor, if so configured. Note that this can
-	// only be done at Dial() time, as opposed to when the rpcCtx is created,
-	// because the testing knob callback wants access to the dial details for this
-	// particular connection.
-	streamInterceptors := rpcCtx.clientStreamInterceptors
-	if rpcCtx.Knobs.StreamClientInterceptor != nil {
-		testingStreamInterceptor := rpcCtx.Knobs.StreamClientInterceptor(target, class)
-		if testingStreamInterceptor != nil {
-			// Make a copy of the interceptors slice and append the knob one.
-			streamInterceptors = append(append([]grpc.StreamClientInterceptor(nil), streamInterceptors...), testingStreamInterceptor)
-		}
-	}
 	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
 		dialerFunc := func(ctx context.Context, target string) (net.Conn, error) {
 			dialer := net.Dialer{
@@ -1457,11 +1491,38 @@ func (rpcCtx *Context) grpcDialOptions(
 		dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
 	}
 
+	// Append a testing stream interceptor, if so configured. Note that this can
+	// only be done at Dial() time, as opposed to when the rpcCtx is created,
+	// because the testing knob callback wants access to the dial details for this
+	// particular connection.
+	if rpcCtx.Knobs.StreamClientInterceptor != nil {
+		testingStreamInterceptor := rpcCtx.Knobs.StreamClientInterceptor(target, class)
+		if testingStreamInterceptor != nil {
+			dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(testingStreamInterceptor))
+		}
+	}
+
+	return dialOpts, nil
+}
+
+// dialOptsCommon computes options used for both in-memory and
+// over-the-network RPC connections.
+func (rpcCtx *Context) dialOptsCommon() (dialOpts []grpc.DialOption, err error) {
+	// The limiting factor for lowering the max message size is the fact
+	// that a single large kv can be sent over the network in one message.
+	// Our maximum kv size is unlimited, so we need this to be very large.
+	//
+	// TODO(peter,tamird): need tests before lowering.
+	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(math.MaxInt32),
+		grpc.MaxCallSendMsgSize(math.MaxInt32),
+	))
+
 	if len(rpcCtx.clientUnaryInterceptors) > 0 {
 		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptors...))
 	}
-	if len(streamInterceptors) > 0 {
-		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
+	if len(rpcCtx.clientStreamInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptors...))
 	}
 	return dialOpts, nil
 }
@@ -1726,7 +1787,7 @@ func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
 func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context, target string, class ConnectionClass,
 ) (*grpc.ClientConn, error) {
-	dialOpts, err := rpcCtx.grpcDialOptions(target, class)
+	dialOpts, err := rpcCtx.grpcDialOptions(target, class, true /* overNetwork */)
 	if err != nil {
 		return nil, err
 	}
