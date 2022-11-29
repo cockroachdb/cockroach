@@ -11,6 +11,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/sqlliveness",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 

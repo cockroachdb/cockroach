@@ -43,6 +43,7 @@ type Reader struct {
 	initialScanDone chan struct{}
 	mu              struct {
 		syncutil.Mutex
+		self       sqlinstance.InstanceInfo
 		instances  map[base.SQLInstanceID]instancerow
 		startError error
 		started    bool
@@ -87,18 +88,30 @@ func NewReader(
 }
 
 // Start initializes the rangefeed for the Reader. The rangefeed will run until
-// the stopper stops.
-func (r *Reader) Start(ctx context.Context) error {
-	rf := r.maybeStartRangeFeed(ctx)
+// the stopper stops. If self has a non-zero ID, it will be used to
+// initialize the set of instances before the rangefeed catches up.
+func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
+	if r.mu.started {
+		return
+	}
+	if self.InstanceID != 0 {
+		r.mu.instances[self.InstanceID] = instancerow{
+			region:     self.Region,
+			instanceID: self.InstanceID,
+			addr:       self.InstanceAddr,
+			sessionID:  self.SessionID,
+			locality:   self.Locality,
+			timestamp:  hlc.Timestamp{}, // intentionally zero
+		}
+	}
+	r.startRangeFeed(ctx)
+}
+
+// WaitForStarted will block until the Reader has a full snapshot of all the
+// instances.
+func (r *Reader) WaitForStarted(ctx context.Context) error {
 	select {
 	case <-r.initialScanDone:
-		// TODO(rimadeodhar): Avoid blocking on initial
-		// scan until first call to read.
-		if rf != nil {
-			// Add rangefeed to the stopper to ensure it
-			// is shutdown correctly.
-			r.stopper.AddCloser(rf)
-		}
 		return r.checkStarted()
 	case <-r.stopper.ShouldQuiesce():
 		return errors.Wrap(stop.ErrUnavailable,
@@ -108,11 +121,8 @@ func (r *Reader) Start(ctx context.Context) error {
 			"failed to retrieve initial instance data")
 	}
 }
-func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
-	if r.started() {
-		// Nothing to do, return
-		return nil
-	}
+
+func (r *Reader) startRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 	updateCacheFn := func(
 		ctx context.Context, keyVal *roachpb.RangeFeedValue,
 	) {
@@ -153,12 +163,13 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 		rangefeed.WithOnInitialScanError(initialScanErrFn),
 		rangefeed.WithRowTimestampInInitialScan(true),
 	)
-	r.setStarted()
+	defer r.setStarted()
 	if err != nil {
 		r.setStartError(err)
 		close(r.initialScanDone)
 		return nil
 	}
+	r.stopper.AddCloser(rf)
 	return rf
 }
 
