@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package netutil
 
 import (
 	"context"
@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// loopbackListener implements a local listener
+// LoopbackListener implements a local listener
 // that delivers net.Conns via its Connect() method
 // based on the other side calls to its Accept() method.
-type loopbackListener struct {
+type LoopbackListener struct {
 	stopper *stop.Stopper
 
 	closeOnce sync.Once
@@ -37,20 +37,22 @@ type loopbackListener struct {
 	conns chan net.Conn
 }
 
-var _ net.Listener = (*loopbackListener)(nil)
+var _ net.Listener = (*LoopbackListener)(nil)
 
+// ErrLocalListenerClosed is returned when the listener
+// is shutting down.
 // note that we need to use cmux.ErrListenerClosed as base (leaf)
 // error so that it is recognized as special case in
 // netutil.IsClosedConnection.
-var errLocalListenerClosed = errors.Wrap(cmux.ErrListenerClosed, "loopback listener")
+var ErrLocalListenerClosed = errors.Wrap(cmux.ErrListenerClosed, "loopback listener")
 
 // Accept waits for and returns the next connection to the listener.
-func (l *loopbackListener) Accept() (conn net.Conn, err error) {
+func (l *LoopbackListener) Accept() (conn net.Conn, err error) {
 	select {
 	case <-l.stopper.ShouldQuiesce():
-		return nil, errLocalListenerClosed
+		return nil, ErrLocalListenerClosed
 	case <-l.active:
-		return nil, errLocalListenerClosed
+		return nil, ErrLocalListenerClosed
 	case <-l.requests:
 	}
 	c1, c2 := net.Pipe()
@@ -60,7 +62,7 @@ func (l *loopbackListener) Accept() (conn net.Conn, err error) {
 	case <-l.stopper.ShouldQuiesce():
 	case <-l.active:
 	}
-	err = errLocalListenerClosed
+	err = ErrLocalListenerClosed
 	err = errors.CombineErrors(err, c1.Close())
 	err = errors.CombineErrors(err, c2.Close())
 	return nil, err
@@ -68,7 +70,7 @@ func (l *loopbackListener) Accept() (conn net.Conn, err error) {
 
 // Close closes the listener.
 // Any blocked Accept operations will be unblocked and return errors.
-func (l *loopbackListener) Close() error {
+func (l *LoopbackListener) Close() error {
 	l.closeOnce.Do(func() {
 		close(l.active)
 	})
@@ -76,33 +78,34 @@ func (l *loopbackListener) Close() error {
 }
 
 // Addr returns the listener's network address.
-func (l *loopbackListener) Addr() net.Addr {
+func (l *LoopbackListener) Addr() net.Addr {
 	return loopbackAddr{}
 }
 
 // Connect signals the Accept method that a conn is needed.
-func (l *loopbackListener) Connect(ctx context.Context) (net.Conn, error) {
+func (l *LoopbackListener) Connect(ctx context.Context) (net.Conn, error) {
 	// Send request to acceptor.
 	select {
 	case <-l.stopper.ShouldQuiesce():
-		return nil, errLocalListenerClosed
+		return nil, ErrLocalListenerClosed
 	case <-l.active:
-		return nil, errLocalListenerClosed
+		return nil, ErrLocalListenerClosed
 	case l.requests <- struct{}{}:
 	}
 	// Get conn from acceptor.
 	select {
 	case <-l.stopper.ShouldQuiesce():
-		return nil, errLocalListenerClosed
+		return nil, ErrLocalListenerClosed
 	case <-l.active:
-		return nil, errLocalListenerClosed
+		return nil, ErrLocalListenerClosed
 	case conn := <-l.conns:
 		return conn, nil
 	}
 }
 
-func newLoopbackListener(ctx context.Context, stopper *stop.Stopper) *loopbackListener {
-	return &loopbackListener{
+// NewLoopbackListener constructs a new LoopbackListener.
+func NewLoopbackListener(ctx context.Context, stopper *stop.Stopper) *LoopbackListener {
+	return &LoopbackListener{
 		stopper:  stopper,
 		active:   make(chan struct{}),
 		requests: make(chan struct{}),
