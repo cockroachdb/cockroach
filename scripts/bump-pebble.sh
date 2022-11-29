@@ -80,7 +80,6 @@ COCKROACH_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 pushd "$COCKROACH_DIR"
 go get "github.com/cockroachdb/pebble@${NEW_SHA}"
 go mod tidy
-make -k vendor_rebuild
 popd
 
 # Commit all the pending vendor directory changes to a new

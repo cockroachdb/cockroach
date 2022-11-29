@@ -174,7 +174,7 @@ bindir       := $(prefix)/bin
 
 # We always want to build from the vendor directory.
 # Avoid reusing GOFLAGS as that is overwritten by various release processes.
-GOMODVENDORFLAGS := -mod=vendor
+GOMODVENDORFLAGS := -mod=mod
 
 # Color support.
 red = $(shell { tput setaf 1 || tput AF 1; } 2>/dev/null)
@@ -243,7 +243,7 @@ export CFLAGS CXXFLAGS LDFLAGS CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS TZ
 # toolchain.
 override LINKFLAGS = -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILDTYPE) -extldflags "$(LDFLAGS)"
 
-GOMODVENDORFLAGS ?= -mod=vendor
+GOMODVENDORFLAGS ?= -mod=mod
 GOFLAGS ?=
 TAR     ?= tar
 
@@ -378,12 +378,10 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	touch $@
 
-vendor/modules.txt: | bin/.submodules-initialized
-
 # Update the git hooks and install commands from dependencies whenever they
 # change.
 # These should be synced with `./pkg/cmd/import-tools/main.go`.
-bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
+bin/.bootstrap: $(GITHOOKS) | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
 		github.com/client9/misspell/cmd/misspell \
 		github.com/cockroachdb/crlfmt \
