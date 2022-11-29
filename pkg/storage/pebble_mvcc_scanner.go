@@ -956,27 +956,34 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 // nextKey advances to the next user key.
 func (p *pebbleMVCCScanner) nextKey() bool {
-	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
-
-	for i := 0; i < p.itersBeforeSeek; i++ {
-		if !p.iterNext() {
-			return false
-		}
-		if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
-			p.incrementItersBeforeSeek()
-			return true
+	// MVCCIterator.NextKey may not be called while in the reverse direction.
+	if p.parentReverse {
+		// If the parent iterator is in reverse because we've peeked, then we
+		// can step the iterator once to land back onto the current key before
+		// we fallthrough to call NextKey.
+		if p.peeked {
+			if !p.iterNext() {
+				return false
+			}
+			// Fallthrough to NextKey.
+		} else {
+			// We can't call NextKey yet because the parent is oriented in
+			// reverse. Step forward using Next, checking if that lands us on a
+			// new key.
+			p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
+			if !p.iterNext() {
+				return false
+			}
+			// If Next-ing landed on a new key, there's nothing more to do.
+			if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
+				return p.updateCurrent()
+			}
+			// Fallthrough to NextKey.
 		}
 	}
-
-	p.decrementItersBeforeSeek()
-	// We're pointed at a different version of the same key. Fall back to
-	// seeking to the next key. We append a NUL to account for the "next-key".
-	// Note that we cannot rely on curUnsafeKey.Key being unchanged even though
-	// we are at a different version of the same key -- the underlying
-	// MVCCIterator is free to mutate the backing for p.curUnsafeKey.Key
-	// arbitrarily. Therefore we use p.keyBuf here which we have handy.
-	p.keyBuf = append(p.keyBuf, 0)
-	return p.iterSeek(MVCCKey{Key: p.keyBuf})
+	// INVARIANT: !p.parentReverse
+	p.parent.NextKey()
+	return p.updateCurrent()
 }
 
 // backwardLatestVersion backs up the iterator to the latest version for the
@@ -1435,16 +1442,10 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		// If we have peeked at the previous entry, we need to advance the iterator
 		// twice.
 		p.peeked = false
-		if !p.iterValid() {
-			// We were peeked off the beginning of iteration. Seek to the first
-			// entry, and then advance one step.
-			p.parent.SeekGE(MVCCKey{Key: p.start})
-			if !p.iterValid() {
-				return false
-			}
-			p.parent.Next()
-			return p.updateCurrent()
-		}
+		// NB: If !p.iterValid(), the iterator is peeked off the beginning of
+		// iteration (eg, exhausted in the reverse direction). A Pebble iterator
+		// can be Nexted from this position to arrive at the first key within
+		// bounds, so no special casing is required.
 		p.parent.Next()
 		if !p.iterValid() {
 			return false
