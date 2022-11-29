@@ -373,7 +373,9 @@ func (v *validator) processOp(op Operation) {
 	// filed an issue for this so close that when done.
 	switch t := op.GetValue().(type) {
 	case *GetOperation:
-		v.failIfError(op, t.Result)
+		if _, isErr := v.checkError(op, t.Result); isErr {
+			break
+		}
 		read := &observedRead{
 			Key:   t.Key,
 			Value: roachpb.Value{RawBytes: t.Result.Value},
@@ -384,6 +386,9 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`get`, t.Result)
 		}
 	case *PutOperation:
+		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
 		// Accumulate all the writes for this transaction.
 		write := &observedWrite{
 			Key:   t.Key,
@@ -399,6 +404,9 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`put`, t.Result)
 		}
 	case *DeleteOperation:
+		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
 		sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
 		write := &observedWrite{
 			Key:       t.Key,
@@ -411,6 +419,9 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`delete`, t.Result)
 		}
 	case *DeleteRangeOperation:
+		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
 		// We express DeleteRange as point deletions on all of the keys it claimed
 		// to have deleted and (atomically post-ceding the deletions) a scan that
 		// sees an empty span. If DeleteRange places a tombstone it didn't report,
@@ -452,6 +463,9 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`deleteRange`, t.Result)
 		}
 	case *DeleteRangeUsingTombstoneOperation:
+		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
 		// NB: MVCC range deletions aren't allowed in transactions (and can't be
 		// overwritten in the same non-txn'al batch), so we currently will only
 		// ever see one write to consume. With transactions (or self-overlapping
@@ -519,7 +533,9 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result)
 		}
 	case *ScanOperation:
-		v.failIfError(op, t.Result)
+		if _, isErr := v.checkError(op, t.Result); isErr {
+			break
+		}
 		scan := &observedScan{
 			Span: roachpb.Span{
 				Key:    t.Key,
@@ -544,10 +560,9 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(atomicScanType, t.Result)
 		}
 	case *BatchOperation:
-		if resultIsRetryable(t.Result) {
-			break
-		}
-		v.failIfError(op, t.Result)
+		// Intentionally don't check the error here. An error on the Batch becomes
+		// that error on each individual operation.
+
 		// Only call checkAtomic if we're in bufferingSingle here. We could have
 		// been a batch inside a txn.
 		wasBuffering := v.buffering
@@ -559,6 +574,18 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`batch`, t.Result)
 		}
 	case *ClosureTxnOperation:
+		// A txn can only fail with an intentional rollback or ambiguous result.
+		// Retry and omitted errors can only happen inside of the txn, but not
+		// inform its result.
+		// For ambiguous results, we must continue validating the txn (since writes
+		// may be there). For all other errors, it still makes sense to do so in case
+		// since a problem at the txn level is likely due to something weird in an
+		// individual operation, so it makes sense to try to emit more failures.
+		//
+		// So we ignore the results of failIfError, calling it only for its side
+		// effect of perhaps registering a failure with the validator.
+		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous)
+
 		ops := t.Ops
 		if t.CommitInBatch != nil {
 			ops = append(ops, t.CommitInBatch.Ops...)
@@ -570,7 +597,7 @@ func (v *validator) processOp(op Operation) {
 		v.checkAtomic(`txn`, t.Result)
 	case *SplitOperation:
 		execTimestampStrictlyOptional = true
-		v.failIfError(op, t.Result)
+		v.failIfError(op, t.Result) // splits should never return *any* error
 	case *MergeOperation:
 		execTimestampStrictlyOptional = true
 		if resultIsErrorStr(t.Result, `cannot merge final range`) {
@@ -611,7 +638,7 @@ func (v *validator) processOp(op Operation) {
 		} else if resultIsErrorStr(t.Result, `merge failed: RHS range bounds do not match`) {
 			// Probably should be transparently retried.
 		} else {
-			v.failIfError(op, t.Result)
+			v.failIfError(op, t.Result) // fail on all other errors
 		}
 	case *ChangeReplicasOperation:
 		execTimestampStrictlyOptional = true
@@ -622,7 +649,7 @@ func (v *validator) processOp(op Operation) {
 				kvserver.IsReplicationChangeInProgressError(err)
 		}
 		if !ignore {
-			v.failIfError(op, t.Result)
+			v.failIfError(op, t.Result) // fail on all other errors
 		}
 	case *TransferLeaseOperation:
 		execTimestampStrictlyOptional = true
@@ -645,18 +672,18 @@ func (v *validator) processOp(op Operation) {
 				resultIsErrorStr(t.Result, `cannot transfer lease while merge in progress`) ||
 				// If the existing leaseholder has not yet heard about the transfer
 				// target's liveness record through gossip, it will return an error.
-				resultIsError(t.Result, liveness.ErrRecordCacheMiss) ||
+				exceptLivenessCacheMiss(errorFromResult(t.Result)) ||
 				// Same as above, but matches cases where ErrRecordCacheMiss is
 				// passed through a LeaseRejectedError. This is necessary until
 				// LeaseRejectedErrors works with errors.Cause.
 				resultIsErrorStr(t.Result, liveness.ErrRecordCacheMiss.Error())
 		}
 		if !ignore {
-			v.failIfError(op, t.Result)
+			v.failIfError(op, t.Result) // fail on all other errors
 		}
 	case *ChangeZoneOperation:
 		execTimestampStrictlyOptional = true
-		v.failIfError(op, t.Result)
+		v.failIfError(op, t.Result) // fail on all errors
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
@@ -1059,7 +1086,52 @@ func (v *validator) checkAtomicUncommitted(atomicType string, txnObservations []
 	}
 }
 
-func (v *validator) failIfError(op Operation, r Result) {
+// checkError returns true if the operation resulted in an error. It also registers a failure
+// with the validator unless the error is an ambiguous result, an omitted error, or a retry
+// error. Additional exceptions may be passed in.
+// Exceptions don't influence the return value, which simply indicates whether there
+// was *any* error. This is useful because any error usually means the rest of the validation
+// for the command ought to be skipped.
+//
+// Writing operations usually want to call checkNonAmbError instead.
+//
+// Note that in a Batch each operation inherits the outcome of the batch as a
+// whole, which means that a read operation may result in an
+// AmbiguousResultError (which it presumably didn't cause). Ideally Batch would
+// track this more precisely but until it does we're just going to allow
+// ambiguous results everywhere. We could also work around this in kvnemesis by
+// tracking which context we're in, i.e. allow ambiguous results for, say, a Get
+// but only if in a batched context. Similarly, we shouldn't allow retry errors
+// when in a non-batched context, since these ought to be retried away
+// internally.
+func (v *validator) checkError(
+	op Operation, r Result, extraExceptions ...func(err error) bool,
+) (ambiguous, hadError bool) {
+	sl := []func(error) bool{exceptAmbiguous, exceptOmitted, exceptRetry}
+	sl = append(sl, extraExceptions...)
+	return v.failIfError(op, r, sl...)
+}
+
+// checkNonAmbError returns true if the result has an error, but the error
+// is not an ambiguous result. It applies the same exceptions as checkError,
+// which won't cause a failure to be emitted to the validator for certain
+// "excepted" error types. True will be returned for those nevertheless.
+//
+// This is typically called by operations that may write, since these always
+// want to emit observedWrites in case the operation actually did commit.
+func (v *validator) checkNonAmbError(op Operation, r Result) bool {
+	isAmb, isErr := v.checkError(op, r)
+	return isErr && !isAmb
+}
+
+// failIfError is the lower-level version of checkError that requires all
+// exceptions to be passed in. This includes exceptAmbiguous, if desired.
+// The first bool will be true if the error is an ambiguous result. Note
+// that for this ambiguous result to *not* also be registered as a failure,
+// exceptAmbiguous must be passed in.
+func (v *validator) failIfError(
+	op Operation, r Result, exceptions ...func(err error) bool,
+) (ambiguous, hasError bool) {
 	switch r.Type {
 	case ResultType_Unknown:
 		err := errors.AssertionFailedf(`unknown result %s`, op)
@@ -1067,9 +1139,15 @@ func (v *validator) failIfError(op Operation, r Result) {
 	case ResultType_Error:
 		ctx := context.Background()
 		err := errors.DecodeError(ctx, *r.Err)
+		for _, fn := range exceptions {
+			if fn(err) {
+				return exceptAmbiguous(err), true
+			}
+		}
 		err = errors.Wrapf(err, `error applying %s`, op)
 		v.failures = append(v.failures, err)
 	}
+	return false, false
 }
 
 func errorFromResult(r Result) error {
@@ -1080,12 +1158,8 @@ func errorFromResult(r Result) error {
 	return errors.DecodeError(ctx, *r.Err)
 }
 
-func resultIsError(r Result, reference error) bool {
-	return errors.Is(errorFromResult(r), reference)
-}
-
-func resultIsRetryable(r Result) bool {
-	return errors.HasInterface(errorFromResult(r), (*roachpb.ClientVisibleRetryError)(nil))
+func exceptLivenessCacheMiss(err error) bool {
+	return errors.Is(err, liveness.ErrRecordCacheMiss)
 }
 
 func resultIsAmbiguous(r Result) bool {
@@ -1166,7 +1240,8 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 		}
 
 		// Handle a point key - put it into `hist`.
-		v, err := storage.DecodeMVCCValue(iter.Value())
+		valB, err := iter.ValueAndErr()
+		v, err := storage.DecodeMVCCValue(valB)
 		if err != nil {
 			panic(err)
 		}

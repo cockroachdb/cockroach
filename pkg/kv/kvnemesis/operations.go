@@ -307,3 +307,11 @@ func (r Result) format(w *strings.Builder) {
 	}
 
 }
+
+// Error decodes and returns the r.Err if it is set.
+func (r Result) Error() error {
+	if !r.Err.IsSet() {
+		return nil
+	}
+	return errors.DecodeError(context.Background(), *r.Err)
+}

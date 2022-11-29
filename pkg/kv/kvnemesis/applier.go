@@ -77,6 +77,28 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 	return a.dbs[dbIdx], int32(dbIdx)
 }
 
+// Sentinel errors.
+var (
+	errOmitted            = errors.New("omitted")
+	errClosureTxnRollback = errors.New("rollback")
+)
+
+func exceptOmitted(err error) bool { // true if errOmitted
+	return errors.Is(err, errOmitted)
+}
+
+func exceptRollback(err error) bool { // true if intentional txn rollback
+	return errors.Is(err, errClosureTxnRollback)
+}
+
+func exceptRetry(err error) bool { // true if retry error
+	return errors.HasInterface(err, (*roachpb.ClientVisibleRetryError)(nil))
+}
+
+func exceptAmbiguous(err error) bool { // true if ambiguous result
+	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
+}
+
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
@@ -118,13 +140,27 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 				retryOnAbort.Next()
 			}
 			savedTxn = txn
-			for i := range o.Ops {
-				op := &o.Ops[i]
-				op.Result().Reset() // in case we're a retry
-				applyClientOp(ctx, txn, op, true)
-				// The KV api disallows use of a txn after an operation on it errors.
-				if r := op.Result(); r.Type == ResultType_Error {
-					return errors.DecodeError(ctx, *r.Err)
+			{
+				var err error
+				for i := range o.Ops {
+					op := &o.Ops[i]
+					op.Result().Reset() // in case we're a retry
+					if err != nil {
+						// If a previous op failed, mark this op as never invoked. We need
+						// to do this because we want, as an invariant, to have marked all
+						// operations as either failed or succeeded.
+						*op.Result() = resultInit(ctx, errOmitted)
+						continue
+					}
+
+					applyClientOp(ctx, txn, op, true)
+					// The KV api disallows use of a txn after an operation on it errors.
+					if r := op.Result(); r.Type == ResultType_Error {
+						err = errors.DecodeError(ctx, *r.Err)
+					}
+				}
+				if err != nil {
+					return err
 				}
 			}
 			if o.CommitInBatch != nil {
@@ -139,7 +175,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			case ClosureTxnType_Commit:
 				return nil
 			case ClosureTxnType_Rollback:
-				return errors.New("rollback")
+				return errClosureTxnRollback
 			default:
 				panic(errors.AssertionFailedf(`unknown closure txn type: %s`, o.Type))
 			}
