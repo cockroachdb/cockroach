@@ -694,7 +694,7 @@ FROM
   (
     SELECT
      txn_id,
-     row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time  ) as rank
+     row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time DESC ) as rank
     FROM crdb_internal.cluster_execution_insights
   ) as latestTxns
 JOIN crdb_internal.cluster_execution_insights AS insights
