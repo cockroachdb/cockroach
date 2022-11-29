@@ -93,7 +93,7 @@ func (s *httpServer) setupRoutes(
 	runtimeStatSampler *status.RuntimeStatSampler,
 	handleRequestsUnauthenticated http.Handler,
 	handleDebugUnauthenticated http.Handler,
-	apiServer *apiV2Server,
+	apiServer http.Handler,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
