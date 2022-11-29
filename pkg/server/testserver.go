@@ -772,6 +772,11 @@ func (t *TestTenant) Codec() keys.SQLCodec {
 	return t.execCfg.Codec
 }
 
+// Tracer is part of the TestTenantInterface.
+func (t *TestTenant) Tracer() *tracing.Tracer {
+	return t.SQLServer.ambientCtx.Tracer
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,

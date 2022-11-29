@@ -63,7 +63,6 @@ go_test(
         "//pkg/server/systemconfigwatcher/systemconfigwatchertest",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/distsql",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sqlinstance/instancestorage",

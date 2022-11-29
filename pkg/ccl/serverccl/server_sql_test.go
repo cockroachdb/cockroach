@@ -25,12 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -277,27 +275,6 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 		}
 		return fmt.Errorf("waiting for preallocated rows")
 	})
-}
-
-// TestNoInflightTracesVirtualTableOnTenant verifies that internal inflight traces table
-// is correctly handled by tenants (which don't provide this functionality as of now).
-func TestNoInflightTracesVirtualTableOnTenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	args := base.TestClusterArgs{}
-	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
-	defer tc.Stopper().Stop(ctx)
-
-	tenn, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{TenantID: serverutils.TestTenantID()})
-	require.NoError(t, err, "Failed to start tenant node")
-	ex := tenn.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
-	_, err = ex.Exec(ctx, "get table", nil, /* txn */
-		"select * from crdb_internal.cluster_inflight_traces WHERE trace_id = 4;")
-	require.Error(t, err, "cluster_inflight_traces should be unsupported")
-	require.Contains(t, err.Error(), "table crdb_internal.cluster_inflight_traces is not implemented on tenants")
 }
 
 func TestSystemConfigWatcherCache(t *testing.T) {
