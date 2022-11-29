@@ -106,7 +106,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	s := srv.Server
 	var initServer *initServer
 	{
-		dialOpts, err := s.rpcContext.GRPCDialOptions()
+		dialOpts, err := s.rpcContext.GRPCNetworkDialOptions()
 		require.NoError(t, err)
 
 		initConfig := newInitServerConfig(ctx, s.cfg, dialOpts)
