@@ -170,60 +170,46 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		}
 	}
 
-	// Check the `entries()` method which has special handling to accommodate
-	// `term()`: when an empty sideload storage is passed in, `entries()` should
-	// not inline, and in turn also not populate the entries cache (since its
-	// contents must always be fully inlined).
+	// Check that the `entries()` call caches the loaded entries and inlines the
+	// sideloaded ones.
 	tc.repl.raftMu.Lock()
 	defer tc.repl.raftMu.Unlock()
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
-	testutils.RunTrueAndFalse(t, "withSS", func(t *testing.T, withSS bool) {
-		rsl := stateloader.Make(tc.repl.RangeID)
-		lo := tc.repl.mu.state.TruncatedState.Index + 1
-		hi := tc.repl.mu.lastIndex + 1
 
-		var ss logstore.SideloadStorage
-		if withSS {
-			ss = tc.repl.raftMu.sideloaded
+	rsl := stateloader.Make(tc.repl.RangeID)
+	lo := tc.repl.mu.state.TruncatedState.Index + 1
+	hi := tc.repl.mu.lastIndex + 1
+
+	tc.store.raftEntryCache.Clear(tc.repl.RangeID, hi)
+	ents, err := entries(
+		ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
+		tc.repl.raftMu.sideloaded, lo, hi, math.MaxUint64,
+	)
+	require.NoError(t, err)
+	require.Len(t, ents, int(hi-lo))
+
+	// Check that the Raft entry cache was populated.
+	_, okLo := tc.store.raftEntryCache.Get(tc.repl.RangeID, lo)
+	_, okHi := tc.store.raftEntryCache.Get(tc.repl.RangeID, hi-1)
+	require.True(t, okLo)
+	require.True(t, okHi)
+
+	// Check that the sideloaded entries were inlined.
+	var idx int
+	for idx = 0; idx < len(ents); idx++ {
+		// Get the SST back from the raft log.
+		if !logstore.SniffSideloadedRaftCommand(ents[idx].Data) {
+			continue
 		}
-
-		tc.store.raftEntryCache.Clear(tc.repl.RangeID, hi)
-		ents, err := entries(
-			ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
-			ss, lo, hi, math.MaxUint64,
-		)
+		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
 		require.NoError(t, err)
-		require.Len(t, ents, int(hi-lo))
-
-		// Raft entry cache only gets populated when sideloaded storage provided.
-		_, okLo := tc.store.raftEntryCache.Get(tc.repl.RangeID, lo)
-		_, okHi := tc.store.raftEntryCache.Get(tc.repl.RangeID, hi-1)
-		if withSS {
-			require.True(t, okLo)
-			require.True(t, okHi)
-		} else {
-			require.False(t, okLo)
-			require.False(t, okHi)
-		}
-
-		// The rest of the test is the same in both cases. We find the sideloaded entry
-		// and check the sideloaded storage for the payload.
-		var idx int
-		for idx = 0; idx < len(ents); idx++ {
-			// Get the SST back from the raft log.
-			if !logstore.SniffSideloadedRaftCommand(ents[idx].Data) {
-				continue
-			}
-			ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
-			require.NoError(t, err)
-			sst, err := tc.repl.raftMu.sideloaded.Get(ctx, ent.Index, ent.Term)
-			require.NoError(t, err)
-			require.Equal(t, origSSTData, sst)
-			break
-		}
-		require.Less(t, idx, len(ents)) // there was an SST
-	})
+		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, ent.Index, ent.Term)
+		require.NoError(t, err)
+		require.Equal(t, origSSTData, sst)
+		break
+	}
+	require.Less(t, idx, len(ents)) // there was an SST
 }
 
 func TestRaftSSTableSideloadingTruncation(t *testing.T) {
