@@ -111,6 +111,9 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 	}
 }
 
+// errTransferCannotStart is an error that indicates that the transfer cannot be
+// started (e.g. transfer already in progress, or we're not at a safe transfer
+// point). The caller should retry the transfer again if necessary.
 var errTransferCannotStart = errors.New("transfer cannot be started")
 
 // TransferConnection attempts a best-effort connection migration to an
