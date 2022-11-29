@@ -9427,7 +9427,8 @@ func (c *castStringDateOp) Next() coldata.Batch {
 
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v))
+							_ph := &evalCtx.ParseHelper
+							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v), _ph)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9457,7 +9458,8 @@ func (c *castStringDateOp) Next() coldata.Batch {
 
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v))
+							_ph := &evalCtx.ParseHelper
+							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v), _ph)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9489,7 +9491,8 @@ func (c *castStringDateOp) Next() coldata.Batch {
 
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v))
+							_ph := &evalCtx.ParseHelper
+							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v), _ph)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9519,7 +9522,8 @@ func (c *castStringDateOp) Next() coldata.Batch {
 
 							_now := evalCtx.GetRelativeParseTime()
 							_dateStyle := evalCtx.GetDateStyle()
-							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v))
+							_ph := &evalCtx.ParseHelper
+							_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(v), _ph)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}

@@ -244,6 +244,9 @@ type Context struct {
 
 	// ChangefeedState stores the state (progress) of core changefeeds.
 	ChangefeedState ChangefeedState
+
+	// ParseHelper makes date parsing more efficient.
+	ParseHelper pgdate.ParseHelper
 }
 
 // DescIDGenerator generates unique descriptor IDs.
@@ -570,6 +573,11 @@ func (ec *Context) GetRelativeParseTime() time.Time {
 		ret = timeutil.Now()
 	}
 	return ret.In(ec.GetLocation())
+}
+
+// GetDateHelper implements ParseTimeContext.
+func (ec *Context) GetDateHelper() *pgdate.ParseHelper {
+	return &ec.ParseHelper
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per

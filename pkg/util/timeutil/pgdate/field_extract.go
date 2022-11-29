@@ -53,9 +53,6 @@ type fieldExtract struct {
 	// Provides a time for evaluating relative dates as well as a
 	// timezone. Should only be used via the now() and location() accessors.
 	currentTime time.Time
-	// currentTimeUsed is set if we consulted currentTime (indicating if the
-	// result depends on the context).
-	currentTimeUsed bool
 
 	// location is set to the timezone specified by the timestamp (if any).
 	location *time.Location
@@ -66,15 +63,22 @@ type fieldExtract struct {
 	// Stores a reference to one of the sentinel values, to be returned
 	// by the makeDateTime() functions
 	sentinel *time.Time
-	// This indicates that the value in the year field was only
-	// two digits and should be adjusted to make it recent.
-	tweakYear bool
 	// Tracks the sign of the timezone offset.  We need to track
 	// this separately from the sign of the tz1 value in case
 	// we're trying to store a (nonsensical) value like -0030.
 	tzSign int
 	// Tracks the fields that we want to extract.
 	wanted fieldSet
+
+	textChunksScratch [fieldMaximum]stringChunk
+	numbersScratch    [fieldMaximum]numberChunk
+
+	// This indicates that the value in the year field was only
+	// two digits and should be adjusted to make it recent.
+	tweakYear bool
+	// currentTimeUsed is set if we consulted currentTime (indicating if the
+	// result depends on the context).
+	currentTimeUsed bool
 	// Tracks whether the current timestamp is of db2 format.
 	isDB2 bool
 }
@@ -96,8 +100,8 @@ func (fe *fieldExtract) getLocation() *time.Location {
 // string into a collection of date/time fields in order to populate a
 // fieldExtract.
 func (fe *fieldExtract) Extract(s string) error {
+	textChunks := fe.textChunksScratch[:fieldMaximum]
 	// Break the string into alphanumeric chunks.
-	textChunks := make([]stringChunk, fieldMaximum)
 	count, _ := chunk(s, textChunks)
 
 	if count < 0 {
@@ -107,7 +111,7 @@ func (fe *fieldExtract) Extract(s string) error {
 	}
 
 	// Create a place to store extracted numeric info.
-	numbers := make([]numberChunk, 0, fieldMaximum)
+	numbers := fe.numbersScratch[:0]
 
 	appendNumber := func(prefix, number string) error {
 		v, err := strconv.Atoi(number)
