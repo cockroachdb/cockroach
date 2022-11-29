@@ -231,7 +231,16 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	}
 	found := false
 	var mu syncutil.Mutex
-	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication,
+	// backupRestoreTestSetupWithParams() writes some data and then, within
+	// workloadsql.Setup() it splits and scatters the ranges. When using 3 nodes
+	// scatter means we only move leases which is usually enough. During stress or
+	// race we see that the leases may not be scattered because the other 2
+	// replicas are not yet initialized. In those cases the leases all stay on
+	// node 1 and therefore the flows run locally and the test fails (because
+	// 'found' stays false). The simple solution here is to use 4 nodes where
+	// scatter moves replicas in addition to leases.
+	numNodes := 4
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, numNodes, numAccounts, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DisableDefaultTestTenant: true,
