@@ -71,17 +71,17 @@ SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
 ├ Node 1
 │ └ *colexec.ParallelUnorderedSynchronizer
 │   ├ *rowexec.joinReader
-│   │ └ *colfetcher.ColBatchScan
+│   │ └ *colfetcher.ColBatchDirectScan
 │   ├ *colrpc.Inbox
 │   └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *rowexec.joinReader
-│     └ *colfetcher.ColBatchScan
+│     └ *colfetcher.ColBatchDirectScan
 └ Node 3
   └ *colrpc.Outbox
     └ *rowexec.joinReader
-      └ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchDirectScan
 
 query I
 SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
