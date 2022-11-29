@@ -1482,7 +1482,26 @@ func cmdScan(e *evalCtx) error {
 		opts.AllowEmpty = true
 	}
 	if e.hasArg("wholeRows") {
-		opts.WholeRowsOfSize = 10 // arbitrary, must be greater than largest column family in tests
+		for _, c := range e.td.CmdArgs {
+			if c.Key == "wholeRows" {
+				// If we have a custom value for wholeRows key, then use it,
+				// otherwise, pick an arbitrary value greater than the largest
+				// column family in tests.
+				if len(c.Vals) > 0 {
+					wholeRowsOfSize, err := strconv.ParseInt(c.Vals[0], 10, 64)
+					if err != nil {
+						return err
+					}
+					if wholeRowsOfSize < 2 {
+						return errors.Newf("wholeRowOfSize value must be at least 2, got %d", wholeRowsOfSize)
+					}
+					opts.WholeRowsOfSize = int32(wholeRowsOfSize)
+				} else {
+					opts.WholeRowsOfSize = 10
+				}
+				break
+			}
+		}
 	}
 	return e.withReader(func(r storage.Reader) error {
 		res, err := storage.MVCCScan(e.ctx, r, key, endKey, ts, opts)
