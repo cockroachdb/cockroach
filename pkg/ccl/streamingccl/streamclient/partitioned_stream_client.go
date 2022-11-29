@@ -10,6 +10,9 @@ package streamclient
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"net"
 	"net/url"
 
@@ -41,10 +44,17 @@ type partitionedStreamClient struct {
 func newPartitionedStreamClient(
 	ctx context.Context, remote *url.URL,
 ) (*partitionedStreamClient, error) {
-	config, err := pgx.ParseConfig(remote.String())
+
+	noInlineCertURI, tlsInfo, err := uriWithInlineTLSCertsRemoved(remote)
 	if err != nil {
 		return nil, err
 	}
+	config, err := pgx.ParseConfig(noInlineCertURI.String())
+	if err != nil {
+		return nil, err
+	}
+	tlsInfo.addTLSCertsToConfig(config.TLSConfig)
+
 	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
 		return nil, err
@@ -357,4 +367,84 @@ func (p *partitionedStreamSubscription) Events() <-chan streamingccl.Event {
 // Err implements the Subscription interface.
 func (p *partitionedStreamSubscription) Err() error {
 	return p.err
+}
+
+type tlsCerts struct {
+	certs        []tls.Certificate
+	rootCertPool *x509.CertPool
+}
+
+// uriWithInlineTLSCertsRemoved handles the non-standard sslinline
+// option. The returned URL can be passed to pgx. The returned
+// tlsCerts struct can be used to apply the certificate data to the
+// tls.Config produced by pgx.
+func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) {
+	if remote.Query().Get("sslinline") != "true" {
+		return remote, nil, nil
+	}
+
+	retURL := *remote
+	v := retURL.Query()
+	cert := v.Get("sslcert")
+	key := v.Get("sslkey")
+	rootcert := v.Get("sslrootcert")
+
+	if (cert != "" && key == "") || (cert == "" && key != "") {
+		return nil, nil, errors.New(`both "sslcert" and "sslkey" are required`)
+	}
+
+	tlsInfo := &tlsCerts{}
+	if rootcert != "" {
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM([]byte(rootcert)) {
+			return nil, nil, errors.New("unable to add CA to cert pool")
+		}
+		tlsInfo.rootCertPool = caCertPool
+	}
+	if cert != "" && key != "" {
+		// TODO(ssd): pgx supports sslpassword here. But, it
+		// only supports PKCS#1 and relies on functions that
+		// are deprecated in the stdlib. For now, I've skipped
+		// it.
+		block, _ := pem.Decode([]byte(key))
+		pemKey := pem.EncodeToMemory(block)
+		keyPair, err := tls.X509KeyPair([]byte(cert), pemKey)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "unable to construct x509 key pair")
+		}
+		tlsInfo.certs = []tls.Certificate{keyPair}
+	}
+
+	// lib/pq, pgx, and the C libpq implement this backwards
+	// compatibility quirk. Since we are removing sslrootcert, we
+	// have to re-implement it here.
+	//
+	// TODO(ssd): This may be a sign that we should implement the
+	// entire configTLS function from pgx and remove all tls
+	// options.
+	if v.Get("sslmode") == "require" && rootcert != "" {
+		v.Set("sslmode", "verify-ca")
+	}
+
+	v.Del("sslcert")
+	v.Del("sslkey")
+	v.Del("sslrootcert")
+	v.Del("sslinline")
+	retURL.RawQuery = v.Encode()
+	return &retURL, tlsInfo, nil
+}
+
+func (c *tlsCerts) addTLSCertsToConfig(tlsConfig *tls.Config) {
+	if c == nil {
+		return
+	}
+
+	if c.rootCertPool != nil {
+		tlsConfig.RootCAs = c.rootCertPool
+		tlsConfig.ClientCAs = c.rootCertPool
+	}
+
+	if len(c.certs) > 0 {
+		tlsConfig.Certificates = c.certs
+	}
 }

@@ -11,6 +11,8 @@ package streamclient
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -93,7 +96,29 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	client, err := newPartitionedStreamClient(ctx, &h.PGUrl)
+	rng, _ := randutil.NewPseudoRand()
+	maybeGenerateInlineURL := func(orig *url.URL) *url.URL {
+		if rng.Float64() > 0.5 {
+			return orig
+		}
+
+		t.Log("using inline certificates")
+		ret := *orig
+		v := ret.Query()
+		for _, opt := range []string{"sslcert", "sslkey", "sslrootcert"} {
+			path := v.Get(opt)
+			content, err := ioutil.ReadFile(path)
+			require.NoError(t, err)
+			v.Set(opt, string(content))
+
+		}
+		v.Set("sslinline", "true")
+		ret.RawQuery = v.Encode()
+		return &ret
+	}
+
+	maybeInlineURL := maybeGenerateInlineURL(&h.PGUrl)
+	client, err := newPartitionedStreamClient(ctx, maybeInlineURL)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
