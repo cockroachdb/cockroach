@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -414,23 +415,147 @@ func (tpccIncData) runRestoreDetached(
 	return jobID, nil
 }
 
+// This data set restores a backup created from a 500k tpce fixture. The backed
+// up cluster had around 7.6 TB of data on disk, and the restore cluster will
+// have around 8.5TB on disk.
+//
+// Backup Fixture description: This fixture contains two full backups and hourly
+// incremental backups taken over 24 hours, with revision history. The cluster
+// was running the tpce workload, initialized with 500k customers and running
+// with 100k active customers. The init step created 7.6 TB of data, and the
+// running step only created another 100 GB of data. The backups did not begin
+// until after tpce init ended.
+//
+// Fixture recreation steps:
+//
+// 1) Create a roachprod cluster with the same topology as
+// this test.
+//
+// 2) Setup the cluster to run tpc-e init with 500k customers, using
+// the repro steps in the appendix of Nathan's v22.2
+// Scalability & Efficiency Evaluation using TPC-E doc
+// https://docs.google.com/document/d/1wzkBXaA3Ap_daMV1oY1AhQqlnAjO3pIVLZTXY53m0Xk/edit
+//
+// 3) Set the gc ttl for the tpce database to 25 hrs
+//
+// 4) Create a backup schedule with revision history and hourly incremental backups.
+//
+// 6) Run the tpce workload for 24 hours with 100k active customers.
+type tpce10TB struct{}
+
+func (tpce10TB) name() string {
+	return "TPCE10TB"
+}
+
+func (tpce10TB) runRestore(ctx context.Context, c cluster.Cluster) {
+	// Restore from the first full backup AOST in the last incremental backup in the chain.
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE DATABASE tpce FROM '/2022/11/06-124208.52' IN
+				'gs://cockroach-fixtures/backups/tpc-e/rev-history=true,inc-count=23,cluster/customers=500k/22.1.8?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-11-06 23:40:22'"`)
+}
+
+func (tpce10TB) runRestoreDetached(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) (jobspb.JobID, error) {
+	// Restore from the first full backup AOST in the last incremental backup in the chain.
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE DATABASE tpce FROM '/2022/11/06-124208.52' IN
+				'gs://cockroach-fixtures/backups/tpc-e/rev-history=true,inc-count=23,cluster/customers=500k/22.1.8?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-11-06 23:40:22' WITH detached"`)
+	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
+	}
+
+	var jobID jobspb.JobID
+	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`).Scan(
+		&jobID); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
 var _ testDataSet = tpccIncData{}
 
+// checkDetachedRestore returns when the detached restore has completed
+func checkDetachedRestore(
+	ctx context.Context, t test.Test, c cluster.Cluster, jobID jobspb.JobID,
+) error {
+	checkJobTick := time.NewTicker(time.Minute * 1)
+	defer checkJobTick.Stop()
+	done := ctx.Done()
+	for {
+		select {
+		case <-done:
+			return ctx.Err()
+		case <-checkJobTick.C:
+			checkSucceeded := func() (bool, error) {
+				// Open a new connection for every check to prevent connection flakes.
+				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+				if err != nil {
+					return false, errors.Wrapf(err, "failed to open connection to sql server")
+				}
+				defer conn.Close()
+				var status string
+				var payloadBytes []byte
+				if err = conn.QueryRowContext(ctx,
+					`SELECT status, payload FROM [SHOW JOBS] WHERE job_id = $1`,
+					jobID).Scan(&status, &payloadBytes); err != nil {
+					return false, errors.Wrapf(err, "failed to check restore job status")
+				}
+				switch status {
+				case string(jobs.StatusSucceeded):
+					return true, nil
+				case string(jobs.StatusRunning):
+					return false, nil
+				case string(jobs.StatusFailed):
+					var payload jobspb.Payload
+					require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+					return false, errors.Newf("job failed: %s", payload.Error)
+				default:
+					return false, errors.Newf("job unexpectedly found in %s state", status)
+				}
+			}
+			succeeded, err := checkSucceeded()
+			if err != nil {
+				return err
+			}
+			if succeeded {
+				return nil
+			}
+		}
+	}
+}
 func registerRestore(r registry.Registry) {
-	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
 
 	for _, item := range []struct {
-		nodes        int
-		cpus         int
-		largeVolumes bool
+		nodes int
+		cpus  int
+
+		// pdVolumeSize specifies, in GB, the pd-ssd GB per node. If not specified,
+		// each node will use a local ssd, which on GCP, has 375 GB capacity.
+		pdVolumeSize int
 		dataSet      testDataSet
 
 		timeout time.Duration
+
+		// detatched runs a detatched restore, which will cause the roachperf time to be off by at
+		// most 1 minute. Use this setting for especially large roachtests where an
+		// ssh connection disruption could occur.
+		detached bool
+
+		// parallelize bumps the restore node and addsstable request concurrency.
+		parallelize bool
 	}{
 		{dataSet: dataBank2TB{}, nodes: 10, timeout: 6 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
-		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, largeVolumes: true},
+		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, pdVolumeSize: 2500,
+			parallelize: true},
 		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
+		{dataSet: tpce10TB{}, nodes: 10, timeout: 10 * time.Hour, cpus: 8, pdVolumeSize: 1500,
+			detached: true},
 	} {
 		item := item
 		clusterOpts := make([]spec.Option, 0)
@@ -439,9 +564,9 @@ func registerRestore(r registry.Registry) {
 			clusterOpts = append(clusterOpts, spec.CPU(item.cpus))
 			testName += fmt.Sprintf("/cpus=%d", item.cpus)
 		}
-		if item.largeVolumes {
-			clusterOpts = append(clusterOpts, spec.VolumeSize(largeVolumeSize))
-			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
+		if item.pdVolumeSize != 0 {
+			clusterOpts = append(clusterOpts, spec.VolumeSize(item.pdVolumeSize))
+			testName += fmt.Sprintf("/pd-volume=%dGB", item.pdVolumeSize)
 		}
 		// Has been seen to OOM: https://github.com/cockroachdb/cockroach/issues/71805
 		clusterOpts = append(clusterOpts, spec.HighMem(true))
@@ -484,7 +609,7 @@ func registerRestore(r registry.Registry) {
 					// capture the total elapsed time. This is used by
 					// roachperf to compute and display the average MB/sec per
 					// node.
-					if item.cpus >= 8 {
+					if item.parallelize {
 						// If the nodes are large enough (specifically, if they
 						// have enough memory we can increase the parallelism
 						// of restore). Machines with 16 vCPUs typically have
@@ -495,7 +620,14 @@ func registerRestore(r registry.Registry) {
 							`./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5"`)
 					}
 					tick()
-					item.dataSet.runRestore(ctx, c)
+					if item.detached {
+						jobID, err := item.dataSet.runRestoreDetached(ctx, t, c)
+						require.NoError(t, err)
+						err = checkDetachedRestore(ctx, t, c, jobID)
+						require.NoError(t, err)
+					} else {
+						item.dataSet.runRestore(ctx, c)
+					}
 					tick()
 
 					// Upload the perf artifacts to any one of the nodes so that the test
@@ -540,6 +672,7 @@ func registerRestore(r registry.Registry) {
 				// Wait until the restore job has been created.
 				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
 				require.NoError(t, err)
+				defer conn.Close()
 
 				// The job should be created fairly quickly once the roachtest starts.
 				done := ctx.Done()
