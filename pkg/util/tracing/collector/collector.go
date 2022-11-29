@@ -55,8 +55,6 @@ func New(
 type Iterator struct {
 	collector *TraceCollector
 
-	ctx context.Context
-
 	traceID tracingpb.TraceID
 
 	// liveNodes represents all the nodes in the cluster that are considered live,
@@ -90,7 +88,7 @@ type Iterator struct {
 func (t *TraceCollector) StartIter(
 	ctx context.Context, traceID tracingpb.TraceID,
 ) (*Iterator, error) {
-	tc := &Iterator{ctx: ctx, traceID: traceID, collector: t}
+	tc := &Iterator{traceID: traceID, collector: t}
 	var err error
 	tc.liveNodes, err = nodesFromNodeLiveness(ctx, t.nodeliveness)
 	if err != nil {
@@ -100,7 +98,7 @@ func (t *TraceCollector) StartIter(
 	// Calling Next() positions the Iterator in a valid state. It will fetch the
 	// first set of valid (non-nil) inflight span recordings from the list of live
 	// nodes.
-	tc.Next()
+	tc.Next(ctx)
 
 	return tc, nil
 }
@@ -123,7 +121,7 @@ func (i *Iterator) Valid() bool {
 }
 
 // Next sets the Iterator to point to the next value to be returned.
-func (i *Iterator) Next() {
+func (i *Iterator) Next(ctx context.Context) {
 	i.recordingIndex++
 
 	// If recordingIndex is within recordings and there are some buffered
@@ -146,7 +144,7 @@ func (i *Iterator) Next() {
 			return
 		}
 		i.curNode = i.liveNodes[i.curNodeIndex]
-		i.recordings, i.iterErr = i.collector.getTraceSpanRecordingsForNode(i.ctx, i.traceID, i.curNode)
+		i.recordings, i.iterErr = i.collector.getTraceSpanRecordingsForNode(ctx, i.traceID, i.curNode)
 		// TODO(adityamaru): We might want to consider not failing if a single node
 		// fails to return span recordings.
 		if i.iterErr != nil {
