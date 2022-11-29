@@ -114,7 +114,7 @@ override_multi_region_zone_config                     off
 parallelize_multi_key_lookup_joins_enabled            off
 password_encryption                                   scram-sha-256
 pg_trgm.similarity_threshold                          0.3
-plan_direct_scan                                      off
+plan_direct_scan                                      on
 prefer_lookup_joins_for_fks                           off
 propagate_input_ordering                              off
 reorder_joins_limit                                   8
