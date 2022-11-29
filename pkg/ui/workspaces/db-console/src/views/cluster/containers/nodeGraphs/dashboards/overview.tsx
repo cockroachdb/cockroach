@@ -12,7 +12,7 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric, Axis } from "src/views/shared/components/metricQuery";
+import { Axis, Metric } from "src/views/shared/components/metricQuery";
 
 import {
   GraphDashboardProps,
@@ -90,14 +90,13 @@ export default function (props: GraphDashboardProps) {
         ))}
       </Axis>
     </LineGraph>,
-
     <LineGraph
       title="SQL Statement Contention"
       sources={nodeSources}
-      tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
+      tooltip={`A thirty-second moving average of the # of SQL statements executed per second that experienced contention ${tooltipSelection}.`}
       preCalcGraphSize={true}
     >
-      <Axis label="queries">
+      <Axis label="Average # of queries per a second">
         <Metric
           name="cr.node.sql.distsql.contended_queries.count"
           title="Contention"
