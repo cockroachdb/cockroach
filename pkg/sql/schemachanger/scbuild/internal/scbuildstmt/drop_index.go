@@ -113,7 +113,7 @@ func dropAnIndex(
 	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"index %q is in use as unique constraint", indexName.String()),
+				"index %q is in use as unique constraint", indexName.Index.String()),
 			"use CASCADE if you really want to drop it.",
 		))
 	}
@@ -132,7 +132,7 @@ func dropSecondaryIndex(
 	// If CASCADE and there are "dependent" views (i.e. views that use this
 	// to-be-dropped index), then we will drop all dependent views and their
 	// dependents.
-	maybeDropDependentViews(b, sie, indexName.String(), dropBehavior)
+	maybeDropDependentViews(b, sie, indexName.Index.String(), dropBehavior)
 
 	// Maybe drop dependent FK constraints.
 	// A PK or unique constraint is required to serve an inbound FK constraint.
@@ -145,7 +145,7 @@ func dropSecondaryIndex(
 
 	// If shard index, also drop the shard column and all check constraints that
 	// uses this shard column if no other index uses the shard column.
-	maybeDropAdditionallyForShardedIndex(b, sie, indexName.String(), dropBehavior)
+	maybeDropAdditionallyForShardedIndex(b, sie, indexName.Index.String(), dropBehavior)
 
 	// If expression index, also drop the expression column if no other index is
 	// using the expression column.
