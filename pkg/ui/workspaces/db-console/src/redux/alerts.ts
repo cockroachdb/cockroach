@@ -653,6 +653,14 @@ export function alertDataSync(store: Store<AdminUIState>) {
     // Always refresh health.
     dispatch(refreshHealth());
 
+    if (
+      !state.login ||
+      !state.login.loggedInUser ||
+      state.login.loggedInUser == ``
+    ) {
+      return;
+    }
+
     // Load persistent settings which have not yet been loaded.
     const uiData = state.uiData;
     if (uiData !== lastUIData) {

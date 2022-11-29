@@ -13,7 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -197,7 +197,6 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Warningf(ctx, "unable to find tserver for tenant %q: %v", tenantName, err)
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "cannot find tenant")
 		return
 	}
 	// if the client didnt specify tenant name call these for login/logout.
@@ -221,7 +220,6 @@ type sessionWriter struct {
 }
 
 func (sw *sessionWriter) Header() http.Header {
-	fmt.Printf("~~~~~~Header method: %+v\n", sw.header)
 	return sw.header
 }
 
@@ -249,10 +247,19 @@ func (c *serverController) routeLogin() http.Handler {
 		ctx := r.Context()
 		tenantNames := c.getCurrentTenantNames()
 		var sessionsStr string
+		clonedBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Warning(ctx, "unable to write body")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer r.Body.Close()
+
+		success := false
 		for _, name := range tenantNames { // system, app0
-			fmt.Println(name)
 			sw := &sessionWriter{header: w.Header().Clone()}
 			newReq := r.Clone(ctx)
+			newReq.Body = io.NopCloser(bytes.NewBuffer(clonedBody))
 			server, err := c.get(ctx, name)
 			if err != nil {
 				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
@@ -260,10 +267,11 @@ func (c *serverController) routeLogin() http.Handler {
 			}
 			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
 			setCookieHeader := sw.Header().Get("set-cookie")
-			fmt.Printf("~~~~~~routeLogin: %+v\n", sw.Header())
+
 			if len(setCookieHeader) == 0 {
 				log.Warningf(ctx, "unable to find session cookie for tenant %q", name)
 			} else {
+				success = true
 				sessionCookieSlice := strings.Split(strings.ReplaceAll(setCookieHeader, "session=", ""), ";")
 				sessionsStr += sessionCookieSlice[0] + "," + name + "&"
 			}
@@ -271,14 +279,19 @@ func (c *serverController) routeLogin() http.Handler {
 		if len(sessionsStr) > 0 {
 			sessionsStr = sessionsStr[:len(sessionsStr)-1]
 		}
-		cookie := http.Cookie{
-			Name:     SessionCookieName,
-			Value:    sessionsStr,
-			Path:     "/",
-			HttpOnly: false,
+
+		if success {
+			cookie := http.Cookie{
+				Name:     SessionCookieName,
+				Value:    sessionsStr,
+				Path:     "/",
+				HttpOnly: false,
+			}
+			http.SetCookie(w, &cookie)
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
 		}
-		http.SetCookie(w, &cookie)
-		w.WriteHeader(http.StatusOK)
 	})
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -144,7 +145,6 @@ func (s *authenticationServer) UserLogin(
 			"no username was provided",
 		)
 	}
-	fmt.Println("grpc login method")
 
 	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
 	// case-insensitive. Therefore we need to normalize the username
@@ -686,7 +686,7 @@ func findTenantCookie(cookies []*http.Cookie) string {
 			return c.Value
 		}
 	}
-	return ""
+	return catconstants.SystemTenantName
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
