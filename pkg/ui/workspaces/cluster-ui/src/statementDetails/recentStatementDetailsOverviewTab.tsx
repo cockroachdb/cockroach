@@ -44,36 +44,30 @@ export const RecentStatementDetailsOverviewTab = ({
   return (
     <>
       <section className={cx("section", "section--container")}>
-        <Row gutter={24}>
+        <Row gutter={24} type="flex">
           <Col className="gutter-row" span={12}>
             <SummaryCard className={cx("summary-card")}>
-              <Row>
-                <Col>
-                  <SummaryCardItem
-                    label="Start Time (UTC)"
-                    value={statement.start.format(DATE_FORMAT_24_UTC)}
-                  />
-                  <SummaryCardItem
-                    label="Elapsed Time"
-                    value={Duration(
-                      statement.elapsedTime.asMilliseconds() * 1e6,
-                    )}
-                  />
-                  <SummaryCardItem
-                    label="Status"
-                    value={
-                      <>
-                        <StatusIcon status={statement.status} />
-                        {statement.status}
-                      </>
-                    }
-                  />
-                  <SummaryCardItem
-                    label="Full Scan"
-                    value={statement.isFullScan.toString()}
-                  />
-                </Col>
-              </Row>
+              <SummaryCardItem
+                label="Start Time (UTC)"
+                value={statement.start.format(DATE_FORMAT_24_UTC)}
+              />
+              <SummaryCardItem
+                label="Elapsed Time"
+                value={Duration(statement.elapsedTime.asMilliseconds() * 1e6)}
+              />
+              <SummaryCardItem
+                label="Status"
+                value={
+                  <>
+                    <StatusIcon status={statement.status} />
+                    {statement.status}
+                  </>
+                }
+              />
+              <SummaryCardItem
+                label="Full Scan"
+                value={statement.isFullScan.toString()}
+              />
             </SummaryCard>
           </Col>
           <Col className="gutter-row" span={12}>
