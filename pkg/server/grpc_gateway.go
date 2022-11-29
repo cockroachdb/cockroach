@@ -96,8 +96,7 @@ func configureGRPCGateway(
 
 	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
 	// uniquely in-process connection.
-	// TODO(knz): Replace by a loopback-specific version of this method.
-	dialOpts, err := rpcContext.GRPCNetworkDialOptions()
+	dialOpts, err := rpcContext.GRPCLoopbackDialOptions()
 	if err != nil {
 		return nil, nil, nil, err
 	}
