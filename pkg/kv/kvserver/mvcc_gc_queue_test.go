@@ -354,12 +354,21 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 }
 
 func (cws *cachedWriteSimulator) shouldQueue(
-	b bool, prio float64, after time.Duration, ttl time.Duration, ms enginepb.MVCCStats,
+	b bool,
+	prio float64,
+	after time.Duration,
+	ttl time.Duration,
+	ms enginepb.MVCCStats,
+	timeSinceGC time.Duration,
 ) {
 	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
+	prevGCTs := hlc.Timestamp{}
+	if timeSinceGC > 0 {
+		prevGCTs = prevGCTs.Add(ms.LastUpdateNanos+(after-timeSinceGC).Nanoseconds(), 0)
+	}
 	r := makeMVCCGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
-		hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+		prevGCTs, true, /* canAdvanceGCThreshold */
 		roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 	)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
@@ -386,6 +395,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	}
 
 	minuteTTL, hourTTL := time.Minute, time.Hour
+	const never = time.Duration(0)
 
 	{
 		// Hammer a key with 1MB blobs for a (simulated) minute. Logically, at
@@ -400,32 +410,39 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 		//
 		// Since at the time of this check the data is already 30s old on
 		// average (i.e. ~30x the TTL), we expect to *really* want GC.
-		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms)
-		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms, never)
+		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms, never)
 
 		// Right after we finished writing, we don't want to GC yet with a one-minute TTL.
-		cws.shouldQueue(false, 0.48, time.Duration(0), minuteTTL, ms)
+		cws.shouldQueue(false, 0.48, time.Duration(0), minuteTTL, ms, never)
 
-		// Neither after a minute. The first values are about to become GC'able, though.
-		cws.shouldQueue(false, 1.46, time.Minute, minuteTTL, ms)
+		// After a minute score is already above minimum threshold and some data is
+		// GC able so it triggers shouldQueue if there were no GC runs recently
+		// enough, but not queueable if GC run recently.
+		cws.shouldQueue(true, 1.46, time.Minute, minuteTTL, ms, never)
+		cws.shouldQueue(false, 1.46, time.Minute, minuteTTL, ms, 30*time.Second)
 		// 90 seconds in it's really close, but still just shy of GC. Half of the
 		// values could be deleted now (remember that we wrote them over a one
 		// minute period).
-		cws.shouldQueue(false, 1.95, 3*time.Minute/2, minuteTTL, ms)
+		// We are close to high threshold, so cooldown time shrunk to just under 6
+		// minutes.
+		cws.shouldQueue(true, 1.95, 3*time.Minute/2, minuteTTL, ms, 6*time.Minute)
+		cws.shouldQueue(false, 1.95, 3*time.Minute/2, minuteTTL, ms, 5*time.Minute)
 		// Advancing another 1/4 minute does the trick.
-		cws.shouldQueue(true, 2.20, 7*time.Minute/4, minuteTTL, ms)
+		cws.shouldQueue(true, 2.20, 7*time.Minute/4, minuteTTL, ms, never)
 		// After an hour, that's (of course) still true with a very high priority.
-		cws.shouldQueue(true, 59.34, time.Hour, minuteTTL, ms)
+		cws.shouldQueue(true, 59.34, time.Hour, minuteTTL, ms, never)
 
 		// Let's see what the same would look like with a 1h TTL.
 		// Can't delete anything until 59min have passed, and indeed the score is low.
-		cws.shouldQueue(false, 0.01, time.Duration(0), hourTTL, ms)
-		cws.shouldQueue(false, 0.02, time.Minute, hourTTL, ms)
-		cws.shouldQueue(false, 0.99, time.Hour, hourTTL, ms)
+		cws.shouldQueue(false, 0.01, time.Duration(0), hourTTL, ms, never)
+		cws.shouldQueue(false, 0.02, time.Minute, hourTTL, ms, never)
+		cws.shouldQueue(false, 0.99, time.Hour, hourTTL, ms, never)
 		// After 90 minutes, we're getting closer. After just over two hours,
 		// definitely ripe for GC (and this would delete all the values).
-		cws.shouldQueue(false, 1.48, 90*time.Minute, hourTTL, ms)
-		cws.shouldQueue(true, 2.05, 125*time.Minute, hourTTL, ms)
+		cws.shouldQueue(true, 1.48, 90*time.Minute, hourTTL, ms, never)
+		cws.shouldQueue(false, 1.48, 90*time.Minute, hourTTL, ms, 5*time.Minute)
+		cws.shouldQueue(true, 2.05, 125*time.Minute, hourTTL, ms, never)
 	}
 
 	{
@@ -435,7 +452,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 		cws.multiKey(999, valSize, nil /* no txn */, &ms)
 
 		// GC shouldn't move at all, even after a long time and short TTL.
-		cws.shouldQueue(false, 0, 24*time.Hour, minuteTTL, ms)
+		cws.shouldQueue(false, 0, 24*time.Hour, minuteTTL, ms, never)
 
 		// Write a single key twice.
 		cws.singleKeySteady(2, 0, valSize, &ms)
@@ -446,16 +463,16 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 
 		// If the fact that 99.9% of the replica is live were not taken into
 		// account, this would get us at least close to GC.
-		cws.shouldQueue(false, 0.00, 5*time.Minute, minuteTTL, ms)
+		cws.shouldQueue(false, 0.00, 5*time.Minute, minuteTTL, ms, never)
 
 		// 12 hours in the score becomes relevant, but not yet large enough.
 		// The key is of course GC'able and has been for a long time, but
 		// to find it we'd have to scan all the other kv pairs as well.
-		cws.shouldQueue(false, 0.71, 12*time.Hour, minuteTTL, ms)
+		cws.shouldQueue(false, 0.71, 12*time.Hour, minuteTTL, ms, never)
 
 		// Two days in we're more than ready to go, would queue for GC, and
 		// delete.
-		cws.shouldQueue(true, 2.85, 48*time.Hour, minuteTTL, ms)
+		cws.shouldQueue(true, 2.85, 48*time.Hour, minuteTTL, ms, never)
 	}
 
 	{
@@ -472,9 +489,12 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 		// doesn't matter. In reality, the value-based GC score will often strike first.
 		cws.multiKey(100, valSize, txn, &ms)
 
-		cws.shouldQueue(false, 0.12, 1*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 0.87, 7*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(true, 1.12, 9*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 0.12, 1*time.Hour, irrelevantTTL, ms, never)
+		cws.shouldQueue(false, 0.87, 7*time.Hour, irrelevantTTL, ms, never)
+		cws.shouldQueue(true, 1.12, 9*time.Hour, irrelevantTTL, ms, never)
+		// Check if cooldown policy protects us from too frequent runs based on
+		// intents alone.
+		cws.shouldQueue(false, 1.12, 9*time.Hour, irrelevantTTL, ms, time.Hour)
 	}
 }
 
@@ -524,7 +544,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 
 	shouldQueueAfter := func(ms enginepb.MVCCStats, delay time.Duration, gcTTL time.Duration) bool {
 		now := deletionTime.Add(delay.Nanoseconds(), 0)
-		r := makeMVCCGCQueueScoreImpl(ctx, 0 /* seed */, now, ms, gcTTL, hlc.Timestamp{}, true,
+		r := makeMVCCGCQueueScoreImpl(ctx, 0 /* seed */, now, ms, gcTTL, now.Add(-time.Hour.Nanoseconds(), 0), true,
 			roachpb.GCHint{}, time.Hour)
 		return r.ShouldQueue
 	}
