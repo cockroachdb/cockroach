@@ -69,8 +69,8 @@ EXPLAIN (VEC) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN da
 │
 └ Node 1
   └ *colexec.hashGroupJoiner
-    ├ *colfetcher.ColBatchScan
-    └ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchDirectScan
+    └ *colfetcher.ColBatchDirectScan
 
 statement ok
 RESET experimental_hash_group_join_enabled
@@ -82,5 +82,5 @@ EXPLAIN (VEC) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN da
 └ Node 1
   └ *colexec.hashAggregator
     └ *colexecjoin.hashJoiner
-      ├ *colfetcher.ColBatchScan
-      └ *colfetcher.ColBatchScan
+      ├ *colfetcher.ColBatchDirectScan
+      └ *colfetcher.ColBatchDirectScan

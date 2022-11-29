@@ -1793,7 +1793,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().PlanDirectScan), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
+			return formatBoolAsPostgresSetting(true)
 		},
 	},
 

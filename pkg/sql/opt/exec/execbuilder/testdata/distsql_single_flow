@@ -18,8 +18,8 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
 └ Node 2
   └ *colrpc.Outbox
     └ *colexecjoin.hashJoiner
-      ├ *colfetcher.ColBatchScan
-      └ *colfetcher.ColBatchScan
+      ├ *colfetcher.ColBatchDirectScan
+      └ *colfetcher.ColBatchDirectScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
@@ -74,8 +74,8 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
 │
 └ Node 1
   └ *colexecjoin.hashJoiner
-    ├ *colfetcher.ColBatchScan
-    └ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchDirectScan
+    └ *colfetcher.ColBatchDirectScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.b
@@ -108,9 +108,9 @@ EXPLAIN (VEC) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
 │
 └ Node 1
   └ *colexecjoin.mergeJoinInnerOp
-    ├ *colfetcher.ColBatchScan
+    ├ *colfetcher.ColBatchDirectScan
     └ *colexecsel.selEQInt64Int64ConstOp
-      └ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchDirectScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1, t AS t2 WHERE t1.b = 1 AND t1.a = t2.a
@@ -151,8 +151,8 @@ EXPLAIN (VEC) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHER
   └ *colrpc.Outbox
     └ *colexecjoin.mergeJoinInnerOp
       ├ *colexecsel.selEQInt64Int64ConstOp
-      │ └ *colfetcher.ColBatchScan
-      └ *colfetcher.ColBatchScan
+      │ └ *colfetcher.ColBatchDirectScan
+      └ *colfetcher.ColBatchDirectScan
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t AS t1 INNER MERGE JOIN t AS t2 ON t1.a = t2.a WHERE t1.c = 1

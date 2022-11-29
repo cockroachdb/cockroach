@@ -256,7 +256,7 @@ func TestTrace(t *testing.T) {
 				"optimizer",
 				"flow",
 				"batch flow coordinator",
-				"colbatchscan",
+				"colbatchdirectscan",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",

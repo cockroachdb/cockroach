@@ -76,23 +76,23 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 │ └ *colexec.isNullSelOp
 │   └ *colexecbase.castNativeToDatumOp
 │     └ *colexec.ParallelUnorderedSynchronizer
-│       ├ *colfetcher.ColBatchScan
+│       ├ *colfetcher.ColBatchDirectScan
 │       ├ *colrpc.Inbox
 │       ├ *colrpc.Inbox
 │       ├ *colrpc.Inbox
 │       └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchDirectScan
 
 # Check that the plan is local when experimental DistSQL planning is disabled.
 statement ok
@@ -105,7 +105,7 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 └ Node 1
   └ *colexec.isNullSelOp
     └ *colexecbase.castNativeToDatumOp
-      └ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchDirectScan
 
 statement ok
 SET experimental_distsql_planning = always
@@ -119,23 +119,23 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ├ Node 1
 │ └ *colexecbase.castNativeToDatumOp
 │   └ *colexec.ParallelUnorderedSynchronizer
-│     ├ *colfetcher.ColBatchScan
+│     ├ *colfetcher.ColBatchDirectScan
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchDirectScan
 
 # Disable the partially distributed plans and check that a local plan is
 # produced instead.
@@ -150,23 +150,23 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ├ Node 1
 │ └ *colexecbase.castNativeToDatumOp
 │   └ *colexec.ParallelUnorderedSynchronizer
-│     ├ *colfetcher.ColBatchScan
+│     ├ *colfetcher.ColBatchDirectScan
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.ColBatchScan
+│   └ *colfetcher.ColBatchDirectScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchDirectScan
 
 statement ok
 SET disable_partially_distributed_plans = false
