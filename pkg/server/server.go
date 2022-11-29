@@ -1175,7 +1175,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// startRPCServer (and for the loopback grpc-gw connection).
 	var initServer *initServer
 	{
-		dialOpts, err := s.rpcContext.GRPCDialOptions()
+		dialOpts, err := s.rpcContext.GRPCNetworkDialOptions()
 		if err != nil {
 			return err
 		}
