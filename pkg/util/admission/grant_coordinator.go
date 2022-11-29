@@ -1014,3 +1014,15 @@ func (e *ElasticCPUGrantCoordinator) close() {
 func (e *ElasticCPUGrantCoordinator) tryGrant() {
 	e.elasticCPUGranter.tryGrant()
 }
+
+// NewPacer implements the PacerMaker interface.
+func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *Pacer {
+	if e == nil {
+		return nil
+	}
+	return &Pacer{
+		unit: unit,
+		wi:   wi,
+		wq:   e.ElasticCPUWorkQueue,
+	}
+}

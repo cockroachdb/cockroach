@@ -33,19 +33,20 @@ import (
 // Reader implements the sqlinstance.AddressResolver interface. It uses
 // caching backed by rangefeed to cache instance information.
 type Reader struct {
-	storage         *Storage
-	slReader        sqlliveness.Reader
-	f               *rangefeed.Factory
-	codec           keys.SQLCodec
-	clock           *hlc.Clock
-	stopper         *stop.Stopper
-	rowcodec        rowCodec
+	storage  *Storage
+	slReader sqlliveness.Reader
+	f        *rangefeed.Factory
+	codec    keys.SQLCodec
+	clock    *hlc.Clock
+	stopper  *stop.Stopper
+	rowcodec rowCodec
+	// Once initialScanDone is closed, the error (if any) while establishing the
+	// rangefeed can be found in initialScanErr.
 	initialScanDone chan struct{}
 	mu              struct {
 		syncutil.Mutex
-		instances  map[base.SQLInstanceID]instancerow
-		startError error
-		started    bool
+		instances      map[base.SQLInstanceID]instancerow
+		initialScanErr error
 	}
 }
 
@@ -87,19 +88,29 @@ func NewReader(
 }
 
 // Start initializes the rangefeed for the Reader. The rangefeed will run until
-// the stopper stops.
-func (r *Reader) Start(ctx context.Context) error {
-	rf := r.maybeStartRangeFeed(ctx)
+// the stopper stops. If self has a non-zero ID, it will be used to initialize
+// the set of instances before the rangefeed catches up.
+func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
+	if self.InstanceID != 0 {
+		r.updateInstanceMap(instancerow{
+			region:     self.Region,
+			instanceID: self.InstanceID,
+			addr:       self.InstanceAddr,
+			sessionID:  self.SessionID,
+			locality:   self.Locality,
+			timestamp:  hlc.Timestamp{}, // intentionally zero
+		}, false /* deletionEvent */)
+	}
+	r.startRangeFeed(ctx)
+}
+
+// WaitForStarted will block until the Reader has an initial full snapshot of
+// all the instances. If Start hasn't been called, this will block until the
+// context is cancelled, or the stopper quiesces.
+func (r *Reader) WaitForStarted(ctx context.Context) error {
 	select {
 	case <-r.initialScanDone:
-		// TODO(rimadeodhar): Avoid blocking on initial
-		// scan until first call to read.
-		if rf != nil {
-			// Add rangefeed to the stopper to ensure it
-			// is shutdown correctly.
-			r.stopper.AddCloser(rf)
-		}
-		return r.checkStarted()
+		return r.initialScanErr()
 	case <-r.stopper.ShouldQuiesce():
 		return errors.Wrap(stop.ErrUnavailable,
 			"failed to retrieve initial instance data")
@@ -108,11 +119,8 @@ func (r *Reader) Start(ctx context.Context) error {
 			"failed to retrieve initial instance data")
 	}
 }
-func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
-	if r.started() {
-		// Nothing to do, return
-		return nil
-	}
+
+func (r *Reader) startRangeFeed(ctx context.Context) {
 	updateCacheFn := func(
 		ctx context.Context, keyVal *roachpb.RangeFeedValue,
 	) {
@@ -124,7 +132,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 		r.updateInstanceMap(instance, !keyVal.Value.IsPresent())
 	}
 	initialScanDoneFn := func(_ context.Context) {
-		close(r.initialScanDone)
+		r.setInitialScanErr(nil)
 	}
 	initialScanErrFn := func(_ context.Context, err error) (shouldFail bool) {
 		if grpcutil.IsAuthError(err) ||
@@ -132,8 +140,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 			// errors out of gRPC. See #56208.
 			strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
 			shouldFail = true
-			r.setStartError(err)
-			close(r.initialScanDone)
+			r.setInitialScanErr(err)
 		}
 		return shouldFail
 	}
@@ -153,20 +160,18 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 		rangefeed.WithOnInitialScanError(initialScanErrFn),
 		rangefeed.WithRowTimestampInInitialScan(true),
 	)
-	r.setStarted()
 	if err != nil {
-		r.setStartError(err)
-		close(r.initialScanDone)
-		return nil
+		r.setInitialScanErr(err)
+		return
 	}
-	return rf
+	r.stopper.AddCloser(rf)
 }
 
 // GetInstance implements sqlinstance.AddressResolver interface.
 func (r *Reader) GetInstance(
 	ctx context.Context, instanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
-	if err := r.checkStarted(); err != nil {
+	if err := r.initialScanErr(); err != nil {
 		return sqlinstance.InstanceInfo{}, err
 	}
 	r.mu.Lock()
@@ -198,7 +203,7 @@ func (r *Reader) GetInstance(
 func (r *Reader) GetAllInstances(
 	ctx context.Context,
 ) (sqlInstances []sqlinstance.InstanceInfo, _ error) {
-	if err := r.checkStarted(); err != nil {
+	if err := r.initialScanErr(); err != nil {
 		return nil, err
 	}
 	liveInstances, err := r.getAllLiveInstances(ctx)
@@ -256,8 +261,8 @@ func (r *Reader) getAllLiveInstances(ctx context.Context) ([]instancerow, error)
 	return rows, nil
 }
 
-// getAllInstanceRows returns all instancerow objects contained
-// within the map, in an arbitrary order.
+// getAllInstanceRows returns all instancerow objects contained within the map,
+// in an arbitrary order.
 func (r *Reader) getAllInstanceRows() (instances []instancerow) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -277,29 +282,16 @@ func (r *Reader) updateInstanceMap(instance instancerow, deletionEvent bool) {
 	r.mu.instances[instance.instanceID] = instance
 }
 
-func (r *Reader) setStarted() {
+func (r *Reader) initialScanErr() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.started = true
+	return r.mu.initialScanErr
 }
 
-func (r *Reader) started() bool {
+func (r *Reader) setInitialScanErr(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.started
-}
-
-func (r *Reader) checkStarted() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.mu.started {
-		return sqlinstance.NotStartedError
-	}
-	return r.mu.startError
-}
-
-func (r *Reader) setStartError(err error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.startError = err
+	// Set error before closing done channel.
+	r.mu.initialScanErr = err
+	close(r.initialScanDone)
 }

@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -867,6 +868,9 @@ func makeTenantSQLServerArgs(
 		eventsServer.TestingKnobs = knobs.(obs.EventServerTestingKnobs)
 	}
 
+	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
+	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
+
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -915,6 +919,7 @@ func makeTenantSQLServerArgs(
 		grpc:                     grpcServer,
 		eventsServer:             eventsServer,
 		externalStorageBuilder:   esb,
+		admissionPacerFactory:    noopElasticCPUGrantCoord,
 	}, nil
 }
 

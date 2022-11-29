@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -139,17 +140,17 @@ func (s *Storage) CreateInstance(
 	sessionExpiration hlc.Timestamp,
 	addr string,
 	locality roachpb.Locality,
-) (instanceID base.SQLInstanceID, _ error) {
+) (instance sqlinstance.InstanceInfo, _ error) {
 	if len(addr) == 0 {
-		return base.SQLInstanceID(0), errors.New("no address information for instance")
+		return sqlinstance.InstanceInfo{}, errors.New("no address information for instance")
 	}
 	if len(sessionID) == 0 {
-		return base.SQLInstanceID(0), errors.New("no session information for instance")
+		return sqlinstance.InstanceInfo{}, errors.New("no session information for instance")
 	}
 
 	region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
 	if err != nil {
-		return base.SQLInstanceID(0), errors.Wrap(err, "unable to determine region for sql_instance")
+		return sqlinstance.InstanceInfo{}, errors.Wrap(err, "unable to determine region for sql_instance")
 	}
 
 	// TODO(jeffswenson): advance session expiration. This can get stuck in a
@@ -206,10 +207,16 @@ func (s *Storage) CreateInstance(
 		instanceID, err := assignInstance()
 		// Instance was successfully assigned an ID.
 		if err == nil {
-			return instanceID, err
+			return sqlinstance.InstanceInfo{
+				Region:       region,
+				InstanceID:   instanceID,
+				InstanceAddr: addr,
+				SessionID:    sessionID,
+				Locality:     locality,
+			}, err
 		}
 		if !errors.Is(err, errNoPreallocatedRows) {
-			return base.SQLInstanceID(0), err
+			return sqlinstance.InstanceInfo{}, err
 		}
 		// If assignInstance failed because there are no available rows,
 		// allocate new instance IDs for the local region.
@@ -229,7 +236,7 @@ func (s *Storage) CreateInstance(
 	}
 
 	// If we exit here, it has to be the case where the context has expired.
-	return base.SQLInstanceID(0), ctx.Err()
+	return sqlinstance.InstanceInfo{}, ctx.Err()
 }
 
 // getAvailableInstanceIDForRegion retrieves an available instance ID for the

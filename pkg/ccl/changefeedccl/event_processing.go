@@ -13,15 +13,19 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,6 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+// pacerLogEvery is used for logging errors instead of returning terminal
+// errors when pacer.Pace returns an error.
+var pacerLogEvery log.EveryN = log.Every(100 * time.Millisecond)
 
 // eventContext holds metadata pertaining to event.
 type eventContext struct {
@@ -62,6 +70,17 @@ type kvEventToRowConsumer struct {
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
+
+	// This pacer is used to incorporate event consumption to elastic CPU
+	// control. This helps ensure that event encoding/decoding does not throttle
+	// foreground SQL traffic.
+	//
+	// Note that for pacer to function correctly,
+	// kvEventToRowConsumer.ConsumeEvent must be called by the same goroutine in a
+	// tight loop.
+	//
+	// The pacer is closed by kvEventToRowConsumer.Close.
+	pacer *admission.Pacer
 }
 
 func newEventConsumer(
@@ -85,6 +104,9 @@ func newEventConsumer(
 		return nil, nil, err
 	}
 
+	pacerRequestUnit := changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV)
+	enablePacer := changefeedbase.EventConsumerElasticCPUControlEnabled.Get(&cfg.Settings.SV)
+
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
 		encoder, err := getEncoder(encodingOpts, feed.Targets)
@@ -100,22 +122,44 @@ func newEventConsumer(
 			}
 		}
 
+		// Passing a nil Pacer is effectively a noop Pacer if
+		// CPU control is disabled.
+		var pacer *admission.Pacer = nil
+		if enablePacer {
+			tenantID, ok := roachpb.TenantFromContext(ctx)
+			if !ok {
+				tenantID = roachpb.SystemTenantID
+			}
+			pacer = cfg.AdmissionPacerFactory.NewPacer(
+				pacerRequestUnit,
+				admission.WorkInfo{
+					TenantID:        tenantID,
+					Priority:        admissionpb.BulkNormalPri,
+					CreateTime:      timeutil.Now().UnixNano(),
+					BypassAdmission: false,
+				},
+			)
+		}
+
 		return newKVEventToRowConsumer(ctx, cfg, evalCtx, frontier, cursor, s,
-			encoder, details, expr, knobs, topicNamer)
+			encoder, details, expr, knobs, topicNamer, pacer)
 	}
 
-	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
 	if numWorkers == 0 {
 		// Pick a reasonable default.
 		numWorkers = defaultNumWorkers()
 	}
 
+	// The descriptions for event_consumer_worker settings should also be updated
+	// when these TODOs are completed.
+	//
+	// TODO (ganeshb) Add support for parallel encoding when using parquet.
 	// We cannot have a separate encoder and sink for parquet format (see
 	// parquet_sink_cloudstorage.go). Because of this the current nprox solution
 	// does not work for parquet format.
 	//
-	//TODO (ganeshb) Add support for parallel encoding
+	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds.
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
@@ -174,6 +218,7 @@ func newKVEventToRowConsumer(
 	expr execinfrapb.Expression,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
+	pacer *admission.Pacer,
 ) (*kvEventToRowConsumer, error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	keyOnly := details.Opts.KeyOnly()
@@ -215,6 +260,7 @@ func newKVEventToRowConsumer(
 		evaluator:            evaluator,
 		safeExpr:             safeExpr,
 		encodingFormat:       encodingOpts.Format,
+		pacer:                pacer,
 	}, nil
 }
 
@@ -240,6 +286,15 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
 	if ev.Type() != kvevent.TypeKV {
 		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
+	}
+
+	// Request CPU time to use for event consumption, block if this time is
+	// unavailable. If there is unused CPU time left from the last call to
+	// Pace, then use that time instead of blocking.
+	if err := c.pacer.Pace(ctx); err != nil {
+		if pacerLogEvery.ShouldLog() {
+			log.Errorf(ctx, "automatic pacing: %v", err)
+		}
 	}
 
 	schemaTimestamp := ev.KV().Value.Timestamp
@@ -382,6 +437,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 // Close is a noop for the kvEventToRowConsumer because it
 // has no goroutines in flight.
 func (c *kvEventToRowConsumer) Close() error {
+	c.pacer.Close()
 	return nil
 }
 
@@ -527,6 +583,12 @@ func (c *parallelEventConsumer) startWorkers() error {
 func (c *parallelEventConsumer) workerLoop(
 	ctx context.Context, consumer eventConsumer, id int64,
 ) error {
+	defer func() {
+		err := consumer.Close()
+		if err != nil {
+			log.Errorf(ctx, "closing consumer: %v", err)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():

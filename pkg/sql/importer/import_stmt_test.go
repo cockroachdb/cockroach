@@ -4582,6 +4582,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 					BulkAdderFlushesEveryBatch: true,
 				},
 			},
+			SQLMemoryPoolSize: 1 << 30, // 1 GiB
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
 	ctx := context.Background()

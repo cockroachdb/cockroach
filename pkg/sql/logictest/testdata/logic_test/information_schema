@@ -1412,6 +1412,7 @@ system         public              span_configurations                    BASE T
 system         public              tenant_settings                        BASE TABLE   YES                 1
 system         public              privileges                             BASE TABLE   YES                 1
 system         public              external_connections                   BASE TABLE   YES                 1
+system         public              job_info                               BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1496,6 +1497,10 @@ system              public             29_52_4_not_null                         
 system              public             29_52_5_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             29_52_6_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        external_connections             PRIMARY KEY      NO             NO
+system              public             29_53_1_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
+system              public             29_53_2_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
+system              public             29_53_3_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
+system              public             primary                                                                                                         system         public        job_info                         PRIMARY KEY      NO             NO
 system              public             29_15_1_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             29_15_2_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             29_15_3_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
@@ -1859,6 +1864,9 @@ system              public             29_52_3_not_null                         
 system              public             29_52_4_not_null                                                                                                connection_type IS NOT NULL
 system              public             29_52_5_not_null                                                                                                connection_details IS NOT NULL
 system              public             29_52_6_not_null                                                                                                owner IS NOT NULL
+system              public             29_53_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_53_2_not_null                                                                                                info_key IS NOT NULL
+system              public             29_53_3_not_null                                                                                                written IS NOT NULL
 system              public             29_5_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
@@ -1888,6 +1896,9 @@ system         public        descriptor_id_seq                value             
 system         public        eventlog                         timestamp                                                                                                 system              public             primary
 system         public        eventlog                         uniqueID                                                                                                  system              public             primary
 system         public        external_connections             connection_name                                                                                           system              public             primary
+system         public        job_info                         info_key                                                                                                  system              public             primary
+system         public        job_info                         job_id                                                                                                    system              public             primary
+system         public        job_info                         written                                                                                                   system              public             primary
 system         public        jobs                             id                                                                                                        system              public             primary
 system         public        join_tokens                      id                                                                                                        system              public             primary
 system         public        lease                            descID                                                                                                    system              public             primary
@@ -2085,6 +2096,10 @@ system         pg_extension  geometry_columns                 f_table_name      
 system         pg_extension  geometry_columns                 f_table_schema                                                                                            2
 system         pg_extension  geometry_columns                 srid                                                                                                      6
 system         pg_extension  geometry_columns                 type                                                                                                      7
+system         public        job_info                         info_key                                                                                                  2
+system         public        job_info                         job_id                                                                                                    1
+system         public        job_info                         value                                                                                                     4
+system         public        job_info                         written                                                                                                   3
 system         public        jobs                             claim_instance_id                                                                                         9
 system         public        jobs                             claim_session_id                                                                                          8
 system         public        jobs                             created                                                                                                   3
@@ -3080,6 +3095,14 @@ NULL     root     system         public              external_connections       
 NULL     root     system         public              external_connections                   INSERT          YES           NO
 NULL     root     system         public              external_connections                   SELECT          YES           YES
 NULL     root     system         public              external_connections                   UPDATE          YES           NO
+NULL     admin    system         public              job_info                               DELETE          YES           NO
+NULL     admin    system         public              job_info                               INSERT          YES           NO
+NULL     admin    system         public              job_info                               SELECT          YES           YES
+NULL     admin    system         public              job_info                               UPDATE          YES           NO
+NULL     root     system         public              job_info                               DELETE          YES           NO
+NULL     root     system         public              job_info                               INSERT          YES           NO
+NULL     root     system         public              job_info                               SELECT          YES           YES
+NULL     root     system         public              job_info                               UPDATE          YES           NO
 NULL     admin    system         public              jobs                                   DELETE          YES           NO
 NULL     admin    system         public              jobs                                   INSERT          YES           NO
 NULL     admin    system         public              jobs                                   SELECT          YES           YES
@@ -3896,6 +3919,14 @@ NULL     root     system         public              external_connections       
 NULL     root     system         public              external_connections                   INSERT          YES           NO
 NULL     root     system         public              external_connections                   SELECT          YES           YES
 NULL     root     system         public              external_connections                   UPDATE          YES           NO
+NULL     admin    system         public              job_info                               DELETE          YES           NO
+NULL     admin    system         public              job_info                               INSERT          YES           NO
+NULL     admin    system         public              job_info                               SELECT          YES           YES
+NULL     admin    system         public              job_info                               UPDATE          YES           NO
+NULL     root     system         public              job_info                               DELETE          YES           NO
+NULL     root     system         public              job_info                               INSERT          YES           NO
+NULL     root     system         public              job_info                               SELECT          YES           YES
+NULL     root     system         public              job_info                               UPDATE          YES           NO
 
 statement ok
 USE other_db;

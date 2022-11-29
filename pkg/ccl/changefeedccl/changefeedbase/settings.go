@@ -242,7 +242,8 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_workers",
 	"the number of workers to use when processing events: <0 disables, "+
-		"0 assigns a reasonable default, >0 assigns the setting value",
+		"0 assigns a reasonable default, >0 assigns the setting value. for experimental/core "+
+		"changefeeds and changefeeds using parquet format, this is disabled",
 	0,
 ).WithPublic()
 
@@ -250,8 +251,31 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_worker_queue_size",
-	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events"+
+	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events "+
 		"which a worker can buffer",
 	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
 	settings.NonNegativeInt,
 ).WithPublic()
+
+// EventConsumerPacerRequestSize specifies how often (measured in CPU time)
+// that event consumer workers request CPU time from admission control.
+// For example, every N milliseconds of CPU work, request N more
+// milliseconds of CPU time.
+var EventConsumerPacerRequestSize = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.cpu.per_event_consumer_worker_allocation",
+	"an event consumer worker will perform a blocking request for CPU time "+
+		"before consuming events. after fully utilizing this CPU time, it will "+
+		"request more",
+	50*time.Millisecond,
+	settings.PositiveDuration,
+)
+
+// EventConsumerElasticCPUControlEnabled determines whether changefeed event
+// processing integrates with elastic CPU control.
+var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.cpu.per_event_elastic_control.enabled",
+	"determines whether changefeed event processing integrates with elastic CPU control",
+	true,
+)

@@ -11,6 +11,7 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -666,6 +667,120 @@ func (r *Registry) LoadJobWithTxn(
 	return j, nil
 }
 
+// GetJobInfo fetches the latest info record for the given job and infoKey.
+func (r *Registry) GetJobInfo(
+	ctx context.Context, jobID jobspb.JobID, infoKey []byte, txn *kv.Txn,
+) ([]byte, bool, error) {
+	row, err := r.ex.QueryRowEx(
+		ctx, "job-info-get", txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 ORDER BY written DESC LIMIT 1",
+		jobID, infoKey,
+	)
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	if row == nil {
+		return nil, false, nil
+	}
+
+	value, ok := row[0].(*tree.DBytes)
+	if !ok {
+		return nil, false, errors.AssertionFailedf("job info: expected value to be DBytes (was %T)", row[0])
+	}
+
+	return []byte(*value), true, nil
+}
+
+// IterateJobInfo iterates though the info records for a given job and info key
+// prefix.
+func (r *Registry) IterateJobInfo(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	infoPrefix []byte,
+	fn func(infoKey []byte, value []byte) error,
+	txn *kv.Txn,
+) (retErr error) {
+	// TODO(dt): verify this predicate hits the index.
+	rows, err := r.ex.QueryIteratorEx(
+		ctx, "job-info-iter", txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		`SELECT info_key, value 
+		FROM system.job_info 
+		WHERE job_id = $1 AND substring(info_key for $2) = $3 
+		ORDER BY info_key ASC, written DESC`,
+		jobID, len(infoPrefix), infoPrefix,
+	)
+	if err != nil {
+		return err
+	}
+	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(rows)
+
+	var prevKey []byte
+	var ok bool
+	for ok, err = rows.Next(ctx); ok; ok, err = rows.Next(ctx) {
+		if err != nil {
+			return err
+		}
+		row := rows.Cur()
+
+		key, ok := row[0].(*tree.DBytes)
+		if !ok {
+			return errors.AssertionFailedf("job info: expected info_key to be DBytes (was %T)", row[0])
+		}
+		infoKey := []byte(*key)
+
+		if bytes.Equal(infoKey, prevKey) {
+			continue
+		}
+		prevKey = append(prevKey[:0], infoKey...)
+
+		value, ok := row[1].(*tree.DBytes)
+		if !ok {
+			return errors.AssertionFailedf("job info: expected value to be DBytes (was %T)", row[1])
+		}
+		if err = fn(infoKey, []byte(*value)); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+// WriteJobInfo writes the provided value to an info record for the provided
+// jobID and infoKey after removing any existing info records for that job and
+// infoKey using the same transaction, effectively replacing any older row with
+// a row with the new value.
+func (r *Registry) WriteJobInfo(
+	ctx context.Context, jobID jobspb.JobID, infoKey, value []byte, txn *kv.Txn,
+) error {
+	// Assert we have a non-nil txn with which to delete and then write.
+	if txn == nil {
+		return errors.AssertionFailedf("a txn is required to write job info record")
+	}
+	// First clear out any older revisions of this info.
+	_, err := r.ex.ExecEx(
+		ctx, "job-info-write", txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
+		jobID, infoKey,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Write the new info, using the same transaction.
+	_, err = r.ex.ExecEx(
+		ctx, "job-info-write", txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
+		jobID, infoKey, value,
+	)
+	return err
+}
+
 // UpdateJobWithTxn calls the Update method on an existing job with jobID, using
 // a transaction passed in the txn argument. Passing a nil transaction means
 // that a txn will be automatically created. The useReadLock parameter will
@@ -991,15 +1106,22 @@ func (r *Registry) cleanupOldJobsPage(
 	if len(toDelete.Array) > 0 {
 		log.VEventf(ctx, 2, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
-		var nDeleted int
+		const infoStmt = `DELETE FROM system.job_info WHERE job_id = ANY($1)`
+		var nDeleted, nDeletedInfos int
 		if nDeleted, err = r.ex.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
 			log.Warningf(ctx, "error cleaning up %d jobs: %v", len(toDelete.Array), err)
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
+		nDeletedInfos, err = r.ex.Exec(
+			ctx, "gc-job-infos", nil /* txn */, infoStmt, toDelete,
+		)
+		if err != nil {
+			return false, 0, errors.Wrap(err, "deleting old job infos")
+		}
 		if nDeleted > 0 {
-			log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
+			log.Infof(ctx, "cleaned up %d expired job records and %d expired info records", nDeleted, nDeletedInfos)
 		}
 	}
 	// If we got as many rows as we asked for, there might be more.

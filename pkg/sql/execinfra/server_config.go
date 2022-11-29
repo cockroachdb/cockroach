@@ -197,6 +197,10 @@ type ServerConfig struct {
 
 	// RangeStatsFetcher is used to fetch range stats for keys.
 	RangeStatsFetcher eval.RangeStatsFetcher
+
+	// AdmissionPacerFactory is used to integrate CPU-intensive work
+	// with elastic CPU control.
+	AdmissionPacerFactory admission.PacerFactory
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

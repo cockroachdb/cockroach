@@ -250,7 +250,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// Check the cluster version is still oldVersion.
 	curVersion := tc.getVersionFromSelect(0)
 	if curVersion != oldVersion.String() {
-		t.Fatalf("cluster version should still be %s, but get %s", oldVersion, curVersion)
+		t.Fatalf("cluster version should still be %s, but got %s", oldVersion, curVersion)
 	}
 
 	// Reset cluster.preserve_downgrade_option to enable auto upgrade.
@@ -261,7 +261,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// Check the cluster version is bumped to newVersion.
 	testutils.SucceedsSoon(t, func() error {
 		if version := tc.getVersionFromSelect(0); version != newVersion.String() {
-			return errors.Errorf("cluster version is still %s, should be %s", oldVersion, newVersion)
+			return errors.Errorf("cluster version is still %s, should be %s", version, newVersion)
 		}
 		return nil
 	})

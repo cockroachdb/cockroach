@@ -17,11 +17,14 @@ package sqlinstance
 
 import (
 	"context"
+	"encoding/base64"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // InstanceInfo exposes information on a SQL instance such as ID, network
@@ -33,6 +36,25 @@ type InstanceInfo struct {
 	SessionID    sqlliveness.SessionID
 	Locality     roachpb.Locality
 }
+
+// SafeFormat implements redact.SafeFormatter.
+func (ii InstanceInfo) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.Printf(
+		"Instance{RegionPrefix: %v, InstanceID: %d, Addr: %v, SessionID: %s, Locality: %v}",
+		redact.SafeString(base64.StdEncoding.EncodeToString(ii.Region)),
+		ii.InstanceID,
+		ii.InstanceAddr,
+		ii.SessionID,
+		ii.Locality,
+	)
+}
+
+// String implements fmt.Stringer.
+func (ii InstanceInfo) String() string {
+	return redact.Sprint(ii).StripMarkers()
+}
+
+var _ redact.SafeFormatter = InstanceInfo{}
 
 // AddressResolver exposes API for retrieving the instance address and all live instances for a tenant.
 type AddressResolver interface {
@@ -46,9 +68,6 @@ type AddressResolver interface {
 
 // NonExistentInstanceError can be returned if a SQL instance does not exist.
 var NonExistentInstanceError = errors.Errorf("non existent SQL instance")
-
-// NotStartedError can be returned if the sqlinstance subsystem has not been started yet.
-var NotStartedError = errors.Errorf("sqlinstance subsystem not started")
 
 // NotASQLInstanceError can be returned if a function is is not supported for
 // non-SQL instances.

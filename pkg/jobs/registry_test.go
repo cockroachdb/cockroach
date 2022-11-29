@@ -1171,3 +1171,106 @@ func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 	// disabled on this registry.
 	tdb.CheckQueryResultsRetry(t, `SELECT claim_session_id FROM system.jobs WHERE id = 1`, [][]string{{"NULL"}})
 }
+
+func TestJobInfoAccessors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	r := s.JobRegistry().(*Registry)
+
+	kPrefix, kA, kB, kC := []byte("🔑"), []byte("🔑A"), []byte("🔑B"), []byte("🔑C")
+	v1, v2 := []byte("val1"), []byte("val2")
+
+	// Key doesn't exist yet.
+	_, ok, err := r.GetJobInfo(ctx, 1, kA, nil)
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	// Write kA = v1.
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.WriteJobInfo(ctx, 1, kA, v1, txn)
+	}))
+
+	// Check that key is now found with value v1.
+	v, ok, err := r.GetJobInfo(ctx, 1, kA, nil)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, v1, v)
+
+	// Overwrite kA = v2.
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.WriteJobInfo(ctx, 1, kA, v2, txn)
+	}))
+
+	// Check that key is now v1.
+	v, ok, err = r.GetJobInfo(ctx, 1, kA, nil)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, v2, v)
+
+	// Verify a different is not found.
+	_, ok, err = r.GetJobInfo(ctx, 1, kB, nil)
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	// Verify that the same key for a different job is not found.
+	_, ok, err = r.GetJobInfo(ctx, 2, kB, nil)
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	// Write and revise some info keys a, b and c (out of order, just for fun).
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.WriteJobInfo(ctx, 2, kB, v2, txn)
+	}))
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.WriteJobInfo(ctx, 2, kA, v1, txn)
+	}))
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.WriteJobInfo(ctx, 2, kC, v2, txn)
+	}))
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.WriteJobInfo(ctx, 2, kA, v2, txn)
+	}))
+
+	// Iterate the common prefix of a, b and c.
+	var i int
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.IterateJobInfo(ctx, 2, kPrefix, func(key, value []byte) error {
+			i++
+			switch i {
+			case 1:
+				require.Equal(t, key, kA)
+			case 2:
+				require.Equal(t, key, kB)
+			case 3:
+				require.Equal(t, key, kC)
+			}
+			require.Equal(t, v2, value)
+			return nil
+		}, txn)
+	}))
+	require.Equal(t, 3, i)
+
+	// Iterate the specific prefix of just a.
+	found := false
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.IterateJobInfo(ctx, 2, kA, func(key, value []byte) error {
+			require.Equal(t, kA, key)
+			require.Equal(t, v2, value)
+			found = true
+			return nil
+		}, txn)
+	}))
+	require.True(t, found)
+
+	// Iterate a different job.
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.IterateJobInfo(ctx, 3, kPrefix, func(key, value []byte) error {
+			t.Fatalf("unexpected record for job 3: %v = %v", key, value)
+			return nil
+		}, txn)
+	}))
+}

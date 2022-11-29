@@ -569,8 +569,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "users_user_id_idx", false, 2, "username", "ASC", true, true, true),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).
-				Others(bootstrap.NumSystemTablesForSystemTenant - 1),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(bootstrap.NumSystemTablesForSystemTenant - 1),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),

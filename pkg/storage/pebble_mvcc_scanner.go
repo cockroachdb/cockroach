@@ -193,7 +193,7 @@ func (p *pebbleResults) continuesFirstRow(key roachpb.Key) bool {
 // If so, we know that the row is complete. However, the inverse is not true:
 // the final column families of the row may be omitted, in which case the caller
 // has to scan to the next key to find out whether the row is complete.
-func (p *pebbleResults) lastRowHasFinalColumnFamily() bool {
+func (p *pebbleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
 	if !p.lastOffsetsEnabled || p.count == 0 {
 		return false
 	}
@@ -208,6 +208,9 @@ func (p *pebbleResults) lastRowHasFinalColumnFamily() bool {
 	colFamilyID, err := keys.DecodeFamilyKey(key)
 	if err != nil {
 		return false
+	}
+	if reverse {
+		return colFamilyID == 0
 	}
 	return int(colFamilyID) == len(p.lastOffsets)-1
 }
@@ -1084,7 +1087,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 		// whether the row is complete or not, because the final column families of
 		// the row may have been omitted (if they are all NULL values) -- to find
 		// out, we must continue scanning to the next key and handle it above.
-		if !p.wholeRows || p.results.lastRowHasFinalColumnFamily() {
+		if !p.wholeRows || p.results.lastRowHasFinalColumnFamily(p.reverse) {
 			p.resumeReason = roachpb.RESUME_KEY_LIMIT
 			return false
 		}
