@@ -135,7 +135,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 
 		var iter *collector.Iterator
 		var err error
-		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
+		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next(ctx) {
 			nodeID, recording := iter.Value()
 			res[nodeID] = append(res[nodeID], recording)
 		}
