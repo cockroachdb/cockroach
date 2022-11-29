@@ -231,7 +231,11 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	}
 	found := false
 	var mu syncutil.Mutex
-	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication,
+	// Using 4 nodes instead of 3 because we want to make sure at lease one flow
+	// will be remote (with 3 nodes we sometimes have a single flow which runs
+	// locally and then this test fails).
+	numNodes := 4
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, numNodes, numAccounts, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DisableDefaultTestTenant: true,
