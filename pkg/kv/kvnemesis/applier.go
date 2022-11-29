@@ -79,8 +79,9 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 
 // Sentinel errors.
 var (
-	errOmitted            = errors.New("omitted")
-	errClosureTxnRollback = errors.New("rollback")
+	errOmitted                                      = errors.New("omitted")
+	errClosureTxnRollback                           = errors.New("rollback")
+	errDelRangeUsingTombstoneStraddlesRangeBoundary = errors.New("DeleteRangeUsingTombstone can not straddle range boundary")
 )
 
 func exceptOmitted(err error) bool { // true if errOmitted
@@ -97,6 +98,10 @@ func exceptRetry(err error) bool { // true if retry error
 
 func exceptAmbiguous(err error) bool { // true if ambiguous result
 	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
+}
+
+func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
+	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {

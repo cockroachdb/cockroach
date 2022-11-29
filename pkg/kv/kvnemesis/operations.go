@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -76,6 +76,13 @@ type formatCtx struct {
 	receiver string
 	indent   string
 	// TODO(dan): error handling.
+}
+
+func (fctx formatCtx) maybeCtx() string {
+	if fctx.receiver == `b` {
+		return ""
+	}
+	return "ctx, "
 }
 
 func (s Step) format(w *strings.Builder, fctx formatCtx) {
@@ -174,11 +181,15 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		w.WriteString(`})`)
 		o.Result.format(w)
 		if o.Txn != nil {
-			fmt.Fprintf(w, ` txnpb:(%s)`, o.Txn)
+			fmt.Fprintf(w, "\n%s// ^-- txnpb:(%s)", fctx.indent, o.Txn)
 		}
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
 	}
+}
+
+func fmtKey(k []byte) string {
+	return fmt.Sprintf(`uint64ToKey(%d)`, uint64FromKey(string(k)))
 }
 
 func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -186,19 +197,23 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 	if op.ForUpdate {
 		methodName = `GetForUpdate`
 	}
-	fmt.Fprintf(w, `%s.%s(ctx, %s)`, fctx.receiver, methodName, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.%s(%s%s)`, fctx.receiver, methodName, fctx.maybeCtx(), fmtKey(op.Key))
 	op.Result.format(w)
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Put(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Value())
+	fmt.Fprintf(w, `%s.Put(%s%s, seq2val(kvnemesisutil.Seq(%d)))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
+}
+
+func seq2Val(seq kvnemesisutil.Seq) string {
+	return `v` + strconv.Itoa(int(seq))
 }
 
 // Value returns the value written by this put. This is a function of the
 // sequence number.
 func (op PutOperation) Value() string {
-	return `v` + strconv.Itoa(int(op.Seq))
+	return seq2Val(op.Seq)
 }
 
 func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -214,49 +229,49 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 	if fctx.receiver == `b` {
 		maxRowsArg = ``
 	}
-	fmt.Fprintf(w, `%s.%s(ctx, %s, %s%s)`, fctx.receiver, methodName, roachpb.Key(op.Key), roachpb.Key(op.EndKey), maxRowsArg)
+	fmt.Fprintf(w, `%s.%s(%s%s, %s%s)`, fctx.receiver, methodName, fctx.maybeCtx(), fmtKey(op.Key), fmtKey(op.EndKey), maxRowsArg)
 	op.Result.format(w)
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Del(ctx, %s /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), op.Seq)
+	fmt.Fprintf(w, `%s.Del(%s%s /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
 func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), op.Seq)
+	fmt.Fprintf(w, `%s.DelRange(%s%s, %s, true /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), fmtKey(op.EndKey), op.Seq)
 	op.Result.format(w)
 }
 
 func (op DeleteRangeUsingTombstoneOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.DelRangeUsingTombstone(ctx, %s, %s /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), op.Seq)
+	fmt.Fprintf(w, `%s.DelRangeUsingTombstone(ctx, %s, %s /* @%s */)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey), op.Seq)
 	op.Result.format(w)
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s)`, fctx.receiver, fmtKey(op.Key))
 	op.Result.format(w)
 }
 
 func (op MergeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminMerge(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.AdminMerge(ctx, %s)`, fctx.receiver, fmtKey(op.Key))
 	op.Result.format(w)
 }
 
 func (op BatchOperation) format(w *strings.Builder, fctx formatCtx) {
 	w.WriteString("\n")
 	w.WriteString(fctx.indent)
-	w.WriteString(`b := &Batch{}`)
+	w.WriteString(`b := &kv.Batch{}`)
 	formatOps(w, fctx, op.Ops)
 }
 
 func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Changes)
+	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), op.Changes)
 	op.Result.format(w)
 }
 
 func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, roachpb.Key(op.Key), op.Target)
+	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, fmtKey(op.Key), op.Target)
 	op.Result.format(w)
 }
 
