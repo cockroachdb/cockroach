@@ -37,7 +37,6 @@ go_library(
         "initial_sql.go",
         "listen_and_update_addrs.go",
         "load_endpoint.go",
-        "loopback.go",
         "loss_of_quorum.go",
         "migration.go",
         "node.go",
