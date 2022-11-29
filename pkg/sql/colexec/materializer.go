@@ -352,18 +352,10 @@ func (m *Materializer) close() {
 	if m.Closed {
 		return
 	}
-	if m.Ctx == nil {
-		// In some edge cases (like when Init of an operator above this
-		// materializer encounters a panic), the materializer might never be
-		// started, yet it still will attempt to close its Closers. This
-		// context is only used for logging purposes, so it is ok to grab
-		// the background context in order to prevent a NPE below.
-		m.Ctx = context.Background()
-	}
 	// Make sure to call InternalClose() only after closing the closers - this
 	// allows the closers to utilize the unfinished tracing span (if tracing is
 	// enabled).
-	m.closers.CloseAndLogOnErr(m.Ctx, "materializer")
+	m.closers.CloseAndLogOnErr(m.Ctx(), "materializer")
 	m.InternalClose()
 }
 

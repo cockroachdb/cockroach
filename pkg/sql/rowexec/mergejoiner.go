@@ -232,7 +232,7 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		// TODO(paul): Investigate (with benchmarks) whether or not it's
 		// worthwhile to only buffer one row from the right stream per batch
 		// for semi-joins.
-		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.Ctx, m.EvalCtx)
+		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.Ctx(), m.EvalCtx)
 		if meta != nil {
 			return nil, meta
 		}
@@ -251,8 +251,8 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 
 func (m *mergeJoiner) close() {
 	if m.InternalClose() {
-		m.streamMerger.close(m.Ctx)
-		m.MemMonitor.Stop(m.Ctx)
+		m.streamMerger.close(m.Ctx())
+		m.MemMonitor.Stop(m.Ctx())
 	}
 }
 

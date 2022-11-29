@@ -211,7 +211,7 @@ func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	bp.agg.Close()
 	if bp.InternalClose() {
-		bp.memAcc.Close(bp.Ctx)
+		bp.memAcc.Close(bp.Ctx())
 	}
 }
 

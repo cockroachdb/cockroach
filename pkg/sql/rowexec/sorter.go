@@ -117,10 +117,10 @@ func (s *sorterBase) close() {
 		if s.i != nil {
 			s.i.Close()
 		}
-		s.rows.Close(s.Ctx)
-		s.MemMonitor.Stop(s.Ctx)
+		s.rows.Close(s.Ctx())
+		s.MemMonitor.Stop(s.Ctx())
 		if s.diskMonitor != nil {
-			s.diskMonitor.Stop(s.Ctx)
+			s.diskMonitor.Stop(s.Ctx())
 		}
 	}
 }
@@ -250,13 +250,13 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 			break
 		}
 
-		if err := s.rows.AddRow(s.Ctx, row); err != nil {
+		if err := s.rows.AddRow(s.Ctx(), row); err != nil {
 			return false, err
 		}
 	}
-	s.rows.Sort(s.Ctx)
+	s.rows.Sort(s.Ctx())
 
-	s.i = s.rows.NewFinalIterator(s.Ctx)
+	s.i = s.rows.NewFinalIterator(s.Ctx())
 	s.i.Rewind()
 	return true, nil
 }
@@ -421,7 +421,7 @@ func newSortChunksProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.i = proc.rows.NewFinalIterator(proc.Ctx)
+	proc.i = proc.rows.NewFinalIterator(proc.Ctx())
 	return proc, nil
 }
 
@@ -448,7 +448,7 @@ func (s *sortChunksProcessor) chunkCompleted(
 // if a metadata record was encountered). The caller is expected to drain when
 // this returns false.
 func (s *sortChunksProcessor) fill() (bool, error) {
-	ctx := s.Ctx
+	ctx := s.Ctx()
 
 	var meta *execinfrapb.ProducerMetadata
 
@@ -518,7 +518,7 @@ func (s *sortChunksProcessor) Start(ctx context.Context) {
 
 // Next is part of the RowSource interface.
 func (s *sortChunksProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	ctx := s.Ctx
+	ctx := s.Ctx()
 	for s.State == execinfra.StateRunning {
 		ok, err := s.i.Valid()
 		if err != nil {
