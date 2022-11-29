@@ -451,7 +451,8 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context, flags explain.RedactFlag
 	b.z.AddFile("schema.sql", buf.String())
 	for i := range tables {
 		buf.Reset()
-		if err := c.PrintTableStats(&buf, &tables[i], false /* hideHistograms */); err != nil {
+		hideHistograms := flags.Has(explain.RedactPII)
+		if err := c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
 			fmt.Fprintf(&buf, "-- error getting statistics for table %s: %v\n", tables[i].String(), err)
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
