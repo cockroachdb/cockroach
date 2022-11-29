@@ -370,7 +370,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 
 	// Create a child stopper for this tenant's server.
 	ambientCtx := baseCfg.AmbientCtx
-	stopper.SetTracer(ambientCtx.Tracer)
+	stopper.SetTracer(baseCfg.Tracer)
 
 	// New context, since we're using a separate tracer.
 	startCtx := ambientCtx.AnnotateCtx(context.Background())
