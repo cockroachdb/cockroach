@@ -23,11 +23,30 @@ import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 
+// ReplicationProducerSpec is the specification returned by the replication
+// producer job when it is created.
+message ReplicationProducerSpec {
+  int64 stream_id = 1 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
+
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan.
+  util.hlc.Timestamp replication_start_time = 2 [(gogoproto.nullable) = false];
+}
+
 // StreamPartitionSpec is the stream partition specification.
 message StreamPartitionSpec {
-  // start_from specifies the starting point for all spans.  If its empty,
-  // an initial scan is performed.
+  // StartFrom specifies the timestamp from which all spans will begin ingesting
+  // MVCC versions.
   util.hlc.Timestamp start_from = 1 [(gogoproto.nullable) = false];
+
+  // WithInitialScan if true configures the rangefeed on the source cluster to
+  // run an initial scan as of the StartFrom timestamp before streaming further
+  // changes to the partition.
+  bool with_initial_scan = 4;
+
   // List of spans to stream.
   repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
 

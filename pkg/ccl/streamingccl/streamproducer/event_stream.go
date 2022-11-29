@@ -111,10 +111,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		return err
 	}
 
-	if s.spec.StartFrom.IsEmpty() {
-		// Arrange to perform initial scan.
-		s.spec.StartFrom = s.execCfg.Clock.Now()
-
+	if s.spec.WithInitialScan {
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
@@ -130,12 +127,13 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 			rangefeed.WithOnScanCompleted(s.onSpanCompleted),
 		)
-	} else {
-		// When resuming from cursor, advance frontier to the cursor position.
-		for _, sp := range s.spec.Spans {
-			if _, err := frontier.Forward(sp, s.spec.StartFrom); err != nil {
-				return err
-			}
+	}
+
+	// Advance the frontier to the timestamp we are starting the replication
+	// stream from.
+	for _, sp := range s.spec.Spans {
+		if _, err := frontier.Forward(sp, s.spec.StartFrom); err != nil {
+			return err
 		}
 	}
 

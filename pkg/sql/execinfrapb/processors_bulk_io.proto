@@ -201,6 +201,12 @@ message StreamIngestionDataSpec {
 
   // The processor will ingest events from StartTime onwards.
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
+
+  // WithInitialScan if true configures the rangefeed on the source cluster to
+  // run an initial scan as of the StartTime timestamp before streaming further
+  // changes to the processor.
+  optional bool with_initial_scan = 11 [(gogoproto.nullable) = false];
+
   // StreamAddress locate the stream so that a stream client can be initialized.
   optional string stream_address = 3 [(gogoproto.nullable) = false];
   // JobID is the job ID of the stream ingestion job.

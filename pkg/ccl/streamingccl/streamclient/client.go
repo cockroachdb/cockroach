@@ -47,7 +47,7 @@ type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.StreamID, error)
+	Create(ctx context.Context, tenantName roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
@@ -78,7 +78,8 @@ type Client interface {
 		ctx context.Context,
 		streamID streampb.StreamID,
 		spec SubscriptionToken,
-		checkpoint hlc.Timestamp,
+		startTime hlc.Timestamp,
+		withInitialScan bool,
 	) (Subscription, error)
 
 	// Close releases all the resources used by this client.

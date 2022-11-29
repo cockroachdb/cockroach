@@ -64,21 +64,21 @@ var _ Client = &partitionedStreamClient{}
 // Create implements Client interface.
 func (p *partitionedStreamClient) Create(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (streampb.StreamID, error) {
+) (streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
 	defer sp.Finish()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var streamID streampb.StreamID
+	var replicationProducerSpec streampb.ReplicationProducerSpec
 	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
-	err := row.Scan(&streamID)
+	err := row.Scan(&replicationProducerSpec)
 	if err != nil {
-		return streampb.InvalidStreamID,
+		return streampb.ReplicationProducerSpec{},
 			errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)
 	}
 
-	return streamID, err
+	return replicationProducerSpec, err
 }
 
 // Dial implements Client interface.
@@ -185,7 +185,11 @@ func (p *partitionedStreamClient) Close(ctx context.Context) error {
 
 // Subscribe implements Client interface.
 func (p *partitionedStreamClient) Subscribe(
-	ctx context.Context, stream streampb.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+	ctx context.Context,
+	stream streampb.StreamID,
+	spec SubscriptionToken,
+	startTime hlc.Timestamp,
+	withInitialScan bool,
 ) (Subscription, error) {
 	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
 	defer sp.Finish()
@@ -194,7 +198,8 @@ func (p *partitionedStreamClient) Subscribe(
 	if err := protoutil.Unmarshal(spec, &sps); err != nil {
 		return nil, err
 	}
-	sps.StartFrom = checkpoint
+	sps.StartFrom = startTime
+	sps.WithInitialScan = withInitialScan
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {

@@ -333,7 +333,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			}
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token, startTime)
+		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token,
+			startTime, sip.spec.WithInitialScan)
 
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))

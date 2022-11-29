@@ -62,18 +62,18 @@ var _ streamclient.Client = &mockStreamClient{}
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
 	_ context.Context, _ roachpb.TenantName,
-) (streampb.StreamID, error) {
+) (streampb.ReplicationProducerSpec, error) {
 	panic("unimplemented")
 }
 
 // Dial implements the Client interface.
-func (m *mockStreamClient) Dial(ctx context.Context) error {
+func (m *mockStreamClient) Dial(_ context.Context) error {
 	panic("unimplemented")
 }
 
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
-	ctx context.Context, ID streampb.StreamID, _ hlc.Timestamp,
+	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	panic("unimplemented")
 }
@@ -107,9 +107,10 @@ func (m *mockSubscription) Err() error {
 // Subscribe implements the Client interface.
 func (m *mockStreamClient) Subscribe(
 	ctx context.Context,
-	stream streampb.StreamID,
+	_ streampb.StreamID,
 	token streamclient.SubscriptionToken,
 	startTime hlc.Timestamp,
+	_ bool,
 ) (streamclient.Subscription, error) {
 	var events []streamingccl.Event
 	var ok bool
@@ -137,14 +138,12 @@ func (m *mockStreamClient) Subscribe(
 }
 
 // Close implements the Client interface.
-func (m *mockStreamClient) Close(ctx context.Context) error {
+func (m *mockStreamClient) Close(_ context.Context) error {
 	return nil
 }
 
 // Complete implements the streamclient.Client interface.
-func (m *mockStreamClient) Complete(
-	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
-) error {
+func (m *mockStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bool) error {
 	return nil
 }
 
@@ -155,18 +154,13 @@ var _ streamclient.Client = &errorStreamClient{}
 
 // ConsumePartition implements the streamclient.Client interface.
 func (m *errorStreamClient) Subscribe(
-	ctx context.Context,
-	stream streampb.StreamID,
-	spec streamclient.SubscriptionToken,
-	checkpoint hlc.Timestamp,
+	_ context.Context, _ streampb.StreamID, _ streamclient.SubscriptionToken, _ hlc.Timestamp, _ bool,
 ) (streamclient.Subscription, error) {
 	return nil, errors.New("this client always returns an error")
 }
 
 // Complete implements the streamclient.Client interface.
-func (m *errorStreamClient) Complete(
-	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
-) error {
+func (m *errorStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bool) error {
 	return nil
 }
 
@@ -250,7 +244,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			Partitions: partitions,
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
-			topology, startTime, []jobspb.ResolvedSpan{}, tenantRekey,
+			topology, startTime, true /* withInitialScan */, []jobspb.ResolvedSpan{}, tenantRekey,
 			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
 		require.NoError(t, err)
 
@@ -297,7 +291,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			lastClientStart[token] = clientStartTime
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
-			topology, startTime, checkpoint, tenantRekey, mockClient,
+			topology, startTime, true /* withInitialScan */, checkpoint, tenantRekey, mockClient,
 			nil /* cutoverProvider */, streamingTestingKnobs)
 		require.NoError(t, err)
 
@@ -324,8 +318,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			Partitions: partitions,
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
-			topology, startTime, []jobspb.ResolvedSpan{}, tenantRekey, &errorStreamClient{},
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			topology, startTime, true /* withInitialScan */, []jobspb.ResolvedSpan{},
+			tenantRekey, &errorStreamClient{}, nil, /* cutoverProvider */
+			nil /* streamingTestingKnobs */)
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -463,15 +458,13 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
 	require.True(t, ok)
-	id, err := randomStreamClient.Create(ctx, tenantName)
+	replicationProducerSpec, err := randomStreamClient.Create(ctx, tenantName)
 	require.NoError(t, err)
 
-	topo, err := randomStreamClient.Plan(ctx, id)
+	topo, err := randomStreamClient.Plan(ctx, replicationProducerSpec.StreamID)
 	require.NoError(t, err)
 	// One system and two table data partitions.
 	require.Equal(t, 2 /* numPartitions */, len(topo.Partitions))
-
-	startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
 	ctx, cancel := context.WithCancel(ctx)
 	// Cancel the flow after emitting 1000 checkpoint events from the client.
@@ -494,8 +487,9 @@ func TestRandomClientGeneration(t *testing.T) {
 	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator))
 
 	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
-		topo, startTime, []jobspb.ResolvedSpan{}, tenantRekey,
-		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/)
+		topo, replicationProducerSpec.ReplicationStartTime, true, /* withInitialScan */
+		[]jobspb.ResolvedSpan{}, tenantRekey, randomStreamClient, noCutover{},
+		nil /* streamingTestingKnobs*/)
 	require.NoError(t, err)
 
 	partitionSpanToTableID := getPartitionSpanToTableID(t, topo.Partitions)
@@ -536,7 +530,8 @@ func TestRandomClientGeneration(t *testing.T) {
 		}
 
 		// We must have at least some progress across the frontier
-		require.Greater(t, latestResolvedTimestamp.WallTime, startTime.WallTime)
+		require.Greater(t, latestResolvedTimestamp.WallTime,
+			replicationProducerSpec.ReplicationStartTime.WallTime)
 	}
 
 	// Ensure that no errors were reported to the validator.
@@ -560,6 +555,7 @@ func runStreamIngestionProcessor(
 	kvDB *kv.DB,
 	partitions streamclient.Topology,
 	startTime hlc.Timestamp,
+	withInitialScan bool,
 	checkpoint []jobspb.ResolvedSpan,
 	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
@@ -567,7 +563,8 @@ func runStreamIngestionProcessor(
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*distsqlutils.RowBuffer, error) {
 	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
-		partitions, startTime, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs)
+		partitions, startTime, withInitialScan, checkpoint, tenantRekey, mockClient, cutoverProvider,
+		streamingTestingKnobs)
 	require.NoError(t, err)
 
 	sip.Run(ctx)
@@ -589,6 +586,7 @@ func getStreamIngestionProcessor(
 	kvDB *kv.DB,
 	partitions streamclient.Topology,
 	startTime hlc.Timestamp,
+	withInitalScan bool,
 	checkpoint []jobspb.ResolvedSpan,
 	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
@@ -634,6 +632,7 @@ func getStreamIngestionProcessor(
 	}
 	spec.StartTime = startTime
 	spec.Checkpoint.ResolvedSpans = checkpoint
+	spec.WithInitialScan = withInitalScan
 	processorID := int32(0)
 	proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, processorID, spec, &post, out)
 	require.NoError(t, err)

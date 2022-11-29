@@ -103,36 +103,36 @@ INSERT INTO d.t2 VALUES (2);
 			[][]string{{string(status)}})
 	}
 
-	streamID, err := client.Create(ctx, testTenantName)
+	replicationProducerSpec, err := client.Create(ctx, testTenantName)
 	require.NoError(t, err)
 	// We can create multiple replication streams for the same tenant.
 	_, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
 
-	top, err := client.Plan(ctx, streamID)
+	top, err := client.Plan(ctx, replicationProducerSpec.StreamID)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(top.Partitions))
 	// Plan for a non-existent stream
 	_, err = client.Plan(ctx, 999)
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
 
-	expectStreamState(streamID, jobs.StatusRunning)
-	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	expectStreamState(replicationProducerSpec.StreamID, jobs.StatusRunning)
+	status, err := client.Heartbeat(ctx, replicationProducerSpec.StreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, status.StreamStatus)
 
 	// Pause the underlying producer job of the replication stream
-	h.SysSQL.Exec(t, `PAUSE JOB $1`, streamID)
-	expectStreamState(streamID, jobs.StatusPaused)
-	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	h.SysSQL.Exec(t, `PAUSE JOB $1`, replicationProducerSpec.StreamID)
+	expectStreamState(replicationProducerSpec.StreamID, jobs.StatusPaused)
+	status, err = client.Heartbeat(ctx, replicationProducerSpec.StreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
 
 	// Cancel the underlying producer job of the replication stream
-	h.SysSQL.Exec(t, `CANCEL JOB $1`, streamID)
-	expectStreamState(streamID, jobs.StatusCanceled)
+	h.SysSQL.Exec(t, `CANCEL JOB $1`, replicationProducerSpec.StreamID)
+	expectStreamState(replicationProducerSpec.StreamID, jobs.StatusCanceled)
 
-	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	status, err = client.Heartbeat(ctx, replicationProducerSpec.StreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 
@@ -174,7 +174,8 @@ INSERT INTO d.t2 VALUES (2);
 		require.NoError(t, subClient.Close(ctx))
 	}()
 	require.NoError(t, err)
-	sub, err := subClient.Subscribe(ctx, streamID, encodeSpec("t1"), hlc.Timestamp{})
+	sub, err := subClient.Subscribe(ctx, replicationProducerSpec.StreamID,
+		encodeSpec("t1"), hlc.Timestamp{}, true /* withInitialScan */)
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
@@ -219,11 +220,12 @@ INSERT INTO d.t2 VALUES (2);
 	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
 `)
-	streamID, err = client.Create(ctx, testTenantName)
+	replicationProducerSpec, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
-	require.NoError(t, client.Complete(ctx, streamID, true))
+	require.NoError(t, client.Complete(ctx, replicationProducerSpec.StreamID, true))
 	h.SysSQL.CheckQueryResultsRetry(t,
-		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})
+		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d",
+			replicationProducerSpec.StreamID), [][]string{{"succeeded"}})
 }
 
 // isQueryCanceledError returns true if the error appears to be a query cancelled error.

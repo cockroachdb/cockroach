@@ -214,9 +214,20 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	progress := ingestionJob.Progress()
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
 
-	startTime := progress.GetStreamIngest().StartTime
-	// Start from the last checkpoint if it exists.
+	// startTime is the timestamp from which the source cluster will begin
+	// streaming MVCC revisions. Consequently, it is the timestamp from which all
+	// partitions will begin ingesting data on the destination cluster.
+	// If there has been no checkpoint since the last resumption of the
+	// replication job then we use the timestamp that was picked during
+	// replication planning. Otherwise, we use the last checkpoint.
+	//
+	// Note, we only want the rangefeed on the source cluster to perform an
+	// initial scan if the replication job has reported no progress since the last
+	// resumption.
+	startTime := details.ReplicationStartTime
+	withInitialScan := true
 	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		withInitialScan = false
 		startTime = *h
 	}
 
@@ -241,9 +252,6 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 
 		// TODO(casper): update running status
 		err = ingestionJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Progress.GetStreamIngest().StartTime.Less(startTime) {
-				md.Progress.GetStreamIngest().StartTime = startTime
-			}
 			md.Progress.GetStreamIngest().StreamAddresses = topology.StreamAddresses()
 			ju.UpdateProgress(md.Progress)
 			return nil
@@ -253,7 +261,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
-			ingestionJob.ID(), progress.GetStreamIngest().StartTime)
+			ingestionJob.ID(), startTime)
 		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
 		checkpoint := ingestProgress.Checkpoint
 
@@ -268,7 +276,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, progress.GetStreamIngest().StartTime, checkpoint,
+			streamAddress, topology, sqlInstanceIDs, startTime, withInitialScan, checkpoint,
 			ingestionJob.ID(), streamID, topology.SourceTenantID, details.DestinationTenantID)
 		if err != nil {
 			return err
