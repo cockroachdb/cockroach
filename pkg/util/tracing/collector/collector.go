@@ -28,7 +28,6 @@ import (
 // component that the tracing service relies upon.
 type NodeLiveness interface {
 	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
-	IsLive(roachpb.NodeID) (bool, error)
 }
 
 // TraceCollector can be used to extract recordings from inflight spans for a
