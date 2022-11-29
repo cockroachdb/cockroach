@@ -20,9 +20,11 @@ import { TimestampToMoment } from "src/util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import ISpanTag = cockroach.server.serverpb.ISpanTag;
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
-import { CircleFilled } from "../../icon";
+import { CircleFilled } from "src/icon";
 import { Dropdown } from "src/dropdown";
 import "antd/lib/switch/style";
+import { Link } from "react-router-dom";
+import Long from "long";
 const cx = classNames.bind(styles);
 
 class SpanSortedTable extends SortedTable<Span> {}
@@ -52,11 +54,10 @@ const Tag = ({ t }: TagRowProps) => {
   );
 };
 
-const TagCell = (props: { span: Span }) => {
-  const tagGroups = props.span.processed_tags.filter(
-    tag => tag?.children?.length,
-  );
-  const tags = props.span.processed_tags.filter(tag => !tag?.children?.length);
+export const TagCell = (props: { span: Span; defaultExpanded?: boolean }) => {
+  const { span, defaultExpanded } = props;
+  const tagGroups = span.processed_tags.filter(tag => tag?.children?.length);
+  const tags = span.processed_tags.filter(tag => !tag?.children?.length);
 
   let hiddenTagGroup = null;
   if (tagGroups.length && tagGroups[tagGroups.length - 1].key === "...") {
@@ -70,18 +71,20 @@ const TagCell = (props: { span: Span }) => {
         {tags.map((t, i) => (
           <Tag t={t} key={i} />
         ))}
-        {hiddenTagGroup && <TagGroup tag={hiddenTagGroup} />}
+        {hiddenTagGroup && (
+          <TagGroup tag={hiddenTagGroup} defaultExpanded={defaultExpanded} />
+        )}
       </div>
       {tagGroups.map((t, i) => (
-        <TagGroup tag={t} key={i} />
+        <TagGroup tag={t} key={i} defaultExpanded={defaultExpanded} />
       ))}
     </div>
   );
 };
 
-const TagGroup = (props: { tag: ISpanTag }) => {
-  const { tag } = props;
-  const [isExpanded, setExpanded] = useState(false);
+const TagGroup = (props: { tag: ISpanTag; defaultExpanded?: boolean }) => {
+  const { tag, defaultExpanded } = props;
+  const [isExpanded, setExpanded] = useState(Boolean(defaultExpanded));
   const { children } = tag;
   return (
     <div className={cx("tag")}>
@@ -129,7 +132,16 @@ const TagGroup = (props: { tag: ISpanTag }) => {
   );
 };
 
-const formatDuration = (d: moment.Duration): string => {
+const SpanCell: React.FC<{
+  span: Span;
+  spanDetailsURL: (spanID: Long) => string;
+}> = props => {
+  const { span, spanDetailsURL } = props;
+  const toPath = spanDetailsURL(span.span_id);
+  return <Link to={toPath}>{span.operation}</Link>;
+};
+
+export const formatDurationHours = (d: moment.Duration): string => {
   const hours = Math.floor(d.asHours());
   const hourStr = hours ? hours + "h " : "";
   const minutes = d.minutes();
@@ -148,6 +160,8 @@ const makeColumns = (
   snapshot: Snapshot,
   relativeTimeMode: boolean,
   setRelativeTimeMode: (value: boolean) => void,
+  spanDetailsURL: (spanID: Long) => string,
+  sortable: boolean,
 ): ColumnDescriptor<Span>[] => {
   const startTime = TimestampToMoment(snapshot.captured_at);
 
@@ -179,8 +193,8 @@ const makeColumns = (
       name: "span",
       title: "Span",
       titleAlign: "left",
-      cell: span => span.operation,
-      sort: span => span.operation,
+      cell: span => <SpanCell span={span} spanDetailsURL={spanDetailsURL} />,
+      sort: sortable && (span => span.operation),
       hideTitleUnderline: true,
       className: cx("operation-cell"),
     },
@@ -206,13 +220,13 @@ const makeColumns = (
       titleAlign: "right",
       cell: span => {
         return relativeTimeMode
-          ? formatDuration(
+          ? formatDurationHours(
               moment.duration(startTime.diff(TimestampToMoment(span.start))),
             )
           : TimestampToMoment(span.start).format("YYYY-MM-DD HH:mm:ss");
       },
       // This sort is backwards in duration mode, but toggling between sort keys within a column really trips things up.
-      sort: span => TimestampToMoment(span.start).unix(),
+      sort: sortable && (span => TimestampToMoment(span.start).unix()),
       hideTitleUnderline: true,
       className: cx("table-cell-time"),
     },
@@ -228,13 +242,14 @@ const makeColumns = (
 };
 
 export interface SpanTableProps {
-  sort: SortSetting;
-  setSort: (value: SortSetting) => void;
+  sort?: SortSetting;
+  setSort?: (value: SortSetting) => void;
   snapshot: Snapshot;
+  spanDetailsURL: (spanID: Long) => string;
 }
 
 export const SpanTable: React.FC<SpanTableProps> = props => {
-  const { snapshot, sort, setSort } = props;
+  const { snapshot, sort, setSort, spanDetailsURL } = props;
   const spans = snapshot?.spans;
 
   const [relativeTimeMode, setRelativeTimeMode] = useState(false);
@@ -247,7 +262,13 @@ export const SpanTable: React.FC<SpanTableProps> = props => {
       data={spans}
       sortSetting={sort}
       onChangeSortSetting={setSort}
-      columns={makeColumns(snapshot, relativeTimeMode, setRelativeTimeMode)}
+      columns={makeColumns(
+        snapshot,
+        relativeTimeMode,
+        setRelativeTimeMode,
+        spanDetailsURL,
+        Boolean(setSort),
+      )}
       rowClass={() => cx("table-row")}
     />
   );
