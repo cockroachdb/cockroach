@@ -140,6 +140,9 @@ func (n *Dialer) DialNoBreaker(
 // DialInternalClient is a specialization of DialClass for callers that
 // want a roachpb.InternalClient. This supports an optimization to bypass the
 // network for the local node.
+//
+// For a more contextualized explanation, see the comment that decorates
+// (*rpc.Context).loopbackDialFn.
 func (n *Dialer) DialInternalClient(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (rpc.RestrictedInternalClient, error) {

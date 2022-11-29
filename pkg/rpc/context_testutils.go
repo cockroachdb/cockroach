@@ -48,6 +48,13 @@ type ContextTestingKnobs struct {
 	// StorageClusterID initializes the Context's StorageClusterID container to
 	// this value if non-nil at construction time.
 	StorageClusterID *uuid.UUID
+
+	// NoLoopbackDialer, when set, indicates that a test does not care
+	// about the special loopback dial semantics.
+	// If this is left unset, the test is responsible for ensuring
+	// SetLoopbackDialer() has been called on the rpc.Context.
+	// (This is done automatically by server.Server/server.SQLServerWrapper.)
+	NoLoopbackDialer bool
 }
 
 // InjectedLatencyOracle is a testing mechanism used to inject artificial

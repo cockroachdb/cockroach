@@ -58,6 +58,8 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 				MaxOffset: 1,
 				Stopper:   s.Stopper(),
 				Settings:  s.ClusterSettings(),
+
+				ClientOnly: true,
 			})
 	}
 
@@ -94,6 +96,8 @@ func TestOIDCEnabled(t *testing.T) {
 			MaxOffset: 1,
 			Stopper:   s.Stopper(),
 			Settings:  s.ClusterSettings(),
+
+			ClientOnly: true,
 		})
 	}
 
