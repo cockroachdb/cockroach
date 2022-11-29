@@ -85,7 +85,8 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 		// all statistics with histograms of type BYTES. This means we cannot
 		// forecast statistics for normal BYTES columns.
 		// TODO(michae2): Improve this when issue #50655 is fixed.
-		if stat.HistogramData != nil && stat.HistogramData.ColumnType.Family() == types.BytesFamily {
+		if stat.HistogramData != nil && stat.HistogramData.ColumnType != nil &&
+			stat.HistogramData.ColumnType.Family() == types.BytesFamily {
 			continue
 		}
 		colKey := MakeSortedColStatKey(stat.ColumnIDs)
@@ -252,7 +253,7 @@ func forecastColumnStatistics(
 	// stats. If we cannot predict a histogram, we will use the latest observed
 	// histogram. NOTE: If any of the observed histograms were for inverted
 	// indexes this will produce an incorrect histogram.
-	if observed[0].HistogramData != nil {
+	if observed[0].HistogramData != nil && observed[0].HistogramData.ColumnType != nil {
 		hist, err := predictHistogram(ctx, observed, forecastAt, minRequiredFit, nonNullRowCount)
 		if err != nil {
 			// If we did not successfully predict a histogram then copy the latest
@@ -289,7 +290,7 @@ func predictHistogram(
 	minRequiredFit float64,
 	nonNullRowCount float64,
 ) (histogram, error) {
-	if observed[0].HistogramData == nil {
+	if observed[0].HistogramData == nil || observed[0].HistogramData.ColumnType == nil {
 		return histogram{}, errors.New("latest observed stat missing histogram")
 	}
 
@@ -311,7 +312,7 @@ func predictHistogram(
 		if stat.HistogramData == nil {
 			continue
 		}
-		if !stat.HistogramData.ColumnType.Equivalent(colType) {
+		if stat.HistogramData.ColumnType == nil || !stat.HistogramData.ColumnType.Equivalent(colType) {
 			continue
 		}
 		if !canMakeQuantile(stat.HistogramData.Version, stat.HistogramData.ColumnType) {
