@@ -149,7 +149,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │             │   └ *colexec.invariantsChecker
 │             │     └ *colexecutils.CancelChecker
 │             │       └ *colexec.invariantsChecker
-│             │         └ *colfetcher.ColBatchScan
+│             │         └ *colfetcher.ColBatchDirectScan
 │             ├ *colexec.invariantsChecker
 │             │ └ *colrpc.Inbox
 │             ├ *colexec.invariantsChecker
@@ -166,7 +166,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │         └ *colexec.invariantsChecker
 │           └ *colexecutils.CancelChecker
 │             └ *colexec.invariantsChecker
-│               └ *colfetcher.ColBatchScan
+│               └ *colfetcher.ColBatchDirectScan
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
@@ -175,7 +175,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │         └ *colexec.invariantsChecker
 │           └ *colexecutils.CancelChecker
 │             └ *colexec.invariantsChecker
-│               └ *colfetcher.ColBatchScan
+│               └ *colfetcher.ColBatchDirectScan
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
@@ -184,7 +184,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │         └ *colexec.invariantsChecker
 │           └ *colexecutils.CancelChecker
 │             └ *colexec.invariantsChecker
-│               └ *colfetcher.ColBatchScan
+│               └ *colfetcher.ColBatchDirectScan
 └ Node 5
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
@@ -193,7 +193,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
           └ *colexec.invariantsChecker
             └ *colexecutils.CancelChecker
               └ *colexec.invariantsChecker
-                └ *colfetcher.ColBatchScan
+                └ *colfetcher.ColBatchDirectScan
 
 query T
 EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
@@ -220,7 +220,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │         │ │   │     └ *colexec.invariantsChecker
 │             │         │ │   │       └ *colexecutils.CancelChecker
 │             │         │ │   │         └ *colexec.invariantsChecker
-│             │         │ │   │           └ *colfetcher.ColBatchScan
+│             │         │ │   │           └ *colfetcher.ColBatchDirectScan
 │             │         │ │   ├ *colexec.invariantsChecker
 │             │         │ │   │ └ *colrpc.Inbox
 │             │         │ │   ├ *colexec.invariantsChecker
@@ -237,7 +237,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │         │     │     └ *colexec.invariantsChecker
 │             │         │     │       └ *colexecutils.CancelChecker
 │             │         │     │         └ *colexec.invariantsChecker
-│             │         │     │           └ *colfetcher.ColBatchScan
+│             │         │     │           └ *colfetcher.ColBatchDirectScan
 │             │         │     ├ *colexec.invariantsChecker
 │             │         │     │ └ *colrpc.Inbox
 │             │         │     ├ *colexec.invariantsChecker
@@ -278,7 +278,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │ │   │     └ *colexec.invariantsChecker
 │               │ │   │       └ *colexecutils.CancelChecker
 │               │ │   │         └ *colexec.invariantsChecker
-│               │ │   │           └ *colfetcher.ColBatchScan
+│               │ │   │           └ *colfetcher.ColBatchDirectScan
 │               │ │   ├ *colexec.invariantsChecker
 │               │ │   │ └ *colrpc.Inbox
 │               │ │   ├ *colexec.invariantsChecker
@@ -295,7 +295,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │     │     └ *colexec.invariantsChecker
 │               │     │       └ *colexecutils.CancelChecker
 │               │     │         └ *colexec.invariantsChecker
-│               │     │           └ *colfetcher.ColBatchScan
+│               │     │           └ *colfetcher.ColBatchDirectScan
 │               │     ├ *colexec.invariantsChecker
 │               │     │ └ *colrpc.Inbox
 │               │     ├ *colexec.invariantsChecker
@@ -328,7 +328,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │ │   │     └ *colexec.invariantsChecker
 │               │ │   │       └ *colexecutils.CancelChecker
 │               │ │   │         └ *colexec.invariantsChecker
-│               │ │   │           └ *colfetcher.ColBatchScan
+│               │ │   │           └ *colfetcher.ColBatchDirectScan
 │               │ │   ├ *colexec.invariantsChecker
 │               │ │   │ └ *colrpc.Inbox
 │               │ │   └ *colexec.invariantsChecker
@@ -345,7 +345,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │     │     └ *colexec.invariantsChecker
 │               │     │       └ *colexecutils.CancelChecker
 │               │     │         └ *colexec.invariantsChecker
-│               │     │           └ *colfetcher.ColBatchScan
+│               │     │           └ *colfetcher.ColBatchDirectScan
 │               │     ├ *colexec.invariantsChecker
 │               │     │ └ *colrpc.Inbox
 │               │     └ *colexec.invariantsChecker
@@ -378,7 +378,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │ │   │     └ *colexec.invariantsChecker
 │               │ │   │       └ *colexecutils.CancelChecker
 │               │ │   │         └ *colexec.invariantsChecker
-│               │ │   │           └ *colfetcher.ColBatchScan
+│               │ │   │           └ *colfetcher.ColBatchDirectScan
 │               │ │   └ *colexec.invariantsChecker
 │               │ │     └ *colrpc.Inbox
 │               │ └ *colexec.invariantsChecker
@@ -395,7 +395,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │     │     └ *colexec.invariantsChecker
 │               │     │       └ *colexecutils.CancelChecker
 │               │     │         └ *colexec.invariantsChecker
-│               │     │           └ *colfetcher.ColBatchScan
+│               │     │           └ *colfetcher.ColBatchDirectScan
 │               │     └ *colexec.invariantsChecker
 │               │       └ *colrpc.Inbox
 │               ├ *colexec.invariantsChecker
@@ -428,7 +428,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
                 │ │         └ *colexec.invariantsChecker
                 │ │           └ *colexecutils.CancelChecker
                 │ │             └ *colexec.invariantsChecker
-                │ │               └ *colfetcher.ColBatchScan
+                │ │               └ *colfetcher.ColBatchDirectScan
                 │ └ *colexec.invariantsChecker
                 │   └ *colexec.ParallelUnorderedSynchronizer
                 │     ├ *colexec.invariantsChecker
@@ -445,7 +445,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
                 │           └ *colexec.invariantsChecker
                 │             └ *colexecutils.CancelChecker
                 │               └ *colexec.invariantsChecker
-                │                 └ *colfetcher.ColBatchScan
+                │                 └ *colfetcher.ColBatchDirectScan
                 ├ *colexec.invariantsChecker
                 ├ *colexec.invariantsChecker
                 └ *colexecdisk.hashBasedPartitioner
