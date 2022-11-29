@@ -34,7 +34,7 @@ EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
   └ *colexecproj.projPlusInt64Int64Op
     └ *colexecproj.projPlusInt64Int64Op
       └ *colexecproj.projPlusInt64Int64Op
-        └ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchDirectScan
 
 statement ok
 SET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.min_render_count = 3;
@@ -48,7 +48,7 @@ EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
   └ *colexecproj.projPlusInt64Int64Op
     └ *colexecproj.projPlusInt64Int64Op
       └ *colexecproj.projPlusInt64Int64Op
-        └ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchDirectScan
 
 statement ok
 SET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.max_row_count = 1000;
@@ -69,7 +69,7 @@ EXPLAIN (VEC) SELECT k + k + k + k FROM t85632
   └ *colexecproj.projPlusInt64Int64Op
     └ *colexecproj.projPlusInt64Int64Op
       └ *colexecproj.projPlusInt64Int64Op
-        └ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchDirectScan
 
 statement ok
 RESET CLUSTER SETTING sql.distsql.vectorize_render_wrapping.max_row_count;

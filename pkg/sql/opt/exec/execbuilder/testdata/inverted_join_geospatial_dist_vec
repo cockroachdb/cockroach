@@ -53,7 +53,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 │   ├ *colexec.sortChunksOp
 │   │ └ *rowexec.joinReader
 │   │   └ *rowexec.invertedJoiner
-│   │     └ *colfetcher.ColBatchScan
+│   │     └ *colfetcher.ColBatchDirectScan
 │   ├ *colrpc.Inbox
 │   └ *colrpc.Inbox
 ├ Node 2
@@ -61,13 +61,13 @@ ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 │   └ *colexec.sortChunksOp
 │     └ *rowexec.joinReader
 │       └ *rowexec.invertedJoiner
-│         └ *colfetcher.ColBatchScan
+│         └ *colfetcher.ColBatchDirectScan
 └ Node 3
   └ *colrpc.Outbox
     └ *colexec.sortChunksOp
       └ *rowexec.joinReader
         └ *rowexec.invertedJoiner
-          └ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchDirectScan
 
 query T
 EXPLAIN (VEC) SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
@@ -79,7 +79,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 │   ├ *colexec.sortChunksOp
 │   │ └ *rowexec.joinReader
 │   │   └ *rowexec.invertedJoiner
-│   │     └ *colfetcher.ColBatchScan
+│   │     └ *colfetcher.ColBatchDirectScan
 │   ├ *colrpc.Inbox
 │   └ *colrpc.Inbox
 ├ Node 2
@@ -87,10 +87,10 @@ ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 │   └ *colexec.sortChunksOp
 │     └ *rowexec.joinReader
 │       └ *rowexec.invertedJoiner
-│         └ *colfetcher.ColBatchScan
+│         └ *colfetcher.ColBatchDirectScan
 └ Node 3
   └ *colrpc.Outbox
     └ *colexec.sortChunksOp
       └ *rowexec.joinReader
         └ *rowexec.invertedJoiner
-          └ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchDirectScan
