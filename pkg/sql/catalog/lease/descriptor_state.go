@@ -305,7 +305,7 @@ func (t *descriptorState) startLeaseRenewal(
 	log.VEventf(ctx, 1,
 		"background lease renewal beginning for id=%d name=%q",
 		id, name)
-	if _, err := acquireNodeLease(ctx, m, id); err != nil {
+	if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
 		log.Errorf(ctx,
 			"background lease renewal for id=%d name=%q failed: %s",
 			id, name, err)

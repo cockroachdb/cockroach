@@ -29,8 +29,8 @@ type StorageTestingKnobs struct {
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(desc catalog.Descriptor, err error)
 	// Called before waiting on a results from a DoChan call of acquireNodeLease
-	// in descriptorState.acquire() and descriptorState.acquireFreshestFromStore().
-	LeaseAcquireResultBlockEvent func(leaseBlockType AcquireBlockType, id descpb.ID)
+	// in Acquire and AcquireFreshestFromStore.
+	LeaseAcquireResultBlockEvent func(leaseBlockType AcquireType, id descpb.ID)
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
