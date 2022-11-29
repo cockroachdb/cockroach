@@ -8,47 +8,61 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useMemo } from "react";
-import { Helmet } from "react-helmet";
+import React, { useCallback, useEffect } from "react";
 import { RouteComponentProps } from "react-router-dom";
 import {
   ListTracingSnapshotsResponse,
   GetTracingSnapshotResponse,
   TakeTracingSnapshotResponse,
+  SetTraceRecordingTypeResponse,
+  RecordingMode,
+  GetTraceResponse,
 } from "src/api/tracezApi";
-import { Button, Icon } from "@cockroachlabs/ui-components";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Dropdown } from "src/dropdown";
-import { Loading } from "src/loading";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { SortSetting } from "src/sortedtable";
 import { join } from "path";
-import {
-  getDataFromServer,
-  getMatchParamByName,
-  TimestampToMoment,
-} from "src/util";
+import { getMatchParamByName } from "src/util";
 import { syncHistory } from "src/util";
 
-import { SpanTable } from "./spanTable";
+import { SnapshotComponent } from "./snapshotComponent";
+import Long from "long";
+import { SpanComponent } from "./spanComponent";
+import { RawTraceComponent } from "./rawTraceComponent";
+import { Breadcrumbs } from "src/breadcrumbs";
 
-import { commonStyles } from "src/common";
-import styles from "../snapshot.module.scss";
-import classNames from "classnames/bind";
-
-const cx = classNames.bind(styles);
+// This component does some manual route management and navigation.
+// This is because the data model doesn't match the ideal route form.
+// The data model is largely monolithic - one downloads a whole snapshot at a
+// time. But often, one only wants to view part of the snapshot, as in e.g.
+// the span view.
+// In order to provide that feature with respectable performance and an easy
+// GUI, we toggle between one of several components here based on the URL
+// params. To manage that navigation, we need to know the route prefix.
+export const ROUTE_PREFIX = "/debug/tracez_v2/";
 
 export interface SnapshotPageStateProps {
   sort: SortSetting;
-  snapshotsError?: Error;
-  snapshotsLoading: boolean;
-  snapshots?: ListTracingSnapshotsResponse;
-  snapshotsValid: boolean;
-  snapshot: GetTracingSnapshotResponse;
-  snapshotError?: Error;
-  snapshotLoading: boolean;
+
   nodes?: cockroach.server.status.statuspb.INodeStatus[];
+
+  snapshots?: ListTracingSnapshotsResponse;
+  snapshotsLoading: boolean;
+  snapshotsError?: Error;
+
+  snapshot: GetTracingSnapshotResponse;
+  snapshotLoading: boolean;
+  snapshotError?: Error;
+
+  rawTrace: GetTraceResponse;
+  rawTraceLoading: boolean;
+  rawTraceError?: Error;
+
   takeSnapshot: (nodeID: string) => Promise<TakeTracingSnapshotResponse>;
+  setTraceRecordingType: (
+    nodeID: string,
+    traceID: Long,
+    recordingMode: RecordingMode,
+  ) => Promise<SetTraceRecordingTypeResponse>;
 }
 
 export interface SnapshotPageDispatchProps {
@@ -56,10 +70,18 @@ export interface SnapshotPageDispatchProps {
   refreshSnapshots: (id: string) => void;
   refreshSnapshot: (req: { nodeID: string; snapshotID: number }) => void;
   refreshNodes: () => void;
+  refreshRawTrace: (req: {
+    nodeID: string;
+    snapshotID: number;
+    traceID: Long;
+  }) => void;
 }
 
 type UrlParams = Partial<
-  Record<"nodeID" | "snapshotID" | "ascending" | "columnTitle", string>
+  Record<
+    "nodeID" | "snapshotID" | "spanID" | "ascending" | "columnTitle",
+    string
+  >
 >;
 export type SnapshotPageProps = SnapshotPageStateProps &
   SnapshotPageDispatchProps &
@@ -69,16 +91,30 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   const {
     history,
     match,
-    refreshNodes,
-    refreshSnapshots,
-    refreshSnapshot,
-    nodes,
-    snapshots,
-    snapshot,
-    snapshotsValid,
+
     sort,
     setSort,
+
+    nodes,
+    refreshNodes,
+
+    snapshots,
+    snapshotsLoading,
+    snapshotsError,
+    refreshSnapshots,
+
+    snapshot,
+    snapshotLoading,
+    snapshotError,
+    refreshSnapshot,
+
+    rawTrace,
+    rawTraceLoading,
+    rawTraceError,
+    refreshRawTrace,
+
     takeSnapshot,
+    setTraceRecordingType,
   } = props;
 
   // Sort Settings.
@@ -87,8 +123,15 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
 
   // Always an integer ID.
   const snapshotID = parseInt(getMatchParamByName(match, "snapshotID"));
+  // Always a Long, or undefined.
+  const spanStr = getMatchParamByName(match, "spanID");
+  const spanID = spanStr ? Long.fromString(spanStr) : null;
   // Usually a string-wrapped integer ID, but also supports alias "local."
   const nodeID = getMatchParamByName(match, "nodeID");
+
+  const isRaw =
+    match.path ===
+    join(ROUTE_PREFIX, "node/:nodeID/snapshot/:snapshotID/span/:spanID/raw");
 
   // Load initial data.
   useEffect(() => {
@@ -96,11 +139,11 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   }, [refreshNodes]);
 
   useEffect(() => {
-    if (!nodeID) {
-      return;
-    }
     refreshSnapshots(nodeID);
-  }, [nodeID, refreshSnapshots]);
+    // Reload the snapshots when transitioning to a new snapshot ID.
+    // This isn't always necessary, but doesn't hurt (it's async) and helps
+    // when taking a new snapshot.
+  }, [nodeID, snapshotID, refreshSnapshots]);
 
   useEffect(() => {
     if (!snapshotID) {
@@ -118,22 +161,15 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   // If no node was provided, navigate explicitly to the local node.
   // If no snapshot was provided, navigate to the most recent.
   useEffect(() => {
-    if (nodeID && snapshotID) {
+    if (snapshotID) {
       return;
-    }
-    if (!nodeID) {
-      let targetNodeID = getDataFromServer().NodeID;
-      if (!targetNodeID) {
-        targetNodeID = "local";
-      }
-      history.location.pathname = join("/debug/tracez_v2/node/", targetNodeID);
     }
 
-    if (!snapArray?.length || !snapshotsValid) {
+    if (!snapArray?.length) {
       // If we have no snapshots, or the record is stale, don't navigate.
-      history.replace(history.location);
       return;
     }
+
     const lastSnapshotID = snapArray[snapArray.length - 1].snapshot_id;
     history.location.pathname = join(
       history.location.pathname,
@@ -142,7 +178,7 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     );
     history.replace(history.location);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapArrayAsJson, snapshotID, nodeID, history, snapshotsValid]);
+  }, [snapArrayAsJson, snapshotID, history]);
 
   // Update sort based on URL.
   useEffect(() => {
@@ -154,7 +190,8 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
 
   const onSnapshotSelected = (item: number) => {
     history.location.pathname = join(
-      "/debug/tracez_v2/node",
+      ROUTE_PREFIX,
+      "node",
       nodeID,
       "snapshot",
       item.toString(),
@@ -163,7 +200,7 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   };
 
   const onNodeSelected = (item: string) => {
-    history.location.pathname = join("/debug/tracez_v2/node/", item);
+    history.location.pathname = join(ROUTE_PREFIX, "node/", item);
     history.push(history.location);
   };
 
@@ -180,10 +217,10 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
 
   const takeAndLoadSnapshot = () => {
     takeSnapshot(nodeID).then(resp => {
-      refreshSnapshots(nodeID);
       // Load the new snapshot.
       history.location.pathname = join(
-        "/debug/tracez_v2/node",
+        ROUTE_PREFIX,
+        "node",
         nodeID,
         "/snapshot/",
         resp.snapshot.snapshot_id.toString(),
@@ -192,96 +229,112 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     });
   };
 
-  const [snapshotItems, snapshotName] = useMemo(() => {
-    if (!snapArray) {
-      return [[], ""];
-    }
-    let selectedName = "";
-    const items = snapArray.map(snapshotInfo => {
-      const id = snapshotInfo.snapshot_id.toNumber();
-      const time = TimestampToMoment(snapshotInfo.captured_at).format(
-        "MMM D, YYYY [at] HH:mm:ss",
+  const spanDetailsURL = useCallback(
+    (spanID: Long): string => {
+      return join(
+        ROUTE_PREFIX,
+        "node",
+        nodeID,
+        "/snapshot/",
+        snapshotID.toString(),
+        "span",
+        spanID.toString(),
       );
-      const out = {
-        name: "Snapshot " + id + ": " + time,
-        value: id,
-      };
-      if (id === snapshotID) {
-        selectedName = out.name;
-      }
-      return out;
-    });
-    return [items, selectedName];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapArrayAsJson, snapshotID]);
+    },
+    [nodeID, snapshotID],
+  );
 
-  const [nodeItems, nodeName] = useMemo(() => {
-    if (!nodes) {
-      return [[], ""];
-    }
-    let selectedName = "";
-    const items = nodes.map(node => {
-      const id = node.desc.node_id.toString();
-      const out = {
-        name: "Node " + id,
-        value: id,
-      };
-      if (id === nodeID) {
-        selectedName = out.name;
-      }
-      return out;
-    });
-    return [items, selectedName];
-  }, [nodes, nodeID]);
+  const rawTraceURL = useCallback(
+    (spanID: Long): string => {
+      return join(
+        ROUTE_PREFIX,
+        "node",
+        nodeID,
+        "/snapshot/",
+        snapshotID.toString(),
+        "span",
+        spanID.toString(),
+        "raw",
+      );
+    },
+    [nodeID, snapshotID],
+  );
 
-  const isLoading = props.snapshotsLoading || props.snapshotLoading;
-  const error = props.snapshotsError || props.snapshotError;
-  return (
-    <div className={cx("snapshots-page")}>
-      <Helmet title="Snapshots" />
-      <h3 className={commonStyles("base-heading")}>Snapshots</h3>
-      <div>
-        <PageConfig>
-          <PageConfigItem>
-            <Button onClick={takeAndLoadSnapshot} intent="secondary">
-              <Icon iconName="Download" /> Take snapshot
-            </Button>
-          </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown items={nodeItems} onChange={onNodeSelected}>
-              {nodeName}
-            </Dropdown>
-          </PageConfigItem>
-          {snapshotItems.length > 0 && (
-            <PageConfigItem>
-              <Dropdown<number>
-                items={snapshotItems}
-                onChange={onSnapshotSelected}
-              >
-                {snapshotName}
-              </Dropdown>
-            </PageConfigItem>
-          )}
-        </PageConfig>
-      </div>
-      <section className={cx("section")}>
-        {snapshotID ? (
-          <Loading
-            loading={isLoading}
-            page={"snapshots"}
-            error={error}
-            render={() => (
-              <SpanTable
-                snapshot={snapshot?.snapshot}
-                setSort={changeSortSetting}
-                sort={sort}
-              />
-            )}
-          />
-        ) : (
-          "No snapshots found on this node."
-        )}
-      </section>
-    </div>
+  const isLoading = snapshotsLoading || snapshotLoading;
+  const error = snapshotsError || snapshotError;
+  const spans = snapshot?.snapshot.spans;
+  const span = spanID ? spans?.find(s => s.span_id.equals(spanID)) : null;
+  const snapProps = {
+    sort,
+    changeSortSetting,
+    nodes,
+    nodeID,
+    onNodeSelected,
+    snapshots,
+    snapshotID,
+    snapshot,
+    onSnapshotSelected,
+    isLoading,
+    error,
+    spanDetailsURL,
+    takeAndLoadSnapshot,
+  };
+  const spanProps = {
+    sort,
+    changeSortSetting,
+
+    nodeID,
+
+    snapshot,
+    snapshotLoading,
+    snapshotError,
+
+    span,
+    spanDetailsURL,
+    setTraceRecordingType,
+
+    rawTraceURL,
+  };
+  const rawTraceProps = {
+    nodeID,
+    snapshotID,
+    traceID: span?.trace_id,
+
+    rawTrace,
+    rawTraceLoading,
+    rawTraceError,
+    refreshRawTrace,
+  };
+
+  const breadcrumbItems = [
+    {
+      link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}`,
+      name: `Node ${nodeID}, Snapshot ${snapshotID}`,
+    },
+    {
+      link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}`,
+      name: `${span?.operation}`,
+    },
+  ];
+  return !spanID ? (
+    <SnapshotComponent {...snapProps} />
+  ) : !isRaw ? (
+    <>
+      <Breadcrumbs items={breadcrumbItems} />
+      <SpanComponent {...spanProps} />
+    </>
+  ) : (
+    <>
+      <Breadcrumbs
+        items={[
+          ...breadcrumbItems,
+          {
+            link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}/raw`,
+            name: `raw trace`,
+          },
+        ]}
+      />
+      <RawTraceComponent {...rawTraceProps} />
+    </>
   );
 };

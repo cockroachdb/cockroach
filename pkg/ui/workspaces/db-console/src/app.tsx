@@ -80,11 +80,11 @@ import RecentStatementDetails from "./views/statements/recentStatementDetailsCon
 import RecentTransactionDetails from "./views/transactions/recentTransactionDetailsConnected";
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
-import SnapshotPage from "src/views/tracez_v2/snapshotPage";
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
+import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -323,21 +323,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   {/* debug pages */}
                   <Route exact path="/debug" component={Debug} />
                   <Route exact path="/debug/tracez" component={Tracez} />
-                  <Route
-                    exact
-                    path="/debug/tracez_v2"
-                    component={SnapshotPage}
-                  />
-                  <Route
-                    exact
-                    path="/debug/tracez_v2/node/:nodeID"
-                    component={SnapshotPage}
-                  />
-                  <Route
-                    exact
-                    path="/debug/tracez_v2/node/:nodeID/snapshot/:snapshotID"
-                    component={SnapshotPage}
-                  />
+                  <Route path="/debug/tracez_v2" component={SnapshotRouter} />
                   <Route exact path="/debug/redux" component={ReduxDebug} />
                   <Route exact path="/debug/chart" component={CustomChart} />
                   <Route

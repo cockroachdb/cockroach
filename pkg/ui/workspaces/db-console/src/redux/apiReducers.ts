@@ -32,6 +32,7 @@ import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
+import Long from "long";
 
 const { generateStmtDetailsToID } = util;
 
@@ -499,7 +500,6 @@ const snapshotsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.listTracingSnapshots,
   "snapshots",
   (nodeID: string): string => nodeID,
-  moment.duration(1, "s"),
 );
 export const refreshSnapshots = snapshotsReducerObj.refresh;
 
@@ -512,9 +512,21 @@ const snapshotReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.getTracingSnapshot,
   "snapshot",
   snapshotKey,
-  moment.duration(1, "s"),
 );
 export const refreshSnapshot = snapshotReducerObj.refresh;
+
+export const rawTraceKey = (req: {
+  nodeID: string;
+  snapshotID: number;
+  traceID: Long;
+}): string =>
+  req.nodeID + "/" + req.snapshotID.toString() + "/" + req.traceID?.toString();
+const rawTraceReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getRawTrace,
+  "rawTrace",
+  rawTraceKey,
+);
+export const refreshRawTrace = rawTraceReducerObj.refresh;
 
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
@@ -559,6 +571,7 @@ export interface APIReducersState {
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
+  rawTrace: KeyedCachedDataReducerState<clusterUiApi.GetTraceResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -611,6 +624,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [scheduleReducerObj.actionNamespace]: scheduleReducerObj.reducer,
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,
+  [rawTraceReducerObj.actionNamespace]: rawTraceReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

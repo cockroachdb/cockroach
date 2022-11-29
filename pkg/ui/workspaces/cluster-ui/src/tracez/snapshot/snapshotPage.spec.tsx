@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { SnapshotPage, SnapshotPageProps } from "./snapshotPage";
+import { ROUTE_PREFIX, SnapshotPage, SnapshotPageProps } from "./snapshotPage";
 import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -16,52 +16,74 @@ import * as H from "history";
 
 import { SortSetting } from "../../sortedtable";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { TakeTracingSnapshotResponse } from "src/api/tracezApi";
+import {
+  RecordingMode,
+  SetTraceRecordingTypeResponse,
+  TakeTracingSnapshotResponse,
+} from "src/api/tracezApi";
 import GetTracingSnapshotResponse = cockroach.server.serverpb.GetTracingSnapshotResponse;
+import Long from "long";
+import { getByTestId } from "@testing-library/dom/types/queries";
 
 const getMockSnapshotPageProps = (): SnapshotPageProps => {
   const history = H.createHashHistory();
+  history.location.pathname =
+    ROUTE_PREFIX + "node/:nodeID/snapshot/:snapshotID/";
   return {
-    snapshotsValid: false,
-    location: history.location,
     history,
+    location: history.location,
     match: {
       url: "",
       path: history.location.pathname,
       isExact: false,
-      params: {},
+      params: {
+        nodeID: "1",
+        snapshotID: "1",
+      },
     },
-    refreshSnapshot: (_req: { nodeID: string; snapshotID: number }): void => {},
-    refreshSnapshots: (_nodeID: string): void => {},
-    refreshNodes: (): void => {},
-    takeSnapshot(_nodeID: string): Promise<TakeTracingSnapshotResponse> {
+    rawTrace: undefined,
+    rawTraceLoading: false,
+    refreshNodes: () => void {},
+    refreshRawTrace: (req: {
+      nodeID: string;
+      snapshotID: number;
+      traceID: Long;
+    }) => void {},
+    refreshSnapshot: (req: { nodeID: string; snapshotID: number }): void => {},
+    refreshSnapshots: (id: string): void => {},
+    setSort: (value: SortSetting): void => {},
+    setTraceRecordingType: (
+      nodeID: string,
+      traceID: Long,
+      recordingMode: RecordingMode,
+    ): Promise<SetTraceRecordingTypeResponse> => {
       return Promise.resolve(undefined);
     },
-    setSort: (value: SortSetting): void => {},
-    snapshotError: undefined,
+    snapshot: GetTracingSnapshotResponse.fromObject({
+      snapshot: {
+        spans: [{ span_id: 1, operation: "spanny" }],
+      },
+    }),
     snapshotLoading: false,
-    snapshots: undefined,
-    snapshotsError: undefined,
     snapshotsLoading: false,
     sort: undefined,
-    snapshot: null,
+    takeSnapshot: (nodeID: string): Promise<TakeTracingSnapshotResponse> => {
+      return Promise.resolve(undefined);
+    },
   };
 };
 
 describe("Snapshot", () => {
   it("renders expected snapshot table columns", () => {
     const props = getMockSnapshotPageProps();
-    props.match.params.snapshotID = "1";
-    props.snapshot = GetTracingSnapshotResponse.fromObject({
-      snapshot: {
-        spans: [{ span_id: 1 }],
-      },
-    });
-    const { getAllByText } = render(
+    const { getAllByText, getByTestId } = render(
       <MemoryRouter>
         <SnapshotPage {...props} />
       </MemoryRouter>,
     );
+
+    getByTestId("snapshot-component-title");
+
     const expectedColumnTitles = [
       "Span",
       "Start Time (UTC)",
@@ -72,5 +94,31 @@ describe("Snapshot", () => {
     for (const columnTitle of expectedColumnTitles) {
       getAllByText(columnTitle);
     }
+  });
+
+  it("renders span view", () => {
+    const props = getMockSnapshotPageProps();
+    props.match.params["spanID"] = "1";
+    const { getByTestId } = render(
+      <MemoryRouter>
+        <SnapshotPage {...props} />
+      </MemoryRouter>,
+    );
+
+    getByTestId("span-component-title");
+  });
+
+  it("renders raw trace view", () => {
+    const props = getMockSnapshotPageProps();
+    props.match.path =
+      ROUTE_PREFIX + "node/:nodeID/snapshot/:snapshotID/span/:spanID/raw";
+    props.match.params["spanID"] = "1";
+
+    const { getByTestId } = render(
+      <MemoryRouter>
+        <SnapshotPage {...props} />
+      </MemoryRouter>,
+    );
+    getByTestId("raw-trace-component");
   });
 });
