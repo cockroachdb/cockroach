@@ -645,7 +645,7 @@ func (b *Builder) buildUDF(
 		params = make(opt.ColList, len(paramTypes))
 		for i := range paramTypes {
 			paramType := &paramTypes[i]
-			argColName := funcArgColName(tree.Name(paramType.Name), i)
+			argColName := funcParamColName(tree.Name(paramType.Name), i)
 			col := b.synthesizeColumn(bodyScope, argColName, paramType.Typ, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
 			params[i] = col.id

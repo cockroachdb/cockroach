@@ -258,7 +258,7 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			argTypes, err := fn.InputArgTypes(d.ctx, d.catalog)
+			argTypes, err := fn.ParamTypes(d.ctx, d.catalog)
 			if err != nil {
 				return nil, err
 			}

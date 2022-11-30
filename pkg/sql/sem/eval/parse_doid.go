@@ -91,7 +91,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			return nil, errors.Wrapf(err, "invalid function signature: %s", s)
 		}
 		fn := stmt.AST.(*tree.AlterFunctionOptions).Function
-		if fn.Args == nil {
+		if fn.Params == nil {
 			// Always require the full function signature.
 			return nil, errors.Newf("invalid function signature: %s", s)
 		}
@@ -118,7 +118,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			}
 		}
 
-		argTypes, err := fn.InputArgTypes(ctx, evalCtx.Planner)
+		argTypes, err := fn.ParamTypes(ctx, evalCtx.Planner)
 		if err != nil {
 			return nil, err
 		}

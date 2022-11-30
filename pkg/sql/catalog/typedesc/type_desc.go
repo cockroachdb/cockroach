@@ -883,8 +883,8 @@ func HydrateTypesInTableDescriptor(
 func HydrateTypesInFunctionDescriptor(
 	ctx context.Context, desc *descpb.FunctionDescriptor, res catalog.TypeDescriptorResolver,
 ) error {
-	for i := range desc.Args {
-		if err := EnsureTypeIsHydrated(ctx, desc.Args[i].Type, res); err != nil {
+	for i := range desc.Params {
+		if err := EnsureTypeIsHydrated(ctx, desc.Params[i].Type, res); err != nil {
 			return err
 		}
 	}

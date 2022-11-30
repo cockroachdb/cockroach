@@ -275,12 +275,12 @@ func scopeColName(name tree.Name) scopeColumnName {
 	}
 }
 
-// funcArgColName creates a scopeColumnName that can be referenced by the given
+// funcParamColName creates a scopeColumnName that can be referenced by the given
 // name and will be added to the metadata with the given name, if the given name
 // is not empty. If the given name is empty, the returned scopeColumnName
 // represents an anonymous function argument that cannot be referenced, and it
 // will be added to the metadata with the descriptive name "arg<ord>".
-func funcArgColName(name tree.Name, ord int) scopeColumnName {
+func funcParamColName(name tree.Name, ord int) scopeColumnName {
 	alias := string(name)
 	if alias == "" {
 		alias = fmt.Sprintf("arg%d", ord+1)

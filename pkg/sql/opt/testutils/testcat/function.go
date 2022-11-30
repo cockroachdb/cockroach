@@ -68,15 +68,15 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		panic(fmt.Errorf("routine body of BEGIN ATOMIC is not supported"))
 	}
 
-	// Resolve the argument names and types.
-	argTypes := make(tree.ArgTypes, len(c.Args))
-	for i := range c.Args {
-		arg := &c.Args[i]
-		typ, err := tree.ResolveType(context.Background(), arg.Type, tc)
+	// Resolve the parameter names and types.
+	argTypes := make(tree.ArgTypes, len(c.Params))
+	for i := range c.Params {
+		param := &c.Params[i]
+		typ, err := tree.ResolveType(context.Background(), param.Type, tc)
 		if err != nil {
 			panic(err)
 		}
-		argTypes.SetAt(i, string(arg.Name), typ)
+		argTypes.SetAt(i, string(param.Name), typ)
 	}
 
 	// Resolve the return type.

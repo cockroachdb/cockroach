@@ -141,8 +141,8 @@ func (n *createFunctionNode) createNewFunction(
 	if err != nil {
 		return err
 	}
-	argTypes := make([]*types.T, len(udfDesc.Args))
-	for i, arg := range udfDesc.Args {
+	argTypes := make([]*types.T, len(udfDesc.Params))
+	for i, arg := range udfDesc.Params {
 		argTypes[i] = arg.Type
 	}
 	scDesc.AddFunction(
@@ -165,11 +165,11 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	// TODO(chengxiong): add validation that the function is not referenced. This
 	// is needed when we start allowing function references from other objects.
 
-	// Make sure argument names are not changed.
-	for i := range n.cf.Args {
-		if string(n.cf.Args[i].Name) != udfDesc.Args[i].Name {
+	// Make sure parameter names are not changed.
+	for i := range n.cf.Params {
+		if string(n.cf.Params[i].Name) != udfDesc.Params[i].Name {
 			return pgerror.Newf(
-				pgcode.InvalidFunctionDefinition, "cannot change name of input parameter %q", udfDesc.Args[i].Name,
+				pgcode.InvalidFunctionDefinition, "cannot change name of input parameter %q", udfDesc.Params[i].Name,
 			)
 		}
 	}
@@ -228,31 +228,31 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	scDesc catalog.SchemaDescriptor, params runParams,
 ) (fnDesc *funcdesc.Mutable, isNew bool, err error) {
 	// Resolve argument types.
-	argTypes := make([]*types.T, len(n.cf.Args))
-	pbArgs := make([]descpb.FunctionDescriptor_Argument, len(n.cf.Args))
+	argTypes := make([]*types.T, len(n.cf.Params))
+	pbParams := make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
 	argNameSeen := make(map[tree.Name]struct{})
-	for i, arg := range n.cf.Args {
-		if arg.Name != "" {
-			if _, ok := argNameSeen[arg.Name]; ok {
+	for i, param := range n.cf.Params {
+		if param.Name != "" {
+			if _, ok := argNameSeen[param.Name]; ok {
 				// Argument names cannot be used more than once.
 				return nil, false, pgerror.Newf(
-					pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", arg.Name,
+					pgcode.InvalidFunctionDefinition, "parameter name %q used more than once", param.Name,
 				)
 			}
-			argNameSeen[arg.Name] = struct{}{}
+			argNameSeen[param.Name] = struct{}{}
 		}
-		pbArg, err := makeFunctionArg(params.ctx, arg, params.p)
+		pbArg, err := makeFunctionArg(params.ctx, param, params.p)
 		if err != nil {
 			return nil, false, err
 		}
-		pbArgs[i] = pbArg
+		pbParams[i] = pbArg
 		argTypes[i] = pbArg.Type
 	}
 
 	// Try to look up an existing function.
 	fuObj := tree.FuncObj{
 		FuncName: n.cf.FuncName,
-		Args:     n.cf.Args,
+		Params:   n.cf.Params,
 	}
 	existing, err := params.p.matchUDF(params.ctx, &fuObj, false /* required */)
 	if err != nil {
@@ -303,7 +303,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		n.dbDesc.GetID(),
 		scDesc.GetID(),
 		string(n.cf.FuncName.ObjectName),
-		pbArgs,
+		pbParams,
 		returnType,
 		n.cf.ReturnType.IsSet,
 		privileges,
@@ -451,27 +451,27 @@ func resetFuncOption(udfDesc *funcdesc.Mutable) {
 }
 
 func makeFunctionArg(
-	ctx context.Context, arg tree.FuncArg, typeResolver tree.TypeReferenceResolver,
-) (descpb.FunctionDescriptor_Argument, error) {
-	pbArg := descpb.FunctionDescriptor_Argument{
+	ctx context.Context, arg tree.FuncParam, typeResolver tree.TypeReferenceResolver,
+) (descpb.FunctionDescriptor_Parameter, error) {
+	pbParam := descpb.FunctionDescriptor_Parameter{
 		Name: string(arg.Name),
 	}
 	var err error
-	pbArg.Class, err = funcdesc.ArgClassToProto(arg.Class)
+	pbParam.Class, err = funcdesc.ArgClassToProto(arg.Class)
 	if err != nil {
-		return descpb.FunctionDescriptor_Argument{}, err
+		return descpb.FunctionDescriptor_Parameter{}, err
 	}
 
-	pbArg.Type, err = tree.ResolveType(ctx, arg.Type, typeResolver)
+	pbParam.Type, err = tree.ResolveType(ctx, arg.Type, typeResolver)
 	if err != nil {
-		return descpb.FunctionDescriptor_Argument{}, err
+		return descpb.FunctionDescriptor_Parameter{}, err
 	}
 
 	if arg.DefaultVal != nil {
-		return descpb.FunctionDescriptor_Argument{}, unimplemented.New("CREATE FUNCTION argument", "default value")
+		return descpb.FunctionDescriptor_Parameter{}, unimplemented.New("CREATE FUNCTION argument", "default value")
 	}
 
-	return pbArg, nil
+	return pbParam, nil
 }
 
 func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {

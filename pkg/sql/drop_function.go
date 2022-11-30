@@ -114,7 +114,7 @@ func (p *planner) matchUDF(
 		return nil, err
 	}
 
-	argTypes, err := fn.InputArgTypes(ctx, p)
+	argTypes, err := fn.ParamTypes(ctx, p)
 	if err != nil {
 		return nil, err
 	}
