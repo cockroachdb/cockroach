@@ -501,7 +501,7 @@ func checkDetachedRestore(
 				var status string
 				var payloadBytes []byte
 				if err = conn.QueryRowContext(ctx,
-					`SELECT status, payload FROM [SHOW JOBS] WHERE job_id = $1`,
+					`SELECT status, payload FROM system.jobs WHERE id = $1`,
 					jobID).Scan(&status, &payloadBytes); err != nil {
 					return false, errors.Wrapf(err, "failed to check restore job status")
 				}
