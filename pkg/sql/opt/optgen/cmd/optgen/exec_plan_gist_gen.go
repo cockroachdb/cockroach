@@ -56,6 +56,19 @@ var boolAllowList = map[string]bool{
 	"all":               true,
 }
 
+var omitList = map[string][]string{
+	"Delete": {"Passthrough"},
+}
+
+func omitted(define, field string) bool {
+	for _, str := range omitList[define] {
+		if str == field {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *execPlanGistGen) genPlanGistFactory() {
 	for _, define := range g.compiled.Defines {
 		g.w.write("\n")
@@ -73,6 +86,9 @@ func (g *execPlanGistGen) genPlanGistFactory() {
 			g.w.write("f.encodeDataSource(index.Table().ID(), index.Table().Name())\n")
 		}
 		for _, field := range define.Fields {
+			if omitted(string(define.Name), string(field.Name)) {
+				continue
+			}
 			// grab ids
 			var expr, encoder string
 			name := unTitle(string(field.Name))
@@ -136,6 +152,9 @@ func (g *execPlanGistGen) genPlanGistDecoder() {
 			g.w.writeIndent("tbl := f.decodeTable()\n")
 		}
 		for f, field := range define.Fields {
+			if omitted(string(define.Name), string(field.Name)) {
+				continue
+			}
 			// grab ids
 			var argName, decoder, decoderArg, store string
 			name := unTitle(string(field.Name))
