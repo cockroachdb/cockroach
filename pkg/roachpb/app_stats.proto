@@ -149,6 +149,10 @@ message TransactionStatistics {
   // all statement operations have been applied.
   optional NumericStat commit_lat = 6 [(gogoproto.nullable) = false];
 
+  // IdleLat is the cumulative amount of time spent in seconds waiting for
+  // the client to send statements while holding the transaction open.
+  optional NumericStat idle_lat = 11 [(gogoproto.nullable) = false];
+
   // BytesRead collects the number of bytes read from disk.
   optional NumericStat bytes_read = 7 [(gogoproto.nullable) = false];
 

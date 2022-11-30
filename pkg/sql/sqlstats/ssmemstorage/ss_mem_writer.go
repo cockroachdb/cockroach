@@ -301,6 +301,7 @@ func (s *Container) RecordTransaction(
 	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatency.Seconds())
 	stats.mu.data.RetryLat.Record(stats.mu.data.Count, value.RetryLatency.Seconds())
 	stats.mu.data.CommitLat.Record(stats.mu.data.Count, value.CommitLatency.Seconds())
+	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatency.Seconds())
 	if value.RetryCount > stats.mu.data.MaxRetries {
 		stats.mu.data.MaxRetries = value.RetryCount
 	}

@@ -124,6 +124,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 		t.MaxRetries = other.MaxRetries
 	}
 
+	t.IdleLat.Add(other.IdleLat, t.Count, other.Count)
 	t.CommitLat.Add(other.CommitLat, t.Count, other.Count)
 	t.RetryLat.Add(other.RetryLat, t.Count, other.Count)
 	t.ServiceLat.Add(other.ServiceLat, t.Count, other.Count)

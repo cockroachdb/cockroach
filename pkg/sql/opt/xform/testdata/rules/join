@@ -13208,3 +13208,117 @@ project
       └── filters (true)
 
 ### END regression tests for issue #69617
+
+# Regression test for #89603
+exec-ddl
+CREATE TABLE table11 (
+      col1_1 FLOAT8 NOT NULL,
+      col1_2 TIMESTAMP NOT NULL,
+      col1_3 BYTES NOT NULL,
+      col1_4 NAME NOT NULL,
+      col1_5 OID NULL,
+      col1_6 JSONB NULL,
+      col1_7 REGPROCEDURE NULL,
+      INDEX table1_col1_3_col1_1_expr_idx (col1_3 ASC, col1_1 DESC)
+  )
+----
+
+# The sort must be done as the last step instead of in between the first and
+# second joins of the paired join.
+opt set=testing_optimizer_random_seed=4057832385546395198 set=testing_optimizer_cost_perturbation=1.0
+SELECT
+        tab_17534.col1_3 AS col_52140,
+        0:::OID AS col_52141,
+        tab_17533.col1_7 AS col_52142,
+        '\x58':::BYTES AS col_52143,
+        0:::OID AS col_52144
+FROM
+        table11@[0] AS tab_17533
+        RIGHT JOIN table11@[0] AS tab_17534
+                JOIN table11@[0] AS tab_17535 ON
+                                (tab_17534.crdb_internal_mvcc_timestamp) = (tab_17535.crdb_internal_mvcc_timestamp)
+                                AND (tab_17534.col1_4) = (tab_17535.col1_4)
+                JOIN table11@[0] AS tab_17536 ON
+                                (tab_17535.col1_1) = (tab_17536.col1_1)
+                                AND (tab_17535.col1_3) = (tab_17536.col1_3)
+                                AND (tab_17534.col1_6) = (tab_17536.col1_6)
+                JOIN table11@[0] AS tab_17537
+                        JOIN table11@[0] AS tab_17538 ON
+                                        (tab_17537.crdb_internal_mvcc_timestamp) = (tab_17538.crdb_internal_mvcc_timestamp) ON
+                                (tab_17536.col1_2) = (tab_17538.col1_2) AND (tab_17535.col1_4) = (tab_17537.col1_4) ON
+                        (tab_17533.col1_3) = (tab_17537.col1_3) AND (tab_17533.col1_6) = (tab_17536.col1_6)
+ORDER BY
+        tab_17535.col1_4, tab_17535.col1_3 DESC
+----
+project
+ ├── columns: col_52140:13!null col_52141:61!null col_52142:7 col_52143:62!null col_52144:61!null  [hidden: tab_17535.col1_3:23!null tab_17535.col1_4:24!null]
+ ├── immutable
+ ├── fd: ()-->(61,62)
+ ├── ordering: +24,-23 opt(61,62) [actual: +24,-23]
+ ├── sort
+ │    ├── columns: tab_17533.col1_3:3 tab_17533.col1_6:6 tab_17533.col1_7:7 tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
+ │    ├── immutable
+ │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
+ │    ├── ordering: +(14|24|44),-(23|33) [actual: +14,-23]
+ │    └── left-join (lookup table11 [as=tab_17533])
+ │         ├── columns: tab_17533.col1_3:3 tab_17533.col1_6:6 tab_17533.col1_7:7 tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
+ │         ├── key columns: [70] = [8]
+ │         ├── lookup columns are key
+ │         ├── second join in paired joiner
+ │         ├── immutable
+ │         ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
+ │         ├── left-join (lookup table11@table1_col1_3_col1_1_expr_idx [as=tab_17533])
+ │         │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null tab_17533.col1_1:63 tab_17533.col1_3:65 tab_17533.rowid:70 continuation:73
+ │         │    ├── key columns: [43] = [65]
+ │         │    ├── first join in paired joiner; continuation column: continuation:73
+ │         │    ├── immutable
+ │         │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24), (70)-->(63,65,73)
+ │         │    ├── inner-join (hash)
+ │         │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
+ │         │    │    ├── immutable
+ │         │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
+ │         │    │    ├── inner-join (hash)
+ │         │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49
+ │         │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
+ │         │    │    │    ├── immutable
+ │         │    │    │    ├── fd: (24)==(14,44), (44)==(14,24), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (19)==(29), (29)==(19), (14)==(24,44), (16)==(36), (36)==(16)
+ │         │    │    │    ├── scan table11 [as=tab_17537]
+ │         │    │    │    │    └── columns: tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49
+ │         │    │    │    ├── inner-join (lookup table11 [as=tab_17536])
+ │         │    │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null
+ │         │    │    │    │    ├── key columns: [38] = [38]
+ │         │    │    │    │    ├── lookup columns are key
+ │         │    │    │    │    ├── immutable
+ │         │    │    │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24), (24)==(14), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16)
+ │         │    │    │    │    ├── inner-join (lookup table11@table1_col1_3_col1_1_expr_idx [as=tab_17536])
+ │         │    │    │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16 tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_3:33!null tab_17536.rowid:38!null
+ │         │    │    │    │    │    ├── key columns: [23 21] = [33 31]
+ │         │    │    │    │    │    ├── immutable
+ │         │    │    │    │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24), (24)==(14), (38)-->(31,33), (23)==(33), (33)==(23), (21)==(31), (31)==(21)
+ │         │    │    │    │    │    ├── inner-join (hash)
+ │         │    │    │    │    │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16 tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null
+ │         │    │    │    │    │    │    ├── immutable
+ │         │    │    │    │    │    │    ├── fd: (19)==(29), (29)==(19), (14)==(24), (24)==(14)
+ │         │    │    │    │    │    │    ├── scan table11 [as=tab_17535]
+ │         │    │    │    │    │    │    │    └── columns: tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29
+ │         │    │    │    │    │    │    ├── scan table11 [as=tab_17534]
+ │         │    │    │    │    │    │    │    └── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16 tab_17534.crdb_internal_mvcc_timestamp:19
+ │         │    │    │    │    │    │    └── filters
+ │         │    │    │    │    │    │         ├── tab_17534.crdb_internal_mvcc_timestamp:19 = tab_17535.crdb_internal_mvcc_timestamp:29 [outer=(19,29), immutable, constraints=(/19: (/NULL - ]; /29: (/NULL - ]), fd=(19)==(29), (29)==(19)]
+ │         │    │    │    │    │    │         └── tab_17534.col1_4:14 = tab_17535.col1_4:24 [outer=(14,24), constraints=(/14: (/NULL - ]; /24: (/NULL - ]), fd=(14)==(24), (24)==(14)]
+ │         │    │    │    │    │    └── filters (true)
+ │         │    │    │    │    └── filters
+ │         │    │    │    │         └── tab_17534.col1_6:16 = tab_17536.col1_6:36 [outer=(16,36), immutable, constraints=(/16: (/NULL - ]; /36: (/NULL - ]), fd=(16)==(36), (36)==(16)]
+ │         │    │    │    └── filters
+ │         │    │    │         └── tab_17535.col1_4:24 = tab_17537.col1_4:44 [outer=(24,44), constraints=(/24: (/NULL - ]; /44: (/NULL - ]), fd=(24)==(44), (44)==(24)]
+ │         │    │    ├── scan table11 [as=tab_17538]
+ │         │    │    │    └── columns: tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59
+ │         │    │    └── filters
+ │         │    │         ├── tab_17537.crdb_internal_mvcc_timestamp:49 = tab_17538.crdb_internal_mvcc_timestamp:59 [outer=(49,59), immutable, constraints=(/49: (/NULL - ]; /59: (/NULL - ]), fd=(49)==(59), (59)==(49)]
+ │         │    │         └── tab_17536.col1_2:32 = tab_17538.col1_2:52 [outer=(32,52), constraints=(/32: (/NULL - ]; /52: (/NULL - ]), fd=(32)==(52), (52)==(32)]
+ │         │    └── filters (true)
+ │         └── filters
+ │              └── tab_17533.col1_6:6 = tab_17536.col1_6:36 [outer=(6,36), immutable, constraints=(/6: (/NULL - ]; /36: (/NULL - ]), fd=(6)==(36), (36)==(6)]
+ └── projections
+      ├── 0 [as=col_52141:61]
+      └── '\x58' [as=col_52143:62]
