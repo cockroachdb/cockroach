@@ -73,6 +73,7 @@
   &--row {
     background-color: $adminui-white;
     letter-spacing: 0.33px;
+    margin-left: 1px;
   }
   &--label {
     font-family: $font-family--semi-bold;
@@ -136,3 +137,8 @@
     text-decoration: underline;
   }
 }
+
+.row-spaced {
+  margin-top: 20px;
+}
+
