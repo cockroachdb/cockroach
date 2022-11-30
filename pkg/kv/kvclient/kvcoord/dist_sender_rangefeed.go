@@ -594,11 +594,6 @@ func (ds *DistSender) singleRangeFeed(
 
 	for {
 		stuckWatcher.stop() // if timer is running from previous iteration, stop it now
-		if catchupRes == nil {
-			// Already finished catch-up scan (in an earlier iteration of this loop),
-			// so start timer early, not on first event received.
-			stuckWatcher.ping()
-		}
 		if transport.IsExhausted() {
 			return args.Timestamp, newSendError(
 				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
@@ -639,19 +634,21 @@ func (ds *DistSender) singleRangeFeed(
 			}
 		}
 
+		var event *roachpb.RangeFeedEvent
 		for {
-			event, err := stream.Recv()
-			if err == io.EOF {
-				return args.Timestamp, nil
-			}
-			if err != nil {
+			if err := stuckWatcher.do(func() (err error) {
+				event, err = stream.Recv()
+				return err
+			}); err != nil {
+				if err == io.EOF {
+					return args.Timestamp, nil
+				}
 				if stuckWatcher.stuck() {
 					afterCatchUpScan := catchupRes == nil
 					return args.Timestamp, ds.handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold())
 				}
 				return args.Timestamp, err
 			}
-			stuckWatcher.ping() // starts timer on first event only
 
 			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
 			switch t := event.GetValue().(type) {
