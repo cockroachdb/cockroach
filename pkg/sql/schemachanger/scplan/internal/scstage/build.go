@@ -37,15 +37,17 @@ func BuildStages(
 	phase scop.Phase,
 	g *scgraph.Graph,
 	scJobIDSupplier func() jobspb.JobID,
+	enforcePlannerSanityChecks bool,
 ) []Stage {
 	c := buildContext{
-		rollback:               init.InRollback,
-		g:                      g,
-		isRevertibilityIgnored: true,
-		targetState:            init.TargetState,
-		startingStatuses:       init.Current,
-		startingPhase:          phase,
-		descIDs:                screl.AllTargetDescIDs(init.TargetState),
+		rollback:                   init.InRollback,
+		g:                          g,
+		isRevertibilityIgnored:     true,
+		targetState:                init.TargetState,
+		startingStatuses:           init.Current,
+		startingPhase:              phase,
+		descIDs:                    screl.AllTargetDescIDs(init.TargetState),
+		enforcePlannerSanityChecks: enforcePlannerSanityChecks,
 	}
 	// Try building stages while ignoring revertibility constraints.
 	// This is fine as long as there are no post-commit stages.
@@ -92,14 +94,15 @@ func BuildStages(
 // buildContext contains the global constants for building the stages.
 // Only the BuildStages function mutates it, it's read-only everywhere else.
 type buildContext struct {
-	rollback               bool
-	g                      *scgraph.Graph
-	scJobID                jobspb.JobID
-	isRevertibilityIgnored bool
-	targetState            scpb.TargetState
-	startingStatuses       []scpb.Status
-	startingPhase          scop.Phase
-	descIDs                catalog.DescriptorIDSet
+	rollback                   bool
+	g                          *scgraph.Graph
+	scJobID                    jobspb.JobID
+	isRevertibilityIgnored     bool
+	targetState                scpb.TargetState
+	startingStatuses           []scpb.Status
+	startingPhase              scop.Phase
+	descIDs                    catalog.DescriptorIDSet
+	enforcePlannerSanityChecks bool
 }
 
 func buildStages(bc buildContext) (stages []Stage) {
@@ -427,9 +430,12 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 	sb.visited[n] = sb.visitEpoch
 	// Do some sanity checks.
 	if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
-		// This should never happen.
-		panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
-			screl.NodeString(n)))
+		if sb.bc.enforcePlannerSanityChecks {
+			panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
+				screl.NodeString(n)))
+		} else {
+			return false
+		}
 	}
 	// Look up the current target state for this node, via the lookup table.
 	if t := sb.lut[n.Target]; t == nil {
