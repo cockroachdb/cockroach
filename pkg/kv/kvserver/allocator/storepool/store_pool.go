@@ -405,6 +405,16 @@ type AllocatorStorePool interface {
 	// UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
 	// involved store descriptors immediately after a lease transfer.
 	UpdateLocalStoresAfterLeaseTransfer(from roachpb.StoreID, to roachpb.StoreID, rangeQPS float64)
+
+	// UpdateLocalStoreAfterRelocate is used to update the local copy of the
+	// previous and new replica stores immediately after a successful relocate
+	// range.
+	UpdateLocalStoreAfterRelocate(
+		voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+		oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
+		localStore roachpb.StoreID,
+		rangeQPS float64,
+	)
 }
 
 // StorePool maintains a list of all known stores in the cluster and
@@ -571,6 +581,49 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 	sp.DetailsMu.StoreDetails[storeID] = &detail
 }
 
+// UpdateLocalStoreAfterRelocate is used to update the local copy of the
+// previous and new replica stores immediately after a successful relocate
+// range.
+//
+// TODO(kvoli): We do not update the logical bytes or writes per second here.
+// Once #91593 is in, update these methods to instead take a general purpose
+// representation. This is less relevant at the moment.
+func (sp *StorePool) UpdateLocalStoreAfterRelocate(
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
+	localStore roachpb.StoreID,
+	rangeQPS float64,
+) {
+	if len(voterTargets) < 1 {
+		return
+	}
+	leaseTarget := voterTargets[0]
+	sp.UpdateLocalStoresAfterLeaseTransfer(localStore, leaseTarget.StoreID, rangeQPS)
+
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
+
+	updateTargets := func(targets []roachpb.ReplicationTarget) {
+		for _, target := range targets {
+			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail != nil {
+				toDetail.Desc.Capacity.RangeCount++
+			}
+		}
+	}
+	updatePrevious := func(previous []roachpb.ReplicaDescriptor) {
+		for _, old := range previous {
+			if toDetail := sp.GetStoreDetailLocked(old.StoreID); toDetail != nil {
+				toDetail.Desc.Capacity.RangeCount--
+			}
+		}
+	}
+
+	updateTargets(voterTargets)
+	updateTargets(nonVoterTargets)
+	updatePrevious(oldVoters)
+	updatePrevious(oldNonVoters)
+}
+
 // UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
 // involved store descriptors immediately after a lease transfer.
 func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
@@ -619,9 +672,9 @@ func (sp *StorePool) GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor {
 	return stores
 }
 
-// GetStoreDetailLocked returns the store detail for the given storeID.
-// The lock must be held *in write mode* even though this looks like a
-// read-only method.
+// GetStoreDetailLocked returns the store detail for the given storeID. The
+// lock must be held *in write mode* even though this looks like a read-only
+// method. The store detail returned is a mutable reference.
 func (sp *StorePool) GetStoreDetailLocked(storeID roachpb.StoreID) *StoreDetail {
 	detail, ok := sp.DetailsMu.StoreDetails[storeID]
 	if !ok {
@@ -922,6 +975,23 @@ func (sl StoreList) ToMap() map[roachpb.StoreID]*roachpb.StoreDescriptor {
 		storeMap[sl.Stores[i].StoreID] = &sl.Stores[i]
 	}
 	return storeMap
+}
+
+// FindStoreByID iterates over the store list and returns the descriptor for
+// the store with storeID. If no such store is found, this function instead
+// returns an empty descriptor and false. This fn is O(n) w.r.t the number of
+// stores in the list.
+func (sl StoreList) FindStoreByID(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
+	var desc roachpb.StoreDescriptor
+	var found bool
+
+	for i := range sl.Stores {
+		if sl.Stores[i].StoreID == storeID {
+			desc, found = sl.Stores[i], true
+			break
+		}
+	}
+	return desc, found
 }
 
 // StoreFilter is one of StoreFilter{None,Throttled,Suspect}, controlling what

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStorePoolUpdateLocalStore(t *testing.T) {
@@ -158,6 +159,23 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedQPS := 50 + QPS; desc.Capacity.QueriesPerSecond != expectedQPS {
 		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
 	}
+
+	sp.UpdateLocalStoreAfterRelocate(
+		[]roachpb.ReplicationTarget{{StoreID: roachpb.StoreID(1)}}, []roachpb.ReplicationTarget{},
+		[]roachpb.ReplicaDescriptor{{StoreID: roachpb.StoreID(2)}}, []roachpb.ReplicaDescriptor{},
+		roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
+
+	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(1))
+	require.True(t, ok)
+	require.Equal(t, 100.0, desc.Capacity.QueriesPerSecond)
+	require.Equal(t, int32(1), desc.Capacity.LeaseCount)
+	require.Equal(t, int32(7), desc.Capacity.RangeCount)
+
+	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(2))
+	require.True(t, ok)
+	require.Equal(t, 50.0, desc.Capacity.QueriesPerSecond)
+	require.Equal(t, int32(2), desc.Capacity.LeaseCount)
+	require.Equal(t, int32(2), desc.Capacity.RangeCount)
 }
 
 // TestStorePoolUpdateLocalStoreBeforeGossip verifies that an attempt to update
