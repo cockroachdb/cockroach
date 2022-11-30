@@ -17,7 +17,7 @@ import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses
 import { CaretRight } from "../icon/caretRight";
 import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
 import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
-import { SqlBox } from "src/sql";
+import { SqlBox, SqlBoxSize } from "src/sql";
 import { Col, Row, Tooltip } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -257,7 +257,10 @@ export class IndexDetailsPage extends React.Component<
           <section className={baseHeadingClasses.wrapper}>
             <Row gutter={18}>
               <Col className="gutter-row" span={18}>
-                <SqlBox value={this.props.details.createStatement} />
+                <SqlBox
+                  value={this.props.details.createStatement}
+                  size={SqlBoxSize.custom}
+                />
               </Col>
             </Row>
             <Row gutter={18}>
@@ -306,7 +309,7 @@ export class IndexDetailsPage extends React.Component<
                 </SummaryCard>
               </Col>
             </Row>
-            <Row gutter={18}>
+            <Row gutter={18} className={cx("row-spaced")}>
               <Col className="gutter-row" span={18}>
                 <SummaryCard className={cx("summary-card--row")}>
                   <Heading type="h5">Index recommendations</Heading>
