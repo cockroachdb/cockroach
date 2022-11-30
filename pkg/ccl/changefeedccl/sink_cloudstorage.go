@@ -76,7 +76,6 @@ var _ io.Writer = &cloudStorageSinkFile{}
 
 func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 	f.rawSize += len(p)
-	f.numMessages++
 	if f.codec != nil {
 		return f.codec.Write(p)
 	}
@@ -529,6 +528,7 @@ func (s *cloudStorageSink) EmitRow(
 	if _, err := file.Write(s.rowDelimiter); err != nil {
 		return err
 	}
+	file.numMessages++
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
