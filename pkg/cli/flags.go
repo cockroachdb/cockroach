@@ -1201,5 +1201,17 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
 		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
 	}
+
+	// In standalone SQL servers, we do not generate a ballast file,
+	// unless a ballast size was specified explicitly by the user.
+	for i := range serverCfg.Stores.Specs {
+		spec := &serverCfg.Stores.Specs[i]
+		if spec.BallastSize == nil {
+			// Only override if there was no ballast size specified to start
+			// with.
+			zero := base.SizeSpec{InBytes: 0, Percent: 0}
+			spec.BallastSize = &zero
+		}
+	}
 	return nil
 }
