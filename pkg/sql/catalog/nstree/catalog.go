@@ -16,19 +16,25 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
 // Catalog is used to store an in-memory copy of the whole catalog, or a portion
-// thereof.
+// thereof, as well as metadata like comment and zone configs.
 type Catalog struct {
-	underlying NameMap
-	byteSize   int64
+	underlying  NameMap
+	byteSize    int64
+	comments    map[catalogkeys.CommentKey]string
+	zoneConfigs map[descpb.ID]catalog.ZoneConfig
 }
 
 // ForEachDescriptorEntry iterates over all descriptor table entries in an
@@ -40,6 +46,38 @@ func (c Catalog) ForEachDescriptorEntry(fn func(desc catalog.Descriptor) error) 
 	return c.underlying.byID.ascend(func(e catalog.NameEntry) error {
 		return fn(e.(catalog.Descriptor))
 	})
+}
+
+// ForEachCommentUnordered iterates through all descriptor comments in an unordered manner.
+func (c Catalog) ForEachCommentUnordered(
+	fn func(key catalogkeys.CommentKey, cmt string) error,
+) error {
+	if !c.IsInitialized() {
+		return nil
+	}
+
+	for k, cmt := range c.comments {
+		if err := fn(k, cmt); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+
+	return nil
+}
+
+// ForEachZoneConfigUnordered iterates through all descriptor zone configs in an unordered manner.
+func (c Catalog) ForEachZoneConfigUnordered(
+	fn func(id descpb.ID, zoneConfig catalog.ZoneConfig) error,
+) error {
+	if !c.IsInitialized() {
+		return nil
+	}
+	for id, z := range c.zoneConfigs {
+		if err := fn(id, z); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
 // NamespaceEntry is a catalog.NameEntry augmented with an MVCC timestamp.
@@ -126,7 +164,16 @@ func (c Catalog) OrderedDescriptorIDs() []descpb.ID {
 // IsInitialized returns false if the underlying map has not yet been
 // initialized. Initialization is done lazily when
 func (c Catalog) IsInitialized() bool {
-	return c.underlying.initialized()
+	return c.underlying.initialized() && c.comments != nil && c.zoneConfigs != nil
+}
+
+func (c *Catalog) maybeInitialize() {
+	if c.IsInitialized() {
+		return
+	}
+	c.underlying.maybeInitialize()
+	c.comments = make(map[catalogkeys.CommentKey]string)
+	c.zoneConfigs = make(map[descpb.ID]catalog.ZoneConfig)
 }
 
 var _ validate.ValidationDereferencer = Catalog{}
@@ -244,7 +291,7 @@ func (mc *MutableCatalog) UpsertDescriptorEntry(desc catalog.Descriptor) {
 	if desc == nil || desc.GetID() == descpb.InvalidID {
 		return
 	}
-	mc.underlying.maybeInitialize()
+	mc.maybeInitialize()
 	if replaced := mc.underlying.byID.upsert(desc); replaced != nil {
 		mc.byteSize -= replaced.(catalog.Descriptor).ByteSize()
 	}
@@ -256,7 +303,6 @@ func (mc *MutableCatalog) DeleteDescriptorEntry(id descpb.ID) {
 	if id == descpb.InvalidID || !mc.IsInitialized() {
 		return
 	}
-	mc.underlying.maybeInitialize()
 	if removed := mc.underlying.byID.delete(id); removed != nil {
 		mc.byteSize -= removed.(catalog.Descriptor).ByteSize()
 	}
@@ -269,7 +315,7 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(
 	if key == nil || id == descpb.InvalidID {
 		return
 	}
-	mc.underlying.maybeInitialize()
+	mc.maybeInitialize()
 	nsEntry := &namespaceEntry{
 		NameInfo: descpb.NameInfo{
 			ParentID:       key.GetParentID(),
@@ -290,10 +336,35 @@ func (mc *MutableCatalog) DeleteNamespaceEntry(key catalog.NameKey) {
 	if key == nil || !mc.IsInitialized() {
 		return
 	}
-	mc.underlying.maybeInitialize()
 	if removed := mc.underlying.byName.delete(key); removed != nil {
 		mc.byteSize -= removed.(*namespaceEntry).ByteSize()
 	}
+}
+
+// UpsertComment upserts a ((ObjectID, SubID, CommentType) -> Comment) mapping
+// into the catalog.
+func (mc *MutableCatalog) UpsertComment(key catalogkeys.CommentKey, cmt string) {
+	mc.maybeInitialize()
+	mc.byteSize -= int64(len(mc.comments[key]))
+	mc.comments[key] = cmt
+	mc.byteSize += int64(len(cmt))
+}
+
+// UpsertZoneConfig upserts a (descriptor id -> zone config) mapping into the
+// catalog.
+func (mc *MutableCatalog) UpsertZoneConfig(
+	id descpb.ID, zoneConfig *zonepb.ZoneConfig, rawBytes []byte,
+) {
+	mc.maybeInitialize()
+	if mc.zoneConfigs == nil {
+		mc.zoneConfigs = make(map[descpb.ID]catalog.ZoneConfig)
+	}
+	if existing, ok := mc.zoneConfigs[id]; ok {
+		mc.byteSize -= int64(existing.Size())
+	}
+	zc := zone.NewZoneConfigWithRawBytes(zoneConfig, rawBytes)
+	mc.zoneConfigs[id] = zc
+	mc.byteSize += int64(zc.Size())
 }
 
 // Clear empties the MutableCatalog.

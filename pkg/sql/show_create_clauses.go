@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -47,6 +48,8 @@ type comment struct {
 
 // selectComment retrieves all the comments pertaining to a table (comments on the table
 // itself but also column and index comments.)
+// TODO(chengxiong): consider plumbing the collection through here so that we
+// can just fetch comments from collection cache instead of firing extra query.
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 
@@ -59,10 +62,10 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
-			commentType := keys.CommentType(tree.MustBeDInt(row[0]))
+			commentType := catalogkeys.CommentType(tree.MustBeDInt(row[0]))
 			switch commentType {
-			case keys.TableCommentType, keys.ColumnCommentType,
-				keys.IndexCommentType, keys.ConstraintCommentType:
+			case catalogkeys.TableCommentType, catalogkeys.ColumnCommentType,
+				catalogkeys.IndexCommentType, catalogkeys.ConstraintCommentType:
 				subID := int(tree.MustBeDInt(row[2]))
 				cmt := string(tree.MustBeDString(row[3]))
 
@@ -71,13 +74,13 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 				}
 
 				switch commentType {
-				case keys.TableCommentType:
+				case catalogkeys.TableCommentType:
 					tc.comment = &cmt
-				case keys.ColumnCommentType:
+				case catalogkeys.ColumnCommentType:
 					tc.columns = append(tc.columns, comment{subID, cmt})
-				case keys.IndexCommentType:
+				case catalogkeys.IndexCommentType:
 					tc.indexes = append(tc.indexes, comment{subID, cmt})
-				case keys.ConstraintCommentType:
+				case catalogkeys.ConstraintCommentType:
 					tc.constraints = append(tc.constraints, comment{subID, cmt})
 				}
 			}

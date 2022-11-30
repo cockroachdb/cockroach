@@ -13,21 +13,18 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnIndexNode struct {
-	n               *tree.CommentOnIndex
-	tableDesc       *tabledesc.Mutable
-	index           catalog.Index
-	metadataUpdater scexec.DescriptorMetadataUpdater
+	n         *tree.CommentOnIndex
+	tableDesc *tabledesc.Mutable
+	index     catalog.Index
 }
 
 // CommentOnIndex adds a comment on an index.
@@ -50,33 +47,22 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 		n:         n,
 		tableDesc: tableDesc,
 		index:     index,
-		metadataUpdater: descmetadata.NewMetadataUpdater(
-			ctx,
-			p.ExecCfg().InternalExecutorFactory,
-			p.Descriptors(),
-			&p.ExecCfg().Settings.SV,
-			p.txn,
-			p.SessionData(),
-		)}, nil
+	}, nil
 }
 
 func (n *commentOnIndexNode) startExec(params runParams) error {
-	if n.n.Comment != nil {
-		err := n.metadataUpdater.UpsertDescriptorComment(
-			int64(n.tableDesc.ID),
-			int64(n.index.GetID()),
-			keys.IndexCommentType,
-			*n.n.Comment,
+	var err error
+	if n.n.Comment == nil {
+		err = params.p.deleteComment(
+			params.ctx, n.tableDesc.GetID(), uint32(n.index.GetID()), catalogkeys.IndexCommentType,
 		)
-		if err != nil {
-			return err
-		}
 	} else {
-		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.tableDesc.ID), int64(n.index.GetID()), keys.IndexCommentType)
-		if err != nil {
-			return err
-		}
+		err = params.p.updateComment(
+			params.ctx, n.tableDesc.GetID(), uint32(n.index.GetID()), catalogkeys.IndexCommentType, *n.n.Comment,
+		)
+	}
+	if err != nil {
+		return err
 	}
 
 	comment := ""

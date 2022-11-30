@@ -13,14 +13,12 @@ package descmetadata
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -65,84 +63,6 @@ func NewMetadataUpdater(
 	}
 }
 
-// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) UpsertDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType, comment string,
-) error {
-	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
-	_, err := ie.ExecEx(context.Background(),
-		fmt.Sprintf("upsert-%s-comment", commentType),
-		mu.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-		commentType,
-		id,
-		subID,
-		comment,
-	)
-	return err
-}
-
-// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) DeleteDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType,
-) error {
-	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
-	_, err := ie.ExecEx(context.Background(),
-		fmt.Sprintf("delete-%s-comment", commentType),
-		mu.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"DELETE FROM system.comments WHERE object_id = $1 AND sub_id = $2 AND "+
-			"type = $3;",
-		id,
-		subID,
-		commentType,
-	)
-	return err
-}
-
-// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) DeleteAllCommentsForTables(idSet catalog.DescriptorIDSet) error {
-	if idSet.Empty() {
-		return nil
-	}
-	var buf strings.Builder
-	ids := idSet.Ordered()
-	_, _ = fmt.Fprintf(&buf, `
-DELETE FROM system.comments
-      WHERE type IN (%d, %d, %d, %d)
-        AND object_id IN (%d`,
-		keys.TableCommentType, keys.ColumnCommentType, keys.ConstraintCommentType,
-		keys.IndexCommentType, ids[0],
-	)
-	for _, id := range ids[1:] {
-		_, _ = fmt.Fprintf(&buf, ", %d", id)
-	}
-	buf.WriteString(")")
-	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
-	_, err := ie.ExecEx(context.Background(),
-		"delete-all-comments-for-tables",
-		mu.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		buf.String(),
-	)
-	return err
-}
-
-// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) UpsertConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
-) error {
-	return mu.UpsertDescriptorComment(int64(tableID), int64(constraintID), keys.ConstraintCommentType, comment)
-}
-
-// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) DeleteConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID,
-) error {
-	return mu.DeleteDescriptorComment(int64(tableID), int64(constraintID), keys.ConstraintCommentType)
-}
-
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
 func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
 	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
@@ -180,25 +100,6 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 	}
 	desc.MaybeIncrementVersion()
 	return mu.descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, mu.txn)
-}
-
-// SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) SwapDescriptorSubComment(
-	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
-) error {
-	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
-	_, err := ie.ExecEx(context.Background(),
-		fmt.Sprintf("upsert-%s-comment", commentType),
-		mu.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"UPDATE system.comments  SET sub_id= $1 WHERE "+
-			"object_id = $2 AND sub_id = $3 AND type = $4",
-		newSubID,
-		id,
-		oldSubID,
-		commentType,
-	)
-	return err
 }
 
 // DeleteSchedule implement scexec.DescriptorMetadataUpdater.

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
@@ -544,37 +544,16 @@ func (p *planner) copySplitPointsToNewIndexes(
 func (p *planner) reassignIndexComments(
 	ctx context.Context, table *tabledesc.Mutable, indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
-	// Check if there are any index comments that need to be updated.
-	row, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
-		ctx,
-		"update-table-comments",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
-		table.ID,
-		keys.IndexCommentType,
-	)
-	if err != nil {
-		return err
-	}
-	if row == nil {
-		return errors.New("failed to update table comments")
-	}
-	if int(tree.MustBeDInt(row[0])) > 0 {
-		for old, new := range indexIDMapping {
-			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-				ctx,
-				"update-table-comments",
-				p.txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
-				new,
-				old,
-				table.ID,
-				keys.IndexCommentType,
-			); err != nil {
-				return err
-			}
+	for old, new := range indexIDMapping {
+		cmt, found := p.descCollection.GetComment(catalogkeys.MakeCommentKey(uint32(table.GetID()), uint32(old), catalogkeys.IndexCommentType))
+		if !found {
+			continue
+		}
+		if err := p.deleteComment(ctx, table.GetID(), uint32(old), catalogkeys.IndexCommentType); err != nil {
+			return err
+		}
+		if err := p.updateComment(ctx, table.GetID(), uint32(new), catalogkeys.IndexCommentType, cmt); err != nil {
+			return err
 		}
 	}
 	return nil

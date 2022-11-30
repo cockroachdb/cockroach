@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -63,6 +63,8 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		dbZoneConfigsToDelete,
 		mvs.modifiedDescriptors,
 		mvs.drainedNames,
+		mvs.commentsToUpdate,
+		mvs.tableCommentsToDelete,
 		deps.Catalog(),
 	); err != nil {
 		return err
@@ -96,6 +98,8 @@ func performBatchedCatalogWrites(
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
 	modifiedDescriptors nstree.IDMap,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
+	commentsToUpdate []commentToUpdate,
+	tableCommentsToDelete catalog.DescriptorIDSet,
 	cat Catalog,
 ) error {
 	b := cat.NewCatalogChangeBatcher()
@@ -128,6 +132,30 @@ func performBatchedCatalogWrites(
 		dbZoneConfigsToDelete.ForEach(func(id descpb.ID) {
 			if err == nil {
 				err = b.DeleteZoneConfig(ctx, id)
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	{
+		for _, u := range commentsToUpdate {
+			if len(u.comment) > 0 {
+				if err := b.UpdateComment(ctx, catalogkeys.MakeCommentKey(uint32(u.id), uint32(u.subID), u.commentType), u.comment); err != nil {
+					return err
+				}
+			} else {
+				if err := b.DeleteComment(ctx, catalogkeys.MakeCommentKey(uint32(u.id), uint32(u.subID), u.commentType)); err != nil {
+					return err
+				}
+			}
+		}
+
+		var err error
+		tableCommentsToDelete.ForEach(func(id descpb.ID) {
+			if err == nil {
+				err = b.DeleteTableComments(ctx, id)
 			}
 		})
 		if err != nil {
@@ -255,37 +283,6 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 func updateDescriptorMetadata(
 	ctx context.Context, mvs *mutationVisitorState, m DescriptorMetadataUpdater,
 ) error {
-	for _, comment := range mvs.commentsToUpdate {
-		if len(comment.comment) > 0 {
-			if err := m.UpsertDescriptorComment(
-				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
-				return err
-			}
-		} else {
-			if err := m.DeleteDescriptorComment(
-				comment.id, comment.subID, comment.commentType); err != nil {
-				return err
-			}
-		}
-	}
-	for _, comment := range mvs.constraintCommentsToUpdate {
-		if len(comment.comment) > 0 {
-			if err := m.UpsertConstraintComment(
-				comment.tblID, comment.constraintID, comment.comment); err != nil {
-				return err
-			}
-		} else {
-			if err := m.DeleteConstraintComment(
-				comment.tblID, comment.constraintID); err != nil {
-				return err
-			}
-		}
-	}
-	if !mvs.tableCommentsToDelete.Empty() {
-		if err := m.DeleteAllCommentsForTables(mvs.tableCommentsToDelete); err != nil {
-			return err
-		}
-	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
 		err := m.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
 		if err != nil {
@@ -394,7 +391,6 @@ type mutationVisitorState struct {
 	descriptorsToDelete          catalog.DescriptorIDSet
 	commentsToUpdate             []commentToUpdate
 	tableCommentsToDelete        catalog.DescriptorIDSet
-	constraintCommentsToUpdate   []constraintCommentToUpdate
 	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
@@ -404,16 +400,10 @@ type mutationVisitorState struct {
 	gcJobs
 }
 
-type constraintCommentToUpdate struct {
-	tblID        catid.DescID
-	constraintID descpb.ConstraintID
-	comment      string
-}
-
 type commentToUpdate struct {
 	id          int64
 	subID       int64
-	commentType keys.CommentType
+	commentType catalogkeys.CommentType
 	comment     string
 }
 
@@ -503,7 +493,7 @@ func (mvs *mutationVisitorState) DeleteAllTableComments(id descpb.ID) {
 }
 
 func (mvs *mutationVisitorState) AddComment(
-	id descpb.ID, subID int, commentType keys.CommentType, comment string,
+	id descpb.ID, subID int, commentType catalogkeys.CommentType, comment string,
 ) {
 	mvs.commentsToUpdate = append(mvs.commentsToUpdate,
 		commentToUpdate{
@@ -515,7 +505,7 @@ func (mvs *mutationVisitorState) AddComment(
 }
 
 func (mvs *mutationVisitorState) DeleteComment(
-	id descpb.ID, subID int, commentType keys.CommentType,
+	id descpb.ID, subID int, commentType catalogkeys.CommentType,
 ) {
 	mvs.commentsToUpdate = append(mvs.commentsToUpdate,
 		commentToUpdate{
@@ -523,17 +513,6 @@ func (mvs *mutationVisitorState) DeleteComment(
 			subID:       int64(subID),
 			commentType: commentType,
 		})
-}
-
-func (mvs *mutationVisitorState) DeleteConstraintComment(
-	ctx context.Context, tblID descpb.ID, constraintID descpb.ConstraintID,
-) error {
-	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
-		constraintCommentToUpdate{
-			tblID:        tblID,
-			constraintID: constraintID,
-		})
-	return nil
 }
 
 func (mvs *mutationVisitorState) DeleteDatabaseRoleSettings(

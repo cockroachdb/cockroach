@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -74,17 +74,10 @@ type MutationVisitorStateUpdater interface {
 	DeleteAllTableComments(id descpb.ID)
 
 	// DeleteComment removes comments for a descriptor
-	DeleteComment(id descpb.ID, subID int, commentType keys.CommentType)
-
-	// DeleteConstraintComment removes comments for a descriptor
-	DeleteConstraintComment(
-		ctx context.Context,
-		tblID descpb.ID,
-		constraintID descpb.ConstraintID,
-	) error
+	DeleteComment(id descpb.ID, subID int, commentType catalogkeys.CommentType)
 
 	// AddComment adds comments for a descriptor
-	AddComment(id descpb.ID, subID int, commentType keys.CommentType, comment string)
+	AddComment(id descpb.ID, subID int, commentType catalogkeys.CommentType, comment string)
 
 	// DeleteDatabaseRoleSettings removes a database role setting
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error

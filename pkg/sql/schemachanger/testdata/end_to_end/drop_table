@@ -38,6 +38,7 @@ add synthetic descriptor #107:
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 11 MutationType ops
+delete all comments for table descriptor 107
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
@@ -65,7 +66,6 @@ upsert descriptor #107
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
-delete all comments for table descriptors [107]
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [107]
 # end PreCommitPhase

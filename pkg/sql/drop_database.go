@@ -13,10 +13,10 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -219,10 +219,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := metadataUpdater.DeleteDescriptorComment(
-		int64(n.dbDesc.GetID()),
-		0, /* subID */
-		keys.DatabaseCommentType,
+	if err := p.deleteComment(
+		ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
 	); err != nil {
 		return err
 	}

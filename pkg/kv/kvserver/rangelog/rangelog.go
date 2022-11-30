@@ -81,7 +81,7 @@ func (s *Writer) WriteRangeLogEvent(
 		args[5] = tree.NewDString(string(infoBytes))
 	}
 	ba := txn.NewBatch()
-	if err := s.w.Insert(ba, args[:]...); err != nil {
+	if err := s.w.Insert(ctx, ba, false /* kvTrace */, args[:]...); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(
 			err, "failed to encode rangelog index entries",
 		)

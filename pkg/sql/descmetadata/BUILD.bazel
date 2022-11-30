@@ -3,11 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "descmetadata",
-    srcs = [
-        "comment_cache.go",
-        "metadata_updater.go",
-        "zone_config_getter.go",
-    ],
+    srcs = ["metadata_updater.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/descmetadata",
     visibility = ["//visibility:public"],
     deps = [
@@ -16,44 +12,30 @@ go_library(
         "//pkg/kv",
         "//pkg/security/username",
         "//pkg/settings",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessioninit",
         "//pkg/sql/sqlutil",
         "//pkg/util/protoutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "descmetadata_test",
-    srcs = [
-        "comment_cache_test.go",
-        "main_test.go",
-    ],
+    srcs = ["main_test.go"],
     args = ["-test.timeout=295s"],
-    embed = [":descmetadata"],
     deps = [
-        "//pkg/kv",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/sqlutil",
-        "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

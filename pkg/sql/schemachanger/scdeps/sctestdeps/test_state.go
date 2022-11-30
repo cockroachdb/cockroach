@@ -16,15 +16,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
@@ -58,8 +55,8 @@ type TestState struct {
 	// WithTxn method returns.
 	committed, uncommitted nstree.MutableCatalog
 
-	comments                map[descmetadata.CommentKey]string
-	zoneConfigs             map[catid.DescID]*zonepb.ZoneConfig
+	comments                map[catalogkeys.CommentKey]string
+	zoneConfigs             map[catid.DescID]catalog.ZoneConfig
 	currentDatabase         string
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
@@ -196,68 +193,53 @@ func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
 	return s
 }
 
-// LoadCommentsForObjects implements scdecomp.CommentGetter interface.
-func (s *TestState) LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error {
-	return nil
-}
-
 // Get implements DescriptorCommentCache interface.
 func (s *TestState) get(
-	ctx context.Context, objID catid.DescID, subID uint32, commentType keys.CommentType,
-) (comment string, ok bool, err error) {
-	commentKey := descmetadata.CommentKey{
-		ObjectID:    objID,
-		SubID:       subID,
-		CommentType: commentType,
-	}
+	objID catid.DescID, subID uint32, commentType catalogkeys.CommentType,
+) (comment string, ok bool) {
+	commentKey := catalogkeys.MakeCommentKey(uint32(objID), subID, commentType)
 	comment, ok = s.comments[commentKey]
-	return comment, ok, nil
+	return comment, ok
 }
 
 // GetDatabaseComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetDatabaseComment(
-	ctx context.Context, dbID catid.DescID,
-) (comment string, ok bool, err error) {
-	return s.get(ctx, dbID, 0, keys.DatabaseCommentType)
+func (s *TestState) GetDatabaseComment(dbID catid.DescID) (comment string, ok bool) {
+	return s.get(dbID, 0, catalogkeys.DatabaseCommentType)
 }
 
 // GetSchemaComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetSchemaComment(
-	ctx context.Context, schemaID catid.DescID,
-) (comment string, ok bool, err error) {
-	return s.get(ctx, schemaID, 0, keys.SchemaCommentType)
+func (s *TestState) GetSchemaComment(schemaID catid.DescID) (comment string, ok bool) {
+	return s.get(schemaID, 0, catalogkeys.SchemaCommentType)
 }
 
 // GetTableComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetTableComment(
-	ctx context.Context, tableID catid.DescID,
-) (comment string, ok bool, err error) {
-	return s.get(ctx, tableID, 0, keys.TableCommentType)
+func (s *TestState) GetTableComment(tableID catid.DescID) (comment string, ok bool) {
+	return s.get(tableID, 0, catalogkeys.TableCommentType)
 }
 
 // GetColumnComment implements the scdecomp.CommentGetter interface.
 func (s *TestState) GetColumnComment(
-	ctx context.Context, tableID catid.DescID, pgAttrNum catid.PGAttributeNum,
-) (comment string, ok bool, err error) {
-	return s.get(ctx, tableID, uint32(pgAttrNum), keys.ColumnCommentType)
+	tableID catid.DescID, pgAttrNum catid.PGAttributeNum,
+) (comment string, ok bool) {
+	return s.get(tableID, uint32(pgAttrNum), catalogkeys.ColumnCommentType)
 }
 
 // GetIndexComment implements the scdecomp.CommentGetter interface.
 func (s *TestState) GetIndexComment(
-	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
-) (comment string, ok bool, err error) {
-	return s.get(ctx, tableID, uint32(indexID), keys.IndexCommentType)
+	tableID catid.DescID, indexID catid.IndexID,
+) (comment string, ok bool) {
+	return s.get(tableID, uint32(indexID), catalogkeys.IndexCommentType)
 }
 
 // GetConstraintComment implements the scdecomp.CommentGetter interface.
 func (s *TestState) GetConstraintComment(
-	ctx context.Context, tableID catid.DescID, constraintID catid.ConstraintID,
-) (comment string, ok bool, err error) {
-	return s.get(ctx, tableID, uint32(constraintID), keys.ConstraintCommentType)
+	tableID catid.DescID, constraintID catid.ConstraintID,
+) (comment string, ok bool) {
+	return s.get(tableID, uint32(constraintID), catalogkeys.ConstraintCommentType)
 }
 
-// DescriptorCommentCache implements scbuild.Dependencies interface.
-func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
+// DescriptorCommentGetter implements scbuild.Dependencies interface.
+func (s *TestState) DescriptorCommentGetter() scbuild.CommentGetter {
 	return s
 }
 

@@ -14,13 +14,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -503,16 +502,9 @@ func (p *planner) dropIndexByName(
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
 
-	metadataUpdater := descmetadata.NewMetadataUpdater(
-		ctx,
-		p.ExecCfg().InternalExecutorFactory,
-		p.Descriptors(),
-		&p.ExecCfg().Settings.SV,
-		p.txn,
-		p.SessionData(),
-	)
-	if err := metadataUpdater.DeleteDescriptorComment(
-		int64(tableDesc.ID), int64(idxDesc.ID), keys.IndexCommentType); err != nil {
+	if err := p.deleteComment(
+		ctx, tableDesc.ID, uint32(idxDesc.ID), catalogkeys.IndexCommentType,
+	); err != nil {
 		return err
 	}
 

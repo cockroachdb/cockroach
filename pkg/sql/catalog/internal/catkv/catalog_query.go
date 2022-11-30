@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,6 +73,10 @@ func (cq catalogQuery) query(
 				err = cq.processNamespaceResultRow(row, out)
 			case keys.DescriptorTableID:
 				err = cq.processDescriptorResultRow(row, out)
+			case keys.CommentsTableID:
+				err = cq.processCommentsResultRow(row, out)
+			case keys.ZonesTableID:
+				err = cq.processZonesResultRow(row, out)
 			default:
 				err = errors.AssertionFailedf("unexpected catalog key %s", row.Key.String())
 			}
@@ -111,6 +117,47 @@ func (cq catalogQuery) processDescriptorResultRow(
 		return wrapError(expectedType, id, err)
 	}
 	cb.UpsertDescriptorEntry(desc)
+	return nil
+}
+
+func (cq catalogQuery) processCommentsResultRow(row kv.KeyValue, cb *nstree.MutableCatalog) error {
+	remaining, cmtKey, err := catalogkeys.DecodeCommentMetadataID(cq.codec, row.Key)
+	if err != nil {
+		return err
+	}
+	_, famID, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return err
+	}
+
+	// Skip the primary column family since only the comment string is interested.
+	if famID != keys.CommentsTableCommentColFamID {
+		return nil
+	}
+	cb.UpsertComment(cmtKey, string(row.ValueBytes()))
+	return nil
+}
+
+func (cq catalogQuery) processZonesResultRow(row kv.KeyValue, cb *nstree.MutableCatalog) error {
+	remaining, id, err := cq.codec.DecodeZoneConfigMetadataID(row.Key)
+	if err != nil {
+		return err
+	}
+	_, famID, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return err
+	}
+
+	// Skip not interested column families or non-existing keys.
+	if famID != keys.ZonesTableConfigColFamID || len(row.ValueBytes()) == 0 {
+		return nil
+	}
+
+	var zoneConfig zonepb.ZoneConfig
+	if err := row.ValueProto(&zoneConfig); err != nil {
+		return errors.Wrapf(err, "decoding zone config for id %d", id)
+	}
+	cb.UpsertZoneConfig(descpb.ID(id), &zoneConfig, row.ValueBytes())
 	return nil
 }
 
