@@ -242,6 +242,29 @@ func NewTestStateReplDistribution(
 	return NewTestState(len(percentOfReplicas), 1, startKeys, replicas, map[Key]StoreID{})
 }
 
+// NewTestStateEvenDistribution returns a new State that may be used for
+// testing, where the replica count per store is equal.
+func NewTestStateEvenDistribution(stores, ranges, replicationFactor, keyspace int) State {
+	distribution := []float64{}
+	frac := 1.0 / float64(stores)
+	for i := 0; i < stores; i++ {
+		distribution = append(distribution, frac)
+	}
+	return NewTestStateReplDistribution(distribution, ranges, replicationFactor, keyspace)
+}
+
+// NewTestStateSkewedDistribution returns a new State that may be used for
+// testing, where the replica count per store is skewed.
+func NewTestStateSkewedDistribution(stores, ranges, replicationFactor, keyspace int) State {
+	distribution := []float64{}
+	rem := ranges
+	for i := 0; i < stores; i++ {
+		rem /= 2
+		distribution = append(distribution, float64(rem))
+	}
+	return NewTestStateReplDistribution(distribution, ranges, replicationFactor, keyspace)
+}
+
 // TestDistributeQPSCounts distributes QPS evenly among the leaseholder
 // replicas on a store, such that the total QPS for the store matches the
 // qpsCounts argument passed in.
@@ -251,15 +274,16 @@ func TestDistributeQPSCounts(s State, qpsCounts []float64) {
 		return
 	}
 
-	ranges := s.Ranges()
 	for x, qpsCount := range qpsCounts {
 		storeID := StoreID(x + 1)
 		lhs := []Range{}
-		for rangeID, replicaID := range stores[storeID].Replicas() {
-			if ranges[rangeID].Leaseholder() == replicaID {
-				lhs = append(lhs, ranges[rangeID])
+		for _, replica := range s.Replicas(storeID) {
+			if replica.HoldsLease() {
+				rng, _ := s.Range(replica.Range())
+				lhs = append(lhs, rng)
 			}
 		}
+
 		qpsPerRange := qpsCount / float64(len(lhs))
 		for _, rng := range lhs {
 			rl := s.ReplicaLoad(rng.RangeID(), storeID)

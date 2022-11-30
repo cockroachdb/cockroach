@@ -53,10 +53,12 @@ func TestRangeSplit(t *testing.T) {
 	// The end key of the lhs should be the start key of the rhs.
 	require.Equal(t, lhs.Descriptor().EndKey, rhs.Descriptor().StartKey)
 	// The lhs inherits the pre-split replicas.
-	require.Equal(t, repl1, lhs.Replicas()[s1.StoreID()])
+	lhsRepl, ok := lhs.Replica(s1.StoreID())
+	require.True(t, ok)
+	require.Equal(t, repl1, lhsRepl)
 	// The rhs should have a replica added to it as well. It should hold the
 	// lease if the lhs replica does.
-	newRepl, ok := rhs.Replicas()[s1.StoreID()]
+	newRepl, ok := rhs.Replica(s1.StoreID())
 	require.True(t, ok)
 	require.Equal(t, repl1.HoldsLease(), newRepl.HoldsLease())
 	// Assert that the lhs now has half the previous load counters.
@@ -232,8 +234,8 @@ func TestAddReplica(t *testing.T) {
 	require.Equal(t, ReplicaID(1), r2repl1.ReplicaID())
 	require.Equal(t, ReplicaID(2), r2repl2.ReplicaID())
 
-	require.Len(t, s1.Replicas(), 2)
-	require.Len(t, s2.Replicas(), 1)
+	require.Len(t, s.Replicas(s1.StoreID()), 2)
+	require.Len(t, s.Replicas(s2.StoreID()), 1)
 }
 
 // TestWorkloadApply asserts that applying workload on a key, will be reflected
@@ -271,10 +273,9 @@ func TestWorkloadApply(t *testing.T) {
 	require.Equal(t, float64(10000), s.ReplicaLoad(r3.RangeID(), s3.StoreID()).Load().WritesPerSecond)
 
 	expectedLoad := roachpb.StoreCapacity{WritesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
-	_ = s.StoreDescriptors()
-	sc1 := s1.Descriptor().Capacity
-	sc2 := s2.Descriptor().Capacity
-	sc3 := s3.Descriptor().Capacity
+	sc1 := Capacity(s, s1.StoreID())
+	sc2 := Capacity(s, s2.StoreID())
+	sc3 := Capacity(s, s3.StoreID())
 
 	// Assert that the store load is also updated upon request GetStoreLoad.
 	require.Equal(t, expectedLoad, sc1)
@@ -332,4 +333,48 @@ func TestKeyTranslation(t *testing.T) {
 			mappedKey,
 		)
 	}
+}
+
+func TestOrderedStateLists(t *testing.T) {
+	assertListsOrdered := func(s State) {
+		rangeIDs := []RangeID{}
+		for _, rng := range s.Ranges() {
+			rangeIDs = append(rangeIDs, rng.RangeID())
+		}
+		require.IsIncreasing(t, rangeIDs, "range list is not sorted %v", rangeIDs)
+
+		storeIDs := []StoreID{}
+		for _, store := range s.Stores() {
+			storeIDs = append(storeIDs, store.StoreID())
+		}
+		require.IsIncreasing(t, storeIDs, "store list is not sorted %v", storeIDs)
+
+		nodeIDs := []NodeID{}
+		for _, node := range s.Nodes() {
+			nodeIDs = append(nodeIDs, node.NodeID())
+		}
+		require.IsIncreasing(t, nodeIDs, "node list is not sorted %v", nodeIDs)
+
+		for _, storeID := range storeIDs {
+			storeRangeIDs := []RangeID{}
+			for _, repl := range s.Replicas(storeID) {
+				storeRangeIDs = append(storeRangeIDs, repl.Range())
+			}
+			require.IsIncreasing(
+				t,
+				storeRangeIDs,
+				"replica (rangeID) list for a store is not sorted %v", storeRangeIDs,
+			)
+		}
+	}
+
+	// Test an empty state, where there should be nothing.
+	s := NewState(config.DefaultSimulationSettings())
+	assertListsOrdered(s)
+	// Test a even distribution with 100 stores, 10k ranges and 1m keyspace.
+	s = NewTestStateEvenDistribution(100, 10000, 3, 1000000)
+	assertListsOrdered(s)
+	// Test a skewed distribution with 100 stores, 10k ranges and 1m keyspace.
+	s = NewTestStateSkewedDistribution(100, 10000, 3, 1000000)
+	assertListsOrdered(s)
 }
