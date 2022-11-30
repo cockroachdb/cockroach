@@ -428,6 +428,16 @@ func (ds *ServerImpl) setupFlow(
 		if req.JobTag != "" {
 			flowCtx.AmbientContext.AddLogTag("job", req.JobTag)
 		}
+		if req.StatementSQL != "" {
+			flowCtx.AmbientContext.AddLogTag("distsql.stmt", req.StatementSQL)
+		}
+		flowCtx.AmbientContext.AddLogTag("distsql.gateway", req.Flow.Gateway)
+		if req.EvalContext.SessionData.ApplicationName != "" {
+			flowCtx.AmbientContext.AddLogTag("distsql.appname", req.EvalContext.SessionData.ApplicationName)
+		}
+		if leafTxn != nil {
+			flowCtx.AmbientContext.AddLogTag("distsql.txn", leafTxn.ID())
+		}
 		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
