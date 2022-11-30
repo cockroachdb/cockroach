@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -298,13 +299,13 @@ func (r Result) format(w *strings.Builder) {
 		errString = fmt.Sprint(err)
 	case ResultType_Keys:
 		for _, k := range r.Keys {
-			sl = append(sl, string(k))
+			sl = append(sl, roachpb.Key(k).String())
 		}
 	case ResultType_Value:
 		sl = append(sl, mustGetStringValue(r.Value))
 	case ResultType_Values:
 		for _, kv := range r.Values {
-			sl = append(sl, fmt.Sprintf(`%s:%s`, kv.Key, mustGetStringValue(kv.Value)))
+			sl = append(sl, fmt.Sprintf(`%s:%s`, roachpb.Key(kv.Key), mustGetStringValue(kv.Value)))
 		}
 	default:
 		panic("unhandled ResultType")
