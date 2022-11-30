@@ -464,9 +464,9 @@ func (v *validator) processOp(op Operation) {
 		}
 	case *DeleteRangeUsingTombstoneOperation:
 		if v.checkNonAmbError(op, t.Result, func(err error) bool {
-			// TODO(during review): is it "wanted" that an unhandled WTO can bubble up
-			// here?
-			return errors.HasType(err, (*roachpb.AmbiguousResultError)(nil))
+			// TODO(during review): is it "wanted" that an unhandled retry error (a
+			// WriteTooOldError) can bubble up here?
+			return errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil))
 		}) {
 			break
 		}
