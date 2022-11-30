@@ -193,3 +193,123 @@ vectorized: true
   table: pg_class@pg_class_oid_idx
   spans: [/50 - /50]
   limit: 1
+
+# Regression test for not projecting away looked up columns by the left semi
+# virtual lookup join (#91012).
+statement ok
+CREATE TABLE t91012 (id INT, a_id INT);
+
+query T
+EXPLAIN SELECT
+    *
+FROM
+    pg_class AS t INNER JOIN pg_attribute AS a ON t.oid = a.attrelid
+WHERE
+    a.attnotnull = 'f'
+    AND a.attname = 'a_id'
+    AND t.relname = 't91012'
+    AND a.atttypid IN (SELECT oid FROM pg_type WHERE typname = ANY (ARRAY['int8']));
+----
+distribution: local
+vectorized: true
+·
+• virtual table lookup join
+│ table: pg_class@pg_class_oid_idx
+│ equality: (attrelid) = (oid)
+│ pred: relname = 't91012'
+│
+└── • virtual table lookup join (semi)
+    │ table: pg_type@pg_type_oid_idx
+    │ equality: (atttypid) = (oid)
+    │ pred: typname = 'int8'
+    │
+    └── • filter
+        │ filter: (NOT attnotnull) AND (attname = 'a_id')
+        │
+        └── • virtual table
+              table: pg_attribute@primary
+
+# Same query, but with left anti join instead.
+query T
+EXPLAIN SELECT
+    *
+FROM
+    pg_class AS t INNER JOIN pg_attribute AS a ON t.oid = a.attrelid
+WHERE
+    a.attnotnull = 'f'
+    AND a.attname = 'a_id'
+    AND t.relname = 't91012'
+    AND NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = ANY (ARRAY['typefoo']) AND a.atttypid = oid);
+----
+distribution: local
+vectorized: true
+·
+• virtual table lookup join
+│ table: pg_class@pg_class_oid_idx
+│ equality: (attrelid) = (oid)
+│ pred: relname = 't91012'
+│
+└── • virtual table lookup join (anti)
+    │ table: pg_type@pg_type_oid_idx
+    │ equality: (atttypid) = (oid)
+    │ pred: typname = 'typefoo'
+    │
+    └── • filter
+        │ filter: (NOT attnotnull) AND (attname = 'a_id')
+        │
+        └── • virtual table
+              table: pg_attribute@primary
+
+# Regression test for incorrectly handling left anti virtual lookup joins
+# (#88096).
+statement ok
+CREATE TYPE mytype AS enum('hello')
+
+query T
+EXPLAIN SELECT
+    *
+FROM
+    pg_type AS t
+WHERE
+    t.typrelid = 0
+    AND NOT EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+    AND t.typname LIKE 'myt%';
+----
+distribution: local
+vectorized: true
+·
+• virtual table lookup join (anti)
+│ table: pg_type@pg_type_oid_idx
+│ equality: (typelem) = (oid)
+│ pred: typarray = oid
+│
+└── • filter
+    │ filter: (typrelid = 0) AND (typname LIKE 'myt%')
+    │
+    └── • virtual table
+          table: pg_type@primary
+
+# Same query, but with left semi join instead.
+query T
+EXPLAIN SELECT
+    *
+FROM
+    pg_type AS t
+WHERE
+    t.typrelid = 0
+    AND EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+    AND t.typname LIKE 'myt%';
+----
+distribution: local
+vectorized: true
+·
+• virtual table lookup join (semi)
+│ table: pg_type@pg_type_oid_idx
+│ equality: (typelem) = (oid)
+│ pred: typarray = oid
+│
+└── • filter
+    │ filter: (typrelid = 0) AND (typname LIKE 'myt%')
+    │
+    └── • virtual table
+          table: pg_type@primary
