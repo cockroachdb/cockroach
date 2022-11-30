@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -41,6 +42,9 @@ func Build(
 		"building declarative schema change targets for %s",
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
+	if len(initial.Current) > 0 {
+		log.Errorf(ctx, "PREVIOUS STATE WAS: %v", initial)
+	}
 	initial = initial.DeepCopy()
 	bs := newBuilderState(ctx, dependencies, initial)
 	els := newEventLogState(dependencies, initial, n)
