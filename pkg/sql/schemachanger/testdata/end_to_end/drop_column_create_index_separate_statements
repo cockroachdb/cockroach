@@ -346,7 +346,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 12 MutationType ops
+## PostCommitPhase stage 8 of 15 with 13 MutationType ops
 upsert descriptor #104
   ...
      - direction: ADD
@@ -450,7 +450,7 @@ upsert descriptor #104
   +      - k
   +      keySuffixColumnIds:
   +      - 1
-  +      name: crdb_internal_index_5_name_placeholder
+  +      name: idx
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnNames: []
@@ -461,7 +461,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 4
+  +      constraintId: 5
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -487,7 +487,7 @@ upsert descriptor #104
      name: t
      nextColumnId: 5
   -  nextConstraintId: 4
-  +  nextConstraintId: 5
+  +  nextConstraintId: 6
      nextFamilyId: 1
   -  nextIndexId: 5
   +  nextIndexId: 7
@@ -602,7 +602,7 @@ begin transaction #17
 validate forward indexes [5] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX
@@ -676,11 +676,11 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-         constraintId: 4
+  -      constraintId: 4
   -      createdAtNanos: "1640998800000000000"
-         createdExplicitly: true
-         foreignKey: {}
-         geoConfig: {}
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
   -      id: 5
   -      interleave: {}
   -      keyColumnDirections:
@@ -691,7 +691,7 @@ upsert descriptor #104
   -      - k
   -      keySuffixColumnIds:
   -      - 1
-  -      name: crdb_internal_index_5_name_placeholder
+  -      name: idx
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnNames: []
@@ -701,12 +701,8 @@ upsert descriptor #104
   -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
-  -      constraintId: 4
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-         id: 6
-         interleave: {}
+         constraintId: 5
+         createdExplicitly: true
   ...
          version: 4
        mutationId: 1
@@ -719,6 +715,8 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "11"
   +  version: "12"
+write *eventpb.CreateIndex to event log: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
+adding table for stats refresh: 104
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 11 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
@@ -865,7 +863,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 4
+  -      constraintId: 5
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

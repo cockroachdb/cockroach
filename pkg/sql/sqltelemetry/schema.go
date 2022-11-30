@@ -92,6 +92,12 @@ var (
 	ExpressionIndexCounter = telemetry.GetCounterOnce("sql.schema.expression_index")
 )
 
+// SchemaChangeIndexCounter is to be incremented for certain CREATE
+// index operations.
+func SchemaChangeIndexCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema.%s_index", typ))
+}
+
 var (
 	// TempObjectCleanerDeletionCounter is to be incremented every time a temporary schema
 	// has been deleted by the temporary object cleaner.

@@ -24,7 +24,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
            │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-           └── 13 Mutation operations
+           └── 15 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
                 ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_id...","TableID":104}
                 ├── SetIndexName {"IndexID":2,"Name":"t_expr_k_idx","TableID":104}
@@ -33,6 +33,8 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
                 ├── RefreshStats {"TableID":104}
                 ├── MakeWriteOnlyColumnPublic {"ColumnID":4,"TableID":104}
                 ├── RefreshStats {"TableID":104}
+                ├── RefreshStats {"TableID":104}
+                ├── LogEvent {"TargetStatus":2}
                 ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}

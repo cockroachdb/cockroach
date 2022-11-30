@@ -69,7 +69,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, on: true, extraChecks: alterTableIsSupported},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: false, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
 	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, on: true, minSupportedClusterVersion: clusterversion.V22_1},
 	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, on: true, minSupportedClusterVersion: clusterversion.V22_1},

@@ -133,6 +133,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
@@ -247,6 +248,10 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB = tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off';")
+	require.NoError(t, err)
 	sqlRunner = sqlutils.MakeSQLRunner(sqlDB)
 	sqlRunner.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v INT)`)
 	sqlRunner.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;`, chunkSize))
@@ -341,6 +346,10 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
+	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+	require.NoError(t, err)
 
 	splitTemporaryIndex = func() error {
 		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
@@ -577,6 +586,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 	require.NoError(t, err)
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {

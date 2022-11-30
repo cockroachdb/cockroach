@@ -204,7 +204,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'create_index'
   AND info::JSONB->>'Statement' LIKE 'CREATE INDEX ON%'
 ----
-1  {"EventType": "create_index", "IndexName": "a_val_idx", "MutationID": 3, "Statement": "CREATE INDEX ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
+1  {"EventType": "create_index", "IndexName": "a_val_idx", "MutationID": 2, "Statement": "CREATE INDEX ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -213,7 +213,7 @@ ORDER BY "timestamp", info
 ----
 1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 1}
 1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 2}
-1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 3}
+1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 2}
 
 
 # Drop the index
@@ -226,7 +226,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eve
 WHERE "eventType" = 'drop_index'
   AND info::JSONB->>'Statement' LIKE 'DROP INDEX%a_foo'
 ----
-1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 4, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "Tag": "DROP INDEX", "User": "root"}
+1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 2, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "Tag": "DROP INDEX", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -235,8 +235,8 @@ ORDER BY "timestamp", info
 ----
 1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 1}
 1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 2}
-1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 3}
-1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 4}
+1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 2}
+1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 2}
 
 # Truncate a table
 ##################

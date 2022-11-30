@@ -13,6 +13,7 @@ package scdecomp
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -268,6 +270,11 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		ObjectID:       tbl.GetID(),
 		ParentSchemaID: tbl.GetParentSchemaID(),
 	})
+	if tbl.IsPartitionAllBy() {
+		w.ev(descriptorStatus(tbl), &scpb.TablePartitioning{
+			TableID: tbl.GetID(),
+		})
+	}
 	if l := tbl.GetLocalityConfig(); l != nil {
 		w.walkLocality(tbl, l)
 	}
@@ -477,6 +484,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 	}
 	{
 		cpy := idx.IndexDescDeepCopy()
+
 		index := scpb.Index{
 			TableID:             tbl.GetID(),
 			IndexID:             idx.GetID(),
@@ -486,7 +494,14 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			ConstraintID:        idx.GetConstraintID(),
 			IsNotVisible:        idx.IsNotVisible(),
 		}
+		if geoConfig := idx.GetGeoConfig(); !geoConfig.IsEmpty() {
+			index.GeoConfig = protoutil.Clone(&geoConfig).(*geoindex.Config)
+		}
 		for i, c := range cpy.KeyColumnIDs {
+			invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
+			if index.IsInverted && c == idx.InvertedColumnID() {
+				invertedKind = idx.InvertedColumnKind()
+			}
 			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{
 				TableID:       tbl.GetID(),
 				IndexID:       idx.GetID(),
@@ -494,6 +509,8 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 				OrdinalInKind: uint32(i),
 				Kind:          scpb.IndexColumn_KEY,
 				Direction:     cpy.KeyColumnDirections[i],
+				Implicit:      i < idx.ImplicitPartitioningColumnCount(),
+				InvertedKind:  invertedKind,
 			})
 		}
 		for i, c := range cpy.KeySuffixColumnIDs {

@@ -375,7 +375,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 106, Name: test_pkey, IndexID: 4}
     │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │     rule: "index named right before index becomes public"
+    │   │   │   │     rule: "primary index named right before index becomes public"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
     │   │   │   │     rule: "index dependents exist before index becomes public"

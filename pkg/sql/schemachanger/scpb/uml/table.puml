@@ -111,6 +111,10 @@ object TableData
 TableData :  TableID
 TableData :  DatabaseID
 
+object TablePartitioning
+
+TablePartitioning :  TableID
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -203,6 +207,8 @@ IndexColumn :  ColumnID
 IndexColumn :  OrdinalInKind
 IndexColumn :  Kind
 IndexColumn :  Direction
+IndexColumn :  Implicit
+IndexColumn :  InvertedKind
 
 object IndexData
 
@@ -300,6 +306,7 @@ View <|-- TableZoneConfig
 Table <|-- TableData
 View <|-- TableData
 Sequence <|-- TableData
+Table <|-- TablePartitioning
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion

@@ -149,6 +149,7 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     constraintId: 1
+    geoConfig: null
     indexId: 1
     isConcurrently: false
     isCreatedExplicitly: false
@@ -162,6 +163,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 0
+    geoConfig: null
     indexId: 2
     isConcurrently: false
     isCreatedExplicitly: false
@@ -459,7 +461,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: KEY
     ordinalInKind: 0
     tableId: 108
@@ -467,7 +471,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 2
+    invertedKind: 0
     kind: KEY_SUFFIX
     ordinalInKind: 0
     tableId: 108
@@ -475,7 +481,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: STORED
     ordinalInKind: 0
     tableId: 108
@@ -483,7 +491,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 2
+    invertedKind: 0
     kind: KEY
     ordinalInKind: 0
     tableId: 108
@@ -491,7 +501,9 @@ ElementState:
 - IndexColumn:
     columnId: 4
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: STORED
     ordinalInKind: 1
     tableId: 108
@@ -499,7 +511,9 @@ ElementState:
 - IndexColumn:
     columnId: 5
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: STORED
     ordinalInKind: 2
     tableId: 108

@@ -25,7 +25,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
     │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │     rule: "index named right before index becomes public"
+    │   │   │   │     rule: "primary index named right before index becomes public"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "primary index swap"
@@ -33,7 +33,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │   │   └── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
     │   │         ABSENT → PUBLIC
     │   │
-    │   ├── • 15 elements transitioning toward ABSENT
+    │   ├── • 16 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -131,6 +131,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │   │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_j_key, IndexID: 4}
     │   │   │         rule: "dependents removed before index"
     │   │   │
+    │   │   ├── • IndexName:{DescID: 106, Name: tbl_j_key, IndexID: 4}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
@@ -152,7 +155,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
-    │   └── • 12 Mutation operations
+    │   └── • 13 Mutation operations
     │       │
     │       ├── • SetIndexName
     │       │     IndexID: 1
@@ -181,6 +184,28 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 4
+    │       │     Name: crdb_internal_index_4_name_placeholder
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 5
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeValidatedPrimaryIndexPublic
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+    │       │         now()) AS INT8)
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
     │       ├── • LogEvent
     │       │     Element:
     │       │       SecondaryIndex:
@@ -203,23 +228,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 4
-    │       │     TableID: 106
-    │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 5
-    │       │     TableID: 106
-    │       │
-    │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-    │       │         now()) AS INT8)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     IndexID: 1
     │       │     TableID: 106
     │       │
     │       ├── • SetJobStateOnDescriptor

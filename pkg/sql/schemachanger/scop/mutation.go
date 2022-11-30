@@ -615,21 +615,23 @@ type RefreshStats struct {
 // the index.
 type AddColumnToIndex struct {
 	mutationOp
-	TableID   descpb.ID
-	ColumnID  descpb.ColumnID
-	IndexID   descpb.IndexID
-	Kind      scpb.IndexColumn_Kind
-	Direction catpb.IndexColumn_Direction
-	Ordinal   uint32
+	TableID      descpb.ID
+	ColumnID     descpb.ColumnID
+	IndexID      descpb.IndexID
+	Kind         scpb.IndexColumn_Kind
+	Direction    catpb.IndexColumn_Direction
+	Ordinal      uint32
+	InvertedKind catpb.InvertedIndexColumnKind
 }
 
 // RemoveColumnFromIndex mutates an index to removed a column from it.
 // The column should already exist on the table and so should the index.
 type RemoveColumnFromIndex struct {
 	mutationOp
-	TableID  descpb.ID
-	ColumnID descpb.ColumnID
-	IndexID  descpb.IndexID
-	Kind     scpb.IndexColumn_Kind
-	Ordinal  uint32
+	TableID      descpb.ID
+	ColumnID     descpb.ColumnID
+	IndexID      descpb.IndexID
+	Kind         scpb.IndexColumn_Kind
+	Ordinal      uint32
+	InvertedKind catpb.InvertedIndexColumnKind
 }

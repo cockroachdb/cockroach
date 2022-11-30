@@ -722,7 +722,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 - from: [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [index dependents exist before index becomes public; index named right before index becomes public]
+  rules: [index dependents exist before index becomes public; primary index named right before index becomes public]
 - from: [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -1700,7 +1700,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 - from: [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [index dependents exist before index becomes public; index named right before index becomes public]
+  rules: [index dependents exist before index becomes public; primary index named right before index becomes public]
 - from: [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   kind: Precedence

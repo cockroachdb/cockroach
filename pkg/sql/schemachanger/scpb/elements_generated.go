@@ -1350,6 +1350,37 @@ func FindTableLocalitySecondaryRegion(b ElementStatusIterator) (current Status, 
 	return current, target, element
 }
 
+func (e TablePartitioning) element() {}
+
+// ForEachTablePartitioning iterates over elements of type TablePartitioning.
+func ForEachTablePartitioning(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TablePartitioning),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TablePartitioning); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTablePartitioning finds the first element of type TablePartitioning.
+func FindTablePartitioning(b ElementStatusIterator) (current Status, target TargetStatus, element *TablePartitioning) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TablePartitioning); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e TableZoneConfig) element() {}
 
 // ForEachTableZoneConfig iterates over elements of type TableZoneConfig.

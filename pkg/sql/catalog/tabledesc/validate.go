@@ -1534,7 +1534,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	}
 
 	if part.NumLists() == 0 && part.NumRanges() == 0 {
-		return errors.Newf("at least one of LIST or RANGE partitioning must be used")
+		return pgerror.Newf(pgcode.InvalidObjectDefinition, "at least one of LIST or RANGE partitioning must be used")
 	}
 	if part.NumLists() > 0 && part.NumRanges() > 0 {
 		return errors.Newf("only one LIST or RANGE partitioning may used")
@@ -1567,7 +1567,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 		}
 		if indexName, exists := partitionNames[name]; exists {
 			if indexName == idx.GetName() {
-				return errors.Newf("PARTITION %s: name must be unique (used twice in index %q)",
+				return pgerror.Newf(pgcode.InvalidObjectDefinition, "PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
 		}

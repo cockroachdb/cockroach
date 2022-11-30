@@ -238,6 +238,7 @@ func init() {
 				(*scpb.Owner)(nil),
 				(*scpb.UserPrivileges)(nil),
 				(*scpb.EnumTypeValue)(nil),
+				(*scpb.TablePartitioning)(nil),
 			),
 
 			joinOnDescID(desc, dep, descID),

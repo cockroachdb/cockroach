@@ -11,7 +11,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 12 elements transitioning toward ABSENT
+    │   ├── • 13 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ MERGE_ONLY → DELETE_ONLY
@@ -79,13 +79,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
-    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
-    │   │       │ PUBLIC → ABSENT
-    │   │       │
-    │   │       └── • skip PUBLIC → ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   └── • IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
+    │   │         PUBLIC → ABSENT
     │   │
-    │   └── • 6 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
@@ -93,6 +96,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 4
+    │       │     Name: crdb_internal_index_4_name_placeholder
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly

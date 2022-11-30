@@ -27,6 +27,8 @@ go_library(
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/docs",
+        "//pkg/geo/geoindex",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
@@ -54,6 +56,8 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/storageparam",
+        "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",

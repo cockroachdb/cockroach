@@ -520,6 +520,56 @@ func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s i
 	return s
 }
 
+// makeTempIndexSpec clones the primary/secondary index spec into one for a
+// temporary index, based on the populated information.
+func makeTempIndexSpec(src indexSpec) indexSpec {
+	if src.secondary == nil && src.primary == nil {
+		panic(errors.AssertionFailedf("make temp index converts a primary/secondary index into a temporary one"))
+	}
+	newTempSpec := src.clone()
+	var srcIdx scpb.Index
+	isSecondary := false
+	if src.primary != nil {
+		srcIdx = newTempSpec.primary.Index
+	}
+	if src.secondary != nil {
+		srcIdx = newTempSpec.secondary.Index
+		isSecondary = true
+	}
+	tempID := srcIdx.TemporaryIndexID
+	newTempSpec.temporary = &scpb.TemporaryIndex{
+		Index:                    srcIdx,
+		IsUsingSecondaryEncoding: isSecondary,
+	}
+	newTempSpec.temporary.TemporaryIndexID = 0
+	newTempSpec.temporary.IndexID = tempID
+	newTempSpec.temporary.ConstraintID = srcIdx.ConstraintID + 1
+	newTempSpec.secondary = nil
+	newTempSpec.primary = nil
+
+	// Replace all the index IDs in the clone.
+	if newTempSpec.data != nil {
+		newTempSpec.data.IndexID = tempID
+	}
+	if newTempSpec.partitioning != nil {
+		newTempSpec.partitioning.IndexID = tempID
+	}
+	if newTempSpec.partial != nil {
+		newTempSpec.partial.IndexID = tempID
+	}
+	for _, ic := range newTempSpec.columns {
+		ic.IndexID = tempID
+	}
+	// Clear fields that temporary indexes should not have.
+	newTempSpec.name = nil
+	newTempSpec.constrComment = nil
+	newTempSpec.idxComment = nil
+	newTempSpec.name = nil
+	newTempSpec.secondary = nil
+
+	return newTempSpec
+}
+
 // indexColumnSpec specifies how to construct a scpb.IndexColumn element.
 type indexColumnSpec struct {
 	columnID  catid.ColumnID
@@ -568,13 +618,12 @@ func makeSwapIndexSpec(
 	}
 	// Determine old and new IDs.
 	var inID, tempID catid.IndexID
-	var inConstraintID, tempConstraintID catid.ConstraintID
+	var inConstraintID catid.ConstraintID
 	{
 		_, _, tbl := scpb.FindTable(b.QueryByID(tableID).Filter(notAbsentTargetFilter))
 		inID = b.NextTableIndexID(tbl)
 		inConstraintID = b.NextTableConstraintID(tbl.TableID)
 		tempID = inID + 1
-		tempConstraintID = inConstraintID + 1
 	}
 	// Setup new primary or secondary index.
 	{
@@ -624,32 +673,7 @@ func makeSwapIndexSpec(
 	}
 	// Setup temporary index.
 	{
-		s := in.clone()
-		if isSecondary {
-			temp.temporary = &scpb.TemporaryIndex{Index: s.secondary.Index}
-		} else {
-			temp.temporary = &scpb.TemporaryIndex{Index: s.primary.Index}
-		}
-		temp.temporary.IndexID = tempID
-		temp.temporary.TemporaryIndexID = 0
-		temp.temporary.ConstraintID = tempConstraintID
-		temp.temporary.IsUsingSecondaryEncoding = isSecondary
-		if s.partial != nil {
-			temp.partial = s.partial
-			temp.partial.IndexID = tempID
-		}
-		if s.partitioning != nil {
-			temp.partitioning = s.partitioning
-			temp.partitioning.IndexID = tempID
-		}
-		for _, ic := range s.columns {
-			ic.IndexID = tempID
-		}
-		temp.columns = s.columns
-		if s.data != nil {
-			temp.data = s.data
-			temp.data.IndexID = tempID
-		}
+		temp = makeTempIndexSpec(in)
 	}
 	return in, temp
 }
