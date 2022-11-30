@@ -103,12 +103,28 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 			slowStatements.Add(i)
 		}
 	}
-	if slowStatements.Empty() {
+
+	// So far this is the only case when a transaction is considered slow.
+	// In the future, we may want to make a detector for transactions if there
+	// are more cases.
+	highContention := false
+	if transaction.Contention != nil {
+		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
+	}
+
+	if slowStatements.Empty() && !highContention {
+		// We only record an insight if we have slow statements or high txn contention.
 		return
 	}
+
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
 	insight := makeInsight(sessionID, transaction)
+
+	if highContention {
+		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_SlowExecution)
+		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
+	}
 
 	for i, s := range *statements {
 		if slowStatements.Contains(i) {
