@@ -76,7 +76,9 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
     >
       <Row gutter={24}>
         <Col>
-          <Heading type="h5">{WaitTimeInsightsLabels.SECTION_HEADING}</Heading>
+          <Heading type="h5" className={cx("margin-header")}>
+            {WaitTimeInsightsLabels.SECTION_HEADING}
+          </Heading>
           {showWaitTimeInsightsDetails && (
             <Row gutter={24}>
               {" "}
@@ -124,7 +126,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
           )}
           {blockingExecutions.length > 0 && (
             <Row>
-              <Heading type="h5">
+              <Heading type="h5" className={cx("margin-header")}>
                 {WaitTimeInsightsLabels.BLOCKING_TXNS_TABLE_TITLE(
                   executionID,
                   execType,
@@ -140,7 +142,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
           )}
           {waitingExecutions.length > 0 && (
             <Row>
-              <Heading type="h5">
+              <Heading type="h5" className={cx("margin-header")}>
                 {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
                   executionID,
                   execType,

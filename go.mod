@@ -395,3 +395,5 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
+
+replace google.golang.org/api v0.80.0 => github.com/cockroachdb/google-api-go-client v0.80.1-0.20221117193156-6a9f7150cb93
