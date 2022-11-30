@@ -1200,27 +1200,33 @@ func mustGetStringValue(value []byte) string {
 
 func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTimeSpans {
 	var hist []storage.MVCCValue
+	lowerBound := storage.EncodeMVCCKey(storage.MVCCKey{Key: key})
+	upperBound := storage.EncodeMVCCKey(storage.MVCCKey{Key: key.Next()})
 	iter := b.NewIter(&pebble.IterOptions{
-		KeyTypes: storage.IterKeyTypePointsAndRanges,
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: lowerBound,
+		UpperBound: upperBound,
 	})
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key}))
 
+	iter.SeekGE(lowerBound) // can ignore result because we can HasPointAndRange below which checks validity
 	for ; iter.Valid(); iter.Next() {
-		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
-		if err != nil {
-			panic(err)
-		}
-
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange && iter.RangeKeyChanged() {
-			k, ek := iter.RangeBounds()
-			sp := roachpb.Span{Key: k, EndKey: ek}
+			encK, encEK := iter.RangeBounds()
+			k, err := storage.DecodeMVCCKey(encK)
+			if err != nil {
+				panic(err)
+			}
+			ek, err := storage.DecodeMVCCKey(encEK)
+			if err != nil {
+				panic(err)
+			}
+
+			sp := roachpb.Span{Key: k.Key, EndKey: ek.Key}
 			if !sp.ContainsKey(key) {
-				// If we see a range key that doesn't even contain the key,
-				// we've moved off the key (recall that we seeked to the key
-				// initially).
-				break
+				// We used bounds that should make this impossible.
+				panic(fmt.Sprintf("iterator for %s on non-overlapping range key %s", key, sp))
 			}
 			// Range key contains the key. Emit a point deletion on the key
 			// at the tombstone's timestamp for each active range key.
@@ -1237,8 +1243,14 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 			continue
 		}
 
+		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
+		if err != nil {
+			panic(err)
+		}
+
 		if !mvccKey.Key.Equal(key) {
-			break
+			// We used bounds that should make this impossible.
+			panic("iterator on non-overlapping key")
 		}
 
 		// Handle a point key - put it into `hist`.
