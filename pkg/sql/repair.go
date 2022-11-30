@@ -400,8 +400,13 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		return err
 	}
 	parentID, parentSchemaID, descID := descpb.ID(parentIDInt), descpb.ID(parentSchemaIDInt), descpb.ID(descIDInt)
-	key := catalogkeys.MakeObjectNameKey(p.execCfg.Codec, parentID, parentSchemaID, name)
-	val, err := p.txn.Get(ctx, key)
+	nameInfo := descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}
+	nameKey := catalogkeys.EncodeNameKey(p.execCfg.Codec, &nameInfo)
+	val, err := p.txn.Get(ctx, nameKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read namespace entry (%d, %d, %s)",
 			parentID, parentSchemaID, name)
@@ -489,9 +494,20 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 			return err
 		}
 	}
-	if err := p.txn.Put(ctx, key, descID); err != nil {
-		return err
+
+	{
+		b := p.txn.NewBatch()
+		entry := repairNameEntry{NameInfo: nameInfo, id: descID}
+		if err := p.Descriptors().UpsertNamespaceEntryToBatch(
+			ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), &entry, b,
+		); err != nil {
+			return errors.Wrap(err, "failed to upsert entry")
+		}
+		if err := p.txn.Run(ctx, b); err != nil {
+			return errors.Wrap(err, "failed to upsert entry")
+		}
 	}
+
 	var validationErrStr string
 	if validationErr != nil {
 		validationErrStr = validationErr.Error()
@@ -506,6 +522,18 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 			FailedValidation: validationErr != nil,
 			ValidationErrors: validationErrStr,
 		})
+}
+
+type repairNameEntry struct {
+	descpb.NameInfo
+	id descpb.ID
+}
+
+var _ catalog.NameEntry = &repairNameEntry{}
+
+// GetID is part of the catalog.NameEntry interface.
+func (r repairNameEntry) GetID() descpb.ID {
+	return r.id
 }
 
 // UnsafeDeleteNamespaceEntry powers the repair builtin of the same name. The
@@ -527,8 +555,12 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 		return err
 	}
 	parentID, parentSchemaID, descID := descpb.ID(parentIDInt), descpb.ID(parentSchemaIDInt), descpb.ID(descIDInt)
-	key := catalogkeys.MakeObjectNameKey(p.execCfg.Codec, parentID, parentSchemaID, name)
-	val, err := p.txn.Get(ctx, key)
+	nameInfo := descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}
+	val, err := p.txn.Get(ctx, catalogkeys.EncodeNameKey(p.execCfg.Codec, &nameInfo))
 	if err != nil {
 		return errors.Wrapf(err, "failed to read namespace entry (%d, %d, %s)",
 			parentID, parentSchemaID, name)
@@ -555,7 +587,11 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"refusing to delete namespace entry for non-dropped descriptor")
 	}
-	if _, err := p.txn.Del(ctx, key); err != nil {
+	b := p.txn.NewBatch()
+	if err := p.dropNamespaceEntry(ctx, b, &nameInfo); err != nil {
+		return errors.Wrap(err, "failed to delete entry")
+	}
+	if err := p.txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "failed to delete entry")
 	}
 

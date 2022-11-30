@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -159,7 +158,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := params.p.Descriptors().Direct().LookupObjectID(
+			id, err := params.p.Descriptors().LookupObjectID(
 				params.ctx,
 				params.p.txn,
 				n.dbDesc.GetID(),
@@ -289,19 +288,17 @@ func (n *createViewNode) startExec(params runParams) error {
 					orderedTypeDeps.Add(backrefID)
 				}
 				desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
+				newDesc = &desc
 
 				// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 				// do some basic string formatting (not accurate in the general case).
-				if err = params.p.createDescriptorWithID(
+				if err = params.p.createDescriptor(
 					params.ctx,
-					catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.viewName.Table()),
-					id,
-					&desc,
+					newDesc,
 					fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
 				); err != nil {
 					return err
 				}
-				newDesc = &desc
 			}
 
 			// Persist the back-references in all referenced table descriptors.

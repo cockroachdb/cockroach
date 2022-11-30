@@ -107,11 +107,8 @@ func (ud *uncommittedDescriptors) getUncommittedMutableByID(
 // it exists.
 func (ud *uncommittedDescriptors) getUncommittedByName(
 	parentID, parentSchemaID descpb.ID, name string,
-) catalog.Descriptor {
-	if e := ud.uncommitted.GetByName(parentID, parentSchemaID, name); e != nil {
-		return e.(catalog.Descriptor)
-	}
-	return nil
+) catalog.NameEntry {
+	return ud.uncommitted.GetByName(parentID, parentSchemaID, name)
 }
 
 // iterateUncommittedByID applies fn to the uncommitted descriptors in ascending

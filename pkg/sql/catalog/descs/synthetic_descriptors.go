@@ -33,11 +33,8 @@ func (sd *syntheticDescriptors) reset() {
 
 func (sd *syntheticDescriptors) getSyntheticByName(
 	dbID descpb.ID, schemaID descpb.ID, name string,
-) catalog.Descriptor {
-	if entry := sd.descs.GetByName(dbID, schemaID, name); entry != nil {
-		return entry.(catalog.Descriptor)
-	}
-	return nil
+) catalog.NameEntry {
+	return sd.descs.GetByName(dbID, schemaID, name)
 }
 
 func (sd *syntheticDescriptors) getSyntheticByID(id descpb.ID) catalog.Descriptor {

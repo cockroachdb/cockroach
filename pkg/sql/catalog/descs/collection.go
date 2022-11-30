@@ -229,7 +229,7 @@ func (tc *Collection) AddUncommittedDescriptor(
 			"cannot add uncommitted %s %q (%d) when a synthetic descriptor with the same name exists",
 			desc.DescriptorType(), desc.GetName(), desc.GetID())
 	}
-	tc.stored.RemoveFromNameIndex(desc)
+	tc.stored.RemoveFromNameIndex(desc.GetID())
 	return tc.uncommitted.upsert(ctx, desc)
 }
 
@@ -238,6 +238,9 @@ func (tc *Collection) AddUncommittedDescriptor(
 func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
+	if desc.GetID() == descpb.InvalidID {
+		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
+	}
 	desc.MaybeIncrementVersion()
 	if !tc.skipValidationOnWrite && tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
@@ -264,9 +267,87 @@ func (tc *Collection) WriteDescToBatch(
 	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), desc.GetID())
 	proto := desc.DescriptorProto()
 	if kvTrace {
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
+		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, proto)
 	}
 	b.CPut(descKey, proto, expected)
+	return nil
+}
+
+// DeleteDescToBatch adds a delete from system.descriptor to the batch.
+func (tc *Collection) DeleteDescToBatch(
+	ctx context.Context, kvTrace bool, id descpb.ID, b *kv.Batch,
+) error {
+	if id == descpb.InvalidID {
+		return errors.AssertionFailedf("cannot delete descriptor with an empty ID: %v", id)
+	}
+	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), id)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Del %s", descKey)
+	}
+	b.Del(descKey)
+	tc.NotifyOfDeletedDescriptor(id)
+	return nil
+}
+
+// InsertNamespaceEntryToBatch adds an insertion into system.namespace to the
+// batch.
+func (tc *Collection) InsertNamespaceEntryToBatch(
+	ctx context.Context, kvTrace bool, e catalog.NameEntry, b *kv.Batch,
+) error {
+	if cachedID := tc.stored.GetCachedIDByName(e); cachedID != descpb.InvalidID {
+		tc.stored.RemoveFromNameIndex(cachedID)
+	}
+	tc.stored.RemoveFromNameIndex(e.GetID())
+	if e.GetName() == "" || e.GetID() == descpb.InvalidID {
+		return errors.AssertionFailedf(
+			"cannot insert namespace entry (%d, %d, %q) -> %d with an empty name or ID",
+			e.GetParentID(), e.GetParentSchemaID(), e.GetName(), e.GetID(),
+		)
+	}
+	nameKey := catalogkeys.EncodeNameKey(tc.codec(), e)
+	if kvTrace {
+		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, e.GetID())
+	}
+	b.CPut(nameKey, e.GetID(), nil /* expValue */)
+	return nil
+}
+
+// UpsertNamespaceEntryToBatch adds an upsert into system.namespace to the
+// batch.
+func (tc *Collection) UpsertNamespaceEntryToBatch(
+	ctx context.Context, kvTrace bool, e catalog.NameEntry, b *kv.Batch,
+) error {
+	if cachedID := tc.stored.GetCachedIDByName(e); cachedID != descpb.InvalidID {
+		tc.stored.RemoveFromNameIndex(cachedID)
+	}
+	tc.stored.RemoveFromNameIndex(e.GetID())
+	if e.GetName() == "" || e.GetID() == descpb.InvalidID {
+		return errors.AssertionFailedf(
+			"cannot upsert namespace entry (%d, %d, %q) -> %d with an empty name or ID",
+			e.GetParentID(), e.GetParentSchemaID(), e.GetName(), e.GetID(),
+		)
+	}
+	nameKey := catalogkeys.EncodeNameKey(tc.codec(), e)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %d", nameKey, e.GetID())
+	}
+	b.Put(nameKey, e.GetID())
+	return nil
+}
+
+// DeleteNamespaceEntryToBatch adds a deletion from system.namespace to the
+// batch.
+func (tc *Collection) DeleteNamespaceEntryToBatch(
+	ctx context.Context, kvTrace bool, k catalog.NameKey, b *kv.Batch,
+) error {
+	if cachedID := tc.stored.GetCachedIDByName(k); cachedID != descpb.InvalidID {
+		tc.stored.RemoveFromNameIndex(cachedID)
+	}
+	nameKey := catalogkeys.EncodeNameKey(tc.codec(), k)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Del %s", nameKey)
+	}
+	b.Del(nameKey)
 	return nil
 }
 
@@ -279,6 +360,119 @@ func (tc *Collection) WriteDesc(
 		return err
 	}
 	return txn.Run(ctx, b)
+}
+
+// LookupDatabaseID returns the descriptor ID assigned to a database name.
+func (tc *Collection) LookupDatabaseID(
+	ctx context.Context, txn *kv.Txn, dbName string,
+) (descpb.ID, error) {
+	// First look up in-memory descriptors in collection,
+	// except for leased descriptors.
+	dbInMemory, err := func() (catalog.Descriptor, error) {
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidStorage:   true,
+			IncludeOffline: true,
+		}
+		return tc.getDescriptorByName(
+			ctx, txn, nil /* db */, nil /* sc */, dbName, flags, catalog.Database,
+		)
+	}()
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
+		// Swallow these errors to fall back to storage lookup.
+		err = nil
+	}
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if dbInMemory != nil {
+		return dbInMemory.GetID(), nil
+	}
+	// Look up database ID in storage if nothing was found in memory.
+	return tc.stored.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
+}
+
+// LookupSchemaID returns the descriptor ID assigned to a schema name.
+func (tc *Collection) LookupSchemaID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
+) (descpb.ID, error) {
+	// First look up in-memory descriptors in collection,
+	// except for leased descriptors.
+	scInMemory, err := func() (catalog.Descriptor, error) {
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidStorage:   true,
+			IncludeOffline: true,
+		}
+		var parentDescs [1]catalog.Descriptor
+		if err := getDescriptorsByID(ctx, tc, txn, flags, parentDescs[:], dbID); err != nil {
+			return nil, err
+		}
+		db, err := catalog.AsDatabaseDescriptor(parentDescs[0])
+		if err != nil {
+			return nil, err
+		}
+		return tc.getDescriptorByName(
+			ctx, txn, db, nil /* sc */, schemaName, flags, catalog.Schema,
+		)
+	}()
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
+		// Swallow these errors to fall back to storage lookup.
+		err = nil
+	}
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if scInMemory != nil {
+		return scInMemory.GetID(), nil
+	}
+	// Look up schema ID in storage if nothing was found in memory.
+	return tc.stored.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schemaName)
+}
+
+// LookupObjectID returns the descriptor ID assigned to an object name.
+func (tc *Collection) LookupObjectID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaID descpb.ID, objectName string,
+) (descpb.ID, error) {
+	// First look up in-memory descriptors in collection,
+	// except for leased descriptors.
+	objInMemory, err := func() (catalog.Descriptor, error) {
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidStorage:   true,
+			IncludeOffline: true,
+		}
+		var parentDescs [2]catalog.Descriptor
+		if err := getDescriptorsByID(ctx, tc, txn, flags, parentDescs[:], dbID, schemaID); err != nil {
+			return nil, err
+		}
+		db, err := catalog.AsDatabaseDescriptor(parentDescs[0])
+		if err != nil {
+			return nil, err
+		}
+		sc, err := catalog.AsSchemaDescriptor(parentDescs[1])
+		if err != nil {
+			return nil, err
+		}
+		return tc.getDescriptorByName(
+			ctx, txn, db, sc, objectName, flags, catalog.Any,
+		)
+	}()
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
+		// Swallow these errors to fall back to storage lookup.
+		err = nil
+	}
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if objInMemory != nil {
+		return objInMemory.GetID(), nil
+	}
+	// Look up ID in storage if nothing was found in memory.
+	return tc.stored.LookupDescriptorID(ctx, txn, dbID, schemaID, objectName)
 }
 
 // GetOriginalPreviousIDVersionsForUncommitted returns all the IDVersion

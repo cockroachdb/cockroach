@@ -202,7 +202,6 @@ var _ planNode = &renameColumnNode{}
 var _ planNode = &renameDatabaseNode{}
 var _ planNode = &renameIndexNode{}
 var _ planNode = &renameTableNode{}
-var _ planNode = &reparentDatabaseNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &RevokeRoleNode{}
 var _ planNode = &rowCountNode{}
@@ -251,7 +250,6 @@ var _ planNodeReadingOwnWrites = &changeDescriptorBackedPrivilegesNode{}
 var _ planNodeReadingOwnWrites = &dropSchemaNode{}
 var _ planNodeReadingOwnWrites = &dropTypeNode{}
 var _ planNodeReadingOwnWrites = &refreshMaterializedViewNode{}
-var _ planNodeReadingOwnWrites = &reparentDatabaseNode{}
 var _ planNodeReadingOwnWrites = &setZoneConfigNode{}
 
 // planNodeRequireSpool serves as marker for nodes whose parent must

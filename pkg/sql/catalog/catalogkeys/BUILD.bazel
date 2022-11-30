@@ -28,6 +28,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/util/leaktest",
     ],
 )

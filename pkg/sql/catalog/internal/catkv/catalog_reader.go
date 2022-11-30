@@ -160,7 +160,7 @@ func (cr catalogReader) ScanNamespaceForDatabases(
 	ctx context.Context, txn *kv.Txn,
 ) (nstree.Catalog, error) {
 	return cr.scanNamespace(
-		ctx, txn, catalogkeys.MakeDatabaseNameKey(cr.codec, ""),
+		ctx, txn, catalogkeys.EncodeNameKey(cr.codec, &descpb.NameInfo{}),
 	)
 }
 
@@ -169,7 +169,7 @@ func (cr catalogReader) ScanNamespaceForDatabaseSchemas(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
 	return cr.scanNamespace(
-		ctx, txn, catalogkeys.MakeSchemaNameKey(cr.codec, db.GetID(), "" /* name */),
+		ctx, txn, catalogkeys.EncodeNameKey(cr.codec, &descpb.NameInfo{ParentID: db.GetID()}),
 	)
 }
 
@@ -186,9 +186,10 @@ func (cr catalogReader) ScanNamespaceForDatabaseEntries(
 func (cr catalogReader) ScanNamespaceForSchemaObjects(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 ) (nstree.Catalog, error) {
-	return cr.scanNamespace(ctx, txn, catalogkeys.MakeObjectNameKey(
-		cr.codec, db.GetID(), sc.GetID(), "", /* name */
-	))
+	return cr.scanNamespace(ctx, txn, catalogkeys.EncodeNameKey(cr.codec, &descpb.NameInfo{
+		ParentID:       db.GetID(),
+		ParentSchemaID: sc.GetID(),
+	}))
 }
 
 // GetDescriptorEntries is part of the CatalogReader interface.

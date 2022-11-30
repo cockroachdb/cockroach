@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -223,7 +222,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	tdb.Exec(t, "CREATE SCHEMA db.sc")
 	tdb.Exec(t, "CREATE TABLE db.sc.tab (i INT PRIMARY KEY)")
 	tdb.Exec(t, "CREATE TYPE db.sc.typ AS ENUM ('foo')")
-	lm := s0.LeaseManager().(*lease.Manager)
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	t.Run("database descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
@@ -233,44 +231,40 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			mut, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 
-			resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			dbID := mut.GetID()
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, dbID)
 			require.NoError(t, err)
+			require.Same(t, mut, byID)
 
-			require.Same(t, db, resolved)
-
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, db.GetID())
-			require.NoError(t, err)
-			require.Same(t, db, byID)
-
-			mut := db
 			mut.MaybeIncrementVersion()
-
+			mut.Name = "new_name"
 			flags.RequireMutable = false
 
+			// Check that changes to the mutable descriptor don't impact the
+			// collection until they're added as uncommitted
 			immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
+			require.Equal(t, dbID, immByName.GetID())
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
-			_, immByID, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
+			_, immByID, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
 			require.NoError(t, err)
 			require.Same(t, immByName, immByID)
 
-			mut.Name = "new_name"
-
 			// Don't write the descriptor, just write the namespace entry.
-			// This will mean that resolution still is based on the old name.
 			b := &kv.Batch{}
-			b.CPut(catalogkeys.MakeDatabaseNameKey(lm.Codec(), mut.Name), mut.GetID(), nil)
+			err = descriptors.InsertNamespaceEntryToBatch(ctx, false /* kvTrace */, mut, b)
+			require.NoError(t, err)
 			err = txn.Run(ctx, b)
 			require.NoError(t, err)
 
-			// Try to get the database descriptor by the new name and fail.
-			failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
-			require.Regexp(t, `database "new_name" does not exist`, err)
-			require.Nil(t, failedToResolve)
+			// Should be able to get the database descriptor by the new name.
+			resolved, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			require.Nil(t, err)
+			require.Equal(t, dbID, resolved.GetID())
 
 			// Try to get the database descriptor by the old name and succeed but get
 			// the old version with the old name because the new version has not yet
@@ -283,10 +277,10 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
-			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
+			require.Equal(t, mut.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), immByNameAfter.DescriptorProto())
 
-			_, immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
+			_, immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
 
@@ -1179,16 +1173,14 @@ SELECT id
 			require.NoError(t, err)
 			require.Equal(t, "foo", tabMut.GetName())
 			tabMut.Name = "baz"
-			if _, err := txn.Del(ctx, catalogkeys.MakeObjectNameKey(
-				codec,
-				tabMut.GetParentID(), tabMut.GetParentSchemaID(), tabMut.OriginalName(),
-			)); err != nil {
+			if _, err := txn.Del(ctx, catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
+				ParentID:       tabMut.GetParentID(),
+				ParentSchemaID: tabMut.GetParentSchemaID(),
+				Name:           tabMut.OriginalName(),
+			})); err != nil {
 				return err
 			}
-			if err := txn.Put(ctx, catalogkeys.MakeObjectNameKey(
-				codec,
-				tabMut.GetParentID(), tabMut.GetParentSchemaID(), tabMut.GetName(),
-			), int64(tabMut.ID)); err != nil {
+			if err := txn.Put(ctx, catalogkeys.EncodeNameKey(codec, tabMut), int64(tabMut.ID)); err != nil {
 				return err
 			}
 			const kvTrace = false

@@ -215,7 +215,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Populate namespace update batch.
 	b := p.txn.NewBatch()
-	p.renameNamespaceEntry(ctx, b, oldNameKey, tableDesc)
+	if err := p.renameNamespaceEntry(ctx, b, oldNameKey, tableDesc); err != nil {
+		return err
+	}
 
 	// Write the updated table descriptor.
 	if err := p.writeSchemaChange(

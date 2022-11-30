@@ -98,7 +98,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   └── • PreviousStagePrecedence dependency from TXN_DROPPED Table:{DescID: 108}
 │       │   │         rule: "descriptor TXN_DROPPED before DROPPED"
 │       │   │
-│       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 106}
+│       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 105}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
@@ -170,10 +170,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnID: 2}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
@@ -194,7 +194,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip column dependents removal ops on relation drop"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
@@ -203,10 +203,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnID: 2}
+│       │   ├── • ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
@@ -376,7 +376,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           ├── • UpdateTableBackReferencesInTypes
 │           │     BackReferencedTableID: 108
 │           │     TypeIDs:
-│           │     - 105
+│           │     - 106
 │           │     - 107
 │           │
 │           ├── • DrainDescriptorName
@@ -384,7 +384,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │       DatabaseID: 104
 │           │       DescriptorID: 108
 │           │       Name: table_regional_by_row
-│           │       SchemaID: 106
+│           │       SchemaID: 105
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 1
@@ -405,7 +405,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           ├── • UpdateTableBackReferencesInTypes
 │           │     BackReferencedTableID: 108
 │           │     TypeIDs:
-│           │     - 105
+│           │     - 106
 │           │     - 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
@@ -445,7 +445,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │     TableID: 108
 │           │
 │           ├── • SetJobStateOnDescriptor
-│           │     DescriptorID: 105
+│           │     DescriptorID: 106
 │           │     Initialize: true
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -460,7 +460,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │                 Authorization:
 │                   UserName: root
 │                 DescriptorIDs:
-│                 - 105
+│                 - 106
 │                 - 107
 │                 - 108
 │                 JobID: 1
@@ -527,7 +527,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │     TableID: 108
             │
             ├── • RemoveJobStateFromDescriptor
-            │     DescriptorID: 105
+            │     DescriptorID: 106
             │     JobID: 1
             │
             ├── • RemoveJobStateFromDescriptor
@@ -540,7 +540,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │
             └── • UpdateSchemaChangerJob
                   DescriptorIDsToRemove:
-                  - 105
+                  - 106
                   - 107
                   - 108
                   IsNonCancelable: true
