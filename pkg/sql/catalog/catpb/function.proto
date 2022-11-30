@@ -46,3 +46,25 @@ message Function {
     }
   }
 }
+
+// These wrappers are for the convenience of referencing the enum types from a
+// proto3 definition.
+message FunctionVolatility {
+  option (gogoproto.equal) = true;
+  optional Function.Volatility volatility = 1;
+}
+
+message FunctionNullInputBehavior {
+  option (gogoproto.equal) = true;
+  optional Function.NullInputBehavior nullInputBehavior = 1;
+}
+
+message FunctionLanguage {
+  option (gogoproto.equal) = true;
+  optional Function.Language lang = 1;
+}
+
+message FunctionParamClass {
+  option (gogoproto.equal) = true;
+  optional Function.Arg.Class class = 1;
+}

@@ -13,6 +13,7 @@ package cockroach.sql.schemachanger.scpb;
 option go_package = "scpb";
 
 import "sql/catalog/catpb/catalog.proto";
+import "sql/catalog/catpb/function.proto";
 import "sql/catalog/catpb/index.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
@@ -528,4 +529,66 @@ message IndexData {
 
 message TablePartitioning {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message Function {
+  message Parameter {
+    option (gogoproto.equal) = true;
+    cockroach.sql.catalog.catpb.FunctionParamClass class = 1 [(gogoproto.nullable) = false];
+    string name = 2;
+    sql.sem.types.T type = 3;
+    string default_expr = 4;
+  }
+
+  message ReturnType {
+    option (gogoproto.equal) = true;
+    sql.sem.types.T type = 1;
+    bool return_set = 2;
+  }
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated Parameter params = 2 [(gogoproto.nullable) = false];
+  ReturnType return_type = 3 [(gogoproto.nullable) = false];
+}
+
+message FunctionName {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+}
+
+message FunctionBody {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string function_body = 2;
+  cockroach.sql.catalog.catpb.FunctionLanguage lang = 3 [(gogoproto.nullable) = false];
+}
+
+message FunctionVolatility {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.FunctionVolatility volatility = 2 [(gogoproto.nullable) = false];
+}
+
+message FunctionNullInputBehavior {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.FunctionNullInputBehavior null_input_behavior = 11 [(gogoproto.nullable) = false];
+}
+
+// OutboundRelationReference resonates with "DependsOn" fields of Table/View and
+// Function descriptor.
+message OutboundRelationReference {
+  uint32 dependent_id = 1 [(gogoproto.customname) = "DependentID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 dependee_id = 2 [(gogoproto.customname) = "DependeeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// TypeReference resonates with "DependsOnTypes" field of Table/View and
+// Function descriptor, and "ReferencingDescriptorIDs" field of Type descriptor.
+message TypeReference {
+  uint32 dependent_id = 1 [(gogoproto.customname) = "DependentID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 dependee_type_id = 2 [(gogoproto.customname) = "DependeeTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message FunctionInboundReference {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 dependent_id = 2 [(gogoproto.customname) = "DependentID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 index_ids = 3 [(gogoproto.customname) = "IndexIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];;
+  repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];;
+  repeated uint32 constraint_ids = 5 [(gogoproto.customname) = "ConstraintIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];;
 }
