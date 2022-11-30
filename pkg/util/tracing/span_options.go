@@ -75,6 +75,7 @@ type spanOptions struct {
 	ForceRealSpan                 bool                   // see WithForceRealSpan
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
+	Redactable                    bool                   // see WithRedactable
 	EventListeners                []EventListener        // see WithEventListeners
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
@@ -439,6 +440,17 @@ func WithSterile() SpanOption {
 
 func (w withSterileOption) apply(opts spanOptions) spanOptions {
 	opts.Sterile = true
+	return opts
+}
+
+type withRedactableOption struct{}
+
+func WithRedactable() SpanOption {
+	return withRedactableOption{}
+}
+
+func (w withRedactableOption) apply(opts spanOptions) spanOptions {
+	opts.Redactable = true
 	return opts
 }
 

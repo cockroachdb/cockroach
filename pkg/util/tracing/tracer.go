@@ -979,6 +979,7 @@ func (t *Tracer) newSpan(
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
 	sterile bool,
+	redactable bool,
 ) *Span {
 	if t.testing.MaintainAllocationCounters {
 		atomic.AddInt32(&t.spansCreated, 1)
@@ -987,7 +988,7 @@ func (t *Tracer) newSpan(
 	h.span.reset(
 		traceID, spanID, operation, goroutineID,
 		startTime, logTags, eventListeners, kind,
-		otelSpan, netTr, sterile)
+		otelSpan, netTr, sterile, redactable)
 	return &h.span
 }
 
@@ -1187,10 +1188,14 @@ child operation: %s, tracer created at:
 	}
 	spanID := tracingpb.SpanID(randutil.FastInt63())
 
+	if !opts.Parent.empty() && opts.Parent.i.redactable {
+		opts.Redactable = true
+	}
+
 	s := t.newSpan(
 		traceID, spanID, opName, uint64(goid.Get()),
 		startTime, opts.LogTags, opts.EventListeners, opts.SpanKind,
-		otelSpan, netTr, opts.Sterile)
+		otelSpan, netTr, opts.Sterile, opts.Redactable)
 
 	s.i.crdb.SetRecordingType(opts.recordingType())
 	s.i.crdb.parentSpanID = opts.parentSpanID()

@@ -345,11 +345,15 @@ func (ih *instrumentationHelper) Setup(
 		// testing callback.
 		recType = tracingpb.RecordingVerbose
 	}
+	//if ih.explainFlags.Redact&explain.RedactPII != 0 {
+	//ih.previousRedactable = cfg.AmbientCtx.Tracer.Redactable()
+	//cfg.AmbientCtx.Tracer.SetRedactable(true)
+	//}
 	if ih.explainFlags.Redact&explain.RedactPII != 0 {
-		ih.previousRedactable = cfg.AmbientCtx.Tracer.Redactable()
-		cfg.AmbientCtx.Tracer.SetRedactable(true)
+		newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType), tracing.WithRedactable())
+	} else {
+		newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	}
-	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
 	return newCtx, true
 }

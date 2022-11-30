@@ -1149,7 +1149,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		if s.recordingType() == tracingpb.RecordingVerbose {
 			rs.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_verbose", "1")
 		}
-		if s.tracer.Redactable() {
+		if s.sp.i.redactable {
 			rs.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_redactable", "1")
 		}
 		if s.mu.recording.droppedLogs {
