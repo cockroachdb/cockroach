@@ -143,7 +143,6 @@ $cchar     <why it needed to change: This was inadequate because ...>\\
 $cchar     <what you did about it: To address this, this patch ...>\\
 $cchar\\
 $cchar     Fixes <GH/Jira issue ID/URL to GH/Jira issue>\\
-$cchar     ---\\
 $cchar\\
 $cchar     Release note (<category>): <what> <show> <why>\\
 $cchar     ---\\
