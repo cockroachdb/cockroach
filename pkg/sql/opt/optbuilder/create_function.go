@@ -109,7 +109,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		// Add the argument to the base scope of the body.
 		argColName := funcArgColName(arg.Name, i)
 		col := b.synthesizeColumn(bodyScope, argColName, typ, nil /* expr */, nil /* scalar */)
-		col.setArgOrd(i)
+		col.setParamOrd(i)
 
 		// Collect the user defined type dependencies.
 		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)
