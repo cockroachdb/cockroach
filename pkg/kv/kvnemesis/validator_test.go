@@ -484,7 +484,7 @@ func TestValidate(t *testing.T) {
 					withResult(del(k1, s2)),
 				), t1)),
 			},
-			kvs: kvs(tombstone("a", t1, s2)),
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed deletes of the same key",
@@ -1201,10 +1201,10 @@ func TestValidate(t *testing.T) {
 			name: "one scan after write returning extra key",
 			steps: []Step{
 				step(withResultTS(put(k1, s1), t1)),
-				step(withResultTS(put(k2, s2), t2)),
-				step(withScanResultTS(scan(k1, k3), t3, scanKV(k1, v1), scanKV(`a2`, v3), scanKV(k2, v2))),
+				step(withResultTS(put(k3, s2), t2)),
+				step(withScanResultTS(scan(k1, k4), t3, scanKV(k1, v1), scanKV(k2, v3), scanKV(k2, v2))),
 			},
-			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+			kvs: kvs(kv(k1, t1, s1), kv(k3, t2, s2)),
 		},
 		{
 			name: "one tranactional scan after write and delete returning extra key",
@@ -1222,10 +1222,14 @@ func TestValidate(t *testing.T) {
 			name: "one reverse scan after write returning extra key",
 			steps: []Step{
 				step(withResultTS(put(k1, s1), t1)),
-				step(withResultTS(put(k2, s2), t2)),
-				step(withScanResultTS(reverseScan(k1, k3), t3, scanKV(k2, v2), scanKV(`a2`, v3), scanKV(k1, v1))),
+				step(withResultTS(put(k3, s2), t2)),
+				step(withScanResultTS(reverseScan(k1, k4), t3,
+					scanKV(k3, v2),
+					scanKV(k2, v3),
+					scanKV(k1, v1),
+				)),
 			},
-			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+			kvs: kvs(kv(k1, t1, s1), kv(k3, t2, s2)),
 		},
 		{
 			name: "one scan after write returning missing key",

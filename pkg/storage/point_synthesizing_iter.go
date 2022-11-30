@@ -681,7 +681,7 @@ func (i *PointSynthesizingIter) UnsafeKey() MVCCKey {
 // UnsafeRawKey implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeRawKey() []byte {
 	if i.atPoint {
-		i.iter.UnsafeRawKey()
+		return i.iter.UnsafeRawKey()
 	}
 	i.rawKeyBuf = EncodeMVCCKeyToBuf(i.rawKeyBuf[:0], i.UnsafeKey())
 	return i.rawKeyBuf
@@ -690,7 +690,7 @@ func (i *PointSynthesizingIter) UnsafeRawKey() []byte {
 // UnsafeRawMVCCKey implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 	if i.atPoint {
-		i.iter.UnsafeRawMVCCKey()
+		return i.iter.UnsafeRawMVCCKey()
 	}
 	i.rawKeyBuf = EncodeMVCCKeyToBuf(i.rawKeyBuf[:0], i.UnsafeKey())
 	return i.rawKeyBuf
