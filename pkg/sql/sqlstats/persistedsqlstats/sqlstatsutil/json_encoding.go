@@ -218,6 +218,7 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 //	        "svcLat":     { "$ref": "#/definitions/numeric_stats" },
 //	        "retryLat":   { "$ref": "#/definitions/numeric_stats" },
 //	        "commitLat":  { "$ref": "#/definitions/numeric_stats" },
+//	        "idleLat":    { "$ref": "#/definitions/numeric_stats" },
 //	        "bytesRead":  { "$ref": "#/definitions/numeric_stats" },
 //	        "rowsRead":   { "$ref": "#/definitions/numeric_stats" }
 //	      },
@@ -227,6 +228,7 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 //	        "svcLat",
 //	        "retryLat",
 //	        "commitLat",
+//	        "idleLat",
 //	        "bytesRead",
 //	        "rowsRead",
 //	      ]

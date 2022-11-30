@@ -134,6 +134,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		// recursive directories ending in /...
 		extraRewritablePaths = []struct{ pkg, path string }{
 			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
+			{"pkg/ccl/logictestccl", "pkg/sql/opt/exec/execbuilder"},
 			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},

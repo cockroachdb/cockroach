@@ -303,6 +303,7 @@ func (t *innerTxnStats) jsonFields() jsonFields {
 		{"svcLat", (*numericStats)(&t.ServiceLat)},
 		{"retryLat", (*numericStats)(&t.RetryLat)},
 		{"commitLat", (*numericStats)(&t.CommitLat)},
+		{"idleLat", (*numericStats)(&t.IdleLat)},
 		{"bytesRead", (*numericStats)(&t.BytesRead)},
 		{"rowsRead", (*numericStats)(&t.RowsRead)},
 		{"rowsWritten", (*numericStats)(&t.RowsWritten)},
