@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -99,13 +98,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // Entries requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
-	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return entries(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache,
+	return entries(ctx, r.mu.stateLoader, r.store.Engine(), r.RangeID, r.store.raftEntryCache,
 		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
@@ -114,14 +111,16 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
 }
 
-// entries retrieves entries from the engine. To accommodate loading the term,
-// `sideloaded` can be supplied as nil, in which case sideloaded entries will
-// not be inlined, the raft entry cache will not be populated with *any* of the
-// loaded entries, and maxBytes will not be applied to the payloads.
+// entries retrieves entries from the engine. It inlines the sideloaded entries,
+// and caches all the loaded entries. The size of the returned entries does not
+// exceed maxSize, unless only one entry is returned.
+//
+// TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
+// target size. Currently we may read one extra entry and drop it.
 func entries(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	reader storage.Reader,
+	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded logstore.SideloadStorage,
@@ -149,10 +148,6 @@ func entries(
 	// stopping once we have enough.
 	expectedIndex := hitIndex
 
-	// Whether we can populate the Raft entries cache. False if we found a
-	// sideloaded proposal, but the caller didn't give us a sideloaded storage.
-	canCache := true
-
 	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
 		if ent.Index != expectedIndex {
@@ -161,17 +156,14 @@ func entries(
 		expectedIndex++
 
 		if logstore.SniffSideloadedRaftCommand(ent.Data) {
-			canCache = canCache && sideloaded != nil
-			if sideloaded != nil {
-				newEnt, err := logstore.MaybeInlineSideloadedRaftCommand(
-					ctx, rangeID, ent, sideloaded, eCache,
-				)
-				if err != nil {
-					return err
-				}
-				if newEnt != nil {
-					ent = *newEnt
-				}
+			newEnt, err := logstore.MaybeInlineSideloadedRaftCommand(
+				ctx, rangeID, ent, sideloaded, eCache,
+			)
+			if err != nil {
+				return err
+			}
+			if newEnt != nil {
+				ent = *newEnt
 			}
 		}
 
@@ -179,27 +171,22 @@ func entries(
 		size += uint64(ent.Size())
 		if size > maxBytes {
 			exceededMaxBytes = true
-			if len(ents) > 0 {
-				if exceededMaxBytes {
-					return iterutil.StopIteration()
-				}
-				return nil
+			if len(ents) == 0 { // make sure to return at least one entry
+				ents = append(ents, ent)
 			}
-		}
-		ents = append(ents, ent)
-		if exceededMaxBytes {
 			return iterutil.StopIteration()
 		}
+
+		ents = append(ents, ent)
 		return nil
 	}
 
+	reader := eng.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
 	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
-	// Cache the fetched entries, if we may.
-	if canCache {
-		eCache.Add(rangeID, ents, false /* truncate */)
-	}
+	eCache.Add(rangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	if uint64(len(ents)) == hi-lo {
@@ -213,11 +200,6 @@ func entries(
 
 	// Did we get any results at all? Because something went wrong.
 	if len(ents) > 0 {
-		// Was the lo already truncated?
-		if ents[0].Index > lo {
-			return nil, raft.ErrCompacted
-		}
-
 		// Was the missing index after the last index?
 		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
 		if err != nil {
@@ -258,14 +240,8 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	if r.mu.lastIndex == i && r.mu.lastTerm != invalidLastTerm {
 		return r.mu.lastTerm, nil
 	}
-	// Try to retrieve the term for the desired entry from the entry cache.
-	if e, ok := r.store.raftEntryCache.Get(r.RangeID, i); ok {
-		return e.Term, nil
-	}
-	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
-	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, r.mu.stateLoader, r.store.Engine(), r.RangeID, r.store.raftEntryCache, i)
 }
 
 // raftTermLocked requires that r.mu is locked for writing.
@@ -284,30 +260,66 @@ func (r *Replica) GetTerm(i uint64) (uint64, error) {
 func term(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	reader storage.Reader,
+	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	i uint64,
+	index uint64,
 ) (uint64, error) {
-	// entries() accepts a `nil` sideloaded storage and will skip inlining of
-	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, rsl, reader, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
-	if errors.Is(err, raft.ErrCompacted) {
-		ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
-		if err != nil {
-			return 0, err
+	entry, found := eCache.Get(rangeID, index)
+	if found {
+		return entry.Term, nil
+	}
+
+	reader := eng.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
+
+	if err := raftlog.Visit(reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
+		if found {
+			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
 		}
-		if i == ts.Index {
-			return ts.Term, nil
-		}
-		return 0, raft.ErrCompacted
-	} else if err != nil {
+		found = true
+		entry = ent
+		return nil
+	}); err != nil {
 		return 0, err
 	}
-	if len(ents) == 0 {
-		return 0, nil
+
+	if found {
+		// Found an entry. Double-check that it has a correct index.
+		if got, want := entry.Index, index; got != want {
+			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
+		}
+		// Cache the entry except if it is sideloaded. We don't load/inline the
+		// sideloaded entries here to keep the term fetching cheap.
+		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
+		// makes any difference.
+		if !logstore.SniffSideloadedRaftCommand(entry.Data) {
+			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+		}
+		return entry.Term, nil
 	}
-	return ents[0].Term, nil
+	// Otherwise, the entry at the given index is not found. This can happen if
+	// the index is ahead of lastIndex, or it has been compacted away.
+
+	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
+	if err != nil {
+		return 0, err
+	}
+	if index > lastIndex {
+		return 0, raft.ErrUnavailable
+	}
+
+	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	if err != nil {
+		return 0, err
+	}
+	if index == ts.Index {
+		return ts.Term, nil
+	}
+	if index > ts.Index {
+		return 0, errors.Errorf("there is a gap at index %d", index)
+	}
+	return 0, raft.ErrCompacted
 }
 
 // raftLastIndexRLocked requires that r.mu is held for reading.
