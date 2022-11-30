@@ -1,10 +1,10 @@
 echo
 ----
 {
-  b := &Batch{}
-  b.DelRangeUsingTombstone(ctx, "a", "b" /* @s1 */)
-  b.DelRangeUsingTombstone(ctx, "b", "d" /* @s2 */)
+  b := &kv.Batch{}
+  b.DelRangeUsingTombstone(ctx, uint64ToKey(1), uint64ToKey(2) /* @s1 */) // <nil>
+  b.DelRangeUsingTombstone(ctx, uint64ToKey(2), uint64ToKey(4) /* @s2 */) // <nil>
   db0.Run(ctx, b) // @0.000000001,0 <nil>
 }
-{a-b}/0.000000001,0 @ s1 <nil>
-{b-d}/0.000000001,0 @ s2 <nil>
+/Table/100/"000000000000000{1"-2"}/0.000000001,0 @ s1 <nil>
+/Table/100/"000000000000000{2"-4"}/0.000000001,0 @ s2 <nil>

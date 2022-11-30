@@ -1,8 +1,8 @@
 echo
 ----
 {
-  b := &Batch{}
-  b.Del(ctx, "a" /* @s1 */)
+  b := &kv.Batch{}
+  b.Del(uint64ToKey(1) /* @s1 */) // <nil>
   db0.Run(ctx, b) // @0.000000001,0 <nil>
 }
-"a"/0.000000001,0 @ s1 <nil>
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 <nil>

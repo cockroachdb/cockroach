@@ -2,8 +2,8 @@ echo
 ----
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   {
-    b := &Batch{}
-    b.Put(ctx, "a", v1) // <nil>
+    b := &kv.Batch{}
+    b.Put(uint64ToKey(1), seq2val(kvnemesisutil.Seq(1))) // <nil>
     txn.Run(ctx, b) // <nil>
   }
   return errors.New("rollback")

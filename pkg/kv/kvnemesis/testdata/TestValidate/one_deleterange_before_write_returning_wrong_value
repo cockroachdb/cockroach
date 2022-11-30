@@ -1,6 +1,6 @@
 echo
 ----
-db0.DelRange(ctx, "a", "c", true /* @s1 */) // @0.000000001,0 (a, <nil>)
-db0.Put(ctx, "a", v2) // @0.000000002,0 <nil>
-"a"/0.000000002,0 @ s2 v2
-committed deleteRange missing write at seq s1: [dr.d]"a":missing-><nil>@s1 [dr.s]{a-c}:{gap:[<min>, 0.000000002,0)}->[]
+db0.DelRange(ctx, uint64ToKey(1), uint64ToKey(3), true /* @s1 */) // @0.000000001,0 (/Table/100/"0000000000000001", <nil>)
+db0.Put(ctx, uint64ToKey(1), seq2val(kvnemesisutil.Seq(2))) // @0.000000002,0 <nil>
+/Table/100/"0000000000000001"/0.000000002,0 @ s2 v2
+committed deleteRange missing write at seq s1: [dr.d]/Table/100/"0000000000000001":missing-><nil>@s1 [dr.s]/Table/100/"000000000000000{1"-3"}:{gap:[<min>, 0.000000002,0)}->[]
