@@ -11,8 +11,8 @@ package streamclient
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -107,7 +107,7 @@ INSERT INTO d.t2 VALUES (2);
 		v := ret.Query()
 		for _, opt := range []string{"sslcert", "sslkey", "sslrootcert"} {
 			path := v.Get(opt)
-			content, err := ioutil.ReadFile(path)
+			content, err := os.ReadFile(path)
 			require.NoError(t, err)
 			v.Set(opt, string(content))
 
