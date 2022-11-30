@@ -554,55 +554,6 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 	}
 }
 
-func loadValueHeaderForDeleteRange(
-	reader storage.Reader, t *enginepb.MVCCDeleteRangeOp,
-) (enginepb.MVCCValueHeader, error) {
-	it := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: t.StartKey,
-		UpperBound: t.EndKey,
-		KeyTypes:   storage.IterKeyTypeRangesOnly,
-	})
-	defer it.Close()
-
-	it.SeekGE(storage.MVCCKey{Key: t.StartKey})
-	var span roachpb.Span
-	var vh enginepb.MVCCValueHeader
-	for ; ; it.Next() {
-		ok, err := it.Valid()
-		if err != nil {
-			return enginepb.MVCCValueHeader{}, err
-		}
-		if !ok {
-			break
-		}
-		rkv, ok := it.RangeKeys().FirstAtOrAbove(t.Timestamp)
-		if !ok || rkv.Timestamp != t.Timestamp {
-			return enginepb.MVCCValueHeader{}, errors.AssertionFailedf("missing range key segment")
-		}
-		v, err := storage.DecodeMVCCValue(rkv.Value)
-		if err != nil {
-			return enginepb.MVCCValueHeader{}, err
-		}
-		if vh.IsEmpty() {
-			vh = v.MVCCValueHeader
-			// TODO check all equal
-		}
-		bounds := it.RangeBounds().Clone()
-		if len(span.EndKey) == 0 {
-			span = bounds
-		} else if !span.EndKey.Equal(bounds.Key) {
-			return enginepb.MVCCValueHeader{}, errors.AssertionFailedf("previous EndKey doesn't match up next StartKey: %s vs %s", span, bounds)
-		} else {
-			span.EndKey = bounds.EndKey
-		}
-	}
-	if o := (roachpb.Span{Key: t.StartKey, EndKey: t.EndKey}); !span.Equal(o) {
-		return enginepb.MVCCValueHeader{}, errors.AssertionFailedf("event span != iter span: %s != %s", span, o)
-	}
-	// Made it!
-	return vh, nil
-}
-
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active
 // rangefeed, if one is running. The method accepts a reader, which is used to
 // look up the values associated with key-value writes in the log before handing
@@ -654,11 +605,16 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			if vhf == nil {
 				continue
 			}
-			vh, err := loadValueHeaderForDeleteRange(reader, t)
+			valBytes, err := storage.MVCCLookupRangeKeyValue(reader, t.StartKey, t.EndKey, t.Timestamp)
 			if err != nil {
 				panic(err)
 			}
-			vhf(t.StartKey, t.EndKey, t.Timestamp, vh)
+
+			v, err := storage.DecodeMVCCValue(valBytes)
+			if err != nil {
+				panic(err)
+			}
+			vhf(t.StartKey, t.EndKey, t.Timestamp, v.MVCCValueHeader)
 			continue
 		default:
 			panic(errors.AssertionFailedf("unknown logical op %T", t))
