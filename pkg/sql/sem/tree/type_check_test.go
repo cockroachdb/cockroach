@@ -336,6 +336,8 @@ func TestTypeCheckError(t *testing.T) {
 			`1 + 2::d.s.typ`,
 			`type "d.s.typ" does not exist`,
 		},
+		{`() = '03:00:00'`, `unsupported comparison operator: <tuple> = <string>`},
+		{`'03:00:00' > ROW()`, `unsupported comparison operator: <string> > <tuple>`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {
