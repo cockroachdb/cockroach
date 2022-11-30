@@ -79,9 +79,17 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 			slowStatements.Add(i)
 		}
 	}
-	if slowStatements.Empty() {
+
+	highContention := false
+	if transaction.Contention != nil {
+		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
+	}
+
+	if slowStatements.Empty() && !highContention {
+		// The total contention time of the transaction may be above the threshold.
 		return
 	}
+
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
 	for i, s := range *statements {
