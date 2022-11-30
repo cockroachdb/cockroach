@@ -76,7 +76,7 @@
     padding-right: 9px;
     padding-left: 9px;
     margin-right: -9px;
-    margin-left: -9px;
+    margin-left: 9px;
   }
 
   &__header {
@@ -156,4 +156,8 @@
 .bold {
   font-weight: $font-weight--extra-bold;
   color: $colors--neutral-8;
+}
+
+.row-spaced {
+  margin-top: 20px;
 }

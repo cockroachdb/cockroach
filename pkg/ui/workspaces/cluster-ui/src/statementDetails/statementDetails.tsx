@@ -689,7 +689,7 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
-                title="Statement Execution and Planning Time"
+                title="Statement Times"
                 alignedData={executionAndPlanningTimeseries}
                 uPlotOptions={executionAndPlanningOps}
                 yAxisUnits={AxisUnits.Duration}
