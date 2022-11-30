@@ -101,10 +101,9 @@ func registerLiquibase(r registry.Registry) {
 		}
 
 		t.Status("running liquibase test harness")
-		blocklistName, expectedFailures, _, ignoreList := liquibaseBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
-		}
+		const blocklistName = "liquibaseBlocklist"
+		expectedFailures := liquibaseBlocklist
+		ignoreList := liquibaseIgnorelist
 
 		const (
 			repoDir     = "/mnt/data1/liquibase-test-harness"
