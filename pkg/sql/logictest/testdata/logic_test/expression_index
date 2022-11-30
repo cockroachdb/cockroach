@@ -237,6 +237,7 @@ ALTER TABLE t RENAME COLUMN crdb_internal_idx_expr_2 TO err
 statement error column \"crdb_internal_idx_expr_2\" of relation \"t\" already exists
 ALTER TABLE t ADD COLUMN crdb_internal_idx_expr_2 INT
 
+onlyif config local-legacy-schema-changer
 query T
 SELECT * FROM (
   SELECT json_array_elements(
@@ -246,12 +247,34 @@ SELECT * FROM (
 ----
 {"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
+skipif config local-legacy-schema-changer
+query T
+SELECT * FROM (
+  SELECT json_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
+  ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
+) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
+----
+{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "pgAttributeNum": 9, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+
 statement ok
 DROP INDEX t_lower_c_a_plus_b_idx
 
 # Verify that the inaccessible columns in t_lower_c_a_plus_b_idx are not dropped
 # because other indexes contain them.
 # exists in the descriptor.
+skipif config local-legacy-schema-changer
+query T
+SELECT * FROM (
+  SELECT json_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'table'->'columns'
+  ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
+) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
+----
+{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "pgAttributeNum": 7, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "pgAttributeNum": 8, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+
+onlyif config local-legacy-schema-changer
 query T
 SELECT * FROM (
   SELECT json_array_elements(

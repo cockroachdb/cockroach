@@ -13,7 +13,7 @@ CREATE INDEX id1
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -36,7 +36,7 @@ upsert descriptor #104
   +      keyColumnNames:
   +      - id
   +      - name
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: id1
   +      partitioning:
   +        list:
   +        - name: p1
@@ -54,6 +54,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
+  +      constraintId: 1
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -217,7 +218,7 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
              BY LIST (id) (PARTITION p1 VALUES IN (1))
@@ -264,9 +265,9 @@ upsert descriptor #104
   +  - direction: DROP
        index:
   -      createdAtNanos: "1640998800000000000"
-         createdExplicitly: true
-         foreignKey: {}
-         geoConfig: {}
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
   -      id: 2
   -      interleave: {}
   -      keyColumnDirections:
@@ -278,7 +279,7 @@ upsert descriptor #104
   -      keyColumnNames:
   -      - id
   -      - name
-  -      name: crdb_internal_index_2_name_placeholder
+  -      name: id1
   -      partitioning:
   -        list:
   -        - name: p1
@@ -296,11 +297,8 @@ upsert descriptor #104
   -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-         id: 3
-         interleave: {}
+         constraintId: 1
+         createdExplicitly: true
   ...
          version: 4
        mutationId: 1
@@ -313,6 +311,8 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
+write *eventpb.CreateIndex to event log: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
+adding table for stats refresh: 104
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
@@ -345,6 +345,7 @@ upsert descriptor #104
   -  mutations:
   -  - direction: DROP
   -    index:
+  -      constraintId: 1
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

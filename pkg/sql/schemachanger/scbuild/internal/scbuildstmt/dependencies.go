@@ -152,6 +152,10 @@ type Telemetry interface {
 
 	// IncrementDropOwnedByCounter increments the DROP OWNED BY telemetry counter.
 	IncrementDropOwnedByCounter()
+
+	// IncrementSchemaChangeIndexCounter schema change counters related to index
+	// features during creation.
+	IncrementSchemaChangeIndexCounter(counterType string)
 }
 
 // SchemaFeatureChecker checks if a schema change feature is allowed by the
@@ -208,10 +212,9 @@ type TableHelpers interface {
 
 	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.
-	IndexPartitioningDescriptor(
-		index *scpb.Index,
-		partBy *tree.PartitionBy,
-	) catpb.PartitioningDescriptor
+	IndexPartitioningDescriptor(indexName string,
+		index *scpb.Index, keyColumns []*scpb.IndexColumn,
+		partBy *tree.PartitionBy) catpb.PartitioningDescriptor
 
 	// ResolveTypeRef resolves a type reference.
 	ResolveTypeRef(typeref tree.ResolvableTypeReference) scpb.TypeT
@@ -223,6 +226,12 @@ type TableHelpers interface {
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
 	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr
+
+	// PartialIndexPredicateExpression returns a validated partial predicate
+	// wrapped expression
+	PartialIndexPredicateExpression(
+		tableID catid.DescID, expr tree.Expr,
+	) *scpb.Expression
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
