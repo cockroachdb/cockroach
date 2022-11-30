@@ -36,7 +36,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -153,24 +152,41 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		// data.
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	case webhookSink:
-		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		ct.t.Status("webhook install")
+		webhookNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		rootFolder := `/home/ubuntu`
+
+		// We use a different port every time to support multiple webhook sinks.
+		webhookPort := nextWebhookPort
+		nextWebhookPort++
+		serverSrcPath := filepath.Join(rootFolder, fmt.Sprintf(`webhook-server-%d.go`, webhookPort))
+		serverExecPath := filepath.Join(rootFolder, fmt.Sprintf(`webhook-server-%d.sh`, webhookPort))
+		err := ct.cluster.PutString(ct.ctx, webhookServerScript(webhookPort), serverSrcPath, 0700, webhookNode)
 		if err != nil {
 			ct.t.Fatal(err)
 		}
-		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		err = ct.cluster.PutString(ct.ctx, webhookStartScript(webhookPort), serverExecPath, 0700, webhookNode)
 		if err != nil {
 			ct.t.Fatal(err)
 		}
 
-		sinkDestHost, err := url.Parse(sinkDest.URL())
+		ct.cluster.Run(ct.ctx, webhookNode, `sudo apt --yes install golang-go;`)
+
+		// Start the server in its own monitor to not block ct.mon.Wait()
+		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
+		m.Go(func(ctx context.Context) error {
+			return ct.cluster.RunE(ct.ctx, webhookNode, serverExecPath, rootFolder)
+		})
+
+		nodeIPs, _ := ct.cluster.ExternalIP(ct.ctx, ct.logger, webhookNode)
+		sinkDestHost, err := url.Parse(fmt.Sprintf(`https://%s:%d`, nodeIPs[0], webhookPort))
 		if err != nil {
 			ct.t.Fatal(err)
 		}
 
 		params := sinkDestHost.Query()
-		params.Set(changefeedbase.SinkParamCACert, certEncoded)
+		params.Set("insecure_tls_skip_verify", "true")
 		sinkDestHost.RawQuery = params.Encode()
-
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
@@ -381,6 +397,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		opts:           feedOptions,
 		db:             db,
 		tolerateErrors: args.tolerateErrors,
+		logger:         ct.logger,
 	}
 
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
@@ -1180,34 +1197,35 @@ func registerCDC(r registry.Registry) {
 			ct.waitForWorkload()
 		},
 	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/webhook-sink",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
 
-	// TODO(zinger): uncomment once connectivity issue is fixed,
-	// currently fails with "initial scan did not complete" because sink
-	// URI is set as localhost, need to expose it to the other nodes via IP
-	/*
-				r.Add(registry.TestSpec{
-					Name:            "cdc/webhook-sink",
-					Owner:           `cdc`,
-					Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-					RequiresLicense: true,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		        ct := newCDCTester(ctx, t, c)
-		        defer ct.Close()
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
 
-		        ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: webhookSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"metrics_label": "'webhook'",
+					// Webhook sink without batching is currently too slow to handle even 1 warehouse
+					"webhook_sink_config": `'{"Flush": { "Messages": 500, "Frequency": "5s" } }'`,
+				},
+			})
 
-		        feed := ct.newChangefeed(feedArgs{
-		          sinkType:   webhookSink,
-		          targets:    allTpccTargets,
-		        })
-		        ct.runFeedLatencyVerifier(feed, latencyTargets{
-		          initialScanLatency: 30 * time.Minute,
-		          steadyLatency:      time.Minute,
-		        })
-		        ct.waitForWorkload()
-					},
-				})
-	*/
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+				steadyLatency:      time.Minute,
+			})
+
+			ct.waitForWorkload()
+		},
+	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
 		Owner:           `cdc`,
@@ -1391,6 +1409,37 @@ func randomSerial() (*big.Int, error) {
 		return nil, errors.Wrap(err, "generate random serial")
 	}
 	return ret, nil
+}
+
+var nextWebhookPort = 3001 // 3000 is used by grafana
+
+var webhookServerScript = func(port int) string {
+	return fmt.Sprintf(`
+package main
+
+import (
+	"log"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {})
+	log.Fatal(http.ListenAndServeTLS(":%d",  "cert.pem",  "key.pem", nil))
+}
+`, port)
+}
+
+var webhookStartScript = func(port int) string {
+	return fmt.Sprintf(`
+#!/bin/bash
+
+rm -f key.pem cert.pem
+yes | openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -nodes -subj '/CN=localhost' -extensions SAN \
+    -config <(cat /etc/ssl/openssl.cnf \
+            <(printf "[SAN]\nsubjectAltName='DNS:localhost'"))
+
+go run webhook-server-%d.go
+`, port)
 }
 
 const (
