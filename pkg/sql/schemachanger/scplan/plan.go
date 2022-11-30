@@ -46,6 +46,10 @@ type Params struct {
 	// SchemaChangerJobIDSupplier is used to return the JobID for a
 	// job if one should exist.
 	SchemaChangerJobIDSupplier func() jobspb.JobID
+
+	// enforcePlannerSanityCheck, if true, strictly enforces sanity checks in the
+	// declarative schema changer planner.
+	EnforcePlannerSanityCheck bool
 }
 
 // Exported internal types
@@ -109,9 +113,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 	}
 	{
 		start := timeutil.Now()
-		p.Stages = scstage.BuildStages(
-			ctx, p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier,
-		)
+		p.Stages = scstage.BuildStages(ctx, p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier, p.Params.EnforcePlannerSanityCheck)
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}
