@@ -13,6 +13,7 @@ package distsql
 import (
 	"context"
 	"io"
+	"runtime/pprof"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -653,6 +654,13 @@ func (ds *ServerImpl) SetupFlow(
 			}
 			return err
 		}
+		lbls := pprof.Labels(
+			"distsql.stmt", req.StatementSQL,
+			"distsql.gateway", req.Flow.Gateway.String(),
+			"distsql.flowid", req.Flow.FlowID.String(),
+			"distsql.appname", req.EvalContext.SessionData.ApplicationName,
+		)
+		ctx = pprof.WithLabels(ctx, lbls)
 		var undo func()
 		ctx, undo = pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		defer undo()
