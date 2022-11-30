@@ -36,7 +36,7 @@ message Function {
     SQL = 1;
   }
 
-  message Arg {
+  message Param {
     enum Class {
       UNKNOWN_ARG_CLASS = 0;
       IN = 1;

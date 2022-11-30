@@ -671,9 +671,10 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
-	// argOrd returns the ordinal of the arguments that the given column ID
-	// represents. If the column does not represent an argument, then ok=false
-	// is returned.
+	// argOrd returns the ordinal of the argument within the arguments list that
+	// can be substituted for each reference to the given function parameter
+	// column. If the given column does not represent a function parameter,
+	// ok=false is returned.
 	argOrd := func(col opt.ColumnID) (ord int, ok bool) {
 		for i, param := range udf.Params {
 			if col == param {
@@ -700,8 +701,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		f := o.Factory()
 		stmt := udf.Body[stmtIdx]
 
-		// Copy the expression into a new memo. Replace argument references with
-		// argument datums.
+		// Copy the expression into a new memo. Replace parameter references
+		// with argument datums.
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			if v, ok := e.(*memo.VariableExpr); ok {

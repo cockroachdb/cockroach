@@ -375,7 +375,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
-		case tree.ArgTypes:
+		case tree.ParamTypes:
 			for _, arg := range ft {
 				// CollatedString's default has no Locale, and so GenerateRandomArg will panic
 				// on RandDatumWithNilChance. Copy the typ and fake a locale.
