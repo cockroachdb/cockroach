@@ -707,7 +707,7 @@ func (i *PointSynthesizingIter) Value() []byte {
 // UnsafeValue implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeValue() []byte {
 	if i.atPoint {
-		i.iter.UnsafeValue()
+		return i.iter.UnsafeValue()
 	}
 	if i.rangeKeysIdx >= len(i.rangeKeys) || i.rangeKeysIdx < 0 {
 		return nil
