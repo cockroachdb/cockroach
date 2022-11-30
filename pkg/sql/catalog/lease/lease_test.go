@@ -1334,8 +1334,8 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
-				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if uint32(id) < bootstrap.TestingMinUserDescID() {
+				LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
+					if uint32(id) < bootstrap.TestingMinUserDescID() || typ == lease.AcquireBackground {
 						return
 					}
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
@@ -1798,8 +1798,8 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					defer mu.Unlock()
 					releasedIDs[id] = struct{}{}
 				},
-				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if uint32(id) < bootstrap.TestingMinUserDescID() {
+				LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
+					if uint32(id) < bootstrap.TestingMinUserDescID() || typ == lease.AcquireBackground {
 						return
 					}
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
