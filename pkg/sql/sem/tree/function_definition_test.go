@@ -97,19 +97,19 @@ func TestMatchOverload(t *testing.T) {
 		Overloads: []tree.QualifiedOverload{
 			{
 				Schema:   "pg_catalog",
-				Overload: &tree.Overload{Oid: 1, IsUDF: false, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
+				Overload: &tree.Overload{Oid: 1, IsUDF: false, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
 			{
 				Schema:   "sc1",
-				Overload: &tree.Overload{Oid: 2, IsUDF: true, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
+				Overload: &tree.Overload{Oid: 2, IsUDF: true, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
 			{
 				Schema:   "sc1",
-				Overload: &tree.Overload{Oid: 3, IsUDF: true, Types: tree.ArgTypes{}},
+				Overload: &tree.Overload{Oid: 3, IsUDF: true, Types: tree.ParamTypes{}},
 			},
 			{
 				Schema:   "sc2",
-				Overload: &tree.Overload{Oid: 4, IsUDF: true, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
+				Overload: &tree.Overload{Oid: 4, IsUDF: true, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
 		},
 	}

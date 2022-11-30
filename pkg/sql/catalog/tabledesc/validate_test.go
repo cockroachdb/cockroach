@@ -308,7 +308,7 @@ var validationMap = []struct {
 			"ID":                            {status: iSolemnlySwearThisFieldIsValidated},
 			"ParentID":                      {status: iSolemnlySwearThisFieldIsValidated},
 			"ParentSchemaID":                {status: iSolemnlySwearThisFieldIsValidated},
-			"Args":                          {status: iSolemnlySwearThisFieldIsValidated},
+			"Params":                        {status: iSolemnlySwearThisFieldIsValidated},
 			"ReturnType":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"Lang":                          {status: thisFieldReferencesNoObjects},
 			"FunctionBody":                  {status: thisFieldReferencesNoObjects},

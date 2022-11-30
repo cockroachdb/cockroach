@@ -253,8 +253,8 @@ func TestHydratedCache(t *testing.T) {
 		// (user-defined type).
 		require.NotEqual(t, tableDescUDT, hydrated)
 		require.EqualValues(t, hydrated.GetReturnType().Type, typ1T)
-		require.EqualValues(t, hydrated.GetArgs()[0].Type, typ1T)
-		require.EqualValues(t, hydrated.GetArgs()[1].Type, typ2T)
+		require.EqualValues(t, hydrated.GetParams()[0].Type, typ1T)
+		require.EqualValues(t, hydrated.GetParams()[1].Type, typ2T)
 
 		// Try again and ensure we get pointer-for-pointer the same descriptor.
 		res.calls = 0
@@ -446,13 +446,13 @@ var (
 	funcUDTDesc = funcdesc.NewBuilder(&descpb.FunctionDescriptor{
 		Name:       "f_udt",
 		ID:         funcUDTID,
-		Args:       []descpb.FunctionDescriptor_Argument{{Type: typ1TSerialized}, {Type: typ2TSerialized}},
+		Params:     []descpb.FunctionDescriptor_Parameter{{Type: typ1TSerialized}, {Type: typ2TSerialized}},
 		ReturnType: descpb.FunctionDescriptor_ReturnType{Type: typ1TSerialized},
 	}).BuildExistingMutable()
 	funcNoUDTDesc = funcdesc.NewBuilder(&descpb.FunctionDescriptor{
 		Name:       "f_no_udt",
 		ID:         funcNoUDTID,
-		Args:       []descpb.FunctionDescriptor_Argument{{Type: types.Int}},
+		Params:     []descpb.FunctionDescriptor_Parameter{{Type: types.Int}},
 		ReturnType: descpb.FunctionDescriptor_ReturnType{Type: types.Void},
 	}).BuildExistingMutable()
 	descs = []catalog.MutableDescriptor{

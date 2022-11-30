@@ -119,7 +119,7 @@ func (cv columnVisibility) String() string {
 // maxFuncParams is the maximum number of parameters allowed in a function.
 const maxFuncParams = 100
 
-// funcParamOrd is a 1-based ordinal of a function parameters.
+// funcParamOrd is a 1-based ordinal of a function parameter.
 type funcParamOrd int8
 
 // setParamOrd sets the column's 1-based function parameter ordinal to the given
@@ -135,7 +135,7 @@ func (c *scopeColumn) setParamOrd(ord int) {
 	c.paramOrd = funcParamOrd(ord + 1)
 }
 
-// funcParamReferencedBy returns true if the scopeColumn is a function argument
+// funcParamReferencedBy returns true if the scopeColumn is a function parameter
 // column that can be referenced by the given placeholder.
 func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {
 	return c.paramOrd > 0 && tree.PlaceholderIdx(c.paramOrd-1) == idx
@@ -275,12 +275,12 @@ func scopeColName(name tree.Name) scopeColumnName {
 	}
 }
 
-// funcArgColName creates a scopeColumnName that can be referenced by the given
+// funcParamColName creates a scopeColumnName that can be referenced by the given
 // name and will be added to the metadata with the given name, if the given name
 // is not empty. If the given name is empty, the returned scopeColumnName
 // represents an anonymous function argument that cannot be referenced, and it
 // will be added to the metadata with the descriptive name "arg<ord>".
-func funcArgColName(name tree.Name, ord int) scopeColumnName {
+func funcParamColName(name tree.Name, ord int) scopeColumnName {
 	alias := string(name)
 	if alias == "" {
 		alias = fmt.Sprintf("arg%d", ord+1)

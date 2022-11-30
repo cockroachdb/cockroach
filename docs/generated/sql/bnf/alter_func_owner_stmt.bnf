@@ -1,2 +1,2 @@
 alter_func_owner_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes 'OWNER' 'TO' role_spec
+	'ALTER' 'FUNCTION' function_with_paramtypes 'OWNER' 'TO' role_spec

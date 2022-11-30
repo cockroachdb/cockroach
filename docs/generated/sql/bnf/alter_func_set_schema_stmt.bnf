@@ -1,2 +1,2 @@
 alter_func_set_schema_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes 'SET' 'SCHEMA' schema_name
+	'ALTER' 'FUNCTION' function_with_paramtypes 'SET' 'SCHEMA' schema_name

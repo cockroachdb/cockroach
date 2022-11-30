@@ -629,15 +629,15 @@ func (b *Builder) buildUDF(
 	// Create a new scope for building the statements in the function body. We
 	// start with an empty scope because a statement in the function body cannot
 	// refer to anything from the outer expression. If there are function
-	// arguments, we add them as columns to the scope so that references to them
-	// can be resolved.
+	// parameters, we add them as columns to the scope so that references to
+	// them can be resolved.
 	//
 	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
 	// CTEs that mutate and are not at the top-level.
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	if o.Types.Length() > 0 {
-		paramTypes, ok := o.Types.(tree.ArgTypes)
+		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
@@ -645,7 +645,7 @@ func (b *Builder) buildUDF(
 		params = make(opt.ColList, len(paramTypes))
 		for i := range paramTypes {
 			paramType := &paramTypes[i]
-			argColName := funcArgColName(tree.Name(paramType.Name), i)
+			argColName := funcParamColName(tree.Name(paramType.Name), i)
 			col := b.synthesizeColumn(bodyScope, argColName, paramType.Typ, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
 			params[i] = col.id

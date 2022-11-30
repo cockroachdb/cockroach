@@ -59,19 +59,19 @@ func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, erro
 	return -1, pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function language %q", v)
 }
 
-// ArgClassToProto converts sql statement input argument class to protobuf
+// ParamClassToProto converts sql statement input argument class to protobuf
 // type.
-func ArgClassToProto(v tree.FuncArgClass) (catpb.Function_Arg_Class, error) {
+func ParamClassToProto(v tree.FuncParamClass) (catpb.Function_Param_Class, error) {
 	switch v {
-	case tree.FunctionArgIn:
-		return catpb.Function_Arg_IN, nil
-	case tree.FunctionArgOut:
-		return catpb.Function_Arg_OUT, nil
-	case tree.FunctionArgInOut:
-		return catpb.Function_Arg_IN_OUT, nil
-	case tree.FunctionArgVariadic:
-		return catpb.Function_Arg_VARIADIC, nil
+	case tree.FunctionParamIn:
+		return catpb.Function_Param_IN, nil
+	case tree.FunctionParamOut:
+		return catpb.Function_Param_OUT, nil
+	case tree.FunctionParamInOut:
+		return catpb.Function_Param_IN_OUT, nil
+	case tree.FunctionParamVariadic:
+		return catpb.Function_Param_VARIADIC, nil
 	}
 
-	return -1, pgerror.Newf(pgcode.InvalidParameterValue, "unknown function argument class %q", v)
+	return -1, pgerror.Newf(pgcode.InvalidParameterValue, "unknown function parameter class %q", v)
 }

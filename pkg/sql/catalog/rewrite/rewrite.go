@@ -702,8 +702,8 @@ func FunctionDescs(
 		fnDesc.FunctionBody = fnBody
 
 		// Rewrite type IDs.
-		for _, arg := range fnDesc.Args {
-			if err := rewriteIDsInTypesT(arg.Type, descriptorRewrites); err != nil {
+		for _, param := range fnDesc.Params {
+			if err := rewriteIDsInTypesT(param.Type, descriptorRewrites); err != nil {
 				return err
 			}
 		}

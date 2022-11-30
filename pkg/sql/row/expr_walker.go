@@ -603,7 +603,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["unique_rowid"],
 			tree.Overload{
-				Types:      tree.ArgTypes{},
+				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Fn:         importUniqueRowID,
 				Info:       "Returns a unique rowid based on row position and time",
@@ -619,7 +619,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["random"],
 			tree.Overload{
-				Types:      tree.ArgTypes{},
+				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Float),
 				Fn:         importRandom,
 				Info:       "Returns a random number between 0 and 1 based on row position and time.",
@@ -635,7 +635,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["gen_random_uuid"],
 			tree.Overload{
-				Types:      tree.ArgTypes{},
+				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Uuid),
 				Fn:         importGenUUID,
 				Info: "Generates a random UUID based on row position and time, " +
@@ -670,13 +670,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["nextval"],
 			tree.Overload{
-				Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.String}},
+				Types:      tree.ParamTypes{{builtinconstants.SequenceNameArg, types.String}},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextVal,
 			},
 			tree.Overload{
-				Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.RegClass}},
+				Types:      tree.ParamTypes{{builtinconstants.SequenceNameArg, types.RegClass}},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextValByID,
@@ -687,7 +687,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["default_to_database_primary_region"],
 			tree.Overload{
-				Types:      tree.ArgTypes{{"val", types.String}},
+				Types:      tree.ParamTypes{{"val", types.String}},
 				ReturnType: tree.FixedReturnType(types.String),
 				Info:       "Returns the primary region of the database.",
 				Fn:         importDefaultToDatabasePrimaryRegion,
@@ -698,7 +698,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["gateway_region"],
 			tree.Overload{
-				Types:      tree.ArgTypes{},
+				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.String),
 				Info:       "Returns the primary region of the database.",
 				// gateway_region also maps to importDefaultToDatabasePrimaryRegion to

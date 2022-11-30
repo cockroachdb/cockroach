@@ -72,7 +72,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 			// Find the overload that matches funcExpr.
 			if len(funcExpr.Exprs) == def.Overloads[i].Types.Length() {
 				found = true
-				argTypes, ok := def.Overloads[i].Types.(tree.ArgTypes)
+				paramTypes, ok := def.Overloads[i].Types.(tree.ParamTypes)
 				if !ok {
 					panic(pgerror.Newf(
 						pgcode.InvalidFunctionDefinition,
@@ -80,9 +80,9 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 					))
 				}
 				for i := 0; i < def.Overloads[i].Types.Length(); i++ {
-					// Find the sequence name arg.
-					argName := argTypes[i].Name
-					if argName == builtinconstants.SequenceNameArg {
+					// Find the sequence name param.
+					paramName := paramTypes[i].Name
+					if paramName == builtinconstants.SequenceNameArg {
 						arg := funcExpr.Exprs[i]
 						if seqIdentifier := getSequenceIdentifier(arg); seqIdentifier != nil {
 							return seqIdentifier, nil
