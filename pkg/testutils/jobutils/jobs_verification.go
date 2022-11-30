@@ -62,6 +62,12 @@ func WaitForJobToFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) 
 	waitForJobToHaveStatus(t, db, jobID, jobs.StatusFailed)
 }
 
+// WaitForJobReverting waits for the specified job ID to be in a reverting state.
+func WaitForJobReverting(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusReverting)
+}
+
 func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
 ) {

@@ -278,13 +278,14 @@ func TestPutS3AssumeRole(t *testing.T) {
 		)
 	})
 
-	t.Run("role-chaining", func(t *testing.T) {
+	t.Run("role-chaining-external-id", func(t *testing.T) {
 		roleChainStr := os.Getenv("AWS_ROLE_ARN_CHAIN")
 		if roleChainStr == "" {
 			skip.IgnoreLint(t, "AWS_ROLE_ARN_CHAIN env var must be set")
 		}
 
-		roleChain := strings.Split(roleChainStr, ",")
+		assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(roleChainStr)
+		providerChain := append(delegateRoleProviders, assumeRoleProvider)
 		for _, tc := range []struct {
 			auth      string
 			accessKey string
@@ -295,14 +296,14 @@ func TestPutS3AssumeRole(t *testing.T) {
 		} {
 			t.Run(tc.auth, func(t *testing.T) {
 				// First verify that none of the individual roles in the chain can be used to access the storage.
-				for _, role := range roleChain {
+				for _, p := range providerChain {
 					roleURI := S3URI(bucket, "backup-test",
 						&cloudpb.ExternalStorage_S3{
-							Auth:      tc.auth,
-							RoleARN:   role,
-							AccessKey: tc.accessKey,
-							Secret:    tc.secretKey,
-							Region:    "us-east-1",
+							Auth:               tc.auth,
+							AssumeRoleProvider: p,
+							AccessKey:          tc.accessKey,
+							Secret:             tc.secretKey,
+							Region:             "us-east-1",
 						},
 					)
 					cloudtestutils.CheckNoPermission(t, roleURI, user,
@@ -313,15 +314,40 @@ func TestPutS3AssumeRole(t *testing.T) {
 					)
 				}
 
-				// Finally, check that the chain of roles can be used to access the storage.
+				// Next check that the role chain without any external IDs cannot be used to
+				// access the storage.
+				roleWithoutID := cloudpb.ExternalStorage_AssumeRoleProvider{Role: providerChain[len(providerChain)-1].Role}
+				delegatesWithoutID := make([]cloudpb.ExternalStorage_AssumeRoleProvider, 0, len(providerChain)-1)
+				for _, p := range providerChain[:len(providerChain)-1] {
+					delegatesWithoutID = append(delegatesWithoutID, cloudpb.ExternalStorage_AssumeRoleProvider{Role: p.Role})
+				}
+
 				uri := S3URI(bucket, "backup-test",
 					&cloudpb.ExternalStorage_S3{
-						Auth:             tc.auth,
-						RoleARN:          roleChain[len(roleChain)-1],
-						DelegateRoleARNs: roleChain[:len(roleChain)-1],
-						AccessKey:        tc.accessKey,
-						Secret:           tc.secretKey,
-						Region:           "us-east-1",
+						Auth:                  tc.auth,
+						AssumeRoleProvider:    roleWithoutID,
+						DelegateRoleProviders: delegatesWithoutID,
+						AccessKey:             tc.accessKey,
+						Secret:                tc.secretKey,
+						Region:                "us-east-1",
+					},
+				)
+				cloudtestutils.CheckNoPermission(t, uri, user,
+					nil, /* ie */
+					nil, /* ief */
+					nil, /* kvDB */
+					testSettings,
+				)
+
+				// Finally, check that the chain of roles can be used to access the storage.
+				uri = S3URI(bucket, "backup-test",
+					&cloudpb.ExternalStorage_S3{
+						Auth:                  tc.auth,
+						AssumeRoleProvider:    providerChain[len(providerChain)-1],
+						DelegateRoleProviders: providerChain[:len(providerChain)-1],
+						AccessKey:             tc.accessKey,
+						Secret:                tc.secretKey,
+						Region:                "us-east-1",
 					},
 				)
 

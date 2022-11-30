@@ -754,6 +754,8 @@ func TestDataDriven(t *testing.T) {
 						jobutils.WaitForJobToPause(t, runner, jobID)
 					case "failed":
 						jobutils.WaitForJobToFail(t, runner, jobID)
+					case "reverting":
+						jobutils.WaitForJobReverting(t, runner, jobID)
 					default:
 						t.Fatalf("unknown state %s", state)
 					}

@@ -164,28 +164,22 @@ func (p *Manager) Protect(
 	if readAsOf.IsEmpty() {
 		return nil, nil
 	}
-	var protectedtsID *uuid.UUID
-	err := p.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		details := job.Details()
-		protectedtsID = getProtectedTSOnJob(details)
-		// Check if there is an existing protected timestamp ID on the job,
-		// in which case we can only need to update it.
+	// Set up a new protected timestamp ID and install it on the job.
+	err := job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		// Check if the protected timestamp is visible in the txn.
+		protectedtsID := getProtectedTSOnJob(md.Payload.UnwrapDetails())
+		// If it's been removed lets create a new one.
 		if protectedtsID == nil {
 			newID := uuid.MakeV4()
 			protectedtsID = &newID
-			// Set up a new protected timestamp ID and install it on the job.
-			return job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-				details = job.Details()
-				details = setProtectedTSOnJob(details, protectedtsID)
-				md.Payload.Details = jobspb.WrapPayloadDetails(details)
-				ju.UpdatePayload(md.Payload)
-
-				rec := MakeRecord(*protectedtsID,
-					int64(job.ID()), readAsOf, nil, Jobs, target)
-				return p.protectedTSProvider.Protect(ctx, txn, rec)
-			})
+			details := setProtectedTSOnJob(md.Payload.UnwrapDetails(), protectedtsID)
+			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			ju.UpdatePayload(md.Payload)
+			rec := MakeRecord(*protectedtsID,
+				int64(job.ID()), readAsOf, nil, Jobs, target)
+			return p.protectedTSProvider.Protect(ctx, txn, rec)
 		}
-		// Refresh the existing timestamp.
+		// Refresh the existing timestamp, otherwise.
 		return p.protectedTSProvider.UpdateTimestamp(ctx, txn, *protectedtsID, readAsOf)
 	})
 	if err != nil {
@@ -216,7 +210,7 @@ func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 		if protectedtsID == nil {
 			return nil
 		}
-		updatedDetails := setProtectedTSOnJob(job.Details(), nil)
+		updatedDetails := setProtectedTSOnJob(md.Payload.UnwrapDetails(), nil)
 		md.Payload.Details = jobspb.WrapPayloadDetails(updatedDetails)
 		ju.UpdatePayload(md.Payload)
 		return p.protectedTSProvider.Release(ctx, txn, *protectedtsID)

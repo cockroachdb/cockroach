@@ -716,7 +716,7 @@ select
                 │    ├── limit hint: 1.00
                 │    ├── scan d
                 │    │    ├── columns: d1:7 d2:8
-                │    │    └── limit hint: 50.00
+                │    │    └── limit hint: 50.25
                 │    └── filters
                 │         └── (d1:7 = 4) OR (d2:8 = 50) [outer=(7,8)]
                 └── 1
