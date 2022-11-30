@@ -277,5 +277,5 @@ var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.cpu.per_event_elastic_control.enabled",
 	"determines whether changefeed event processing integrates with elastic CPU control",
-	true,
+	false,
 )
