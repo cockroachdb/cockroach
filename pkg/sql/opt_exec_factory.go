@@ -790,10 +790,18 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	tableScan.index = idx
 	vtableCols := colinfo.ResultColumnsFromColumns(tableDesc.GetID(), tableDesc.PublicColumns())
 	projectedVtableCols := planColumns(&tableScan)
-	outputCols := make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
-	outputCols = append(outputCols, inputCols...)
-	outputCols = append(outputCols, projectedVtableCols...)
-	// joinType is either INNER or LEFT_OUTER.
+	var outputCols colinfo.ResultColumns
+	switch joinType {
+	case descpb.InnerJoin, descpb.LeftOuterJoin:
+		outputCols = make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
+		outputCols = append(outputCols, inputCols...)
+		outputCols = append(outputCols, projectedVtableCols...)
+	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+		outputCols = make(colinfo.ResultColumns, 0, len(inputCols))
+		outputCols = append(outputCols, inputCols...)
+	default:
+		return nil, errors.AssertionFailedf("unexpected join type for virtual lookup join: %s", joinType.String())
+	}
 	pred := makePredicate(joinType, inputCols, projectedVtableCols)
 	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	n := &vTableLookupJoinNode{
