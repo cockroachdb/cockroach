@@ -161,25 +161,30 @@ func (s *state) ClusterInfo() ClusterInfo {
 }
 
 // Stores returns all stores that exist in this state.
-func (s *state) Stores() map[StoreID]Store {
-	stores := make(map[StoreID]Store)
-	for storeID, store := range s.stores {
-		stores[storeID] = store
+func (s *state) Stores() []Store {
+	stores := []Store{}
+	for _, store := range s.stores {
+		stores = append(stores, store)
 	}
+	sort.Slice(stores, func(i, j int) bool { return stores[i].StoreID() < stores[j].StoreID() })
 	return stores
 }
 
 // StoreDescriptors returns the descriptors for all stores that exist in
 // this state.
 func (s *state) StoreDescriptors() []roachpb.StoreDescriptor {
-	s.updateStoreCapacities()
-	storeDescriptors := make([]roachpb.StoreDescriptor, len(s.stores))
-	iter := 0
-	for _, store := range s.stores {
-		storeDescriptors[iter] = store.desc
-		iter++
+	storeDescriptors := []roachpb.StoreDescriptor{}
+	for _, store := range s.Stores() {
+		s.updateStoreCapacity(store.StoreID())
+		storeDescriptors = append(storeDescriptors, store.Descriptor())
 	}
 	return storeDescriptors
+}
+
+func (s *state) updateStoreCapacity(storeID StoreID) {
+	if store, ok := s.stores[storeID]; ok {
+		store.desc.Capacity = Capacity(s, storeID)
+	}
 }
 
 // Store returns the Store with ID StoreID. This fails if no Store exists
@@ -189,12 +194,12 @@ func (s *state) Store(storeID StoreID) (Store, bool) {
 	return store, ok
 }
 
-// Nodes returns all nodes that exist in this state.
-func (s *state) Nodes() map[NodeID]Node {
-	nodes := make(map[NodeID]Node)
-	for nodeID, node := range s.nodes {
-		nodes[nodeID] = node
+func (s *state) Nodes() []Node {
+	nodes := []Node{}
+	for _, node := range s.nodes {
+		nodes = append(nodes, node)
 	}
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].NodeID() < nodes[j].NodeID() })
 	return nodes
 }
 
@@ -229,11 +234,12 @@ func (s *state) rng(rangeID RangeID) (*rng, bool) {
 }
 
 // Ranges returns all ranges that exist in this state.
-func (s *state) Ranges() map[RangeID]Range {
-	ranges := make(map[RangeID]Range)
-	for rangeID, r := range s.ranges.rangeMap {
-		ranges[rangeID] = r
+func (s *state) Ranges() []Range {
+	ranges := []Range{}
+	for _, r := range s.ranges.rangeMap {
+		ranges = append(ranges, r)
 	}
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].RangeID() < ranges[j].RangeID() })
 	return ranges
 }
 
@@ -258,13 +264,13 @@ func (r replicaList) Less(i, j int) bool {
 // Replicas returns all replicas that exist on a store.
 func (s *state) Replicas(storeID StoreID) []Replica {
 	replicas := []Replica{}
-	store, ok := s.Store(storeID)
+	store, ok := s.stores[storeID]
 	if !ok {
 		return replicas
 	}
 
 	repls := replicaList{}
-	for rangeID := range store.Replicas() {
+	for rangeID := range store.replicas {
 		rng := s.ranges.rangeMap[rangeID]
 		if replica := rng.replicas[storeID]; replica != nil {
 			repls = append(repls, replica)
@@ -602,7 +608,7 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	}
 	rng, _ := s.Range(rangeID)
 	store, _ := s.Store(storeID)
-	repl, ok := store.Replicas()[rangeID]
+	repl, ok := store.Replica(rangeID)
 	// A replica for the range does not exist on the store, we cannot transfer
 	// a lease to it.
 	if !ok {
@@ -656,12 +662,6 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 		return
 	}
 	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
-}
-
-func (s *state) updateStoreCapacities() {
-	for storeID, store := range s.stores {
-		store.desc.Capacity = Capacity(s, storeID)
-	}
 }
 
 // ReplicaLoad returns the usage information for the Range with ID
@@ -878,9 +878,11 @@ func (s *store) Descriptor() roachpb.StoreDescriptor {
 	return s.desc
 }
 
-// Replicas returns all replicas that are on this store.
-func (s *store) Replicas() map[RangeID]ReplicaID {
-	return s.replicas
+// Replica returns a the Replica belonging to the Range with ID RangeID, if
+// it exists, otherwise false.
+func (s *store) Replica(rangeID RangeID) (ReplicaID, bool) {
+	replicaID, ok := s.replicas[rangeID]
+	return replicaID, ok
 }
 
 // rng is an implementation of the Range interface.
@@ -932,12 +934,20 @@ func (r *rng) SpanConfig() roachpb.SpanConfig {
 }
 
 // Replicas returns all replicas which exist for this range.
-func (r *rng) Replicas() map[StoreID]Replica {
-	replicas := make(map[StoreID]Replica)
-	for storeID, replica := range r.replicas {
-		replicas[storeID] = replica
+func (r *rng) Replicas() []Replica {
+	replicas := replicaList{}
+	for _, replica := range r.replicas {
+		replicas = append(replicas, replica)
 	}
+	sort.Sort(replicas)
 	return replicas
+}
+
+// Replica returns the replica that is on the store with ID StoreID if it
+// exists, else false.
+func (r *rng) Replica(storeID StoreID) (Replica, bool) {
+	replica, ok := r.replicas[storeID]
+	return replica, ok
 }
 
 // Leaseholder returns the ID of the leaseholder for this Range if there is
