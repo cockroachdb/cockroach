@@ -29,7 +29,7 @@ const (
 // JWTAuthAudience sets accepted audience values for JWT logins over the SQL interface.
 var JWTAuthAudience = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
-		settings.TenantReadOnly,
+		settings.TenantWritable,
 		JWTAuthAudienceSettingName,
 		"sets accepted audience values for JWT logins over the SQL interface",
 		"",
@@ -41,7 +41,7 @@ var JWTAuthAudience = func() *settings.StringSetting {
 // JWTAuthEnabled enables or disabled JWT login over the SQL interface.
 var JWTAuthEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
-		settings.TenantReadOnly,
+		settings.TenantWritable,
 		JWTAuthEnabledSettingName,
 		"enables or disabled JWT login for the SQL interface",
 		false,
@@ -53,7 +53,7 @@ var JWTAuthEnabled = func() *settings.BoolSetting {
 // JWTAuthJWKS is the public key set for JWT logins over the SQL interface.
 var JWTAuthJWKS = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
-		settings.TenantReadOnly,
+		settings.TenantWritable,
 		JWTAuthJWKSSettingName,
 		"sets the public key set for JWT logins over the SQL interface (JWKS format)",
 		"{\"keys\":[]}",
@@ -65,7 +65,7 @@ var JWTAuthJWKS = func() *settings.StringSetting {
 // JWTAuthIssuers is the list of "issuer" values that are accepted for JWT logins over the SQL interface.
 var JWTAuthIssuers = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
-		settings.TenantReadOnly,
+		settings.TenantWritable,
 		JWTAuthIssuersSettingName,
 		"sets accepted issuer values for JWT logins over the SQL interface either as a string or as a JSON "+
 			"string with an array of issuer strings in it",
