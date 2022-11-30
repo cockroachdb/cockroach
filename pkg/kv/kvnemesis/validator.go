@@ -1255,6 +1255,9 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 
 		// Handle a point key - put it into `hist`.
 		valB, err := iter.ValueAndErr()
+		if err != nil {
+			panic(err)
+		}
 		v, err := storage.DecodeMVCCValue(valB)
 		if err != nil {
 			panic(err)

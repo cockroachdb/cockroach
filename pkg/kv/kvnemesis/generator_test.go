@@ -246,7 +246,13 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 		return seq
 	}
 
-	splitKeys := []uint64{5000, 10000, 15000, 20000, 25000, 30000, math.MaxUint64 / 2} // sorted
+	// We'll add temporary elements below. The linters prevent shadowing so we
+	// need to pick a name that makes it clear which is which.
+	//
+	// Keep this sorted.
+	goldenSplitKeys := []uint64{
+		5000, 10000, 15000, 20000, 25000, 30000, math.MaxUint64 / 2,
+	}
 
 	splitPointMap := map[string]struct{}{}
 	splitPointCountMap := map[string]int{}
@@ -254,7 +260,7 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 	{
 		// Temporarily put 0 and MaxUint64 into the slice to
 		// help generate the leftmost and rightmost range.
-		splitKeys := append([]uint64{0}, splitKeys...)
+		splitKeys := append([]uint64{0}, goldenSplitKeys...)
 		splitKeys = append(splitKeys, math.MaxUint64)
 		for i := range splitKeys {
 			if i == 0 {
