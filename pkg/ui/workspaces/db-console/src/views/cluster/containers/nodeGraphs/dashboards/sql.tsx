@@ -116,7 +116,7 @@ export default function(props: GraphDashboardProps) {
       title="SQL Statement Errors"
       sources={nodeSources}
       tooltip={
-        "The number of statements which returned a planning or runtime error."
+        "The number of statements which returned a planning, runtime, or client-side retry error."
       }
     >
       <Axis label="errors">
