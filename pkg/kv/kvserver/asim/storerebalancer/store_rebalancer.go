@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -57,6 +56,7 @@ type storeRebalancerState struct {
 
 	pendingRelocate, pendingTransfer kvserver.CandidateReplica
 	pendingRelocateTargets           []roachpb.ReplicationTarget
+	pendingRelocateExistingVoters    []roachpb.ReplicaDescriptor
 	pendingTransferTarget            roachpb.ReplicaDescriptor
 
 	pendingTicket op.DispatchedTicket
@@ -121,30 +121,6 @@ func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.QPSScorerOptio
 	}
 }
 
-func (src *storeRebalancerControl) makeRebalanceContext(
-	state state.State,
-) *kvserver.RebalanceContext {
-	allStoresList, _, _ := src.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
-	options := src.scorerOptions()
-
-	store, ok := state.Store(src.storeID)
-	if !ok {
-		return nil
-	}
-	localDesc := store.Descriptor()
-
-	return kvserver.NewRebalanceContext(
-		&localDesc,
-		options,
-		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
-		allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean),
-		allStoresList.ToMap(),
-		allStoresList,
-		hottestRanges(state, src.storeID),
-		[]kvserver.CandidateReplica{},
-	)
-}
-
 func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Time, _ error) {
 	ticket := src.rebalancerState.pendingTicket
 	op, ok := src.controller.Check(ticket)
@@ -186,7 +162,12 @@ func (src *storeRebalancerControl) phaseSleep(ctx context.Context, tick time.Tim
 func (src *storeRebalancerControl) phasePrologue(
 	ctx context.Context, tick time.Time, s state.State,
 ) {
-	rctx := src.makeRebalanceContext(s)
+	rctx := src.sr.NewRebalanceContext(
+		ctx, src.scorerOptions(),
+		hottestRanges(s, src.storeID),
+		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
+	)
+
 	if !src.sr.ShouldRebalanceStore(ctx, rctx) {
 		src.phaseEpilogue(ctx, tick)
 		return
@@ -197,7 +178,7 @@ func (src *storeRebalancerControl) phasePrologue(
 	src.phaseLeaseRebalancing(ctx, tick, s)
 }
 
-func (src *storeRebalancerControl) checkPendingLeaseRebalance() bool {
+func (src *storeRebalancerControl) checkPendingLeaseRebalance(ctx context.Context) bool {
 	// No pending lease rebalance, we can continue to searching for targets.
 	if src.rebalancerState.pendingTransfer == nil {
 		return true
@@ -214,6 +195,7 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance() bool {
 		// The transfer has completed without error, update the local
 		// state to reflect it's success.
 		src.sr.PostLeaseRebalance(
+			ctx,
 			src.rebalancerState.rctx,
 			src.rebalancerState.pendingTransfer,
 			src.rebalancerState.pendingTransferTarget,
@@ -256,7 +238,7 @@ func (src *storeRebalancerControl) phaseLeaseRebalancing(
 	for {
 		// Check the pending transfer state, if we can't continue to searching
 		// for targets return early.
-		if !src.checkPendingLeaseRebalance() {
+		if !src.checkPendingLeaseRebalance(ctx) {
 			return
 		}
 
@@ -283,7 +265,7 @@ func (src *storeRebalancerControl) phaseLeaseRebalancing(
 	src.phaseEpilogue(ctx, tick)
 }
 
-func (src *storeRebalancerControl) checkPendingRangeRebalance() bool {
+func (src *storeRebalancerControl) checkPendingRangeRebalance(ctx context.Context) bool {
 	// No pending range rebalance, we can continue to searching for targets.
 	if src.rebalancerState.pendingRelocate == nil {
 		return true
@@ -301,9 +283,13 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance() bool {
 		// store descriptor and continue searching for range
 		// rebalancing targets.
 		src.sr.PostRangeRebalance(
+			ctx,
 			src.rebalancerState.rctx,
 			src.rebalancerState.pendingRelocate,
 			src.rebalancerState.pendingRelocateTargets,
+			nil, /* non-voter targets */
+			src.rebalancerState.pendingRelocateExistingVoters,
+			nil, /* old non-voters */
 		)
 	}
 
@@ -335,6 +321,7 @@ func (src *storeRebalancerControl) applyRangeRebalance(
 	ticket := src.controller.Dispatch(ctx, tick, s, relocateOp)
 	src.rebalancerState.pendingRelocate = candidateReplica
 	src.rebalancerState.pendingRelocateTargets = voterTargets
+	src.rebalancerState.pendingRelocateExistingVoters = candidateReplica.Desc().Replicas().VoterDescriptors()
 	src.rebalancerState.pendingTicket = ticket
 }
 
@@ -344,7 +331,7 @@ func (src *storeRebalancerControl) phaseRangeRebalancing(
 	for {
 		// Check the pending range rebalance state, if we can't continue to
 		// searching for targets return early.
-		if !src.checkPendingRangeRebalance() {
+		if !src.checkPendingRangeRebalance(ctx) {
 			return
 		}
 
