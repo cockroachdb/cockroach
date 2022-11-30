@@ -291,7 +291,8 @@ func TestRelocateRangeOp(t *testing.T) {
 			// Update the storepool for informing allocator decisions.
 			storeDescriptors := s.StoreDescriptors()
 			exchange.Put(state.OffsetTick(start, 0), storeDescriptors...)
-			for storeID := range s.Stores() {
+			for _, store := range s.Stores() {
+				storeID := store.StoreID()
 				s.UpdateStorePool(storeID, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(storeID)))
 			}
 
@@ -342,8 +343,8 @@ func TestRelocateRangeOp(t *testing.T) {
 						leaseholder: int64(leaseholderStore.StoreID()),
 						voters:      []int64{},
 					}
-					for storeID := range rng.Replicas() {
-						rState.voters = append(rState.voters, int64(storeID))
+					for _, repl := range rng.Replicas() {
+						rState.voters = append(rState.voters, int64(repl.StoreID()))
 					}
 					sort.Slice(rState.voters, func(i, j int) bool {
 						return rState.voters[i] < rState.voters[j]

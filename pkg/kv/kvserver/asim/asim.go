@@ -77,7 +77,8 @@ func NewSimulator(
 	sqs := make(map[state.StoreID]queue.RangeQueue)
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
 	controllers := make(map[state.StoreID]op.Controller)
-	for storeID := range initialState.Stores() {
+	for _, store := range initialState.Stores() {
+		storeID := store.StoreID()
 		allocator := initialState.MakeAllocator(storeID)
 		// TODO(kvoli): Instead of passing in individual settings to construct
 		// the each ticking component, pass a pointer to the simulation
@@ -225,12 +226,14 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
 // exchange. It then updates the exchanged descriptors for each store's store
 // pool.
 func (s *Simulator) tickStateExchange(tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		storeDescriptors := s.state.StoreDescriptors()
-		s.exchange.Put(tick, storeDescriptors...)
-		for storeID := range s.state.Stores() {
-			s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
-		}
+	if s.bgLastTick.Add(s.bgInterval).After(tick) {
+		return
+	}
+	storeDescriptors := s.state.StoreDescriptors()
+	s.exchange.Put(tick, storeDescriptors...)
+	for _, store := range s.state.Stores() {
+		storeID := store.StoreID()
+		s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
 	}
 }
 
@@ -242,7 +245,8 @@ func (s *Simulator) tickStoreClocks(tick time.Time) {
 // consider. It then enqueues each of these and ticks the replicate queue for
 // processing.
 func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.State) {
-	for storeID := range state.Stores() {
+	for _, store := range state.Stores() {
+		storeID := store.StoreID()
 
 		// Tick the split queue.
 		s.sqs[storeID].Tick(ctx, tick, state)
