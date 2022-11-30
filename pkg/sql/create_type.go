@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -193,7 +192,7 @@ func findFreeArrayTypeName(
 	arrayName := "_" + name
 	for {
 		// See if there is a collision with the current name.
-		objectID, err := col.Direct().LookupObjectID(ctx, txn, parentID, schemaID, arrayName)
+		objectID, err := col.LookupObjectID(ctx, txn, parentID, schemaID, arrayName)
 		if err != nil {
 			return "", err
 		}
@@ -264,7 +263,6 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
@@ -283,15 +281,8 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-
 	jobStr := fmt.Sprintf("implicit array type creation for %s", typ)
-	if err := p.createDescriptorWithID(
-		params.ctx,
-		arrayTypeKey,
-		id,
-		arrayTypDesc,
-		jobStr,
-	); err != nil {
+	if err := p.createDescriptor(params.ctx, arrayTypDesc, jobStr); err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -410,13 +401,7 @@ func (p *planner) createEnumWithID(
 	typeDesc.ArrayTypeID = arrayTypeID
 
 	// Now create the type after the implicit array type as been created.
-	if err := p.createDescriptorWithID(
-		params.ctx,
-		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schema.GetID(), typeName.Type()),
-		id,
-		typeDesc,
-		typeName.String(),
-	); err != nil {
+	if err := p.createDescriptor(params.ctx, typeDesc, typeName.String()); err != nil {
 		return err
 	}
 

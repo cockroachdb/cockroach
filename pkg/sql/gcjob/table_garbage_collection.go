@@ -89,9 +89,7 @@ func gcTables(
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.
-		if err := sql.DeleteTableDescAndZoneConfig(
-			ctx, execCfg.DB, execCfg.Settings, execCfg.Codec, table,
-		); err != nil {
+		if err := sql.DeleteTableDescAndZoneConfig(ctx, execCfg, table); err != nil {
 			return errors.Wrapf(err, "dropping table descriptor for table %d", table.GetID())
 		}
 
@@ -334,9 +332,7 @@ func deleteTableDescriptorsAfterGC(
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.
-		if err := sql.DeleteTableDescAndZoneConfig(
-			ctx, execCfg.DB, execCfg.Settings, execCfg.Codec, table,
-		); err != nil {
+		if err := sql.DeleteTableDescAndZoneConfig(ctx, execCfg, table); err != nil {
 			return errors.Wrapf(err, "dropping table descriptor for table %d", table.GetID())
 		}
 

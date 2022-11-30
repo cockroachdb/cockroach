@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -121,8 +120,6 @@ type PlanHookState interface {
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allHydratedDescs []catalog.Descriptor, desc catalog.TableDescriptor, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
-	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
-		schemaID descpb.ID) error
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)

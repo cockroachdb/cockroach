@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -672,9 +671,17 @@ func (r *importResumer) prepareSchemasForIngestion(
 
 	// Finally create the schemas on disk.
 	for i, mutDesc := range mutableSchemaDescs {
-		nameKey := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbDesc.ID, mutDesc.GetName())
-		err = createSchemaDescriptorWithID(ctx, nameKey, mutDesc.ID, mutDesc, p, descsCol, txn)
-		if err != nil {
+		b := &kv.Batch{}
+		kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, mutDesc, b); err != nil {
+			return nil, err
+		}
+		if !mutDesc.SkipNamespace() {
+			if err := descsCol.InsertNamespaceEntryToBatch(ctx, kvTrace, mutDesc, b); err != nil {
+				return nil, err
+			}
+		}
+		if err := txn.Run(ctx, b); err != nil {
 			return nil, err
 		}
 		schemaMetadata.schemaPreparedDetails.Schemas[i] = jobspb.ImportDetails_Schema{
@@ -709,54 +716,6 @@ func bindImportStartTime(
 		return err
 	}
 	return nil
-}
-
-// createSchemaDescriptorWithID writes a schema descriptor with `id` to disk.
-func createSchemaDescriptorWithID(
-	ctx context.Context,
-	idKey roachpb.Key,
-	id descpb.ID,
-	descriptor catalog.Descriptor,
-	p sql.JobExecContext,
-	descsCol *descs.Collection,
-	txn *kv.Txn,
-) error {
-	if descriptor.GetID() == descpb.InvalidID {
-		return errors.AssertionFailedf("cannot create descriptor with an empty ID: %v", descriptor)
-	}
-	if descriptor.GetID() != id {
-		return errors.AssertionFailedf("cannot create descriptor with an ID %v; expected ID %v; descriptor %v",
-			id, descriptor.GetID(), descriptor)
-	}
-	b := &kv.Batch{}
-	descID := descriptor.GetID()
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
-	}
-	b.CPut(idKey, descID, nil)
-	if err := descsCol.Direct().WriteNewDescToBatch(
-		ctx,
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		b,
-		descriptor,
-	); err != nil {
-		return err
-	}
-
-	mutDesc, ok := descriptor.(catalog.MutableDescriptor)
-	if !ok {
-		return errors.Newf("unexpected type %T when creating descriptor", descriptor)
-	}
-	switch mutDesc.(type) {
-	case *schemadesc.Mutable:
-		if err := descsCol.AddUncommittedDescriptor(ctx, mutDesc); err != nil {
-			return err
-		}
-	default:
-		return errors.Newf("unexpected type %T when creating descriptor", mutDesc)
-	}
-
-	return txn.Run(ctx, b)
 }
 
 // parseBundleSchemaIfNeeded parses dump files (PGDUMP, MYSQLDUMP) for DDL
@@ -1606,9 +1565,7 @@ func (r *importResumer) dropNewTables(
 		// possible. This is safe since the table data was never visible to users,
 		// and so we don't need to preserve MVCC semantics.
 		newTableDesc.DropTime = dropTime
-		b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc))
 		tablesToGC = append(tablesToGC, newTableDesc.ID)
-		descsCol.NotifyOfDeletedDescriptor(newTableDesc.GetID())
 
 		// Accumulate the changes before adding them to the batch to avoid
 		// making any table invalid before having read it.
@@ -1619,6 +1576,10 @@ func (r *importResumer) dropNewTables(
 		if err := descsCol.WriteDescToBatch(ctx, kvTrace, d, b); err != nil {
 			return err
 		}
+		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, d, b); err != nil {
+			return err
+		}
+		descsCol.NotifyOfDeletedDescriptor(d.GetID())
 	}
 
 	// Queue a GC job.
@@ -1693,10 +1654,14 @@ func (r *importResumer) dropSchemas(
 		if dbDesc.Schemas != nil {
 			delete(dbDesc.Schemas, schemaDesc.GetName())
 		}
-		b.Del(catalogkeys.EncodeNameKey(p.ExecCfg().Codec, schemaDesc))
-
-		if err := descsCol.WriteDescToBatch(ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-			schemaDesc, b); err != nil {
+		if err := descsCol.WriteDescToBatch(
+			ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), schemaDesc, b,
+		); err != nil {
+			return nil, err
+		}
+		if err := descsCol.DeleteNamespaceEntryToBatch(
+			ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), schemaDesc, b,
+		); err != nil {
 			return nil, err
 		}
 		err = txn.Run(ctx, b)

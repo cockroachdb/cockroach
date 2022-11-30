@@ -42,7 +42,7 @@ func (p *planner) renameDatabase(
 	}
 
 	// Check that the new name is available.
-	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, newName); err == nil && dbID != descpb.InvalidID {
+	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, newName); err == nil && dbID != descpb.InvalidID {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
 			"the new database name %q already exists", newName)
 	} else if err != nil {
@@ -54,7 +54,9 @@ func (p *planner) renameDatabase(
 
 	// Populate the namespace update batch.
 	b := p.txn.NewBatch()
-	p.renameNamespaceEntry(ctx, b, oldNameKey, desc)
+	if err := p.renameNamespaceEntry(ctx, b, oldNameKey, desc); err != nil {
+		return err
+	}
 
 	// Write the updated database descriptor.
 	if err := p.writeNonDropDatabaseChange(ctx, desc, stmt); err != nil {

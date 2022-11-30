@@ -71,8 +71,8 @@ func TestGetAllNamesInternal(t *testing.T) {
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
-		batch.Put(catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, 999, 444, "bob"), 9999)
-		batch.Put(catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, 1000, "alice"), 10000)
+		batch.Put(catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{ParentID: 999, ParentSchemaID: 444, Name: "bob"}), 9999)
+		batch.Put(catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{ParentID: 1000, ParentSchemaID: 29, Name: "alice"}), 10000)
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)

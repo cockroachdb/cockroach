@@ -174,6 +174,8 @@ type CommonLookupFlags struct {
 	IncludeDropped bool
 	// AvoidSynthetic specifies if the synthetic descriptors will be ignored.
 	AvoidSynthetic bool
+	// AvoidStorage specifies if the descriptors in storage will be ignored.
+	AvoidStorage bool
 	// ParentID enforces that the resolved descriptor exist with this parent
 	// ID if non-zero.
 	ParentID catid.DescID

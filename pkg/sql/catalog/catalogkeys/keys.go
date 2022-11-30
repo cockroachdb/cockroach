@@ -129,40 +129,6 @@ func PrettySpans(index catalog.Index, spans []roachpb.Span, skip int) string {
 	return b.String()
 }
 
-// NewNameKeyComponents returns a new catalog.NameKey instance for the given object
-// name scoped under the given parent schema and parent database.
-func NewNameKeyComponents(
-	parentID descpb.ID, parentSchemaID descpb.ID, name string,
-) catalog.NameKey {
-	return descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
-}
-
-// MakeObjectNameKey returns the roachpb.Key for the given object name
-// scoped under the given schema in the given database.
-func MakeObjectNameKey(
-	codec keys.SQLCodec, parentID, parentSchemaID descpb.ID, name string,
-) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, parentSchemaID, name))
-}
-
-// MakePublicObjectNameKey returns the roachpb.Key for the given object name
-// scoped under the public schema in the given database.
-func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.PublicSchemaID, name))
-}
-
-// MakeSchemaNameKey returns the roachpb.Key for the given schema name scoped
-// under the given database.
-func MakeSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, name))
-}
-
-// MakeDatabaseNameKey returns the roachpb.Key corresponding to the database
-// with the given name.
-func MakeDatabaseNameKey(codec keys.SQLCodec, name string) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(keys.RootNamespaceID, keys.RootNamespaceID, name))
-}
-
 // MakeDatabaseChildrenNameKeyPrefix constructs a key which is a prefix to all
 // namespace entries for children of the requested database.
 func MakeDatabaseChildrenNameKeyPrefix(codec keys.SQLCodec, parentID descpb.ID) roachpb.Key {

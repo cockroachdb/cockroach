@@ -356,7 +356,9 @@ func (p *planner) initiateDropTable(
 
 	// Delete namespace entry for table.
 	b := p.txn.NewBatch()
-	p.dropNamespaceEntry(ctx, b, tableDesc)
+	if err := p.dropNamespaceEntry(ctx, b, tableDesc); err != nil {
+		return err
+	}
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}

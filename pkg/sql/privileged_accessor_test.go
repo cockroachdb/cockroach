@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +39,7 @@ func TestLookupNamespaceID(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(
 			ctx,
-			catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, 999, 1000, "bob"),
+			catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{ParentID: 999, ParentSchemaID: 1000, Name: "bob"}),
 			9999,
 		)
 	})

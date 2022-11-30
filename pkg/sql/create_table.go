@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -415,10 +414,8 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	// Descriptor written to store here.
-	if err := params.p.createDescriptorWithID(
+	if err := params.p.createDescriptor(
 		params.ctx,
-		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.n.Table.Table()),
-		id,
 		desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {

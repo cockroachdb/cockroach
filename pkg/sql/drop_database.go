@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -145,11 +145,24 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	for _, schemaWithDbDesc := range n.d.schemasToDelete {
 		schemaToDelete := schemaWithDbDesc.schema
 		switch schemaToDelete.SchemaKind() {
-		case catalog.SchemaTemporary, catalog.SchemaPublic:
-			// The public schema and temporary schemas are cleaned up by just removing
-			// the existing namespace entries.
-			key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.dbDesc.GetID(), schemaToDelete.GetName())
-			if _, err := p.txn.Del(ctx, key); err != nil {
+		case catalog.SchemaPublic:
+			b := &kv.Batch{}
+			if err := p.Descriptors().DeleteDescriptorlessPublicSchemaToBatch(
+				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, b,
+			); err != nil {
+				return err
+			}
+			if err := p.txn.Run(ctx, b); err != nil {
+				return err
+			}
+		case catalog.SchemaTemporary:
+			b := &kv.Batch{}
+			if err := p.Descriptors().DeleteTempSchemaToBatch(
+				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, schemaToDelete.GetName(), b,
+			); err != nil {
+				return err
+			}
+			if err := p.txn.Run(ctx, b); err != nil {
 				return err
 			}
 		case catalog.SchemaUserDefined:
@@ -180,7 +193,9 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	n.dbDesc.SetDropped()
 	b := p.txn.NewBatch()
-	p.dropNamespaceEntry(ctx, b, n.dbDesc)
+	if err := p.dropNamespaceEntry(ctx, b, n.dbDesc); err != nil {
+		return err
+	}
 
 	// Note that a job was already queued above.
 	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {

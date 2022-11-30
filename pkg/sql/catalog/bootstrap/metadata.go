@@ -173,6 +173,14 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			add(keys.LegacyDescIDGenerator, legacyValue)
 		}
 	}
+	// Generate initial values for the system database's public schema, which
+	// doesn't have a descriptor.
+	{
+		publicSchemaValue := roachpb.Value{}
+		publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
+		nameInfo := descpb.NameInfo{ParentID: keys.SystemDatabaseID, Name: tree.PublicSchema}
+		add(catalogkeys.EncodeNameKey(ms.codec, &nameInfo), publicSchemaValue)
+	}
 
 	// Generate initial values for system databases and tables, which have
 	// static descriptors that were generated elsewhere.
@@ -180,16 +188,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Create name metadata key.
 		nameValue := roachpb.Value{}
 		nameValue.SetInt(int64(desc.GetID()))
-		if desc.GetParentID() != keys.RootNamespaceID {
-			add(catalogkeys.MakePublicObjectNameKey(ms.codec, desc.GetParentID(), desc.GetName()), nameValue)
-		} else {
-			// Initializing a database. Databases must be initialized with
-			// the public schema, as all tables are scoped under the public schema.
-			add(catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()), nameValue)
-			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
-			add(catalogkeys.MakeSchemaNameKey(ms.codec, desc.GetID(), tree.PublicSchema), publicSchemaValue)
-		}
+		add(catalogkeys.EncodeNameKey(ms.codec, desc), nameValue)
 
 		// Set initial sequence values.
 		if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
