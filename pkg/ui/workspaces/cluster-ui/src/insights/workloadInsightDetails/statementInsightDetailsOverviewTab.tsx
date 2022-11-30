@@ -89,7 +89,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
 
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
-    columnTitle: "Insights",
+    columnTitle: "insights",
   });
 
   return (
