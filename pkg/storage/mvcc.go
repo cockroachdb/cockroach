@@ -993,7 +993,6 @@ func newMVCCIterator(
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
-	// TODO(during review): should this be inlined for performance? How do I tell?
 	value, intent, _, err := MVCCGetWithValueHeader(ctx, reader, key, timestamp, opts)
 	return value, intent, err
 }
