@@ -2000,3 +2000,13 @@ ORDER BY a.attnum
 ----
 interval_col  interval  'P3Y'::INTERVAL
 rowid         bigint    unique_rowid()
+
+statement error pq: unsupported comparison operator: <tuple> < <string>
+SELECT * FROM ex WHERE () < '1970-01-02 00:00:01.000001-04';
+
+statement error pq: could not parse \"1970-01-02 00:00:01.000001-04\" as type tuple{timestamptz}: record must be enclosed in \( and \)
+SELECT * FROM ex WHERE ROW('1970-01-02 00:00:01.000001-04'::TIMESTAMPTZ) < '1970-01-02 00:00:01.000001-04';
+
+query TTTTT
+SELECT * FROM ex WHERE ROW('1970-01-03 00:00:01.000001-04'::TIMESTAMPTZ) < ROW('1970-01-02 00:00:01.000001-04');
+----
