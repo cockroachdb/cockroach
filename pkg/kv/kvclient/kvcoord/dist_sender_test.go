@@ -4286,9 +4286,27 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sendErrors := int32(0)
-	var queriedMetaKeys sync.Map
+	// makeBarrier will make a function which will return once N goroutines
+	// have called it simultaneously. The first time these goroutines call
+	// this function, it will return false. After it has returned false,
+	// subsequent calls will return true.
+	makeBarrier := func(n int) func() (previouslyJoined bool) {
+		wg, done := sync.WaitGroup{}, atomic.Bool{}
+		wg.Add(n)
+		return func() bool {
+			if done.Load() {
+				return true
+			}
+			wg.Done()
+			wg.Wait()
+			done.Store(true)
+			return false
+		}
+	}
 
+	waitForInitialPuts := makeBarrier(2)
+	waitForInitialMeta2Scans := makeBarrier(2)
+	var queriedMetaKeys sync.Map
 	var ds *DistSender
 	testFn := func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
@@ -4300,7 +4318,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		if !kv.TestingIsRangeLookup(ba) {
 			// Return a sendError so DistSender retries the first range lookup in the
 			// user key-space for both batches.
-			if atomic.AddInt32(&sendErrors, 1) <= 2 {
+			if previouslyWaited := waitForInitialPuts(); !previouslyWaited {
 				return nil, newSendError("boom")
 			}
 			return br, nil
@@ -4319,6 +4337,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			br.Add(r)
 			return br, nil
 		}
+		waitForInitialMeta2Scans()
 		// Querying meta2 range.
 		br = &roachpb.BatchResponse{}
 		r := &roachpb.ScanResponse{}
