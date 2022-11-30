@@ -17,10 +17,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
@@ -28,7 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -72,6 +77,10 @@ type Collection struct {
 	// These descriptors are local to this Collection and their state is thus
 	// not visible to other transactions.
 	uncommitted uncommittedDescriptors
+
+	uncommittedComments uncommittedComments
+
+	uncommittedZoneConfigs uncommittedZoneConfigs
 
 	// A collection of descriptors which mirrors the descriptors committed to
 	// storage. This acts as a cache by accumulating every descriptor ever read
@@ -163,6 +172,8 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommitted.reset(ctx)
+	tc.uncommittedComments.reset()
+	tc.uncommittedZoneConfigs.reset()
 	tc.stored.Reset(ctx)
 	tc.ResetSyntheticDescriptors()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
@@ -348,6 +359,134 @@ func (tc *Collection) DeleteNamespaceEntryToBatch(
 		log.VEventf(ctx, 2, "Del %s", nameKey)
 	}
 	b.Del(nameKey)
+	return nil
+}
+
+// WriteCommentToBatch adds the comment changes to uncommitted layer and writes
+// to the kv batch.
+func (tc *Collection) WriteCommentToBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, key catalogkeys.CommentKey, cmt string,
+) error {
+	cmtWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.CommentsTable)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(key.CommentType)),
+		tree.NewDInt(tree.DInt(key.ObjectID)),
+		tree.NewDInt(tree.DInt(key.SubID)),
+		tree.NewDString(cmt),
+	}
+
+	var expValues []tree.Datum
+	if oldCmt, found := tc.GetComment(key); found {
+		expValues = []tree.Datum{
+			tree.NewDInt(tree.DInt(key.CommentType)),
+			tree.NewDInt(tree.DInt(key.ObjectID)),
+			tree.NewDInt(tree.DInt(key.SubID)),
+			tree.NewDString(oldCmt),
+		}
+	}
+
+	var err error
+	if expValues == nil {
+		err = cmtWriter.Insert(ctx, b, kvTrace, values...)
+	} else {
+		err = cmtWriter.Update(ctx, b, kvTrace, values, expValues)
+	}
+	if err != nil {
+		return err
+	}
+
+	tc.AddUncommittedComment(key, cmt)
+	return nil
+}
+
+// DeleteCommentInBatch deletes a comment with the given (objID, subID, cmtType) key in
+// the same batch and marks it as deleted
+func (tc *Collection) DeleteCommentInBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, key catalogkeys.CommentKey,
+) error {
+	cmtWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.CommentsTable)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(key.CommentType)),
+		tree.NewDInt(tree.DInt(key.ObjectID)),
+		tree.NewDInt(tree.DInt(key.SubID)),
+		// kv delete only care about keys, so it's fine to just use an empty string
+		// for comment here since it's not part of any index.
+		tree.NewDString(""),
+	}
+
+	if err := cmtWriter.Delete(ctx, b, kvTrace, values...); err != nil {
+		return err
+	}
+
+	tc.MarkUncommittedCommentDeleted(key)
+	return nil
+}
+
+// DeleteTableComments deletes all comment on a table.
+func (tc *Collection) DeleteTableComments(
+	ctx context.Context, kvTrace bool, b *kv.Batch, tblID descpb.ID,
+) error {
+	for _, t := range catalogkeys.AllTableCommentTypes {
+		cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(tc.codec(), t, tblID)
+		b.DelRange(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		if kvTrace {
+			log.VEventf(ctx, 2, "DelRange %s", cmtKeyPrefix)
+		}
+	}
+	tc.MarkUncommittedCommentDeletedForTable(tblID)
+	return nil
+}
+
+// WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
+// writes to the kv batch.
+func (tc *Collection) WriteZoneConfigToBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, descID descpb.ID, zc *zonepb.ZoneConfig,
+) error {
+	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable)
+	var val roachpb.Value
+	if err := val.SetProto(zc); err != nil {
+		return err
+	}
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(descID)),
+		tree.NewDBytes(tree.DBytes(val.TagAndDataBytes())),
+	}
+
+	var expValues []tree.Datum
+	if zc := tc.GetZoneConfig(descID); zc != nil {
+		expValues = []tree.Datum{
+			tree.NewDInt(tree.DInt(descID)),
+			tree.NewDBytes(tree.DBytes(zc.GetRawBytesInStorage())),
+		}
+	}
+
+	var err error
+	if expValues == nil {
+		err = zcWriter.Insert(ctx, b, kvTrace, values...)
+	} else {
+		err = zcWriter.Update(ctx, b, kvTrace, values, expValues)
+	}
+	if err != nil {
+		return err
+	}
+
+	return tc.AddUncommittedZoneConfig(descID, zc)
+}
+
+// DeleteZoneConfigInBatch deletes zone config of the table.
+func (tc *Collection) DeleteZoneConfigInBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, descID descpb.ID,
+) error {
+	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(descID)),
+		tree.NewDBytes(""),
+	}
+	if err := zcWriter.Delete(ctx, b, kvTrace, values...); err != nil {
+		return err
+	}
+
+	tc.MarkUncommittedZoneConfigDeleted(descID)
 	return nil
 }
 
@@ -835,6 +974,42 @@ func (tc *Collection) SetDescriptorSessionDataProvider(dsdp DescriptorSessionDat
 	tc.stored.DescriptorValidationModeProvider = dsdp
 	tc.temporarySchemaProvider = dsdp
 	tc.validationModeProvider = dsdp
+}
+
+// GetDatabaseComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetDatabaseComment(dbID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(dbID), 0, catalogkeys.DatabaseCommentType))
+}
+
+// GetSchemaComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetSchemaComment(schemaID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(schemaID), 0, catalogkeys.SchemaCommentType))
+}
+
+// GetTableComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetTableComment(tableID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), 0, catalogkeys.TableCommentType))
+}
+
+// GetColumnComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetColumnComment(
+	tableID descpb.ID, pgAttrNum catid.PGAttributeNum,
+) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(pgAttrNum), catalogkeys.ColumnCommentType))
+}
+
+// GetIndexComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetIndexComment(
+	tableID descpb.ID, indexID catid.IndexID,
+) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(indexID), catalogkeys.IndexCommentType))
+}
+
+// GetConstraintComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetConstraintComment(
+	tableID descpb.ID, constraintID catid.ConstraintID,
+) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(constraintID), catalogkeys.ConstraintCommentType))
 }
 
 // Direct exports the catkv.Direct interface.

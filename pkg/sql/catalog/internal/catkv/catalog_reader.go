@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,7 +65,8 @@ type CatalogReader interface {
 	) (nstree.Catalog, error)
 
 	// GetDescriptorEntries gets the descriptors for the desired IDs, but looks in
-	// the system database cache first if there is one.
+	// the system database cache first if there is one. It also reads all metadata
+	// (e.g. comments and zoneconfig) of the descriptors.
 	GetDescriptorEntries(
 		ctx context.Context,
 		txn *kv.Txn,
@@ -133,6 +135,10 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 		b.Scan(descsPrefix, descsPrefix.PrefixEnd())
 		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
+		commentPrefix := catalogkeys.CommentsMetadataPrefix(codec)
+		b.Scan(commentPrefix, commentPrefix.PrefixEnd())
+		zonesPrefix := config.ZonesPrimaryIndexPrefix(codec)
+		b.Scan(zonesPrefix, zonesPrefix.PrefixEnd())
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -226,6 +232,12 @@ func (cr catalogReader) GetDescriptorEntries(
 			for _, id := range ids {
 				if id != descpb.InvalidID && mc.LookupDescriptorEntry(id) == nil {
 					b.Get(catalogkeys.MakeDescMetadataKey(codec, id))
+					// Fetch all the comments on the descriptor in same batch.
+					for _, t := range catalogkeys.AllCommentTypes {
+						cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id)
+						b.Scan(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd())
+					}
+					b.Get(config.MakeZoneKey(codec, id))
 				}
 			}
 		})

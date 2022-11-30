@@ -13,11 +13,10 @@ package sctestdeps
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -79,7 +78,7 @@ func WithSessionData(sessionData sessiondata.SessionData) Option {
 }
 
 // WithZoneConfigs sets the TestStates zone config map to the provided value.
-func WithZoneConfigs(zoneConfigs map[catid.DescID]*zonepb.ZoneConfig) Option {
+func WithZoneConfigs(zoneConfigs map[catid.DescID]catalog.ZoneConfig) Option {
 	return optionFunc(func(state *TestState) {
 		state.zoneConfigs = zoneConfigs
 	})
@@ -125,7 +124,7 @@ func WithBackfiller(backfiller scexec.Backfiller) Option {
 }
 
 // WithComments injects sets comment cache of TestState to the provided value.
-func WithComments(comments map[descmetadata.CommentKey]string) Option {
+func WithComments(comments map[catalogkeys.CommentKey]string) Option {
 	return optionFunc(func(state *TestState) {
 		state.comments = comments
 	})
@@ -157,6 +156,6 @@ var defaultOptions = []Option{
 		state.merger = &testBackfiller{s: state}
 		state.indexSpanSplitter = &indexSpanSplitter{}
 		state.approximateTimestamp = defaultCreatedAt
-		state.zoneConfigs = make(map[catid.DescID]*zonepb.ZoneConfig)
+		state.zoneConfigs = make(map[catid.DescID]catalog.ZoneConfig)
 	}),
 }

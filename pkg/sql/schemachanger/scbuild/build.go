@@ -128,7 +128,7 @@ type builderState struct {
 	cr               CatalogReader
 	tr               TableReader
 	auth             AuthorizationAccessor
-	commentCache     CommentCache
+	commentGetter    scdecomp.CommentGetter
 	zoneConfigReader scdecomp.ZoneConfigGetter
 	createPartCCL    CreatePartitioningCCLCallback
 	hasAdmin         bool
@@ -173,7 +173,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		output:           make([]elementState, 0, len(initial.Current)),
 		descCache:        make(map[catid.DescID]*cachedDesc),
 		tempSchemas:      make(map[catid.DescID]catalog.SchemaDescriptor),
-		commentCache:     d.DescriptorCommentCache(),
+		commentGetter:    d.DescriptorCommentGetter(),
 		zoneConfigReader: d.ZoneConfigGetter(),
 	}
 	var err error

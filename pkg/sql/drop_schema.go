@@ -16,10 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -227,7 +225,7 @@ func (p *planner) dropSchemaImpl(
 	}
 
 	// Remove any associated comments.
-	if err := p.removeSchemaComment(ctx, sc.GetID()); err != nil {
+	if err := p.deleteComment(ctx, sc.GetID(), 0, catalogkeys.SchemaCommentType); err != nil {
 		return err
 	}
 
@@ -268,19 +266,6 @@ func (p *planner) createDropSchemaJob(
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
 	})
-	return err
-}
-
-func (p *planner) removeSchemaComment(ctx context.Context, schemaID descpb.ID) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-schema-comment",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-		keys.SchemaCommentType,
-		schemaID)
-
 	return err
 }
 

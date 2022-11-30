@@ -13,19 +13,16 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnDatabaseNode struct {
-	n               *tree.CommentOnDatabase
-	dbDesc          catalog.DatabaseDescriptor
-	metadataUpdater scexec.DescriptorMetadataUpdater
+	n      *tree.CommentOnDatabase
+	dbDesc catalog.DatabaseDescriptor
 }
 
 // CommentOnDatabase add comment on a database.
@@ -43,7 +40,7 @@ func (p *planner) CommentOnDatabase(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
 		string(n.Name), tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -52,32 +49,22 @@ func (p *planner) CommentOnDatabase(
 		return nil, err
 	}
 
-	return &commentOnDatabaseNode{n: n,
-		dbDesc: dbDesc,
-		metadataUpdater: descmetadata.NewMetadataUpdater(
-			ctx,
-			p.ExecCfg().InternalExecutorFactory,
-			p.Descriptors(),
-			&p.ExecCfg().Settings.SV,
-			p.txn,
-			p.SessionData(),
-		),
-	}, nil
+	return &commentOnDatabaseNode{n: n, dbDesc: dbDesc}, nil
 }
 
 func (n *commentOnDatabaseNode) startExec(params runParams) error {
-	if n.n.Comment != nil {
-		err := n.metadataUpdater.UpsertDescriptorComment(
-			int64(n.dbDesc.GetID()), 0, keys.DatabaseCommentType, *n.n.Comment)
-		if err != nil {
-			return err
-		}
+	var err error
+	if n.n.Comment == nil {
+		err = params.p.deleteComment(
+			params.ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
+		)
 	} else {
-		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.dbDesc.GetID()), 0, keys.DatabaseCommentType)
-		if err != nil {
-			return err
-		}
+		err = params.p.updateComment(
+			params.ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType, *n.n.Comment,
+		)
+	}
+	if err != nil {
+		return err
 	}
 
 	dbComment := ""

@@ -699,8 +699,8 @@ explain(gist):
 gist-explain-roundtrip
 DELETE FROM foo
 ----
-hash: 17378315733259356217
-plan-gist: AgFqAgAHAAAAI2oAAQ==
+hash: 5369057709634423529
+plan-gist: AgFqAgAHAAAAI2oB
 explain(shape):
 • delete
 │ from: foo
@@ -722,8 +722,8 @@ explain(gist):
 gist-explain-roundtrip
 DELETE FROM foo WHERE a = 1
 ----
-hash: 11485970487285265051
-plan-gist: AgFqAgAHAgAAI2oAAQ==
+hash: 7691685103096689151
+plan-gist: AgFqAgAHAgAAI2oB
 explain(shape):
 • delete
 │ from: foo

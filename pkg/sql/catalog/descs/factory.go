@@ -169,6 +169,8 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		virtual:                 makeVirtualDescriptors(cf.virtualSchemas),
 		leased:                  makeLeasedDescriptors(cf.leaseMgr),
 		uncommitted:             makeUncommittedDescriptors(cfg.monitor),
+		uncommittedComments:     makeUncommittedComments(),
+		uncommittedZoneConfigs:  makeUncommittedZoneConfigs(),
 		stored:                  catkv.MakeStoredCatalog(cr, cfg.dsdp, cfg.monitor),
 		temporarySchemaProvider: cfg.dsdp,
 		validationModeProvider:  cfg.dsdp,
