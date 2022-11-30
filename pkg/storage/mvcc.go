@@ -6583,3 +6583,67 @@ func isWatchedSystemTable(key roachpb.Key) bool {
 		return false
 	}
 }
+
+// MVCCLookupRangeKeyValue reads the value header for a range deletion on
+// [key,endKey) at the specified timestamp. The range deletion is allowed to be
+// fragmented (with identical value) and is allowed to extend out of
+// [key,endKey). An error is returned if a matching range deletion cannot be
+// found.
+func MVCCLookupRangeKeyValue(
+	reader Reader, key, endKey roachpb.Key, ts hlc.Timestamp,
+) ([]byte, error) {
+	it := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+		KeyTypes:   IterKeyTypeRangesOnly,
+	})
+	defer it.Close()
+
+	it.SeekGE(MVCCKey{Key: key})
+
+	// Start by assuming that we've already seen [min, key) and now we're iterating
+	// to fill this up to [min, endKey).
+	span := roachpb.Span{
+		Key:    roachpb.KeyMin,
+		EndKey: key,
+	}
+	first := true
+	var val []byte
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		rkv, ok := it.RangeKeys().FirstAtOrAbove(ts)
+		if !ok || rkv.Timestamp != ts {
+			return nil, errors.Errorf(
+				"gap [%s,...) in expected range deletion [%s,%s)", span.EndKey, key, endKey)
+		}
+
+		bounds := it.RangeBounds().Clone()
+		if !span.EndKey.Equal(bounds.Key) {
+			return nil, errors.Errorf(
+				"gap [%s,%s) in expected range deletion [%s,%s)", span.EndKey, bounds.Key, key, endKey,
+			)
+		}
+
+		if first {
+			val = append(val, rkv.Value...)
+			first = false
+		} else if !bytes.Equal(val, rkv.Value) {
+			return nil, errors.Errorf(
+				"value change at %s in expected range deletion [%s,%s)", bounds.Key, key, endKey)
+		}
+
+		span.EndKey = bounds.EndKey
+	}
+	if !span.EndKey.Equal(endKey) {
+		return nil, errors.Errorf(
+			"gap [%s,...) in expected range deletion [%s,%s)", span.EndKey, key, endKey)
+	}
+	// Made it!
+	return val, nil
+}

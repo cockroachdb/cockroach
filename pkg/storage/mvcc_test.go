@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -6620,4 +6621,132 @@ func mvccGetRawWithError(t *testing.T, r Reader, key MVCCKey) ([]byte, error) {
 		return nil, err
 	}
 	return iter.Value(), nil
+}
+
+func TestMVCCLookupRangeKeyValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+
+	const diagram = `
+# 	      a     b     c     d
+# t=4000  [-----v1----)
+# t=2000  [-v2-)[-----v3----)
+`
+
+	v1 := MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 1},
+		},
+	}
+	v2 := MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 2},
+		},
+	}
+	v3 := MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: 3},
+		},
+	}
+
+	t2000 := hlc.Timestamp{WallTime: 2000}
+	t4000 := hlc.Timestamp{WallTime: 4000}
+
+	a, b, c, d := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")
+
+	require.NoError(t, eng.PutMVCCRangeKey(MVCCRangeKey{
+		StartKey:  a,
+		EndKey:    c,
+		Timestamp: t4000,
+	}, v1))
+
+	require.NoError(t, eng.PutMVCCRangeKey(MVCCRangeKey{
+		StartKey:  a,
+		EndKey:    b,
+		Timestamp: t2000,
+	}, v2))
+
+	require.NoError(t, eng.PutMVCCRangeKey(MVCCRangeKey{
+		StartKey:  b,
+		EndKey:    d,
+		Timestamp: t2000,
+	}, v3))
+
+	var buf bytes.Buffer
+	fmt.Fprintln(&buf, strings.TrimSpace(diagram))
+
+	for _, tc := range []struct {
+		name  string
+		k, ek roachpb.Key
+		ts    hlc.Timestamp
+	}{
+		{
+			// Look up the exact rangedel.
+			name: "ac-valid-full",
+			k:    a,
+			ek:   c,
+			ts:   t4000,
+		},
+		{
+			// Look up inside of the rangedel.
+			name: "ac-valid-partial",
+			k:    a.Next(),
+			ek:   b,
+			ts:   t4000,
+		},
+		{
+			// Correct bounds, but incorrect timestamp,
+			// will see part of ab and bd which are not compatible and error out.
+			name: "ac-incompatible-fragments",
+			k:    a,
+			ek:   c,
+			ts:   t2000,
+		},
+		{
+			// Correct bounds, but timestamp too early.
+			// Won't see anything and error out.
+			name: "ac-ts-too-early",
+			k:    a,
+			ek:   b,
+			ts:   t2000,
+		},
+		{
+			// See ac but with a gap. Start key before rangedel starts. Errors out.
+			name: "ac-invalid-pre",
+			k:    roachpb.KeyMin,
+			ek:   c,
+			ts:   t4000,
+		},
+		{
+			// Sees ac but with a gap. End key after rangedel end. Errors out.
+			name: "ac-invalid-post",
+			k:    a,
+			ek:   d,
+			ts:   t4000,
+		},
+		// Sees cd but wants it longer. Errors.
+		{
+			name: "cd-invalid-post",
+			k:    c,
+			ek:   roachpb.Key("f"),
+			ts:   t2000,
+		},
+	} {
+		fmt.Fprintf(&buf, "lookup([%s,%s) @ %d) = ", tc.k, tc.ek, tc.ts.WallTime)
+		valBytes, err := MVCCLookupRangeKeyValue(eng, tc.k, tc.ek, tc.ts)
+		if err != nil {
+			fmt.Fprintln(&buf, err)
+		} else {
+			v, err := DecodeMVCCValue(valBytes)
+			if err != nil {
+				fmt.Fprintln(&buf, err)
+			} else {
+				fmt.Fprintf(&buf, "v%d\n", v.MVCCValueHeader.LocalTimestamp.WallTime)
+			}
+		}
+	}
+	path := testutils.TestDataPath(t, t.Name())
+	echotest.Require(t, buf.String(), path)
 }
