@@ -254,4 +254,46 @@ func TestRegistry(t *testing.T) {
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, transaction) })
 	})
+
+	t.Run("txn with high accumulated contention without high single stmt contention", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
+		contentionDuration := 10 * time.Second
+		statement := &Statement{
+			Status:           Statement_Completed,
+			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+			FingerprintID:    roachpb.StmtFingerprintID(100),
+			LatencyInSeconds: 0.00001,
+		}
+		txnHighContention := &Transaction{ID: uuid.FastMakeV4(), Contention: &contentionDuration}
+
+		require.NotPanics(t, func() { registry.ObserveStatement(session.ID, statement) })
+		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, txnHighContention) })
+
+		expected := []*Insight{
+			{
+				Session: session,
+				Transaction: &Transaction{
+					ID:               txnHighContention.ID,
+					Contention:       &contentionDuration,
+					StmtExecutionIDs: txnHighContention.StmtExecutionIDs,
+					Problems:         []Problem{Problem_SlowExecution},
+					Causes:           []Cause{Cause_HighContention}},
+				Statements: []*Statement{
+					newStmtWithProblemAndCauses(statement, Problem_None, nil),
+				},
+			},
+		}
+
+		var actual []*Insight
+		store.IterateInsights(
+			context.Background(),
+			func(ctx context.Context, o *Insight) {
+				actual = append(actual, o)
+			},
+		)
+
+		require.Equal(t, expected, actual)
+	})
 }
