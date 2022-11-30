@@ -223,6 +223,7 @@ go_library(
         "//pkg/workload/bulkingest",
         "//pkg/workload/cli",
         "//pkg/workload/examples",
+        "//pkg/workload/insights",
         "//pkg/workload/kv",
         "//pkg/workload/movr",
         "//pkg/workload/tpcc",
