@@ -4,6 +4,28 @@ set -eo pipefail
 
 source ./scripts/test_lib.sh
 
+# set default GOARCH if not set
+if [ -z "$GOARCH" ]; then
+  GOARCH=$(go env GOARCH);
+fi
+
+# determine whether target supports race detection
+if [ -z "${RACE}" ] ; then
+  if [ "$GOARCH" == "amd64" ]; then
+    RACE="--race"
+  else
+    RACE="--race=false"
+  fi
+else
+  RACE="--race=${RACE:-true}"
+fi
+
+# This options make sense for cases where SUT (System Under Test) is compiled by test.
+COMMON_TEST_FLAGS=("${RACE}")
+if [[ -n "${CPU}" ]]; then
+  COMMON_TEST_FLAGS+=("--cpu=${CPU}")
+fi
+
 ######### Code formatting checkers #############################################
 
 # generic_checker [cmd...]
@@ -95,6 +117,19 @@ function mod_tidy_for_module {
 
 function mod_tidy_pass {
   mod_tidy_for_module
+}
+
+################# REGULAR TESTS ################################################
+
+# run_unit_tests [pkgs] runs unit tests for a current module and givesn set of [pkgs]
+function run_unit_tests {
+  shift 1
+  # shellcheck disable=SC2086
+  GOLANG_TEST_SHORT=true go test ./... -short -timeout="${TIMEOUT:-3m}" "${COMMON_TEST_FLAGS[@]}" "${RUN_ARG[@]}" "$@"
+}
+
+function unit_pass {
+  run_unit_tests "$@"
 }
 
 ########### MAIN ###############################################################

@@ -1,3 +1,4 @@
+GO_TEST_FLAGS?=
 
 .PHONY: verify
 verify: verify-gofmt verify-dep verify-lint verify-mod-tidy verify-genproto
@@ -24,5 +25,4 @@ verify-genproto:
 
 .PHONY: test
 test:
-	go test ./...
-
+	PASSES="unit" ./scripts/test.sh $(GO_TEST_FLAGS)
