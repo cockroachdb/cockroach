@@ -3667,12 +3667,6 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 
-		resp, err := p.ExecCfg().TenantStatusServer.NodeLocality(ctx, &serverpb.NodeLocalityRequest{})
-		if err != nil {
-			return nil, nil, err
-		}
-		nodeIDToLocality := resp.NodeLocalities
-
 		var desc roachpb.RangeDescriptor
 
 		i := 0
@@ -3726,8 +3720,12 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 			replicaLocalityArr := tree.NewDArray(types.String)
 			for _, replica := range votersAndNonVoters {
-				replicaLocality := nodeIDToLocality[replica.NodeID].String()
-				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
+				nodeDesc, err := p.ExecCfg().NodeDescs.GetNodeDescriptor(replica.NodeID)
+				if err != nil {
+					return nil, err
+				}
+				replicaLocality := tree.NewDString(nodeDesc.Locality.String())
+				if err := replicaLocalityArr.Append(replicaLocality); err != nil {
 					return nil, err
 				}
 			}

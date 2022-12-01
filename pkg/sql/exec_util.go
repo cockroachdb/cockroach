@@ -1336,6 +1336,9 @@ type ExecutorConfig struct {
 
 	// EventsExporter is the client for the Observability Service.
 	EventsExporter obs.EventsExporter
+
+	// NodeDescs is documented in kvcoord.NodeDescStore
+	NodeDescs kvcoord.NodeDescStore
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
