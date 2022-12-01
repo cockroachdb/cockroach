@@ -41,7 +41,7 @@ func TestBlocklists(t *testing.T) {
 		"libpq":        libPQBlocklist20_2,
 		"gopg":         gopgBlockList20_2,
 		"pgx":          pgxBlocklist20_2,
-		"activerecord": activeRecordBlockList20_2,
+		"activerecord": activeRecordBlocklist,
 	}
 	type reasonCount struct {
 		reason string
