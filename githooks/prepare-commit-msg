@@ -72,6 +72,33 @@ $cchar Note: to disable this commit template, run: git config --global --add coc
 	fi
 fi
 
+ghIssuePart="(#\d+)"
+ghIssueRepoPart="([\w.-]+[/][\w.-]+#\d+)"
+ghURLPart="(https://github.com/[-a-z0-9]+/[-._a-z0-9/]+/issues/\d+)"
+jiraIssuePart="([[:alpha:]]+-\d+)"
+jiraURLPart="https://cockroachlabs.atlassian.net/browse/${jiraIssuePart}"
+issueRefPart="${ghIssuePart}|${ghIssueRepoPart}|${ghURLPart}|${jiraIssuePart}|${jiraURLPart}"
+afterRefPart="[,.;]?(?:[ \t\n\r]+|\$)"
+fixIssueRefRE="(?i:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:${issueRefPart})${afterRefPart})+"
+informIssueRefRE="(?:part of|see also|informs):?\s+(?:(?:${issueRefPart})${afterRefPart})+"
+epicRefRE="epic:?\s+(?:(?:${jiraIssuePart}|${jiraURLPart})${afterRefPart})+"
+epicNoneRE="epic:?\s+(?:(none)${afterRefPart})+"
+
+# Add an issue or epic reference.
+if ! grep -q -i -E "^${fixIssueRefRE}|${informIssueRefRE}|${epicRefRE}|${epicNoneRE}" "$1"; then
+	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+$cchar Please enter a valid issue or epic reference:\\
+${cchar}Epic: none\\
+${cchar}      ^-- not related to an issue or an epic\\
+${cchar}Fixes: #77376\\
+${cchar}Part of: https://cockroachlabs.atlassian.net/browse/DOC-1355\\
+${cchar}Informs: https://github.com/cockroachdb/cockroach/issues/33316\\
+${cchar}Epic: CRDB-8035\\
+
+;
+"
+fi
+
 # Add an explicit "Release note: None" if no release note was specified.
 if ! grep -q '^Release note' "$1"; then
 	sed_script+="/$cchar Please enter the commit message for your changes./i\\
@@ -115,6 +142,9 @@ $cchar     <what was there before: Previously, ...>\\
 $cchar     <why it needed to change: This was inadequate because ...>\\
 $cchar     <what you did about it: To address this, this patch ...>\\
 $cchar\\
+$cchar     Fixes <GH/Jira issue ID/URL to GH/Jira issue>\\
+$cchar     ---\\
+$cchar\\
 $cchar     Release note (<category>): <what> <show> <why>\\
 $cchar     ---\\
 $cchar\\
@@ -134,7 +164,11 @@ $cchar\\
 "
 fi
 
-sed_script+="$cchar The release note must be present if your commit has user-facing\\
+sed_script+="$cchar An issue or epic reference must be in the PR body or each commit message\\
+$cchar if the PR or commit is part of an issue or epic. Use \\\`Epic: none\\\` otherwise.\\
+$cchar See also: https://wiki.crdb.io/wiki/spaces/CRDB/pages/2009039063/\\
+$cchar\\
+$cchar The release note must be present if your commit has user-facing\\
 $cchar or backward-incompatible changes. Use 'Release note: None' otherwise.\\
 $cchar\\
 $cchar Things to keep in mind for release notes:\\
