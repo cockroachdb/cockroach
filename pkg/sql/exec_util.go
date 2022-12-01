@@ -1328,7 +1328,7 @@ type ExecutorConfig struct {
 	// DescIDGenerator generates unique descriptor IDs.
 	DescIDGenerator eval.DescIDGenerator
 
-	// SyntheticPrivilegeCache
+	// SyntheticPrivilegeCache stores synthetic privileges in an in-memory cache.
 	SyntheticPrivilegeCache *cacheutil.Cache
 
 	// RangeStatsFetcher is used to fetch RangeStats.
@@ -1336,6 +1336,9 @@ type ExecutorConfig struct {
 
 	// EventsExporter is the client for the Observability Service.
 	EventsExporter obs.EventsExporter
+
+	// NodeDescs stores node descriptors in an in-memory cache.
+	NodeDescs kvcoord.NodeDescStore
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
