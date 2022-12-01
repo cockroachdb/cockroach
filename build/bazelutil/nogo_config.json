@@ -739,7 +739,14 @@
             "pkg/sql/execinfra/processorsbase.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/importer/import_table_creation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/row/expr_walker_test.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
-            "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context"
+            "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/security/securityassets/security_assets.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/roachprod/install/cluster_synced.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/security/securitytest/securitytest.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/server/dumpstore/dumpstore.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/server/dumpstore/dumpstore_test.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/server/heapprofiler/profilestore_test.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
