@@ -564,6 +564,12 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 	return g.getNodeDescriptor(nodeID, false /* locked */)
 }
 
+// GetNodeDescriptorByStoreID looks up the descriptor of the node by ID.
+func (g *Gossip) GetNodeDescriptorByStoreID(storeID roachpb.StoreID) (*roachpb.NodeDescriptor, error) {
+	nodeID := g.storeMap[storeID]
+	return g.getNodeDescriptor(nodeID, false /* locked */)
+}
+
 // LogStatus logs the current status of gossip such as the incoming and
 // outgoing connections.
 func (g *Gossip) LogStatus() {
