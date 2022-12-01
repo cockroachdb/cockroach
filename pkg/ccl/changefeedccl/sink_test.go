@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strconv"
 	"sync"
@@ -675,6 +676,21 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		err = cfg.Apply(saramaCfg)
 		require.Error(t, err)
 
+	})
+	t.Run("compression options validation", func(t *testing.T) {
+		for option := range saramaCompressionCodecOptions {
+			opts := changefeedbase.SinkSpecificJSONConfig(fmt.Sprintf(`{"Compression": "%s"}`, option))
+			cfg, err := getSaramaConfig(opts)
+			require.NoError(t, err)
+
+			saramaCfg := &sarama.Config{}
+			err = cfg.Apply(saramaCfg)
+			require.NoError(t, err)
+		}
+
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"Compression": "invalid"}`)
+		_, err := getSaramaConfig(opts)
+		require.Error(t, err)
 	})
 }
 
