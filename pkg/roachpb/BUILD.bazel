@@ -83,6 +83,7 @@ go_test(
         "metadata_replicas_test.go",
         "metadata_test.go",
         "replica_unavailable_error_test.go",
+        "span_config_conformance_report_test.go",
         "span_group_test.go",
         "string_test.go",
         "tenant_test.go",
