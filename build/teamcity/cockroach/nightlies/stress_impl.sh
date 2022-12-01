@@ -16,6 +16,17 @@ bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 ARTIFACTS_DIR=/artifacts
 
+if [[ ! -z $(bazel query "attr(tags, \"broken_in_bazel\", $TARGET)") ]]
+then
+    echo "Skipping test $TARGET as it is broken in bazel"
+    exit 0
+fi
+if [[ ! -z $(bazel query "attr(tags, \"integration\", $TARGET)") ]]
+then
+    echo "Skipping test $TARGET as it is an integration test"
+    exit 0
+fi
+
 GOTESTTIMEOUTSECS=$(($TESTTIMEOUTSECS - 5))
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/$(echo "$TARGET" | cut -d: -f2).test.json.txt
 exit_status=0
