@@ -33,6 +33,7 @@ do
         continue
     fi
     exit_status=0
+    GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/$(echo "$test" | cut -d: -f2).test.json.txt
     $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci "$test" \
                                           --test_env=COCKROACH_NIGHTLY_STRESS=true \
                                           --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
