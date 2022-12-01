@@ -74,21 +74,24 @@ var _ Client = &partitionedStreamClient{}
 // Create implements Client interface.
 func (p *partitionedStreamClient) Create(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (streampb.StreamID, error) {
+) (streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
 	defer sp.Finish()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var streamID streampb.StreamID
+	var rawReplicationProducerSpec []byte
 	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
-	err := row.Scan(&streamID)
+	err := row.Scan(&rawReplicationProducerSpec)
 	if err != nil {
-		return streampb.InvalidStreamID,
-			errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)
+		return streampb.ReplicationProducerSpec{}, errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)
+	}
+	var replicationProducerSpec streampb.ReplicationProducerSpec
+	if err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
 	}
 
-	return streamID, err
+	return replicationProducerSpec, err
 }
 
 // Dial implements Client interface.
@@ -195,7 +198,11 @@ func (p *partitionedStreamClient) Close(ctx context.Context) error {
 
 // Subscribe implements Client interface.
 func (p *partitionedStreamClient) Subscribe(
-	ctx context.Context, stream streampb.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+	ctx context.Context,
+	streamID streampb.StreamID,
+	spec SubscriptionToken,
+	initialScanTime hlc.Timestamp,
+	previousHighWater hlc.Timestamp,
 ) (Subscription, error) {
 	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
 	defer sp.Finish()
@@ -204,7 +211,8 @@ func (p *partitionedStreamClient) Subscribe(
 	if err := protoutil.Unmarshal(spec, &sps); err != nil {
 		return nil, err
 	}
-	sps.StartFrom = checkpoint
+	sps.InitialScanTimestamp = initialScanTime
+	sps.PreviousHighWaterTimestamp = previousHighWater
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
@@ -215,7 +223,7 @@ func (p *partitionedStreamClient) Subscribe(
 		eventsChan:    make(chan streamingccl.Event),
 		srcConnConfig: p.pgxConfig,
 		specBytes:     specBytes,
-		streamID:      stream,
+		streamID:      streamID,
 		closeChan:     make(chan struct{}),
 	}
 	p.mu.Lock()

@@ -505,9 +505,6 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	srcTime = c.srcCluster.Server(0).Clock().Now()
 	c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
 	c.compareResult("SELECT * FROM d.t2")
-	// Confirm this new run resumed from the previous checkpoint.
-	require.Equal(t, pausedCheckpoint,
-		streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime)
 }
 
 func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
@@ -569,10 +566,6 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 
 	// Ingestion happened one more time after resuming the ingestion job.
 	require.Equal(t, 3, ingestionStarts)
-
-	// Confirm this new run resumed from the empty checkpoint.
-	require.True(t,
-		streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime.IsEmpty())
 }
 
 func TestTenantStreamingCheckpoint(t *testing.T) {

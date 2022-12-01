@@ -23,11 +23,35 @@ import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 
+// ReplicationProducerSpec is the specification returned by the replication
+// producer job when it is created.
+message ReplicationProducerSpec {
+  int64 stream_id = 1 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
+
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan.
+  util.hlc.Timestamp replication_start_time = 2 [(gogoproto.nullable) = false];
+}
+
 // StreamPartitionSpec is the stream partition specification.
 message StreamPartitionSpec {
-  // start_from specifies the starting point for all spans.  If its empty,
-  // an initial scan is performed.
-  util.hlc.Timestamp start_from = 1 [(gogoproto.nullable) = false];
+  // PreviousHighWaterTimestamp specifies the timestamp from which spans will
+  // start ingesting data in the replication job. This timestamp is empty unless
+  // the replication job resumes after a progress checkpoint has been recorded.
+  // While it is empty we use the InitialScanTimestamp described below.
+  util.hlc.Timestamp previous_high_water_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // InitialScanTimestamp is the timestamp at which the partition will run the
+  // initial rangefeed scan before replicating further changes to the target
+  // spans. This timestamp is always non-empty, but a partition will only run an
+  // initial scan if no progress has been recorded prior to the current
+  // resumption of the replication job. Otherwise, all spans will start
+  // ingesting data from the PreviousHighWaterTimestamp described above.
+  util.hlc.Timestamp initial_scan_timestamp = 4 [(gogoproto.nullable) = false];
+
   // List of spans to stream.
   repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
 
