@@ -27,20 +27,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockNodeStore struct {
+type mockDescCache struct {
 	nodes []roachpb.NodeDescriptor
 }
 
-var _ NodeDescStore = &mockNodeStore{}
+var _ DescCache = &mockDescCache{}
 
-// GetNodeDesc is part of the NodeDescStore interface.
-func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	for _, nd := range ns.nodes {
+// GetNodeDescriptor is part of the DescCache interface.
+func (dc *mockDescCache) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	for _, nd := range dc.nodes {
 		if nd.NodeID == nodeID {
 			return &nd, nil
 		}
 	}
 	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+}
+
+// GetStoreDescriptor is part of the DescCache interface.
+func (dc *mockDescCache) GetStoreDescriptor(
+	storeID roachpb.StoreID,
+) (*roachpb.StoreDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
 }
 
 func TestNewReplicaSlice(t *testing.T) {
@@ -53,7 +60,7 @@ func TestNewReplicaSlice(t *testing.T) {
 			{NodeID: 3, StoreID: 3, ReplicaID: 3},
 		},
 	}
-	ns := &mockNodeStore{
+	ns := &mockDescCache{
 		nodes: []roachpb.NodeDescriptor{
 			{
 				NodeID:  1,

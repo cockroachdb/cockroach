@@ -132,12 +132,18 @@ func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.
 	return kvs, splits
 }
 
-type mockNodeStore struct {
+type mockDescCache struct {
 	desc *roachpb.NodeDescriptor
 }
 
-func (m mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	return m.desc, nil
+func (dc mockDescCache) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return dc.desc, nil
+}
+
+func (dc mockDescCache) GetStoreDescriptor(
+	id roachpb.StoreID,
+) (*roachpb.StoreDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", id)
 }
 
 type dummyFirstRangeProvider struct {
@@ -213,7 +219,7 @@ func createTestStoreWithoutStart(
 		AmbientCtx:         cfg.AmbientCtx,
 		Settings:           cfg.Settings,
 		Clock:              cfg.Clock,
-		NodeDescs:          mockNodeStore{desc: nodeDesc},
+		DescCache:          mockDescCache{desc: nodeDesc},
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retry.Options{},
 		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip)), // TODO

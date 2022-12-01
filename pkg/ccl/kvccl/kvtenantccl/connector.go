@@ -78,6 +78,7 @@ type Connector struct {
 		syncutil.RWMutex
 		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
+		storeDescs           map[roachpb.StoreID]*roachpb.StoreDescriptor
 		systemConfig         *config.SystemConfig
 		systemConfigChannels map[chan<- struct{}]struct{}
 	}
@@ -101,7 +102,7 @@ type client struct {
 // Connector is capable of providing information on each of the KV nodes in the
 // cluster in the form of NodeDescriptors. This obviates the need for SQL-only
 // tenant processes to join the cluster-wide gossip network.
-var _ kvcoord.NodeDescStore = (*Connector)(nil)
+var _ kvcoord.DescCache = (*Connector)(nil)
 
 // Connector is capable of providing Range addressing information in the form of
 // RangeDescriptors through delegated RangeLookup requests. This is necessary
@@ -146,6 +147,7 @@ func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	c.mu.storeDescs = make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
@@ -259,6 +261,8 @@ var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, ro
 	gossip.KeyClusterID: (*Connector).updateClusterID,
 	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix): (*Connector).updateNodeAddress,
+	// Subscribe to all *StoreDescriptor updates.
+	gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix): (*Connector).updateStoreAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
 	gossip.KeyDeprecatedSystemConfig: (*Connector).updateSystemConfig,
 }
@@ -308,13 +312,42 @@ func (c *Connector) updateNodeAddress(ctx context.Context, key string, content r
 	c.mu.nodeDescs[desc.NodeID] = desc
 }
 
-// GetNodeDescriptor implements the kvcoord.NodeDescStore interface.
+// updateStoreAddress handles updates to "store" gossip keys, performing the
+// corresponding update to the Connector's cached NodeDescriptor set.
+func (c *Connector) updateStoreAddress(ctx context.Context, key string, content roachpb.Value) {
+	desc := new(roachpb.StoreDescriptor)
+	if err := content.GetProto(desc); err != nil {
+		log.Errorf(ctx, "could not unmarshal store descriptor: %v", err)
+		return
+	}
+
+	// TODO(nvanbenschoten): this doesn't handle StoreDescriptor removal from the
+	// gossip network. See comment in updateNodeAddress.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.storeDescs[desc.StoreID] = desc
+}
+
+// GetNodeDescriptor implements the kvcoord.DescCache interface.
 func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
 		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+	}
+	return desc, nil
+}
+
+// GetStoreDescriptor implements the kvcoord.DescCache interface.
+func (c *Connector) GetStoreDescriptor(
+	storeID roachpb.StoreID,
+) (*roachpb.StoreDescriptor, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	desc, ok := c.mu.storeDescs[storeID]
+	if !ok {
+		return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
 	}
 	return desc, nil
 }

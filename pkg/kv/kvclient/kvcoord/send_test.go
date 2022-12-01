@@ -375,7 +375,7 @@ func sendBatch(
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
 		Settings:           cluster.MakeTestingClusterSettings(),
-		NodeDescs:          g,
+		DescCache:          g,
 		RPCContext:         rpcContext,
 		NodeDialer:         nodeDialer,
 		FirstRangeProvider: g,

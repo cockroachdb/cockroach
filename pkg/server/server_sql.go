@@ -266,7 +266,7 @@ type sqlServerArgs struct {
 	rpcContext *rpc.Context
 
 	// Used by DistSQLPlanner.
-	nodeDescs kvcoord.NodeDescStore
+	descCache kvcoord.DescCache
 
 	// Used by the executor config.
 	systemConfigWatcher *systemconfigwatcher.Cache
@@ -879,7 +879,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
-			cfg.nodeDescs,
+			cfg.descCache,
 			cfg.gossip,
 			cfg.stopper,
 			isAvailable,
@@ -912,7 +912,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DescIDGenerator:            descidgen.NewGenerator(cfg.Settings, codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
 		EventsExporter:             cfg.eventsServer,
-		NodeDescs:                  cfg.nodeDescs,
+		DescCache:                  cfg.descCache,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

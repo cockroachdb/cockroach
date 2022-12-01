@@ -88,7 +88,7 @@ func NewDistSenderForLocalTestCluster(
 		AmbientCtx:         log.MakeTestingAmbientContext(tracer),
 		Settings:           st,
 		Clock:              clock,
-		NodeDescs:          g,
+		DescCache:          g,
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retryOpts,
 		nodeDescriptor:     nodeDesc,
