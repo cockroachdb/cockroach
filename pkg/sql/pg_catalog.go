@@ -414,7 +414,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				if column.IsGeneratedAlwaysAsIdentity() {
 					generatedAsIdentityType = "a"
 				} else if column.IsGeneratedByDefaultAsIdentity() {
-					generatedAsIdentityType = "b"
+					generatedAsIdentityType = "d"
 				} else {
 					return errors.AssertionFailedf(
 						"column %s is of wrong generated as identity type (neither ALWAYS nor BY DEFAULT)",
