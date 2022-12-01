@@ -1,3 +1,3 @@
 echo
 ----
-db1.ReverseScanForUpdate(ctx, "a", "c", 0) // context canceled
+db1.ReverseScanForUpdate(ctx, uint64ToKey(1), uint64ToKey(3), 0) // context canceled

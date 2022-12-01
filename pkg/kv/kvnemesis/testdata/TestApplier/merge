@@ -1,3 +1,3 @@
 echo
 ----
-db0.AdminMerge(ctx, "foo") // <nil>
+db0.AdminMerge(ctx, uint64ToKey(1)) // <nil>

@@ -41,100 +41,157 @@ func TestApplier(t *testing.T) {
 
 	type testCase struct {
 		name string
-		a    string // actual output
+		step Step
 	}
 
 	a := MakeApplier(env, db, db)
 
-	var tests []testCase
-	addPass := func(t *testing.T, name string, s Step) {
-		t.Helper()
-		_ /* trace */, err := a.Apply(ctx, &s)
-		require.NoError(t, err)
-		actual := s.String()
-		// Trim out the txn to avoid nondeterminism.
-		actual = regexp.MustCompile(` txnpb:\(.*\)`).ReplaceAllLiteralString(actual, ` txnpb:<txn>`)
-		// Replace timestamps.
-		actual = regexp.MustCompile(`[0-9]+\.[0-9]+,[0-9]+`).ReplaceAllLiteralString(actual, `<ts>`)
-		tests = append(tests, testCase{name: name, a: actual})
+	k1 := uint64ToKey(1)
+	k2 := uint64ToKey(2)
+	k3 := uint64ToKey(3)
+	k4 := uint64ToKey(4)
+	k5 := uint64ToKey(5)
+	k6 := uint64ToKey(6)
+
+	tests := []testCase{
+		{
+			"get", step(get(k1)),
+		},
+		{
+			"scan", step(scan(k1, k3)),
+		},
+		{
+			"put", step(put(k1, 1)),
+		},
+		{
+			"get-for-update", step(getForUpdate(k1)),
+		},
+		{
+			"scan-for-update", step(scanForUpdate(k1, k3)),
+		},
+		{
+			"batch", step(batch(put(k1, 21), delRange(k2, k3, 22))),
+		},
+		{
+
+			"rscan", step(reverseScan(k1, k3)),
+		},
+		{
+			"rscan-for-update", step(reverseScanForUpdate(k1, k2)),
+		},
+		{
+			"del", step(del(k2, 1)),
+		},
+		{
+			"delrange", step(delRange(k1, k3, 6)),
+		},
+		{
+			"txn-delrange", step(closureTxn(ClosureTxnType_Commit, delRange(k2, k4, 1))),
+		},
+		{
+			"get-err", step(get(k1)),
+		},
+		{
+			"put-err", step(put(k1, 1)),
+		},
+		{
+			"scan-for-update-err", step(scanForUpdate(k1, k3)),
+		},
+		{
+			"rscan-err", step(reverseScan(k1, k3)),
+		},
+		{
+			"rscan-for-update-err", step(reverseScanForUpdate(k1, k3)),
+		},
+		{
+			"del-err", step(del(k2, 1)),
+		},
+		{
+			"delrange-err", step(delRange(k2, k3, 12)),
+		},
+		{
+			"txn-err", step(closureTxn(ClosureTxnType_Commit, delRange(k2, k4, 1))),
+		},
+		{
+			"batch-mixed", step(batch(put(k2, 2), get(k1), del(k2, 1), del(k3, 1), scan(k1, k3), reverseScanForUpdate(k1, k5))),
+		},
+		{
+			"batch-mixed-err", step(batch(put(k2, 2), getForUpdate(k1), scanForUpdate(k1, k3), reverseScan(k1, k3))),
+		},
+		{
+			"txn-commit-mixed", step(closureTxn(ClosureTxnType_Commit, put(k5, 5), batch(put(k6, 6), delRange(k3, k5, 1)))),
+		},
+		{
+			"txn-commit-batch", step(closureTxnCommitInBatch(opSlice(get(k1), put(k6, 6)), put(k5, 5))),
+		},
+		{
+			"txn-rollback", step(closureTxn(ClosureTxnType_Rollback, put(k5, 5))),
+		},
+		{
+			"txn-error", step(closureTxn(ClosureTxnType_Rollback, put(k5, 5))),
+		},
+		{
+			"split", step(split(k2)),
+		},
+		{
+			"merge", step(merge(k1)), // NB: this undoes the split at k2
+		},
+		{
+			"split-again", step(split(k2)),
+		},
+		{
+			"merge-again", step(merge(k1)), // ditto
+		},
+		{
+			"transfer", step(transferLease(k6, 1)),
+		},
+		{
+			"transfer-again", step(transferLease(k6, 1)),
+		},
+		{
+			"zcfg", step(changeZone(ChangeZoneType_ToggleGlobalReads)),
+		},
+		{
+			"zcfg-again", step(changeZone(ChangeZoneType_ToggleGlobalReads)),
+		},
 	}
-	addErr := func(t *testing.T, name string, s Step) {
-		t.Helper()
-		cancelledCtx, cancel := context.WithCancel(context.Background())
-		cancel()
-		_ /* trace */, err := a.Apply(cancelledCtx, &s)
-		require.NoError(t, err)
-		actual := s.String()
-		// Trim out context canceled location, which can be non-deterministic.
-		// The wrapped string around the context canceled error depends on where
-		// the context cancellation was noticed.
-		actual = regexp.MustCompile(` aborted .*: context canceled`).ReplaceAllString(actual, ` context canceled`)
-		tests = append(tests, testCase{name: name, a: actual})
-	}
-
-	// Basic operations
-	addPass(t, "get", step(get(`a`)))
-	addPass(t, "scan", step(scan(`a`, `c`)))
-
-	addPass(t, "put", step(put(`a`, 1)))
-	addPass(t, "get-for-update", step(getForUpdate(`a`)))
-	addPass(t, "scan-for-update", step(scanForUpdate(`a`, `c`)))
-
-	addPass(t, `batch`, step(batch(put(`a`, 21), delRange(`b`, `c`, 22))))
-
-	addPass(t, "rscan", step(reverseScan(`a`, `c`)))
-	addPass(t, "rscan-for-update", step(reverseScanForUpdate(`a`, `b`)))
-
-	addPass(t, "del", step(del(`b`, 1)))
-	addPass(t, "delrange", step(delRange(`a`, `c`, 6)))
-
-	addPass(t, "txn-delrange", step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`, 1))))
-
-	addErr(t, "get-err", step(get(`a`)))
-	addErr(t, "put-err", step(put(`a`, 1)))
-
-	addErr(t, "scan-for-update-err", step(scanForUpdate(`a`, `c`)))
-	addErr(t, "rscan-err", step(reverseScan(`a`, `c`)))
-	addErr(t, "rscan-for-update-err", step(reverseScanForUpdate(`a`, `c`)))
-	addErr(t, "del-err", step(del(`b`, 1)))
-	addErr(t, "delrange-err", step(delRange(`b`, `c`, 12)))
-
-	addErr(t, `txn-err`, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`, 1))))
-
-	// Batch
-	addPass(t, `batch-mixed`, step(batch(put(`b`, 2), get(`a`), del(`b`, 1), del(`c`, 1), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))))
-	addErr(t, `batch-mixed-err`, step(batch(put(`b`, 2), getForUpdate(`a`), scanForUpdate(`a`, `c`), reverseScan(`a`, `c`))))
-
-	// Txn commit
-	addPass(t, `txn-commit-mixed`, step(closureTxn(ClosureTxnType_Commit, put(`e`, 5), batch(put(`f`, 6), delRange(`c`, `e`, 1)))))
-	// Txn commit in batch
-	addPass(t, `txn-commit-batch`, step(closureTxnCommitInBatch(opSlice(get(`a`), put(`f`, 6)), put(`e`, 5))))
-
-	// Txn rollback
-	addPass(t, `txn-rollback`, step(closureTxn(ClosureTxnType_Rollback, put(`e`, 5))))
-
-	// Txn error
-	addErr(t, `txn-error`, step(closureTxn(ClosureTxnType_Rollback, put(`e`, 5))))
-
-	// Splits and merges
-	addPass(t, `split`, step(split(`foo`)))
-	addPass(t, `merge`, step(merge(`foo`)))
-	addErr(t, `split-again`, step(split(`foo`)))
-	addErr(t, `merge-again`, step(merge(`foo`)))
-
-	// Lease transfers
-	addPass(t, `transfer`, step(transferLease(`foo`, 1)))
-	addErr(t, `transfer-again`, step(transferLease(`foo`, 1)))
-
-	// Zone config changes
-	addPass(t, `zcfg`, step(changeZone(ChangeZoneType_ToggleGlobalReads)))
-	addErr(t, `zcfg-again`, step(changeZone(ChangeZoneType_ToggleGlobalReads)))
 
 	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	defer w.Check(t)
 	for _, test := range tests {
+		s := test.step
 		t.Run(test.name, w.Run(t, test.name, func(t *testing.T) string {
-			t.Log(test.a)
-			return strings.TrimLeft(test.a, "\n")
+			isErr := strings.HasSuffix(test.name, "-err") || strings.HasSuffix(test.name, "-again")
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if isErr {
+				cancel()
+			}
+
+			var buf strings.Builder
+			trace, err := a.Apply(ctx, &s)
+			require.NoError(t, err)
+
+			actual := strings.TrimLeft(s.String(), "\n")
+
+			if isErr {
+				// Trim out context canceled location, which can be non-deterministic.
+				// The wrapped string around the context canceled error depends on where
+				// the context cancellation was noticed.
+				actual = regexp.MustCompile(` aborted .*: context canceled`).ReplaceAllString(actual, ` context canceled`)
+			} else {
+				// Trim out the txn to avoid nondeterminism.
+				actual = regexp.MustCompile(` txnpb:\(.*\)`).ReplaceAllLiteralString(actual, ` txnpb:<txn>`)
+				// Replace timestamps.
+				actual = regexp.MustCompile(`[0-9]+\.[0-9]+,[0-9]+`).ReplaceAllLiteralString(actual, `<ts>`)
+			}
+			buf.WriteString(actual)
+
+			t.Log(buf.String())
+			t.Log(trace)
+
+			return buf.String()
 		}))
 	}
 }

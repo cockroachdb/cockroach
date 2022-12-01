@@ -1,10 +1,10 @@
 echo
 ----
 {
-  b := &Batch{}
-  b.Put(ctx, "b", v2) // context canceled
-  b.GetForUpdate(ctx, "a") // context canceled
-  b.ScanForUpdate(ctx, "a", "c") // context canceled
-  b.ReverseScan(ctx, "a", "c") // context canceled
+  b := &kv.Batch{}
+  b.Put(uint64ToKey(2), seq2val(kvnemesisutil.Seq(2))) // context canceled
+  b.GetForUpdate(uint64ToKey(1)) // context canceled
+  b.ScanForUpdate(uint64ToKey(1), uint64ToKey(3)) // context canceled
+  b.ReverseScan(uint64ToKey(1), uint64ToKey(3)) // context canceled
   db0.Run(ctx, b) // context canceled
 }
