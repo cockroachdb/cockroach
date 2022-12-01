@@ -551,12 +551,21 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 	if ok := p.iter.Valid(); !ok {
 		return nil
 	}
-	return p.iter.Value()
+	// TODO(sumeer): change the UnsafeValue and Value interfaces to return an
+	// error. Meanwhile, we rely on the fact that pebble.Iterator will remember
+	// the error, so if the caller subsequently calls pebbleIterator.Valid(),
+	// they will see the error. However, there is no guarantee that a caller
+	// will call Valid() since it may be done iterating.
+	v, _ := p.iter.ValueAndErr()
+	return v
 }
 
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
 func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
-	val := p.iter.Value()
+	lv := p.iter.LazyValue()
+	// TODO(sumeer): fix this to use LazyValue.TryGetShortAttribute when
+	// https://github.com/cockroachdb/pebble/pull/2142 is merged.
+	val := lv.InPlaceValue()
 	isTombstone, err := EncodedMVCCValueIsTombstone(val)
 	if err != nil {
 		return 0, false, err
@@ -566,7 +575,8 @@ func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
 
 // ValueLen implements the MVCCIterator interface.
 func (p *pebbleIterator) ValueLen() int {
-	return len(p.iter.Value())
+	lv := p.iter.LazyValue()
+	return lv.Len()
 }
 
 // SeekLT implements the MVCCIterator interface.
