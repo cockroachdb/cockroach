@@ -2079,12 +2079,13 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 	args = strings.Split(strings.Join(args, " "), " ")
 	prefix := []string{reOnlyAlphanumeric.ReplaceAllString(args[0], "")}
 	for _, arg := range args[1:] {
-		if s := reOnlyAlphanumeric.ReplaceAllString(arg, ""); s != arg {
+		s := reOnlyAlphanumeric.ReplaceAllString(arg, "")
+		if s == "" {
 			break
 		}
-		prefix = append(prefix, arg)
+		prefix = append(prefix, s)
 	}
-	s := strings.Join(prefix, "_")
+	s := strings.Join(prefix, "-")
 	const maxLen = 70
 	if len(s) > maxLen {
 		s = s[:maxLen]

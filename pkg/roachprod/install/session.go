@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -52,8 +51,8 @@ type remoteSession struct {
 func newRemoteSession(l *logger.Logger, user, host string) (*remoteSession, error) {
 	var logfile string
 	var loggingArgs []string
-	cl, err := l.ChildLogger(fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)))
-	// running roachprod from the cli will result in a fileless logger
+	cl, err := l.ChildLogger(filepath.Join("ssh", host, fmt.Sprintf("%s_%s", timeutil.Now().Format(`150405.000000000`), host)))
+	// Running roachprod from the cli will result in a fileless logger
 	if err == nil && l.File != nil {
 		logfile = cl.File.Name()
 		loggingArgs = []string{
@@ -89,8 +88,8 @@ func newRemoteSession(l *logger.Logger, user, host string) (*remoteSession, erro
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil && s.logfile != "" {
 		err = errors.Wrapf(err, "ssh verbose log retained in %s", filepath.Base(s.logfile))
-		s.logfile = "" // prevent removal on close
 	}
+	s.logfile = "" // prevent removal on close
 	return err
 }
 
