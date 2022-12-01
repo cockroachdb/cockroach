@@ -132,7 +132,8 @@ type RowIterator interface {
 	// Next advances the iterator to the next row in the iteration.
 	Next()
 	// Row returns the current row. The returned row is only valid until the
-	// next call to Rewind() or Next().
+	// next call to Rewind() or Next(). However, datums in the row won't be
+	// modified, so shallow copying is sufficient.
 	Row() (rowenc.EncDatumRow, error)
 
 	// Close frees up resources held by the iterator.
