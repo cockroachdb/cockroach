@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -5895,6 +5896,7 @@ func TestWillOverflow(t *testing.T) {
 
 func TestMVCCExportToSSTResourceLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	engine := createTestPebbleEngine()
 	defer engine.Close()
@@ -5966,6 +5968,149 @@ func TestMVCCExportToSSTResourceLimits(t *testing.T) {
 			})
 	}
 }
+
+// TestMVCCExportToSSTExhaustedAtStart is a regression test for a bug
+// in which mis-handling of resume spans would cause MVCCExportToSST
+// would return an empty resume key in cases where out various
+// resource limiters caused an early return of a resume span.
+func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+
+	var (
+		minKey       = int64(0)
+		maxKey       = int64(1000)
+		minTimestamp = hlc.Timestamp{WallTime: 100000}
+		maxTimestamp = hlc.Timestamp{WallTime: 200000}
+	)
+
+	assertExportEqualWithOptions := func(t *testing.T, ctx context.Context, engine Engine, expectedData []MVCCKey, initialOpts MVCCExportOptions) {
+		dataIndex := 0
+		startKey := initialOpts.StartKey
+		for len(startKey.Key) > 0 {
+			sstFile := &MemFile{}
+			opts := initialOpts
+			opts.StartKey = startKey
+			_, resumeKey, err := MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			require.NoError(t, err)
+			chunk := sstToKeys(t, sstFile.Data())
+			require.LessOrEqual(t, len(chunk), len(expectedData)-dataIndex, "remaining test data")
+			for _, key := range chunk {
+				require.True(t, key.Equal(expectedData[dataIndex]), "returned key is not equal")
+				dataIndex++
+			}
+			startKey = resumeKey
+		}
+		require.Equal(t, len(expectedData), dataIndex, "not all expected data was consumed")
+	}
+	t.Run("elastic CPU limit exhausted",
+		func(t *testing.T) {
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			limits := dataLimits{
+				minKey:          minKey,
+				maxKey:          maxKey,
+				minTimestamp:    minTimestamp,
+				maxTimestamp:    maxTimestamp,
+				tombstoneChance: 0.01,
+			}
+			generateData(t, engine, limits, (limits.maxKey-limits.minKey)*10)
+			data := exportAllData(t, engine, queryLimits{
+				minKey:       minKey,
+				maxKey:       maxKey,
+				minTimestamp: minTimestamp,
+				maxTimestamp: maxTimestamp,
+				latest:       false,
+			})
+
+			// Our ElasticCPUWorkHandle will fail on the
+			// very first call. As a result, the very
+			// first resturn from MVCCExportToSST will
+			// actually contain no data but _should_
+			// return a resume key.
+			firstCall := true
+			ctx := admission.ContextWithElasticCPUWorkHandle(context.Background(), admission.TestingNewElasticCPUHandleWithCallback(func() (bool, time.Duration) {
+				if firstCall {
+					firstCall = false
+					return true, 0
+				}
+				return false, 0
+			}))
+			assertExportEqualWithOptions(t, ctx, engine, data, MVCCExportOptions{
+				StartKey:           MVCCKey{Key: testKey(limits.minKey), Timestamp: limits.minTimestamp},
+				EndKey:             testKey(limits.maxKey),
+				StartTS:            limits.minTimestamp,
+				EndTS:              limits.maxTimestamp,
+				ExportAllRevisions: true,
+			})
+		})
+	t.Run("resource limit exhausted",
+		func(t *testing.T) {
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			// Construct a data set that contains 4
+			// tombstones followed by 1 non-tombstone.
+			//
+			// We expect that MVCCExportToSST with
+			// ExportAllRevisions set to false and with no
+			// start timestamp will elide the tombstones.
+			rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+			timestamp := minTimestamp.Add(rand.Int63n(maxTimestamp.WallTime-minTimestamp.WallTime), 0)
+			require.NoError(t, engine.PutMVCC(MVCCKey{Key: testKey(6), Timestamp: timestamp}, MVCCValue{}), "write data to test storage")
+			require.NoError(t, engine.PutMVCC(MVCCKey{Key: testKey(7), Timestamp: timestamp}, MVCCValue{}), "write data to test storage")
+			require.NoError(t, engine.PutMVCC(MVCCKey{Key: testKey(8), Timestamp: timestamp}, MVCCValue{}), "write data to test storage")
+			value := MVCCValue{Value: roachpb.MakeValueFromBytes(randutil.RandBytes(rng, 256))}
+			require.NoError(t, engine.PutMVCC(MVCCKey{Key: testKey(9), Timestamp: timestamp}, value), "write data to test storage")
+			require.NoError(t, engine.Flush(), "Flush engine data")
+
+			data := exportAllData(t, engine, queryLimits{
+				minKey: minKey,
+				maxKey: maxKey,
+				// Tombstones are only elided when
+				// StartTS isn't set on the export
+				// request.
+				minTimestamp: hlc.Timestamp{},
+				maxTimestamp: maxTimestamp,
+				latest:       true,
+			})
+
+			firstCall := true
+			assertExportEqualWithOptions(t, context.Background(), engine, data, MVCCExportOptions{
+				StartKey: MVCCKey{Key: testKey(minKey), Timestamp: minTimestamp},
+				EndKey:   testKey(maxKey),
+				// No StartTS to ensure that
+				// tombstones are elided.
+				EndTS:              maxTimestamp,
+				ExportAllRevisions: false,
+				// The ResourceLimiter will
+				// return ResourceLimitReached
+				// on the very first call.
+				ResourceLimiter: &callbackResourceLimiter{
+					func() ResourceLimitReached {
+						if firstCall {
+							firstCall = false
+							return ResourceLimitReachedHard
+						}
+						return ResourceLimitNotReached
+					},
+				},
+			})
+		})
+}
+
+type callbackResourceLimiter struct {
+	cb func() ResourceLimitReached
+}
+
+func (c *callbackResourceLimiter) IsExhausted() ResourceLimitReached {
+	return c.cb()
+}
+
+var _ ResourceLimiter = &callbackResourceLimiter{}
 
 type countingResourceLimiter struct {
 	softCount int64

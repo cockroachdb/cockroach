@@ -5904,9 +5904,9 @@ func MVCCExportToSST(
 	}
 
 	if summary.DataSize == 0 {
-		// If no records were added to the sstable, skip completing it and return a
-		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
+		// If no records were added to the sstable, skip
+		// completing it and return an empty summary.
+		return roachpb.BulkOpSummary{}, resumeKey, nil
 	}
 
 	return summary, resumeKey, sstWriter.Finish()
