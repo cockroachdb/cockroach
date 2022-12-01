@@ -43,6 +43,8 @@ type ElasticCPUWorkHandle struct {
 	runningTimeAtLastCheck, differenceWithAllottedAtLastCheck time.Duration
 
 	testingOverrideRunningTime func() time.Duration
+
+	testingOverrideOverLimit func() (bool, time.Duration)
 }
 
 func newElasticCPUWorkHandle(allotted time.Duration) *ElasticCPUWorkHandle {
@@ -69,6 +71,14 @@ func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
 func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Duration) {
 	if h == nil { // not applicable
 		return false, time.Duration(0)
+	}
+
+	// TODO(ssd): It would be nice to get this in some zero-cost
+	// way. We could make ElasticCPUWorkHandle an interface and
+	// then allow for testing implementations. Not sure if the
+	// indirect call is better or worse than the conditional.
+	if h.testingOverrideOverLimit != nil {
+		return h.testingOverrideOverLimit()
 	}
 
 	// What we're effectively doing is just:
@@ -137,4 +147,13 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
 	return newElasticCPUWorkHandle(420 * time.Hour) // use a very high allotment
+}
+
+// TestingNewElasticCPUHandleWithCallback constructs an
+// ElasticCPUWorkHandle with a testing override for the behaviour of
+// OverLimit().
+func TestingNewElasticCPUHandleWithCallback(cb func() (bool, time.Duration)) *ElasticCPUWorkHandle {
+	h := TestingNewElasticCPUHandle()
+	h.testingOverrideOverLimit = cb
+	return h
 }
