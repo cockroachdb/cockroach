@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,22 +54,6 @@ type relocateRequest struct {
 	fromStoreDesc   *roachpb.StoreDescriptor
 }
 
-// TODO(ewall): replace with NodeDescs.GetStoreDescriptor.
-func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
-	var storeDesc roachpb.StoreDescriptor
-	gossipStoreKey := gossip.MakeStoreDescKey(storeID)
-	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
-	if err != nil {
-		return nil, err
-	}
-	if err := g.GetInfoProto(
-		gossipStoreKey, &storeDesc,
-	); err != nil {
-		return nil, errors.Wrapf(err, "error looking up store %d", storeID)
-	}
-	return &storeDesc, nil
-}
-
 func (n *relocateRange) startExec(params runParams) error {
 	toStoreID, err := paramparse.DatumAsInt(params.ctx, params.EvalContext(), "TO", n.toStoreID)
 	if err != nil {
@@ -93,12 +76,12 @@ func (n *relocateRange) startExec(params runParams) error {
 	}
 	// Lookup all the store descriptors upfront, so we dont have to do it for each
 	// range we are working with.
-	n.run.toStoreDesc, err = lookupStoreDesc(roachpb.StoreID(toStoreID), params)
+	n.run.toStoreDesc, err = params.ExecCfg().NodeDescs.GetStoreDescriptor(roachpb.StoreID(toStoreID))
 	if err != nil {
 		return err
 	}
 	if n.subjectReplicas != tree.RelocateLease {
-		n.run.fromStoreDesc, err = lookupStoreDesc(roachpb.StoreID(fromStoreID), params)
+		n.run.fromStoreDesc, err = params.ExecCfg().NodeDescs.GetStoreDescriptor(roachpb.StoreID(fromStoreID))
 		if err != nil {
 			return err
 		}
