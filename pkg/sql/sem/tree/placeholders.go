@@ -134,7 +134,11 @@ func (p *PlaceholderTypesInfo) SetType(idx PlaceholderIdx, typ *types.T) error {
 				pgcode.DatatypeMismatch,
 				"placeholder %s already has type %s, cannot assign %s", idx, t, typ)
 		}
-		return nil
+		// If `t` is ambiguous, then we can set the type to `typ`, which is more
+		// specific.
+		if !t.IsAmbiguous() {
+			return nil
+		}
 	}
 	p.Types[idx] = typ
 	return nil
