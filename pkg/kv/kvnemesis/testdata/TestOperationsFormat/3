@@ -3,12 +3,12 @@ echo
 ···db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 ···  {
 ···    b := &kv.Batch{}
-···    b.Get(uint64ToKey(7))
-···    b.Get(uint64ToKey(8))
-···    b.Del(uint64ToKey(9) /* @s1 */)
+···    b.Get(tk(7))
+···    b.Get(tk(8))
+···    b.Del(tk(9) /* @s1 */)
 ···    txn.Run(ctx, b)
 ···  }
-···  txn.DelRange(ctx, uint64ToKey(10), uint64ToKey(11), true /* @s2 */)
-···  txn.Put(ctx, uint64ToKey(11), seq2val(kvnemesisutil.Seq(3)))
+···  txn.DelRange(ctx, tk(10), tk(11), true /* @s2 */)
+···  txn.Put(ctx, tk(11), sv(3))
 ···  return nil
 ···})

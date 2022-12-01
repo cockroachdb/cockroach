@@ -571,18 +571,18 @@ func randDelRangeUsingTombstoneImpl(
 		}
 		if yn(0.5) {
 			// In 50% of cases, move endKey backward.
-			nk := uint64FromKey(k) + 1
-			nek := uint64FromKey(ek)
+			nk := fk(k) + 1
+			nek := fk(ek)
 			if nek < math.MaxUint64 {
 				nek++
 			}
-			ek = randKeyBetween(rng, uint64ToKey(nk), uint64ToKey(nek))
+			ek = randKeyBetween(rng, tk(nk), tk(nek))
 		}
 	} else if yn(0.5) {
 		// (100%-95%)*50% = 2.5% chance of turning the span we have now into a
 		// random point write.
 		k = randKey(rng)
-		ek = uint64ToKey(uint64FromKey(k) + 1)
+		ek = tk(fk(k) + 1)
 	} else {
 		// 2.5% chance of picking a completely random span. This will often span range
 		// boundaries and be rejected, so these are essentially doomed to fail.
@@ -720,7 +720,9 @@ func makeClosureTxn(
 	}
 }
 
-func uint64FromKey(k string) uint64 {
+// fk stands for "from key", i.e. decode the uint64 the key represents.
+// Panics on error.
+func fk(k string) uint64 {
 	k = k[len(GeneratorDataSpan().Key):]
 	_, s, err := encoding.DecodeUnsafeStringAscendingDeepCopy([]byte(k), nil)
 	if err != nil {
@@ -733,6 +735,16 @@ func uint64FromKey(k string) uint64 {
 	return binary.BigEndian.Uint64(sl)
 }
 
+// tk stands for toKey, i.e. encode the uint64 into its key representation.
+func tk(n uint64) string {
+	var sl [8]byte
+	binary.BigEndian.PutUint64(sl[:8], n)
+	s := hex.EncodeToString(sl[:8])
+	key := GeneratorDataSpan().Key
+	key = encoding.EncodeStringAscending(key, s)
+	return string(key)
+}
+
 func randKey(rng *rand.Rand) string {
 	// Avoid the endpoints because having point writes at the
 	// endpoints complicates randRangeSpan.
@@ -743,16 +755,7 @@ func randKey(rng *rand.Rand) string {
 	if n == math.MaxUint64 {
 		n--
 	}
-	return uint64ToKey(n)
-}
-
-func uint64ToKey(n uint64) string {
-	var sl [8]byte
-	binary.BigEndian.PutUint64(sl[:8], n)
-	s := hex.EncodeToString(sl[:8])
-	key := GeneratorDataSpan().Key
-	key = encoding.EncodeStringAscending(key, s)
-	return string(key)
+	return tk(n)
 }
 
 // Interprets the provided map as the split points of the key space and returns
@@ -765,18 +768,18 @@ func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string,
 	sort.Strings(keys)
 	if len(keys) == 0 {
 		// No splits.
-		return uint64ToKey(0), uint64ToKey(math.MaxUint64)
+		return tk(0), tk(math.MaxUint64)
 	}
 	idx := rng.Intn(len(keys) + 1)
 	if idx == len(keys) {
 		// Last range.
-		return keys[idx-1], uint64ToKey(math.MaxUint64)
+		return keys[idx-1], tk(math.MaxUint64)
 	}
 	if idx == 0 {
 		// First range. We avoid having splits at 0 so this will be a well-formed
 		// range. (If it isn't, we'll likely catch an error because we'll send an
 		// ill-formed request and kvserver will error it out).
-		return uint64ToKey(0), keys[0]
+		return tk(0), keys[0]
 	}
 	return keys[idx-1], keys[idx]
 }
@@ -789,7 +792,7 @@ func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 	// If there is only one key in the map we will get [0,x) or [x,max)
 	// back and want to return `x` to avoid the endpoints, which are
 	// reserved.
-	if uint64FromKey(k) == 0 {
+	if fk(k) == 0 {
 		return ek
 	}
 	return k
@@ -797,7 +800,7 @@ func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 
 // Returns a key that falls into `[k,ek)`.
 func randKeyBetween(rng *rand.Rand, k, ek string) string {
-	a, b := uint64FromKey(k), uint64FromKey(ek)
+	a, b := fk(k), fk(ek)
 	if b <= a {
 		b = a + 1 // we will return `a`
 	}
@@ -806,7 +809,7 @@ func randKeyBetween(rng *rand.Rand, k, ek string) string {
 			panic(fmt.Sprintf("a=%d b=%d b-a=%d: %v", a, b, int64(b-a), r))
 		}
 	}()
-	return uint64ToKey(a + (rng.Uint64() % (b - a)))
+	return tk(a + (rng.Uint64() % (b - a)))
 }
 
 func randSpan(rng *rand.Rand) (string, string) {

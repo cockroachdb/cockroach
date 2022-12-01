@@ -190,7 +190,7 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func fmtKey(k []byte) string {
-	return fmt.Sprintf(`uint64ToKey(%d)`, uint64FromKey(string(k)))
+	return fmt.Sprintf(`tk(%d)`, fk(string(k)))
 }
 
 func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -203,18 +203,19 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Put(%s%s, seq2val(kvnemesisutil.Seq(%d)))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	fmt.Fprintf(w, `%s.Put(%s%s, sv(%d))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
-func seq2Val(seq kvnemesisutil.Seq) string {
+// sv stands for sequence value, i.e. the value dictated by the given sequence number.
+func sv(seq kvnemesisutil.Seq) string {
 	return `v` + strconv.Itoa(int(seq))
 }
 
 // Value returns the value written by this put. This is a function of the
 // sequence number.
 func (op PutOperation) Value() string {
-	return seq2Val(op.Seq)
+	return sv(op.Seq)
 }
 
 func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {

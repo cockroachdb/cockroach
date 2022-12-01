@@ -2,7 +2,7 @@ echo
 ----
 {
   b := &kv.Batch{}
-  b.Put(uint64ToKey(1), seq2val(kvnemesisutil.Seq(21))) // <nil>
-  b.DelRange(uint64ToKey(2), uint64ToKey(3), true /* @s22 */) // <nil>
+  b.Put(tk(1), sv(21)) // <nil>
+  b.DelRange(tk(2), tk(3), true /* @s22 */) // <nil>
   db1.Run(ctx, b) // @<ts> <nil>
 }

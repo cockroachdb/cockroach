@@ -22,17 +22,17 @@ import (
 )
 
 var (
-	k1  = uint64ToKey(1)
-	k2  = uint64ToKey(2)
-	k3  = uint64ToKey(3)
-	k4  = uint64ToKey(4)
-	k5  = uint64ToKey(5)
-	k6  = uint64ToKey(6)
-	k7  = uint64ToKey(7)
-	k8  = uint64ToKey(8)
-	k9  = uint64ToKey(9)
-	k10 = uint64ToKey(10)
-	k11 = uint64ToKey(11)
+	k1  = tk(1)
+	k2  = tk(2)
+	k3  = tk(3)
+	k4  = tk(4)
+	k5  = tk(5)
+	k6  = tk(6)
+	k7  = tk(7)
+	k8  = tk(8)
+	k9  = tk(9)
+	k10 = tk(10)
+	k11 = tk(11)
 )
 
 func TestOperationsFormat(t *testing.T) {
