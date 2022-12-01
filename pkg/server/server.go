@@ -89,7 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -634,7 +634,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			nodeLiveness,
 			storePool,
 			spanConfig.subscriber,
-			rangedesciter.New(db),
+			rangedesc.NewScanner(db),
 			cfg.Settings,
 			spanConfigKnobs,
 		)
@@ -902,6 +902,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		settingsStorage:          settingsWriter,
 		eventsServer:             eventsServer,
 		admissionPacerFactory:    gcoords.Elastic,
+		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 	})
 	if err != nil {
 		return nil, err

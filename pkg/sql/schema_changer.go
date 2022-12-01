@@ -1828,17 +1828,18 @@ func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	kvTrace bool,
 	descriptors *descs.Collection,
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, table.ID)
+	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn, table.GetID())
 	if err != nil {
 		return err
 	}
 
 	// If this table doesn't have a zone attached to it, don't do anything.
-	if zone == nil {
+	if zoneWithRaw == nil {
 		return nil
 	}
 
@@ -1857,21 +1858,23 @@ func maybeUpdateZoneConfigsForPKChange(
 	}
 
 	for oldIdx, newIdx := range oldIdxToNewIdx {
-		for i := range zone.Subzones {
-			subzone := &zone.Subzones[i]
+		for i := range zoneWithRaw.ZoneConfigProto().Subzones {
+			subzone := &zoneWithRaw.ZoneConfigProto().Subzones[i]
 			if subzone.IndexID == uint32(oldIdx) {
 				// If we find a subzone matching an old index, copy its subzone
 				// into a new subzone with the new index's ID.
 				subzoneCopy := *subzone
 				subzoneCopy.IndexID = uint32(newIdx)
-				zone.SetSubzone(subzoneCopy)
+				zoneWithRaw.ZoneConfigProto().SetSubzone(subzoneCopy)
 			}
 		}
 	}
 
 	// Write the zone back. This call regenerates the index spans that apply
 	// to each partition in the index.
-	_, err = writeZoneConfig(ctx, txn, table.ID, table, zone, execCfg, descriptors, false)
+	_, err = writeZoneConfig(
+		ctx, txn, table.ID, table, zoneWithRaw.ZoneConfigProto(), zoneWithRaw.GetRawBytesInStorage(), execCfg, descriptors, false, kvTrace,
+	)
 	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 		return err
 	}
@@ -2997,6 +3000,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				ctx,
 				txn,
 				sc.execCfg,
+				false, /* kvTrace */
 				descsCol,
 				regionConfig,
 				tableDesc,
@@ -3010,7 +3014,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 		// Note this is done even for isDone = true, though not strictly
 		// necessary.
 		return maybeUpdateZoneConfigsForPKChange(
-			ctx, txn, sc.execCfg, descsCol, tableDesc, pkSwap.PrimaryKeySwapDesc(),
+			ctx, txn, sc.execCfg, false /* kvTrace */, descsCol, tableDesc, pkSwap.PrimaryKeySwapDesc(),
 		)
 	}
 	return nil

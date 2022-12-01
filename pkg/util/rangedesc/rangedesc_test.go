@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rangedesciter_test
+package rangedesc_test
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +60,7 @@ var scopes = []roachpb.Span{
 	},
 }
 
-func TestEverythingIterator(t *testing.T) {
+func TestEverythingScanner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -84,11 +84,11 @@ func TestEverythingIterator(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			iter := rangedesciter.New(kvDB)
+			scanner := rangedesc.NewScanner(kvDB)
 			for _, pageSize := range []int{1, 5, 10, 50} {
 				var numDescs int
 				init := func() { numDescs = 0 }
-				if err := iter.Iterate(ctx, pageSize, init, keys.EverythingSpan,
+				if err := scanner.Scan(ctx, pageSize, init, keys.EverythingSpan,
 					func(descriptors ...roachpb.RangeDescriptor) error {
 						numDescs += len(descriptors)
 						return nil
@@ -104,7 +104,7 @@ func TestEverythingIterator(t *testing.T) {
 	}
 }
 
-// TestDataDriven is a data-driven test for rangedesciter. The following syntax
+// TestDataDriven is a data-driven test for rangedesc. The following syntax
 // is provided:
 //
 //   - "iter" [page-size=<int>] [scope=<int>]
@@ -118,12 +118,12 @@ func TestDataDriven(t *testing.T) {
 		server, _, kvDB := serverutils.StartServer(t, params)
 		defer server.Stopper().Stop(context.Background())
 
-		iter := rangedesciter.New(kvDB)
+		scanner := rangedesc.NewScanner(kvDB)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var buf strings.Builder
 
 			switch d.Cmd {
-			case "iter":
+			case "scan":
 				pageSize := 1
 				if d.HasArg("page-size") {
 					d.ScanArgs(t, "page-size", &pageSize)
@@ -137,7 +137,7 @@ func TestDataDriven(t *testing.T) {
 
 				var numDescs int
 				init := func() { numDescs = 0 }
-				if err := iter.Iterate(ctx, pageSize, init, scope,
+				if err := scanner.Scan(ctx, pageSize, init, scope,
 					func(descriptors ...roachpb.RangeDescriptor) error {
 						for _, desc := range descriptors {
 							buf.WriteString(fmt.Sprintf("- r%d:%s\n", desc.RangeID, desc.KeySpan().String()))
@@ -156,7 +156,7 @@ func TestDataDriven(t *testing.T) {
 					t.Fatal(err)
 				}
 				buf.WriteString(fmt.Sprintf(
-					"iteration through %s (page-size=%d) found %d/%d descriptors\n",
+					"scan through %s (page-size=%d) found %d/%d descriptors\n",
 					scope, pageSize, numDescs, numRanges))
 
 			case "split":
@@ -177,4 +177,41 @@ func TestDataDriven(t *testing.T) {
 			return buf.String()
 		})
 	})
+}
+
+func TestIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	for _, s := range splits {
+		t.Run(fmt.Sprintf("with-splits-at=%s", s), func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			server, _, kvDB := serverutils.StartServer(t, params)
+			defer server.Stopper().Stop(context.Background())
+
+			for _, split := range s {
+				_, _, err := server.SplitRange(split)
+				require.NoError(t, err)
+			}
+			var numRanges int
+			err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				numRanges = s.ReplicaCount()
+				return nil
+			})
+			require.NoError(t, err)
+
+			iteratorFactory := rangedesc.NewIteratorFactory(kvDB)
+
+			iter, err := iteratorFactory.NewIterator(ctx, keys.EverythingSpan)
+			require.NoError(t, err)
+			var descs []roachpb.RangeDescriptor
+			for iter.Valid() {
+				descs = append(descs, iter.CurRangeDescriptor())
+				iter.Next()
+			}
+			if len(descs) != numRanges {
+				t.Fatalf("expected to find %d ranges, found %d", numRanges, len(descs))
+			}
+		})
+	}
 }

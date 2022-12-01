@@ -437,6 +437,12 @@ func (*internalServer) TenantSettings(
 	panic("unimplemented")
 }
 
+func (n *internalServer) GetRangeDescriptors(
+	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //

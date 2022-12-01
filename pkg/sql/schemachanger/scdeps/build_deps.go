@@ -406,10 +406,24 @@ func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {
 }
 
 func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
-	return d.descsCollection
+	return &zoneConfigGetter{
+		txn:         d.txn,
+		descriptors: d.descsCollection,
+	}
 }
 
 // ClientNoticeSender implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
+}
+
+type zoneConfigGetter struct {
+	txn         *kv.Txn
+	descriptors *descs.Collection
+}
+
+func (zc *zoneConfigGetter) GetZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (catalog.ZoneConfig, error) {
+	return zc.descriptors.GetZoneConfig(ctx, zc.txn, id)
 }

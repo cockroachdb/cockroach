@@ -113,7 +113,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -366,6 +366,10 @@ type sqlServerArgs struct {
 	// admissionPacerFactory is used for elastic CPU control when performing
 	// CPU intensive operations, such as CDC event encoding/decoding.
 	admissionPacerFactory admission.PacerFactory
+
+	// rangeDescIteratorFactory is used to construct iterators over range
+	// descriptors.
+	rangeDescIteratorFactory rangedesc.IteratorFactory
 }
 
 type monitorAndMetrics struct {
@@ -863,6 +867,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
+		RangeDescIteratorFactory:  cfg.rangeDescIteratorFactory,
 		SyntheticPrivilegeCache: cacheutil.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
 
@@ -1087,10 +1092,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		var systemDeps upgrade.SystemDeps
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
-				NodeLiveness:      nodeLiveness,
-				Dialer:            cfg.nodeDialer,
-				RangeDescIterator: rangedesciter.New(cfg.db),
-				DB:                cfg.db,
+				NodeLiveness:     nodeLiveness,
+				Dialer:           cfg.nodeDialer,
+				RangeDescScanner: rangedesc.NewScanner(cfg.db),
+				DB:               cfg.db,
 			})
 			systemDeps = upgrade.SystemDeps{
 				Cluster:          c,

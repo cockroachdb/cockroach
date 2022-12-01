@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rangedesciter
+package rangedesc
 
 import (
 	"context"
@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Iterator paginates through range descriptors in the system.
-type Iterator interface {
-	// Iterate paginates through range descriptors in the system that overlap
+// Scanner paginates through range descriptors in the system.
+type Scanner interface {
+	// Scan paginates through range descriptors in the system that overlap
 	// with the given span. When doing so it uses the given page size. It's
 	// important to note that the closure is being executed in the context of a
 	// distributed transaction that may be automatically retried. So something
@@ -54,10 +54,28 @@ type Iterator interface {
 	// be reading. Callers are expected to pick a page size accordingly
 	// (page sizes that are much larger than expected # of descriptors would
 	// lead to wasted work).
-	Iterate(
+	Scan(
 		ctx context.Context, pageSize int, init func(), span roachpb.Span,
 		fn func(descriptors ...roachpb.RangeDescriptor) error,
 	) error
+}
+
+// Iterator iterates through range descriptors.
+type Iterator interface {
+	// Valid returns whether the iterator is pointing at a valid element.
+	Valid() bool
+	// Next advances the iterator. Must not be called if Valid is false.
+	Next()
+	// CurRangeDescriptor returns the range descriptor the iterator is currently
+	// pointing at. Must not be called if Valid is false.
+	CurRangeDescriptor() roachpb.RangeDescriptor
+}
+
+// IteratorFactory is used to construct Iterators over arbitrary spans.
+type IteratorFactory interface {
+	// NewIterator constructs an iterator to iterate over range descriptors for
+	// ranges that overlap with the supplied span.
+	NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error)
 }
 
 // DB is a database handle to a CRDB cluster.
@@ -65,21 +83,28 @@ type DB interface {
 	Txn(ctx context.Context, retryable func(context.Context, *kv.Txn) error) error
 }
 
-// iteratorImpl is a concrete (private) implementation of the Iterator
+// impl is a concrete (private) implementation of the Scanner interface. It also
+// serves as the system tenant's implementation for the IteratorFactory
 // interface.
-type iteratorImpl struct {
+type impl struct {
 	db DB
 }
 
-// New returns an Iterator.
-func New(db DB) Iterator {
-	return &iteratorImpl{db: db}
+// NewScanner returns a Scanner.
+func NewScanner(db DB) Scanner {
+	return &impl{db: db}
 }
 
-var _ Iterator = &iteratorImpl{}
+// NewIteratorFactory returns an IteratorFactory.
+func NewIteratorFactory(db DB) IteratorFactory {
+	return &impl{db: db}
+}
 
-// Iterate implements the Iterator interface.
-func (i *iteratorImpl) Iterate(
+var _ Scanner = &impl{}
+var _ IteratorFactory = &impl{}
+
+// Scan implements the Scanner interface.
+func (i *impl) Scan(
 	ctx context.Context,
 	pageSize int,
 	init func(),
@@ -113,7 +138,7 @@ func (i *iteratorImpl) Iterate(
 		}
 		metaScanStartKey := metaScanBoundsForStart.Key.AsRawKey()
 
-		// Iterate through meta{1,2} to pull out relevant range descriptors.
+		// Scan through meta{1,2} to pull out relevant range descriptors.
 		// We'll keep scanning until we've found a range descriptor outside the
 		// scan of interest.
 		var lastRangeIDInMeta1 roachpb.RangeID
@@ -177,4 +202,44 @@ func (i *iteratorImpl) Iterate(
 			}),
 		)
 	})
+}
+
+// NewIterator implements the IteratorFactory interface.
+func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error) {
+	var rangeDescriptors []roachpb.RangeDescriptor
+	err := i.Scan(ctx, 0 /* pageSize */, func() {
+		rangeDescriptors = rangeDescriptors[:0] // retryable
+	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
+		rangeDescriptors = append(rangeDescriptors, descriptors...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &iterator{
+		rangeDescs: rangeDescriptors,
+		curIdx:     0,
+	}, nil
+}
+
+// iterator is a concrete (private) implementation of the Iterator interface.
+type iterator struct {
+	rangeDescs []roachpb.RangeDescriptor
+	curIdx     int
+}
+
+// Valid implements the Iterator interface.
+func (i *iterator) Valid() bool {
+	return i.curIdx < len(i.rangeDescs)
+}
+
+// Next implements the Iterator interface.
+func (i *iterator) Next() {
+	i.curIdx++
+}
+
+// CurRangeDescriptor implements the Iterator interface.
+func (i *iterator) CurRangeDescriptor() roachpb.RangeDescriptor {
+	return i.rangeDescs[i.curIdx]
 }

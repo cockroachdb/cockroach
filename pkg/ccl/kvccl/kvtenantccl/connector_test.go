@@ -131,6 +131,12 @@ func (m *mockServer) SpanConfigConformance(
 	panic("unimplemented")
 }
 
+func (m *mockServer) GetRangeDescriptors(
+	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+) error {
+	panic("unimplemented")
+}
+
 func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyClusterID,

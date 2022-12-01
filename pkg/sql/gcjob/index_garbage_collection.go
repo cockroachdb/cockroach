@@ -135,7 +135,7 @@ func gcIndexes(
 				return err
 			}
 			return sql.RemoveIndexZoneConfigs(
-				ctx, txn, execCfg, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
+				ctx, txn, execCfg, false /* kvTrace */, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
 		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
@@ -224,7 +224,7 @@ func deleteIndexZoneConfigsAfterGC(
 				return err
 			}
 			return sql.RemoveIndexZoneConfigs(
-				ctx, txn, execCfg, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
+				ctx, txn, execCfg, false /* kvTrace */, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
 		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)

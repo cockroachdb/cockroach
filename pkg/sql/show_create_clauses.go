@@ -50,6 +50,8 @@ type comment struct {
 // itself but also column and index comments.)
 // TODO(chengxiong): consider plumbing the collection through here so that we
 // can just fetch comments from collection cache instead of firing extra query.
+// An alternative approach would be to leverage a virtual table which internally
+// uses the collection.
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 

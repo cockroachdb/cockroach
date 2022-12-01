@@ -550,6 +550,7 @@ func removeLocalityConfigFromAllTablesInDB(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 					p.Descriptors(),
 					multiregion.RegionConfig{}, // pass dummy config as it is not used.
 					tbDesc,
@@ -622,6 +623,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 			params.p.txn,
 			params.p.execCfg,
 			params.p.Descriptors(),
+			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		); err != nil {
 			return err
 		}
@@ -790,6 +792,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1170,6 +1173,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1300,6 +1304,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1844,6 +1849,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1951,6 +1957,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -2246,6 +2253,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}

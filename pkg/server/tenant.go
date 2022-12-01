@@ -920,6 +920,7 @@ func makeTenantSQLServerArgs(
 		eventsServer:             eventsServer,
 		externalStorageBuilder:   esb,
 		admissionPacerFactory:    noopElasticCPUGrantCoord,
+		rangeDescIteratorFactory: tenantConnect,
 	}, nil
 }
 

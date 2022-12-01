@@ -603,6 +603,7 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg(),
+		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		params.p.Descriptors(),
 		regionConfig,
 		n.tableDesc,
