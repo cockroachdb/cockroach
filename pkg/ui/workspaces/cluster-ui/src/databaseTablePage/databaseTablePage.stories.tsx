@@ -15,7 +15,7 @@ import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
   randomName,
   randomRole,
-  randomTablePrivilege,
+  randomTablePrivileges,
 } from "src/storybook/fixtures";
 import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 import moment from "moment";
@@ -94,7 +94,7 @@ const withData: DatabaseTablePageProps = {
     grants: [
       {
         user: randomRole(),
-        privilege: randomTablePrivilege(),
+        privileges: randomTablePrivileges(),
       },
     ],
     statsLastUpdated: moment("0001-01-01T00:00:00Z"),

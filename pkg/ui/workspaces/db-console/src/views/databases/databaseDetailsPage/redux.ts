@@ -53,7 +53,7 @@ function normalizeRoles(raw: string[]): string[] {
   return _.sortBy(alphabetizedRoles, role => rolePrecedence[role] || 100);
 }
 
-function normalizePrivileges(raw: string[]): string[] {
+export function normalizePrivileges(raw: string[]): string[] {
   const privilegePrecedence: Record<string, number> = {
     ALL: 1,
     CREATE: 2,

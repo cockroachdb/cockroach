@@ -10,8 +10,8 @@
 
 import _ from "lodash";
 
-export function randomTablePrivilege(): string {
-  return _.sample([
+export function randomTablePrivileges(): string[] {
+  return Array.from(_.sample([
     "ALL",
     "CREATE",
     "DROP",
@@ -20,5 +20,5 @@ export function randomTablePrivilege(): string {
     "INSERT",
     "UPDATE",
     "DELETE",
-  ]);
+  ]));
 }
