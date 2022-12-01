@@ -378,3 +378,35 @@ func TestOrderedStateLists(t *testing.T) {
 	s = NewTestStateSkewedDistribution(100, 10000, 3, 1000000)
 	assertListsOrdered(s)
 }
+
+// TestNewStateDeterministic asserts that the state returned from the new state
+// utility functions is deterministic.
+func TestNewStateDeterministic(t *testing.T) {
+
+	testCases := []struct {
+		desc       string
+		newStateFn func() State
+	}{
+		{
+			desc:       "even distribution",
+			newStateFn: func() State { return NewTestStateEvenDistribution(7, 1400, 3, 10000) },
+		},
+		{
+			desc:       "skewed distribution",
+			newStateFn: func() State { return NewTestStateSkewedDistribution(7, 1400, 3, 10000) },
+		},
+		{
+			desc:       "replica distribution raw ",
+			newStateFn: func() State { return NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000) },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			ref := tc.newStateFn()
+			for i := 0; i < 5; i++ {
+				require.Equal(t, ref.Ranges(), tc.newStateFn().Ranges())
+			}
+		})
+	}
+}
