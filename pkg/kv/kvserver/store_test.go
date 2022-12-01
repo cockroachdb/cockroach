@@ -140,6 +140,12 @@ func (m mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 	return m.desc, nil
 }
 
+func (m mockNodeStore) GetNodeDescriptorByStoreID(
+	id roachpb.StoreID,
+) (*roachpb.NodeDescriptor, error) {
+	return m.desc, nil
+}
+
 type dummyFirstRangeProvider struct {
 	store *Store
 }

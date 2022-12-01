@@ -197,10 +197,11 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
-		assert.Equal(t, "system-db", req.Patterns[2])
+		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -252,7 +253,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.Regexp(t, "unable to look up descriptor for node ID 3", err)
 
 	// Return updated GossipSubscription response.
 	node1Up := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.2.3.4")}
@@ -414,10 +415,11 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
-		assert.Equal(t, "system-db", req.Patterns[2])
+		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err
@@ -474,7 +476,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.Regexp(t, "unable to look up descriptor for node ID 3", err)
 }
 
 // TestConnectorRetriesError tests that Connector iterates over each of

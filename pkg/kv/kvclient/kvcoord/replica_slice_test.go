@@ -40,7 +40,14 @@ func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.Node
 			return &nd, nil
 		}
 	}
-	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+	return nil, errors.Errorf("unable to look up descriptor for node ID %d", nodeID)
+}
+
+// GetNodeDescriptorByStoreID is part of the NodeDescStore interface.
+func (ns *mockNodeStore) GetNodeDescriptorByStoreID(
+	storeID roachpb.StoreID,
+) (*roachpb.NodeDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
 }
 
 func TestNewReplicaSlice(t *testing.T) {
