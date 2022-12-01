@@ -591,7 +591,7 @@ export class DatabaseTablePage extends React.Component<
                         </SummaryCard>
                       </Col>
                     </Row>
-                    <Row gutter={18}>
+                    <Row gutter={18} className={cx("row-spaced")}>
                       <SummaryCard
                         className={cx(
                           "summary-card",
