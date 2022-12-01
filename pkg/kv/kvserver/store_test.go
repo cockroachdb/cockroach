@@ -140,6 +140,10 @@ func (m mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 	return m.desc, nil
 }
 
+func (m mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", id)
+}
+
 type dummyFirstRangeProvider struct {
 	store *Store
 }

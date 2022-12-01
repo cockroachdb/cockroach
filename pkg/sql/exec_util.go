@@ -1342,7 +1342,7 @@ type ExecutorConfig struct {
 	// EventsExporter is the client for the Observability Service.
 	EventsExporter obs.EventsExporter
 
-	// NodeDescs stores node descriptors in an in-memory cache.
+	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
 }
 

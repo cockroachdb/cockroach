@@ -47,8 +47,9 @@ type Connector interface {
 	Start(context.Context) error
 
 	// NodeDescStore provides information on each of the KV nodes in the cluster
-	// in the form of NodeDescriptors. This obviates the need for SQL-only
-	// tenant processes to join the cluster-wide gossip network.
+	// in the form of NodeDescriptors and StoreDescriptors. This obviates the
+	// need for SQL-only tenant processes to join the cluster-wide gossip
+	// network.
 	kvcoord.NodeDescStore
 
 	// RangeDescriptorDB provides range addressing information in the form of

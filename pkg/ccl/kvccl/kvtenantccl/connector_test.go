@@ -157,6 +157,18 @@ func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscri
 	}
 }
 
+func gossipEventForStoreDesc(desc *roachpb.StoreDescriptor) *roachpb.GossipSubscriptionEvent {
+	val, err := protoutil.Marshal(desc)
+	if err != nil {
+		panic(err)
+	}
+	return &roachpb.GossipSubscriptionEvent{
+		Key:            gossip.MakeStoreDescKey(desc.StoreID),
+		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
+		PatternMatched: gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+	}
+}
+
 func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.GossipSubscriptionEvent {
 	val, err := protoutil.Marshal(cfg)
 	if err != nil {
@@ -173,6 +185,14 @@ func waitForNodeDesc(t *testing.T, c *Connector, nodeID roachpb.NodeID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		_, err := c.GetNodeDescriptor(nodeID)
+		return err
+	})
+}
+
+func waitForStoreDesc(t *testing.T, c *Connector, storeID roachpb.StoreID) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		_, err := c.GetStoreDescriptor(storeID)
 		return err
 	})
 }
@@ -197,10 +217,11 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
-		assert.Equal(t, "system-db", req.Patterns[2])
+		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -253,6 +274,25 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
 	require.Regexp(t, "unable to look up descriptor for n3", err)
+
+	// Test GetStoreDescriptor.
+	storeID1 := roachpb.StoreID(1)
+	store1 := &roachpb.StoreDescriptor{StoreID: storeID1, Node: *node1}
+	storeID2 := roachpb.StoreID(2)
+	store2 := &roachpb.StoreDescriptor{StoreID: storeID2, Node: *node2}
+	gossipSubC <- gossipEventForStoreDesc(store1)
+	gossipSubC <- gossipEventForStoreDesc(store2)
+	waitForStoreDesc(t, c, storeID1)
+	storeDesc, err := c.GetStoreDescriptor(storeID1)
+	require.NoError(t, err)
+	require.Equal(t, store1, storeDesc)
+	waitForStoreDesc(t, c, storeID2)
+	storeDesc, err = c.GetStoreDescriptor(storeID2)
+	require.NoError(t, err)
+	require.Equal(t, store2, storeDesc)
+	storeDesc, err = c.GetStoreDescriptor(3)
+	require.Nil(t, storeDesc)
+	require.Regexp(t, "unable to look up descriptor for store ID 3", err)
 
 	// Return updated GossipSubscription response.
 	node1Up := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.2.3.4")}
@@ -414,10 +454,11 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
-		assert.Equal(t, "system-db", req.Patterns[2])
+		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err
