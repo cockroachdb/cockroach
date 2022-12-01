@@ -835,7 +835,7 @@ func (s *statusServer) AllocatorRange(
 			ctx,
 			"server.statusServer: requesting remote Allocator simulation",
 			func(ctx context.Context) {
-				_ = contextutil.RunWithTimeout(ctx, "allocator range", base.NetworkTimeout, func(ctx context.Context) error {
+				_ = contextutil.RunWithTimeout(ctx, "allocator range", 3*time.Second, func(ctx context.Context) error {
 					status, err := s.dialNode(ctx, nodeID)
 					var allocatorResponse *serverpb.AllocatorResponse
 					if err == nil {
