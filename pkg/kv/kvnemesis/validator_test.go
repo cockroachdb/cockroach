@@ -118,14 +118,6 @@ func TestValidate(t *testing.T) {
 		skip.IgnoreLint(t, "kvnemesis must be run with the crdb_test build tag")
 	}
 
-	var (
-		k1 = uint64ToKey(1)
-		k2 = uint64ToKey(2)
-		k3 = uint64ToKey(3)
-		k4 = uint64ToKey(4)
-		k5 = uint64ToKey(5)
-	)
-
 	const (
 		s1 = kvnemesisutil.Seq(1 + iota)
 		s2
