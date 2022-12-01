@@ -37,7 +37,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_column
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -117,7 +117,7 @@ upsert descriptor #104
   +      - crdb_internal_column_3_name_placeholder
   +      keySuffixColumnIds:
   +      - 1
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: t_expr_idx
   +      partitioning: {}
   +      sharded: {}
   +      version: 3
@@ -322,7 +322,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t DROP COLUMN j CASCADE
@@ -338,6 +338,12 @@ upsert descriptor #104
      - direction: DROP
        index:
   ...
+         keySuffixColumnIds:
+         - 1
+  -      name: t_expr_idx
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning: {}
+         sharded: {}
          version: 3
        mutationId: 1
   -    state: WRITE_ONLY
@@ -437,11 +443,12 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
+write *eventpb.DropIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
 upsert descriptor #104
   ...
      - direction: DROP
@@ -519,7 +526,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.DropIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops pending"
 commit transaction #11
 begin transaction #12
