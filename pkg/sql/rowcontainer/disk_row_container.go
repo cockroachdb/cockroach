@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -83,6 +84,9 @@ type DiskRowContainer struct {
 	engine      diskmap.Factory
 
 	datumAlloc *tree.DatumAlloc
+
+	// Context cancellation checker.
+	cancelChecker cancelchecker.CancelChecker
 }
 
 var _ SortableRowContainer = &DiskRowContainer{}
@@ -91,11 +95,13 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 // MakeDiskRowContainer creates a DiskRowContainer with the given engine as the
 // underlying store that rows are stored on.
 // Arguments:
+//   - ctx is used for cancellation checking.
 //   - diskMonitor is used to monitor this DiskRowContainer's disk usage.
 //   - types is the schema of rows that will be added to this container.
 //   - ordering is the output ordering; the order in which rows should be sorted.
 //   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
+	ctx context.Context,
 	diskMonitor *mon.BytesMonitor,
 	types []*types.T,
 	ordering colinfo.ColumnOrdering,
@@ -113,6 +119,7 @@ func MakeDiskRowContainer(
 		datumAlloc:    &tree.DatumAlloc{},
 	}
 	d.bufferedRows = d.diskMap.NewBatchWriter()
+	d.cancelChecker.Reset(ctx)
 
 	// The ordering is specified for a subset of the columns. These will be
 	// encoded as a key in the given order according to the given direction so
@@ -281,6 +288,9 @@ func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow
 	}
 
 	for i, orderInfo := range d.ordering {
+		if err := d.cancelChecker.Check(); err != nil {
+			return err
+		}
 		col := orderInfo.ColIdx
 		var err error
 		d.scratchKey, err = row[col].Encode(d.types[col], d.datumAlloc, d.encodings[i], d.scratchKey)
@@ -290,6 +300,9 @@ func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow
 	}
 	if !d.deDuplicate {
 		for _, i := range d.valueIdxs {
+			if err := d.cancelChecker.Check(); err != nil {
+				return err
+			}
 			var err error
 			d.scratchVal, err = row[i].Encode(d.types[i], d.datumAlloc, descpb.DatumEncoding_VALUE, d.scratchVal)
 			if err != nil {
@@ -327,10 +340,13 @@ func (d *DiskRowContainer) Sort(context.Context) {}
 func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnOrdering) error {
 	// We need to create a new DiskRowContainer since its ordering can only be
 	// changed at initialization.
-	newContainer := MakeDiskRowContainer(d.diskMonitor, d.types, ordering, d.engine)
+	newContainer := MakeDiskRowContainer(ctx, d.diskMonitor, d.types, ordering, d.engine)
 	i := d.NewFinalIterator(ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {
+		if err := d.cancelChecker.Check(); err != nil {
+			return err
+		}
 		if ok, err := i.Valid(); err != nil {
 			return err
 		} else if !ok {
@@ -398,6 +414,9 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 // call to keyValToRow().
 func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, error) {
 	for i, orderInfo := range d.ordering {
+		if err := d.cancelChecker.Check(); err != nil {
+			return nil, err
+		}
 		// Types with composite key encodings are decoded from the value.
 		if colinfo.CanHaveCompositeKeyEncoding(d.types[orderInfo.ColIdx]) {
 			// Skip over the encoded key.
@@ -417,6 +436,9 @@ func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, 
 		}
 	}
 	for _, i := range d.valueIdxs {
+		if err := d.cancelChecker.Check(); err != nil {
+			return nil, err
+		}
 		var err error
 		d.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(d.types[i], descpb.DatumEncoding_VALUE, v)
 		if err != nil {

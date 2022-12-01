@@ -66,6 +66,7 @@ func (b *kvStreamerResultDiskBuffer) Serialize(
 ) (resultID int, _ error) {
 	if !b.initialized {
 		b.container = MakeDiskRowContainer(
+			ctx,
 			b.monitor,
 			inOrderResultsBufferSpillTypeSchema,
 			colinfo.ColumnOrdering{},
