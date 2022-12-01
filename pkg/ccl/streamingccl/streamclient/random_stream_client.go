@@ -383,9 +383,12 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 // Create implements the Client interface.
 func (m *RandomStreamClient) Create(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (streampb.StreamID, error) {
+) (streampb.ReplicationProducerSpec, error) {
 	log.Infof(ctx, "creating random stream for tenant %s", tenantName)
-	return streampb.StreamID(1), nil
+	return streampb.ReplicationProducerSpec{
+		StreamID:             streampb.StreamID(1),
+		ReplicationStartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+	}, nil
 }
 
 // Heartbeat implements the Client interface.
@@ -457,7 +460,11 @@ func (m *RandomStreamClient) Close(_ context.Context) error {
 
 // Subscribe implements the Client interface.
 func (m *RandomStreamClient) Subscribe(
-	ctx context.Context, stream streampb.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+	_ context.Context,
+	_ streampb.StreamID,
+	spec SubscriptionToken,
+	initialScanTime hlc.Timestamp,
+	_ hlc.Timestamp,
 ) (Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {
@@ -471,7 +478,7 @@ func (m *RandomStreamClient) Subscribe(
 
 	eventCh := make(chan streamingccl.Event)
 	now := timeutil.Now()
-	startWalltime := timeutil.Unix(0 /* sec */, checkpoint.WallTime)
+	startWalltime := timeutil.Unix(0 /* sec */, initialScanTime.WallTime)
 	if startWalltime.After(now) {
 		panic("cannot start random stream client event stream in the future")
 	}

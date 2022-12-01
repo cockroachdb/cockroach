@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -323,4 +325,101 @@ func TestCutoverBuiltin(t *testing.T) {
 	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
 	require.Equal(t, hlc.Timestamp{WallTime: highWater.UnixNano()}, sp.StreamIngest.CutoverTime)
+}
+
+// TestReplicationJobResumptionStartTime tests that a replication job picks the
+// correct timestamps to resume from across multiple resumptions.
+func TestReplicationJobResumptionStartTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	planned := make(chan struct{})
+	canContinue := make(chan struct{})
+	args := defaultTenantStreamingClustersArgs
+
+	replicationSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0)
+	frontier := &execinfrapb.StreamIngestionFrontierSpec{}
+	args.testingKnobs = &sql.StreamingTestingKnobs{
+		AfterReplicationFlowPlan: func(ingestionSpecs []*execinfrapb.StreamIngestionDataSpec,
+			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
+			replicationSpecs = ingestionSpecs
+			frontier = frontierSpec
+			planned <- struct{}{}
+			<-canContinue
+		},
+	}
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	defer close(planned)
+	defer close(canContinue)
+
+	producerJobID, replicationJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+
+	// Wait for the distsql plan to be created.
+	<-planned
+	registry := c.destSysServer.ExecutorConfig().(sql.ExecutorConfig).JobRegistry
+	var replicationJobDetails jobspb.StreamIngestionDetails
+	require.NoError(t, c.destSysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		j, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
+		require.NoError(t, err)
+		var ok bool
+		replicationJobDetails, ok = j.Details().(jobspb.StreamIngestionDetails)
+		if !ok {
+			t.Fatalf("job with id %d is not a stream ingestion job", replicationJobID)
+		}
+		return nil
+	}))
+
+	// Let's verify the timestamps on the first resumption of the replication job.
+	startTime := replicationJobDetails.ReplicationStartTime
+	require.NotEmpty(t, startTime)
+
+	for _, r := range replicationSpecs {
+		require.Equal(t, startTime, r.InitialScanTimestamp)
+		require.Empty(t, r.PreviousHighWaterTimestamp)
+	}
+	require.Empty(t, frontier.HighWaterAtStart)
+
+	// Allow the job to make some progress.
+	canContinue <- struct{}{}
+	srcTime := c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
+
+	// Pause the job.
+	c.destSysSQL.Exec(t, `PAUSE JOB $1`, replicationJobID)
+	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+
+	// Unpause the job and ensure the resumption takes place at a later timestamp
+	// than the initial scan timestamp.
+	c.destSysSQL.Exec(t, `RESUME JOB $1`, replicationJobID)
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+
+	<-planned
+	stats := streamIngestionStats(t, c.destSysSQL, replicationJobID)
+
+	// Assert that the start time hasn't changed.
+	require.Equal(t, startTime, stats.IngestionDetails.ReplicationStartTime)
+
+	// Assert that the previous highwater mark is greater than the replication
+	// start time.
+	var previousHighWaterTimestamp hlc.Timestamp
+	for _, r := range replicationSpecs {
+		require.Equal(t, startTime, r.InitialScanTimestamp)
+		require.True(t, r.InitialScanTimestamp.Less(r.PreviousHighWaterTimestamp))
+		if previousHighWaterTimestamp.IsEmpty() {
+			previousHighWaterTimestamp = r.PreviousHighWaterTimestamp
+		} else {
+			require.Equal(t, r.PreviousHighWaterTimestamp, previousHighWaterTimestamp)
+		}
+	}
+	require.Equal(t, frontier.HighWaterAtStart, previousHighWaterTimestamp)
+	canContinue <- struct{}{}
+	srcTime = c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
+	c.cutover(producerJobID, replicationJobID, srcTime.GoTime())
+	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(replicationJobID))
 }
