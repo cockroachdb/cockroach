@@ -13,6 +13,8 @@
 
 package buildutil
 
+import "reflect"
+
 // CrdbTestBuild is a flag that is set to true if the binary was compiled
 // with the 'crdb_test' build tag (which is the case for all test targets). This
 // flag can be used to enable expensive checks, test randomizations, or other
@@ -22,28 +24,31 @@ const CrdbTestBuild = false
 
 // TestingInt64 is an empty struct that can be used as a `gogoproto.casttype` in
 // proto messages. It uses no space. When the crdb_test build tag is set, this
-// type is instead represented by a RealTestingInt64.
+// type is instead represented by a TestingInt64.
 type TestingInt64 struct{}
 
-// Unmarshal implements (part of) protoutil.Message.
-func (m *TestingInt64) Unmarshal([]byte) error { return nil }
+func (m *TestingInt64) Reset() {}
 
-// Marshal implements (part of) protoutil.Message.
-func (m *TestingInt64) Marshal([]byte) error { return nil }
+// String implements (a part of) protoutil.Message.
+func (m *TestingInt64) String() string { return "0" }
 
-// MarshalToSizedBuffer implements (part of) protoutil.Message.
-func (m *TestingInt64) MarshalToSizedBuffer([]byte) (int, error) { return 0, nil }
+// ProtoMessage implements (a part of) protoutil.Message.
+func (m *TestingInt64) ProtoMessage() {}
 
-// Size implements (part of) protoutil.Message.
+// MarshalTo implements (a part of) protoutil.Message.
+func (m *TestingInt64) MarshalTo(buf []byte) (int, error) { return 0, nil }
+
+// Unmarshal implements (a part of) protoutil.Message.
+func (m *TestingInt64) Unmarshal(buf []byte) error { return nil }
+
+// MarshalToSizedBuffer implements (a part of) protoutil.Message.
+func (m *TestingInt64) MarshalToSizedBuffer(buf []byte) (int, error) { return 0, nil }
+
+// Size implements (a part of) protoutil.Message.
 func (m *TestingInt64) Size() int { return 0 }
 
-// Equal implements `gogoproto.equal`.
-func (m *TestingInt64) Equal(n interface{}) bool {
-	if n == nil {
-		return m == nil
-	}
-	return *m == *(n.(*TestingInt64))
-}
+// Equal implements (gogoproto.equal).
+func (m *TestingInt64) Equal(n interface{}) bool { return reflect.DeepEqual(m, n) }
 
 // Set is a no-op.
 func (m *TestingInt64) Set(int64) {}

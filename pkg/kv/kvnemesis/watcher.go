@@ -224,8 +224,7 @@ func (w *Watcher) handleValue(
 		// the rangefeed boundary, and handed to the tracker. This is merely our
 		// local copy.
 		//
-		// TODO(during review): plumb the seq through the rangefeed and then we can
-		// use the real thing here and avoid this problem in a more natural way.
+		// See https://github.com/cockroachdb/cockroach/issues/92822.
 		var vh enginepb.MVCCValueHeader
 		vh.KVNemesisSeq.Set(int64(rand.Int31()))
 		mvccV := storage.MVCCValue{

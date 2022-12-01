@@ -37,11 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var numSteps int
-
-func init() {
-	numSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
-}
+var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
 
 func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
@@ -132,6 +128,7 @@ func (t *tBridge) WriteFile(basename string, contents string) string {
 
 type kvnemesisTestCfg struct {
 	numNodes     int
+	numSteps     int
 	concurrency  int
 	seedOverride int64
 }
@@ -142,6 +139,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
 		numNodes:     1,
+		numSteps:     defaultNumSteps,
 		concurrency:  5,
 		seedOverride: 0,
 	})
@@ -152,7 +150,8 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
-		numNodes:     5,
+		numNodes:     4,
+		numSteps:     defaultNumSteps,
 		concurrency:  5,
 		seedOverride: 0,
 	})
@@ -195,7 +194,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	}
 	logger := newTBridge(t)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
-	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, numSteps, dbs...)
+	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
 	require.NoError(t, err, `%+v`, err)
 	require.Zero(t, len(failures), "kvnemesis detected failures") // they've been logged already
 }

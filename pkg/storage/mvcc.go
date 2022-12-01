@@ -1102,8 +1102,6 @@ func mvccGetWithValueHeader(
 		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
 	})
-	// TODO(during review): if MVCCValueHeader ever picks up a pointer, is it
-	// still safe to return it (since it's in curUnsafeValue)?
 	return value, intent, mvccScanner.curUnsafeValue.MVCCValueHeader, nil
 }
 

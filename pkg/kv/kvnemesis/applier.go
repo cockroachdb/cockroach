@@ -96,6 +96,10 @@ func exceptRetry(err error) bool { // true if retry error
 	return errors.HasInterface(err, (*roachpb.ClientVisibleRetryError)(nil))
 }
 
+func exceptUnhandledRetry(err error) bool {
+	return errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil))
+}
+
 func exceptAmbiguous(err error) bool { // true if ambiguous result
 	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
 }

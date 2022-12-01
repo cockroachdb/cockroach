@@ -13,6 +13,7 @@ package testingint
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -70,10 +71,7 @@ func (m *RealTestingInt64) Size() int {
 
 // Equal implements (gogoproto.equal).
 func (m *RealTestingInt64) Equal(n interface{}) bool {
-	if n == nil {
-		return m == nil
-	}
-	return *m == *(n.(*RealTestingInt64))
+	return reflect.DeepEqual(m, n)
 }
 
 // Set updates the receiver. Not thread safe.

@@ -1842,9 +1842,6 @@ func TestValidate(t *testing.T) {
 					fmt.Fprintln(&buf, failures[i])
 				}
 			}
-			// TODO(during review): prefix all test names with a (padded) number so
-			// that it's easier to join up the test case and the file in a sorted
-			// view.
 			return buf.String()
 		}))
 	}

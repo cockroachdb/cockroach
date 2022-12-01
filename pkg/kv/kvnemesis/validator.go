@@ -369,8 +369,6 @@ func (v *validator) processOp(op Operation) {
 	// TODO(during review): check that this still works when setting this back to
 	// "buffering". Had disabled this during development.
 	execTimestampStrictlyOptional := true
-	// TODO(during review): lots of operations here are missing error checks. Erik
-	// filed an issue for this so close that when done.
 	switch t := op.GetValue().(type) {
 	case *GetOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
@@ -463,11 +461,13 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`deleteRange`, t.Result)
 		}
 	case *DeleteRangeUsingTombstoneOperation:
-		if v.checkNonAmbError(op, t.Result, func(err error) bool {
-			// TODO(during review): is it "wanted" that an unhandled retry error (a
-			// WriteTooOldError) can bubble up here?
-			return errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil))
-		}) {
+		if v.checkNonAmbError(op, t.Result, exceptUnhandledRetry) {
+			// If there was an error and it's not an ambiguous result, since we don't
+			// allow this operation to span ranges (which might otherwise allow for
+			// partial execution, since it's not atomic across ranges), we know none
+			// of the writes must have become visible. Check this by not emitting them
+			// in the first place. (Otherwise, we could get an error but the write
+			// would still be there and kvnemesis would pass).
 			break
 		}
 		// NB: MVCC range deletions aren't allowed in transactions (and can't be
@@ -1325,7 +1325,11 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 	missingKeys := make(map[string]disjointTimeSpans)
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
+
+	// We don't check the return value since HasPointAndRange below
+	// checks for validity as well.
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
+
 	for ; iter.Valid(); iter.Next() {
 		// TODO(during review): is this correct? Should be but have Erik check.
 		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
