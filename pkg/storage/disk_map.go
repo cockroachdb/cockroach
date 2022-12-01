@@ -197,6 +197,9 @@ func (i *pebbleMapIterator) UnsafeKey() []byte {
 
 // UnsafeValue implements the SortedDiskMapIterator interface.
 func (i *pebbleMapIterator) UnsafeValue() []byte {
+	// TODO(sumeer): switch to using ValueAndErr. Since error only happens for
+	// non in-place values, and temp engines only have in-place values, this
+	// change is not critical.
 	return i.iter.Value()
 }
 
