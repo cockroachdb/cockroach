@@ -5,7 +5,7 @@ COPY . .
 RUN go test -v -c -tags gss_compose -o gss.test
 
 # Copy the test binary to an image with psql and krb installed.
-FROM postgres:11
+FROM postgres:15
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
