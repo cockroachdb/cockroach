@@ -464,7 +464,7 @@ func makeInMemoryTenantServerConfig(
 	baseCfg.Config.User = kvServerCfg.Config.User
 	baseCfg.Config.DisableTLSForHTTP = kvServerCfg.Config.DisableTLSForHTTP
 	baseCfg.Config.AcceptSQLWithoutTLS = kvServerCfg.Config.AcceptSQLWithoutTLS
-	baseCfg.Config.RPCHeartbeatIntervalAndHalfTimeout = kvServerCfg.Config.RPCHeartbeatIntervalAndHalfTimeout
+	baseCfg.Config.RPCHeartbeatIntervalAndTimeout = kvServerCfg.Config.RPCHeartbeatIntervalAndTimeout
 	baseCfg.Config.ClockDevicePath = kvServerCfg.Config.ClockDevicePath
 	baseCfg.Config.ClusterName = kvServerCfg.Config.ClusterName
 	baseCfg.Config.DisableClusterNameVerification = kvServerCfg.Config.DisableClusterNameVerification
