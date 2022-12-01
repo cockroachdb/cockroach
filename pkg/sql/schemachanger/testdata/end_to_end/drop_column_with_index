@@ -38,7 +38,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_column
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -182,6 +182,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
+write *eventpb.DropIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -422,11 +423,11 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #104
   ...
      modificationTime: {}
@@ -490,7 +491,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.DropIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops pending"
 commit transaction #11
 begin transaction #12

@@ -306,7 +306,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -357,31 +357,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
     │   │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
     │   │             rule: "dependents removed before index"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 6 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 4
     │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 5
-    │       │         isUnique: true
-    │       │         sourceIndexId: 3
-    │       │         tableId: 104
-    │       │         temporaryIndexId: 6
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›)
-    │       │       StatementTag: CREATE INDEX
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         StatementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 5

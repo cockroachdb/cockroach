@@ -46,11 +46,33 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • PreviousTransactionPrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, ConstraintID: 2}
 │       │             rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │
-│       └── • 6 Mutation operations
+│       └── • 7 Mutation operations
 │           │
 │           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
 │           │     TableID: 104
+│           │
+│           ├── • LogEvent
+│           │     Element:
+│           │       SecondaryIndex:
+│           │         indexId: 2
+│           │         isCreatedExplicitly: true
+│           │         sharding:
+│           │           columnNames:
+│           │           - j
+│           │           isSharded: true
+│           │           name: crdb_internal_j_shard_16
+│           │           shardBuckets: 16
+│           │         tableId: 104
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+│           │       StatementTag: DROP INDEX
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
+│           │     TargetStatus: 1
 │           │
 │           ├── • SetIndexName
 │           │     IndexID: 2
@@ -78,7 +100,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
 │           │       StatementTag: DROP INDEX
 │           │       TargetMetadata:
-│           │         SourceElementID: 1
+│           │         SourceElementID: 2
 │           │         SubWorkID: 1
 │           │     TargetStatus: 1
 │           │
@@ -198,7 +220,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
@@ -253,29 +275,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
         │             rule: "index removed before garbage collection"
         │
-        └── • 6 Mutation operations
-            │
-            ├── • LogEvent
-            │     Element:
-            │       SecondaryIndex:
-            │         indexId: 2
-            │         isCreatedExplicitly: true
-            │         sharding:
-            │           columnNames:
-            │           - j
-            │           isSharded: true
-            │           name: crdb_internal_j_shard_16
-            │           shardBuckets: 16
-            │         tableId: 104
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
-            │       StatementTag: DROP INDEX
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
+        └── • 5 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 2
@@ -295,7 +295,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
             │       Statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
             │       StatementTag: DROP INDEX
             │       TargetMetadata:
-            │         SourceElementID: 1
+            │         SourceElementID: 2
             │         SubWorkID: 1
             │     TableID: 104
             │

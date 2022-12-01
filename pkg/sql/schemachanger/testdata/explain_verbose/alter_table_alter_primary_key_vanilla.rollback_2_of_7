@@ -106,7 +106,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   └── • IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
     │   │         PUBLIC → ABSENT
     │   │
-    │   └── • 8 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
@@ -132,25 +132,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │       │         SubWorkID: 1
     │       │     IndexID: 2
     │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 4
-    │       │         isUnique: true
-    │       │         sourceIndexId: 1
-    │       │         tableId: 104
-    │       │         temporaryIndexId: 5
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 4
