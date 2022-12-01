@@ -12,6 +12,7 @@ package state
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -25,6 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+// NewShuffler returns a function which will shuffle elements determinstically
+// but without order.
+func NewShuffler(seed int64) func(n int, swap func(i, j int)) {
+	r := rand.New(rand.NewSource(seed))
+	return func(n int, swap func(i, j int)) {
+		r.Shuffle(n, swap)
+	}
+}
 
 // TestingStartTime returns a start time that may be used for tests.
 func TestingStartTime() time.Time {
