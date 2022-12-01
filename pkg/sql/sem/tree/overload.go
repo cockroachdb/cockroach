@@ -1268,6 +1268,9 @@ func checkReturnPlaceholdersAtIdx(
 			}
 			return false, err
 		}
+		if typ.ResolvedType().IsAmbiguous() {
+			return false, nil
+		}
 		s.typedExprs[i] = typ
 	}
 	s.overloadIdxs = append(s.overloadIdxs[:0], idx)

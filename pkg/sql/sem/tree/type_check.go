@@ -1696,10 +1696,19 @@ func (expr *Placeholder) TypeCheck(
 		return expr, err
 	} else if ok {
 		typ = typ.WithoutTypeModifiers()
-		if !desired.Equivalent(typ) {
-			// This indicates there's a conflict between what the type system thinks
-			// the type for this position should be, and the actual type of the
-			// placeholder. This actual placeholder type could be either a type hint
+		if !desired.Equivalent(typ) || (typ.IsAmbiguous() && !desired.IsAmbiguous()) {
+			// This indicates either:
+			// - There's a conflict between what the type system thinks
+			//   the type for this position should be, and the actual type of the
+			//   placeholder.
+			// - A type was already set for the placeholder, but it was ambiguous. If
+			//   the desired type is not ambiguous then it can be used as the
+			//   placeholder type. This can happen during overload type checking: an
+			//   overload that operates on collated strings might cause the type
+			//   checker to assign AnyCollatedString to a placeholder, but a later
+			//   stage of type checking can further refine the desired type.
+			//
+			// This actual placeholder type could be either a type hint
 			// (from pgwire or from a SQL PREPARE), or the actual value type.
 			//
 			// To resolve this situation, we *override* the placeholder type with what
@@ -2547,21 +2556,26 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 	return s.typedExprs, typ, nil
 }
 
-// typeCheckSplitExprs splits the expressions into three groups of indexes:
+// typeCheckSplitExprs categorizes the expressions into three groups of indexes.
+// A particular index may appear in multiple groups.
 // - Constants
 // - Placeholders
-// - All other Exprs
+// - All Exprs that are not constants or unresolved placeholders
 func typeCheckSplitExprs(
 	semaCtx *SemaContext, exprs []Expr,
 ) (constIdxs util.FastIntSet, placeholderIdxs util.FastIntSet, resolvableIdxs util.FastIntSet) {
 	for i, expr := range exprs {
-		switch {
-		case isConstant(expr):
+		if isConstant(expr) {
+			// This does not include constants that are wrapped in parens, since
+			// the type-checker coerces these exprssions directly into tree.Constant.
 			constIdxs.Add(i)
-		case semaCtx.isUnresolvedPlaceholder(expr):
-			placeholderIdxs.Add(i)
-		default:
-			resolvableIdxs.Add(i)
+		} else {
+			if _, isPlaceholder := StripParens(expr).(*Placeholder); isPlaceholder {
+				placeholderIdxs.Add(i)
+			}
+			if !semaCtx.isUnresolvedPlaceholder(expr) {
+				resolvableIdxs.Add(i)
+			}
 		}
 	}
 	return constIdxs, placeholderIdxs, resolvableIdxs

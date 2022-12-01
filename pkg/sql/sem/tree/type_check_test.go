@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // The following tests need both the type checking infrastructure and also
@@ -436,4 +437,31 @@ func TestTypeCheckVolatility(t *testing.T) {
 			t.Fatalf("%s: %v", tc.expr, err)
 		}
 	}
+}
+
+func TestTypeCheckCollatedString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Typecheck without any restrictions.
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.Properties.Require("", 0 /* flags */)
+
+	// Hint a normal string type for $1.
+	placeholderTypes := []*types.T{types.String}
+	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
+	require.NoError(t, err)
+
+	// The collated string constant must be on the LHS for this test, so that
+	// the type-checker chooses the collated string overload first.
+	expr, err := parser.ParseExpr("'cat'::STRING COLLATE \"en-US-u-ks-level2\" = ($1)")
+	require.NoError(t, err)
+	typed, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+	require.NoError(t, err)
+
+	rightTyp := typed.(*tree.ComparisonExpr).Right.(tree.TypedExpr).ResolvedType()
+	require.Equal(t, rightTyp.Family(), types.CollatedStringFamily)
+	require.Equal(t, rightTyp.Locale(), "en-US-u-ks-level2")
 }
