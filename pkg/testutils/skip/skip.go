@@ -119,6 +119,17 @@ func UnderStress(t SkippableTest, args ...interface{}) {
 	}
 }
 
+// UnderStressWithIssue skips this test when running under stress, logging the
+// given issue ID as the reason.
+func UnderStressWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if Stress() {
+		t.Skip(append([]interface{}{fmt.Sprintf(
+			"disabled under stress. issue: https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID,
+		)}, args...))
+	}
+}
+
 // UnderStressRace skips this test during stressrace runs, which are tests
 // run under stress with the -race flag.
 func UnderStressRace(t SkippableTest, args ...interface{}) {
