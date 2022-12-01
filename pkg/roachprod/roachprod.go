@@ -1577,8 +1577,13 @@ func sendCaptureCommand(
 				scheme = "https"
 			}
 
-			debugUrl := fmt.Sprintf("%s://%s:%d/%s", scheme, host, port, "debug/workload_capture")
-			r, err := httpClient.Get(ctx, debugUrl)
+			debugUrl := url.URL{
+				Scheme: scheme,
+				Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+				Path:   "/debug/workload_capture",
+			}
+
+			r, err := httpClient.Get(ctx, debugUrl.String())
 			if err != nil {
 				res.Err = errors.New("Failed to retrieve current store workload collection state")
 				return res, res.Err
