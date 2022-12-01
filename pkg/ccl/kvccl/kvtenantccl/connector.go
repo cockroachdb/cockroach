@@ -78,6 +78,7 @@ type Connector struct {
 		syncutil.RWMutex
 		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
+		nodeIDByStoreID      map[roachpb.StoreID]roachpb.NodeID
 		systemConfig         *config.SystemConfig
 		systemConfigChannels map[chan<- struct{}]struct{}
 	}
@@ -146,6 +147,7 @@ func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	c.mu.nodeIDByStoreID = make(map[roachpb.StoreID]roachpb.NodeID)
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
@@ -259,6 +261,8 @@ var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, ro
 	gossip.KeyClusterID: (*Connector).updateClusterID,
 	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix): (*Connector).updateNodeAddress,
+	// Subscribe to all *StoreDescriptor updates.
+	gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix): (*Connector).updateStoreAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
 	gossip.KeyDeprecatedSystemConfig: (*Connector).updateSystemConfig,
 }
@@ -308,13 +312,46 @@ func (c *Connector) updateNodeAddress(ctx context.Context, key string, content r
 	c.mu.nodeDescs[desc.NodeID] = desc
 }
 
+// updateStoreAddress handles updates to "store" gossip keys, performing the
+// corresponding update to the Connector's cached NodeDescriptor set.
+func (c *Connector) updateStoreAddress(ctx context.Context, key string, content roachpb.Value) {
+	desc := new(roachpb.StoreDescriptor)
+	if err := content.GetProto(desc); err != nil {
+		log.Errorf(ctx, "could not unmarshal store descriptor: %v", err)
+		return
+	}
+
+	// TODO(nvanbenschoten): this doesn't handle StoreDescriptor removal from the
+	// gossip network. See comment in updateNodeAddress.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.nodeIDByStoreID[desc.StoreID] = desc.Node.NodeID
+}
+
 // GetNodeDescriptor implements the kvcoord.NodeDescStore interface.
 func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
-		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+		return nil, errors.Errorf("unable to look up descriptor for node ID %d", int32(nodeID))
+	}
+	return desc, nil
+}
+
+// GetNodeDescriptorByStoreID implements the kvcoord.NodeDescStore interface.
+func (c *Connector) GetNodeDescriptorByStoreID(
+	storeID roachpb.StoreID,
+) (*roachpb.NodeDescriptor, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	nodeID, ok := c.mu.nodeIDByStoreID[storeID]
+	if !ok {
+		return nil, errors.Errorf("unable to look up node ID for store ID %d", int32(storeID))
+	}
+	desc, ok := c.mu.nodeDescs[nodeID]
+	if !ok {
+		return nil, errors.Errorf("unable to look up descriptor for node ID %d store ID %d", int32(nodeID), int32(storeID))
 	}
 	return desc, nil
 }
