@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -46,33 +45,28 @@ func init() {
 	storage.GetCFetcherWrapper = newCFetcherWrapper
 }
 
-func (c *cFetcherWrapper) NextBatch(
-	ctx context.Context, serialize bool,
-) ([]byte, coldata.Batch, error) {
+func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
 	batch, err := c.fetcher.NextBatch(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if l := batch.Length(); c.removeLastRow && l > 0 {
 		batch.SetLength(l - 1)
 	}
 	if batch.Length() == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 	c.sawBatch = true
-	if !serialize {
-		return nil, batch, nil
-	}
 	data, err := c.converter.BatchToArrow(batch)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	c.buf.Reset()
 	_, _, err = c.serializer.Serialize(&c.buf, data, batch.Length())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return c.buf.Bytes(), nil, nil
+	return c.buf.Bytes(), nil
 }
 
 // ContinuesFirstRow returns true if the given key belongs to the same SQL row
@@ -169,7 +163,7 @@ func newCFetcherWrapper(
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
-		true,  /* allocateFreshBatches */
+		false, /* allocateFreshBatches */
 		allowNullsInNonNullableOnLastRowInBatch,
 	}
 
