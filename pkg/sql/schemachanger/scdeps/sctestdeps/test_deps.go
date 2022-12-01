@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
@@ -1053,25 +1051,6 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 	return nil
 }
 
-// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) DeleteZoneConfig(
-	ctx context.Context, id descpb.ID,
-) (numAffectedRows int, err error) {
-	if _, ok := s.zoneConfigs[id]; !ok {
-		return 0, nil
-	}
-	delete(s.zoneConfigs, id)
-	return 1, nil
-}
-
-// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) UpsertZoneConfig(
-	ctx context.Context, id descpb.ID, z *zonepb.ZoneConfig,
-) (numAffected int, err error) {
-	s.zoneConfigs[id] = zone.NewZoneConfigWithRawBytes(z, nil)
-	return 1, nil
-}
-
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,
@@ -1156,6 +1135,6 @@ func (s *TestState) ZoneConfigGetter() scbuild.ZoneConfigGetter {
 }
 
 // GetZoneConfig implements scexec.Dependencies.
-func (s *TestState) GetZoneConfig(id descpb.ID) catalog.ZoneConfig {
-	return s.zoneConfigs[id]
+func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error) {
+	return s.zoneConfigs[id], nil
 }

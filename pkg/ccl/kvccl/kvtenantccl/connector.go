@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -435,6 +436,51 @@ func (c *Connector) TenantRanges(
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
 func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
+}
+
+// NewIterator implements the rangedesc.IteratorFactory interface.
+func (c *Connector) NewIterator(
+	ctx context.Context, span roachpb.Span,
+) (rangedesc.Iterator, error) {
+	var rangeDescriptors []roachpb.RangeDescriptor
+	for ctx.Err() == nil {
+		rangeDescriptors = rangeDescriptors[:0] // clear out.
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		stream, err := client.GetRangeDescriptors(ctx, &roachpb.GetRangeDescriptorsRequest{
+			Span: span,
+		})
+		if err != nil {
+			// TODO(arul): We probably don't want to treat all errors here as "soft".
+			// for example, it doesn't make much sense to retry the request if it fails
+			// the keybounds check.
+			// Soft RPC error. Drop client and retry.
+			log.Warningf(ctx, "error issuing GetRangeDescriptors RPC: %v", err)
+			c.tryForgetClient(ctx, client)
+			continue
+		}
+
+		for ctx.Err() == nil {
+			e, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return &rangeDescIterator{
+						rangeDescs: rangeDescriptors,
+						curIdx:     0,
+					}, nil
+				}
+				// TODO(arul): We probably don't want to treat all errors here as "soft".
+				// Soft RPC error. Drop client and retry.
+				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
+				c.tryForgetClient(ctx, client)
+				break
+			}
+			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
+		}
+	}
+	return nil, ctx.Err()
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.

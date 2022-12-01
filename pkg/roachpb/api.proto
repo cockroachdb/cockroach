@@ -3064,6 +3064,23 @@ service Internal {
   // TenantSettings is used by tenants to obtain and stay up to date with tenant
   // setting overrides.
   rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) { }
+
+
+  // GetRangeDescriptors is used by tenants to get range descriptors for their
+  // own ranges.
+ rpc GetRangeDescriptors (GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) { }
+}
+
+// GetRangeDescriptorsRequest is used to fetch range descriptors.
+message GetRangeDescriptorsRequest {
+  // Span over which to request range descriptors.
+  Span span = 1 [(gogoproto.nullable) = false];
+}
+
+// GetRangeDescriptorsResponse lists out the requested range descriptors.
+message GetRangeDescriptorsResponse {
+  // RangeDescriptors is the list of range descriptors over the requested span.
+  repeated RangeDescriptor range_descriptors = 1 [(gogoproto.nullable) = false];
 }
 
 // ContentionEvent is a message that will be attached to BatchResponses

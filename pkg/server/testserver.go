@@ -762,6 +762,11 @@ func (t *TestTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
 }
 
+// RangeDescIteratorFactory implements the TestTenantInterface.
+func (t *TestTenant) RangeDescIteratorFactory() interface{} {
+	return t.SQLServer.execCfg.RangeDescIteratorFactory
+}
+
 // Codec is part of the TestTenantInterface.
 func (t *TestTenant) Codec() keys.SQLCodec {
 	return t.execCfg.Codec
@@ -1539,6 +1544,11 @@ func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 
 func (ts *TestServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
+}
+
+// RangeDescIteratorFactory is part of the TestServerInterface.
+func (ts *TestServer) RangeDescIteratorFactory() interface{} {
+	return ts.sqlServer.execCfg.RangeDescIteratorFactory
 }
 
 type testServerFactoryImpl struct{}

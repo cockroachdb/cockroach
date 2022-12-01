@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -95,34 +94,3 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 func (n *commentOnColumnNode) Next(runParams) (bool, error) { return false, nil }
 func (n *commentOnColumnNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *commentOnColumnNode) Close(context.Context)        {}
-
-func (p *planner) updateComment(
-	ctx context.Context, objID descpb.ID, subID uint32, cmtType catalogkeys.CommentType, cmt string,
-) error {
-	b := p.Txn().NewBatch()
-	if err := p.descCollection.WriteCommentToBatch(
-		ctx,
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		b,
-		catalogkeys.MakeCommentKey(uint32(objID), subID, cmtType),
-		cmt,
-	); err != nil {
-		return err
-	}
-	return p.Txn().Run(ctx, b)
-}
-
-func (p *planner) deleteComment(
-	ctx context.Context, objID descpb.ID, subID uint32, cmtType catalogkeys.CommentType,
-) error {
-	b := p.Txn().NewBatch()
-	if err := p.descCollection.DeleteCommentInBatch(
-		ctx,
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		b,
-		catalogkeys.MakeCommentKey(uint32(objID), subID, cmtType),
-	); err != nil {
-		return err
-	}
-	return p.Txn().Run(ctx, b)
-}

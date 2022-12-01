@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -771,19 +772,21 @@ func prepareZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	regionConfig multiregion.RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) (*zoneConfigUpdate, error) {
 	tableID := table.GetID()
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableID)
+	currentZoneConfigWithRaw, err := descriptors.GetZoneConfig(ctx, txn, tableID)
 	if err != nil {
 		return nil, err
 	}
-	newZoneConfig := *zonepb.NewZoneConfig()
-	if currentZoneConfig != nil {
-		newZoneConfig = *currentZoneConfig
+	if currentZoneConfigWithRaw == nil {
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
+	newZoneConfig := *zonepb.NewZoneConfig()
+	newZoneConfig = *currentZoneConfigWithRaw.ZoneConfigProto()
 
 	var hasNewSubzones bool
 	for _, opt := range opts {
@@ -826,7 +829,7 @@ func prepareZoneConfigForMultiRegionTable(
 
 	// Determine if we're rewriting or deleting the zone configuration.
 	newZoneConfigIsEmpty := newZoneConfig.Equal(zonepb.NewZoneConfig())
-	currentZoneConfigIsEmpty := currentZoneConfig.Equal(zonepb.NewZoneConfig())
+	currentZoneConfigIsEmpty := currentZoneConfigWithRaw.ZoneConfigProto().Equal(zonepb.NewZoneConfig())
 	rewriteZoneConfig := !newZoneConfigIsEmpty
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
 
@@ -852,7 +855,7 @@ func prepareZoneConfigForMultiRegionTable(
 		)
 	}
 	return prepareZoneConfigWrites(
-		ctx, execCfg, tableID, table, &newZoneConfig, hasNewSubzones,
+		ctx, execCfg, tableID, table, &newZoneConfig, currentZoneConfigWithRaw.GetRawBytesInStorage(), hasNewSubzones,
 	)
 }
 
@@ -862,16 +865,17 @@ func ApplyZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	kvTrace bool,
 	descriptors *descs.Collection,
 	regionConfig multiregion.RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
-	update, err := prepareZoneConfigForMultiRegionTable(ctx, txn, execCfg, regionConfig, table, opts...)
+	update, err := prepareZoneConfigForMultiRegionTable(ctx, txn, execCfg, descriptors, regionConfig, table, opts...)
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
+	_, err = writeZoneConfigUpdate(ctx, txn, kvTrace, descriptors, update)
 	return err
 }
 
@@ -914,6 +918,7 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 	descriptors *descs.Collection,
+	kvTrace bool,
 ) error {
 	// Build a zone config based on the RegionConfig information.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, execConfig, regionConfig)
@@ -928,6 +933,7 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 		txn,
 		execConfig,
 		descriptors,
+		kvTrace,
 	)
 }
 
@@ -939,6 +945,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 	descriptors *descs.Collection,
+	kvTrace bool,
 ) error {
 	// Merge with an empty zone config.
 	return applyZoneConfigForMultiRegionDatabase(
@@ -948,6 +955,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 		txn,
 		execConfig,
 		descriptors,
+		kvTrace,
 	)
 }
 
@@ -958,27 +966,29 @@ func applyZoneConfigForMultiRegionDatabase(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 	descriptors *descs.Collection,
+	kvTrace bool,
 ) error {
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, execConfig.Settings, dbID)
+	currentZoneConfigWithRaw, err := descriptors.GetZoneConfig(ctx, txn, dbID)
 	if err != nil {
 		return err
 	}
-	newZoneConfig := *zonepb.NewZoneConfig()
-	if currentZoneConfig != nil {
-		newZoneConfig = *currentZoneConfig
+	if currentZoneConfigWithRaw == nil {
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
+	newZoneConfig := *zonepb.NewZoneConfig()
+	newZoneConfig = *currentZoneConfigWithRaw.ZoneConfigProto()
 	newZoneConfig.CopyFromZone(
 		mergeZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
 	// If the new zone config is the same as a blank zone config, delete it.
 	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
-		_, err = execConfig.InternalExecutor.Exec(
+		_, err = writeZoneConfigUpdate(
 			ctx,
-			"delete-zone-multiregion-database",
 			txn,
-			"DELETE FROM system.zones WHERE id = $1",
-			dbID,
+			kvTrace,
+			descriptors,
+			&zoneConfigUpdate{id: dbID, zoneConfig: nil},
 		)
 		return err
 	}
@@ -988,9 +998,11 @@ func applyZoneConfigForMultiRegionDatabase(
 		dbID,
 		nil, /* table */
 		&newZoneConfig,
+		currentZoneConfigWithRaw.GetRawBytesInStorage(),
 		execConfig,
 		descriptors,
 		false, /* hasNewSubzones */
+		kvTrace,
 	); err != nil {
 		return err
 	}
@@ -1029,6 +1041,7 @@ func (p *planner) refreshZoneConfigsForTables(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 					p.Descriptors(),
 					regionConfig,
 					tbDesc,
@@ -1071,6 +1084,7 @@ func (p *planner) refreshZoneConfigsForTablesWithValidation(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.Descriptors(),
 					regionConfig,
 					tbDesc,
 					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -1090,7 +1104,7 @@ func (p *planner) refreshZoneConfigsForTablesWithValidation(
 	// TODO(janexing): if any write failed, do we roll back? Same question to the
 	// original p.forEachMutableTableInDatabase().
 	for _, update := range zoneConfigUpdates {
-		_, err = writeZoneConfigUpdate(ctx, p.Txn(), p.ExecCfg(), p.Descriptors(), update)
+		_, err = writeZoneConfigUpdate(ctx, p.Txn(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(), p.Descriptors(), update)
 		if err != nil {
 			return err
 		}
@@ -1153,7 +1167,9 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		*regionConfig,
 		p.txn,
 		p.execCfg,
-		p.Descriptors()); err != nil {
+		p.Descriptors(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	); err != nil {
 		return err
 	}
 
@@ -1248,6 +1264,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 		ctx,
 		p.txn,
 		p.ExecCfg(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.Descriptors(),
 		regionConfig,
 		desc,
@@ -1294,6 +1311,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 		p.txn,
 		p.execCfg,
 		p.Descriptors(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1318,20 +1336,18 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	}
 	ids = append(ids, dbDesc.GetID())
 
-	zoneConfigs, err := getZoneConfigRawBatch(
-		ctx,
-		p.txn,
-		p.ExecCfg().Codec,
-		p.ExecCfg().Settings,
-		ids,
-	)
+	zoneConfigs, err := p.Descriptors().GetZoneConfigs(ctx, p.Txn(), ids...)
 	if err != nil {
 		return err
 	}
 
+	var dbZoneConfig *zonepb.ZoneConfig
+	if zc := zoneConfigs[dbDesc.GetID()]; zc != nil {
+		dbZoneConfig = zc.ZoneConfigProto()
+	}
 	if err := p.validateZoneConfigForMultiRegionDatabase(
 		dbDesc,
-		zoneConfigs[dbDesc.GetID()],
+		dbZoneConfig,
 		zoneConfigForMultiRegionValidator,
 	); err != nil {
 		return err
@@ -1341,10 +1357,14 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			var tbZoneConfig *zonepb.ZoneConfig
+			if zc := zoneConfigs[tbDesc.GetID()]; zc != nil {
+				tbZoneConfig = zc.ZoneConfigProto()
+			}
 			return p.validateZoneConfigForMultiRegionTable(
 				dbDesc,
 				tbDesc,
-				zoneConfigs[tbDesc.GetID()],
+				tbZoneConfig,
 				zoneConfigForMultiRegionValidator,
 			)
 		},
@@ -1995,10 +2015,14 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionDatabaseZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, dbDesc.GetID())
+	currentZoneConfig, err := p.Descriptors().GetZoneConfig(ctx, p.Txn(), dbDesc.GetID())
 	if err != nil {
 		return err
 	}
+	if currentZoneConfig == nil {
+		currentZoneConfig = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
+	}
+
 	regionConfig, err := SynthesizeRegionConfig(
 		ctx,
 		p.txn,
@@ -2011,7 +2035,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	}
 	return p.validateZoneConfigForMultiRegionDatabase(
 		dbDesc,
-		currentZoneConfig,
+		currentZoneConfig.ZoneConfigProto(),
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
 			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
 				regionConfig: regionConfig,
@@ -2068,10 +2092,14 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, desc.GetID())
+	currentZoneConfig, err := p.Descriptors().GetZoneConfig(ctx, p.Txn(), desc.GetID())
 	if err != nil {
 		return err
 	}
+	if currentZoneConfig == nil {
+		currentZoneConfig = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
+	}
+
 	regionConfig, err := SynthesizeRegionConfig(
 		ctx,
 		p.txn,
@@ -2086,7 +2114,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	return p.validateZoneConfigForMultiRegionTable(
 		dbDesc,
 		desc,
-		currentZoneConfig,
+		currentZoneConfig.ZoneConfigProto(),
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
 			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
 				regionConfig: regionConfig,

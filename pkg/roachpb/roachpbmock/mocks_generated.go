@@ -77,6 +77,26 @@ func (mr *MockInternalClientMockRecorder) GetAllSystemSpanConfigsThatApply(arg0,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllSystemSpanConfigsThatApply", reflect.TypeOf((*MockInternalClient)(nil).GetAllSystemSpanConfigsThatApply), varargs...)
 }
 
+// GetRangeDescriptors mocks base method.
+func (m *MockInternalClient) GetRangeDescriptors(arg0 context.Context, arg1 *roachpb.GetRangeDescriptorsRequest, arg2 ...grpc.CallOption) (roachpb.Internal_GetRangeDescriptorsClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetRangeDescriptors", varargs...)
+	ret0, _ := ret[0].(roachpb.Internal_GetRangeDescriptorsClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRangeDescriptors indicates an expected call of GetRangeDescriptors.
+func (mr *MockInternalClientMockRecorder) GetRangeDescriptors(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRangeDescriptors", reflect.TypeOf((*MockInternalClient)(nil).GetRangeDescriptors), varargs...)
+}
+
 // GetSpanConfigs mocks base method.
 func (m *MockInternalClient) GetSpanConfigs(arg0 context.Context, arg1 *roachpb.GetSpanConfigsRequest, arg2 ...grpc.CallOption) (*roachpb.GetSpanConfigsResponse, error) {
 	m.ctrl.T.Helper()
