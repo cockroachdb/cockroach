@@ -10,7 +10,7 @@
 
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
-import _ from "lodash";
+import _, { forEach} from "lodash";
 import {
   DatabaseTablePageData,
   util,
@@ -120,11 +120,22 @@ export const mapStateToProps = createSelector(
       },
     );
 
-    const grants = _.flatMap(details?.data?.grants, grant =>
-      _.map(grant.privileges, privilege => {
-        return { user: grant.user, privilege };
-      }),
-    );
+    const userToPrivileges = new Map<string, string[]>();
+
+    forEach(details?.data?.grants, grant => {
+      if (!userToPrivileges.has(grant.user)) {
+        userToPrivileges.set(grant.user, []);
+      }
+      userToPrivileges.set(
+        grant.user, 
+        userToPrivileges.get(grant.user).concat(grant.privileges));
+    })
+
+    const grants = Array.from(userToPrivileges).map(([name, value]) => ({
+      user: name, 
+      privileges: value.sort()
+    }))
+
     const nodes = stats?.data?.node_ids || [];
 
     return {
