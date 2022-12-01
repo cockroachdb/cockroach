@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │
     ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 8 elements transitioning toward PUBLIC
+    │   ├── • 7 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -93,10 +93,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
     │   │   │     ABSENT → PUBLIC
     │   │   │
-    │   │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
-    │   │   │     ABSENT → PUBLIC
-    │   │   │
-    │   │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+    │   │   └── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
     │   │         ABSENT → PUBLIC
     │   │
     │   ├── • 14 elements transitioning toward ABSENT
@@ -168,7 +165,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: idx, IndexID: 5}
-    │   │   │     PUBLIC → ABSENT
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+    │   │   │         rule: "index no longer public before index name"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 5, SourceIndexID: 3}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -195,6 +195,28 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │       │     Name: t_pkey
     │       │     TableID: 104
     │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 104
+    │       │
+    │       ├── • LogEvent
+    │       │     Element:
+    │       │       SecondaryIndex:
+    │       │         indexId: 2
+    │       │         tableId: 104
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TargetStatus: 2
+    │       │
+    │       ├── • MakeValidatedSecondaryIndexPublic
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 2
     │       │     Name: j
@@ -203,11 +225,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │       ├── • SetColumnName
     │       │     ColumnID: 4
     │       │     Name: crdb_internal_idx_expr
-    │       │     TableID: 104
-    │       │
-    │       ├── • SetIndexName
-    │       │     IndexID: 2
-    │       │     Name: t_expr_k_idx
     │       │     TableID: 104
     │       │
     │       ├── • MakePublicPrimaryIndexWriteOnly
@@ -221,11 +238,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
-    │       │     TableID: 104
-    │       │
-    │       ├── • SetIndexName
-    │       │     IndexID: 5
-    │       │     Name: crdb_internal_index_5_name_placeholder
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
@@ -274,30 +286,33 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
-    │       ├── • RefreshStats
-    │       │     TableID: 104
-    │       │
     │       ├── • LogEvent
     │       │     Element:
     │       │       SecondaryIndex:
-    │       │         indexId: 2
+    │       │         constraintId: 4
+    │       │         indexId: 5
+    │       │         isUnique: true
+    │       │         sourceIndexId: 3
     │       │         tableId: 104
+    │       │         temporaryIndexId: 6
     │       │     EventBase:
     │       │       Authorization:
     │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
+    │       │       Statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›)
+    │       │       StatementTag: CREATE INDEX
     │       │       TargetMetadata:
     │       │         SourceElementID: 1
+    │       │         StatementID: 1
     │       │         SubWorkID: 1
-    │       │     TargetStatus: 2
-    │       │
-    │       ├── • MakeValidatedSecondaryIndexPublic
-    │       │     IndexID: 2
-    │       │     TableID: 104
+    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 5
+    │       │     Name: crdb_internal_index_5_name_placeholder
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -306,7 +321,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -357,31 +372,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │   │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
     │   │             rule: "dependents removed before index"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 6 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 4
     │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 5
-    │       │         isUnique: true
-    │       │         sourceIndexId: 3
-    │       │         tableId: 104
-    │       │         temporaryIndexId: 6
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›)
-    │       │       StatementTag: CREATE INDEX
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         StatementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 5

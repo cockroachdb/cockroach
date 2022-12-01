@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 8 elements transitioning toward PUBLIC
+        ├── • 7 elements transitioning toward PUBLIC
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 3}
         │   │   │ WRITE_ONLY → PUBLIC
@@ -107,10 +107,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
         │   │     ABSENT → PUBLIC
         │   │
-        │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
-        │   │     ABSENT → PUBLIC
-        │   │
-        │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+        │   └── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
         │         ABSENT → PUBLIC
         │
         ├── • 5 elements transitioning toward ABSENT
@@ -154,45 +151,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │
-        └── • 18 Mutation operations
+        └── • 17 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 3
             │     Name: k
-            │     TableID: 104
-            │
-            ├── • SetColumnName
-            │     ColumnID: 2
-            │     Name: j
-            │     TableID: 104
-            │
-            ├── • SetColumnName
-            │     ColumnID: 4
-            │     Name: crdb_internal_idx_expr
-            │     TableID: 104
-            │
-            ├── • SetIndexName
-            │     IndexID: 2
-            │     Name: t_expr_k_idx
-            │     TableID: 104
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 4
-            │     TableID: 104
-            │
-            ├── • MakeWriteOnlyColumnPublic
-            │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TableID: 104
-            │
-            ├── • RefreshStats
             │     TableID: 104
             │
             ├── • RefreshStats
@@ -215,6 +178,35 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │
             ├── • MakeValidatedSecondaryIndexPublic
             │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • SetColumnName
+            │     ColumnID: 2
+            │     Name: j
+            │     TableID: 104
+            │
+            ├── • SetColumnName
+            │     ColumnID: 4
+            │     Name: crdb_internal_idx_expr
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 4
+            │     TableID: 104
+            │
+            ├── • MakeWriteOnlyColumnPublic
+            │     ColumnID: 2
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
+            │       StatementTag: ALTER TABLE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TableID: 104
+            │
+            ├── • RefreshStats
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
