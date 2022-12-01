@@ -9,18 +9,16 @@ eexpect "defaultdb>"
 
 start_test "Check that interrupt with a partial line clears the line."
 send "asasaa"
+eexpect "asasaa"
 interrupt
 eexpect "defaultdb>"
 end_test
 
-start_test "Check that interrupt with a multiline clears the current line."
+start_test "Check that interrupt with a multiline clears the current input."
 send "select\r"
 eexpect " -> "
 send "'XXX'"
 interrupt
-send "'YYY';\r"
-eexpect "column"
-eexpect "YYY"
 eexpect "defaultdb>"
 end_test
 
@@ -38,10 +36,6 @@ interrupt
 eexpect "query execution canceled"
 eexpect "57014"
 
-# TODO(knz): we currently need to trigger a reconnection
-# before we get a healthy prompt. This will be fixed
-# in a later version.
-send "\r"
 eexpect "defaultdb>"
 end_test
 
@@ -65,10 +59,11 @@ interrupt
 expect {
     "attempting to cancel query" { exit 1 }
     "panic: runtime error" { exit 1 }
-    eof {}
+    "" {}
 }
 end_test
-
+send "\rexit\r"
+eexpect eof
 
 # Open a unix shell.
 spawn /bin/bash
@@ -92,11 +87,6 @@ sleep 0.4
 interrupt
 eexpect "query execution canceled"
 eexpect "57014"
-
-# TODO(knz): we currently need to trigger a reconnection
-# before we get a healthy prompt. This will be fixed
-# in a later version.
-send "\rselect 1;\r"
 
 # Send another query, expect an error. The shell should
 # not have terminated by this point.
