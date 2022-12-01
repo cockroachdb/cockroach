@@ -134,29 +134,31 @@ func dropSecondaryIndex(
 	dropBehavior tree.DropBehavior,
 	sie *scpb.SecondaryIndex,
 ) {
-	// Maybe drop dependent views.
-	// If CASCADE and there are "dependent" views (i.e. views that use this
-	// to-be-dropped index), then we will drop all dependent views and their
-	// dependents.
-	maybeDropDependentViews(b, sie, indexName.Index.String(), dropBehavior)
+	{
+		next := b.WithNewSourceElementID()
+		// Maybe drop dependent views.
+		// If CASCADE and there are "dependent" views (i.e. views that use this
+		// to-be-dropped index), then we will drop all dependent views and their
+		// dependents.
+		maybeDropDependentViews(next, sie, indexName.Index.String(), dropBehavior)
 
-	// Maybe drop dependent FK constraints.
-	// A PK or unique constraint is required to serve an inbound FK constraint.
-	// It is possible that there is an inbound FK constraint 'fk' and it's
-	// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
-	// In this case, if we were to drop 'ui' and no other unique constraint can be
-	// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
-	//and drop 'fk' as well.
-	maybeDropDependentFKConstraints(b, sie, indexName, dropBehavior)
+		// Maybe drop dependent FK constraints.
+		// A PK or unique constraint is required to serve an inbound FK constraint.
+		// It is possible that there is an inbound FK constraint 'fk' and it's
+		// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
+		// In this case, if we were to drop 'ui' and no other unique constraint can be
+		// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
+		//and drop 'fk' as well.
+		maybeDropDependentFKConstraints(next, sie, indexName, dropBehavior)
 
-	// If shard index, also drop the shard column and all check constraints that
-	// uses this shard column if no other index uses the shard column.
-	maybeDropAdditionallyForShardedIndex(b, sie, indexName.Index.String(), dropBehavior)
+		// If shard index, also drop the shard column and all check constraints that
+		// uses this shard column if no other index uses the shard column.
+		maybeDropAdditionallyForShardedIndex(next, sie, indexName.Index.String(), dropBehavior)
 
-	// If expression index, also drop the expression column if no other index is
-	// using the expression column.
-	dropAdditionallyForExpressionIndex(b, sie)
-
+		// If expression index, also drop the expression column if no other index is
+		// using the expression column.
+		dropAdditionallyForExpressionIndex(next, sie)
+	}
 	// Finally, drop the index's public elements and trigger a GC job.
 	b.QueryByID(sie.TableID).
 		Filter(hasIndexIDAttrFilter(sie.IndexID)).

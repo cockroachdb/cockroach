@@ -86,9 +86,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   └── • IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
-    │   │         PUBLIC → ABSENT
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}
+    │   │             rule: "index no longer public before index name"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 8 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
@@ -97,6 +100,25 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
+    │       │
+    │       ├── • LogEvent
+    │       │     Element:
+    │       │       SecondaryIndex:
+    │       │         constraintId: 4
+    │       │         indexId: 4
+    │       │         isUnique: true
+    │       │         sourceIndexId: 1
+    │       │         tableId: 104
+    │       │         temporaryIndexId: 5
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
@@ -117,7 +139,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 9 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
@@ -219,7 +241,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
         │             rule: "index removed before garbage collection"
         │
-        └── • 11 Mutation operations
+        └── • 10 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     EventBase:
@@ -250,25 +272,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │       Rollback: true
             │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
             │     TableID: 104
-            │
-            ├── • LogEvent
-            │     Element:
-            │       SecondaryIndex:
-            │         constraintId: 4
-            │         indexId: 4
-            │         isUnique: true
-            │         sourceIndexId: 1
-            │         tableId: 104
-            │         temporaryIndexId: 5
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
             │
             ├── • MakeIndexAbsent
             │     IndexID: 4

@@ -44,7 +44,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       ├── • 4 elements transitioning toward ABSENT
+│       ├── • 3 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Column:{DescID: 104, ColumnID: 2}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -61,27 +61,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │   │ PUBLIC → VALIDATED
-│       │   │   │
-│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
-│       │   │
-│       │   └── • IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
-│       │       │ PUBLIC → ABSENT
+│       │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │       │ PUBLIC → VALIDATED
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │             rule: "index no longer public before dependents"
+│       │       └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │             rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │
-│       └── • 9 Mutation operations
+│       └── • 8 Mutation operations
 │           │
 │           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
-│           │     TableID: 104
-│           │
-│           ├── • SetIndexName
-│           │     IndexID: 2
-│           │     Name: crdb_internal_index_2_name_placeholder
 │           │     TableID: 104
 │           │
 │           ├── • MakeAbsentIndexBackfilling
@@ -359,7 +348,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
     │   │
-    │   ├── • 8 elements transitioning toward ABSENT
+    │   ├── • 9 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -421,13 +410,22 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
-    │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │       │ VALIDATED → DELETE_ONLY
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   │ VALIDATED → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
+    │   │   │
+    │   │   └── • IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
+    │   │       │ PUBLIC → ABSENT
     │   │       │
-    │   │       └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │             rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
+    │   │       ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │       │     rule: "index no longer public before index name"
+    │   │       │
+    │   │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │             rule: "index no longer public before dependents"
     │   │
-    │   └── • 9 Mutation operations
+    │   └── • 11 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
@@ -451,8 +449,28 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
+    │       ├── • LogEvent
+    │       │     Element:
+    │       │       SecondaryIndex:
+    │       │         indexId: 2
+    │       │         tableId: 104
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TargetStatus: 1
+    │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • SetIndexName
+    │       │     IndexID: 2
+    │       │     Name: crdb_internal_index_2_name_placeholder
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
@@ -473,7 +491,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -511,22 +529,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
     │   │             rule: "dependents removed before index"
     │   │
-    │   └── • 6 Mutation operations
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         tableId: 104
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
+    │   └── • 5 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
