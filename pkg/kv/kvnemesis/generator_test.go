@@ -286,9 +286,16 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 	rng := rand.New(rand.NewSource(1)) // deterministic
 	const num = 1000
 
+	// keysMap plays no role in this test but we need to pass one.
+	// We could also check that we're hitting the keys in this map
+	// randomly, etc, but don't currently.
+	keysMap := map[string]struct{}{
+		tk(5): {},
+	}
+
 	var numSingleRange, numCrossRange, numPoint int
 	for i := 0; i < num; i++ {
-		dr := randDelRangeUsingTombstoneImpl(splitPointMap, nextSeq, rng).DeleteRangeUsingTombstone
+		dr := randDelRangeUsingTombstoneImpl(splitPointMap, keysMap, nextSeq, rng).DeleteRangeUsingTombstone
 		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
 		nk, nek := fk(string(dr.Key)), fk(string(dr.EndKey))
 		s := fmt.Sprintf("[%d,%d)", nk, nek)
