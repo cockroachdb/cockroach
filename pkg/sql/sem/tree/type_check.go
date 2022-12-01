@@ -1696,7 +1696,7 @@ func (expr *Placeholder) TypeCheck(
 		return expr, err
 	} else if ok {
 		typ = typ.WithoutTypeModifiers()
-		if !desired.Equivalent(typ) {
+		if !desired.Equivalent(typ) || (typ.IsAmbiguous() && !desired.IsAmbiguous()) {
 			// This indicates there's a conflict between what the type system thinks
 			// the type for this position should be, and the actual type of the
 			// placeholder. This actual placeholder type could be either a type hint
@@ -2547,21 +2547,24 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 	return s.typedExprs, typ, nil
 }
 
-// typeCheckSplitExprs splits the expressions into three groups of indexes:
+// typeCheckSplitExprs categorizes the expressions into three groups of indexes.
+// A particular index may appear in multiple groups.
 // - Constants
 // - Placeholders
-// - All other Exprs
+// - All Exprs that are not constants or unresolved placeholders
 func typeCheckSplitExprs(
 	semaCtx *SemaContext, exprs []Expr,
 ) (constIdxs util.FastIntSet, placeholderIdxs util.FastIntSet, resolvableIdxs util.FastIntSet) {
 	for i, expr := range exprs {
-		switch {
-		case isConstant(expr):
+		if isConstant(expr) {
 			constIdxs.Add(i)
-		case semaCtx.isUnresolvedPlaceholder(expr):
-			placeholderIdxs.Add(i)
-		default:
-			resolvableIdxs.Add(i)
+		} else {
+			if _, isPlaceholder := StripParens(expr).(*Placeholder); isPlaceholder {
+				placeholderIdxs.Add(i)
+			}
+			if !semaCtx.isUnresolvedPlaceholder(expr) {
+				resolvableIdxs.Add(i)
+			}
 		}
 	}
 	return constIdxs, placeholderIdxs, resolvableIdxs
