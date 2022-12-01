@@ -10,6 +10,7 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
+import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
@@ -94,7 +95,9 @@ const withData: DatabaseTablePageProps = {
     grants: [
       {
         user: randomRole(),
-        privilege: randomTablePrivilege(),
+        privileges: _.uniq(
+          new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
+        ),
       },
     ],
     statsLastUpdated: moment("0001-01-01T00:00:00Z"),
