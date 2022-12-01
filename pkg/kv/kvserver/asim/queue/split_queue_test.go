@@ -40,7 +40,7 @@ func TestSplitQueue(t *testing.T) {
 		replicationFactor int32,
 		leaseholder state.StoreID,
 	) state.State {
-		s := state.NewTestStateReplCounts(replicaCounts, int(replicationFactor))
+		s := state.NewTestStateReplCounts(replicaCounts, int(replicationFactor), 1000 /* keyspace */)
 		spanConfig := roachpb.SpanConfig{
 			NumVoters:   replicationFactor,
 			NumReplicas: replicationFactor,
