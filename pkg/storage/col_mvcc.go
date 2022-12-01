@@ -14,12 +14,10 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -52,12 +50,9 @@ type NextKVer interface {
 // CFetcherWrapper is a wrapper around a colfetcher.cFetcher that returns a
 // serialized set of bytes or a column-oriented batch.
 type CFetcherWrapper interface {
-	// NextBatch gives back the next column-oriented batch.
-	//
-	// If serialize is true, the returned batch will be the byte slice,
-	// serialized in Arrow batch format. If serialize is false, the returned
-	// batch will be the coldata.Batch.
-	NextBatch(ctx context.Context, serialize bool) ([]byte, coldata.Batch, error)
+	// NextBatch gives back the next column-oriented batch, serialized in Arrow
+	// batch format.
+	NextBatch(ctx context.Context) ([]byte, error)
 
 	// Close release the resources held by this CFetcherWrapper. It *must* be
 	// called after use of the wrapper.
@@ -147,7 +142,7 @@ func (f *mvccScanFetchAdapter) NextKV(
 	}
 	// TODO: think through for how we need to handle the copying with multiple
 	// column families (here or in the cFetcher).
-	return true, lastKV, true, nil
+	return true, lastKV, f.scanner.wholeRows, nil
 }
 
 // GetLastEncodedKey implements the NextKVer interface.
@@ -268,32 +263,19 @@ func mvccScanToCols(
 	var res MVCCScanResult
 
 	adapter.onNextKV = onNextKVSeek
-	if grpcutil.IsLocalRequestContext(ctx) {
-		for {
-			_, batch, err := wrapper.NextBatch(ctx, false /* serialize */)
-			if err != nil {
-				return res, err
-			}
-			if batch == nil {
-				break
-			}
-			res.ColBatches = append(res.ColBatches, batch)
+	for {
+		batch, err := wrapper.NextBatch(ctx)
+		if err != nil {
+			return res, err
 		}
-	} else {
-		for {
-			batch, _, err := wrapper.NextBatch(ctx, true /* serialize */)
-			if err != nil {
-				return res, err
-			}
-			if batch == nil {
-				break
-			}
-			// We need to make a copy since the wrapper reuses underlying bytes
-			// buffer.
-			b := make([]byte, len(batch))
-			copy(b, batch)
-			res.KVData = append(res.KVData, b)
+		if batch == nil {
+			break
 		}
+		// We need to make a copy since the wrapper reuses underlying bytes
+		// buffer.
+		b := make([]byte, len(batch))
+		copy(b, batch)
+		res.KVData = append(res.KVData, b)
 	}
 
 	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.afterScan()
