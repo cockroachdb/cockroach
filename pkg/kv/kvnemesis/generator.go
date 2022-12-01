@@ -545,25 +545,25 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 }
 
 func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
-	return randDelRangeUsingTombstoneImpl(g.currentSplits, g.nextSeq, rng)
+	return randDelRangeUsingTombstoneImpl(g.currentSplits, g.keys, g.nextSeq, rng)
 }
 
 func randDelRangeUsingTombstoneImpl(
-	currentSplits map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
+	currentSplits, keys map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
 ) Operation {
 	yn := func(probY float64) bool {
 		return rng.Float64() <= probY
 	}
 
 	var k, ek string
-	if yn(0.95) {
-		// 95% chance of picking an entire existing range.
+	if yn(0.90) {
+		// 90% chance of picking an entire existing range.
 		//
 		// In kvnemesis, DeleteRangeUsingTombstone is prevented from spanning ranges since
 		// CRDB executes such requests non-atomically and so we can't verify them
 		// well. Thus, pick spans that are likely single-range most of the time.
 		//
-		// 75% of the time we'll also modify the bounds.
+		// 75% (of the 90%) of the time we'll also modify the bounds.
 		k, ek = randRangeSpan(rng, currentSplits)
 		if yn(0.5) {
 			// In 50% of cases, move startKey forward.
@@ -579,12 +579,16 @@ func randDelRangeUsingTombstoneImpl(
 			ek = randKeyBetween(rng, tk(nk), tk(nek))
 		}
 	} else if yn(0.5) {
-		// (100%-95%)*50% = 2.5% chance of turning the span we have now into a
-		// random point write.
-		k = randKey(rng)
+		// (100%-90%)*50% = 5% chance of turning the span we have now into a
+		// point write. Half the time random key, otherwise prefer existing key.
+		if yn(0.5) || len(keys) == 0 {
+			k = randKey(rng)
+		} else {
+			k = randMapKey(rng, keys)
+		}
 		ek = tk(fk(k) + 1)
 	} else {
-		// 2.5% chance of picking a completely random span. This will often span range
+		// 5% chance of picking a completely random span. This will often span range
 		// boundaries and be rejected, so these are essentially doomed to fail.
 		k, ek = randKey(rng), randKey(rng)
 		if ek < k {
