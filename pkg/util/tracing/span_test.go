@@ -49,6 +49,7 @@ func TestStartSpan(t *testing.T) {
 }
 
 func TestRecordingString(t *testing.T) {
+	panic("!!!")
 	tr := NewTracer()
 	tr2 := NewTracer()
 
