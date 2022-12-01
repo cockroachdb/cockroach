@@ -16,7 +16,10 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 //
 // Implementations of the interface are expected to be threadsafe.
 type NodeDescStore interface {
-	// GetNodeDescriptor looks up the descriptor of the node by ID.
+	// GetNodeDescriptor looks up the descriptor of the node by node ID.
 	// It returns an error if the node is not known by the store.
 	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	// GetNodeDescriptorByStoreID looks up the descriptor of the node by store ID.
+	// It returns an error if the node is not known by the store.
+	GetNodeDescriptorByStoreID(roachpb.StoreID) (*roachpb.NodeDescriptor, error)
 }

@@ -265,6 +265,7 @@ func (a tenantAuthorizer) authTenant(id roachpb.TenantID) error {
 var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
+	"store:.*",
 	"system-db",
 }
 
