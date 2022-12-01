@@ -66,9 +66,9 @@ const (
 	// each heartbeat.
 	defaultRaftHeartbeatIntervalTicks = 5
 
-	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatIntervalAndHalfTimeout
-	// used by the rpc context.
-	defaultRPCHeartbeatInterval = 3 * time.Second
+	// defaultRPCHeartbeatIntervalAndTimeout is the default value of
+	// RPCHeartbeatIntervalAndTimeout used by the rpc context.
+	defaultRPCHeartbeatIntervalAndTimeout = 3 * time.Second
 
 	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
@@ -221,13 +221,11 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
-	// RPCHeartbeatIntervalAndHalfTimeout controls how often a Ping request is
-	// sent on peer connections to determine connection health and update the
-	// local view of remote clocks.
-	//
-	// Twice this value is used as a timeout for heartbeats, so don't set this too
-	// low.
-	RPCHeartbeatIntervalAndHalfTimeout time.Duration
+	// RPCHeartbeatIntervalAndTimeout controls how often a Ping request is sent on
+	// peer connections to determine connection health and update the local view
+	// of remote clocks. This is also used as a timeout for heartbeats, so don't
+	// set this too low.
+	RPCHeartbeatIntervalAndTimeout time.Duration
 
 	// SecondaryTenantPortOffset is the increment to add to the various
 	// addresses to generate the network configuration for the in-memory
@@ -285,7 +283,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SocketFile = ""
 	cfg.SSLCertsDir = DefaultCertsDirectory
-	cfg.RPCHeartbeatIntervalAndHalfTimeout = defaultRPCHeartbeatInterval
+	cfg.RPCHeartbeatIntervalAndTimeout = defaultRPCHeartbeatIntervalAndTimeout
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
