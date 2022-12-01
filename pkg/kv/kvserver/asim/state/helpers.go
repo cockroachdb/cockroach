@@ -137,68 +137,23 @@ func NewTestState(
 	return state
 }
 
-// NewTestStateReplCounts returns a state that may be used for testing, where
-// the stores given are initialized with the specified replica counts and each
-// range may have at most the specified replicas per range, or possibly fewer
-// if it's impossible with the required replica counts.
-func NewTestStateReplCounts(storeReplicas map[StoreID]int, replsPerRange int) State {
-	nextKey := 0
-	freeKeys := []Key{}
-	splitKeys := []Key{}
-	rangeStoreMap := make(map[Key]map[StoreID]bool)
-	replicas := make(map[Key][]StoreID)
-
-	addKey := func() {
-		splitKeys = append(splitKeys, Key(nextKey))
-		freeKeys = append(freeKeys, Key(nextKey))
-		replicas[Key(nextKey)] = make([]StoreID, 0, 1)
-		rangeStoreMap[Key(nextKey)] = make(map[StoreID]bool)
-		nextKey++
+// NewTestStateReplCounts returns a new test state where each store is
+// initialized the given number of replicas. The required number of ranges is
+// inferred from the replication factor and the replica count.
+func NewTestStateReplCounts(replCounts map[StoreID]int, replicationFactor, keyspace int) State {
+	total := 0
+	nStores := len(replCounts)
+	for _, count := range replCounts {
+		total += count
 	}
 
-	for {
-		addReplica := false
-		for storeID := range storeReplicas {
-			if storeReplicas[storeID] > 0 {
-				addReplica = true
-				foundKey := false
-				// Find the first key that is not already associated with the
-				// current store. We then associate the store with this key as
-				// a replica to be created.
-				for i, key := range freeKeys {
-					if ok := rangeStoreMap[key][storeID]; !ok {
-						// The key is not associated with this store, we may
-						// use it.
-						foundKey = true
-						replicas[key] = append(replicas[key], storeID)
-						rangeStoreMap[key][storeID] = true
-						// Check if the number of stores associated with this
-						// key is equal to the replication factor; If so, it is
-						// now full in terms of stores. Remove it  from the
-						// split key list so that other stores don't get added
-						// to it.
-						if len(replicas[key]) == replsPerRange {
-							freeKeys = append(freeKeys[:i], freeKeys[i+1:]...)
-						}
-
-						// The store now requires one less replica, update and move to the next store.
-						storeReplicas[storeID]--
-						break
-					}
-				}
-				// If we were unable to find a key that could go on the current
-				// store, add a new key.
-				if !foundKey {
-					addKey()
-				}
-			}
-		}
-		if !addReplica {
-			break
-		}
+	replDistribution := make([]float64, nStores)
+	ranges := total / replicationFactor
+	for store, count := range replCounts {
+		replDistribution[store-1] = float64(count) / float64(ranges)
 	}
 
-	return NewTestState(len(storeReplicas), 1, splitKeys, replicas, map[Key]StoreID{})
+	return NewTestStateReplDistribution(replDistribution, ranges, replicationFactor, keyspace)
 }
 
 type storeRangeCount struct {
@@ -229,6 +184,11 @@ func NewTestStateReplDistribution(
 		targetRangeCount[i] = storeRangeCount{requestedReplicas: requiredRanges, storeID: StoreID(i + 1)}
 	}
 
+	// If there are no ranges specified, default to 1 range.
+	if ranges == 0 {
+		ranges = 1
+	}
+
 	// There cannot be less keys than there are ranges.
 	if ranges > keyspace {
 		keyspace = ranges
@@ -249,7 +209,14 @@ func NewTestStateReplDistribution(
 		}
 	}
 
-	return NewTestState(len(percentOfReplicas), 1, startKeys, replicas, map[Key]StoreID{})
+	s := NewTestState(len(percentOfReplicas), 1, startKeys, replicas, map[Key]StoreID{})
+	spanconfig := defaultSpanConfig
+	spanconfig.NumVoters = int32(replicationFactor)
+	spanconfig.NumReplicas = int32(replicationFactor)
+	for _, r := range s.Ranges() {
+		s.SetSpanConfig(r.RangeID(), spanconfig)
+	}
+	return s
 }
 
 // NewTestStateEvenDistribution returns a new State that may be used for

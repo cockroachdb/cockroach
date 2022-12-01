@@ -54,11 +54,12 @@ func testMakeLeaseTransferChange(rangeKey Key, target StoreID) func(s State) Cha
 }
 
 func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
-	state := NewTestStateReplCounts(replCounts, 3 /* replsPerRange */)
-	// The first range has ID 1, this is the initial range in the keyspace.
-	// We split that and use the rhs, range 2.
+	numReplicas := 0
+	for _, count := range replCounts {
+		numReplicas += count
+	}
+	state := NewTestStateReplCounts(replCounts, numReplicas, 50 /* keyspace */)
 	rng, _ := state.Range(RangeID(2))
-	state.TransferLease(rng.RangeID(), 1)
 	return state, rng
 }
 
