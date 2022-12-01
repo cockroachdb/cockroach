@@ -367,7 +367,7 @@ func (r *rpcNodePaginator) queryNode(ctx context.Context, nodeID roachpb.NodeID,
 		r.mu.currentIdx++
 		r.mu.turnCond.Broadcast()
 	}
-	if err := contextutil.RunWithTimeout(ctx, "dial node", base.NetworkTimeout, func(ctx context.Context) error {
+	if err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
 		var err error
 		client, err = r.dialFn(ctx, nodeID)
 		return err

@@ -2681,7 +2681,7 @@ func (s *statusServer) iterateNodes(
 
 	nodeQuery := func(ctx context.Context, nodeID roachpb.NodeID) {
 		var client interface{}
-		err := contextutil.RunWithTimeout(ctx, "dial node", base.NetworkTimeout, func(ctx context.Context) error {
+		err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
 			var err error
 			client, err = dialFn(ctx, nodeID)
 			return err
