@@ -2010,7 +2010,10 @@ func (c *clusterImpl) RunWithDetails(
 	if err != nil {
 		return nil, err
 	}
-	physicalFileName := l.File.Name()
+	physicalFileName := ""
+	if l.File != nil {
+		physicalFileName = l.File.Name()
+	}
 
 	if err := ctx.Err(); err != nil {
 		l.Printf("(note: incoming context was canceled: %s", err)
@@ -2023,7 +2026,7 @@ func (c *clusterImpl) RunWithDetails(
 	}
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, false /* secure */, args)
-	if err != nil {
+	if err != nil && len(physicalFileName) > 0 {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
 		return results, err
