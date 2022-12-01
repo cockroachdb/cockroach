@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -416,11 +417,11 @@ func TestRequestHeaderRoundTrip(t *testing.T) {
 		require.EqualValues(t, 123, exp)
 	}
 	rh := RequestHeader{KVNemesisSeq: seq}
-	sl, err := rh.Marshal()
+	sl, err := protoutil.Marshal(&rh)
 	require.NoError(t, err)
 
 	rh.Reset()
-	require.NoError(t, rh.Unmarshal(sl))
+	require.NoError(t, protoutil.Unmarshal(sl, &rh))
 
 	require.Equal(t, exp, rh.KVNemesisSeq.Get())
 }

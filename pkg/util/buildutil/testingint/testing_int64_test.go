@@ -14,24 +14,34 @@ package testingint
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTestingInt64(t *testing.T) {
 	m := RealTestingInt64(123)
 	require.Equal(t, 1, m.Size())
+
 	buf1 := make([]byte, m.Size())
-	require.NoError(t, m.Marshal(buf1))
+	{
+		n, err := protoutil.MarshalTo(&m, buf1)
+		require.NoError(t, err)
+		require.Equal(t, m.Size(), n)
+	}
+
 	buf2 := make([]byte, m.Size())
-	n, err := m.MarshalToSizedBuffer(buf2)
-	require.NoError(t, err)
-	require.Equal(t, m.Size(), n)
+	{
+		n, err := protoutil.MarshalToSizedBuffer(&m, buf2)
+		require.NoError(t, err)
+		require.Equal(t, m.Size(), n)
+	}
 
 	var r1 RealTestingInt64
-	require.NoError(t, r1.Unmarshal(buf1))
+	require.NoError(t, protoutil.Unmarshal(buf1, &r1))
 	require.EqualValues(t, r1, 123)
 
 	var r2 RealTestingInt64
-	require.NoError(t, r2.Unmarshal(buf2))
+
+	require.NoError(t, protoutil.Unmarshal(buf2, &r2))
 	require.EqualValues(t, r2, 123)
 }

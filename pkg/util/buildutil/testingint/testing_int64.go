@@ -12,14 +12,39 @@
 package testingint
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	gogoproto "github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 // RealTestingInt64 is an int64 with methods that allow it to be used as a
 // `gogoproto.casttype`, and which has a getter/setter. See
 // `buildutil.TestingInt64`.
 type RealTestingInt64 int64
+
+var _ protoutil.Message = (*RealTestingInt64)(nil)
+
+func (m *RealTestingInt64) Reset() {
+	*m = 0
+}
+
+// String implements (a part of) protoutil.Message.
+func (m *RealTestingInt64) String() string {
+	return fmt.Sprint(*m)
+}
+
+// ProtoMessage implements (a part of) protoutil.Message.
+func (m *RealTestingInt64) ProtoMessage() {
+}
+
+// MarshalTo implements (a part of) protoutil.Message.
+func (m *RealTestingInt64) MarshalTo(buf []byte) (int, error) {
+	sl := gogoproto.EncodeVarint(uint64(*m))
+	_ = append(buf[:0], sl...)
+	return len(sl), nil
+}
 
 // Unmarshal implements (a part of) protoutil.Message.
 func (m *RealTestingInt64) Unmarshal(buf []byte) error {
@@ -28,12 +53,6 @@ func (m *RealTestingInt64) Unmarshal(buf []byte) error {
 		return errors.Errorf("unable to unmarshal %x as varint", buf)
 	}
 	*m = RealTestingInt64(x)
-	return nil
-}
-
-// Marshal implements (a part of) protoutil.Message.
-func (m *RealTestingInt64) Marshal(buf []byte) error {
-	_ = append(buf[:0], gogoproto.EncodeVarint(uint64(*m))...)
 	return nil
 }
 
