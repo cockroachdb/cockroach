@@ -898,8 +898,6 @@ func readPostgresStmt(
 		}
 	case *tree.BeginTransaction, *tree.CommitTransaction:
 		// Ignore transaction statements as they have no meaning during an IMPORT.
-		// TODO(during review): Should we guard these statements under the
-		// ignore_unsupported flag as well?
 	case *tree.Insert, *tree.CopyFrom, *tree.Delete, copyData:
 		// handled during the data ingestion pass.
 	case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
