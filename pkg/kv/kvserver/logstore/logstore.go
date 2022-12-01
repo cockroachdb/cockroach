@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -328,4 +329,119 @@ func LoadTerm(
 		return 0, errors.Errorf("there is a gap at index %d", index)
 	}
 	return 0, raft.ErrCompacted
+}
+
+// LoadEntries retrieves entries from the engine. It inlines the sideloaded
+// entries, and caches all the loaded entries. The size of the returned entries
+// does not exceed maxSize, unless only one entry is returned.
+//
+// TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
+// target size. Currently we may read one extra entry and drop it.
+func LoadEntries(
+	ctx context.Context,
+	rsl StateLoader,
+	eng storage.Engine,
+	rangeID roachpb.RangeID,
+	eCache *raftentry.Cache,
+	sideloaded SideloadStorage,
+	lo, hi, maxBytes uint64,
+) ([]raftpb.Entry, error) {
+	if lo > hi {
+		return nil, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
+	}
+
+	n := hi - lo
+	if n > 100 {
+		n = 100
+	}
+	ents := make([]raftpb.Entry, 0, n)
+
+	ents, size, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+
+	// Return results if the correct number of results came back or if
+	// we ran into the max bytes limit.
+	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
+		return ents, nil
+	}
+
+	// Scan over the log to find the requested entries in the range [lo, hi),
+	// stopping once we have enough.
+	expectedIndex := hitIndex
+
+	scanFunc := func(ent raftpb.Entry) error {
+		// Exit early if we have any gaps or it has been compacted.
+		if ent.Index != expectedIndex {
+			return iterutil.StopIteration()
+		}
+		expectedIndex++
+
+		if SniffSideloadedRaftCommand(ent.Data) {
+			newEnt, err := MaybeInlineSideloadedRaftCommand(
+				ctx, rangeID, ent, sideloaded, eCache,
+			)
+			if err != nil {
+				return err
+			}
+			if newEnt != nil {
+				ent = *newEnt
+			}
+		}
+
+		// Note that we track the size of proposals with payloads inlined.
+		size += uint64(ent.Size())
+		if size > maxBytes {
+			exceededMaxBytes = true
+			if len(ents) == 0 { // make sure to return at least one entry
+				ents = append(ents, ent)
+			}
+			return iterutil.StopIteration()
+		}
+
+		ents = append(ents, ent)
+		return nil
+	}
+
+	reader := eng.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
+	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
+		return nil, err
+	}
+	eCache.Add(rangeID, ents, false /* truncate */)
+
+	// Did the correct number of results come back? If so, we're all good.
+	if uint64(len(ents)) == hi-lo {
+		return ents, nil
+	}
+
+	// Did we hit the size limit? If so, return what we have.
+	if exceededMaxBytes {
+		return ents, nil
+	}
+
+	// Did we get any results at all? Because something went wrong.
+	if len(ents) > 0 {
+		// Was the missing index after the last index?
+		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
+		if err != nil {
+			return nil, err
+		}
+		if lastIndex <= expectedIndex {
+			return nil, raft.ErrUnavailable
+		}
+
+		// We have a gap in the record, if so, return a nasty error.
+		return nil, errors.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
+	}
+
+	// No results, was it due to unavailability or truncation?
+	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	if err != nil {
+		return nil, err
+	}
+	if ts.Index >= lo {
+		// The requested lo index has already been truncated.
+		return nil, raft.ErrCompacted
+	}
+	// The requested lo index does not yet exist.
+	return nil, raft.ErrUnavailable
 }
