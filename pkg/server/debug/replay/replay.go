@@ -25,17 +25,17 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-type responseType struct {
-	Data []workloadCollectorResponse `json:"data"`
+type ResponseType struct {
+	Data []WorkloadCollectorStatus `json:"data"`
 }
 
-type workloadCollectorResponse struct {
-	StoreId   int  `json:"store_id"`
+type WorkloadCollectorStatus struct {
+	StoreID   int  `json:"store_id"`
 	IsRunning bool `json:"is_running"`
 }
 
-type workloadCollectorPerformAction struct {
-	StoreId          int    `json:"store_id"`
+type WorkloadCollectorPerformAction struct {
+	StoreID          int    `json:"store_id"`
 	Action           string `json:"action"`
 	CaptureDirectory string `json:"capture_directory"`
 }

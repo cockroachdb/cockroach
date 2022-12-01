@@ -91,6 +91,16 @@ type Provider struct {
 	}
 }
 
+func (p *Provider) CreateVolume(vm.VolumeCreateOpts) (vm.Volume, error) {
+	// TODO(leon): implement me
+	panic("implement me")
+}
+
+func (p *Provider) AttachVolumeToVM(vm.Volume, *vm.VM) (string, error) {
+	// TODO(leon): implement me
+	panic("implement me")
+}
+
 // New constructs a new Provider instance.
 func New() *Provider {
 	p := &Provider{}
