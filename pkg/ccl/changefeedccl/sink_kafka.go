@@ -105,6 +105,37 @@ type kafkaSink struct {
 	}
 }
 
+var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
+	"NONE":   sarama.CompressionNone,
+	"GZIP":   sarama.CompressionGZIP,
+	"SNAPPY": sarama.CompressionSnappy,
+	"LZ4":    sarama.CompressionLZ4,
+	"ZSTD":   sarama.CompressionZSTD,
+}
+
+func validateCompressionCodec(s string) (sarama.CompressionCodec, error) {
+	codec, ok := saramaCompressionCodecOptions[s]
+	if !ok {
+		return -1, errors.Newf("could not validate compression codec '%s'", s)
+	}
+	return codec, nil
+}
+
+type compressionCodec sarama.CompressionCodec
+
+func (j *compressionCodec) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	codec, err := validateCompressionCodec(s)
+	if err != nil {
+		return err
+	}
+	*j = compressionCodec(codec)
+	return nil
+}
+
 type saramaConfig struct {
 	// These settings mirror ones in sarama config.
 	// We just tag them w/ JSON annotations.
@@ -116,6 +147,8 @@ type saramaConfig struct {
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
 	}
+
+	Compression compressionCodec `json:",omitempty"`
 
 	RequiredAcks string `json:",omitempty"`
 
@@ -152,6 +185,10 @@ func defaultSaramaConfig() *saramaConfig {
 	config.Flush.Messages = 0
 	config.Flush.Frequency = jsonDuration(0)
 	config.Flush.Bytes = 0
+
+	// The default compression protocol is sarama.CompressionNone,
+	// which is 0.
+	config.Compression = 0
 
 	// This works around what seems to be a bug in sarama where it isn't
 	// computing the right value to compare against `Producer.MaxMessageBytes`
@@ -465,6 +502,7 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 		}
 		kafka.Producer.RequiredAcks = parsedAcks
 	}
+	kafka.Producer.Compression = sarama.CompressionCodec(c.Compression)
 	return nil
 }
 
