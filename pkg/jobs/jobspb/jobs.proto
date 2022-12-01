@@ -114,6 +114,14 @@ message StreamIngestionDetails {
   // is the earliest timestamp that the replication job can be cut-over to.
   int32 replication_ttl_seconds = 11 [(gogoproto.customname) = "ReplicationTTLSeconds"];
 
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan on the
+  // source cluster.
+  util.hlc.Timestamp replication_start_time = 12 [(gogoproto.nullable) = false];
+
   reserved 5, 6;
 }
 
@@ -135,10 +143,6 @@ message StreamIngestionProgress {
       (gogoproto.nullable) = false];
   }
 
-  // The job will ingest events from StartTime onwards during the current run.
-  // This may change when the the ingestion job gets resumed from the previous checkpoint.
-  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
-
   // CutoverTime is set to signal to the stream ingestion job to complete its
   // ingestion. This involves stopping any subsequent ingestion, and rolling
   // back any additional ingested data, to bring the ingested cluster to a
@@ -153,6 +157,8 @@ message StreamIngestionProgress {
 
   // StreamAddresses are the source cluster addresses read from the latest topology.
   repeated string stream_addresses = 5;
+
+  reserved 3;
 }
 
 message StreamReplicationDetails {

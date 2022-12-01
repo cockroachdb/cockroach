@@ -30,7 +30,8 @@ func distStreamIngestionPlanSpecs(
 	streamAddress streamingccl.StreamAddress,
 	topology streamclient.Topology,
 	sqlInstanceIDs []base.SQLInstanceID,
-	initialHighWater hlc.Timestamp,
+	initialScanTimestamp hlc.Timestamp,
+	previousHighWater hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
@@ -48,12 +49,13 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				StreamID:       uint64(streamID),
-				JobID:          int64(jobID),
-				StartTime:      initialHighWater,
-				Checkpoint:     checkpoint, // TODO: Only forward relevant checkpoint info
-				StreamAddress:  string(streamAddress),
-				PartitionSpecs: make(map[string]execinfrapb.StreamIngestionPartitionSpec),
+				StreamID:                   uint64(streamID),
+				JobID:                      int64(jobID),
+				PreviousHighWaterTimestamp: previousHighWater,
+				InitialScanTimestamp:       initialScanTimestamp,
+				Checkpoint:                 checkpoint, // TODO: Only forward relevant checkpoint info
+				StreamAddress:              string(streamAddress),
+				PartitionSpecs:             make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 				TenantRekey: execinfrapb.TenantRekey{
 					OldID: sourceTenantID,
 					NewID: destinationTenantID,
@@ -77,7 +79,7 @@ func distStreamIngestionPlanSpecs(
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		HighWaterAtStart:        initialHighWater,
+		HighWaterAtStart:        previousHighWater,
 		TrackedSpans:            trackedSpans,
 		JobID:                   int64(jobID),
 		StreamID:                uint64(streamID),
