@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -177,12 +176,12 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
 
-	rsl := stateloader.Make(tc.repl.RangeID)
+	rsl := logstore.NewStateLoader(tc.repl.RangeID)
 	lo := tc.repl.mu.state.TruncatedState.Index + 1
 	hi := tc.repl.mu.lastIndex + 1
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, hi)
-	ents, err := entries(
+	ents, err := logstore.LoadEntries(
 		ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
 		tc.repl.raftMu.sideloaded, lo, hi, math.MaxUint64,
 	)
