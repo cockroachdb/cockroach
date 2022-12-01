@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -976,4 +977,141 @@ func (p *Provider) Active() bool {
 // ProjectActive is part of the vm.Provider interface.
 func (p *Provider) ProjectActive(project string) bool {
 	return project == ""
+}
+
+type attachJsonResponse struct {
+	AttachTime string `json:"AttachTime"`
+	InstanceID string `json:"InstanceId"`
+	VolumeID   string `json:"VolumeId"`
+	State      string `json:"State"`
+	Device     string `json:"Device"`
+}
+
+func (p *Provider) AttachVolumeToVM(volume vm.Volume, vm *vm.VM) (string, error) {
+	// TODO(leon): what happens if this device already exists?
+	deviceName := "/dev/sdf"
+	args := []string{
+		"ec2",
+		"attach-volume",
+		"--instance-id", vm.ProviderID,
+		"--volume-id", volume.ProviderResourceID,
+		"--device", deviceName,
+		"--region", vm.Zone[:len(vm.Zone)-1],
+	}
+
+	var commandResponse attachJsonResponse
+	err := p.runJSONCommand(args, &commandResponse)
+	if err != nil {
+		return "", err
+	}
+	if commandResponse.State != "attaching" && commandResponse.State != "in-use" {
+		return "", errors.New("Command to attach succeeded but volume is not in the attached state")
+	}
+
+	args = []string{
+		"ec2",
+		"--region", vm.Zone[:len(vm.Zone)-1],
+		"modify-instance-attribute",
+		"--attribute", "blockDeviceMapping",
+		"--instance-id", vm.ProviderID,
+		"--block-device-mappings",
+		"DeviceName=" + deviceName + ",Ebs={DeleteOnTermination=true,VolumeId=" + volume.ProviderResourceID + "}",
+	}
+	_, err = p.runCommand(args)
+	if err != nil {
+		return "", err
+	}
+
+	return "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_" +
+		strings.Replace(volume.ProviderResourceID, "-", "", 1), nil
+}
+
+type createVolume struct {
+	AvailabilityZone string    `json:"AvailabilityZone"`
+	Encrypted        bool      `json:"Encrypted"`
+	VolumeType       string    `json:"VolumeType"`
+	VolumeID         string    `json:"VolumeId"`
+	State            string    `json:"State"`
+	Iops             int       `json:"Iops"`
+	SnapshotID       string    `json:"SnapshotId"`
+	CreateTime       time.Time `json:"CreateTime"`
+	Size             int       `json:"Size"`
+}
+
+func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+	// TODO(leon): SourceSnapshotID and IOPS, are not handled
+	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
+		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
+		return vol, err
+	}
+
+	region := vco.Zone[:len(vco.Zone)-1]
+	args := []string{
+		"ec2",
+		"create-volume",
+		"--availability-zone", vco.Zone,
+		"--region", region,
+	}
+	if vco.Encrypted {
+		args = append(args, "--encrypted")
+	}
+	if vco.Name != "" {
+		args = append(args, "--tag-specifications", "ResourceType=volume,Tags=[{Key=Name,Value="+vco.Name+"}]")
+	}
+
+	switch vco.Type {
+	case "gp2", "gp3", "io1", "io2", "st1", "sc1", "standard":
+		args = append(args, "--volume-type", vco.Type)
+	case "":
+		// Use the default.
+	default:
+		return vol, errors.Newf("Invalid volume type %q", vco.Type)
+	}
+
+	if vco.Size == 0 {
+		return vol, errors.New("Cannot create a volume of size 0")
+	}
+	args = append(args, "--size", strconv.Itoa(vco.Size))
+	var volumeDetails createVolume
+	err = p.runJSONCommand(args, &volumeDetails)
+	if err != nil {
+		return vol, err
+	}
+
+	waitForVolumeCloser := make(chan struct{})
+
+	waitForVolume := retry.Start(retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     500 * time.Millisecond,
+		MaxRetries:     10,
+		Closer:         waitForVolumeCloser,
+	})
+
+	var state []string
+	args = []string{
+		"ec2",
+		"describe-volumes",
+		"--volume-id", volumeDetails.VolumeID,
+		"--region", region,
+		"--query", "Volumes[*].State",
+	}
+	for waitForVolume.Next() {
+		err = p.runJSONCommand(args, &state)
+		if len(state) > 0 && state[0] == "available" {
+			close(waitForVolumeCloser)
+		}
+	}
+
+	if err != nil {
+		return vm.Volume{}, err
+	}
+
+	vol = vm.Volume{
+		ProviderResourceID: volumeDetails.VolumeID,
+		ProviderVolumeType: volumeDetails.VolumeType,
+		Encrypted:          volumeDetails.Encrypted,
+		Zone:               vol.Zone,
+		Size:               volumeDetails.Size,
+	}
+	return vol, err
 }

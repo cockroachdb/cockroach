@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,6 +108,7 @@ type jsonVM struct {
 	}
 	MachineType string
 	Zone        string
+	instanceDisksResponse
 }
 
 // Convert the JSON VM data into our common VM type
@@ -159,24 +161,44 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		// local username if requested.
 		remoteUser = config.OSUser.Username
 	}
+
+	var volumes []vm.Volume
+
+	for _, disk := range jsonVM.Disks {
+		if !disk.Boot {
+			vol := vm.Volume{
+				ProviderResourceID: disk.DeviceName,
+				ProviderVolumeType: disk.Type,
+				Zone:               jsonVM.Zone,
+			}
+			if val, err := strconv.Atoi(disk.DiskSizeGB); err == nil {
+				vol.Size = val
+			} else {
+				vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", disk.DiskSizeGB))
+			}
+			volumes = append(volumes, vol)
+		}
+	}
+
 	return &vm.VM{
-		Name:        jsonVM.Name,
-		CreatedAt:   jsonVM.CreationTimestamp,
-		Errors:      vmErrors,
-		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
-		Lifetime:    lifetime,
-		Labels:      jsonVM.Labels,
-		PrivateIP:   privateIP,
-		Provider:    ProviderName,
-		ProviderID:  jsonVM.Name,
-		PublicIP:    publicIP,
-		RemoteUser:  remoteUser,
-		VPC:         vpc,
-		MachineType: machineType,
-		Zone:        zone,
-		Project:     project,
-		SQLPort:     config.DefaultSQLPort,
-		AdminUIPort: config.DefaultAdminUIPort,
+		Name:                   jsonVM.Name,
+		CreatedAt:              jsonVM.CreationTimestamp,
+		Errors:                 vmErrors,
+		DNS:                    fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
+		Lifetime:               lifetime,
+		Labels:                 jsonVM.Labels,
+		PrivateIP:              privateIP,
+		Provider:               ProviderName,
+		ProviderID:             jsonVM.Name,
+		PublicIP:               publicIP,
+		RemoteUser:             remoteUser,
+		VPC:                    vpc,
+		MachineType:            machineType,
+		Zone:                   zone,
+		Project:                project,
+		SQLPort:                config.DefaultSQLPort,
+		AdminUIPort:            config.DefaultAdminUIPort,
+		NonBootAttachedVolumes: volumes,
 	}
 }
 
@@ -236,6 +258,160 @@ type ProviderOpts struct {
 type Provider struct {
 	Projects       []string
 	ServiceAccount string
+}
+
+type createVolumeCommandResponse struct {
+	CreationTimestamp      time.Time `json:"creationTimestamp"`
+	ID                     string    `json:"id"`
+	Kind                   string    `json:"kind"`
+	LabelFingerprint       string    `json:"labelFingerprint"`
+	Name                   string    `json:"name"`
+	PhysicalBlockSizeBytes string    `json:"physicalBlockSizeBytes"`
+	SelfLink               string    `json:"selfLink"`
+	SizeGB                 string    `json:"sizeGb"`
+	Status                 string    `json:"status"`
+	Type                   string    `json:"type"`
+	Zone                   string    `json:"zone"`
+}
+
+func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+	// TODO(leon): SourceSnapshotID and IOPS, are not handled
+	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
+		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
+		return vol, err
+	}
+	args := []string{
+		"compute",
+		"disks",
+		"create",
+		vco.Name,
+		"--size", strconv.Itoa(vco.Size),
+		"--zone", vco.Zone,
+		"--format", "json",
+	}
+
+	if vco.Size == 0 {
+		return vol, errors.New("Cannot create a volume of size 0")
+	}
+
+	if vco.Encrypted {
+		return vol, errors.New("Volume encryption is not implemented for GCP")
+	}
+
+	if vco.Architecture != "" {
+		if vco.Architecture == "ARM64" || vco.Architecture == "X86_64" {
+			args = append(args, "--architecture=", vco.Architecture)
+		} else {
+			return vol, errors.Newf("Expected architecture to be one of ARM64, X86_64 got %s\n", vco.Architecture)
+		}
+	}
+
+	switch vco.Type {
+	case "local-ssd", "pd-balanced", "pd-extreme", "pd-ssd", "pd-standard":
+		args = append(args, "--type=", vco.Type)
+	case "":
+	// use the default
+	default:
+		return vol, errors.Newf("Expected type to be one of local-ssd, pd-balanced, pd-extreme, pd-ssd, pd-standard got %s\n", vco.Type)
+	}
+
+	var commandResponse []createVolumeCommandResponse
+	err = runJSONCommand(args, &commandResponse)
+	if err != nil {
+		return vm.Volume{}, err
+	}
+	if len(commandResponse) != 1 {
+		return vol, errors.Newf("Expected to create 1 volume created %d", len(commandResponse))
+	}
+
+	createdVolume := commandResponse[0]
+
+	size, err := strconv.Atoi(createdVolume.SizeGB)
+	if err != nil {
+		return vol, err
+	}
+
+	return vm.Volume{
+		ProviderResourceID: createdVolume.Name,
+		ProviderVolumeType: createdVolume.Type,
+		Zone:               vco.Zone,
+		Size:               size,
+	}, err
+}
+
+type instanceDisksResponse struct {
+	Disks []attachDiskCmdDisk `json:"disks"`
+}
+type attachDiskCmdDisk struct {
+	AutoDelete bool   `json:"autoDelete"`
+	Boot       bool   `json:"boot"`
+	DeviceName string `json:"deviceName"`
+	DiskSizeGB string `json:"diskSizeGb"`
+	Index      int    `json:"index"`
+	Interface  string `json:"interface"`
+	Kind       string `json:"kind"`
+	Mode       string `json:"mode"`
+	Source     string `json:"source"`
+	Type       string `json:"type"`
+}
+
+func (p *Provider) AttachVolumeToVM(volume vm.Volume, vm *vm.VM) (string, error) {
+	// Volume attach
+	args := []string{
+		"compute",
+		"instances",
+		"attach-disk",
+		vm.ProviderID,
+		"--disk", volume.ProviderResourceID,
+		"--device-name", volume.ProviderResourceID,
+		"--zone", vm.Zone,
+		"--format=json(disks)",
+	}
+
+	var commandResponse []instanceDisksResponse
+	if err := runJSONCommand(args, &commandResponse); err != nil {
+		return "", err
+	}
+	found := false
+	if len(commandResponse) != 1 {
+		return "", errors.Newf("Expected to get back json with just a single item got %d", len(commandResponse))
+	}
+	cmdRespDisks := commandResponse[0].Disks
+	for _, response := range cmdRespDisks {
+		found = found || strings.Contains(response.Source, volume.ProviderResourceID)
+	}
+	if !found {
+		return "", errors.Newf("Could not find created disk '%s' in list of disks for %s",
+			volume.ProviderResourceID, vm.ProviderID)
+	}
+
+	// Volume auto delete
+	args = []string{
+		"compute",
+		"instances",
+		"set-disk-auto-delete", vm.ProviderID,
+		"--auto-delete",
+		"--device-name", volume.ProviderResourceID,
+		"--zone", vm.Zone,
+		"--format=json(disks)",
+	}
+
+	if err := runJSONCommand(args, &commandResponse); err != nil {
+		return "", err
+	}
+
+	if len(commandResponse) != 1 {
+		return "", errors.Newf("Expected to get back json with just a single item got %d", len(commandResponse))
+	}
+	cmdRespDisks = commandResponse[0].Disks
+	for _, response := range cmdRespDisks {
+		if response.DeviceName == volume.ProviderResourceID && !response.AutoDelete {
+			return "", errors.Newf("Could not set disk '%s' to auto-delete on instance termination",
+				volume.ProviderResourceID)
+		}
+	}
+
+	return "/dev/disk/by-id/google-" + volume.ProviderResourceID, nil
 }
 
 // ProjectsVal is the implementation for the --gce-projects flag. It populates

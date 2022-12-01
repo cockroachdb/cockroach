@@ -177,9 +177,6 @@ var (
 	// will send to a given follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 128)
-
-	// StorageWorkloadCollectorEnabled specifies if the workload collector will be enabled
-	StorageWorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKLOAD_COLLECTOR", false)
 )
 
 // Config is embedded by server.Config. A base config is not meant to be used

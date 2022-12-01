@@ -119,6 +119,14 @@ type Provider struct {
 	storage VMStorage
 }
 
+func (p *Provider) CreateVolume(vm.VolumeCreateOpts) (vm.Volume, error) {
+	return vm.Volume{}, nil
+}
+
+func (p *Provider) AttachVolumeToVM(vm.Volume, *vm.VM) (string, error) {
+	return "", nil
+}
+
 // No-op implementation of vm.ProviderOpts
 type providerOpts struct{}
 

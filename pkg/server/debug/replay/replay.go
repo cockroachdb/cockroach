@@ -25,17 +25,17 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-type responseType struct {
-	Data []workloadCollectorResponse `json:"data"`
+type ResponseType struct {
+	Data []WorkloadCollectorStatus `json:"data"`
 }
 
-type workloadCollectorResponse struct {
-	StoreId   int  `json:"store_id"`
+type WorkloadCollectorStatus struct {
+	StoreID   int  `json:"store_id"`
 	IsRunning bool `json:"is_running"`
 }
 
-type workloadCollectorPerformAction struct {
-	StoreId          int    `json:"store_id"`
+type WorkloadCollectorPerformActionRequest struct {
+	StoreID          int    `json:"store_id"`
 	Action           string `json:"action"`
 	CaptureDirectory string `json:"capture_directory"`
 }
@@ -77,7 +77,7 @@ func (h *HTTPHandler) SetupStoreMap(engines []storage.Engine, stores *kvserver.S
 func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "POST":
-		var actionJSON WorkloadCollectorPerformAction
+		var actionJSON WorkloadCollectorPerformActionRequest
 		if err := json.NewDecoder(req.Body).Decode(&actionJSON); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

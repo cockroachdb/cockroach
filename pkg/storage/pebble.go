@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/rangekey"
+	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -715,6 +716,16 @@ type Pebble struct {
 	wrappedIntentWriter intentDemuxWriter
 
 	storeIDPebbleLog *base.StoreIDContainer
+	replayer         *replay.WorkloadCollector
+}
+
+// WorkloadCollector implements an workloadCollectorGetter and returns the
+// workload collector stored on Pebble. This method is invoked following a
+// successful cast of an Engine to a `workloadCollectorGetter` type. This method
+// allows for pebble exclusive functionality to be used without modifying the
+// Engine interface.
+func (p *Pebble) WorkloadCollector() *replay.WorkloadCollector {
+	return p.replayer
 }
 
 // EncryptionEnv describes the encryption-at-rest environment, providing
