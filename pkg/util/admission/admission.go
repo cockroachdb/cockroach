@@ -562,3 +562,10 @@ type storeRequestEstimates struct {
 	// writeTokens is the tokens to request at admission time. Must be > 0.
 	writeTokens int64
 }
+
+// PacerFactory is used to construct a new admission.Pacer.
+type PacerFactory interface {
+	NewPacer(unit time.Duration, wi WorkInfo) *Pacer
+}
+
+var _ PacerFactory = &ElasticCPUGrantCoordinator{}

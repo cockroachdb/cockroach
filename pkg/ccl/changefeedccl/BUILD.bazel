@@ -99,6 +99,8 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
         "//pkg/util/cache",
