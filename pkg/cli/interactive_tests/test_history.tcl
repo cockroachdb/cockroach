@@ -28,11 +28,11 @@ send "foo;\r"
 eexpect "syntax error"
 eexpect root@
 send "\022sel"
-eexpect "select 1;"
+eexpect "elect 1;"
 end_test
 
 start_test "Test that recalled previous line can be executed"
-send "\r"
+send "\r\r"
 eexpect "1 row"
 eexpect root@
 end_test
@@ -63,7 +63,10 @@ end_test
 
 start_test "Test that the client cannot terminate with Ctrl+C while cursor is on recalled line"
 interrupt
-send "\rselect 1;\r"
+eexpect root@
+send "\r"
+eexpect root@
+send "select 1;\r"
 eexpect "1 row"
 eexpect root@
 end_test
