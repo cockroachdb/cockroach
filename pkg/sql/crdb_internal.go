@@ -3721,7 +3721,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 			replicaLocalityArr := tree.NewDArray(types.String)
 			for _, replica := range votersAndNonVoters {
-				nodeDesc, err := p.ExecCfg().NodeDescs.GetNodeDescriptor(replica.NodeID)
+				nodeDesc, err := p.ExecCfg().DescCache.GetNodeDescriptor(replica.NodeID)
 				if err != nil {
 					return nil, err
 				}

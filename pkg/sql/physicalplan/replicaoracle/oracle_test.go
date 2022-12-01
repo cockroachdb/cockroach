@@ -46,7 +46,7 @@ func TestClosest(t *testing.T) {
 		nd2, err := g.GetNodeDescriptor(2)
 		require.NoError(t, err)
 		o := NewOracle(ClosestChoice, Config{
-			NodeDescs: g,
+			DescCache: g,
 			NodeID:    1,
 			Locality:  nd2.Locality, // pretend node 2 is closest.
 		})

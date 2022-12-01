@@ -64,13 +64,13 @@ const (
 // idea is that the descriptor might be stale and list the leaseholder as a
 // learner erroneously, and lease info is a strong signal in that direction.
 // Note that the returned ReplicaSlice might still not include the leaseholder
-// if info for the respective node is missing from the NodeDescStore.
+// if info for the respective node is missing from the DescCache.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
 // sendError is returned.
 func NewReplicaSlice(
 	ctx context.Context,
-	nodeDescs NodeDescStore,
+	descCache DescCache,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	filter ReplicaSliceFilter,
@@ -122,7 +122,7 @@ func NewReplicaSlice(
 	}
 	rs := make(ReplicaSlice, 0, len(replicas))
 	for _, r := range replicas {
-		nd, err := nodeDescs.GetNodeDescriptor(r.NodeID)
+		nd, err := descCache.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)

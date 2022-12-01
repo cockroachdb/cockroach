@@ -127,7 +127,7 @@ var _ SpanResolver = &spanResolver{}
 func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
-	nodeDescs kvcoord.NodeDescStore,
+	descCache kvcoord.DescCache,
 	nodeID roachpb.NodeID,
 	locality roachpb.Locality,
 	clock *hlc.Clock,
@@ -137,7 +137,7 @@ func NewSpanResolver(
 	return &spanResolver{
 		st: st,
 		oracle: replicaoracle.NewOracle(policy, replicaoracle.Config{
-			NodeDescs:  nodeDescs,
+			DescCache:  descCache,
 			NodeID:     nodeID,
 			Locality:   locality,
 			Settings:   st,

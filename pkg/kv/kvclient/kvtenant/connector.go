@@ -46,10 +46,11 @@ type Connector interface {
 	// Start starts the connector.
 	Start(context.Context) error
 
-	// NodeDescStore provides information on each of the KV nodes in the cluster
-	// in the form of NodeDescriptors. This obviates the need for SQL-only
-	// tenant processes to join the cluster-wide gossip network.
-	kvcoord.NodeDescStore
+	// DescCache provides information on each of the KV nodes in the cluster
+	// in the form of NodeDescriptors and StoreDescriptors. This obviates the
+	// need for SQL-only tenant processes to join the cluster-wide gossip
+	// network.
+	kvcoord.DescCache
 
 	// RangeDescriptorDB provides range addressing information in the form of
 	// RangeDescriptors through delegated RangeLookup requests. This is
@@ -130,12 +131,12 @@ func (requiresCCLBinaryFactory) NewConnector(_ ConnectorConfig, _ []string) (Con
 		pgcode.CCLRequired)
 }
 
-// AddressResolver wraps a NodeDescStore interface in an adapter that allows it
+// AddressResolver wraps a DescCache interface in an adapter that allows it
 // be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
-func AddressResolver(s kvcoord.NodeDescStore) nodedialer.AddressResolver {
+func AddressResolver(descCache kvcoord.DescCache) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
-		nd, err := s.GetNodeDescriptor(nodeID)
+		nd, err := descCache.GetNodeDescriptor(nodeID)
 		if err != nil {
 			return nil, err
 		}

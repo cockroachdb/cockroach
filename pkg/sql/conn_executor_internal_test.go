@@ -318,7 +318,7 @@ func startConnExecutor(
 				flowinfra.NewRemoteFlowRunner(ambientCtx, stopper, nil /* acc */),
 			),
 			nil, /* distSender */
-			nil, /* nodeDescs */
+			nil, /* descCache */
 			gw,
 			stopper,
 			func(base.SQLInstanceID) bool { return true }, // everybody is available
