@@ -37,6 +37,7 @@ import {
 import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
+import { normalizePrivileges } from "../utils";
 
 const { TableDetailsRequest, TableStatsRequest, TableIndexStatsRequest } =
   cockroach.server.serverpb;
@@ -120,11 +121,23 @@ export const mapStateToProps = createSelector(
       },
     );
 
-    const grants = _.flatMap(details?.data?.grants, grant =>
-      _.map(grant.privileges, privilege => {
-        return { user: grant.user, privilege };
-      }),
-    );
+    const userToPrivileges = new Map<string, string[]>();
+
+    details?.data?.grants.forEach(grant => {
+      if (!userToPrivileges.has(grant.user)) {
+        userToPrivileges.set(grant.user, []);
+      }
+      userToPrivileges.set(
+        grant.user,
+        userToPrivileges.get(grant.user).concat(grant.privileges),
+      );
+    });
+
+    const grants = Array.from(userToPrivileges).map(([name, value]) => ({
+      user: name,
+      privileges: normalizePrivileges(value.sort()),
+    }));
+
     const nodes = stats?.data?.node_ids || [];
 
     return {
