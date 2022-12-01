@@ -1929,6 +1929,13 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	return newSendError(fmt.Sprintf("sending to all replicas failed; last error: %s", lastAttemptErr))
 }
 
+// defaultSendClosedTimestampPolicy is used when the closed timestamp policy
+// is not known by the range cache. This choice prevents sending batch requests
+// to only voters when a perfectly good non-voter may exist in the local
+// region. It's defined as a constant here to ensure that we use the same
+// value when populating the batch header.
+const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
+
 // sendToReplicas sends a batch to the replicas of a range. Replicas are tried one
 // at a time (generally the leaseholder first). The result of this call is
 // either a BatchResponse or an error. In the former case, the BatchResponse
@@ -1958,14 +1965,20 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *roachpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
+
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
+	// If we don't know the closed timestamp policy, we ought to optimistically
+	// assume that it's LEAD_FOR_GLOBAL_READS, because if it is, and we assumed
+	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == roachpb.RoutingPolicy_LEASEHOLDER &&
-		CanSendToFollower(ds.logicalClusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba) {
+		CanSendToFollower(
+			ds.logicalClusterID.Get(), ds.st, ds.clock,
+			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
+		) {
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
-
 	// Filter the replicas to only those that are relevant to the routing policy.
 	// NB: When changing leaseholder policy constraint_status_report should be
 	// updated appropriately.
@@ -2092,14 +2105,16 @@ func (ds *DistSender) sendToReplicas(
 			// is correct, we want the serve to return an update, at which point
 			// the cached entry will no longer be "speculative".
 			DescriptorGeneration: routing.Desc().Generation,
-			// The LeaseSequence will be 0 if the cache doen't have lease info,
+			// The LeaseSequence will be 0 if the cache doesn't have lease info,
 			// or has a speculative lease. Like above, this asks the server to
 			// return an update.
 			LeaseSequence: routing.LeaseSeq(),
 			// The ClosedTimestampPolicy will be the default if the cache
 			// doesn't have info. Like above, this asks the server to return an
 			// update.
-			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(),
+			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(
+				defaultSendClosedTimestampPolicy,
+			),
 
 			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested,
 		}
