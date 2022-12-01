@@ -1209,7 +1209,7 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 	})
 	defer func() { _ = iter.Close() }()
 
-	iter.SeekGE(lowerBound) // can ignore result because we can HasPointAndRange below which checks validity
+	iter.SeekGE(lowerBound)
 	for ; iter.Valid(); iter.Next() {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange && iter.RangeKeyChanged() {
@@ -1323,20 +1323,20 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 	}
 
 	missingKeys := make(map[string]disjointTimeSpans)
+
+	// Next, discover all of the keys that were *not* returned but overlap the
+	// scan span and compute validReadTimes for them.
+	//
+	// Note that this iterator ignores MVCC range deletions. We use this iterator
+	// only to *discover* point keys; we then invoke validReadTimes for each of
+	// them which *does* take into account MVCC range deletionsMVCC range
+	// deletions
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
 
-	// We don't check the return value since HasPointAndRange below
-	// checks for validity as well.
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
 
 	for ; iter.Valid(); iter.Next() {
-		// TODO(during review): is this correct? Should be but have Erik check.
-		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
-			// We're on an MVCC range deletion and don't have a point, so
-			// just nudge the iterator along.
-			continue
-		}
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
 			panic(err)

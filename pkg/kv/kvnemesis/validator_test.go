@@ -1795,6 +1795,18 @@ func TestValidate(t *testing.T) {
 				rd(k2, k3, t1, s1),
 			),
 		},
+		{
+			name: "rangedel shadowing scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(k1, k2, s2), t2)),
+				step(withScanResultTS(scan(k1, k2), t3)), // no rows returned
+			},
+			kvs: kvs(
+				kv(k1, t1, s1),
+				rd(k1, k2, t2, s2),
+			),
+		},
 	}
 
 	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
