@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -512,9 +512,54 @@ func constructUsingExtremesPredicate(
 ) string {
 	var predicate string
 	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
-		predicate = fmt.Sprintf("%s < %s OR %s > %s OR %s is NULL", columnName, extremesSpans.Get(0).EndKey().Value(0).String(), columnName, extremesSpans.Get(1).StartKey().Value(0).String(), columnName)
+		// Construct the comparison operators
+		lbExpr := tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.LT),
+			Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+			Right:    extremesSpans.Get(0).EndKey().Value(0),
+		}
+
+		ubExpr := tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.GT),
+			Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+			Right:    extremesSpans.Get(1).StartKey().Value(0),
+		}
+		nullExpr := tree.IsNullExpr{
+			Expr: &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+		}
+
+		pred := tree.OrExpr{
+			Left: &lbExpr,
+			Right: &tree.OrExpr{
+				Left:  &ubExpr,
+				Right: &nullExpr,
+			},
+		}
+		predicate = tree.Serialize(&pred)
 	} else {
-		predicate = fmt.Sprintf("%s < %s OR %s > %s OR %s is NULL", columnName, extremesSpans.Get(1).StartKey().Value(0).String(), columnName, extremesSpans.Get(0).EndKey().Value(0).String(), columnName)
+		lbExpr := tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.LT),
+			Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+			Right:    extremesSpans.Get(1).StartKey().Value(0),
+		}
+
+		ubExpr := tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.GT),
+			Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+			Right:    extremesSpans.Get(0).EndKey().Value(0),
+		}
+		nullExpr := tree.IsNullExpr{
+			Expr: &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+		}
+
+		pred := tree.OrExpr{
+			Left: &lbExpr,
+			Right: &tree.OrExpr{
+				Left:  &ubExpr,
+				Right: &nullExpr,
+			},
+		}
+		predicate = tree.Serialize(&pred)
 	}
 	return predicate
 }
