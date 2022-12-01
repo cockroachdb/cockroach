@@ -1385,23 +1385,6 @@ func (s *statusServer) Regions(
 	return regionsResponseFromNodesResponse(resp), nil
 }
 
-// NodeLocality implements the serverpb.StatusServer interface.
-func (s *statusServer) NodeLocality(
-	ctx context.Context, req *serverpb.NodeLocalityRequest,
-) (*serverpb.NodeLocalityResponse, error) {
-	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
-	if err != nil {
-		return nil, serverError(ctx, err)
-	}
-	nodes := resp.Nodes
-	res := make(map[roachpb.NodeID]*roachpb.Locality, len(nodes))
-	for _, node := range nodes {
-		desc := node.Desc
-		res[desc.NodeID] = &desc.Locality
-	}
-	return &serverpb.NodeLocalityResponse{NodeLocalities: res}, nil
-}
-
 func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.RegionsResponse {
 	regionsToZones := make(map[string]map[string]struct{})
 	for _, node := range nr.Nodes {
