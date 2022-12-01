@@ -68,8 +68,12 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 			return []error{err}
 		}
 		switch status {
+		case roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE.String():
+			// Can't do anything, so let it slide.
 		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT.String():
+			// Good.
 		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED.String():
+			// Ok.
 		default:
 			failures = append(failures, errors.Errorf("range %d (%s) %s: %s", rangeID, key, status, detail))
 		}
