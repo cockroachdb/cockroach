@@ -323,7 +323,7 @@ func runRoachtestTelemetry(ctx context.Context, t test.Test, c cluster.Cluster) 
 			t.L().Printf("error while iterating over results: %v", err)
 			return
 		}
-		rowData := colContainer //strings.Join(colContainer[:], ",")
+		rowData := colContainer
 		if dataSize < 10 {
 			t.L().Printf("row=: %v", rowData)
 		}
