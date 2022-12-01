@@ -94,6 +94,7 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMod
 
 	skip.UnderShort(t)
 	skip.UnderRace(t) // Too slow under race.
+	skip.UnderStressWithIssue(t, 92540, "too much contention under stress")
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
