@@ -421,17 +421,6 @@ func (c *Connector) Regions(
 	return
 }
 
-// NodeLocality implements the serverpb.TenantStatusServer interface
-func (c *Connector) NodeLocality(
-	ctx context.Context, req *serverpb.NodeLocalityRequest,
-) (resp *serverpb.NodeLocalityResponse, retErr error) {
-	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
-		resp, err = client.NodeLocality(ctx, req)
-		return
-	})
-	return
-}
-
 // TenantRanges implements the serverpb.TenantStatusServer interface
 func (c *Connector) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,

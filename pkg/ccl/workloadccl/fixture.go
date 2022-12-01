@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -350,7 +351,7 @@ func ImportFixture(
 
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
-		if strings.Contains(err.Error(), "operation is unsupported in multi-tenancy mode") {
+		if strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
 			// If the query is unsupported because we're in multi-tenant mode. Assume
 			// that the cluster has 1 node for the purposes of running CSV servers.
 			// Tenants won't use DistSQL to parallelize IMPORT across SQL pods. Doing
