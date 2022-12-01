@@ -112,6 +112,9 @@ func init() {
 						IndexID: this.IndexID,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.LogEvent {
+					return newLogEventOp(this, md)
+				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
 				revertible(false),
@@ -129,9 +132,6 @@ func init() {
 			equiv(scpb.Status_BACKFILLED),
 			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.CreateGCJobForIndex {
 					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
 						return &scop.CreateGCJobForIndex{

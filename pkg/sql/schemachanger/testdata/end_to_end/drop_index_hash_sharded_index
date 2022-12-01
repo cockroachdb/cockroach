@@ -24,7 +24,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
-## StatementPhase stage 1 of 1 with 6 MutationType ops
+## StatementPhase stage 1 of 1 with 7 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -153,6 +153,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "8"
   +  version: "9"
+write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 3 MutationType ops
@@ -226,10 +227,10 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "9"
   +  version: "10"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending"
 commit transaction #3
 begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -303,7 +304,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "10"
   +  version: "11"
-write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"

@@ -653,7 +653,6 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	if err := sc.notFirstInLine(ctx, desc); err != nil {
 		return err
 	}
-
 	if err := sc.checkForMVCCCompliantAddIndexMutations(ctx, desc); err != nil {
 		return err
 	}

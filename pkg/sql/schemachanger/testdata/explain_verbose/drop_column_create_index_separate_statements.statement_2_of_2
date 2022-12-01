@@ -747,7 +747,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 11 MutationType ops
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops
     │               pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
@@ -908,7 +908,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
         │             rule: "index removed before garbage collection"
         │
-        └── • 13 Mutation operations
+        └── • 12 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     EventBase:
@@ -927,21 +927,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │     StatementForDropJob:
             │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
             │     TableID: 104
-            │
-            ├── • LogEvent
-            │     Element:
-            │       SecondaryIndex:
-            │         indexId: 2
-            │         tableId: 104
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
             │
             ├── • MakeIndexAbsent
             │     IndexID: 2

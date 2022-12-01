@@ -14,7 +14,7 @@ SET sql_safe_updates = false;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 12 MutationType ops
+StatementPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -59,6 +59,22 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 107
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          constraintId: 1
+          indexId: 2
+          isUnique: true
+          tableId: 107
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -381,29 +397,13 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 24 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 10 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          constraintId: 1
-          indexId: 2
-          isUnique: true
-          tableId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 107
@@ -959,7 +959,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 12 MutationType ops
+StatementPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -982,6 +982,22 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 107
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          constraintId: 1
+          indexId: 2
+          isUnique: true
+          tableId: 107
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -1340,29 +1356,13 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 11 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 10 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          constraintId: 1
-          indexId: 2
-          isUnique: true
-          tableId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 107

@@ -15,7 +15,7 @@ CREATE VIEW v AS SELECT count(j) FROM t1@idx4
 ops
 DROP INDEX idx1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -23,6 +23,21 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 104
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          indexId: 2
+          isCreatedExplicitly: true
+          tableId: 104
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx1› CASCADE
+        StatementTag: DROP INDEX
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -59,26 +74,11 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          indexId: 2
-          isCreatedExplicitly: true
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx1› CASCADE
-        StatementTag: DROP INDEX
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 104
@@ -143,7 +143,7 @@ DROP INDEX idx1 CASCADE
 ops
 DROP INDEX idx2 CASCADE
 ----
-StatementPhase stage 1 of 1 with 5 MutationType ops
+StatementPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
@@ -153,6 +153,21 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 4
       TableID: 104
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          indexId: 4
+          isCreatedExplicitly: true
+          tableId: 104
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx2› CASCADE
+        StatementTag: DROP INDEX
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.SetIndexName
       IndexID: 4
       Name: crdb_internal_index_4_name_placeholder
@@ -173,7 +188,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx2› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TargetStatus: 1
     *scop.SetColumnName
@@ -216,7 +231,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], DELETE_ONLY] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
@@ -227,21 +242,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 4
       TableID: 104
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          indexId: 4
-          isCreatedExplicitly: true
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx2› CASCADE
-        StatementTag: DROP INDEX
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MakeIndexAbsent
       IndexID: 4
       TableID: 104
@@ -258,7 +258,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx2› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
@@ -369,7 +369,7 @@ DROP INDEX idx2 CASCADE
 ops
 DROP INDEX idx3 CASCADE
 ----
-StatementPhase stage 1 of 1 with 6 MutationType ops
+StatementPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
@@ -380,6 +380,27 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 6
       TableID: 104
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          indexId: 6
+          isCreatedExplicitly: true
+          sharding:
+            columnNames:
+            - i
+            isSharded: true
+            name: crdb_internal_i_shard_16
+            shardBuckets: 16
+          tableId: 104
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
+        StatementTag: DROP INDEX
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.SetIndexName
       IndexID: 6
       Name: crdb_internal_index_6_name_placeholder
@@ -403,7 +424,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TargetStatus: 1
     *scop.SetColumnName
@@ -454,34 +475,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], DELETE_ONLY] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          indexId: 6
-          isCreatedExplicitly: true
-          sharding:
-            columnNames:
-            - i
-            isSharded: true
-            name: crdb_internal_i_shard_16
-            shardBuckets: 16
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
-        StatementTag: DROP INDEX
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MakeIndexAbsent
       IndexID: 6
       TableID: 104
@@ -498,7 +498,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
@@ -625,28 +625,17 @@ DROP INDEX idx3 CASCADE
 ops
 DROP INDEX idx4 CASCADE
 ----
-StatementPhase stage 1 of 1 with 3 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
   ops:
-    *scop.MakePublicSecondaryIndexWriteOnly
-      IndexID: 8
-      TableID: 104
-    *scop.SetIndexName
-      IndexID: 8
-      Name: crdb_internal_index_8_name_placeholder
-      TableID: 104
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 105
 PreCommitPhase stage 1 of 1 with 10 MutationType ops
   transitions:
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -685,7 +674,7 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TableID: 105
     *scop.MakeDeleteOnlyColumnAbsent
@@ -696,7 +685,7 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TableID: 105
     *scop.MakeDeleteOnlyColumnAbsent
@@ -707,7 +696,7 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
         Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
         StatementTag: DROP INDEX
         TargetMetadata:
-          SourceElementID: 1
+          SourceElementID: 2
           SubWorkID: 1
       TableID: 105
     *scop.SetJobStateOnDescriptor
@@ -724,53 +713,22 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 3 with 5 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx4 CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 7 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], PUBLIC] -> VALIDATED
+    [[IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 2
-            indexId: 8
-            toId: 104
-          usesRelationIds:
-          - 104
-          viewId: 105
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
-        StatementTag: DROP INDEX
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
-    *scop.DeleteDescriptor
-      DescriptorID: 105
-    *scop.MakeWriteOnlyIndexDeleteOnly
+    *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 8
       TableID: 104
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-    *scop.UpdateSchemaChangerJob
-      DescriptorIDsToRemove:
-      - 105
-      IsNonCancelable: true
-      JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
-  transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[IndexData:{DescID: 104, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
-  ops:
     *scop.LogEvent
       Element:
         SecondaryIndex:
@@ -788,6 +746,56 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
+    *scop.SetIndexName
+      IndexID: 8
+      Name: crdb_internal_index_8_name_placeholder
+      TableID: 104
+    *scop.LogEvent
+      Element:
+        View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            indexId: 8
+            toId: 104
+          usesRelationIds:
+          - 104
+          viewId: 105
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
+        StatementTag: DROP INDEX
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.DeleteDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 105
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops
+  transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], VALIDATED] -> DELETE_ONLY
+  ops:
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 8
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+  transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
+  ops:
     *scop.MakeIndexAbsent
       IndexID: 8
       TableID: 104
@@ -896,6 +904,10 @@ DROP INDEX idx4 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, VALIDATED]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: SameStagePrecedence
+  rule: view can only go to absent when the index becomes hidden
 - from: [View:{DescID: 105}, DROPPED]
   to:   [ColumnName:{DescID: 105, Name: count, ColumnID: 1}, ABSENT]
   kind: Precedence

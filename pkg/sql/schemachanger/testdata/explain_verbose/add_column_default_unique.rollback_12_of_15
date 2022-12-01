@@ -155,7 +155,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
-    │   └── • 13 Mutation operations
+    │   └── • 12 Mutation operations
     │       │
     │       ├── • SetIndexName
     │       │     IndexID: 1
@@ -205,26 +205,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 12 of 15;
     │       │         SubWorkID: 1
     │       │     IndexID: 1
     │       │     TableID: 106
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 4
-    │       │         isUnique: true
-    │       │         sourceIndexId: 2
-    │       │         tableId: 106
-    │       │         temporaryIndexId: 5
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-    │       │         now()) AS INT8)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 4

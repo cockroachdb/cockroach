@@ -105,3 +105,27 @@ func init() {
 	)
 
 }
+
+func init() {
+	registerDepRuleForDrop(
+		"view can only go to absent when the index becomes hidden",
+		scgraph.SameStagePrecedence,
+		"index", "dependent",
+		scpb.Status_VALIDATED, scpb.Status_ABSENT,
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.View)(nil)),
+				filterElements("viewReferencesIndex", from, to, func(from *scpb.SecondaryIndex, to *scpb.View) bool {
+					for _, ref := range to.ForwardReferences {
+						if ref.ToID == from.TableID &&
+							ref.IndexID == from.IndexID {
+							return true
+						}
+					}
+					return false
+				}),
+			}
+		},
+	)
+}
