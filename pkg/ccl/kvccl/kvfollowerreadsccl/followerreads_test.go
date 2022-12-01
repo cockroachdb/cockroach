@@ -469,17 +469,23 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 }
 
-// mockNodeStore implements the kvcoord.NodeDescStore interface.
-type mockNodeStore []roachpb.NodeDescriptor
+// mockDescCache implements the kvcoord.DescCache interface.
+type mockDescCache []roachpb.NodeDescriptor
 
-func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	for i := range s {
-		desc := &s[i]
+func (dc mockDescCache) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	for i := range dc {
+		desc := &dc[i]
 		if desc.NodeID == id {
 			return desc, nil
 		}
 	}
 	return nil, errors.Errorf("unable to look up descriptor for n%d", id)
+}
+
+func (dc mockDescCache) GetStoreDescriptor(
+	id roachpb.StoreID,
+) (*roachpb.StoreDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", id)
 }
 
 // TestOracle tests the Oracle exposed by this package.
@@ -502,7 +508,7 @@ func TestOracle(t *testing.T) {
 	futureTxn := kv.NewTxn(ctx, c, 0)
 	require.NoError(t, futureTxn.SetFixedTimestamp(ctx, future))
 
-	nodes := mockNodeStore{
+	nodes := mockDescCache{
 		{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1")},
 		{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2")},
 		{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "3")},
@@ -647,7 +653,7 @@ func TestOracle(t *testing.T) {
 			kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, !c.disabledFollowerReads)
 
 			o := replicaoracle.NewOracle(followerReadOraclePolicy, replicaoracle.Config{
-				NodeDescs:  nodes,
+				DescCache:  nodes,
 				Settings:   st,
 				RPCContext: rpcContext,
 				Clock:      clock,

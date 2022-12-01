@@ -120,8 +120,8 @@ type DistSQLPlanner struct {
 
 	// distSender is used to construct the spanResolver upon SetSQLInstanceInfo.
 	distSender *kvcoord.DistSender
-	// nodeDescs is used to construct the spanResolver upon SetSQLInstanceInfo.
-	nodeDescs kvcoord.NodeDescStore
+	// descCache is used to construct the spanResolver upon SetSQLInstanceInfo.
+	descCache kvcoord.DescCache
 	// rpcCtx is used to construct the spanResolver upon SetSQLInstanceInfo.
 	rpcCtx *rpc.Context
 
@@ -169,7 +169,7 @@ func NewDistSQLPlanner(
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsql.ServerImpl,
 	distSender *kvcoord.DistSender,
-	nodeDescs kvcoord.NodeDescStore,
+	descCache kvcoord.DescCache,
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
@@ -193,7 +193,7 @@ func NewDistSQLPlanner(
 			isAvailable: isAvailable,
 		},
 		distSender:         distSender,
-		nodeDescs:          nodeDescs,
+		descCache:          descCache,
 		rpcCtx:             rpcCtx,
 		sqlAddressResolver: sqlAddressResolver,
 		codec:              codec,
@@ -219,7 +219,7 @@ func NewDistSQLPlanner(
 func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
 	sqlInstanceID base.SQLInstanceID,
 ) (*roachpb.NodeDescriptor, error) {
-	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
+	return dsp.descCache.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
 }
 
 // ConstructAndSetSpanResolver constructs and sets the planner's
@@ -230,7 +230,7 @@ func (dsp *DistSQLPlanner) ConstructAndSetSpanResolver(
 	if dsp.spanResolver != nil {
 		log.Fatal(ctx, "trying to construct and set span resolver when one already exists")
 	}
-	sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, nodeID, locality,
+	sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.descCache, nodeID, locality,
 		dsp.clock, dsp.rpcCtx, ReplicaOraclePolicy)
 	dsp.SetSpanResolver(sr)
 }
@@ -1334,7 +1334,7 @@ func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
 		// instances, use the region-aware resolver.
 		hasLocalitySet = true
 		resolver = func(nodeID roachpb.NodeID) base.SQLInstanceID {
-			nodeDesc, err := dsp.nodeDescs.GetNodeDescriptor(nodeID)
+			nodeDesc, err := dsp.descCache.GetNodeDescriptor(nodeID)
 			if err != nil {
 				log.Eventf(ctx, "unable to get node descriptor for KV node %s", nodeID)
 				return dsp.gatewaySQLInstanceID

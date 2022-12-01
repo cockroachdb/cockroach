@@ -157,6 +157,18 @@ func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscri
 	}
 }
 
+func gossipEventForStoreDesc(desc *roachpb.StoreDescriptor) *roachpb.GossipSubscriptionEvent {
+	val, err := protoutil.Marshal(desc)
+	if err != nil {
+		panic(err)
+	}
+	return &roachpb.GossipSubscriptionEvent{
+		Key:            gossip.MakeStoreDescKey(desc.StoreID),
+		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
+		PatternMatched: gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+	}
+}
+
 func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.GossipSubscriptionEvent {
 	val, err := protoutil.Marshal(cfg)
 	if err != nil {
@@ -177,8 +189,16 @@ func waitForNodeDesc(t *testing.T, c *Connector, nodeID roachpb.NodeID) {
 	})
 }
 
+func waitForStoreDesc(t *testing.T, c *Connector, storeID roachpb.StoreID) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		_, err := c.GetStoreDescriptor(storeID)
+		return err
+	})
+}
+
 // TestConnectorGossipSubscription tests Connector's roles as a
-// kvcoord.NodeDescStore and as a config.SystemConfigProvider.
+// kvcoord.DescCache and as a config.SystemConfigProvider.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -197,10 +217,11 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
-		assert.Equal(t, "system-db", req.Patterns[2])
+		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -242,7 +263,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	// Ensure that ClusterID was updated.
 	require.Equal(t, clusterID, rpcContext.StorageClusterID.Get())
 
-	// Test kvcoord.NodeDescStore impl. Wait for full update first.
+	// Test kvcoord.DescCache impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
 	desc, err := c.GetNodeDescriptor(1)
 	require.Equal(t, node1, desc)
@@ -254,13 +275,30 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Nil(t, desc)
 	require.Regexp(t, "unable to look up descriptor for n3", err)
 
+	// Test GetStoreDescriptor.
+	storeID1 := roachpb.StoreID(1)
+	store1 := &roachpb.StoreDescriptor{StoreID: storeID1, Node: *node1}
+	storeID2 := roachpb.StoreID(2)
+	store2 := &roachpb.StoreDescriptor{StoreID: storeID2, Node: *node2}
+	gossipSubC <- gossipEventForStoreDesc(store1)
+	gossipSubC <- gossipEventForStoreDesc(store2)
+	waitForStoreDesc(t, c, storeID1)
+	storeDesc, err := c.GetStoreDescriptor(storeID1)
+	require.Equal(t, store1, storeDesc)
+	waitForStoreDesc(t, c, storeID2)
+	storeDesc, err = c.GetStoreDescriptor(storeID2)
+	require.Equal(t, store2, storeDesc)
+	storeDesc, err = c.GetStoreDescriptor(3)
+	require.Nil(t, storeDesc)
+	require.Regexp(t, "unable to look up descriptor for store ID 3", err)
+
 	// Return updated GossipSubscription response.
 	node1Up := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.2.3.4")}
 	node3 := &roachpb.NodeDescriptor{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
 	gossipSubC <- gossipEventForNodeDesc(node1Up)
 	gossipSubC <- gossipEventForNodeDesc(node3)
 
-	// Test kvcoord.NodeDescStore impl. Wait for full update first.
+	// Test kvcoord.DescCache impl. Wait for full update first.
 	waitForNodeDesc(t, c, 3)
 	desc, err = c.GetNodeDescriptor(1)
 	require.Equal(t, node1Up, desc)
@@ -414,10 +452,11 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
-		assert.Equal(t, "system-db", req.Patterns[2])
+		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err
@@ -464,7 +503,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	})
 	require.NoError(t, <-startedC)
 
-	// Test kvcoord.NodeDescStore impl. Wait for full update first.
+	// Test kvcoord.DescCache impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
 	desc, err := c.GetNodeDescriptor(1)
 	require.Equal(t, node1, desc)
@@ -474,7 +513,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.Regexp(t, "unable to look up descriptor for node ID 3", err)
 }
 
 // TestConnectorRetriesError tests that Connector iterates over each of

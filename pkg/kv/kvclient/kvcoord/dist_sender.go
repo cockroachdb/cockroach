@@ -308,9 +308,9 @@ type DistSender struct {
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
-	// nodeDescs provides information on the KV nodes that DistSender may
+	// descCache provides information on the KV nodes that DistSender may
 	// consider routing requests to.
-	nodeDescs NodeDescStore
+	descCache DescCache
 	// metrics stored DistSender-related metrics.
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
@@ -374,7 +374,7 @@ type DistSenderConfig struct {
 
 	Settings  *cluster.Settings
 	Clock     *hlc.Clock
-	NodeDescs NodeDescStore
+	DescCache DescCache
 	// nodeDescriptor, if provided, is used to describe which node the
 	// DistSender lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
@@ -421,7 +421,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds := &DistSender{
 		st:            cfg.Settings,
 		clock:         cfg.Clock,
-		nodeDescs:     cfg.NodeDescs,
+		descCache:     cfg.DescCache,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
@@ -585,7 +585,7 @@ func (ds *DistSender) getNodeID() roachpb.NodeID {
 	// knowing the node ID, and thus not being able to take advantage of this
 	// optimization is okay, given tenants not running in-process with KV
 	// instances have no such optimization to take advantage of to begin with.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
+	g, ok := ds.descCache.(*gossip.Gossip)
 	if !ok {
 		return 0
 	}
@@ -1993,7 +1993,7 @@ func (ds *DistSender) sendToReplicas(
 	}
 	desc := routing.Desc()
 	leaseholder := routing.Leaseholder()
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, replicaFilter)
+	replicas, err := NewReplicaSlice(ctx, ds.descCache, desc, leaseholder, replicaFilter)
 	if err != nil {
 		return nil, err
 	}

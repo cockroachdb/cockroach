@@ -63,7 +63,7 @@ func TestRangeIterForward(t *testing.T) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
-		NodeDescs:         g,
+		DescCache:         g,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
@@ -99,7 +99,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
-		NodeDescs:         g,
+		DescCache:         g,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
@@ -138,7 +138,7 @@ func TestRangeIterReverse(t *testing.T) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
-		NodeDescs:         g,
+		DescCache:         g,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
@@ -174,7 +174,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
-		NodeDescs:         g,
+		DescCache:         g,
 		RPCContext:        rpcContext,
 		RangeDescriptorDB: alphaRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
