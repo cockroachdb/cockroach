@@ -16,6 +16,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
@@ -38,7 +39,7 @@ func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
 	backoffConfig.MaxDelay = time.Second
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoffConfig,
-		MinConnectTimeout: minConnectionTimeout}))
+		MinConnectTimeout: base.DialTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
 		grpc.WithInitialWindowSize(initialWindowSize),

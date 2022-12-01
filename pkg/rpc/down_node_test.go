@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,9 +34,9 @@ func TestConnectingToDownNode(t *testing.T) {
 
 	{
 		defer func(prev time.Duration) {
-			minConnectionTimeout = prev
-		}(minConnectionTimeout)
-		minConnectionTimeout = time.Millisecond
+			base.DialTimeout = prev
+		}(base.DialTimeout)
+		base.DialTimeout = time.Millisecond
 	}
 
 	testutils.RunTrueAndFalse(t, "refused", func(t *testing.T, refused bool) {

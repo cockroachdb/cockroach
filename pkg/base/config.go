@@ -118,6 +118,11 @@ func DefaultHistogramWindowInterval() time.Duration {
 }
 
 var (
+	// DialTimeout is the timeout used when dialing nodes. For gRPC, this is 3
+	// roundtrips (TCP + TLS handshake), so we set it to twice the network
+	// timeout.
+	DialTimeout = 2 * NetworkTimeout
+
 	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
 	// invocations that must pass between elections.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
