@@ -262,40 +262,61 @@ func runRoachtestTelemetry(ctx context.Context, t test.Test, c cluster.Cluster) 
 		conn.Close()
 	}()
 
-	finalStmt, signatures := chooseRandomQuery()
-	schemaMaps := createRandomDataSnowflake(signatures)
+	var finalStmt string
+	var signatures map[string][]string
 
-	// Create tables.
+	for {
 
-	for key, value := range schemaMaps {
-		t.L().Printf("creating table " + key)
-		fmt.Println(value[2])
-		if _, err := conn.Exec(value[2]); err != nil {
-			t.L().Printf("error while creating table: %v", err)
-			return
-		}
-	}
+		finalStmt, signatures = chooseRandomQuery()
+		schemaMap := createRandomDataSnowflake(signatures)
 
-	// Load tables with initial data.
+		// Create tables.
 
-	importStr := ""
-	for key, value := range schemaMaps {
-		t.L().Printf("inserting rows " + key)
-		ENCODED_KEY, ok := os.LookupEnv(EncodedKeyTag)
-		if !ok {
-			t.L().Printf("%s not set\n", EncodedKeyTag)
-			return
+		for key, value := range schemaMap {
+			t.L().Printf("creating table: " + key)
+			fmt.Println(value[2])
+			if _, err := conn.Exec(value[2]); err != nil {
+				t.L().Printf("error while creating table: %v", err)
+				return
+			}
 		}
 
-		importStr = "IMPORT INTO " + key + " (" + value[1] + ")\n"
-		csvStr := " CSV DATA ('gs://" + bucketName + "/" + value[0] + "?AUTH=specified&CREDENTIALS=" + ENCODED_KEY + "');"
-		queryStr := importStr + csvStr
-		logTest("gs://"+bucketName+"/"+value[0], "TABLE_PATH:")
-		if _, err := conn.Exec(queryStr); err != nil {
-			t.L().Printf("error while inserting rows: %v", err)
-			return
+		// Load tables with initial data.
+
+		importStr := ""
+		for key, value := range schemaMap {
+			t.L().Printf("inserting rows into table:" + key)
+			ENCODED_KEY, ok := os.LookupEnv(EncodedKeyTag)
+			if !ok {
+				t.L().Printf("%s not set\n", EncodedKeyTag)
+				return
+			}
+
+			importStr = "IMPORT INTO " + key + " (" + value[1] + ")\n"
+			csvStr := " CSV DATA ('gs://" + bucketName + "/" + value[0] + "?AUTH=specified&CREDENTIALS=" + ENCODED_KEY + "');"
+			queryStr := importStr + csvStr
+			logTest("gs://"+bucketName+"/"+value[0], "TABLE_PATH:")
+			if _, err := conn.Exec(queryStr); err != nil {
+				t.L().Printf("error while inserting rows: %v", err)
+				return
+			}
 		}
 
+		// Test if query will run with the schemas created
+		t.L().Printf("Testing if valid query: %v", finalStmt)
+		_, err = conn.Query("explain " + finalStmt)
+		if err != nil {
+			t.L().Printf("Not a Valid query with respect to table schema: %v", err)
+			logTest("", "Query/Schema Above is Invalid")
+			for tablename := range schemaMap {
+				if _, droperror := conn.Exec("drop table " + tablename); droperror != nil {
+					t.L().Printf("error while dropping table: %v", droperror)
+
+				}
+			}
+		} else { //Valid query so no need to pick a new random query
+			break
+		}
 	}
 
 	// Execute queries and iterate over results.
