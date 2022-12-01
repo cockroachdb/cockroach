@@ -148,6 +148,13 @@ message MVCCValueHeader {
   option (gogoproto.equal) = true;
 
   message Empty{};
+  // Empty is zero-size in production. It's an int64 under the crdb_test build tag.
+  // This is used to enable kvnemesis testing, which builds on uniqueness of values
+  // in the MVCC history. Deletions don't have a user-definable value, so we need
+  // an extra identifier, which is provided by this field.
+  //
+  // NB: it's important that this isn't at the end of the message, see:
+  // https://dave.cheney.net/2015/10/09/padding-is-hard
   Empty kvnemesis_seq = 2 [
     (gogoproto.customname) = "KVNemesisSeq",
     (gogoproto.nullable) = false,
