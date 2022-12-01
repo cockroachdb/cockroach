@@ -48,7 +48,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
-        "@com_github_petermattis_goid//:goid",
         "@org_golang_google_protobuf//proto",
     ],
 )
