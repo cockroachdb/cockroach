@@ -1,3 +1,3 @@
 echo
 ----
-db0.Del(ctx, uint64ToKey(1) /* @s1 */) // result is ambiguous: boom
+db0.Del(ctx, tk(1) /* @s1 */) // result is ambiguous: boom

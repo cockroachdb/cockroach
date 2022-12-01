@@ -232,8 +232,8 @@ func TestRandKeyDecode(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		rng := rand.New(rand.NewSource(int64(i)))
 		k := randKey(rng)
-		n := uint64FromKey(k)
-		require.Equal(t, k, uint64ToKey(n))
+		n := fk(k)
+		require.Equal(t, k, tk(n))
 	}
 }
 
@@ -266,8 +266,8 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 			if i == 0 {
 				continue
 			}
-			k := uint64ToKey(splitKeys[i-1])
-			ek := uint64ToKey(splitKeys[i])
+			k := tk(splitKeys[i-1])
+			ek := tk(splitKeys[i])
 			splitSpans = append(splitSpans, roachpb.Span{
 				Key:    roachpb.Key(k),
 				EndKey: roachpb.Key(ek),
@@ -290,9 +290,9 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 	for i := 0; i < num; i++ {
 		dr := randDelRangeUsingTombstoneImpl(splitPointMap, nextSeq, rng).DeleteRangeUsingTombstone
 		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
-		nk, nek := uint64FromKey(string(dr.Key)), uint64FromKey(string(dr.EndKey))
+		nk, nek := fk(string(dr.Key)), fk(string(dr.EndKey))
 		s := fmt.Sprintf("[%d,%d)", nk, nek)
-		if uint64FromKey(string(dr.Key))+1 == uint64FromKey(string(dr.EndKey)) {
+		if fk(string(dr.Key))+1 == fk(string(dr.EndKey)) {
 			if numPoint == 0 {
 				t.Logf("first point request: %s", s)
 			}
@@ -335,7 +335,7 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 	for _, splitSp := range splitSpans {
 		frac := float64(splitPointCountMap[string(splitSp.EndKey)]) / float64(numSingleRange)
 		fmt.Fprintf(&buf, "              ^---- %.3f [%d,%d)\n",
-			frac, uint64FromKey(string(splitSp.Key)), uint64FromKey(string(splitSp.EndKey)))
+			frac, fk(string(splitSp.Key)), fk(string(splitSp.EndKey)))
 	}
 
 	fmt.Fprintf(&buf, "------------------\ntotal         %.3f", fracSingleRange+fracPoint+fracCrossRange)
