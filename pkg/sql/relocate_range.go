@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,9 +34,9 @@ type relocateRange struct {
 // relocateRunState contains the run-time state of
 // relocateRange during local execution.
 type relocateRunState struct {
-	toStoreDesc   *roachpb.StoreDescriptor
-	fromStoreDesc *roachpb.StoreDescriptor
-	results       relocateResults
+	toReplicationTarget   roachpb.ReplicationTarget
+	fromReplicationTarget roachpb.ReplicationTarget
+	results               relocateResults
 }
 
 // relocateResults captures the results of the last relocate run
@@ -49,59 +48,47 @@ type relocateResults struct {
 
 // relocateRequest is an internal data structure that describes a relocation.
 type relocateRequest struct {
-	rangeID         roachpb.RangeID
-	subjectReplicas tree.RelocateSubject
-	toStoreDesc     *roachpb.StoreDescriptor
-	fromStoreDesc   *roachpb.StoreDescriptor
-}
-
-// TODO(ewall): replace with DescCache.GetStoreDescriptor.
-func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
-	var storeDesc roachpb.StoreDescriptor
-	gossipStoreKey := gossip.MakeStoreDescKey(storeID)
-	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
-	if err != nil {
-		return nil, err
-	}
-	if err := g.GetInfoProto(
-		gossipStoreKey, &storeDesc,
-	); err != nil {
-		return nil, errors.Wrapf(err, "error looking up store %d", storeID)
-	}
-	return &storeDesc, nil
+	rangeID               roachpb.RangeID
+	subjectReplicas       tree.RelocateSubject
+	toReplicationTarget   roachpb.ReplicationTarget
+	fromReplicationTarget roachpb.ReplicationTarget
 }
 
 func (n *relocateRange) startExec(params runParams) error {
-	toStoreID, err := paramparse.DatumAsInt(params.ctx, params.EvalContext(), "TO", n.toStoreID)
-	if err != nil {
-		return err
-	}
-	var fromStoreID int64
-	if n.subjectReplicas != tree.RelocateLease {
-		// The from expression is NULL if the target is LEASE.
-		fromStoreID, err = paramparse.DatumAsInt(params.ctx, params.EvalContext(), "FROM", n.fromStoreID)
+
+	typedExprToStoreID := func(expr tree.TypedExpr, name string) (roachpb.StoreID, error) {
+		storeIDInt, err := paramparse.DatumAsInt(params.ctx, params.EvalContext(), name, expr)
 		if err != nil {
-			return err
+			return 0, err
 		}
+		storeID := roachpb.StoreID(storeIDInt)
+		if storeID <= 0 {
+			return 0, errors.Errorf("invalid target %s store ID %d for RELOCATE", name, int32(storeID))
+		}
+		return storeID, nil
 	}
 
-	if toStoreID <= 0 {
-		return errors.Errorf("invalid target to store ID %d for RELOCATE", n.toStoreID)
-	}
-	if n.subjectReplicas != tree.RelocateLease && fromStoreID <= 0 {
-		return errors.Errorf("invalid target from store ID %d for RELOCATE", n.fromStoreID)
-	}
-	// Lookup all the store descriptors upfront, so we dont have to do it for each
-	// range we are working with.
-	n.run.toStoreDesc, err = lookupStoreDesc(roachpb.StoreID(toStoreID), params)
+	storeID, err := typedExprToStoreID(n.toStoreID, "TO")
 	if err != nil {
 		return err
 	}
+	n.run.toReplicationTarget.StoreID = storeID
+	storeDesc, err := params.ExecCfg().DescCache.GetStoreDescriptor(storeID)
+	if err != nil {
+		return err
+	}
+	n.run.toReplicationTarget.NodeID = storeDesc.Node.NodeID
 	if n.subjectReplicas != tree.RelocateLease {
-		n.run.fromStoreDesc, err = lookupStoreDesc(roachpb.StoreID(fromStoreID), params)
+		storeID, err := typedExprToStoreID(n.fromStoreID, "FROM")
 		if err != nil {
 			return err
 		}
+		n.run.fromReplicationTarget.StoreID = storeID
+		storeDesc, err := params.ExecCfg().DescCache.GetStoreDescriptor(storeID)
+		if err != nil {
+			return err
+		}
+		n.run.fromReplicationTarget.NodeID = storeDesc.Node.NodeID
 	}
 	return nil
 }
@@ -117,10 +104,10 @@ func (n *relocateRange) Next(params runParams) (bool, error) {
 	rangeID := roachpb.RangeID(tree.MustBeDInt(datum))
 
 	rangeDesc, err := relocate(params, relocateRequest{
-		rangeID:         rangeID,
-		subjectReplicas: n.subjectReplicas,
-		fromStoreDesc:   n.run.fromStoreDesc,
-		toStoreDesc:     n.run.toStoreDesc,
+		rangeID:               rangeID,
+		subjectReplicas:       n.subjectReplicas,
+		toReplicationTarget:   n.run.toReplicationTarget,
+		fromReplicationTarget: n.run.fromReplicationTarget,
 	})
 
 	// record the results of the relocation run, so we can output it.
@@ -153,31 +140,27 @@ func (n *relocateRange) Close(ctx context.Context) {
 }
 
 func relocate(params runParams, req relocateRequest) (*roachpb.RangeDescriptor, error) {
-	rangeDesc, err := lookupRangeDescriptorByRangeID(params.ctx, params.extendedEvalCtx.ExecCfg.DB, req.rangeID)
+	execCfg := params.ExecCfg()
+	rangeDesc, err := lookupRangeDescriptorByRangeID(params.ctx, execCfg.DB, req.rangeID)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error looking up range descriptor")
 	}
 
 	if req.subjectReplicas == tree.RelocateLease {
-		err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rangeDesc.StartKey, req.toStoreDesc.StoreID)
+		err := execCfg.DB.AdminTransferLease(params.ctx, rangeDesc.StartKey, req.toReplicationTarget.StoreID)
 		return rangeDesc, err
 	}
 
-	toTarget := roachpb.ReplicationTarget{NodeID: req.toStoreDesc.Node.NodeID, StoreID: req.toStoreDesc.StoreID}
-	fromTarget := roachpb.ReplicationTarget{NodeID: req.fromStoreDesc.Node.NodeID, StoreID: req.fromStoreDesc.StoreID}
+	addChangeType := roachpb.ADD_VOTER
+	removeChangeType := roachpb.REMOVE_VOTER
 	if req.subjectReplicas == tree.RelocateNonVoters {
-		_, err := params.p.ExecCfg().DB.AdminChangeReplicas(
-			params.ctx, rangeDesc.StartKey, *rangeDesc, []roachpb.ReplicationChange{
-				{ChangeType: roachpb.ADD_NON_VOTER, Target: toTarget},
-				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: fromTarget},
-			},
-		)
-		return rangeDesc, err
+		addChangeType = roachpb.ADD_NON_VOTER
+		addChangeType = roachpb.REMOVE_NON_VOTER
 	}
-	_, err = params.p.ExecCfg().DB.AdminChangeReplicas(
+	_, err = execCfg.DB.AdminChangeReplicas(
 		params.ctx, rangeDesc.StartKey, *rangeDesc, []roachpb.ReplicationChange{
-			{ChangeType: roachpb.ADD_VOTER, Target: toTarget},
-			{ChangeType: roachpb.REMOVE_VOTER, Target: fromTarget},
+			{ChangeType: addChangeType, Target: req.toReplicationTarget},
+			{ChangeType: removeChangeType, Target: req.fromReplicationTarget},
 		},
 	)
 	// TODO(aayush): If the `AdminChangeReplicas`call failed because it found that
