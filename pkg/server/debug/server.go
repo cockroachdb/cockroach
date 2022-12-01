@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
-	debugReplay "github.com/cockroachdb/cockroach/pkg/server/debug/replay"
+	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -183,14 +183,8 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	return lsm.RunE(lsm, []string{db.ManifestFilename})
 }
 
-func (ds *Server) RegisterWorkloadCollector(
-	engines []storage.Engine, stores *kvserver.Stores,
-) error {
-	h := debugReplay.HTTPHandler{}
-	err := h.SetupStoreMap(engines, stores)
-	if err != nil {
-		return err
-	}
+func (ds *Server) RegisterWorkloadCollector(stores *kvserver.Stores) error {
+	h := replay.HTTPHandler{Stores: stores}
 	ds.mux.HandleFunc("/debug/workload_capture", h.HandleRequest)
 	return nil
 }

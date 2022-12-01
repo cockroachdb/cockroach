@@ -9,7 +9,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
-        "//pkg/storage",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//replay",
         "@com_github_cockroachdb_pebble//vfs",
