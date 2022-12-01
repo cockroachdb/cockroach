@@ -147,7 +147,7 @@ interface IndexRecommendation {
 
 interface Grant {
   user: string;
-  privilege: string;
+  privileges: string[];
 }
 
 export interface DatabaseTablePageDataStats {
@@ -470,8 +470,8 @@ export class DatabaseTablePage extends React.Component<
           Grants
         </Tooltip>
       ),
-      cell: grant => grant.privilege,
-      sort: grant => grant.privilege,
+      cell: grant => grant.privileges.join(", "),
+      sort: grant => grant.privileges.join(", "),
     },
   ];
 
