@@ -13,13 +13,13 @@
 package replay
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/vfs"
@@ -40,38 +40,13 @@ type WorkloadCollectorPerformActionRequest struct {
 	CaptureDirectory string `json:"capture_directory"`
 }
 
-type storeWithCollector struct {
-	store             *kvserver.Store
-	workloadCollector *replay.WorkloadCollector
-}
-
 type HTTPHandler struct {
-	storeIDToCollector map[roachpb.StoreID]storeWithCollector
+	syncutil.Mutex
+	Stores *kvserver.Stores
 }
 
-func (h *HTTPHandler) SetupStoreMap(engines []storage.Engine, stores *kvserver.Stores) error {
-	h.storeIDToCollector = make(map[roachpb.StoreID]storeWithCollector)
-	idToIdx := make(map[roachpb.StoreID]int)
-
-	for i := range engines {
-		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
-		if err != nil {
-			return err
-		}
-		idToIdx[id.StoreID] = i
-	}
-
-	return stores.VisitStores(func(s *kvserver.Store) error {
-		indexOfCollector, ok := idToIdx[s.StoreID()]
-		if !ok {
-			return errors.New("Failed to map storeId to index")
-		}
-		h.storeIDToCollector[s.Ident.StoreID] = storeWithCollector{
-			s,
-			s.GetStoreConfig().StoreToWorkloadCollector[indexOfCollector],
-		}
-		return nil
-	})
+type workloadCollectorGetter interface {
+	WorkloadCollector() *replay.WorkloadCollector
 }
 
 func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
@@ -82,25 +57,48 @@ func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		s, err := h.Stores.GetStore(roachpb.StoreID(actionJSON.StoreID))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		getter, ok := s.Engine().(workloadCollectorGetter)
+		if !ok {
+			http.Error(
+				w,
+				fmt.Sprintf("Failed to retrieve workload collector for store with id: %d", s.StoreID()),
+				http.StatusInternalServerError,
+			)
+			return
+		}
+		wc := getter.WorkloadCollector()
+
 		switch actionJSON.Action {
 		case "start":
-			captureFS := vfs.Default
-			swc := h.storeIDToCollector[roachpb.StoreID(actionJSON.StoreID)]
-			err := captureFS.MkdirAll(actionJSON.CaptureDirectory, 0755)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			if !swc.workloadCollector.IsRunning() {
-				swc.workloadCollector.Start(captureFS, actionJSON.CaptureDirectory)
-				err = swc.store.Engine().CreateCheckpoint(captureFS.PathJoin(actionJSON.CaptureDirectory, "checkpoint"))
-			}
+			err := func() error {
+				h.Lock()
+				defer h.Unlock()
+				captureFS := vfs.Default
+				err := captureFS.MkdirAll(actionJSON.CaptureDirectory, 0755)
+				if err != nil {
+					return err
+				}
+				if !wc.IsRunning() {
+					wc.Start(captureFS, actionJSON.CaptureDirectory)
+					err = s.Engine().CreateCheckpoint(captureFS.PathJoin(actionJSON.CaptureDirectory, "checkpoint"))
+				}
+				if err != nil {
+					return err
+				}
+				return nil
+			}()
+
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		case "stop":
-			h.storeIDToCollector[roachpb.StoreID(actionJSON.StoreID)].workloadCollector.Stop()
+			wc.Stop()
 		default:
 			http.Error(w, "Action must be one of start or stop", http.StatusBadRequest)
 			return
@@ -109,12 +107,23 @@ func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 		fallthrough
 	case "GET":
 		var response []WorkloadCollectorStatus
-		for id, v := range h.storeIDToCollector {
+		err := h.Stores.VisitStores(func(s *kvserver.Store) error {
+			getter, ok := s.Engine().(workloadCollectorGetter)
+			if !ok {
+				return errors.Newf("Failed to retrieve workload collector for store with id: %d", s.StoreID())
+			}
+
 			response = append(response, WorkloadCollectorStatus{
-				StoreID:   int(id),
-				IsRunning: v.workloadCollector.IsRunning(),
+				StoreID:   int(s.StoreID()),
+				IsRunning: getter.WorkloadCollector().IsRunning(),
 			})
+			return nil
+		})
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+
 		writeJSONResponse(w, http.StatusOK, ResponseType{Data: response})
 	}
 }
