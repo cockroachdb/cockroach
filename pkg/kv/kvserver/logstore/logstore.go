@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -259,4 +261,71 @@ func logAppend(
 		LastTerm:  entries[len(entries)-1].Term,
 		ByteSize:  prev.ByteSize + diff.SysBytes,
 	}, nil
+}
+
+// LoadTerm returns the term of the entry at the given index for the specified
+// range. The result is loaded from the storage engine if it's not in the cache.
+func LoadTerm(
+	ctx context.Context,
+	rsl StateLoader,
+	eng storage.Engine,
+	rangeID roachpb.RangeID,
+	eCache *raftentry.Cache,
+	index uint64,
+) (uint64, error) {
+	entry, found := eCache.Get(rangeID, index)
+	if found {
+		return entry.Term, nil
+	}
+
+	reader := eng.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
+
+	if err := raftlog.Visit(reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
+		if found {
+			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
+		}
+		found = true
+		entry = ent
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+
+	if found {
+		// Found an entry. Double-check that it has a correct index.
+		if got, want := entry.Index, index; got != want {
+			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
+		}
+		// Cache the entry except if it is sideloaded. We don't load/inline the
+		// sideloaded entries here to keep the term fetching cheap.
+		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
+		// makes any difference.
+		if !SniffSideloadedRaftCommand(entry.Data) {
+			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+		}
+		return entry.Term, nil
+	}
+	// Otherwise, the entry at the given index is not found. This can happen if
+	// the index is ahead of lastIndex, or it has been compacted away.
+
+	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
+	if err != nil {
+		return 0, err
+	}
+	if index > lastIndex {
+		return 0, raft.ErrUnavailable
+	}
+
+	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	if err != nil {
+		return 0, err
+	}
+	if index == ts.Index {
+		return ts.Term, nil
+	}
+	if index > ts.Index {
+		return 0, errors.Errorf("there is a gap at index %d", index)
+	}
+	return 0, raft.ErrCompacted
 }
