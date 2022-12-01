@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/rangekey"
+	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -715,6 +716,11 @@ type Pebble struct {
 	wrappedIntentWriter intentDemuxWriter
 
 	storeIDPebbleLog *base.StoreIDContainer
+	replayer         *replay.WorkloadCollector
+}
+
+func (p *Pebble) WorkloadCollector() *replay.WorkloadCollector {
+	return p.replayer
 }
 
 // EncryptionEnv describes the encryption-at-rest environment, providing
@@ -826,10 +832,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		}
 	}()
 
-	overwriteEventListener := false
-	if cfg.Opts.EventListener == nil {
-		overwriteEventListener = true
-	}
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
 	if settings := cfg.Settings; settings != nil {
@@ -917,6 +919,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
+		replayer:         replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
 	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
@@ -938,17 +941,8 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		}),
 		p.makeMetricEtcEventListener(ctx),
 	)
-	if overwriteEventListener {
-		cfg.Opts.EventListener = &el
-	} else {
-		t := pebble.TeeEventListener(
-			el,
-			*cfg.Opts.EventListener,
-		)
-		cfg.Opts.EventListener = &t
-	}
 
-	p.eventListener = cfg.Opts.EventListener
+	p.eventListener = &el
 	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// Read the current store cluster version.
@@ -957,6 +951,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return nil, err
 	}
 
+	if base.StorageWorkloadCollectorEnabled {
+		p.replayer.Attach(cfg.Opts)
+	}
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
