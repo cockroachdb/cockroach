@@ -241,7 +241,8 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 		return r.mu.lastTerm, nil
 	}
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, r.mu.stateLoader, r.store.Engine(), r.RangeID, r.store.raftEntryCache, i)
+	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.Engine(), r.RangeID,
+		r.store.raftEntryCache, i)
 }
 
 // raftTermLocked requires that r.mu is locked for writing.
@@ -255,71 +256,6 @@ func (r *Replica) GetTerm(i uint64) (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftTermLocked(i)
-}
-
-func term(
-	ctx context.Context,
-	rsl stateloader.StateLoader,
-	eng storage.Engine,
-	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache,
-	index uint64,
-) (uint64, error) {
-	entry, found := eCache.Get(rangeID, index)
-	if found {
-		return entry.Term, nil
-	}
-
-	reader := eng.NewReadOnly(storage.StandardDurability)
-	defer reader.Close()
-
-	if err := raftlog.Visit(reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
-		if found {
-			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
-		}
-		found = true
-		entry = ent
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-
-	if found {
-		// Found an entry. Double-check that it has a correct index.
-		if got, want := entry.Index, index; got != want {
-			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
-		}
-		// Cache the entry except if it is sideloaded. We don't load/inline the
-		// sideloaded entries here to keep the term fetching cheap.
-		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
-		// makes any difference.
-		if !logstore.SniffSideloadedRaftCommand(entry.Data) {
-			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
-		}
-		return entry.Term, nil
-	}
-	// Otherwise, the entry at the given index is not found. This can happen if
-	// the index is ahead of lastIndex, or it has been compacted away.
-
-	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
-	if err != nil {
-		return 0, err
-	}
-	if index > lastIndex {
-		return 0, raft.ErrUnavailable
-	}
-
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
-	if err != nil {
-		return 0, err
-	}
-	if index == ts.Index {
-		return ts.Term, nil
-	}
-	if index > ts.Index {
-		return 0, errors.Errorf("there is a gap at index %d", index)
-	}
-	return 0, raft.ErrCompacted
 }
 
 // raftLastIndexRLocked requires that r.mu is held for reading.
