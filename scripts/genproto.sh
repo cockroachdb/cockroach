@@ -19,18 +19,12 @@ if [[ $(protoc --version | cut -f2 -d' ') != "3.14.0" ]]; then
 fi
 
 GOFAST_BIN=$(tool_get_bin github.com/gogo/protobuf/protoc-gen-gofast)
-GRPC_GATEWAY_BIN=$(tool_get_bin github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway)
-SWAGGER_BIN=$(tool_get_bin github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger)
 GOGOPROTO_ROOT="$(tool_pkg_dir github.com/gogo/protobuf/proto)/.."
-GRPC_GATEWAY_ROOT="$(tool_pkg_dir github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway)/.."
 
 echo
 echo "Resolved binary and packages versions:"
 echo "  - protoc-gen-gofast:       ${GOFAST_BIN}"
-echo "  - protoc-gen-grpc-gateway: ${GRPC_GATEWAY_BIN}"
-echo "  - swagger:                 ${SWAGGER_BIN}"
 echo "  - gogoproto-root:          ${GOGOPROTO_ROOT}"
-echo "  - grpc-gateway-root:       ${GRPC_GATEWAY_ROOT}"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
 # directories containing protos to be built
@@ -40,7 +34,7 @@ log_callout -e "\\nRunning gofast (gogo) proto generation..."
 
 for dir in ${DIRS}; do
   pushd "${dir}"
-    protoc --gofast_out=plugins=grpc:. -I=".:${GOGOPROTO_PATH}:${RAFT_ROOT_DIR}/..:${RAFT_ROOT_DIR}:${GRPC_GATEWAY_ROOT}/third_party/googleapis" \
+    protoc --gofast_out=. -I=".:${GOGOPROTO_PATH}:${RAFT_ROOT_DIR}/..:${RAFT_ROOT_DIR}" \
       --plugin="${GOFAST_BIN}" ./**/*.proto
 
     sed -i.bak -E 's|"raft/raftpb"|"go.etcd.io/etcd/raft/v3/raftpb"|g' ./**/*.pb.go
