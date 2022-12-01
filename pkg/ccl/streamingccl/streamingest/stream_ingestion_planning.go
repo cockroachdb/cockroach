@@ -158,9 +158,10 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
-		// Create the producer job first for the purpose of observability,
-		// user is able to know the producer job id immediately after executing the RESTORE.
-		streamID, err := client.Create(ctx, roachpb.TenantName(sourceTenant))
+		// Create the producer job first for the purpose of observability, user is
+		// able to know the producer job id immediately after executing
+		// CREATE TENANT ... FROM REPLICATION.
+		replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(sourceTenant))
 		if err != nil {
 			return err
 		}
@@ -176,12 +177,13 @@ func ingestionPlanHook(
 		}
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress:         string(streamAddress),
-			StreamID:              uint64(streamID),
+			StreamID:              uint64(replicationProducerSpec.StreamID),
 			Span:                  roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			DestinationTenantID:   destinationTenantID,
 			SourceTenantName:      roachpb.TenantName(sourceTenant),
 			DestinationTenantName: roachpb.TenantName(destinationTenant),
 			ReplicationTTLSeconds: int32(replicationTTLSeconds),
+			ReplicationStartTime:  replicationProducerSpec.ReplicationStartTime,
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)
@@ -202,7 +204,8 @@ func ingestionPlanHook(
 			return err
 		}
 
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())), tree.NewDInt(tree.DInt(streamID))}
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())),
+			tree.NewDInt(tree.DInt(replicationProducerSpec.StreamID))}
 		return nil
 	}
 

@@ -30,17 +30,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// startReplicationStreamJob initializes a replication stream producer job on
+// startReplicationProducerJob initializes a replication stream producer job on
 // the source cluster that:
 //
 // 1. Tracks the liveness of the replication stream consumption.
 // 2. Updates the protected timestamp for spans being replicated.
-func startReplicationStreamJob(
+func startReplicationProducerJob(
 	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantName roachpb.TenantName,
-) (streampb.StreamID, error) {
+) (streampb.ReplicationProducerSpec, error) {
 	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig), txn, tenantName)
 	if err != nil {
-		return 0, err
+		return streampb.ReplicationProducerSpec{}, err
 	}
 	tenantID := tenantRecord.ID
 
@@ -48,11 +48,11 @@ func startReplicationStreamJob(
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 
 	if err != nil {
-		return streampb.InvalidStreamID, err
+		return streampb.ReplicationProducerSpec{}, err
 	}
 
 	if !hasAdminRole {
-		return streampb.InvalidStreamID, errors.New("admin role required to start stream replication jobs")
+		return streampb.ReplicationProducerSpec{}, errors.New("admin role required to start stream replication jobs")
 	}
 
 	registry := execConfig.JobRegistry
@@ -61,24 +61,25 @@ func startReplicationStreamJob(
 
 	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
-		return streampb.InvalidStreamID, err
+		return streampb.ReplicationProducerSpec{}, err
 	}
 
 	ptp := execConfig.ProtectedTimestampProvider
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
 	}
-
 	deprecatedSpansToProtect := roachpb.Spans{*makeTenantSpan(tenantID)}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
-
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(ctx, txn, pts); err != nil {
-		return streampb.InvalidStreamID, err
+		return streampb.ReplicationProducerSpec{}, err
 	}
-	return streampb.StreamID(jr.JobID), nil
+	return streampb.ReplicationProducerSpec{
+		StreamID:             streampb.StreamID(jr.JobID),
+		ReplicationStartTime: statementTime,
+	}, nil
 }
 
 // Convert the producer job's status into corresponding replication

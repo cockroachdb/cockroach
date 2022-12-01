@@ -128,8 +128,9 @@ INSERT INTO d.t2 VALUES (2);
 			[][]string{{string(status)}})
 	}
 
-	streamID, err := client.Create(ctx, testTenantName)
+	rps, err := client.Create(ctx, testTenantName)
 	require.NoError(t, err)
+	streamID := rps.StreamID
 	// We can create multiple replication streams for the same tenant.
 	_, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
@@ -166,6 +167,8 @@ INSERT INTO d.t2 VALUES (2);
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 
+	initialScanTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
 	// Testing client.Subscribe()
 	makePartitionSpec := func(tables ...string) *streampb.StreamPartitionSpec {
 		var spans []roachpb.Span
@@ -176,7 +179,8 @@ INSERT INTO d.t2 VALUES (2);
 		}
 
 		return &streampb.StreamPartitionSpec{
-			Spans: spans,
+			InitialScanTimestamp: initialScanTimestamp,
+			Spans:                spans,
 			Config: streampb.StreamPartitionSpec_ExecutionConfig{
 				MinCheckpointFrequency: 10 * time.Millisecond,
 			},
@@ -199,7 +203,8 @@ INSERT INTO d.t2 VALUES (2);
 		require.NoError(t, subClient.Close(ctx))
 	}()
 	require.NoError(t, err)
-	sub, err := subClient.Subscribe(ctx, streamID, encodeSpec("t1"), hlc.Timestamp{})
+	sub, err := subClient.Subscribe(ctx, streamID, encodeSpec("t1"),
+		initialScanTimestamp, hlc.Timestamp{})
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
@@ -244,8 +249,9 @@ INSERT INTO d.t2 VALUES (2);
 	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
 `)
-	streamID, err = client.Create(ctx, testTenantName)
+	rps, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
+	streamID = rps.StreamID
 	require.NoError(t, client.Complete(ctx, streamID, true))
 	h.SysSQL.CheckQueryResultsRetry(t,
 		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})

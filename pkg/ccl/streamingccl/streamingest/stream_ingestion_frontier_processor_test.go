@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -245,7 +246,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				OldID: roachpb.MustMakeTenantID(tenantID),
 				NewID: roachpb.MustMakeTenantID(tenantID + 10),
 			}
-			spec.StartTime = tc.frontierStartTime
+			spec.PreviousHighWaterTimestamp = tc.frontierStartTime
+			if tc.frontierStartTime.IsEmpty() {
+				spec.InitialScanTimestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			}
 			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 			proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
@@ -331,8 +335,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				require.NoError(t, err)
 				progress := job.Progress().Progress
 				if progress == nil {
-					if !heartbeatTs.Equal(spec.StartTime) {
-						t.Fatalf("heartbeat %v should equal start time of %v", heartbeatTs, spec.StartTime)
+					if !heartbeatTs.Equal(spec.InitialScanTimestamp) {
+						t.Fatalf("heartbeat %v should equal start time of %v", heartbeatTs, spec.InitialScanTimestamp)
 					}
 				} else {
 					persistedHighwater := *progress.(*jobspb.Progress_HighWater).HighWater
