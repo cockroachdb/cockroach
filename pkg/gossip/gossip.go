@@ -270,8 +270,7 @@ type Gossip struct {
 	addresses      []util.UnresolvedAddr
 	addressesTried map[int]struct{} // Set of attempted address indexes
 	nodeDescs      syncutil.IntMap  // map[roachpb.NodeID]*roachpb.NodeDescriptor
-	// storeMap maps store IDs to node IDs.
-	storeMap map[roachpb.StoreID]roachpb.NodeID
+	storeDescs     syncutil.IntMap  // map[roachpb.StoreID]*roachpb.StoreDescriptor
 
 	// Membership sets for bootstrap addresses. bootstrapAddrs also tracks which
 	// address is associated with which node ID to enable faster node lookup by
@@ -324,7 +323,6 @@ func New(
 		bootstrapInterval: defaultBootstrapInterval,
 		cullInterval:      defaultCullInterval,
 		addressesTried:    map[int]struct{}{},
-		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
 		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
@@ -562,6 +560,15 @@ func (g *Gossip) GetNodeIDHTTPAddress(nodeID roachpb.NodeID) (*util.UnresolvedAd
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	return g.getNodeDescriptor(nodeID, false /* locked */)
+}
+
+// GetStoreDescriptor looks up the descriptor of the node by ID.
+func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
+	if value, ok := g.storeDescs.Load(int64(storeID)); ok {
+		desc := (*roachpb.StoreDescriptor)(value)
+		return desc, nil
+	}
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
 }
 
 // LogStatus logs the current status of gossip such as the incoming and
@@ -884,7 +891,7 @@ func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 	g.recomputeMaxPeersLocked()
 }
 
-// updateStoreMaps is a gossip callback which is used to update storeMap.
+// updateStoreMap is a gossip callback which is used to update storeMap.
 func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
 	var desc roachpb.StoreDescriptor
@@ -899,7 +906,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.storeMap[desc.StoreID] = desc.Node.NodeID
+	g.storeDescs.Store(int64(desc.StoreID), unsafe.Pointer(&desc))
 }
 
 func (g *Gossip) updateClients() {

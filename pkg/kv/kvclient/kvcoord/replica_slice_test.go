@@ -33,7 +33,7 @@ type mockNodeStore struct {
 
 var _ NodeDescStore = &mockNodeStore{}
 
-// GetNodeDesc is part of the NodeDescStore interface.
+// GetNodeDescriptor is part of the NodeDescStore interface.
 func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	for _, nd := range ns.nodes {
 		if nd.NodeID == nodeID {
@@ -41,6 +41,13 @@ func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.Node
 		}
 	}
 	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+}
+
+// GetStoreDescriptor is part of the NodeDescStore interface.
+func (ns *mockNodeStore) GetStoreDescriptor(
+	storeID roachpb.StoreID,
+) (*roachpb.StoreDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
 }
 
 func TestNewReplicaSlice(t *testing.T) {

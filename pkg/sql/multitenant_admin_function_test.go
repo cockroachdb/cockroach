@@ -131,6 +131,12 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
 		},
 		{
+			desc:                     "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS SkipSQLSystemTenantCheck",
+			query:                    "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
+			errorMessage:             rangeErrorMessage,
+			skipSQLSystemTenantCheck: true,
+		},
+		{
 			desc:         "ALTER TABLE x SPLIT AT",
 			query:        "ALTER TABLE t SPLIT AT VALUES (1);",
 			errorMessage: "request [1 AdmSplit] not permitted",
