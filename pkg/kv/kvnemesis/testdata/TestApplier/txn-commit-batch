@@ -1,10 +1,11 @@
 echo
 ----
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-  txn.Put(ctx, "e", v5) // @<ts> <nil>
-  b := &Batch{}
-  b.Get(ctx, "a") // (<nil>, <nil>)
-  b.Put(ctx, "f", v6) // <nil>
+  txn.Put(ctx, uint64ToKey(5), seq2val(kvnemesisutil.Seq(5))) // @<ts> <nil>
+  b := &kv.Batch{}
+  b.Get(uint64ToKey(1)) // (<nil>, <nil>)
+  b.Put(uint64ToKey(6), seq2val(kvnemesisutil.Seq(6))) // <nil>
   txn.CommitInBatch(ctx, b) // @<ts> <nil>
   return nil
-}) // @<ts> <nil> txnpb:<txn>
+}) // @<ts> <nil>
+// ^-- txnpb:<txn>
