@@ -308,14 +308,6 @@ message RegionsResponse {
   map<string, Region> regions = 1;
 }
 
-message NodeLocalityRequest{}
-
-message NodeLocalityResponse{
-  map<int32, roachpb.Locality> node_localities = 1 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-  ];
-}
-
 // NodesListRequest requests list of all nodes.
 // The nodes are KV nodes when the cluster is a single
 // tenant cluster or the host cluster in case of multi-tenant
@@ -1907,9 +1899,6 @@ service Status {
 
   // RegionsRequest retrieves all available regions.
   rpc Regions(RegionsRequest) returns (RegionsResponse) {}
-
-  // NodeLocality retrieves the locality of the node with the given ID.
-  rpc NodeLocality(NodeLocalityRequest) returns (NodeLocalityResponse) {}
 
   // NodesList returns all available nodes with their addresses.
   rpc NodesList(NodesListRequest) returns (NodesListResponse) {}

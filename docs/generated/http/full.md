@@ -208,60 +208,6 @@ RegionsResponse describes the available regions.
 
 
 
-## NodeLocality
-
-
-
-NodeLocality retrieves the locality of the node with the given ID.
-
-Support status: [reserved](#support-status)
-
-#### Request Parameters
-
-
-
-
-
-
-
-
-
-
-
-
-
-#### Response Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| node_localities | [NodeLocalityResponse.NodeLocalitiesEntry](#cockroach.server.serverpb.NodeLocalityResponse-cockroach.server.serverpb.NodeLocalityResponse.NodeLocalitiesEntry) | repeated |  | [reserved](#support-status) |
-
-
-
-
-
-
-<a name="cockroach.server.serverpb.NodeLocalityResponse-cockroach.server.serverpb.NodeLocalityResponse.NodeLocalitiesEntry"></a>
-#### NodeLocalityResponse.NodeLocalitiesEntry
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| key | [int32](#cockroach.server.serverpb.NodeLocalityResponse-int32) |  |  |  |
-| value | [cockroach.roachpb.Locality](#cockroach.server.serverpb.NodeLocalityResponse-cockroach.roachpb.Locality) |  |  |  |
-
-
-
-
-
-
 ## NodesList
 
 
