@@ -46,13 +46,6 @@ func TestApplier(t *testing.T) {
 
 	a := MakeApplier(env, db, db)
 
-	k1 := uint64ToKey(1)
-	k2 := uint64ToKey(2)
-	k3 := uint64ToKey(3)
-	k4 := uint64ToKey(4)
-	k5 := uint64ToKey(5)
-	k6 := uint64ToKey(6)
-
 	tests := []testCase{
 		{
 			"get", step(get(k1)),

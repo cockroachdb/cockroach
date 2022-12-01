@@ -1,9 +1,9 @@
 echo
 ----
 ···{
-···  b := &Batch{}
-···  b.Get(ctx, "b")
-···  b.ReverseScanForUpdate(ctx, "c", "e")
-···  b.Get(ctx, "f")
+···  b := &kv.Batch{}
+···  b.Get(uint64ToKey(2))
+···  b.ReverseScanForUpdate(uint64ToKey(3), uint64ToKey(5))
+···  b.Get(uint64ToKey(6))
 ···  db0.Run(ctx, b)
 ···}
