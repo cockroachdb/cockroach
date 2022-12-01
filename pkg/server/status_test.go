@@ -658,6 +658,7 @@ func TestStatusLocalLogs(t *testing.T) {
 // honor the redaction flags.
 func TestStatusLogRedaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 92789, "flaky test")
 
 	testData := []struct {
 		redactableLogs     bool // logging flag
