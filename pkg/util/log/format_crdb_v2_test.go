@@ -27,16 +27,38 @@ import (
 	"github.com/kr/pretty"
 )
 
+type testIDPayload struct {
+	tenantID string
+}
+
+func (t testIDPayload) ServerIdentityString(key ServerIdentificationKey) string {
+	switch key {
+	case IdentifyTenantID:
+		return t.tenantID
+	default:
+		return ""
+	}
+}
+
+var _ ServerIdentificationPayload = (*testIDPayload)(nil)
+
 func TestFormatCrdbV2(t *testing.T) {
 	tm, err := time.Parse(MessageTimeFormat, "060102 15:04:05.654321")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
-	ctx = logtags.AddTag(ctx, "noval", nil)
-	ctx = logtags.AddTag(ctx, "s", "1")
-	ctx = logtags.AddTag(ctx, "long", "2")
+	sysCtx := context.Background()
+	sysCtx = logtags.AddTag(sysCtx, "noval", nil)
+	sysCtx = logtags.AddTag(sysCtx, "s", "1")
+	sysCtx = logtags.AddTag(sysCtx, "long", "2")
+
+	tenantIDPayload := testIDPayload{tenantID: "2"}
+	tenantCtx := context.Background()
+	tenantCtx = context.WithValue(tenantCtx, ServerIdentificationContextKey{}, tenantIDPayload)
+	tenantCtx = logtags.AddTag(tenantCtx, "noval", nil)
+	tenantCtx = logtags.AddTag(tenantCtx, "p", "3")
+	tenantCtx = logtags.AddTag(tenantCtx, "longKey", "456")
 
 	defer func(prev int) { crdbV2LongLineLen.set(prev) }(int(crdbV2LongLineLen))
 	crdbV2LongLineLen.set(1024)
@@ -64,7 +86,7 @@ func TestFormatCrdbV2(t *testing.T) {
 	testCases := []logEntry{
 		// Header entry.
 		func() logEntry {
-			e := makeUnstructuredEntry(ctx, 0, 0, 0, true, "hello %s", "world")
+			e := makeUnstructuredEntry(sysCtx, 0, 0, 0, true, "hello %s", "world")
 			e.header = true
 			return e
 		}(),
@@ -74,34 +96,34 @@ func TestFormatCrdbV2(t *testing.T) {
 		// Empty entry.
 		{},
 		// Structured entry.
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, ev),
+		makeStructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, ev),
 		// Structured entry, with a stack trace.
-		withStack(makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, ev)),
+		withStack(makeStructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, ev)),
 
 		// Single-line unstructured entries, with and without redaction markers.
-		makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
-		makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "world"),
+		makeUnstructuredEntry(sysCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
+		makeUnstructuredEntry(sysCtx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "world"),
 
 		// Unstructured entry, with a counter.
 		func() logEntry {
-			e := makeUnstructuredEntry(ctx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world")
+			e := makeUnstructuredEntry(sysCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world")
 			e.counter = 123
 			return e
 		}(),
 
 		// Single-line unstructured, followed by a stack trace.
-		withStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
+		withStack(makeUnstructuredEntry(sysCtx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
 
 		// Multi-line unstructured.
-		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, false, "maybe %s", "multi\nline"),
-		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, true, "maybe %s", "multi\nline"),
+		makeUnstructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, false, "maybe %s", "multi\nline"),
+		makeUnstructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, true, "maybe %s", "multi\nline"),
 		// Multi-line unstructured, with a stack tace.
-		withStack(makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, true, "maybe %s", "multi\nline with stack")),
+		withStack(makeUnstructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, true, "maybe %s", "multi\nline with stack")),
 
 		// Many-byte unstructured.
-		makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 0, false, "%s", longLine),
+		makeUnstructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, false, "%s", longLine),
 		// Many-byte structured.
-		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
+		makeStructuredEntry(sysCtx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,
 				EventType: "rename_database",
@@ -110,7 +132,10 @@ func TestFormatCrdbV2(t *testing.T) {
 			Event:   longLine,
 		}),
 		// Unstructured with long stack trace.
-		withBigStack(makeUnstructuredEntry(ctx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
+		withBigStack(makeUnstructuredEntry(sysCtx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
+		// Secondary tenant entries
+		makeStructuredEntry(tenantCtx, severity.INFO, channel.DEV, 0, ev),
+		makeUnstructuredEntry(tenantCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
 	}
 
 	// We only use the datadriven framework for the ability to rewrite the output.
@@ -158,8 +183,8 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 		putBuffer(b)
 
 		// Sanity check: verify that no payload is longer (in bytes) than the configured max length.
-		const prefix1 = "I000101 00:00:00.000000 0 :0  [-]  "
-		const prefix2 = "I000101 00:00:00.000000 0 :0 ⋮ [-]  "
+		const prefix1 = "I000101 00:00:00.000000 0 :0  [T1]  "
+		const prefix2 = "I000101 00:00:00.000000 0 :0 ⋮ [T1]  "
 		lines := strings.Split(out, "\n")
 		for i, l := range lines {
 			l = strings.TrimSuffix(l, "\n")

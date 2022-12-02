@@ -261,6 +261,11 @@ message Entry {
   // Entry are still expecting the message and the stack trace in the
   // same field.
   uint32 stack_trace_start = 13;
+
+  // TenantID is the tenant ID that the log entry originated from. NB: if a
+  // log entry was not found to contain any tenant ID, we default to the system
+  // tenant ID.
+  string tenant_id = 14 [(gogoproto.customname) = "TenantID"];
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of

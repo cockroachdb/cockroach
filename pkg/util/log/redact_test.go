@@ -62,7 +62,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 	_ = TestingSetRedactable(true)
 	Errorf(context.Background(), "test3 %v end", "hello")
-	if !contains(redactableIndicator+" [-] 3  test3", t) {
+	if !contains(redactableIndicator+" [T1] 3  test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
 	if !contains("test3 "+startRedactable+"hello"+endRedactable+" end", t) {
@@ -74,7 +74,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	Errorf(context.Background(), "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world"))) // nolint:errwrap
-	if !contains(redactableIndicator+" [-] 4  test3e", t) {
+	if !contains(redactableIndicator+" [T1] 4  test3e", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
 	if !contains("test3e hello error-in-error "+startRedactable+"world"+endRedactable+" end", t) {
