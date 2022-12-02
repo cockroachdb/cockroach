@@ -1724,7 +1724,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	// If enabled, start reporting diagnostics.
-	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut() {
+	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
 		s.startDiagnostics(workersCtx)
 	}
 
