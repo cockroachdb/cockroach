@@ -1,5 +1,5 @@
 diff --git a/staticcheck/lint.go b/staticcheck/lint.go
-index 85bcb21..e91e81c 100644
+index 85bcb21..9fb4cc0 100644
 --- a/staticcheck/lint.go
 +++ b/staticcheck/lint.go
 @@ -3080,6 +3080,9 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
@@ -44,3 +44,12 @@ index 85bcb21..e91e81c 100644
  		}
  		return true
  	}
+@@ -3209,6 +3214,8 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
+ 			}
+ 
+ 			handleDeprecation(depr, spec.Path, path, path, nil)
++		} else if _, ok := knowledge.StdlibDeprecations[path]; ok {
++			handleDeprecation(nil, spec.Path, path, path, nil)
+ 		}
+ 	}
+ 	pass.ResultOf[inspect.Analyzer].(*inspector.Inspector).Nodes(nil, fn)

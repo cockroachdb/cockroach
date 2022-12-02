@@ -4674,3 +4674,39 @@ order by attnum;
 attnum  attname
 1       x
 2       y
+
+# Regression test for not projecting away looked up columns by the left semi
+# virtual lookup join (#91012).
+statement ok
+CREATE TABLE t91012 (id INT, a_id INT);
+
+query I
+SELECT
+	count(*)
+FROM
+	pg_class AS t INNER JOIN pg_attribute AS a ON t.oid = a.attrelid
+WHERE
+	a.attnotnull = 'f'
+	AND a.attname = 'a_id'
+	AND t.relname = 't91012'
+	AND a.atttypid
+		IN (SELECT oid FROM pg_type WHERE typname = ANY (ARRAY['int8']));
+----
+1
+
+# Regression test for incorrectly handling left anti virtual lookup joins
+# (#88096).
+statement ok
+CREATE TYPE mytype AS enum('hello')
+
+query I
+SELECT
+	count(*)
+FROM
+	pg_type AS t
+WHERE
+	t.typrelid = 0
+	AND NOT EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+	AND t.typname LIKE 'myt%'
+----
+1

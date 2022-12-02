@@ -235,9 +235,13 @@ type vTableLookupJoinNode struct {
 
 	// run contains the runtime state of this planNode.
 	run struct {
+		// matched indicates whether the current input row had at least one
+		// match.
+		matched bool
 		// row contains the next row to output.
 		row tree.Datums
-		// rows contains the next rows to output, except for row.
+		// rows contains the next rows to output, except for row. Only allocated
+		// for inner and left outer joins.
 		rows   *rowcontainer.RowContainer
 		keyCtx constraint.KeyContext
 
@@ -257,10 +261,14 @@ var _ rowPusher = &vTableLookupJoinNode{}
 // startExec implements the planNode interface.
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
-	v.run.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
-		colinfo.ColTypeInfoFromResCols(v.columns),
-	)
+	if v.joinType == descpb.InnerJoin || v.joinType == descpb.LeftOuterJoin {
+		v.run.rows = rowcontainer.NewRowContainer(
+			params.p.Mon().MakeBoundAccount(),
+			colinfo.ColTypeInfoFromResCols(v.columns),
+		)
+	} else if v.joinType != descpb.LeftSemiJoin && v.joinType != descpb.LeftAntiJoin {
+		return errors.AssertionFailedf("unexpected join type for virtual lookup join: %s", v.joinType.String())
+	}
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
 	db, err := params.p.Descriptors().GetImmutableDatabaseByName(
@@ -285,7 +293,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 	v.run.params = &params
 	for {
 		// Check if there are any rows left to emit from the last input row.
-		if v.run.rows.Len() > 0 {
+		if v.run.rows != nil && v.run.rows.Len() > 0 {
 			copy(v.run.row, v.run.rows.At(0))
 			v.run.rows.PopFirst(params.ctx)
 			return true, nil
@@ -315,18 +323,38 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		)
 		// Add the input row to the left of the scratch row.
 		v.run.row = append(v.run.row[:0], inputRow...)
+		v.run.matched = false
 		// Finally, we're ready to do the lookup. This invocation will push all of
 		// the looked-up rows into v.run.rows.
 		if err := genFunc(params.ctx, v); err != nil {
 			return false, err
 		}
-		if v.run.rows.Len() == 0 && v.joinType == descpb.LeftOuterJoin {
-			// No matches - construct an outer match.
-			v.run.row = v.run.row[:len(v.inputCols)]
-			for i := len(inputRow); i < len(v.columns); i++ {
-				v.run.row = append(v.run.row, tree.DNull)
+		switch v.joinType {
+		case descpb.LeftOuterJoin:
+			if !v.run.matched {
+				// No matches - construct an outer match.
+				v.run.row = v.run.row[:len(v.inputCols)]
+				for i := len(inputRow); i < len(v.columns); i++ {
+					v.run.row = append(v.run.row, tree.DNull)
+				}
+				return true, nil
 			}
-			return true, nil
+		case descpb.LeftSemiJoin:
+			if v.run.matched {
+				// This input row had a match, so it should be emitted.
+				//
+				// Reset our output row to just the contents of the input row.
+				v.run.row = v.run.row[:len(v.inputCols)]
+				return true, nil
+			}
+		case descpb.LeftAntiJoin:
+			if !v.run.matched {
+				// This input row didn't have a match, so it should be emitted.
+				//
+				// Reset our output row to just the contents of the input row.
+				v.run.row = v.run.row[:len(v.inputCols)]
+				return true, nil
+			}
 		}
 	}
 }
@@ -350,6 +378,12 @@ func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
 	); !ok || err != nil {
 		return err
 	}
+	v.run.matched = true
+	if v.joinType == descpb.LeftSemiJoin || v.joinType == descpb.LeftAntiJoin {
+		// Avoid adding the row into the container since for left semi and left
+		// anti joins we only care to know whether there was a match or not.
+		return nil
+	}
 	_, err := v.run.rows.AddRow(v.run.params.ctx, v.run.row)
 	return err
 }
@@ -362,5 +396,7 @@ func (v *vTableLookupJoinNode) Values() tree.Datums {
 // Close implements the planNode interface.
 func (v *vTableLookupJoinNode) Close(ctx context.Context) {
 	v.input.Close(ctx)
-	v.run.rows.Close(ctx)
+	if v.run.rows != nil {
+		v.run.rows.Close(ctx)
+	}
 }
