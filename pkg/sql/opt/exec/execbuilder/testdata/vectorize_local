@@ -250,13 +250,13 @@ SET tracing = off
 # "querying next range at /Table/109/1/0/0". It's not clear why that happens, so
 # we deduplicate the messages to make the test non-flaky.
 query T rowsort
-SELECT DISTINCT message FROM [SHOW TRACE FOR SESSION]
+SELECT DISTINCT regexp_replace(message, ' \(r.*\)', '') FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at %' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
 querying next range at /Table/109/1/0/0
-=== SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/109/1/10/0
+=== SPAN START: kv.DistSender: sending partial batch ===
 
 # Regression test for #46123 (rowexec.TableReader not implementing
 # execopnode.OpNode interface).

@@ -279,7 +279,7 @@ statement ok
 SET tracing = on,kv; SELECT * FROM system.eventlog AS OF SYSTEM TIME '-1us'; SET tracing = off
 
 query TT
-SELECT operation, message
+SELECT operation, regexp_replace(message, ' \(r.*\)', '')
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
   AND message NOT LIKE '%SystemConfigSpan%'

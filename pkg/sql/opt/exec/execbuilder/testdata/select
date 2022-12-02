@@ -1787,7 +1787,7 @@ SELECT id FROM system.namespace WHERE name='a'
 # was improperly configured to add a limit to the ScanRequest batch.
 # See #30943 for more details.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION]
+SELECT regexp_replace(message, ' \(r.*\)', '') FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at /Table/$t_id3/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
