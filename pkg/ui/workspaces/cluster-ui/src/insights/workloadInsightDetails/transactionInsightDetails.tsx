@@ -23,7 +23,7 @@ import { TxnInsightDetails } from "../types";
 import { commonStyles } from "src/common";
 import { InsightsError } from "../insightsErrorComponent";
 import { TimeScale } from "../../timeScaleDropdown";
-import { executionIdAttr } from "src/util";
+import { idAttr } from "src/util";
 import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
 
@@ -60,7 +60,7 @@ export const TransactionInsightDetails: React.FC<
   insightError,
   match,
 }) => {
-  const executionID = getMatchParamByName(match, executionIdAttr);
+  const executionID = getMatchParamByName(match, idAttr);
   const noInsights = !insightDetails;
   useEffect(() => {
     if (noInsights) {
@@ -90,7 +90,7 @@ export const TransactionInsightDetails: React.FC<
         <h3
           className={commonStyles("base-heading", "no-margin-bottom")}
         >{`Transaction Execution ID: ${String(
-          getMatchParamByName(match, executionIdAttr),
+          getMatchParamByName(match, idAttr),
         )}`}</h3>
       </div>
       <section>

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -150,48 +149,6 @@ func initializeClusterSecret(
 	return err
 }
 
-func retireOldTsPurgeIntervalSettings(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.SystemDeps,
-) error {
-	// We are going to deprecate `timeseries.storage.10s_resolution_ttl`
-	// into `timeseries.storage.resolution_10s.ttl` if the latter is not
-	// defined.
-	//
-	// Ditto for the `30m` resolution.
-
-	// Copy 'timeseries.storage.10s_resolution_ttl' into
-	// 'timeseries.storage.resolution_10s.ttl' if the former is defined
-	// and the latter is not defined yet.
-	//
-	// We rely on the SELECT returning no row if the original setting
-	// was not defined, and INSERT ON CONFLICT DO NOTHING to ignore the
-	// insert if the new name was already set.
-	_, err := deps.InternalExecutor.Exec(ctx, "copy-setting", nil, /* txn */
-		`
-INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
-   SELECT 'timeseries.storage.resolution_10s.ttl', value, "lastUpdated", "valueType"
-     FROM system.settings WHERE name = 'timeseries.storage.10s_resolution_ttl'
-ON CONFLICT (name) DO NOTHING`,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Ditto 30m.
-	_, err = deps.InternalExecutor.Exec(ctx, "copy-setting", nil, /* txn */
-		`
-INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
-   SELECT 'timeseries.storage.resolution_30m.ttl', value, "lastUpdated", "valueType"
-     FROM system.settings WHERE name = 'timeseries.storage.30m_resolution_ttl'
-ON CONFLICT (name) DO NOTHING`,
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func updateSystemLocationData(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
@@ -221,47 +178,6 @@ func updateSystemLocationData(
 		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func disallowPublicUserOrRole(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
-) error {
-	// Check whether a user or role named "public" exists.
-	const selectPublicStmt = `
-          SELECT username, "isRole" from system.users WHERE username = $1
-          `
-
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		row, err := deps.InternalExecutor.QueryRowEx(
-			ctx, "disallowPublicUserOrRole", nil, /* txn */
-			sessiondata.InternalExecutorOverride{
-				User: username.RootUserName(),
-			},
-			selectPublicStmt, username.PublicRole,
-		)
-		if err != nil {
-			continue
-		}
-		if row == nil {
-			// No such user.
-			return nil
-		}
-
-		isRole, ok := tree.AsDBool(row[1])
-		if !ok {
-			log.Fatalf(ctx, "expected 'isRole' column of system.users to be of type bool, got %v", row)
-		}
-
-		if isRole {
-			return fmt.Errorf(`found a role named %s which is now a reserved name. Please drop the role `+
-				`(DROP ROLE %s) using a previous version of CockroachDB and try again`,
-				username.PublicRole, username.PublicRole)
-		}
-		return fmt.Errorf(`found a user named %s which is now a reserved name. Please drop the role `+
-			`(DROP USER %s) using a previous version of CockroachDB and try again`,
-			username.PublicRole, username.PublicRole)
 	}
 	return nil
 }

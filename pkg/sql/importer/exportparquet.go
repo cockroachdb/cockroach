@@ -605,7 +605,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 				if elt.ResolvedType().Family() == types.UnknownFamily {
 					// skip encoding the datum
 				} else {
-					el, err = grandChild.encodeFn(elt)
+					el, err = grandChild.encodeFn(tree.UnwrapDOidWrapper(elt))
 					if err != nil {
 						return col, err
 					}

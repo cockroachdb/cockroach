@@ -815,10 +815,39 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// all nodes in the cluster.
 	// The collector requires nodeliveness to get a list of all the nodes in the
 	// cluster.
-	var traceCollector *collector.TraceCollector
-	if hasNodeLiveness {
-		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Tracer)
+	var getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
+	var nodeDialer *nodedialer.Dialer
+	if !isSQLPod {
+		nodeDialer = cfg.nodeDialer
+		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
+			var ns []roachpb.NodeID
+			ls, err := nodeLiveness.GetLivenessesFromKV(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, l := range ls {
+				if l.Membership.Decommissioned() {
+					continue
+				}
+				ns = append(ns, l.NodeID)
+			}
+			return ns, nil
+		}
+	} else {
+		nodeDialer = cfg.podNodeDialer
+		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
+			instances, err := cfg.sqlInstanceReader.GetAllInstances(ctx)
+			if err != nil {
+				return nil, err
+			}
+			instanceIDs := make([]roachpb.NodeID, len(instances))
+			for i, instance := range instances {
+				instanceIDs[i] = roachpb.NodeID(instance.InstanceID)
+			}
+			return instanceIDs, err
+		}
 	}
+	traceCollector := collector.New(cfg.Tracer, getNodes, nodeDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 

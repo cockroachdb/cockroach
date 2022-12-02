@@ -73,30 +73,16 @@ var upgrades = []upgradebase.Upgrade{
 		toCV(clusterversion.VPrimordial4),
 		initializeClusterSecret,
 	),
-	// Introduced in v19.1.
-	// TODO(knz): bake this migration into v19.2.
-	upgrade.NewPermanentSystemUpgrade(
-		"propagate the ts purge interval to the new setting names",
-		toCV(clusterversion.VPrimordial5),
-		retireOldTsPurgeIntervalSettings,
-	),
 	upgrade.NewPermanentTenantUpgrade(
 		"update system.locations with default location data",
-		toCV(clusterversion.VPrimordial6),
+		toCV(clusterversion.VPrimordial5),
 		updateSystemLocationData,
-	),
-	// Introduced in v2.1.
-	// TODO(mberhault): bake into v19.1.
-	upgrade.NewPermanentTenantUpgrade(
-		"disallow public user or role name",
-		toCV(clusterversion.VPrimordial7),
-		disallowPublicUserOrRole,
 	),
 	// Introduced in v2.1.
 	// TODO(knz): bake this migration into v19.1.
 	upgrade.NewPermanentTenantUpgrade(
 		"create default databases",
-		toCV(clusterversion.VPrimordial8),
+		toCV(clusterversion.VPrimordial6),
 		createDefaultDbs,
 	),
 	upgrade.NewTenantUpgrade(

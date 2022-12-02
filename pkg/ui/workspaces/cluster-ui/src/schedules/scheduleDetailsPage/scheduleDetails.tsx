@@ -20,8 +20,7 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
-import { getMatchParamByName } from "src/util/query";
+import { DATE_FORMAT_24_UTC, idAttr, getMatchParamByName } from "src/util";
 
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
@@ -47,7 +46,7 @@ export type ScheduleDetailsProps = ScheduleDetailsStateProps &
   RouteComponentProps<unknown>;
 
 export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
-  const idStr = getMatchParamByName(props.match, "id");
+  const idStr = getMatchParamByName(props.match, idAttr);
   const { refreshSchedule } = props;
   useEffect(() => {
     refreshSchedule(Long.fromString(idStr));

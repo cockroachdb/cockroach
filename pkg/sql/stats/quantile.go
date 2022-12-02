@@ -116,7 +116,7 @@ func canMakeQuantile(version HistogramVersion, colType *types.T) bool {
 		return false
 	}
 
-	if colType.UserDefined() {
+	if colType == nil || colType.UserDefined() {
 		return false
 	}
 	switch colType.Family() {
