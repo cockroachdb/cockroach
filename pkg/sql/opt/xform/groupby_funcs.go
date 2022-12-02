@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -33,9 +34,12 @@ func (c *CustomFuncs) IsCanonicalGroupBy(private *memo.GroupingPrivate) bool {
 // expressions (aggs) and a scanPrivate into multiple scalar subqueries, with
 // one MIN or MAX expression per subquery.
 func (c *CustomFuncs) MakeMinMaxScalarSubqueries(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, aggs memo.AggregationsExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	scanPrivate *memo.ScanPrivate,
+	aggs memo.AggregationsExpr,
 ) {
-	c.MakeMinMaxScalarSubqueriesWithFilter(grp, scanPrivate, aggs, nil)
+	c.MakeMinMaxScalarSubqueriesWithFilter(grp, required, scanPrivate, aggs, nil)
 }
 
 // MakeMinMaxScalarSubqueriesWithFilter transforms a list of MIN and MAX aggregate
@@ -43,6 +47,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueries(
 // subqueries, with one MIN or MAX expression per subquery.
 func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 	grp memo.RelExpr,
+	required *physical.Required,
 	scanPrivate *memo.ScanPrivate,
 	aggs memo.AggregationsExpr,
 	filters memo.FiltersExpr,
@@ -148,7 +153,7 @@ func (c *CustomFuncs) TwoOrMoreMinOrMax(aggs memo.AggregationsExpr) bool {
 // input expression is expected to return zero or one rows, and the aggregate
 // functions are expected to always pass through their values in that case.
 func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
-	grp memo.RelExpr, input memo.RelExpr, aggs memo.AggregationsExpr,
+	grp memo.RelExpr, required *physical.Required, input memo.RelExpr, aggs memo.AggregationsExpr,
 ) {
 	if !input.Relational().Cardinality.IsZeroOrOne() {
 		panic(errors.AssertionFailedf("input expression cannot have more than one row: %v", input))
@@ -220,6 +225,7 @@ func (c *CustomFuncs) GroupingColsClosureOverlappingOrdering(
 // `newOrdering`. Argument `private` is expected to be a canonical group-by.
 func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
 	grp memo.RelExpr,
+	required *physical.Required,
 	limitExpr *memo.LimitExpr,
 	aggregation memo.RelExpr,
 	input memo.RelExpr,
@@ -302,6 +308,7 @@ func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
 // orderings property. See the GenerateStreamingGroupBy rule.
 func (c *CustomFuncs) GenerateStreamingGroupBy(
 	grp memo.RelExpr,
+	required *physical.Required,
 	op opt.Operator,
 	input memo.RelExpr,
 	aggs memo.AggregationsExpr,
@@ -500,15 +507,16 @@ func (c *CustomFuncs) MakeGroupingPrivate(
 // GenerateIndexScans, which does not construct an IndexJoin.
 func (c *CustomFuncs) GenerateLimitedGroupByScans(
 	grp memo.RelExpr,
+	required *physical.Required,
 	sp *memo.ScanPrivate,
 	aggs memo.AggregationsExpr,
 	gp *memo.GroupingPrivate,
 	limit opt.ScalarExpr,
-	required props.OrderingChoice,
+	requiredOrdering props.OrderingChoice,
 ) {
-	// If the required ordering and grouping columns do not share columns, then
-	// this optimization is not beneficial.
-	if !required.Any() && !required.Group(0).Intersects(gp.GroupingCols) && !required.Optional.Intersects(gp.GroupingCols) {
+	// If the requiredOrdering ordering and grouping columns do not share columns,
+	// then this optimization is not beneficial.
+	if !requiredOrdering.Any() && !requiredOrdering.Group(0).Intersects(gp.GroupingCols) && !requiredOrdering.Optional.Intersects(gp.GroupingCols) {
 		return
 	}
 	// Iterate over all non-inverted and non-partial secondary indexes.
@@ -552,9 +560,9 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 			return
 		}
 
-		// If the index doesn't contain any of the required order columns, then
+		// If the index doesn't contain any of the requiredOrdering order columns, then
 		// there is no benefit to exploring this index.
-		if !required.Any() && !required.Group(0).Intersects(indexCols) {
+		if !requiredOrdering.Any() && !requiredOrdering.Group(0).Intersects(indexCols) {
 			return
 		}
 
@@ -574,6 +582,6 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		// Reconstruct the GroupBy and Limit so the new expression in the memo is
 		// equivalent.
 		input = c.e.f.ConstructGroupBy(input, aggs, gp)
-		grp.Memo().AddLimitToGroup(&memo.LimitExpr{Limit: limit, Ordering: required, Input: input}, grp)
+		grp.Memo().AddLimitToGroup(&memo.LimitExpr{Limit: limit, Ordering: requiredOrdering, Input: input}, grp)
 	})
 }

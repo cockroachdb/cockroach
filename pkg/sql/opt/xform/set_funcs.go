@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,6 +31,7 @@ func (c *CustomFuncs) IsCanonicalSetOp(private *memo.SetPrivate) bool {
 // See the GenerateStreamingSetOp rule.
 func (c *CustomFuncs) GenerateStreamingSetOp(
 	grp memo.RelExpr,
+	required *physical.Required,
 	op opt.Operator,
 	left memo.RelExpr,
 	right memo.RelExpr,
