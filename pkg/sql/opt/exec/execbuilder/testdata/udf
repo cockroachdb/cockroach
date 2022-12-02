@@ -102,9 +102,9 @@ statement ok
 CREATE TABLE t93210 (
   a INT PRIMARY KEY
 );
-CREATE FUNCTION fn93210() RETURNS INT STABLE LANGUAGE SQL AS 'SELECT a FROM t93210';
+CREATE FUNCTION fn93210() RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a FROM t93210';
 
-# The body of the UDF should have no assignment cast expressions.
+# The query plan should have no assignment cast expressions.
 query T
 EXPLAIN (OPT, TYPES)
 SELECT fn93210()
@@ -112,7 +112,7 @@ SELECT fn93210()
 values
  ├── columns: fn93210:4(int)
  ├── cardinality: [1 - 1]
- ├── stable
+ ├── volatile
  ├── stats: [rows=1]
  ├── cost: 0.02
  ├── key: ()
@@ -138,7 +138,7 @@ values
 # Regression test for #88259. Arguments to UDFs should be formatted correctly in
 # EXPLAIN output.
 statement ok
-CREATE FUNCTION f88259(a INT, b INT) RETURNS INT LANGUAGE SQL IMMUTABLE STRICT AS $$
+CREATE FUNCTION f88259(a INT, b INT) RETURNS INT LANGUAGE SQL VOLATILE STRICT AS $$
   SELECT a + b
 $$
 
