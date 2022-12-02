@@ -1,2 +1,2 @@
 alter_func_dep_extension_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
+	'ALTER' 'FUNCTION' function_with_paramtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name

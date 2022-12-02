@@ -267,20 +267,20 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 	}, nil
 }
 
-// MatchOverload searches an overload which takes exactly the same input
-// argument types. The overload from the most significant schema is returned. If
-// argTypes==nil, an error is returned if the function name is not unique in the
-// most significant schema. If argTypes is not nil, an error with
+// MatchOverload searches an overload which has exactly the same parameter
+// types. The overload from the most significant schema is returned. If
+// paramTypes==nil, an error is returned if the function name is not unique in
+// the most significant schema. If paramTypes is not nil, an error with
 // ErrFunctionUndefined cause is returned if not matched found.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	argTypes []*types.T, explicitSchema string, searchPath SearchPath,
+	paramTypes []*types.T, explicitSchema string, searchPath SearchPath,
 ) (QualifiedOverload, error) {
 	matched := func(ol QualifiedOverload, schema string) bool {
-		return schema == ol.Schema && (argTypes == nil || ol.params().Match(argTypes))
+		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
 	}
 	typeNames := func() string {
-		ns := make([]string, len(argTypes))
-		for i, t := range argTypes {
+		ns := make([]string, len(paramTypes))
+		for i, t := range paramTypes {
 			ns[i] = t.Name()
 		}
 		return strings.Join(ns, ",")

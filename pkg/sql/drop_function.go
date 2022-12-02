@@ -114,11 +114,11 @@ func (p *planner) matchUDF(
 		return nil, err
 	}
 
-	argTypes, err := fn.InputArgTypes(ctx, p)
+	paramTypes, err := fn.ParamTypes(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	ol, err := fnDef.MatchOverload(argTypes, fn.FuncName.Schema(), &path)
+	ol, err := fnDef.MatchOverload(paramTypes, fn.FuncName.Schema(), &path)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrFunctionUndefined) {
 			return nil, nil

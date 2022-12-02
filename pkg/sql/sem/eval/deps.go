@@ -225,10 +225,10 @@ type Planner interface {
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)
 
-	// EvalRoutineExpr evaluates a routine with the given input datums and
+	// EvalRoutineExpr evaluates a routine with the given argument datums and
 	// returns the resulting datum.
 	EvalRoutineExpr(
-		ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
+		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 	) (tree.Datum, error)
 
 	// UnsafeUpsertDescriptor is used to repair descriptors in dire

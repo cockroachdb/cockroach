@@ -2425,18 +2425,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						var argNames tree.Datum
 						argNamesArray := tree.NewDArray(types.String)
 						foundAnyArgNames := false
-						for _, arg := range fnDesc.GetArgs() {
-							if err := argTypes.Append(tree.NewDOid(arg.Type.Oid())); err != nil {
+						for _, param := range fnDesc.GetParams() {
+							if err := argTypes.Append(tree.NewDOid(param.Type.Oid())); err != nil {
 								return err
 							}
 							// We only support IN arguments at the moment.
 							if err := argModes.Append(tree.NewDString("i")); err != nil {
 								return err
 							}
-							if len(arg.Name) > 0 {
+							if len(param.Name) > 0 {
 								foundAnyArgNames = true
 							}
-							if err := argNamesArray.Append(tree.NewDString(arg.Name)); err != nil {
+							if err := argNamesArray.Append(tree.NewDString(param.Name)); err != nil {
 								return err
 							}
 						}
@@ -2465,19 +2465,19 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset
 							tree.NewDString(funcVolatility(fnDesc.GetVolatility())),      // provolatile
 							tree.DNull, // proparallel
-							tree.NewDInt(tree.DInt(len(fnDesc.GetArgs()))),  // pronargs
-							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
-							tree.NewDOid(fnDesc.GetReturnType().Type.Oid()), // prorettype
-							tree.NewDOidVectorFromDArray(argTypes),          // proargtypes
-							tree.DNull,                                      // proallargtypes
-							argModes,                                        // proargmodes
-							argNames,                                        // proargnames
-							tree.DNull,                                      // proargdefaults
-							tree.DNull,                                      // protrftypes
-							tree.NewDString(fnDesc.GetFunctionBody()),       // prosrc
-							tree.DNull,                                      // probin
-							tree.DNull,                                      // proconfig
-							tree.DNull,                                      // proacl
+							tree.NewDInt(tree.DInt(len(fnDesc.GetParams()))), // pronargs
+							tree.NewDInt(tree.DInt(0)),                       // pronargdefaults
+							tree.NewDOid(fnDesc.GetReturnType().Type.Oid()),  // prorettype
+							tree.NewDOidVectorFromDArray(argTypes),           // proargtypes
+							tree.DNull,                                       // proallargtypes
+							argModes,                                         // proargmodes
+							argNames,                                         // proargnames
+							tree.DNull,                                       // proargdefaults
+							tree.DNull,                                       // protrftypes
+							tree.NewDString(fnDesc.GetFunctionBody()),        // prosrc
+							tree.DNull,                                       // probin
+							tree.DNull,                                       // proconfig
+							tree.DNull,                                       // proacl
 							// These columns were automatically created by pg_catalog_test's missing column generator.
 							tree.DNull, // prokind
 							tree.DNull, // prosupport

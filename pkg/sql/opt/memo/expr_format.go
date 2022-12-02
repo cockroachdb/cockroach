@@ -926,11 +926,11 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 ) {
 	formatUDFInputAndBody := func(udf *UDFExpr, tp treeprinter.Node) {
 		var n treeprinter.Node
-		if len(udf.ArgCols) > 0 {
-			f.formatColList(tp, "args:", udf.ArgCols, opt.ColSet{} /* notNullCols */)
-			n = tp.Child("input")
-			for i := range udf.Input {
-				f.formatExpr(udf.Input[i], n)
+		if len(udf.Params) > 0 {
+			f.formatColList(tp, "params:", udf.Params, opt.ColSet{} /* notNullCols */)
+			n = tp.Child("args")
+			for i := range udf.Args {
+				f.formatExpr(udf.Args[i], n)
 			}
 		}
 		n = tp.Child("body")

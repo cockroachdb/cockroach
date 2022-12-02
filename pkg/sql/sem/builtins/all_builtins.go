@@ -134,7 +134,7 @@ func getCategory(b []tree.Overload) string {
 	// If single argument attempt to categorize by the type of the argument.
 	for _, ovl := range b {
 		switch typ := ovl.Types.(type) {
-		case tree.ArgTypes:
+		case tree.ParamTypes:
 			if len(typ) == 1 {
 				return categorizeType(typ[0].Typ)
 			}

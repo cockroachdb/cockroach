@@ -10294,7 +10294,7 @@ $$;
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100108, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
@@ -10351,7 +10351,7 @@ $$;
 		require.Equal(t, 114, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
 		require.Equal(t, "SELECT a FROM db1_new.sc1.tbl1;\nSELECT nextval(118:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100116, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100116, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{115, 118}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
 
@@ -10441,7 +10441,7 @@ $$;
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100108, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
@@ -10500,7 +10500,7 @@ $$;
 		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100127, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100127, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{126, 129}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
 

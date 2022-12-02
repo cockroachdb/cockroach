@@ -34,7 +34,7 @@ var trigramBuiltins = map[string]builtinDefinition{
 	"similarity": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryTrigram},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"left", types.String}, {"right", types.String}},
+			Types:      tree.ParamTypes{{"left", types.String}, {"right", types.String}},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				l, r := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
@@ -51,7 +51,7 @@ var trigramBuiltins = map[string]builtinDefinition{
 	"show_trgm": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryTrigram},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"input", types.String}},
+			Types:      tree.ParamTypes{{"input", types.String}},
 			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))

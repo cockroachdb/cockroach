@@ -379,7 +379,7 @@ grant_targets ::=
 	| 'TABLE' table_pattern_list
 	| 'DATABASE' name_list
 	| 'EXTERNAL' 'CONNECTION' name_list
-	| 'FUNCTION' function_with_argtypes_list
+	| 'FUNCTION' function_with_paramtypes_list
 
 role_spec_list ::=
 	( role_spec ) ( ( ',' role_spec ) )*
@@ -1497,8 +1497,8 @@ table_pattern ::=
 	simple_db_object_name
 	| complex_table_pattern
 
-function_with_argtypes_list ::=
-	( function_with_argtypes ) ( ( ',' function_with_argtypes ) )*
+function_with_paramtypes_list ::=
+	( function_with_paramtypes ) ( ( ',' function_with_paramtypes ) )*
 
 privilege ::=
 	name
@@ -1732,7 +1732,7 @@ create_sequence_stmt ::=
 	| 'CREATE' opt_temp 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
 
 create_func_stmt ::=
-	'CREATE' opt_or_replace 'FUNCTION' func_create_name '(' opt_func_arg_with_default_list ')' 'RETURNS' opt_return_set func_return_type opt_create_func_opt_list opt_routine_body
+	'CREATE' opt_or_replace 'FUNCTION' func_create_name '(' opt_func_param_with_default_list ')' 'RETURNS' opt_return_set func_return_type opt_create_func_opt_list opt_routine_body
 
 statistics_name ::=
 	name
@@ -1832,8 +1832,8 @@ drop_type_stmt ::=
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
 
 drop_func_stmt ::=
-	'DROP' 'FUNCTION' function_with_argtypes_list opt_drop_behavior
-	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_argtypes_list opt_drop_behavior
+	'DROP' 'FUNCTION' function_with_paramtypes_list opt_drop_behavior
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_paramtypes_list opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
@@ -2019,8 +2019,8 @@ unrestricted_name ::=
 	| type_func_name_keyword
 	| reserved_keyword
 
-function_with_argtypes ::=
-	db_object_name func_args
+function_with_paramtypes ::=
+	db_object_name func_params
 	| db_object_name
 
 typename ::=
@@ -2225,19 +2225,19 @@ alter_backup_cmds ::=
 	( alter_backup_cmd ) ( ( alter_backup_cmd ) )*
 
 alter_func_options_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes alter_func_opt_list opt_restrict
+	'ALTER' 'FUNCTION' function_with_paramtypes alter_func_opt_list opt_restrict
 
 alter_func_rename_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes 'RENAME' 'TO' name
+	'ALTER' 'FUNCTION' function_with_paramtypes 'RENAME' 'TO' name
 
 alter_func_owner_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes 'OWNER' 'TO' role_spec
+	'ALTER' 'FUNCTION' function_with_paramtypes 'OWNER' 'TO' role_spec
 
 alter_func_set_schema_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes 'SET' 'SCHEMA' schema_name
+	'ALTER' 'FUNCTION' function_with_paramtypes 'SET' 'SCHEMA' schema_name
 
 alter_func_dep_extension_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
+	'ALTER' 'FUNCTION' function_with_paramtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
 
 alter_backup_schedule_cmds ::=
 	( alter_backup_schedule_cmd ) ( ( ',' alter_backup_schedule_cmd ) )*
@@ -2459,8 +2459,8 @@ opt_or_replace ::=
 func_create_name ::=
 	db_object_name
 
-opt_func_arg_with_default_list ::=
-	func_arg_with_default_list
+opt_func_param_with_default_list ::=
+	func_param_with_default_list
 	| 
 
 opt_return_set ::=
@@ -2468,7 +2468,7 @@ opt_return_set ::=
 	| 
 
 func_return_type ::=
-	func_arg_type
+	func_param_type
 
 opt_create_func_opt_list ::=
 	create_func_opt_list
@@ -2728,8 +2728,8 @@ reserved_keyword ::=
 	| 'WITH'
 	| cockroachdb_extra_reserved_keyword
 
-func_args ::=
-	'(' func_args_list ')'
+func_params ::=
+	'(' func_params_list ')'
 	| '(' ')'
 
 simple_typename ::=
@@ -3046,10 +3046,10 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
-func_arg_with_default_list ::=
-	( func_arg_with_default ) ( ( ',' func_arg_with_default ) )*
+func_param_with_default_list ::=
+	( func_param_with_default ) ( ( ',' func_param_with_default ) )*
 
-func_arg_type ::=
+func_param_type ::=
 	typename
 
 create_func_opt_list ::=
@@ -3204,8 +3204,8 @@ type_func_name_no_crdb_extra_keyword ::=
 	| 'RIGHT'
 	| 'SIMILAR'
 
-func_args_list ::=
-	( func_arg ) ( ( ',' func_arg ) )*
+func_params_list ::=
+	( func_param ) ( ( ',' func_param ) )*
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
@@ -3460,10 +3460,10 @@ family_def ::=
 create_as_constraint_def ::=
 	create_as_constraint_elem
 
-func_arg_with_default ::=
-	func_arg
-	| func_arg 'DEFAULT' a_expr
-	| func_arg '=' a_expr
+func_param_with_default ::=
+	func_param
+	| func_param 'DEFAULT' a_expr
+	| func_param '=' a_expr
 
 create_func_opt_item ::=
 	'AS' func_as
@@ -3570,12 +3570,12 @@ opt_nowait_or_skip ::=
 wildcard_pattern ::=
 	name '.' '*'
 
-func_arg ::=
-	func_arg_class param_name func_arg_type
-	| param_name func_arg_class func_arg_type
-	| param_name func_arg_type
-	| func_arg_class func_arg_type
-	| func_arg_type
+func_param ::=
+	func_param_class param_name func_param_type
+	| param_name func_param_class func_param_type
+	| param_name func_param_type
+	| func_param_class func_param_type
+	| func_param_type
 
 opt_column ::=
 	'COLUMN'
@@ -3801,7 +3801,7 @@ group_by_item ::=
 window_definition ::=
 	window_name 'AS' window_specification
 
-func_arg_class ::=
+func_param_class ::=
 	'IN'
 
 param_name ::=

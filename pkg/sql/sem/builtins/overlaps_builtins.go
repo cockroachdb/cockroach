@@ -27,7 +27,7 @@ import (
 // overlapsOverloadVolatility is to define a certain overload for the overlaps
 // builtin, and also the function's volatility for this overload.
 type overlapsOverloadVolatility struct {
-	argTypes   []*types.T
+	paramTypes []*types.T
 	volatility volatility.V
 }
 
@@ -67,11 +67,11 @@ var overlapsBuiltins = map[string]builtinDefinition{
 func makeOverlapsOverloads() []tree.Overload {
 	var res []tree.Overload
 	for _, in := range validOverlapsOverloadVolatility {
-		args := in.argTypes
-		s1, e1, s2, e2 := args[0], args[1], args[2], args[3]
+		params := in.paramTypes
+		s1, e1, s2, e2 := params[0], params[1], params[2], params[3]
 		res = append(res,
 			tree.Overload{
-				Types: tree.ArgTypes{
+				Types: tree.ParamTypes{
 					{"s1", s1},
 					{"e1", e1},
 					{"s1", s2},

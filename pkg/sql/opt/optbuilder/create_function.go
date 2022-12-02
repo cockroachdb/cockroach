@@ -96,20 +96,20 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	var typeDeps opt.SchemaTypeDeps
 
 	// bodyScope is the base scope for each statement in the body. We add the
-	// named arguments to the scope so that references to them in the body can
+	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
-	for i := range cf.Args {
-		arg := &cf.Args[i]
-		typ, err := tree.ResolveType(b.ctx, arg.Type, b.semaCtx.TypeResolver)
+	for i := range cf.Params {
+		param := &cf.Params[i]
+		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
 		}
 
-		// Add the argument to the base scope of the body.
-		argColName := funcArgColName(arg.Name, i)
-		col := b.synthesizeColumn(bodyScope, argColName, typ, nil /* expr */, nil /* scalar */)
-		col.setArgOrd(i)
+		// Add the parameter to the base scope of the body.
+		paramColName := funcParamColName(param.Name, i)
+		col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
+		col.setParamOrd(i)
 
 		// Collect the user defined type dependencies.
 		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)

@@ -57,12 +57,12 @@ type scopeColumn struct {
 	// This field is only used for ordering columns.
 	descending bool
 
-	// funcArgOrd is the 1-based ordinal of the argument of the function that
+	// paramOrd is the 1-based ordinal of the parameter of the function that
 	// the column corresponds to. It is used to resolve placeholders (e.g., $1)
 	// in function bodies that are references to function arguments. If the
-	// column does not represent a function argument, then argOrd is the zero
+	// column does not represent a function parameter, then paramOrd is the zero
 	// value.
-	argOrd funcArgOrd
+	paramOrd funcParamOrd
 
 	// scalar is the scalar expression associated with this column. If it is nil,
 	// then the column is a passthrough from an inner scope or a table column.
@@ -116,29 +116,29 @@ func (cv columnVisibility) String() string {
 	}
 }
 
-// maxFuncArgs is the maximum number of arguments allowed in a function.
-const maxFuncArgs = 100
+// maxFuncParams is the maximum number of parameters allowed in a function.
+const maxFuncParams = 100
 
-// funcArgOrd is a 1-based ordinal of a function argument.
-type funcArgOrd int8
+// funcParamOrd is a 1-based ordinal of a function parameter.
+type funcParamOrd int8
 
-// setArgOrd sets the column's 1-based function argument ordinal to the given
+// setParamOrd sets the column's 1-based function parameter ordinal to the given
 // 0-based ordinal. Panics if the given ordinal is not in the range
-// [0, maxFuncArgs).
-func (c *scopeColumn) setArgOrd(ord int) {
+// [0, maxFuncParams).
+func (c *scopeColumn) setParamOrd(ord int) {
 	if ord < 0 {
 		panic(errors.AssertionFailedf("expected non-negative argument ordinal"))
 	}
-	if ord >= maxFuncArgs {
+	if ord >= maxFuncParams {
 		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
 	}
-	c.argOrd = funcArgOrd(ord + 1)
+	c.paramOrd = funcParamOrd(ord + 1)
 }
 
-// funcArgReferencedBy returns true if the scopeColumn is a function argument
+// funcParamReferencedBy returns true if the scopeColumn is a function parameter
 // column that can be referenced by the given placeholder.
-func (c *scopeColumn) funcArgReferencedBy(idx tree.PlaceholderIdx) bool {
-	return c.argOrd > 0 && tree.PlaceholderIdx(c.argOrd-1) == idx
+func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {
+	return c.paramOrd > 0 && tree.PlaceholderIdx(c.paramOrd-1) == idx
 }
 
 // clearName sets the empty table and column name. This is used to make the
@@ -275,12 +275,12 @@ func scopeColName(name tree.Name) scopeColumnName {
 	}
 }
 
-// funcArgColName creates a scopeColumnName that can be referenced by the given
+// funcParamColName creates a scopeColumnName that can be referenced by the given
 // name and will be added to the metadata with the given name, if the given name
 // is not empty. If the given name is empty, the returned scopeColumnName
 // represents an anonymous function argument that cannot be referenced, and it
 // will be added to the metadata with the descriptive name "arg<ord>".
-func funcArgColName(name tree.Name, ord int) scopeColumnName {
+func funcParamColName(name tree.Name, ord int) scopeColumnName {
 	alias := string(name)
 	if alias == "" {
 		alias = fmt.Sprintf("arg%d", ord+1)

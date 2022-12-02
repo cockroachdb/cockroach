@@ -298,32 +298,30 @@ type TypeList interface {
 	String() string
 }
 
-var _ TypeList = ArgTypes{}
+var _ TypeList = ParamTypes{}
 var _ TypeList = HomogeneousType{}
 var _ TypeList = VariadicType{}
 
-// ArgTypes is very similar to ArgTypes except it allows keeping a string
-// name for each argument as well and using those when printing the
-// human-readable signature.
-// TODO(chengxiong): change ArgTypes to []ArgType.
-type ArgTypes []struct {
+// ParamTypes is a list of function parameter names and their types.
+// TODO(chengxiong): change ParamTypes to []ParamType.
+type ParamTypes []struct {
 	Name string
 	Typ  *types.T
 }
 
-// ArgType encapsulate an argument name and type.
-type ArgType struct {
+// ParamType encapsulate a function parameter name and type.
+type ParamType struct {
 	Name string
 	Typ  *types.T
 }
 
 // Match is part of the TypeList interface.
-func (a ArgTypes) Match(types []*types.T) bool {
-	if len(types) != len(a) {
+func (p ParamTypes) Match(types []*types.T) bool {
+	if len(types) != len(p) {
 		return false
 	}
 	for i := range types {
-		if !a.MatchAt(types[i], i) {
+		if !p.MatchAt(types[i], i) {
 			return false
 		}
 	}
@@ -331,58 +329,58 @@ func (a ArgTypes) Match(types []*types.T) bool {
 }
 
 // MatchAt is part of the TypeList interface.
-func (a ArgTypes) MatchAt(typ *types.T, i int) bool {
+func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
-	// routines before getting here, so we only need to check if the argument
-	// type is a types.TUPLE below. This allows us to avoid defining overloads
+	// routines before getting here, so we only need to check if the parameter
+	// type is p types.TUPLE below. This allows us to avoid defining overloads
 	// for types.Tuple{}, types.Tuple{types.Any}, types.Tuple{types.Any, types.Any},
 	// etc. for Tuple operators.
 	if typ.Family() == types.TupleFamily {
 		typ = types.AnyTuple
 	}
-	return i < len(a) && (typ.Family() == types.UnknownFamily || a[i].Typ.Equivalent(typ))
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Equivalent(typ))
 }
 
 // MatchLen is part of the TypeList interface.
-func (a ArgTypes) MatchLen(l int) bool {
-	return len(a) == l
+func (p ParamTypes) MatchLen(l int) bool {
+	return len(p) == l
 }
 
 // GetAt is part of the TypeList interface.
-func (a ArgTypes) GetAt(i int) *types.T {
-	return a[i].Typ
+func (p ParamTypes) GetAt(i int) *types.T {
+	return p[i].Typ
 }
 
 // SetAt is part of the TypeList interface.
-func (a ArgTypes) SetAt(i int, name string, t *types.T) {
-	a[i].Name = name
-	a[i].Typ = t
+func (p ParamTypes) SetAt(i int, name string, t *types.T) {
+	p[i].Name = name
+	p[i].Typ = t
 }
 
 // Length is part of the TypeList interface.
-func (a ArgTypes) Length() int {
-	return len(a)
+func (p ParamTypes) Length() int {
+	return len(p)
 }
 
 // Types is part of the TypeList interface.
-func (a ArgTypes) Types() []*types.T {
-	n := len(a)
+func (p ParamTypes) Types() []*types.T {
+	n := len(p)
 	ret := make([]*types.T, n)
-	for i, s := range a {
+	for i, s := range p {
 		ret[i] = s.Typ
 	}
 	return ret
 }
 
-func (a ArgTypes) String() string {
+func (p ParamTypes) String() string {
 	var s strings.Builder
-	for i, arg := range a {
+	for i, param := range p {
 		if i > 0 {
 			s.WriteString(", ")
 		}
-		s.WriteString(arg.Name)
+		s.WriteString(param.Name)
 		s.WriteString(": ")
-		s.WriteString(arg.Typ.String())
+		s.WriteString(param.Typ.String())
 	}
 	return s.String()
 }

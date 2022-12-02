@@ -658,25 +658,26 @@ func (b *Builder) addSubquery(
 func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
 	udf := scalar.(*memo.UDFExpr)
 
-	// Build the input expressions.
+	// Build the argument expressions.
 	var err error
-	var inputExprs tree.TypedExprs
-	if len(udf.Input) > 0 {
-		inputExprs = make(tree.TypedExprs, len(udf.Input))
-		for i := range udf.Input {
-			inputExprs[i], err = b.buildScalar(ctx, udf.Input[i])
+	var args tree.TypedExprs
+	if len(udf.Args) > 0 {
+		args = make(tree.TypedExprs, len(udf.Args))
+		for i := range udf.Args {
+			args[i], err = b.buildScalar(ctx, udf.Args[i])
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	// argOrd returns the ordinal of the arguments that the given column ID
-	// represents. If the column does not represent an argument, then ok=false
-	// is returned.
+	// argOrd returns the ordinal of the argument within the arguments list that
+	// can be substituted for each reference to the given function parameter
+	// column. If the given column does not represent a function parameter,
+	// ok=false is returned.
 	argOrd := func(col opt.ColumnID) (ord int, ok bool) {
-		for i, argCol := range udf.ArgCols {
-			if col == argCol {
+		for i, param := range udf.Params {
+			if col == param {
 				return i, true
 			}
 		}
@@ -694,19 +695,19 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
 	planFn := func(
-		ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int, input tree.Datums,
+		ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int, args tree.Datums,
 	) (tree.RoutinePlan, error) {
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
 		stmt := udf.Body[stmtIdx]
 
-		// Copy the expression into a new memo. Replace argument references with
-		// input datums.
+		// Copy the expression into a new memo. Replace parameter references
+		// with argument datums.
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			if v, ok := e.(*memo.VariableExpr); ok {
 				if ord, ok := argOrd(v.Col); ok {
-					return f.ConstructConstVal(input[ord], v.Typ)
+					return f.ConstructConstVal(args[ord], v.Typ)
 				}
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
@@ -741,7 +742,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 	return tree.NewTypedRoutineExpr(
 		udf.Name,
-		inputExprs,
+		args,
 		planFn,
 		len(udf.Body),
 		udf.Typ,
