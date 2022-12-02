@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -749,7 +750,8 @@ func (dsp *DistSQLPlanner) Run(
 
 	recv.outputTypes = plan.GetResultTypes()
 	recv.contendedQueryMetric = dsp.distSQLSrv.Metrics.ContendedQueriesCount
-	if dsp.distSQLSrv.TenantCostController != nil && planCtx.planner != nil {
+	if multitenant.TenantRUEstimateEnabled.Get(&dsp.st.SV) &&
+		dsp.distSQLSrv.TenantCostController != nil && planCtx.planner != nil {
 		if instrumentation := planCtx.planner.curPlan.instrumentation; instrumentation != nil {
 			// Only collect the network egress estimate for a tenant that is running
 			// EXPLAIN ANALYZE, since the overhead is non-negligible.
