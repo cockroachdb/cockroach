@@ -36,6 +36,7 @@ import {
   tableNameAttr,
   txnFingerprintIdAttr,
   viewAttr,
+  idAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
@@ -160,10 +161,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   {/* events & jobs */}
                   <Route path="/events" component={EventPage} />
                   <Route exact path="/jobs" component={JobsPage} />
-                  <Route path={"/jobs/:id"} component={JobDetails} />
+                  <Route path={`/jobs/:${idAttr}`} component={JobDetails} />
 
                   <Route exact path="/schedules" component={SchedulesPage} />
-                  <Route path={"/schedules/:id"} component={ScheduleDetails} />
+                  <Route
+                    path={`/schedules/:${idAttr}`}
+                    component={ScheduleDetails}
+                  />
 
                   {/* databases */}
                   <Route exact path="/databases" component={DatabasesPage} />
@@ -311,11 +315,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     component={InsightsOverviewPage}
                   />
                   <Route
-                    path={`/insights/transaction/:${executionIdAttr}`}
+                    path={`/insights/transaction/:${idAttr}`}
                     component={TransactionInsightDetailsPage}
                   />
                   <Route
-                    path={`/insights/statement/:${executionIdAttr}`}
+                    path={`/insights/statement/:${idAttr}`}
                     component={StatementInsightDetailsPage}
                   />
 

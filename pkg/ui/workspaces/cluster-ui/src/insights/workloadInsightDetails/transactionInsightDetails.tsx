@@ -47,7 +47,7 @@ import { CockroachCloudContext } from "../../contexts";
 import { InsightsError } from "../insightsErrorComponent";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
-import { executionIdAttr } from "src/util";
+import { idAttr } from "src/util";
 
 const tableCx = classNames.bind(insightTableStyles);
 
@@ -102,7 +102,7 @@ export const TransactionInsightDetails: React.FC<
     columnTitle: "insights",
   });
   const isCockroachCloud = useContext(CockroachCloudContext);
-  const executionID = getMatchParamByName(match, executionIdAttr);
+  const executionID = getMatchParamByName(match, idAttr);
   const noInsights = !insightEventDetails;
   useEffect(() => {
     if (noInsights) {
@@ -156,7 +156,7 @@ export const TransactionInsightDetails: React.FC<
         <h3
           className={commonStyles("base-heading", "no-margin-bottom")}
         >{`Transaction Execution ID: ${String(
-          getMatchParamByName(match, executionIdAttr),
+          getMatchParamByName(match, idAttr),
         )}`}</h3>
       </div>
       <section>
