@@ -923,10 +923,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	// TODO(pavelkalinnikov): construct and store this in Replica.
+	// TODO(pavelkalinnikov): fields like raftEntryCache are the same across all
+	// ranges, so can be passed to LogStore methods instead of being stored in it.
 	s := logstore.LogStore{
+		RangeID:     r.RangeID,
 		Engine:      r.store.engine,
 		Sideload:    r.raftMu.sideloaded,
 		StateLoader: r.raftMu.stateLoader.StateLoader,
+		EntryCache:  r.store.raftEntryCache,
 		Settings:    r.store.cfg.Settings,
 		Metrics: logstore.Metrics{
 			RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
@@ -959,9 +963,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
-	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
 	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs, nil /* blocked */)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
