@@ -1361,6 +1361,8 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
   retry_lat_var       FLOAT NOT NULL,
   commit_lat_avg      FLOAT NOT NULL,
   commit_lat_var      FLOAT NOT NULL,
+  idle_lat_avg        FLOAT NOT NULL,
+  idle_lat_var        FLOAT NOT NULL,
   rows_read_avg       FLOAT NOT NULL,
   rows_read_var       FLOAT NOT NULL,
   network_bytes_avg   FLOAT,
@@ -1413,6 +1415,8 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.GetVariance(stats.Stats.Count))),   // retry_lat_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.Mean)),                            // commit_lat_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.GetVariance(stats.Stats.Count))),  // commit_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                              // idle_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.GetVariance(stats.Stats.Count))),    // idle_lat_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                              // rows_read_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),    // rows_read_var
 				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),       // network_bytes_avg
