@@ -11,25 +11,21 @@ import {
   api,
   ScheduleDetails,
   ScheduleDetailsStateProps,
+  selectID,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import { CachedDataReducerState, refreshSchedule } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { getMatchParamByName } from "src/util/query";
 
 const selectScheduleState = createSelector(
-  [
-    (state: AdminUIState) => state.cachedData.schedule,
-    (_state: AdminUIState, props: RouteComponentProps) => props,
-  ],
-  (schedule, props): CachedDataReducerState<api.Schedule> => {
-    const scheduleId = getMatchParamByName(props.match, "id");
+  [(state: AdminUIState) => state.cachedData.schedule, selectID],
+  (schedule, scheduleID): CachedDataReducerState<api.Schedule> => {
     if (!schedule) {
       return null;
     }
-    return schedule[scheduleId];
+    return schedule[scheduleID];
   },
 );
 

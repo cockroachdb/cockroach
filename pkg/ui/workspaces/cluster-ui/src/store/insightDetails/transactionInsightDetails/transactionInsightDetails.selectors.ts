@@ -10,13 +10,13 @@
 
 import { createSelector } from "reselect";
 import { AppState } from "src/store/reducers";
-import { selectExecutionID } from "src/selectors/common";
+import { selectID } from "src/selectors/common";
 import { selectTxnInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
 import { TxnInsightEvent } from "src/insights";
 
 const selectTxnContentionInsightsDetails = createSelector(
   (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
-  selectExecutionID,
+  selectID,
   (cachedTxnInsightDetails, execId) => {
     return cachedTxnInsightDetails.get(execId);
   },
@@ -24,7 +24,7 @@ const selectTxnContentionInsightsDetails = createSelector(
 
 const selectTxnInsightFromExecInsight = createSelector(
   (state: AppState) => state.adminUI.executionInsights?.data,
-  selectExecutionID,
+  selectID,
   (execInsights, execID): TxnInsightEvent => {
     return execInsights.find(txn => txn.transactionExecutionID === execID);
   },
