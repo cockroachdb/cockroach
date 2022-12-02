@@ -97,8 +97,6 @@ func AfterTest(t testing.TB) func() {
 		return func() {}
 	}
 
-	// Try a best effort GC to help the race tests move along.
-	runtime.GC()
 	orig := interestingGoroutines()
 	return func() {
 		t.Helper()
