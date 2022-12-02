@@ -282,7 +282,7 @@ func runDemoInternal(
 
 		// Only print details about the telemetry configuration if the
 		// user has control over it.
-		if cluster.TelemetryOptOut() {
+		if cluster.TelemetryOptOut {
 			cliCtx.PrintlnUnlessEmbedded("#\n# Telemetry disabled by configuration.")
 		} else {
 			cliCtx.PrintlnUnlessEmbedded("#\n" +
