@@ -2336,7 +2336,7 @@ soundex
 
 # Only the volatile functions should see the changes made by the UPDATE in the
 # CTE.
-query IIIIIIII colnames
+query IIIIIIII colnames,rowsort
 WITH u AS (
   UPDATE kv SET v = v + 10 RETURNING k
 )

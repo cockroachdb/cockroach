@@ -1079,3 +1079,231 @@ project
  │         └── k:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
  └── projections
       └── k:1 + 2 [as=c:8, outer=(1), immutable]
+
+# --------------------------------------------------
+# InlineUDF
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION add(x INT, y INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + y
+$$
+----
+
+norm expect=InlineUDF
+SELECT add(1, i) FROM (VALUES (1), (2), (3)) v(i)
+----
+project
+ ├── columns: add:5!null
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── projections
+      └── column1:1 + 1 [as=add:5, outer=(1), immutable]
+
+norm expect=InlineUDF
+SELECT k FROM a WHERE add(i, 1) = 10
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+
+# Nested UDFs should be inlined.
+norm expect=InlineUDF
+SELECT add(10, add(i, 20)) FROM a WHERE add(k, add(10, f::INT)) = 100
+----
+project
+ ├── columns: add:20
+ ├── immutable
+ ├── select
+ │    ├── columns: i:2 "?column?":13!null
+ │    ├── immutable
+ │    ├── fd: ()-->(13)
+ │    ├── project
+ │    │    ├── columns: "?column?":13 i:2
+ │    │    ├── immutable
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2 f:3
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,3)
+ │    │    └── projections
+ │    │         └── k:1 + (f:3::INT8 + 10) [as="?column?":13, outer=(1,3), immutable]
+ │    └── filters
+ │         └── "?column?":13 = 100 [outer=(13), constraints=(/13: [/100 - /100]; tight), fd=()-->(13)]
+ └── projections
+      └── (i:2 + 20) + 10 [as=add:20, outer=(2), immutable]
+
+exec-ddl
+CREATE FUNCTION min_x() RETURNS INT STABLE LANGUAGE SQL AS $$
+  SELECT x FROM xy ORDER BY x LIMIT 1
+$$
+----
+
+# Stable UDFs should be inline. Presentation and ordering are preserved.
+norm expect=InlineUDF
+SELECT k, min_x() FROM a WHERE k = min_x()
+----
+project
+ ├── columns: k:1!null min_x:16
+ ├── key: (1)
+ ├── fd: (1)-->(16)
+ ├── select
+ │    ├── columns: k:1!null
+ │    ├── key: (1)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+ │              ├── k:1
+ │              └── subquery
+ │                   └── limit
+ │                        ├── columns: x:8!null
+ │                        ├── internal-ordering: +8
+ │                        ├── cardinality: [0 - 1]
+ │                        ├── key: ()
+ │                        ├── fd: ()-->(8)
+ │                        ├── scan xy
+ │                        │    ├── columns: x:8!null
+ │                        │    ├── key: (8)
+ │                        │    ├── ordering: +8
+ │                        │    └── limit hint: 1.00
+ │                        └── 1
+ └── projections
+      └── subquery [as=min_x:16, subquery]
+           └── limit
+                ├── columns: x:12!null
+                ├── internal-ordering: +12
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(12)
+                ├── scan xy
+                │    ├── columns: x:12!null
+                │    ├── key: (12)
+                │    ├── ordering: +12
+                │    └── limit hint: 1.00
+                └── 1
+
+exec-ddl
+CREATE FUNCTION min_x_gt(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+  SELECT x FROM xy WHERE x > i ORDER BY x LIMIT 1
+$$
+----
+
+# Nested stable UDFs should be inline.
+norm expect=InlineUDF
+SELECT k FROM a WHERE k = min_x_gt(min_x_gt(0))
+----
+select
+ ├── columns: k:1!null
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+           ├── k:1
+           └── subquery
+                └── limit
+                     ├── columns: x:14!null
+                     ├── internal-ordering: +14
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(14)
+                     ├── select
+                     │    ├── columns: x:14!null
+                     │    ├── key: (14)
+                     │    ├── ordering: +14
+                     │    ├── limit hint: 1.00
+                     │    ├── scan xy
+                     │    │    ├── columns: x:14!null
+                     │    │    ├── key: (14)
+                     │    │    ├── ordering: +14
+                     │    │    └── limit hint: 3.00
+                     │    └── filters
+                     │         └── gt [outer=(14), subquery, constraints=(/14: (/NULL - ])]
+                     │              ├── x:14
+                     │              └── subquery
+                     │                   └── limit
+                     │                        ├── columns: x:9!null
+                     │                        ├── internal-ordering: +9
+                     │                        ├── cardinality: [0 - 1]
+                     │                        ├── key: ()
+                     │                        ├── fd: ()-->(9)
+                     │                        ├── select
+                     │                        │    ├── columns: x:9!null
+                     │                        │    ├── key: (9)
+                     │                        │    ├── ordering: +9
+                     │                        │    ├── limit hint: 1.00
+                     │                        │    ├── scan xy
+                     │                        │    │    ├── columns: x:9!null
+                     │                        │    │    ├── key: (9)
+                     │                        │    │    ├── ordering: +9
+                     │                        │    │    └── limit hint: 3.00
+                     │                        │    └── filters
+                     │                        │         └── x:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+                     │                        └── 1
+                     └── 1
+
+# UDFs with volatile arguments are not inlined.
+norm expect-not=InlineUDF
+SELECT add((random()*10)::INT, i) FROM a
+----
+project
+ ├── columns: add:11
+ ├── volatile
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── add((random() * 10.0)::INT8, i:2) [as=add:11, outer=(2), volatile, udf]
+
+exec-ddl
+CREATE FUNCTION vol() RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT 1;
+$$
+----
+
+# Volatile UDFs are not inlined.
+norm expect-not=InlineUDF
+SELECT vol() FROM a
+----
+project
+ ├── columns: vol:9
+ ├── volatile
+ ├── scan a
+ └── projections
+      └── vol() [as=vol:9, volatile, udf]
+
+exec-ddl
+CREATE FUNCTION multi_stmt() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT 2;
+$$
+----
+
+# Multi-statement UDFs are not inlined.
+norm expect-not=InlineUDF
+SELECT multi_stmt() FROM a
+----
+project
+ ├── columns: multi_stmt:10
+ ├── immutable
+ ├── fd: ()-->(10)
+ ├── scan a
+ └── projections
+      └── multi_stmt() [as=multi_stmt:10, immutable, udf]
