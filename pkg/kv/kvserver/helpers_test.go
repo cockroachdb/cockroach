@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -173,13 +174,38 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
+type mockSpanConfigReader struct {
+	c roachpb.SpanConfig
+}
+
+func (m mockSpanConfigReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	return false
+}
+
+func (m mockSpanConfigReader) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) roachpb.RKey {
+	return nil
+}
+
+func (m mockSpanConfigReader) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	return m.c, nil
+}
+
+var _ spanconfig.StoreReader = (*mockSpanConfigReader)(nil)
+
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	cfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
+
 	ctx := repl.AnnotateCtx(context.Background())
-	_, err := q.process(ctx, repl, cfg)
+	_, err := q.process(ctx, repl, mockSpanConfigReader{
+		c: cfg.DefaultZoneConfig.AsSpanConfig(),
+	})
 	return err
 }
 

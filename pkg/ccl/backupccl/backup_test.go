@@ -1686,8 +1686,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	defer jobs.TestingSetProgressThresholds()()
 
 	serverArgs := base.TestServerArgs{
-		DisableSpanConfigs: true,
-
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

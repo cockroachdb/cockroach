@@ -67,7 +67,6 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 				DisableDefaultTestTenant: true,
 				ExternalIODir:            dir,
 				UseDatabase:              "test",
-				DisableSpanConfigs:       true,
 			},
 		},
 	)
