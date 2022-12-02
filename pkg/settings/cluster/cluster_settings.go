@@ -69,11 +69,6 @@ type OverridesInformer interface {
 	IsOverridden(settingName string) bool
 }
 
-// TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
-func TelemetryOptOut() bool {
-	return envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
-}
-
 // NoSettings is used when a func requires a Settings but none is available
 // (for example, a CLI subcommand that does not connect to a cluster).
 var NoSettings *Settings // = nil
@@ -91,6 +86,9 @@ const (
 	// pprof labels are enabled.
 	CPUProfileWithLabels
 )
+
+// TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
+var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
 // CPUProfileType returns the type of CPU profile being recorded, if any.
 // This can be used by moving parts across the system to add profiler labels
