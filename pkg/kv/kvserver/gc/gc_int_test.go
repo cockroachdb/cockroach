@@ -171,13 +171,27 @@ func TestEndToEndGC(t *testing.T) {
 
 	require.NotEmptyf(t, readSomeKeys(t, sqlDb), "found no keys in table")
 
-	rangeIDs := getTableRangeIDs(t, sqlDb)
-	require.NotEmpty(t, rangeIDs, "failed to query ranges belonging to table")
-
-	nonEmptyRangeIDs := findNonEmptyRanges(t, rangeIDs)
+	// Since ranges query and checking range stats are non atomic there could be
+	// a range split/merge operation caught in between. That could produce empty
+	// or incomplete results. Moreover, range info produced by ranges doesn't
+	// provide start/end keys for the range in binary form, so it is hard to make
+	// consistency check. We rely on retrying several times for simplicity.
+	const tableRangesRetry = 3
+	var tableRangeIDs, nonEmptyRangeIDs ids
+	for i := 0; i < tableRangesRetry; i++ {
+		tableRangeIDs = getTableRangeIDs(t, sqlDb)
+		if len(tableRangeIDs) == 0 {
+			continue
+		}
+		nonEmptyRangeIDs = findNonEmptyRanges(t, tableRangeIDs)
+		if len(nonEmptyRangeIDs) > 0 {
+			break
+		}
+	}
+	require.NotEmpty(t, tableRangeIDs, "failed to query ranges belonging to table")
 	require.NotEmptyf(t, nonEmptyRangeIDs, "all table ranges are empty according to MVCCStats")
 
-	deleteRangeDataWithRangeTombstone(t, rangeIDs, kvDb, sqlDb)
+	deleteRangeDataWithRangeTombstone(t, tableRangeIDs, kvDb, sqlDb)
 
 	require.Empty(t, readSomeKeys(t, sqlDb), "table still contains data after range deletion")
 
