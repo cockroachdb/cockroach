@@ -11,47 +11,66 @@ package cdceval
 /***
 
 cdceval package is a library for evaluating various expressions in CDC.
-Namely, this package concerns itself with 3 things:
-  * Filter evaluation -- aka predicates: does the event match boolean expression.
-  * Projection evaluation:  given the set of projection expressions, evaluate them.
-  * (Soon to be added) Evaluation of computed virtual columns.
 
-Evaluator is the gateway into the evaluation logic; it has 3 methods matching
-the above use cases. Before filtering and projection can be used, Evaluator must
-be configured with appropriate predicate and filtering expressions via configureProjection.
+The expression evaluation and execution is integrated with planner/distSQL.
 
-If the Evaluator is not configured with configureProjection, then each event is assumed
-to match filter by default, and projection operation is an identity operation returning input
-row.
+First, when starting changefeed, CDC expression is planned and normalized
+(NormalizeAndPlan).  The normalization step involves various sanity checks
+(ensuring for example that expression does not target multiple column familes).
+The expression is planned as well because this step, by leveraging optimizer,
+may simplify expressions, and, more importantly, can detect if the expression
+will not match any rows (this results in an error being returned).
 
-Evaluator constructs a helper structure (exprEval) to perform actual evaluation.
-One exprEval exists per cdcevent.EventDescriptor  (currently, a new exprEval created
-whenever event descriptor changes; we might have to add some sort of caching if needed).
+The normalized expression is persisted into job record.
+When changefeed job starts running, it once again plans expression execution.
+Part of the planning stage figures out which spans need to be scanned.  If the
+predicate restricted primary index span, then we will scan only portion
+of the table.
 
-Evaluation of projections and filter expressions are identical.
+Then, once aggregators start up, they will once again plan the expression
+(sql.PlanCDCExpression), but this time each incoming KV event will be evaluated
+by DistSQL to produce final result (projection).
+PlanCDCExpression fully integrates with optimizer, and produces a plan
+that can then be used to execute the "flow" via normal
+distSQL mechanism (PlanAndRun).
 
-First, we have "compilation" phase:
-  1. Expression is "walked" to resolve the names and replace those names with tree.IndexedVar expressions.
-     The "index" part of the indexed var refers to the "index" of the datum in the row.
-     (note however: the row is abstracted under cdcevent package).  IndexedVar allows the value of that
-      variable to be bound later once it is known; it also associates the type information
-      with that variable.
-  2. Expression is typed check to ensure that it is of the appropriate type.
-     * Projection expressions can be of tree.Any type, while filters must be tree.DBool.
-  3. Expression is then normalized (constants folded, etc).
+What makes CDC expression execution different is that CDC is responsible for
+pushing the data into the execution pipeline.  This is accomplished via
+execinfra.RowReceiver which is returned as part of the plan.
+CDC will receive rows (encoded datums) from rangefeed, and then "pushes" those
+rows into execution pipeline.
 
-It is an error to have a filter expression which evaluates to "false" -- in this case, Evaluator
-will return a "contradiction" error.
+CDC then reads the resulting projection via distSQL result writer.
 
-After expressions "compiled", they can be evaluated; and again, both projections and filters use the same
-logic (evalExpr() function); basically, all IndexedVars are bound to the Datums in the updated row, and the
-expression is evaluated to the appropriate target type.
+Evaluator is the gateway into the evaluation logic;  it takes care of running
+execution flow, caching (to reuse the same plan as long as the descriptor version
+does not change), etc.
 
 Expressions can contain functions.  We restrict the set of functions that can be used by CDC.
 Volatile functions, window functions, aggregate functions are disallowed.
 Certain stable functions (s.a. now(), current_timestamp(), etc) are allowed -- they will always
 return the MVCC timestamp of the event.
-We also provide custom, CDC specific functions, such as cdc_prev() which returns prevoius row as
-a JSONB record.  See functions.go for more details.
+
+Access to the previous state of the row is accomplished via (typed) cdc_prev tuple.
+This tuple can be used to build complex expressions around the previous state of the row:
+   SELECT * FROM foo WHERE status='active' AND cdc_prev.status='inactive'
+
+During normalization stage, we determine if the expression has cdc_prev access.
+If so, the expression is rewritten as:
+  SELECT ... FROM tbl, (SELECT ((crdb_internal.cdc_prev_row()).*)) AS cdc_prev
+The crdb_internal.cdc_prev_row function is created to return a tuple based on
+the previous table descriptor.  Access to this function is arranged via custom
+function resolver.
+
+In addition, prior to evaluating CDC expression, the WHERE clause is rewritten as:
+  SELECT where, ... FROM tbl, ...
+That is, WHERE clause is turned into a boolean datum.  When projection results are
+consumed, we can determine if the row ought to be filtered.  This step is done to
+ensure that we correctly release resources for each event -- even the ones that
+are filtered out.
+
+Virtual computed columns can be easily supported but currently are not.
+To support virtual computed columns we must ensure that the expression in that
+column references only the target changefeed column family.
 
 ***/

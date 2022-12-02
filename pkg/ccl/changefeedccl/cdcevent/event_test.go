@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -358,9 +358,9 @@ CREATE TABLE foo (
 				TableID:    tableDesc.GetID(),
 				FamilyName: tc.familyName,
 			})
-			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			ctx := context.Background()
-			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual, tc.keyOnly)
+			decoder, err := NewEventDecoder(ctx, &execCfg, targets, tc.includeVirtual, tc.keyOnly)
 			require.NoError(t, err)
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
 			for i := 0; i < expectedEvents; i++ {
@@ -574,9 +574,9 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 				TableID:    tableDesc.GetID(),
 				FamilyName: tc.familyName,
 			})
-			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			ctx := context.Background()
-			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual, false)
+			decoder, err := NewEventDecoder(ctx, &execCfg, targets, tc.includeVirtual, false)
 			require.NoError(t, err)
 
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)

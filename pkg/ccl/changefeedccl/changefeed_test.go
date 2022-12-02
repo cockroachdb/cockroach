@@ -67,9 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -4550,7 +4547,7 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		prep(t, sqlDB)
 		// Check that disallowed expressions have a good error message.
 		// Also regression test for https://github.com/cockroachdb/cockroach/issues/90416
-		sqlDB.ExpectErr(t, "expression currently unsupported in CREATE CHANGEFEED",
+		sqlDB.ExpectErr(t, "sub-query expressions not supported by CDC",
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE EXISTS (SELECT true)`)
 	})
 
@@ -4794,21 +4791,21 @@ func TestCDCPrev(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 		// TODO(#85143): remove schema_change_policy='stop' from this test.
-		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT cdc_prev()->'b' AS old FROM foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT cdc_prev.b AS old FROM foo`)
 		defer closeFeed(t, foo)
 
-		// cdc_prev() values are null during initial scan
+		// cdc_prev values are null during initial scan
 		assertPayloads(t, foo, []string{
 			`foo: [0]->{"old": null}`,
 		})
 
-		// cdc_prev() values are null for an insert event
+		// cdc_prev values are null for an insert event
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'original')`)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"old": null}`,
 		})
 
-		// cdc_prev() returns the previous value on an update
+		// cdc_prev returns the previous value on an update
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'updated')`)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"old": "original"}`,
@@ -6781,105 +6778,6 @@ INSERT INTO foo (a, b, e) VALUES (3, 'tres', 'closed'); -- should be emitted
 	})
 }
 
-// Verify when running predicate changefeed, the set of spans is constrained
-// based on predicate expression.
-func TestChangefeedConstrainsSpansBasedOnPredicate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
-		sqlDB.Exec(t, `
-CREATE TABLE foo (
-  a INT, 
-  b STRING, 
-  c STRING,
-  d STRING AS (concat(b, c)) VIRTUAL, 
-  e status DEFAULT 'inactive',
-  PRIMARY KEY (a, b)
-)`)
-
-		sqlDB.Exec(t, `
-INSERT INTO foo (a, b) VALUES (0, 'zero'), (1, 'one');
-INSERT INTO foo (a, b, e) VALUES (2, 'two', 'closed');
-INSERT INTO foo (a, b, e) VALUES (11, 'eleven', 'closed');
-`)
-		// Save change aggregator specs.
-		knobs := s.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-		specs := make(chan []*execinfrapb.ChangeAggregatorSpec, 1)
-		knobs.OnDistflowSpec = func(
-			aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, _ *execinfrapb.ChangeFrontierSpec,
-		) {
-			specs <- aggregatorSpecs
-		}
-
-		// TODO(#85143): remove schema_change_policy='stop' from this test.
-		feed := feed(t, f, `
-CREATE CHANGEFEED 
-WITH schema_change_policy='stop'
-AS SELECT * FROM foo
-WHERE a > 10 AND e IN ('open', 'closed') AND NOT cdc_is_delete()`)
-		defer closeFeed(t, feed)
-
-		assertPayloads(t, feed, []string{
-			`foo: [11, "eleven"]->{"a": 11, "b": "eleven", "c": null, "e": "closed"}`,
-		})
-
-		aggSpec := <-specs
-		require.Equal(t, 1, len(aggSpec))
-		require.Equal(t, 1, len(aggSpec[0].Watches))
-
-		// Verify span is "smaller" than the primary index span.
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			s.Server.ExecutorConfig().(sql.ExecutorConfig).DB, s.Codec, "d", "foo")
-		span := aggSpec[0].Watches[0].Span
-		require.Equal(t, -1, fooDesc.PrimaryIndexSpan(s.Codec).Key.Compare(span.Key))
-
-		// Aggregators should get modified select expression reflecting the fact
-		// that the set of spans was reduced (note: we no longer expect to see a >
-		// 10).
-		expectedExpr := normalizeCDCExpression(t, s.Server.ExecutorConfig(),
-			`SELECT * FROM foo WHERE (e IN ('open':::d.public.status, 'closed':::d.public.status)) AND (NOT cdc_is_delete())`)
-		require.Equal(t, expectedExpr, aggSpec[0].Select.Expr)
-	}
-
-	cdcTest(t, testFn)
-}
-
-func normalizeCDCExpression(t *testing.T, execCfgI interface{}, exprStr string) string {
-	t.Helper()
-
-	sc, err := cdceval.ParseChangefeedExpression(exprStr)
-	require.NoError(t, err)
-
-	desc := cdctest.GetHydratedTableDescriptor(t, execCfgI,
-		"d", "public", tree.Name(tree.AsString(sc.From.Tables[0])))
-	target := jobspb.ChangefeedTargetSpecification{TableID: desc.GetID()}
-
-	ctx := context.Background()
-	execCfg := execCfgI.(sql.ExecutorConfig)
-
-	p, cleanup := sql.NewInternalPlanner("test",
-		execCfg.DB.NewTxn(ctx, "test-planner"),
-		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
-		sessiondatapb.SessionData{
-			Database:   "d",
-			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
-		})
-	defer cleanup()
-
-	execCtx := p.(sql.PlanHookState)
-	_, _, err = cdceval.NormalizeAndValidateSelectForTarget(
-		context.Background(), execCtx, desc, target, sc, false, false, false,
-	)
-	require.NoError(t, err)
-	log.Infof(context.Background(), "PostNorm: %s", tree.StmtDebugString(sc))
-	return cdceval.AsStringUnredacted(sc)
-}
-
 // Some predicates and projections can be verified when creating changefeed.
 // The types of errors that can be detected early on is restricted to simple checks
 // (such as type checking, non-existent columns, etc).  More complex errors detected
@@ -6912,7 +6810,7 @@ CREATE TABLE foo (
 		{
 			name:   "no such column",
 			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT no_such_column FROM foo`,
-			err:    `column "no_such_column" does not exist`,
+			err:    `column "foo.no_such_column" does not exist`,
 		},
 		{
 			name:   "wrong type",
@@ -6927,12 +6825,12 @@ CREATE TABLE foo (
 		{
 			name:   "contradiction: a > 1 && a < 1",
 			create: `CREATE CHANGEFEED INTO 'null://'  AS SELECT * FROM foo WHERE a > 1 AND a < 1`,
-			err:    `filter .* is a contradiction`,
+			err:    `does not match any rows`,
 		},
 		{
 			name:   "contradiction: a IS null",
 			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT * FROM foo WHERE a IS NULL`,
-			err:    `filter .* is a contradiction`,
+			err:    `does not match any rows`,
 		},
 		{
 			name:   "wrong table name",
@@ -7013,7 +6911,6 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	}
 
 	for _, tc := range []testCase{
-		// The default policy is to skip schema changes which add new columns which
 		{
 			name:           "add column no default",
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT * FROM foo",
@@ -7066,7 +6963,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT a, b, c, e FROM foo",
 			initialPayload: initialPayload,
 			alterStmt:      "ALTER TABLE foo DROP COLUMN c",
-			expectErr:      `while evaluating projection: SELECT .*: column "c" does not exist`,
+			expectErr:      `column "foo.c" does not exist`,
 		},
 		{
 			name:           "drop referenced column filter",
@@ -7075,7 +6972,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 			},
 			alterStmt: "ALTER TABLE foo DROP COLUMN c",
-			expectErr: `while matching filter: SELECT .*: column "c" does not exist`,
+			expectErr: `column "foo.c" does not exist`,
 		},
 		{
 			name:           "rename referenced column projection",
@@ -7083,7 +6980,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			initialPayload: initialPayload,
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `while evaluating projection: SELECT .*: column "c" does not exist`,
+			expectErr:      `column "foo.c" does not exist`,
 		},
 		{
 			name:           "rename referenced column filter",
@@ -7093,7 +6990,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			},
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `while matching filter: SELECT .*: column "c" does not exist`,
+			expectErr:      `column "foo.c" does not exist`,
 		},
 		{
 			name:           "alter enum",
@@ -7117,7 +7014,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		},
 		{
 			name:           "alter enum use correct enum version",
-			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, cdc_prev()->'e' AS prev_e FROM foo",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, cdc_prev.e AS prev_e FROM foo",
 			initialPayload: []string{
 				`foo: [1, "one"]->{"e": "inactive", "prev_e": null}`,
 				`foo: [2, "two"]->{"e": "open", "prev_e": null}`,

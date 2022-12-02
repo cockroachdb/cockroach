@@ -27,8 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -247,10 +248,10 @@ func createBenchmarkChangefeed(
 	if err != nil {
 		return nil, nil, err
 	}
-	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
-	eventConsumer, err := newKVEventToRowConsumer(ctx, &serverCfg, nil, sf, initialHighWater,
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	eventConsumer, err := newKVEventToRowConsumer(ctx, &execCfg, sf, initialHighWater,
 		sink, encoder, makeChangefeedConfigFromJobDetails(details),
-		execinfrapb.Expression{}, TestingKnobs{}, nil, nil)
+		execinfrapb.Expression{}, username.PublicRoleName(), TestingKnobs{}, nil, nil)
 
 	if err != nil {
 		return nil, nil, err

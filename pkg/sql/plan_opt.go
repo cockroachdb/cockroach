@@ -121,7 +121,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		// would be a better way to accomplish this goal. See CREATE TABLE for an
 		// example.
 		f := opc.optimizer.Factory()
-		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, t.Select)
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, t.Select)
 		if err := bld.Build(); err != nil {
 			return opc.flags, err
 		}
@@ -135,7 +135,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
 			} else {
-				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog)
+				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
 				if err != nil {
 					return 0, err
 				}
@@ -320,7 +320,7 @@ type optPlanningCtx struct {
 
 	// catalog is initialized once, and reset for each query. This allows the
 	// catalog objects to be reused across queries in the same session.
-	catalog optCatalog
+	catalog optPlanningCatalog
 
 	// -- Fields below are reinitialized for each query ---
 
@@ -340,6 +340,7 @@ type optPlanningCtx struct {
 // also be called before each use.
 func (opc *optPlanningCtx) init(p *planner) {
 	opc.p = p
+	opc.catalog = &optCatalog{}
 	opc.catalog.init(p)
 }
 
@@ -347,7 +348,7 @@ func (opc *optPlanningCtx) init(p *planner) {
 func (opc *optPlanningCtx) reset(ctx context.Context) {
 	p := opc.p
 	opc.catalog.reset()
-	opc.optimizer.Init(ctx, p.EvalContext(), &opc.catalog)
+	opc.optimizer.Init(ctx, p.EvalContext(), opc.catalog)
 	opc.flags = 0
 
 	// We only allow memo caching for SELECT/INSERT/UPDATE/DELETE. We could
@@ -421,7 +422,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := opc.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
 	bld.KeepPlaceholders = true
 	if err := bld.Build(); err != nil {
 		return nil, err
@@ -517,7 +518,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 		// If the prepared memo has been invalidated by schema or other changes,
 		// re-prepare it.
-		if isStale, err := prepared.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
+		if isStale, err := prepared.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 			return nil, err
 		} else if isStale {
 			opc.log(ctx, "rebuilding cached memo")
@@ -535,7 +536,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
-			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), &opc.catalog); err != nil {
+			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 				return nil, err
 			} else if isStale {
 				opc.log(ctx, "query cache hit but needed update")
@@ -565,7 +566,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// available.
 	f := opc.optimizer.Factory()
 	f.FoldingControl().AllowStableFolds()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
@@ -624,7 +625,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld = execbuilder.New(ctx, f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit, stmt.IsANSIDML())
+		bld = execbuilder.New(ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+			evalCtx, allowAutoCommit, stmt.IsANSIDML())
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -633,7 +635,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
-		bld = execbuilder.New(ctx, explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit, stmt.IsANSIDML())
+		bld = execbuilder.New(ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+			evalCtx, allowAutoCommit, stmt.IsANSIDML())
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -692,7 +695,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if planTop.instrumentation.ShouldSaveMemo() {
 		planTop.mem = mem
-		planTop.catalog = &opc.catalog
+		planTop.catalog = opc.catalog
 	}
 	return nil
 }
@@ -702,7 +705,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
 	var cat cat.Catalog
 	if !external {
-		cat = &p.optPlanningCtx.catalog
+		cat = p.optPlanningCtx.catalog
 	}
 	return explain.DecodePlanGistToRows(gist, cat)
 }
@@ -758,7 +761,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 
 	// Optimize with the saved memo and hypothetical tables. Walk through the
 	// optimal plan to determine index recommendations.
-	opc.optimizer.Init(ctx, f.EvalContext(), &opc.catalog)
+	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
 	f.CopyAndReplace(
 		savedMemo.RootExpr().(memo.RelExpr),
 		savedMemo.RootProps(),
@@ -774,7 +777,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (er
 	// Re-initialize the optimizer (which also re-initializes the factory) and
 	// update the saved memo's metadata with the original table information.
 	// Prepare to re-optimize and create an executable plan.
-	opc.optimizer.Init(ctx, f.EvalContext(), &opc.catalog)
+	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
 	savedMemo.Metadata().UpdateTableMeta(optTables)
 	f.CopyAndReplace(
 		savedMemo.RootExpr().(memo.RelExpr),

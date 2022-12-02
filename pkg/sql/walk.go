@@ -368,6 +368,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&bufferNode{}):                              "buffer",
 	reflect.TypeOf(&cancelQueriesNode{}):                       "cancel queries",
 	reflect.TypeOf(&cancelSessionsNode{}):                      "cancel sessions",
+	reflect.TypeOf(&cdcValuesNode{}):                           "wrapped streaming node",
 	reflect.TypeOf(&changeDescriptorBackedPrivilegesNode{}):    "change privileges",
 	reflect.TypeOf(&changeNonDescriptorBackedPrivilegesNode{}): "change system privileges",
 	reflect.TypeOf(&commentOnColumnNode{}):                     "comment on column",

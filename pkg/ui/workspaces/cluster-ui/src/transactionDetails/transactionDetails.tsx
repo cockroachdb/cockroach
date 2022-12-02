@@ -343,6 +343,16 @@ export class TransactionDetails extends React.Component<
                 <span className={cx("tooltip-info")}>unavailable</span>
               </Tooltip>
             );
+            const meanIdleLatency = transactionSampled ? (
+              <Text>
+                {formatNumberForDisplay(
+                  _.get(transactionStats, "idle_lat.mean", 0),
+                  duration,
+                )}
+              </Text>
+            ) : (
+              unavailableTooltip
+            );
             const meansRows = `${formatNumberForDisplay(
               transactionStats.rows_read.mean,
               formatTwoPlaces,
@@ -431,6 +441,10 @@ export class TransactionDetails extends React.Component<
                             Transaction resource usage
                           </Heading>
                         </div>
+                        <SummaryCardItem
+                          label="Idle latency"
+                          value={meanIdleLatency}
+                        />
                         <SummaryCardItem
                           label="Mean rows/bytes read"
                           value={meansRows}
