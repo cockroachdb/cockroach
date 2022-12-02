@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
-import { getMatchParamByName, executionIdAttr } from "src/util";
+import { getMatchParamByName, executionIdAttr, idAttr } from "src/util";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
@@ -18,6 +18,15 @@ import { getMatchParamByName, executionIdAttr } from "src/util";
 // between db-console and cluster-ui.
 
 export const selectExecutionID = (
-  _state: unknown,
+  _state: any,
   props: RouteComponentProps,
-): string | null => getMatchParamByName(props.match, executionIdAttr);
+): string | null => {
+  return getMatchParamByName(props.match, executionIdAttr);
+};
+
+export const selectID = (
+  _state: any,
+  props: RouteComponentProps,
+): string | null => {
+  return getMatchParamByName(props.match, idAttr);
+};

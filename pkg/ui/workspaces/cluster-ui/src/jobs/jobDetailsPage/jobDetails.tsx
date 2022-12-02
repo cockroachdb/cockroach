@@ -21,9 +21,12 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { TimestampToMoment } from "src/util";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
-import { getMatchParamByName } from "src/util/query";
+import {
+  TimestampToMoment,
+  idAttr,
+  DATE_FORMAT_24_UTC,
+  getMatchParamByName,
+} from "src/util";
 
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
 import { JobStatusCell } from "src/jobs/util/jobStatusCell";
@@ -67,7 +70,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
 
     this.props.refreshJob(
       new cockroach.server.serverpb.JobRequest({
-        job_id: Long.fromString(getMatchParamByName(this.props.match, "id")),
+        job_id: Long.fromString(getMatchParamByName(this.props.match, idAttr)),
       }),
     );
   }
@@ -167,7 +170,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
             Jobs
           </Button>
           <h3 className={jobCx("page--header__title")}>{`Job ID: ${String(
-            getMatchParamByName(this.props.match, "id"),
+            getMatchParamByName(this.props.match, idAttr),
           )}`}</h3>
         </div>
         <section className={jobCx("section section--container")}>

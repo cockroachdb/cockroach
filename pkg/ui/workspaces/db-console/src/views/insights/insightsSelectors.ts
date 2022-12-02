@@ -18,7 +18,7 @@ import {
   SchemaInsightEventFilters,
   SortSetting,
   selectFlattenedStmtInsightsCombiner,
-  selectExecutionID,
+  selectID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightsCombiner,
   TxnContentionInsightDetails,
@@ -49,7 +49,7 @@ export const selectTransactionInsights = createSelector(
 const selectTxnContentionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-    selectExecutionID,
+    selectID,
   ],
   (insight, insightId): TxnContentionInsightDetails => {
     if (!insight) {
@@ -61,7 +61,7 @@ const selectTxnContentionInsightDetails = createSelector(
 
 const selectTxnInsightFromExecInsight = createSelector(
   (state: AdminUIState) => state.cachedData.executionInsights?.data,
-  selectExecutionID,
+  selectID,
   (execInsights, execID) => {
     return execInsights?.find(txn => txn.transactionExecutionID === execID);
   },
@@ -75,7 +75,7 @@ export const selectTxnInsightDetails = createSelector(
 
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-  selectExecutionID,
+  selectID,
   (insight, insightId): Error | null => {
     if (!insight) {
       return null;
@@ -91,7 +91,7 @@ export const selectStatementInsights = createSelector(
 
 export const selectStatementInsightDetails = createSelector(
   selectStatementInsights,
-  selectExecutionID,
+  selectID,
   selectStatementInsightDetailsCombiner,
 );
 
