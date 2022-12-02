@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -90,9 +91,11 @@ type Metrics struct {
 
 // LogStore is a stub of a separated Raft log storage.
 type LogStore struct {
+	RangeID     roachpb.RangeID
 	Engine      storage.Engine
 	Sideload    SideloadStorage
 	StateLoader StateLoader
+	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 	Metrics     Metrics
 }
@@ -198,6 +201,10 @@ func (s *LogStore) StoreEntries(
 			state.ByteSize = 0
 		}
 	}
+
+	// Update raft log entry cache. We clear any older, uncommitted log entries
+	// and cache the latest ones.
+	s.EntryCache.Add(s.RangeID, rd.Entries, true /* truncate */)
 
 	return state, nil
 }
