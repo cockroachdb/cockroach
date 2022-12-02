@@ -107,8 +107,18 @@ export function configureUPlotLineChart(
             legend.style.display = "block";
           };
 
+          // persistLegend determines if legend should continue showing even when mouse
+          // hovers away.
+          let persistLegend = false;
+
+          over.addEventListener("click", () => {
+            persistLegend = !persistLegend;
+          });
+
           over.onmouseleave = () => {
-            legend.style.display = "none";
+            if (!persistLegend) {
+              legend.style.display = "none";
+            }
           };
         },
         setCursor: (self: uPlot) => {
@@ -139,6 +149,9 @@ export function configureUPlotLineChart(
     //     key: "sync-everything",
     //   },
     // },
+    cursor: {
+      lock: true,
+    },
     legend: {
       show: true,
 
