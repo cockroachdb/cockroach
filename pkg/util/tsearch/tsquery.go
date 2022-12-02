@@ -65,6 +65,34 @@ func (o tsOperator) precedence() int {
 	panic(errors.AssertionFailedf("no precedence for operator %d", o))
 }
 
+func (o tsOperator) pgwireEncoding() byte {
+	switch o {
+	case not:
+		return 1
+	case and:
+		return 2
+	case or:
+		return 3
+	case followedby:
+		return 4
+	}
+	panic(errors.AssertionFailedf("no pgwire encoding for operator %d", o))
+}
+
+func tsOperatorFromPgwireEncoding(b byte) (tsOperator, error) {
+	switch b {
+	case 1:
+		return not, nil
+	case 2:
+		return and, nil
+	case 3:
+		return or, nil
+	case 4:
+		return followedby, nil
+	}
+	return invalid, errors.AssertionFailedf("no operator for pgwire byte %d", b)
+}
+
 // tsNode represents a single AST node within the tree of a TSQuery.
 type tsNode struct {
 	// Only one of term or op will be set.
@@ -75,7 +103,8 @@ type tsNode struct {
 	// set only when op is followedby. Indicates the number n within the <n>
 	// operator, which means the number of terms separating the left and the right
 	// argument.
-	followedN int
+	// At most 16384.
+	followedN uint16
 
 	// l is the left child of the node if op is set, or the only child if
 	// op is set to "not".

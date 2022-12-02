@@ -1918,6 +1918,13 @@ func TestTenantLogic_truncate(
 	runLogicTest(t, "truncate")
 }
 
+func TestTenantLogic_tsvector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tsvector")
+}
+
 func TestTenantLogic_tuple(
 	t *testing.T,
 ) {

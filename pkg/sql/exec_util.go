@@ -1824,6 +1824,8 @@ func checkResultType(typ *types.T) error {
 	case types.TimeFamily:
 	case types.TimeTZFamily:
 	case types.TimestampTZFamily:
+	case types.TSQueryFamily:
+	case types.TSVectorFamily:
 	case types.IntervalFamily:
 	case types.JsonFamily:
 	case types.UuidFamily:

@@ -15,6 +15,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // This file defines the TSVector data structure, which is used to implement
@@ -51,7 +55,7 @@ import (
 // the search term should match any matching term, regardless of its weight. If
 // one or more of the weights are set in a search term, it indicates that the
 // query should match only terms with the given weights.
-type tsWeight int
+type tsWeight byte
 
 const (
 	// These enum values are a bitfield and must be kept in order.
@@ -63,6 +67,7 @@ const (
 	// term. It indicates prefix matching, which will allow the term to match any
 	// document term that begins with the search term.
 	weightStar
+	invalidWeight
 )
 
 func (w tsWeight) String() string {
@@ -85,22 +90,65 @@ func (w tsWeight) String() string {
 	return ret.String()
 }
 
+// TSVectorPGEncoding returns the PG-compatible wire protocol encoding for a
+// given weight. Note that this is only allowable for TSVector tsweights, which
+// can't have more than one weight set at the same time. In a TSQuery, you might
+// have more than one weight per lexeme, which is not encodable using this
+// scheme.
+func (w tsWeight) TSVectorPGEncoding() (byte, error) {
+	switch w {
+	case weightA:
+		return 3, nil
+	case weightB:
+		return 2, nil
+	case weightC:
+		return 1, nil
+	case weightD, 0:
+		return 0, nil
+	}
+	return 0, errors.Errorf("invalid tsvector weight %d", w)
+}
+
+func tsWeightFromVectorPGEncoding(b byte) (tsWeight, error) {
+	switch b {
+	case 3:
+		return weightA, nil
+	case 2:
+		return weightB, nil
+	case 1:
+		return weightC, nil
+	case 0:
+		// We don't explicitly return weightD, since it's the default.
+		return 0, nil
+	}
+	return 0, errors.Errorf("invalid encoded tsvector weight %d", b)
+}
+
 // tsPosition is a position within a document, along with an optional weight.
 type tsPosition struct {
-	position int
+	position uint16
 	weight   tsWeight
 }
 
 // tsTerm is either a lexeme and position list, or an operator (when parsing a
 // a TSQuery).
 type tsTerm struct {
+	// lexeme is at most 2046 characters.
 	lexeme    string
 	positions []tsPosition
 
 	// The operator and followedN fields are only used when parsing a TSQuery.
 	operator tsOperator
 	// Set only when operator = followedby
-	followedN int
+	// At most 16384.
+	followedN uint16
+}
+
+func newLexemeTerm(lexeme string) (tsTerm, error) {
+	if len(lexeme) > 2046 {
+		return tsTerm{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "word is too long (%d bytes, max 2046 bytes)", len(lexeme))
+	}
+	return tsTerm{lexeme: lexeme}, nil
 }
 
 func (t tsTerm) String() string {
@@ -142,7 +190,7 @@ func (t tsTerm) String() string {
 			buf.WriteByte(':')
 		}
 		if pos.position > 0 {
-			buf.WriteString(strconv.Itoa(pos.position))
+			buf.WriteString(strconv.Itoa(int(pos.position)))
 		}
 		buf.WriteString(pos.weight.String())
 	}

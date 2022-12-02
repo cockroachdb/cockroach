@@ -75,6 +75,12 @@ type OverlapsArrayOp struct{}
 // OverlapsINetOp is a BinaryEvalOp.
 type OverlapsINetOp struct{}
 
+// TSMatchesVectorQueryOp is a BinaryEvalOp.
+type TSMatchesVectorQueryOp struct{}
+
+// TSMatchesQueryVectorOp is a BinaryEvalOp.
+type TSMatchesQueryVectorOp struct{}
+
 // AppendToMaybeNullArrayOp is a BinaryEvalOp.
 type AppendToMaybeNullArrayOp struct {
 	Typ *types.T

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -279,6 +280,10 @@ func RandDatumWithNullChance(
 		return d
 	case types.VoidFamily:
 		return tree.DVoidDatum
+	case types.TSVectorFamily:
+		return tree.NewDTSVector(tsearch.RandomTSVector(rng))
+	case types.TSQueryFamily:
+		return tree.NewDTSQuery(tsearch.RandomTSQuery(rng))
 	default:
 		panic(errors.AssertionFailedf("invalid type %v", typ.DebugString()))
 	}

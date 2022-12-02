@@ -503,6 +503,7 @@ func (m *Manager) runMigration(
 		if err := migrationstable.MarkMigrationCompleted(ctx, m.ie, mig.Version()); err != nil {
 			return err
 		}
+		return nil
 	} else {
 		// Run a job that, in turn, will run the upgrade. By running upgrades inside
 		// jobs, we get some observability for them and we avoid multiple nodes
@@ -510,19 +511,23 @@ func (m *Manager) runMigration(
 		// long-running upgrades, this is useful.
 		//
 		// If the job already exists, we wait for it to finish.
-		alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version, mig.Name())
+		alreadyCompleted, alreadyExisting, id, err := m.getOrCreateMigrationJob(ctx, user, version, mig.Name())
 		if alreadyCompleted || err != nil {
 			return err
 		}
-		log.Infof(ctx, "running %s", mig.Name())
-		return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
+		if alreadyExisting {
+			log.Infof(ctx, "waiting for %s", mig.Name())
+			return m.jr.WaitForJobs(ctx, m.ie, []jobspb.JobID{id})
+		} else {
+			log.Infof(ctx, "running %s", mig.Name())
+			return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
+		}
 	}
-	return nil
 }
 
 func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user username.SQLUsername, version roachpb.Version, name string,
-) (alreadyCompleted bool, jobID jobspb.JobID, _ error) {
+) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
@@ -535,21 +540,18 @@ func (m *Manager) getOrCreateMigrationJob(
 		if err != nil || alreadyCompleted {
 			return err
 		}
-		var found bool
-		found, jobID, err = m.getRunningMigrationJob(ctx, txn, version)
-		if err != nil {
+		alreadyExisting, jobID, err = m.getRunningMigrationJob(ctx, txn, version)
+		if err != nil || alreadyExisting {
 			return err
 		}
-		if found {
-			return nil
-		}
+
 		jobID = newJobID
 		_, err = m.jr.CreateJobWithTxn(ctx, upgradejob.NewRecord(version, user, name), jobID, txn)
 		return err
 	}); err != nil {
-		return false, 0, err
+		return false, false, 0, err
 	}
-	return alreadyCompleted, jobID, nil
+	return alreadyCompleted, alreadyExisting, jobID, nil
 }
 
 func (m *Manager) getRunningMigrationJob(

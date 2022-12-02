@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -314,6 +315,15 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	case *tree.DTuple:
 		return encodeUntaggedTuple(t, b, encoding.NoColumnID, nil)
+	case *tree.DTSQuery:
+		encoded := tsearch.EncodeTSQueryPGBinary(nil, t.TSQuery)
+		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
+	case *tree.DTSVector:
+		encoded, err := tsearch.EncodeTSVector(nil, t.TSVector)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	default:
 		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}

@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tsearch",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
