@@ -141,11 +141,15 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Start Time"
-              value={insightDetails.startTime.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC)}
+              value={insightDetails.startTime.format(
+                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+              )}
             />
             <SummaryCardItem
               label="End Time"
-              value={insightDetails.endTime.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC)}
+              value={insightDetails.endTime.format(
+                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+              )}
             />
             <SummaryCardItem
               label="Elapsed Time"
