@@ -30,6 +30,7 @@ describe("recommendDropUnusedIndex", () => {
       table_name: "test_table",
       database_id: 1,
       database_name: "test_db",
+      schema_name: "public",
       unused_threshold: "10h0m0s",
     };
     it("should not recommend index to be dropped", () => {
@@ -49,6 +50,7 @@ describe("recommendDropUnusedIndex", () => {
       table_name: "test_table",
       database_id: 1,
       database_name: "test_db",
+      schema_name: "public",
       unused_threshold: "10h0m0s",
     };
     it("should recommend index to be dropped with the reason that the index is never used", () => {
@@ -68,6 +70,7 @@ describe("recommendDropUnusedIndex", () => {
       table_name: "test_table",
       database_id: 1,
       database_name: "test_db",
+      schema_name: "public",
       unused_threshold: "0h30m0s",
     };
     it("should recommend index to be dropped with the reason that it has exceeded the configured index unuse duration", () => {
@@ -92,6 +95,7 @@ describe("recommendDropUnusedIndex", () => {
         table_name: "test_table",
         database_id: 1,
         database_name: "test_db",
+        schema_name: "public",
         unused_threshold: "10h0m0s",
       };
       it("should not recommend index to be dropped", () => {
@@ -113,6 +117,7 @@ describe("recommendDropUnusedIndex", () => {
         table_name: "test_table",
         database_id: 1,
         database_name: "test_db",
+        schema_name: "public",
         unused_threshold: "0h30m0s",
       };
       it("should recommend index to be dropped with the reason that it has exceeded the configured index unuse duration", () => {
