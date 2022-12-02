@@ -1483,8 +1483,8 @@ github.com/klauspost/pgzip v1.0.2-0.20170402124221-0bf5dcad4ada/go.mod h1:Ch1tH6
 github.com/klauspost/pgzip v1.2.4/go.mod h1:Ch1tH69qFZu15pkjo5kYi6mth2Zzwzt50oCQKQE9RUs=
 github.com/klauspost/pgzip v1.2.5 h1:qnWYvvKqedOF2ulHpMG72XQol4ILEJ8k2wwRl/Km8oE=
 github.com/klauspost/pgzip v1.2.5/go.mod h1:Ch1tH69qFZu15pkjo5kYi6mth2Zzwzt50oCQKQE9RUs=
-github.com/knz/bubbline v0.0.0-20221124133514-7e375ec1ee20 h1:+0fTqUp3/g+FybcL8jbpmg3btb/6ENUjK87U/ry1QWE=
-github.com/knz/bubbline v0.0.0-20221124133514-7e375ec1ee20/go.mod h1:ncR/xqKMlcer+tzvUfzTTF2LeAMAenWcWm21b8cy8LI=
+github.com/knz/bubbline v0.0.0-20221202175954-247a3055d876 h1:0Cqd+JGFEM7xxBPNeVpe5EHdWSX1Rj0XxYtrBP5twe8=
+github.com/knz/bubbline v0.0.0-20221202175954-247a3055d876/go.mod h1:ncR/xqKMlcer+tzvUfzTTF2LeAMAenWcWm21b8cy8LI=
 github.com/knz/catwalk v0.1.2 h1:sNLvF6WOXdvedeiCpqkpsHSGavOYxZwDsgdbKiu1IOc=
 github.com/knz/catwalk v0.1.2/go.mod h1:Q+Yj4ny4AXgrOOyWyDGY/HJzmbGH8MFnsUqvCAiUT5s=
 github.com/knz/lipgloss-convert v0.1.0 h1:qUPUt6r8mqvi9DIV3nBPu3kEmFyHrZtXzv0BlPBPLNQ=

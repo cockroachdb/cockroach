@@ -5163,10 +5163,10 @@ def go_deps():
         name = "com_github_knz_bubbline",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/bubbline",
-        sha256 = "cbb483551afc4af0ab2a490936cc4136fc70eeed69303162de59de6adfc2615c",
-        strip_prefix = "github.com/knz/bubbline@v0.0.0-20221124133514-7e375ec1ee20",
+        sha256 = "176f2b58f6206410c6118965e6cbdfcb2e626830587d94595c0026a31c70432c",
+        strip_prefix = "github.com/knz/bubbline@v0.0.0-20221202175954-247a3055d876",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221124133514-7e375ec1ee20.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221202175954-247a3055d876.zip",
         ],
     )
     go_repository(
