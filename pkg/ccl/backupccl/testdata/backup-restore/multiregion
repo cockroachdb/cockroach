@@ -92,8 +92,7 @@ exec-sql
 DROP DATABASE no_region_db_2;
 ----
 
-exec-sql
-SET CLUSTER SETTING sql.defaults.primary_region = 'non-existent-region';
+set-cluster-setting setting=sql.defaults.primary_region value=non-existent-region
 ----
 
 exec-sql
@@ -104,8 +103,7 @@ HINT: valid regions: eu-central-1, eu-north-1
 --
 set the default PRIMARY REGION to a region that exists (see SHOW REGIONS FROM CLUSTER) then using SET CLUSTER SETTING sql.defaults.primary_region = 'region'
 
-exec-sql
-SET CLUSTER SETTING sql.defaults.primary_region = 'eu-central-1';
+set-cluster-setting setting=sql.defaults.primary_region value=eu-central-1
 ----
 
 exec-sql
@@ -143,7 +141,7 @@ BACKUP DATABASE eu_central_db INTO 'nodelocal://1/eu_central_database_backup/';
 new-server name=s4 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
 ----
 
-exec-sql
+set-cluster-setting setting=sql.defaults.primary_region value=eu-north-1
 SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
 ----
 
