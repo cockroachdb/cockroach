@@ -473,7 +473,6 @@ func makeInMemoryTenantServerConfig(
 	baseCfg.StorageEngine = kvServerCfg.BaseConfig.StorageEngine
 	baseCfg.EnableWebSessionAuthentication = kvServerCfg.BaseConfig.EnableWebSessionAuthentication
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
-	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 
 	// TODO(knz): use a single network interface for all tenant servers.

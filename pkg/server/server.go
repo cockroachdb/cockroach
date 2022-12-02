@@ -586,7 +586,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// tenant records.
 		kvAccessorForTenantRecords spanconfig.KVAccessor
 	}
-	if !cfg.SpanConfigsDisabled {
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
 			spanConfig.subscriber = spanConfigKnobs.StoreKVSubscriberOverride
@@ -622,7 +621,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				spanConfigKnobs,
 				registry,
 			)
-		}
 
 		scKVAccessor := spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings, clock,
@@ -698,7 +696,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangefeedBudgetFactory:   rangeReedBudgetFactory,
 		SystemConfigProvider:     systemConfigWatcher,
 		SpanConfigSubscriber:     spanConfig.subscriber,
-		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 		RangeLogWriter:           rangeLogWriter,
@@ -1659,7 +1656,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	if !s.cfg.SpanConfigsDisabled && s.spanConfigSubscriber != nil {
+	if  s.spanConfigSubscriber != nil {
 		if subscriber, ok := s.spanConfigSubscriber.(*spanconfigkvsubscriber.KVSubscriber); ok {
 			if err := subscriber.Start(workersCtx, s.stopper); err != nil {
 				return err
