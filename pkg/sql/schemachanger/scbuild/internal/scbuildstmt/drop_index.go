@@ -59,9 +59,12 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are dropped concurrently"))
 	}
 
+	anyIndexesDropped := false
 	for _, index := range n.IndexList {
-		dropAnIndex(b, index, n.IfExists, n.DropBehavior)
-
+		dropped := dropAnIndex(b, index, n.IfExists, n.DropBehavior)
+		if dropped {
+			anyIndexesDropped = true
+		}
 		// Increment subwork ID so we know exactly which portion in
 		// a `DROP INDEX index1, index2, ...` statement is responsible
 		// for the creation of the targets.
@@ -69,20 +72,22 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 		b.IncrementSchemaChangeDropCounter("index")
 
 	}
-	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
-		b,
-		errors.WithHint(
-			pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),
-			"The reclamation delay can be customized in the zone configuration for the table.",
-		),
-	)
+	if anyIndexesDropped {
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+			b,
+			errors.WithHint(
+				pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),
+				"The reclamation delay can be customized in the zone configuration for the table.",
+			),
+		)
+	}
 }
 
 // dropAnIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
 func dropAnIndex(
 	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
-) {
+) (indexDropped bool) {
 	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
 		IsExistenceOptional: ifExists,
 		RequiredPrivilege:   privilege.CREATE,
@@ -90,7 +95,7 @@ func dropAnIndex(
 	if toBeDroppedIndexElms == nil {
 		// Attempt to resolve this index failed but `IF EXISTS` is set.
 		b.MarkNameAsNonExistent(&indexName.Table)
-		return
+		return false
 	}
 	// Panic if dropping primary index.
 	_, _, pie := scpb.FindPrimaryIndex(toBeDroppedIndexElms)
@@ -118,6 +123,7 @@ func dropAnIndex(
 		))
 	}
 	dropSecondaryIndex(b, indexName, dropBehavior, sie)
+	return true
 }
 
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
