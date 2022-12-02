@@ -224,6 +224,13 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		func() {
 			r.mu.Lock()
 			defer r.mu.Unlock()
+			// Set a destroyStatus to make sure there won't be any raft processing once
+			// we release raftMu. We applied a command but not one from the raft log, so
+			// should there be a command in the raft log (i.e. some errant lease request
+			// or whatnot) this will fire assertions because it will conflict with the
+			// log index that we pulled out of thin air above.
+			r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
+
 			require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
 			require.Equal(t, truncatedIndex+1, r.mu.state.TruncatedState.Index)
 			expectedSize := raftLogSize - 1
