@@ -369,6 +369,10 @@ func (s *Scanner) Scan(lval ScanSymType) {
 			s.pos++
 			lval.SetID(lexbase.CONTAINS)
 			return
+		case '@': // @@
+			s.pos++
+			lval.SetID(lexbase.AT_AT)
+			return
 		}
 		return
 

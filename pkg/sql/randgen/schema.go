@@ -525,7 +525,12 @@ func randIndexTableDefFromCols(
 		isLastCol := i == len(cols)-1
 
 		// The non-terminal index columns must be indexable.
-		if !isLastCol && !colinfo.ColumnTypeIsIndexable(semType) {
+		forwardIndexable := colinfo.ColumnTypeIsIndexable(semType)
+		invertedIndexable := colinfo.ColumnTypeIsInvertedIndexable(semType)
+		if !isLastCol && !forwardIndexable {
+			return tree.IndexTableDef{}, false
+		}
+		if !forwardIndexable && !invertedIndexable {
 			return tree.IndexTableDef{}, false
 		}
 
@@ -534,7 +539,7 @@ func randIndexTableDefFromCols(
 		if colinfo.ColumnTypeIsOnlyInvertedIndexable(semType) {
 			def.Inverted = true
 			stopPrefix = true
-		} else if isLastCol && !stopPrefix && colinfo.ColumnTypeIsInvertedIndexable(semType) {
+		} else if isLastCol && !stopPrefix && invertedIndexable {
 			// With 1/4 probability, choose to use an inverted index for a column type
 			// that is both inverted indexable and forward indexable.
 			if rng.Intn(4) == 0 {

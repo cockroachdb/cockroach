@@ -12,6 +12,7 @@ package tsearch
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,6 +24,20 @@ import (
 )
 
 func TestParseTSVector(t *testing.T) {
+	var inputLarge, expectedLarge string
+	var sb strings.Builder
+	sb.WriteString("'hi':")
+	for i := 1; i < 258; i++ {
+		if i > 1 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(strconv.Itoa(i))
+		if i == 256 {
+			expectedLarge = sb.String()
+		}
+	}
+	inputLarge = sb.String()
+
 	tcs := []struct {
 		input       string
 		expectedStr string
@@ -81,6 +96,10 @@ bar   `, `'bar' 'foo'`},
 		{`foo:3,1`, `'foo':1,3`},
 		{`foo:3,2,1 foo:1,2,3`, `'foo':1,2,3`},
 		{`a:3 b:2 a:1`, `'a':1,3 'b':2`},
+
+		// Test large positions are truncated.
+		{`foo:100000000`, `'foo':16383`},
+		{inputLarge, expectedLarge},
 	}
 	for _, tc := range tcs {
 		t.Log(tc.input)
@@ -88,6 +107,20 @@ bar   `, `'bar' 'foo'`},
 		require.NoError(t, err)
 		actual := vec.String()
 		assert.Equal(t, tc.expectedStr, actual)
+
+		// Test serialization.
+		serialized, err := EncodeTSVector(nil, vec)
+		require.NoError(t, err)
+		roundtripped, err := DecodeTSVector(serialized)
+		require.NoError(t, err)
+		assert.Equal(t, tc.expectedStr, roundtripped.String())
+
+		serialized, err = EncodeTSVectorPGBinary(nil, vec)
+		require.NoError(t, err)
+		roundtripped, err = DecodeTSVectorPGBinary(serialized)
+		require.NoError(t, err)
+		assert.Equal(t, tc.expectedStr, roundtripped.String())
+
 	}
 
 	t.Run("ComparePG", func(t *testing.T) {
@@ -115,6 +148,7 @@ bar   `, `'bar' 'foo'`},
 }
 
 func TestParseTSVectorError(t *testing.T) {
+	longLexeme := strings.Repeat("a", 2047)
 	for _, tc := range []string{
 		`foo:`,
 		`foo:a`,
@@ -129,6 +163,7 @@ func TestParseTSVectorError(t *testing.T) {
 		`foo:\1`,
 		`foo:-1`,
 		`'foo`,
+		longLexeme,
 	} {
 		t.Log(tc)
 		_, err := ParseTSVector(tc)
@@ -138,10 +173,17 @@ func TestParseTSVectorError(t *testing.T) {
 
 func TestParseTSRandom(t *testing.T) {
 	r, _ := randutil.NewTestRand()
-	for i := 0; i < 10000; i++ {
-		b := randutil.RandBytes(r, randutil.RandIntInRange(r, 0, 50))
+	for i := 0; i < 100; i++ {
+		b := randutil.RandBytes(r, randutil.RandIntInRange(r, 0, 2047))
 		// Just make sure we don't panic
 		_, _ = ParseTSVector(string(b))
 		_, _ = ParseTSQuery(string(b))
+	}
+	for i := 0; i < 1000; i++ {
+		v := RandomTSVector(r)
+		text := v.String()
+		v2, err := ParseTSVector(text)
+		assert.NoError(t, err)
+		assert.Equal(t, v, v2)
 	}
 }

@@ -74,6 +74,7 @@ bar   `, `'foo' 'bar'`},
 		{`foo<0>bar`, `'foo' <0> 'bar'`},
 		{`foo<20>bar`, `'foo' <20> 'bar'`},
 		{`foo<020>bar`, `'foo' <20> 'bar'`},
+		{`foo<16384>bar`, `'foo' <16384> 'bar'`},
 
 		{`()`, `( )`},
 		{`f(a)b`, `'f' ( 'a' ) 'b'`},
@@ -122,6 +123,7 @@ func TestScanTSQueryError(t *testing.T) {
 		`a<01b`,
 		`a<01-`,
 		`a<>`,
+		`a <16385> b`,
 	} {
 		t.Log(tc)
 		_, err := lexTSQuery(tc)
@@ -190,11 +192,24 @@ func TestParseTSQuery(t *testing.T) {
 		{`!(a | (b & c) <-> (d <0> !x | y))`, `!( 'a' | ( 'b' & 'c' ) <-> ( 'd' <0> !'x' | 'y' ) )`},
 	}
 	for _, tc := range tcs {
-		t.Log(tc.input)
-		query, err := ParseTSQuery(tc.input)
-		assert.NoError(t, err)
-		actual := query.String()
-		assert.Equal(t, tc.expectedStr, actual)
+		t.Run(tc.input, func(t *testing.T) {
+			query, err := ParseTSQuery(tc.input)
+			assert.NoError(t, err)
+			actual := query.String()
+			assert.Equal(t, tc.expectedStr, actual)
+
+			// Test serialization.
+			serialized, err := EncodeTSQuery(nil, query)
+			require.NoError(t, err)
+			roundtripped, err := DecodeTSQuery(serialized)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedStr, roundtripped.String())
+
+			serialized = EncodeTSQueryPGBinary(nil, query)
+			roundtripped, err = DecodeTSQueryPGBinary(serialized)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedStr, roundtripped.String())
+		})
 	}
 
 	t.Run("ComparePG", func(t *testing.T) {
@@ -243,6 +258,7 @@ func TestParseTSQueryAssociativity(t *testing.T) {
 }
 
 func TestParseTSQueryError(t *testing.T) {
+	longLexeme := strings.Repeat("a", 2047)
 	for _, tc := range []string{
 		``,
 		`       `,
@@ -269,6 +285,7 @@ func TestParseTSQueryError(t *testing.T) {
 		`()`,
 		`(foo bar)`,
 		`f(a)b`,
+		longLexeme,
 	} {
 		t.Log(tc)
 		_, err := ParseTSQuery(tc)

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1189,6 +1190,24 @@ func (e *evaluator) EvalOverlapsINetOp(
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	other := tree.MustBeDIPAddr(right).IPAddr
 	return tree.MakeDBool(tree.DBool(ipAddr.ContainsOrContainedBy(&other))), nil
+}
+
+func (e *evaluator) EvalTSMatchesQueryVectorOp(
+	ctx context.Context, _ *tree.TSMatchesQueryVectorOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	q := tree.MustBeDTSQuery(left)
+	v := tree.MustBeDTSVector(right)
+	ret, err := tsearch.EvalTSQuery(q.TSQuery, v.TSVector)
+	return tree.MakeDBool(tree.DBool(ret)), err
+}
+
+func (e *evaluator) EvalTSMatchesVectorQueryOp(
+	ctx context.Context, _ *tree.TSMatchesVectorQueryOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	v := tree.MustBeDTSVector(left)
+	q := tree.MustBeDTSQuery(right)
+	ret, err := tsearch.EvalTSQuery(q.TSQuery, v.TSVector)
+	return tree.MakeDBool(tree.DBool(ret)), err
 }
 
 func (e *evaluator) EvalPlusDateIntOp(
