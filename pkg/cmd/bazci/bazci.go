@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,11 +44,12 @@ import (
 )
 
 const (
-	buildSubcmd         = "build"
-	runSubcmd           = "run"
-	testSubcmd          = "test"
-	mergeTestXMLsSubcmd = "merge-test-xmls"
-	mungeTestXMLSubcmd  = "munge-test-xml"
+	buildSubcmd             = "build"
+	runSubcmd               = "run"
+	testSubcmd              = "test"
+	mergeTestXMLsSubcmd     = "merge-test-xmls"
+	mungeTestXMLSubcmd      = "munge-test-xml"
+	beaverHubServerEndpoint = "https://beaver-hub-server-jjd2v2r2dq-uk.a.run.app/process"
 )
 
 type builtArtifact struct {
@@ -279,6 +281,30 @@ func init() {
 	)
 }
 
+func getRunEnvForBeaverHub() string {
+	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
+	if strings.Contains(branch, "master") || strings.Contains(branch, "release") || strings.Contains(branch, "staging") {
+		return branch
+	}
+	return "PR"
+}
+
+func sendBepDataToBeaverHub(bepFilepath string) error {
+	file, err := os.Open(bepFilepath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	httpClient := &http.Client{}
+	req, _ := http.NewRequest("POST", beaverHubServerEndpoint, file)
+	req.Header.Add("Run-Env", getRunEnvForBeaverHub())
+	req.Header.Add("Content-Type", "application/octet-stream")
+	if _, err := httpClient.Do(req); err != nil {
+		return err
+	}
+	return nil
+}
+
 func bazciImpl(cmd *cobra.Command, args []string) error {
 	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
 		return errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
@@ -294,9 +320,18 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}
 
 	server := newMonitorBuildServer(args[0])
+	tmpDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+	bepLoc := filepath.Join(tmpDir, "beplog")
 	if err := server.Start(); err != nil {
 		return err
 	}
+	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", bepLoc))
 	args = append(args, fmt.Sprintf("--bes_backend=grpc://127.0.0.1:%d", port))
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
@@ -307,6 +342,12 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		fmt.Printf("got error %+v from bazel run\n", bazelErr)
 	}
 	server.Wait()
+	if err := sendBepDataToBeaverHub(bepLoc); err != nil {
+		// Retry.
+		if err := sendBepDataToBeaverHub(bepLoc); err != nil {
+			fmt.Printf("Sending BEP data to beaver hub failed - %v\n", err)
+		}
+	}
 	return errors.CombineErrors(processTestXmls(server.testXmls), bazelErr)
 }
 

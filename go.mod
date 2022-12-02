@@ -158,7 +158,7 @@ require (
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.15.11
 	github.com/klauspost/pgzip v1.2.5
-	github.com/knz/bubbline v0.0.0-20221124133514-7e375ec1ee20
+	github.com/knz/bubbline v0.0.0-20221202175954-247a3055d876
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0

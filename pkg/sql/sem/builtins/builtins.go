@@ -7493,6 +7493,67 @@ expires until the statement bundle is collected`,
 			Volatility: volatility.Immutable,
 		},
 	),
+	"crdb_internal.anonymize_sql_constants": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		stringOverload1(
+			func(_ context.Context, _ *eval.Context, sql string) (tree.Datum, error) {
+				if len(sql) == 0 {
+					return tree.NewDString(""), nil
+				}
+
+				parsed, err := parser.ParseOne(sql)
+				if err != nil {
+					return nil, err
+				}
+				sqlNoConstants := tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
+				return tree.NewDString(sqlNoConstants), nil
+			},
+			types.String,
+			"Removes constants from a SQL statement. String provided must contain at most"+
+				"1 statement.",
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types:      tree.ParamTypes{{"val", types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				result := tree.NewDArray(types.String)
+
+				for _, sqlDatum := range arr.Array {
+					if sqlDatum == tree.DNull {
+						if err := result.Append(tree.DNull); err != nil {
+							return nil, err
+						}
+						continue
+					}
+
+					sql := string(tree.MustBeDString(sqlDatum))
+					sqlNoConstants := ""
+
+					if len(sql) != 0 {
+						parsed, err := parser.ParseOne(sql)
+						if err != nil {
+							return nil, err
+						}
+
+						sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
+					}
+
+					if err := result.Append(tree.NewDString(sqlNoConstants)); err != nil {
+						return nil, err
+					}
+				}
+
+				return result, nil
+			},
+			Info: "Hide constants for each element in an array of SQL statements." +
+				"Note that maximum 1 statement is permitted per string element.",
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

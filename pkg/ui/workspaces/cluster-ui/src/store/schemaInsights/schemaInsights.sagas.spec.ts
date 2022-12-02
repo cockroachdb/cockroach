@@ -49,6 +49,7 @@ describe("SchemaInsights sagas", () => {
         table: "test_table",
         indexName: "test_idx",
         indexID: 1,
+        schema: "public",
         lastUsed: "2022-08-22T22:30:02Z",
       },
     },
