@@ -1524,7 +1524,9 @@ CREATE TABLE crdb_internal.session_trace (
 }
 
 // crdbInternalClusterInflightTracesTable exposes cluster-wide inflight spans
-// for a trace_id.
+// for a trace_id. The spans returned are restricted to the tenant querying the
+// table; the system tenant will not get span belonging to other tenants
+// (although perhaps it should).
 //
 // crdbInternalClusterInflightTracesTable is an indexed, virtual table that only
 // returns rows when accessed with an index constraint specifying the trace_id
@@ -1565,14 +1567,9 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", unwrappedConstraint)
 		}
 
-		if !p.ExecCfg().Codec.ForSystemTenant() {
-			// Tenant nodes doesn't have trace collector so can't serve this table.
-			return false, pgerror.New(pgcode.FeatureNotSupported,
-				"table crdb_internal.cluster_inflight_traces is not implemented on tenants")
-		}
 		traceCollector := p.ExecCfg().TraceCollector
 		var iter *collector.Iterator
-		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
+		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next(ctx) {
 			nodeID, recording := iter.Value()
 			traceString := recording.String()
 			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID))

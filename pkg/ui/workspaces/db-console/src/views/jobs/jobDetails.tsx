@@ -7,26 +7,25 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import { JobDetails, JobDetailsStateProps } from "@cockroachlabs/cluster-ui";
+import {
+  JobDetails,
+  JobDetailsStateProps,
+  selectID,
+} from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import { CachedDataReducerState, refreshJob } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { JobResponseMessage } from "src/util/api";
-import { getMatchParamByName } from "src/util/query";
 
 const selectJobState = createSelector(
-  [
-    (state: AdminUIState) => state.cachedData.job,
-    (_state: AdminUIState, props: RouteComponentProps) => props,
-  ],
-  (job, props): CachedDataReducerState<JobResponseMessage> => {
-    const jobId = getMatchParamByName(props.match, "id");
+  [(state: AdminUIState) => state.cachedData.job, selectID],
+  (job, jobID): CachedDataReducerState<JobResponseMessage> => {
     if (!job) {
       return null;
     }
-    return job[jobId];
+    return job[jobID];
   },
 );
 
