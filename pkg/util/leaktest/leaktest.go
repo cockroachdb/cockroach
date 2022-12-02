@@ -110,6 +110,8 @@ func AfterTest(t testing.TB) func() {
 			// the middle of another test's execution and trip the leak detector for
 			// that innocent test.
 			atomic.StoreUint32(&leakDetectorDisabled, 1)
+			t.Log(fmt.Sprintf("panic: %s", r)) // !!!
+			//t.Fatal(fmt.Sprintf("panic: %s", r)) // !!!
 			panic(r)
 		}
 
