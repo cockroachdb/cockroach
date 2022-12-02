@@ -36,12 +36,11 @@ export const WorkloadInsightsRootControl = ({
 }: WorkloadInsightsViewProps): React.ReactElement => {
   const location = useLocation();
   const history = useHistory();
-  let viewValue =
-    queryByName(location, viewAttr) || InsightExecEnum.TRANSACTION;
-  // Use the default Transaction page if an
+  let viewValue = queryByName(location, viewAttr) || InsightExecEnum.STATEMENT;
+  // Use the default Statement page if an
   // unrecognized string was passed in from the URL
   if (!InsightExecOptions.has(viewValue)) {
-    viewValue = InsightExecEnum.TRANSACTION;
+    viewValue = InsightExecEnum.STATEMENT;
   }
 
   const [selectedInsightView, setSelectedInsightView] = useState(viewValue);
