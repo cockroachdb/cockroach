@@ -405,11 +405,14 @@ func evaluateBatch(
 		h := reply.Header()
 		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit != 0 && retResults > 0 {
 			if retResults > limit {
-				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
-				return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
-					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
-					retResults, limit, ba.Header.MaxSpanRequestKeys,
-					redact.Safe(ba.Summary()), index))
+				exceedingAllowed := baHeader.WholeRowsOfSize != 0 && !baHeader.AllowEmpty
+				if !exceedingAllowed {
+					index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
+					return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
+						"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
+						retResults, limit, ba.Header.MaxSpanRequestKeys,
+						redact.Safe(ba.Summary()), index))
+				}
 			} else if retResults < limit {
 				baHeader.MaxSpanRequestKeys -= retResults
 			} else {
