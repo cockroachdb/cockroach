@@ -12,6 +12,11 @@ package log
 
 import "context"
 
+// systemTenantID is the string representation of
+// roachpb.SystemTenantID. Injected at initialization to avoid
+// an import dependency cycle. See SetSystemTenantID.
+var systemTenantID string
+
 // ServerIdentificationContextKey is the type of a context.Value key
 // used to carry ServerIdentificationPayload values.
 type ServerIdentificationContextKey struct{}
@@ -30,6 +35,9 @@ type ServerIdentificationPayload interface {
 type ServerIdentificationKey int
 
 const (
+	// TenantIDLogTagKey is the log tag key used when tagging
+	// log entries with a tenant ID.
+	TenantIDLogTagKey = "T"
 	// IdentifyClusterID retrieves the cluster ID of the server.
 	IdentifyClusterID ServerIdentificationKey = iota
 	// IdentifyKVNodeID retrieves the KV node ID of the server.
@@ -48,6 +56,9 @@ type idPayload struct {
 	// We avoid using roahcpb.NodeID to avoid a circular reference.
 	nodeID string
 	// ditto for the tenant ID.
+	//
+	// NB: Use TenantID() to access/read this value to take advantage
+	// of default behaviors.
 	tenantID string
 	// ditto for the SQL instance ID.
 	sqlInstanceID string
@@ -67,4 +78,28 @@ func getIdentificationPayload(ctx context.Context) (res idPayload) {
 	res.sqlInstanceID = si.ServerIdentityString(IdentifyInstanceID)
 	res.tenantID = si.ServerIdentityString(IdentifyTenantID)
 	return res
+}
+
+// TenantID returns the tenant ID associated with this idPayload.
+// if the idPayload has no tenant ID set, we default to the system
+// tenant ID. NB: This function should never return an empty string.
+func (ip idPayload) TenantID() string {
+	if ip.tenantID == "" {
+		return systemTenantID
+	}
+	return ip.tenantID
+}
+
+// SetSystemTenantID is used to set the string representation of
+// roachpb.SystemTenantID at initialization to avoid an import dependency cycle.
+// We need this value so we can tag each idPayload with the SystemTenantID by
+// default if no ServerIdentificationPayload is found in the context accompanying
+// the log entry, or if the ServerIdentificationPayload is missing a tenant ID.
+//
+// Panics if the value has already been set.
+func SetSystemTenantID(sysTenantID string) {
+	if systemTenantID != "" {
+		panic("programming error: system tenant ID log tag value already set")
+	}
+	systemTenantID = sysTenantID
 }
