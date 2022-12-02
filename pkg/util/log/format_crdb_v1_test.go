@@ -160,6 +160,7 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 			Line:      138,
 			Message:   reallyLongEntry,
 			Counter:   2,
+			TenantID:  systemTenantID,
 		},
 		{
 			Severity:  severity.INFO,
@@ -170,6 +171,7 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 			Line:      139,
 			Message:   tooLongEntry[:maxMessageLength],
 			Counter:   3,
+			TenantID:  systemTenantID,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {

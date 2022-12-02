@@ -290,13 +290,14 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 
 	// Display the tags if set.
 	buf.Write(cp[ttycolor.Blue])
+	// We must always tag with tenant ID.
+	buf.WriteByte('[')
+	writeTagToBuffer(buf, []byte(TenantIDLogTagKey), []byte(entry.TenantID()))
 	if entry.payload.tags != nil {
-		buf.WriteByte('[')
+		buf.WriteByte(',')
 		entry.payload.tags.formatToBuffer(buf)
-		buf.WriteByte(']')
-	} else {
-		buf.WriteString("[-]")
 	}
+	buf.WriteByte(']')
 	buf.Write(cp[ttycolor.Reset])
 	buf.WriteByte(' ')
 
@@ -486,17 +487,18 @@ var (
 			/* Continuation marker      */ `(?P<continuation>[ =!+|])` +
 			/* Message                  */ `(?P<msg>.*)$`,
 	)
-	v2SeverityIdx     = entryREV2.SubexpIndex("severity")
-	v2DateTimeIdx     = entryREV2.SubexpIndex("datetime")
-	v2GoroutineIdx    = entryREV2.SubexpIndex("goroutine")
-	v2ChannelIdx      = entryREV2.SubexpIndex("channel")
-	v2FileIdx         = entryREV2.SubexpIndex("file")
-	v2LineIdx         = entryREV2.SubexpIndex("line")
-	v2RedactableIdx   = entryREV2.SubexpIndex("redactable")
-	v2TagsIdx         = entryREV2.SubexpIndex("tags")
-	v2CounterIdx      = entryREV2.SubexpIndex("counter")
-	v2ContinuationIdx = entryREV2.SubexpIndex("continuation")
-	v2MsgIdx          = entryREV2.SubexpIndex("msg")
+	v2SeverityIdx       = entryREV2.SubexpIndex("severity")
+	v2DateTimeIdx       = entryREV2.SubexpIndex("datetime")
+	v2GoroutineIdx      = entryREV2.SubexpIndex("goroutine")
+	v2ChannelIdx        = entryREV2.SubexpIndex("channel")
+	v2FileIdx           = entryREV2.SubexpIndex("file")
+	v2LineIdx           = entryREV2.SubexpIndex("line")
+	v2RedactableIdx     = entryREV2.SubexpIndex("redactable")
+	v2TagsIdx           = entryREV2.SubexpIndex("tags")
+	v2CounterIdx        = entryREV2.SubexpIndex("counter")
+	v2ContinuationIdx   = entryREV2.SubexpIndex("continuation")
+	v2MsgIdx            = entryREV2.SubexpIndex("msg")
+	v2TenantIdTagSelect = regexp.MustCompile("T[0-9]+,?")
 )
 
 type entryDecoderV2 struct {
@@ -626,6 +628,7 @@ func (d *entryDecoderV2) initEntryFromFirstLine(
 		Line:       m.getLine(),
 		Redactable: m.isRedactable(),
 		Tags:       m.getTags(d.sensitiveEditor),
+		TenantID:   m.getTenantID(),
 		Counter:    m.getCounter(),
 	}
 	if m.isStructured() {
@@ -692,16 +695,34 @@ func (f entryDecoderV2Fragment) isRedactable() bool {
 }
 
 func (f entryDecoderV2Fragment) getTags(editor redactEditor) string {
-	switch tagsStr := string(f[v2TagsIdx]); tagsStr {
+	tagsStr := string(f[v2TagsIdx])
+	// Strip out the tenant ID tag. We handle it separately in getTenantID().
+	tagsStr = v2TenantIdTagSelect.ReplaceAllString(tagsStr, "")
+	switch tagsStr {
+	case "":
+		fallthrough
 	case "-":
-		return tagsStr
+		return "-"
 	default:
 		r := editor(redactablePackage{
-			msg:        f[v2TagsIdx],
+			msg:        []byte(tagsStr),
 			redactable: f.isRedactable(),
 		})
 		return string(r.msg)
 	}
+}
+
+func (f entryDecoderV2Fragment) getTenantID() string {
+	out := systemTenantID
+	switch tagsStr := string(f[v2TagsIdx]); tagsStr {
+	case "-":
+	default:
+		tags := string(f[v2TagsIdx])
+		if strings.HasPrefix(tags, TenantIDLogTagKey) {
+			out = strings.Split(tags, ",")[0][1:]
+		}
+	}
+	return out
 }
 
 func (f entryDecoderV2Fragment) getCounter() uint64 {

@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,6 +37,13 @@ var MinTenantID = MustMakeTenantID(2)
 // MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
 // cluster.
 var MaxTenantID = MustMakeTenantID(math.MaxUint64)
+
+func init() {
+	// Inject the string representation of SystemTenantID into the log package
+	// to avoid an import dependency cycle.
+	log.SetSystemTenantID(
+		strconv.FormatUint(SystemTenantID.ToUint64(), 10))
+}
 
 // MustMakeTenantID constructs a new TenantID from the provided uint64.
 // The function panics if an invalid tenant ID is given.

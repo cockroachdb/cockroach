@@ -186,14 +186,33 @@ func (f formattableTags) formatToBuffer(buf *buffer) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		buf.Write(key)
-		if len(val) > 0 {
-			if len(key) != 1 {
-				// We skip the `=` sign for 1-letter keys: we write "n1" in logs, not "n=1".
-				buf.WriteByte('=')
-			}
-			buf.Write(val)
+		writeTagToBuffer(buf, key, val)
+	}
+}
+
+// writeTagToBuffer writes the provided log tag key and value to buf.
+// If the given key is empty or nil, this is a noop.
+//
+// The written format varies depending on the length of the given key.
+// If len(key) == 1, we avoid separating the key and value with a '=',
+// otherwise, we insert a '=' between the key and value. For example:
+//
+//	k = []byte("p"), 	  v = []byte("123") -> "p123"
+//	k = []byte("tagKey"), v = []byte("456") -> "tagKey=456"
+//
+// If the value is empty, we still write the key with no accompanying
+// value.
+func writeTagToBuffer(buf *buffer, k, v []byte) {
+	if len(k) == 0 {
+		return
+	}
+	buf.Write(k)
+	if len(v) > 0 {
+		if len(k) != 1 {
+			// We skip the `=` sign for 1-letter keys: we write "n1" in logs, not "n=1".
+			buf.WriteByte('=')
 		}
+		buf.Write(v)
 	}
 }
 
