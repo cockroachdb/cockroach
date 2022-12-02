@@ -551,7 +551,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/cpuid/v2/com_github_klauspost_cpuid_v2-v2.0.9.zip": "52c716413296dce2b1698c6cdbc4c53927ce4aee2a60980daf9672e6b6a3b4cb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/crc32/com_github_klauspost_crc32-v0.0.0-20161016154125-cb6bfca970f6.zip": "6b632853a19f039138f251f94dbbdfdb72809adc3a02da08e4301d3d48275b06",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/pgzip/com_github_klauspost_pgzip-v1.2.5.zip": "1143b6417d4bb46d26dc8e6223407b84b6cd5f32e5d705cd4a9fb142220ce4ba",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221124133514-7e375ec1ee20.zip": "cbb483551afc4af0ab2a490936cc4136fc70eeed69303162de59de6adfc2615c",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221202175954-247a3055d876.zip": "176f2b58f6206410c6118965e6cbdfcb2e626830587d94595c0026a31c70432c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/catwalk/com_github_knz_catwalk-v0.1.2.zip": "7b44ddd491c68b186426e5f98fcb9410c4d26a5c4fa82205b3ff2797ffc3b51b",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/lipgloss-convert/com_github_knz_lipgloss_convert-v0.1.0.zip": "f9f9ffa12e7df4007cc60c87327d47ad42d1f71a80e360af4014674138de8bef",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/strtime/com_github_knz_strtime-v0.0.0-20200318182718-be999391ffa9.zip": "c1e1b06c339798387413af1444f06f31a483d4f5278ab3a91b6cd5d7cd8d91a1",

@@ -61,8 +61,13 @@ func (b *bubblineReader) getCompletions(
 	for _, row := range rows {
 		candidates = append(candidates, row[0])
 	}
-	_, wstart, wend := computil.FindWord(v, line, col)
-	return msg, editline.SimpleWordsCompletion(candidates, "keywords", col, wstart, wend)
+
+	if len(candidates) > 0 {
+		_, wstart, wend := computil.FindWord(v, line, col)
+		comps = editline.SimpleWordsCompletion(candidates, "keywords", col, wstart, wend)
+	}
+
+	return msg, comps
 }
 
 // runeOffset converts the 2D rune cursor to a 1D offset from the
