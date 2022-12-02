@@ -718,10 +718,8 @@ func (v *validator) checkAtomic(atomicType string, result Result) {
 		}
 		v.checkAtomicCommitted(`committed `+atomicType, observations, result.OptionalTimestamp)
 	} else if resultIsAmbiguous(result) {
-		// TODO(during review): we're sloppy with this in TestValidate, fix it up and then
-		// arm this check again.
-		const hack = true
-		if !hack && result.OptionalTimestamp.IsSet() {
+		// An ambiguous result shouldn't have an execution timestamp.
+		if result.OptionalTimestamp.IsSet() {
 			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %s", result)
 			v.failures = append(v.failures, err)
 		}

@@ -229,7 +229,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:  "one ambiguous put with successful write",
-			steps: []Step{step(withTimestamp(withAmbResult(put(k1, s1)), t1))},
+			steps: []Step{step(withAmbResult(put(k1, s1)))},
 			kvs:   kvs(kv(k1, t1, s1)),
 		},
 		{
