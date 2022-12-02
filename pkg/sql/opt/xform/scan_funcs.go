@@ -43,7 +43,9 @@ import (
 //	rows from the table. See GenerateConstrainedScans,
 //	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
 //	index joins are introduced into the memo.
-func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
+func (c *CustomFuncs) GenerateIndexScans(
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
+) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
@@ -176,7 +178,7 @@ func (c *CustomFuncs) LocalityOptimizedScanAboveMaxCardinality(relExpr memo.RelE
 // CanMaybeGenerateLocalityOptimizedScan returns true. See the comment above the
 // GenerateLocalityOptimizedScan rule for more details.
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
 ) {
 	if c.LocalityOptimizedScanAboveMaxCardinality(grp) {
 		return
@@ -404,6 +406,7 @@ func (c *CustomFuncs) LookupsAreLocal(lookupJoinExpr *memo.LookupJoinExpr) bool 
 // converted into a locality-optimized `LookupJoinPrivate` by the caller.
 func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 	grp memo.RelExpr,
+	required *physical.Required,
 	lookupJoinExpr *memo.LookupJoinExpr,
 	inputScan *memo.ScanExpr,
 	inputFilters memo.FiltersExpr,
@@ -414,6 +417,12 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 		// Both local and remote branches must evaluate the original filters.
 		localSelectFilters = inputFilters
 		remoteSelectFilters = inputFilters
+	}
+	// We should only generate a locality-optimized search if there is a limit
+	// hint coming from an ancestor expression with a LIMIT, meaning that the
+	// query could be answered solely from rows returned by the local branch.
+	if required.LimitHint == 0 {
+		return
 	}
 	tabMeta := c.e.mem.Metadata().TableMeta(inputScan.Table)
 	table := c.e.mem.Metadata().Table(inputScan.Table)
@@ -599,11 +608,12 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 // REGIONAL BY ROW table.
 func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(
 	grp memo.RelExpr,
+	required *physical.Required,
 	lookupJoinExpr *memo.LookupJoinExpr,
 	inputScan *memo.ScanExpr,
 	inputFilters memo.FiltersExpr,
 ) {
-	c.GenerateLocalityOptimizedSearch(grp, lookupJoinExpr, inputScan, inputFilters, nil)
+	c.GenerateLocalityOptimizedSearch(grp, required, lookupJoinExpr, inputScan, inputFilters, nil)
 }
 
 // mapInputSideOfLookupJoin copies a lookupJoinExpr having a `ScanExpr` as input

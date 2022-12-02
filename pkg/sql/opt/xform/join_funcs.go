@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -31,6 +32,7 @@ import (
 // GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
 func (c *CustomFuncs) GenerateMergeJoins(
 	grp memo.RelExpr,
+	required *physical.Required,
 	originalOp opt.Operator,
 	left, right memo.RelExpr,
 	on memo.FiltersExpr,
@@ -248,6 +250,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //	                                 Input
 func (c *CustomFuncs) GenerateLookupJoins(
 	grp memo.RelExpr,
+	required *physical.Required,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
@@ -293,6 +296,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 // produces the non-covered virtual columns.
 func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
 	grp memo.RelExpr,
+	required *physical.Required,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	rightCols opt.ColSet,
@@ -755,6 +759,7 @@ func (c *CustomFuncs) mapLookupJoin(
 // GenerateLookupJoins for details.
 func (c *CustomFuncs) GenerateInvertedJoins(
 	grp memo.RelExpr,
+	required *physical.Required,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
@@ -1108,7 +1113,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 // ReorderJoins adds alternate orderings of the given join tree to the memo. The
 // first expression of the memo group is used for construction of the join
 // graph. For more information, see the comment in join_order_builder.go.
-func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr) memo.RelExpr {
+func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr, required *physical.Required) memo.RelExpr {
 	c.e.o.JoinOrderBuilder().Init(c.e.f, c.e.evalCtx)
 	c.e.o.JoinOrderBuilder().Reorder(grp.FirstExpr())
 	return grp
