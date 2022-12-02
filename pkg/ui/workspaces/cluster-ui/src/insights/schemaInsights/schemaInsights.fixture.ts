@@ -19,6 +19,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
         table: "table_name",
         indexID: 1,
         indexName: "index_name",
+        schema: "public",
         lastUsed:
           "This index has not been used and can be removed for better write performance.",
       },
@@ -30,6 +31,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
         table: "table_name2",
         indexID: 2,
         indexName: "index_name2",
+        schema: "public",
         lastUsed:
           "This index has not been used in over 9 days, 5 hours, and 3 minutes and can be removed for better write performance.",
       },
