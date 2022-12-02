@@ -340,6 +340,7 @@ export interface InsightRecommendation {
 
 export interface indexDetails {
   table: string;
+  schema: string;
   indexID: number;
   indexName: string;
   lastUsed?: string;
