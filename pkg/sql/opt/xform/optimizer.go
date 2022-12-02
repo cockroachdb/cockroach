@@ -533,7 +533,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 
 		// Now try to generate new expressions that are logically equivalent to
 		// other expressions in this group.
-		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp).fullyExplored {
+		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp, required).fullyExplored {
 			fullyOptimized = false
 		}
 
