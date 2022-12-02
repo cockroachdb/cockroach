@@ -782,7 +782,7 @@ func (g *newRuleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleE
 		// group.
 		g.genBoundStatements(rule.Replace)
 
-		g.w.writeIndent("%s.funcs.%s(_root, ", g.thisVar, t.Name)
+		g.w.writeIndent("%s.funcs.%s(_root, _required, ", g.thisVar, t.Name)
 		for index, arg := range t.Args {
 			if index != 0 {
 				g.w.write(", ")

@@ -41,7 +41,9 @@ import (
 //	rows from the table. See GenerateConstrainedScans,
 //	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
 //	index joins are introduced into the memo.
-func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
+func (c *CustomFuncs) GenerateIndexScans(
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
+) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
@@ -174,7 +176,7 @@ func (c *CustomFuncs) LocalityOptimizedScanAboveMaxCardinality(relExpr memo.RelE
 // CanMaybeGenerateLocalityOptimizedScan returns true. See the comment above the
 // GenerateLocalityOptimizedScan rule for more details.
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
 ) {
 	if c.LocalityOptimizedScanAboveMaxCardinality(grp) {
 		return
