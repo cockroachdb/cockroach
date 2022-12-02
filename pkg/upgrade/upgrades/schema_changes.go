@@ -131,6 +131,7 @@ func migrateTable(
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			op.query); err != nil {
+			fmt.Println(err)
 			return err
 		}
 		return nil
@@ -172,6 +173,12 @@ func ensureProtoMessagesAreEqual(expected, found protoutil.Message) error {
 	if bytes.Equal(expectedBytes, foundBytes) {
 		return nil
 	}
+	fmt.Println("expected")
+
+	fmt.Println(expected)
+	fmt.Println("found")
+
+	fmt.Println(found)
 	return errors.Errorf("expected descriptor doesn't match "+
 		"with found descriptor: %s", strings.Join(pretty.Diff(expected, found), "\n"))
 }

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -479,6 +480,7 @@ func (r *Registry) CreateJobWithTxn(
 	if txn != nil {
 		start = txn.ReadTimestamp().GoTime()
 	}
+	jobType := j.mu.payload.Type()
 	j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(start)
 	payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 	if err != nil {
@@ -488,9 +490,23 @@ func (r *Registry) CreateJobWithTxn(
 	if err != nil {
 		return nil, err
 	}
-	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
+
+	// To actually run the upgrade, a migration job will need to be created using the
+	// old schema of the jobs table.
+	if r.settings.Version.ActiveVersion(ctx).Less(clusterversion.ByKey(
+		clusterversion.V23_1AddTypeColumnToJobsTable)) {
+		if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
 INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
 VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(),
+		); err != nil {
+			return nil, err
+		}
+		return j, nil
+	}
+
+	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
+INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id, type)
+VALUES ($1, $2, $3, $4, $5, $6, $7)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String(),
 	); err != nil {
 		return nil, err
 	}

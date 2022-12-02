@@ -340,6 +340,10 @@ const (
 	// V23_1_CreateSystemJobInfoTable creates the system.job_info table.
 	V23_1CreateSystemJobInfoTable
 
+	// V23_1AddTypeColumnToJobsTable adds the job_type computed column to the
+	// system.jobs table.
+	V23_1AddTypeColumnToJobsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -593,6 +597,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1CreateSystemJobInfoTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 10},
+	},
+	{
+		Key:     V23_1AddTypeColumnToJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 12},
 	},
 
 	// *************************************************

@@ -197,6 +197,24 @@ CREATE TABLE system.jobs (
 	claim_instance_id INT8,
 	num_runs          INT8,
 	last_run          TIMESTAMP,
+	type STRING
+		AS (COALESCE(
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'backup',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'restore',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'schemaChange',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'import',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'changefeed',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'createStats',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'schemaChangeGC',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'typeSchemaChange',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'streamIngestion',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'newSchemaChange',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'migration',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'autoSpanConfigReconciliation',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'autoSQLStatsCompaction',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'streamReplication',
+			crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload, true, true)->'schemaTelemetry'
+		)) STORED,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
@@ -206,7 +224,7 @@ CREATE TABLE system.jobs (
     created
   ) STORING(last_run, num_runs, claim_instance_id)
     WHERE ` + JobsRunStatsIdxPredicate + `,
-	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
+	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id, type),
 	FAMILY progress (progress),
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
@@ -1330,6 +1348,22 @@ var (
 		))
 
 	nowString = "now():::TIMESTAMP"
+	//typeGenerationExprString = "COALESCE(crdb_internal.pb_to_json(" +
+	//	"'cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'backup':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'restore':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'schemaChange':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'import':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'changefeed':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'createStats':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'schemaChangeGC':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'typeSchemaChange':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'streamIngestion':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'newSchemaChange':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'migration':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'autoSpanConfigReconciliation':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'autoSQLStatsCompaction':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'streamReplication':::STRING, " +
+	//	"crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload':::STRING, payload, true, true)->>'schemaTelemetry':::STRING)"
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = makeSystemTable(
@@ -1349,6 +1383,7 @@ var (
 				{Name: "claim_instance_id", ID: 9, Type: types.Int, Nullable: true},
 				{Name: "num_runs", ID: 10, Type: types.Int, Nullable: true},
 				{Name: "last_run", ID: 11, Type: types.Timestamp, Nullable: true},
+				{Name: "type", ID: 12, Type: types.String, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1357,8 +1392,8 @@ var (
 					// that needed to be done.
 					Name:        "fam_0_id_status_created_payload",
 					ID:          0,
-					ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7},
+					ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id", "type"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7, 12},
 				},
 				{
 					Name:            "progress",
@@ -1410,6 +1445,7 @@ var (
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				Predicate:           JobsRunStatsIdxPredicate,
 			},
+			// TODO add an index here?
 		))
 
 	// WebSessions table to authenticate sessions over stateless connections.

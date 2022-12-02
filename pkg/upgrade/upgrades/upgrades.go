@@ -230,6 +230,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemJobInfoTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"add column locality to table system.sql_instances",
+		toCV(clusterversion.V23_1AddTypeColumnToJobsTable),
+		upgrade.NoPrecondition,
+		alterSystemJobsAddJobType,
+	),
 }
 
 func init() {
