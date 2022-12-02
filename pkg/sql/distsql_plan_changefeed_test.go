@@ -1,0 +1,480 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package sql
+
+import (
+	"context"
+	"math/rand"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
+)
+
+// Tests in this file test CDC specific logic when planning/executing
+// expressions. CDC expressions are a restricted form of a select statement. The
+// tests here do not test full CDC semantics, and instead just use expressions
+// that satisfy CDC requirement. The tests here also do not test any CDC
+// specific functions; this is done elsewhere.
+
+func TestChangefeedLogicalPlan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT, b int, c STRING, CONSTRAINT "pk" PRIMARY KEY (a, b), UNIQUE (c))`)
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT)`)
+	fooDesc := desctestutils.TestingGetTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "defaultdb", "public", "foo")
+
+	ctx := context.Background()
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+
+	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
+			Database:   "defaultdb",
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		},
+	)
+	defer cleanup()
+
+	primarySpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+	pkStart := primarySpan.Key
+	pkEnd := primarySpan.EndKey
+	fooID := fooDesc.GetID()
+
+	rc := func(n string, typ *types.T) colinfo.ResultColumn {
+		return colinfo.ResultColumn{Name: n, Typ: typ}
+	}
+	allColumns := colinfo.ResultColumns{
+		rc("a", types.Int), rc("b", types.Int), rc("c", types.String),
+	}
+	checkPresentation := func(t *testing.T, expected, found colinfo.ResultColumns) {
+		t.Helper()
+		require.Equal(t, len(expected), len(found))
+		for i := 0; i < len(found); i++ {
+			require.Equal(t, expected[i].Name, found[i].Name, "e=%v f=%v", expected[i], found[i])
+			require.True(t, expected[i].Typ.Equal(found[i].Typ), "e=%v f=%v", expected[i], found[i])
+		}
+	}
+
+	for _, tc := range []struct {
+		stmt        string
+		expectErr   string
+		expectSpans roachpb.Spans
+		present     colinfo.ResultColumns
+	}{
+		{
+			stmt:        "SELECT * FROM foo WHERE 5 > 1",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     allColumns,
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE 0 != 0",
+			expectErr: "does not match any rows",
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE a IS NULL",
+			expectErr: "does not match any rows",
+		},
+		{
+			stmt:      "SELECT * FROM foo, bar WHERE foo.a = bar.a",
+			expectErr: "unexpected multiple primary index scan operations",
+		},
+		{
+			stmt:      "SELECT (SELECT a FROM foo) AS a FROM foo",
+			expectErr: "unexpected query structure",
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE a > 3 AND a < 3",
+			expectErr: "does not match any rows",
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE 5 > 1 UNION SELECT * FROM foo WHERE a < 1",
+			expectErr: "unexpected multiple primary index scan operations",
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a >=3 or a < 3",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     allColumns,
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE 5",
+			expectErr: "argument of WHERE must be type bool, not type int",
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE no_such_column = 'something'",
+			expectErr: `column "no_such_column" does not exist`,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE true",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     allColumns,
+		},
+		{
+			stmt:      "SELECT * FROM foo WHERE false",
+			expectErr: "does not match any rows",
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a > 100",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a < 100",
+			expectSpans: roachpb.Spans{{Key: pkStart, EndKey: mkPkKey(t, fooID, 100)}},
+			present:     allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a > 10 AND a > 5",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 11), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a > 10 OR a > 5",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 6), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a > 100 AND a <= 101",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101), EndKey: mkPkKey(t, fooID, 102)}},
+			present:     allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a > 100 and a < 200",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101), EndKey: mkPkKey(t, fooID, 200)}},
+			present:     allColumns,
+		},
+		{
+			stmt: "SELECT * FROM foo WHERE a > 100 or a <= 99",
+			expectSpans: roachpb.Spans{
+				{Key: pkStart, EndKey: mkPkKey(t, fooID, 100)},
+				{Key: mkPkKey(t, fooID, 101), EndKey: pkEnd},
+			},
+			present: allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE a > 100 AND b > 11",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			// Same as above, but with table alias -- we expect remaining expression to
+			// preserve the alias.
+			stmt:        "SELECT * FROM foo AS buz WHERE buz.a > 100 AND b > 11",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			// Same as above, but w/ silly tautology, which should be removed.
+			stmt:        "SELECT * FROM defaultdb.public.foo WHERE (a > 3 OR a <= 3) AND a > 100 AND b > 11",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			stmt: "SELECT * FROM foo WHERE a < 42 OR (a > 100 AND b > 11)",
+			expectSpans: roachpb.Spans{
+				{Key: pkStart, EndKey: mkPkKey(t, fooID, 42)},
+				{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd},
+			},
+			present: allColumns,
+		},
+		{
+			// Same as above, but now with tuples.
+			stmt: "SELECT * FROM foo WHERE a < 42 OR ((a, b) > (100, 11))",
+			expectSpans: roachpb.Spans{
+				{Key: pkStart, EndKey: mkPkKey(t, fooID, 42)},
+				// Remember: tuples use lexicographical ordering so the start key is
+				// /Table/104/1/100/12 (i.e. a="100" and b="12" (because 100/12 lexicographically follows 100).
+				{Key: mkPkKey(t, fooID, 100, 12), EndKey: pkEnd},
+			},
+			present: allColumns,
+		},
+		{
+			stmt:        "SELECT * FROM foo WHERE (a, b) > (2, 5)",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 2, 6), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			// Test that aliased table names work.
+			stmt:        "SELECT * FROM foo as buz WHERE (buz.a, buz.b) > (2, 5)",
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 2, 6), EndKey: pkEnd}},
+			present:     allColumns,
+		},
+		{
+			// This test also uses qualified names for some fields.
+			stmt: "SELECT * FROM foo WHERE foo.a IN (5, 10, 20) AND b < 25",
+			expectSpans: roachpb.Spans{
+				{Key: mkPkKey(t, fooID, 5), EndKey: mkPkKey(t, fooID, 5, 25)},
+				{Key: mkPkKey(t, fooID, 10), EndKey: mkPkKey(t, fooID, 10, 25)},
+				{Key: mkPkKey(t, fooID, 20), EndKey: mkPkKey(t, fooID, 20, 25)},
+			},
+			present: allColumns,
+		},
+		{
+			// Currently, only primary index supported; so even when doing lookup
+			// on a non-primary index, we expect primary index to be scanned.
+			stmt:        "SELECT * FROM foo WHERE c = 'unique'",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     allColumns,
+		},
+		{
+			// Point lookup.
+			stmt:        `SELECT a as apple, b as boy, pi()/2 as "halfPie" FROM foo WHERE (a = 5 AND b = 10)`,
+			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 5, 10, 0)}},
+			present: colinfo.ResultColumns{
+				rc("apple", types.Int), rc("boy", types.Int), rc("halfPie", types.Float),
+			},
+		},
+		{
+			// Scope -- restrict columns
+			stmt:        `SELECT * FROM (SELECT a, c FROM foo) AS foo`,
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     colinfo.ResultColumns{rc("a", types.Int), rc("c", types.String)},
+		},
+	} {
+		t.Run(tc.stmt, func(t *testing.T) {
+			stmt, err := parser.ParseOne(tc.stmt)
+			require.NoError(t, err)
+			expr := stmt.AST.(*tree.Select)
+
+			plan, err := PlanCDCExpression(ctx, p, expr)
+			if tc.expectErr != "" {
+				require.Regexp(t, tc.expectErr, err, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.expectSpans, plan.Spans)
+			checkPresentation(t, tc.present, plan.Presentation)
+		})
+	}
+}
+
+// Ensure the physical plan does not buffer results.
+func TestChangefeedStreamsResults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b int)`)
+	fooDesc := desctestutils.TestingGetTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "defaultdb", "public", "foo")
+
+	ctx := context.Background()
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
+			Database:   "defaultdb",
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		},
+	)
+	defer cleanup()
+	stmt, err := parser.ParseOne("SELECT * FROM foo WHERE a < 10")
+	require.NoError(t, err)
+	expr := stmt.AST.(*tree.Select)
+	cdcPlan, err := PlanCDCExpression(ctx, p, expr)
+	require.NoError(t, err)
+
+	cdcPlan.Plan.planNode, err = prepareCDCPlan(ctx, cdcPlan.Plan.planNode,
+		nil, catalog.ColumnIDToOrdinalMap(fooDesc.PublicColumns()))
+	require.NoError(t, err)
+
+	planner := p.(*planner)
+	physPlan, physPlanCleanup, err := planner.DistSQLPlanner().createPhysPlan(ctx, cdcPlan.PlanCtx, cdcPlan.Plan)
+	defer physPlanCleanup()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(physPlan.LocalProcessors))
+	require.True(t, physPlan.LocalProcessors[0].MustBeStreaming())
+}
+
+func TestCdcExpressionExecution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT, c STRING)`)
+	fooDesc := desctestutils.TestingGetTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "defaultdb", "public", "foo")
+
+	ctx := context.Background()
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
+			Database:   "defaultdb",
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		},
+	)
+	defer cleanup()
+	planner := p.(*planner)
+
+	for _, tc := range []struct {
+		name      string
+		stmt      string
+		expectRow func(row rowenc.EncDatumRow) (expected []string)
+	}{
+		{
+			name: "star",
+			stmt: "SELECT * FROM foo WHERE a % 2 = 0",
+			expectRow: func(row rowenc.EncDatumRow) (expected []string) {
+				if tree.MustBeDInt(row[0].Datum)%2 == 0 {
+					a := tree.AsStringWithFlags(row[0].Datum, tree.FmtExport)
+					b := tree.AsStringWithFlags(row[1].Datum, tree.FmtExport)
+					c := tree.AsStringWithFlags(row[2].Datum, tree.FmtExport)
+					expected = append(expected, a, b, c)
+				}
+				return expected
+			},
+		},
+		{
+			name: "same columns",
+			stmt: "SELECT a, c, c, a FROM foo WHERE a % 2 = 0",
+			expectRow: func(row rowenc.EncDatumRow) (expected []string) {
+				if tree.MustBeDInt(row[0].Datum)%2 == 0 {
+					a := tree.AsStringWithFlags(row[0].Datum, tree.FmtExport)
+					c := tree.AsStringWithFlags(row[2].Datum, tree.FmtExport)
+					expected = append(expected, a, c, c, a)
+				}
+				return expected
+			},
+		},
+		{
+			name: "double c",
+			stmt: "SELECT concat(c, c) AS doubleC FROM foo WHERE c IS NOT NULL",
+			expectRow: func(row rowenc.EncDatumRow) (expected []string) {
+				if row[2].Datum != tree.DNull {
+					c := tree.AsStringWithFlags(row[2].Datum, tree.FmtExport)
+					expected = append(expected, c+c)
+				}
+				return expected
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := parser.ParseOne(tc.stmt)
+			require.NoError(t, err)
+			expr := stmt.AST.(*tree.Select)
+			var input execinfra.RowChannel
+			input.InitWithNumSenders([]*types.T{types.Int, types.Int, types.String}, 1)
+			plan, err := PlanCDCExpression(ctx, p, expr)
+			require.NoError(t, err)
+
+			var rows [][]string
+			g := ctxgroup.WithContext(context.Background())
+
+			g.GoCtx(func(ctx context.Context) error {
+				writer := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+					strRow := make([]string, len(row))
+					for i, d := range row {
+						strRow[i] = tree.AsStringWithFlags(d, tree.FmtExport)
+					}
+					rows = append(rows, strRow)
+					return nil
+				})
+
+				r := MakeDistSQLReceiver(
+					ctx,
+					writer,
+					tree.Rows,
+					planner.execCfg.RangeDescriptorCache,
+					nil,
+					nil, /* clockUpdater */
+					planner.extendedEvalCtx.Tracing,
+					planner.execCfg.ContentionRegistry,
+				)
+				defer r.Release()
+
+				if err := RunCDCEvaluation(ctx, plan, &input,
+					catalog.ColumnIDToOrdinalMap(fooDesc.PublicColumns()), r); err != nil {
+					return err
+				}
+				return writer.Err()
+			})
+
+			rng, _ := randutil.NewTestRand()
+
+			var expectedRows [][]string
+			for i := 0; i < 100; i++ {
+				row := randEncDatumRow(rng, fooDesc)
+				input.Push(row, nil)
+				if expected := tc.expectRow(row); expected != nil {
+					expectedRows = append(expectedRows, tc.expectRow(row))
+				}
+			}
+			input.ProducerDone()
+			require.NoError(t, g.Wait())
+			require.Equal(t, expectedRows, rows)
+		})
+	}
+}
+
+func randEncDatumRow(rng *rand.Rand, desc catalog.TableDescriptor) (row rowenc.EncDatumRow) {
+	for _, col := range desc.PublicColumns() {
+		if !col.IsVirtual() {
+			row = append(row, rowenc.EncDatum{Datum: randgen.RandDatum(rng, col.GetType(), col.IsNullable())})
+		}
+	}
+	return row
+}
+
+func mkPkKey(t *testing.T, tableID descpb.ID, vals ...int) roachpb.Key {
+	t.Helper()
+
+	// Encode index id, then each value.
+	key, err := keyside.Encode(
+		keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
+		tree.NewDInt(tree.DInt(1)), encoding.Ascending)
+
+	require.NoError(t, err)
+	for _, v := range vals {
+		d := tree.NewDInt(tree.DInt(v))
+		key, err = keyside.Encode(key, d, encoding.Ascending)
+		require.NoError(t, err)
+	}
+
+	return key
+}
