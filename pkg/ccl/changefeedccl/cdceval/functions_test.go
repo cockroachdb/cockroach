@@ -38,8 +38,8 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, ""+
-		"CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d INT, "+
-		"FAMILY most (a,b,c), FAMILY only_d (d))")
+		"CREATE TABLE foo (a INT, b STRING, c STRING, d INT, "+
+		"FAMILY most (a,b,c), FAMILY only_d (d), PRIMARY KEY (a,b))")
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	ctx := context.Background()
@@ -142,6 +142,26 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		p, err = e.evalProjection(ctx, testRow, s.Clock().Now(), testRow)
 		require.NoError(t, err)
 		require.Equal(t, map[string]string{"cdc_prev": expectedJSON.String()}, slurpValues(t, p))
+	})
+
+	t.Run("cdc_get_key", func(t *testing.T) {
+		rowDatums := randEncDatumRow(t, desc, 0)
+		testRow := cdcevent.TestingMakeEventRow(desc, 0, rowDatums, false)
+		e, err := makeExprEval(t, s.ClusterSettings(), testRow.EventDescriptor,
+			"SELECT cdc_get_key()")
+		require.NoError(t, err)
+
+		// Otherwise, expect to get JSONB.
+		expectedKeys := desc.GetPrimaryIndex()
+		b := jsonb.NewArrayBuilder(expectedKeys.NumKeyColumns())
+		for _, col := range desc.IndexKeyColumns(expectedKeys) {
+			b.Add(mustParseJSON(rowDatums[col.Ordinal()].Datum))
+		}
+
+		expectedJSON := b.Build()
+		p, err := e.evalProjection(ctx, testRow, s.Clock().Now(), testRow)
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{"cdc_get_key": expectedJSON.String()}, slurpValues(t, p))
 	})
 
 	for _, cast := range []string{"", "::decimal", "::string"} {
