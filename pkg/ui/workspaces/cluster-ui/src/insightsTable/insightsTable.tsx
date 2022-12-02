@@ -110,6 +110,7 @@ function descriptionCell(
   insightRec: InsightRecommendation,
   showQuery: boolean,
   disableStmtLink: boolean,
+  isCockroachCloud: boolean,
 ): React.ReactElement {
   const stmtLink =
     showQuery || isIndexRec(insightRec) ? (
@@ -125,6 +126,11 @@ function descriptionCell(
       {"."}
     </>
   );
+
+  const indexLink = isCockroachCloud
+    ? `databases/${insightRec.database}/${insightRec.indexDetails?.schema}/${insightRec.indexDetails?.table}/${insightRec.indexDetails?.indexName}`
+    : `database/${insightRec.database}/table/${insightRec.indexDetails?.table}/index/${insightRec.indexDetails?.indexName}`;
+
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
@@ -143,10 +149,7 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Index: </span>{" "}
-            <Link
-              to={`database/${insightRec.database}/table/${insightRec.indexDetails.table}/index/${insightRec.indexDetails.indexName}`}
-              className={cx("table-link")}
-            >
+            <Link to={indexLink} className={cx("table-link")}>
               {insightRec.indexDetails.indexName}
             </Link>
           </div>
@@ -327,7 +330,7 @@ export function makeInsightsColumns(
       name: "details",
       title: insightsTableTitles.details(),
       cell: (item: InsightRecommendation) =>
-        descriptionCell(item, showQuery, disableStmtLink),
+        descriptionCell(item, showQuery, disableStmtLink, hideAction),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
