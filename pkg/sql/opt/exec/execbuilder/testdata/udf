@@ -104,7 +104,7 @@ CREATE TABLE t93210 (
 );
 CREATE FUNCTION fn93210() RETURNS INT STABLE LANGUAGE SQL AS 'SELECT a FROM t93210';
 
-# The body of the UDF should have no assignment cast expressions.
+# The query plan should have no assignment cast expressions.
 query T
 EXPLAIN (OPT, TYPES)
 SELECT fn93210()
@@ -112,25 +112,18 @@ SELECT fn93210()
 values
  ├── columns: fn93210:4(int)
  ├── cardinality: [1 - 1]
- ├── stable
  ├── stats: [rows=1]
- ├── cost: 0.02
+ ├── cost: 5.07
  ├── key: ()
  ├── fd: ()-->(4)
  ├── distribution: test
  ├── prune: (4)
  └── tuple [type=tuple{int}]
-      └── udf: fn93210 [type=int]
-           └── body
-                └── limit
-                     ├── columns: a:1(int!null)
-                     ├── cardinality: [0 - 1]
-                     ├── stats: [rows=1]
-                     ├── key: ()
-                     ├── fd: ()-->(1)
-                     ├── distribution: test
-                     ├── scan t93210
-                     │    ├── columns: a:1(int!null)
-                     │    ├── stats: [rows=1000]
-                     │    └── key: (1)
-                     └── const: 1 [type=int]
+      └── subquery [type=int]
+           └── scan t93210
+                ├── columns: a:1(int!null)
+                ├── limit: 1
+                ├── stats: [rows=1]
+                ├── cost: 5.05
+                ├── key: ()
+                └── fd: ()-->(1)
