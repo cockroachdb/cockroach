@@ -611,12 +611,12 @@ func (b *Builder) buildUDF(
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
 
-	// Build the input expressions.
-	var input memo.ScalarListExpr
+	// Build the argument expressions.
+	var args memo.ScalarListExpr
 	if len(f.Exprs) > 0 {
-		input = make(memo.ScalarListExpr, len(f.Exprs))
+		args = make(memo.ScalarListExpr, len(f.Exprs))
 		for i, pexpr := range f.Exprs {
-			input[i] = b.buildScalar(
+			args[i] = b.buildScalar(
 				pexpr.(tree.TypedExpr),
 				inScope,
 				nil, /* outScope */
@@ -629,26 +629,26 @@ func (b *Builder) buildUDF(
 	// Create a new scope for building the statements in the function body. We
 	// start with an empty scope because a statement in the function body cannot
 	// refer to anything from the outer expression. If there are function
-	// arguments, we add them as columns to the scope so that references to them
-	// can be resolved.
+	// parameters, we add them as columns to the scope so that references to
+	// them can be resolved.
 	//
 	// TODO(mgartner): We may need to set bodyScope.atRoot=true to prevent
 	// CTEs that mutate and are not at the top-level.
 	bodyScope := b.allocScope()
-	var argCols opt.ColList
+	var params opt.ColList
 	if o.Types.Length() > 0 {
-		args, ok := o.Types.(tree.ArgTypes)
+		paramTypes, ok := o.Types.(tree.ParamTypes)
 		if !ok {
 			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
 		}
-		argCols = make(opt.ColList, len(args))
-		for i := range args {
-			arg := &args[i]
-			argColName := funcArgColName(tree.Name(arg.Name), i)
-			col := b.synthesizeColumn(bodyScope, argColName, arg.Typ, nil /* expr */, nil /* scalar */)
-			col.setArgOrd(i)
-			argCols[i] = col.id
+		params = make(opt.ColList, len(paramTypes))
+		for i := range paramTypes {
+			paramType := &paramTypes[i]
+			argColName := funcParamColName(tree.Name(paramType.Name), i)
+			col := b.synthesizeColumn(bodyScope, argColName, paramType.Typ, nil /* expr */, nil /* scalar */)
+			col.setParamOrd(i)
+			params[i] = col.id
 		}
 	}
 
@@ -717,10 +717,10 @@ func (b *Builder) buildUDF(
 	}
 
 	out = b.factory.ConstructUDF(
-		input,
+		args,
 		&memo.UDFPrivate{
 			Name:              def.Name,
-			ArgCols:           argCols,
+			Params:            params,
 			Body:              rels,
 			Typ:               f.ResolvedType(),
 			Volatility:        o.Volatility,

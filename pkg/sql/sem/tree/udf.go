@@ -85,7 +85,7 @@ type CreateFunction struct {
 	IsProcedure bool
 	Replace     bool
 	FuncName    FunctionName
-	Args        FuncArgs
+	Params      FuncParams
 	ReturnType  FuncReturnType
 	Options     FunctionOptions
 	RoutineBody *RoutineBody
@@ -100,7 +100,7 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 	ctx.WriteString("FUNCTION ")
 	ctx.FormatNode(&node.FuncName)
 	ctx.WriteString("(")
-	ctx.FormatNode(node.Args)
+	ctx.FormatNode(node.Params)
 	ctx.WriteString(")\n\t")
 	ctx.WriteString("RETURNS ")
 	if node.ReturnType.IsSet {
@@ -275,11 +275,11 @@ func (node FunctionBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("$$")
 }
 
-// FuncArgs represents a list of FuncArg.
-type FuncArgs []FuncArg
+// FuncParams represents a list of FuncParam.
+type FuncParams []FuncParam
 
 // Format implements the NodeFormatter interface.
-func (node FuncArgs) Format(ctx *FmtCtx) {
+func (node FuncParams) Format(ctx *FmtCtx) {
 	for i, arg := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -288,24 +288,24 @@ func (node FuncArgs) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncArg represents an argument from a UDF signature.
-type FuncArg struct {
+// FuncParam represents a parameter in a UDF signature.
+type FuncParam struct {
 	Name       Name
 	Type       ResolvableTypeReference
-	Class      FuncArgClass
+	Class      FuncParamClass
 	DefaultVal Expr
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FuncArg) Format(ctx *FmtCtx) {
+func (node *FuncParam) Format(ctx *FmtCtx) {
 	switch node.Class {
-	case FunctionArgIn:
+	case FunctionParamIn:
 		ctx.WriteString("IN")
-	case FunctionArgOut:
+	case FunctionParamOut:
 		ctx.WriteString("OUT")
-	case FunctionArgInOut:
+	case FunctionParamInOut:
 		ctx.WriteString("INOUT")
-	case FunctionArgVariadic:
+	case FunctionParamVariadic:
 		ctx.WriteString("VARIADIC")
 	default:
 		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
@@ -322,18 +322,18 @@ func (node *FuncArg) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncArgClass indicates what type of argument an arg is.
-type FuncArgClass int
+// FuncParamClass indicates what type of argument an arg is.
+type FuncParamClass int
 
 const (
-	// FunctionArgIn args can only be used as input.
-	FunctionArgIn FuncArgClass = iota
-	// FunctionArgOut args can only be used as output.
-	FunctionArgOut
-	// FunctionArgInOut args can be used as both input and output.
-	FunctionArgInOut
-	// FunctionArgVariadic args are variadic.
-	FunctionArgVariadic
+	// FunctionParamIn args can only be used as input.
+	FunctionParamIn FuncParamClass = iota
+	// FunctionParamOut args can only be used as output.
+	FunctionParamOut
+	// FunctionParamInOut args can be used as both input and output.
+	FunctionParamInOut
+	// FunctionParamVariadic args are variadic.
+	FunctionParamVariadic
 )
 
 // FuncReturnType represent the return type of UDF.
@@ -378,30 +378,28 @@ func (node FuncObjs) Format(ctx *FmtCtx) {
 // FuncObj represents a function object DROP FUNCTION tries to drop.
 type FuncObj struct {
 	FuncName FunctionName
-	Args     FuncArgs
+	Params   FuncParams
 }
 
 // Format implements the NodeFormatter interface.
 func (node FuncObj) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.FuncName)
-	if node.Args != nil {
+	if node.Params != nil {
 		ctx.WriteString("(")
-		ctx.FormatNode(node.Args)
+		ctx.FormatNode(node.Params)
 		ctx.WriteString(")")
 	}
 }
 
-// InputArgTypes returns a slice of argument types of the function.
-func (node FuncObj) InputArgTypes(
-	ctx context.Context, res TypeReferenceResolver,
-) ([]*types.T, error) {
+// ParamTypes returns a slice of parameter types of the function.
+func (node FuncObj) ParamTypes(ctx context.Context, res TypeReferenceResolver) ([]*types.T, error) {
 	// TODO(chengxiong): handle INOUT, OUT and VARIADIC argument classes when we
 	// support them. This is because only IN and INOUT arg types need to be
 	// considered to match a overload.
 	var argTypes []*types.T
-	if node.Args != nil {
-		argTypes = make([]*types.T, len(node.Args))
-		for i, arg := range node.Args {
+	if node.Params != nil {
+		argTypes = make([]*types.T, len(node.Params))
+		for i, arg := range node.Params {
 			typ, err := ResolveType(ctx, arg.Type, res)
 			if err != nil {
 				return nil, err

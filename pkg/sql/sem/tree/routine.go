@@ -20,7 +20,7 @@ import (
 // RoutinePlanFn creates a plan for the execution of one statement within a
 // routine.
 type RoutinePlanFn func(
-	_ context.Context, _ RoutineExecFactory, stmtIdx int, input Datums,
+	_ context.Context, _ RoutineExecFactory, stmtIdx int, args Datums,
 ) (RoutinePlan, error)
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
@@ -43,8 +43,8 @@ type RoutineExpr struct {
 	// the UDF that the RoutineExpr is built from.
 	Name string
 
-	// Input contains the input expressions to the routine.
-	Input TypedExprs
+	// Args contains the argument expressions to the routine.
+	Args TypedExprs
 
 	// PlanFn returns an exec plan for a given statement in the routine.
 	PlanFn RoutinePlanFn
@@ -72,7 +72,7 @@ type RoutineExpr struct {
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
 func NewTypedRoutineExpr(
 	name string,
-	input TypedExprs,
+	args TypedExprs,
 	planFn RoutinePlanFn,
 	numStmts int,
 	typ *types.T,
@@ -80,7 +80,7 @@ func NewTypedRoutineExpr(
 	calledOnNullInput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Input:             input,
+		Args:              args,
 		PlanFn:            planFn,
 		NumStmts:          numStmts,
 		Typ:               typ,
@@ -105,8 +105,8 @@ func (node *RoutineExpr) ResolvedType() *types.T {
 // Format is part of the Expr interface.
 func (node *RoutineExpr) Format(ctx *FmtCtx) {
 	ctx.Printf("%s(", node.Name)
-	for i := range node.Input {
-		node.Input[i].Format(ctx)
+	for i := range node.Args {
+		node.Args[i].Format(ctx)
 		if i > 0 {
 			ctx.WriteString(", ")
 		}

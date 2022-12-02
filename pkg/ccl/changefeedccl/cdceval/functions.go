@@ -60,7 +60,7 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	"cdc_is_delete": makeCDCBuiltIn(
 		"cdc_is_delete",
 		tree.Overload{
-			Types:      tree.ArgTypes{},
+			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
 				rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
@@ -89,7 +89,7 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	"cdc_prev": makeCDCBuiltIn(
 		"cdc_prev",
 		tree.Overload{
-			Types:      tree.ArgTypes{},
+			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn:         prevRowAsJSON,
 			Info:       "Returns previous value of a row as JSONB",
@@ -129,7 +129,7 @@ func cdcTimestampBuiltin(
 		cdcFnProps,
 		[]tree.Overload{
 			{
-				Types:      tree.ArgTypes{},
+				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Decimal),
 				Fn: func(ctx context.Context, evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
 					rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)

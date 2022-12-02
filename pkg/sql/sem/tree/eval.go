@@ -90,7 +90,7 @@ func unaryOpFixups(
 ) map[UnaryOperatorSymbol]*UnaryOpOverloads {
 	for _, overload := range ops {
 		for _, impl := range overload.overloads {
-			impl.types = ArgTypes{{"arg", impl.Typ}}
+			impl.types = ParamTypes{{"arg", impl.Typ}}
 			impl.retType = FixedReturnType(impl.ReturnType)
 		}
 	}
@@ -460,7 +460,7 @@ func init() {
 func init() {
 	for _, overload := range BinOps {
 		_ = overload.ForEachBinOp(func(impl *BinOp) error {
-			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
+			impl.types = ParamTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
 			impl.retType = FixedReturnType(impl.ReturnType)
 			return nil
 		})
@@ -1420,7 +1420,7 @@ func cmpOpFixups(
 
 	for _, overloads := range cmpOps {
 		_ = overloads.ForEachCmpOp(func(op *CmpOp) error {
-			op.types = ArgTypes{{"left", op.LeftType}, {"right", op.RightType}}
+			op.types = ParamTypes{{"left", op.LeftType}, {"right", op.RightType}}
 			return nil
 		})
 	}

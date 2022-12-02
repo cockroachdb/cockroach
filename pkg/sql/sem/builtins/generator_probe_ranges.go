@@ -53,7 +53,7 @@ var probeRangesGenerators = map[string]builtinDefinition{
 			Undocumented: true,
 		},
 		makeGeneratorOverload(
-			tree.ArgTypes{
+			tree.ParamTypes{
 				{Name: "timeout", Typ: types.Interval},
 				{Name: "probe_type", Typ: makeEnum()},
 			},

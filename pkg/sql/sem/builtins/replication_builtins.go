@@ -45,7 +45,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"job_id", types.Int},
 				{"cutover_ts", types.TimestampTZ},
 			},
@@ -84,7 +84,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"job_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -124,7 +124,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"job_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -160,7 +160,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"tenant_name", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -190,7 +190,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"stream_id", types.Int},
 				{"frontier_ts", types.String},
 			},
@@ -232,7 +232,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			VectorizeStreaming: true,
 		},
 		makeGeneratorOverload(
-			tree.ArgTypes{
+			tree.ParamTypes{
 				{"stream_id", types.Int},
 				{"partition_spec", types.Bytes},
 			},
@@ -261,7 +261,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"stream_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -295,7 +295,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"stream_id", types.Int},
 				{"successful_ingestion", types.Bool},
 			},

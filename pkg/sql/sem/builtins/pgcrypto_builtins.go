@@ -47,7 +47,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	"crypt": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"password", types.String}, {"salt", types.String}},
+			Types:      tree.ParamTypes{{"password", types.String}, {"salt", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				password := tree.MustBeDString(args[0])
@@ -66,7 +66,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	"digest": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
+			Types:      tree.ParamTypes{{"data", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
@@ -85,7 +85,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Leakproof,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.Bytes}, {"type", types.String}},
+			Types:      tree.ParamTypes{{"data", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
@@ -110,7 +110,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	"gen_salt": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"type", types.String}},
+			Types:      tree.ParamTypes{{"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typ := tree.MustBeDString(args[0])
@@ -124,7 +124,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"type", types.String}, {"iter_count", types.Int}},
+			Types:      tree.ParamTypes{{"type", types.String}, {"iter_count", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typ := tree.MustBeDString(args[0])
@@ -143,7 +143,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	"hmac": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
+			Types:      tree.ParamTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDString(args[1])
@@ -162,7 +162,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Leakproof,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
+			Types:      tree.ParamTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDBytes(args[1])

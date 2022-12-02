@@ -198,8 +198,8 @@ project
  │    └── tuple
  └── projections
       └── udf: add [as=add:4]
-           ├── args: x:1 y:2
-           ├── input
+           ├── params: x:1 y:2
+           ├── args
            │    ├── const: 1
            │    └── const: 2
            └── body
@@ -224,11 +224,11 @@ project
  │    └── tuple
  └── projections
       └── udf: add [as=add:7]
-           ├── args: x:4 y:5
-           ├── input
+           ├── params: x:4 y:5
+           ├── args
            │    ├── udf: add
-           │    │    ├── args: x:1 y:2
-           │    │    ├── input
+           │    │    ├── params: x:1 y:2
+           │    │    ├── args
            │    │    │    ├── const: 1
            │    │    │    └── const: 2
            │    │    └── body
@@ -266,8 +266,8 @@ project
  │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
       └── udf: add [as=add:9]
-           ├── args: x:6 y:7
-           ├── input
+           ├── params: x:6 y:7
+           ├── args
            │    ├── variable: a:1
            │    └── variable: b:2
            └── body
@@ -296,8 +296,8 @@ project
            └── eq
                 ├── variable: a:1
                 └── udf: add
-                     ├── args: x:6 y:7
-                     ├── input
+                     ├── params: x:6 y:7
+                     ├── args
                      │    ├── variable: b:2
                      │    └── variable: c:3
                      └── body
@@ -326,11 +326,11 @@ project
            └── eq
                 ├── variable: a:1
                 └── udf: add
-                     ├── args: x:9 y:10
-                     ├── input
+                     ├── params: x:9 y:10
+                     ├── args
                      │    ├── udf: add
-                     │    │    ├── args: x:6 y:7
-                     │    │    ├── input
+                     │    │    ├── params: x:6 y:7
+                     │    │    ├── args
                      │    │    │    ├── variable: b:2
                      │    │    │    └── variable: c:3
                      │    │    └── body
@@ -374,8 +374,8 @@ project
  │    └── tuple
  └── projections
       └── udf: fetch_b [as=fetch_b:7]
-           ├── args: a_arg:1
-           ├── input
+           ├── params: a_arg:1
+           ├── args
            │    └── const: 1
            └── body
                 └── limit
@@ -401,11 +401,11 @@ project
  │    └── tuple
  └── projections
       └── udf: fetch_b [as=fetch_b:10]
-           ├── args: a_arg:4
-           ├── input
+           ├── params: a_arg:4
+           ├── args
            │    └── udf: add
-           │         ├── args: x:1 y:2
-           │         ├── input
+           │         ├── params: x:1 y:2
+           │         ├── args
            │         │    ├── const: 1
            │         │    └── const: 2
            │         └── body
@@ -448,8 +448,8 @@ project
            └── eq
                 ├── variable: b:2
                 └── udf: fetch_b
-                     ├── args: a_arg:6
-                     ├── input
+                     ├── params: a_arg:6
+                     ├── args
                      │    └── variable: a:1
                      └── body
                           └── limit
@@ -482,8 +482,8 @@ project
  │    └── tuple
  └── projections
       └── udf: shadowed_a [as=shadowed_a:7]
-           ├── args: a:1
-           ├── input
+           ├── params: a:1
+           ├── args
            │    └── const: 1
            └── body
                 └── limit
@@ -515,8 +515,8 @@ project
  │    └── tuple
  └── projections
       └── udf: add_num_args [as=add_num_args:4]
-           ├── args: x:1 y:2
-           ├── input
+           ├── params: x:1 y:2
+           ├── args
            │    ├── const: 1
            │    └── const: 2
            └── body
@@ -541,11 +541,11 @@ project
  │    └── tuple
  └── projections
       └── udf: add_num_args [as=add_num_args:7]
-           ├── args: x:4 y:5
-           ├── input
+           ├── params: x:4 y:5
+           ├── args
            │    ├── udf: add_num_args
-           │    │    ├── args: x:1 y:2
-           │    │    ├── input
+           │    │    ├── params: x:1 y:2
+           │    │    ├── args
            │    │    │    ├── const: 1
            │    │    │    └── const: 2
            │    │    └── body
@@ -587,11 +587,11 @@ project
            └── eq
                 ├── variable: a:1
                 └── udf: add_num_args
-                     ├── args: x:9 y:10
-                     ├── input
+                     ├── params: x:9 y:10
+                     ├── args
                      │    ├── udf: add_num_args
-                     │    │    ├── args: x:6 y:7
-                     │    │    ├── input
+                     │    │    ├── params: x:6 y:7
+                     │    │    ├── args
                      │    │    │    ├── variable: b:2
                      │    │    │    └── variable: c:3
                      │    │    └── body
@@ -633,8 +633,8 @@ project
  │         └── eq
  │              ├── variable: a:1
  │              └── udf: add_num_args
- │                   ├── args: x:6 y:7
- │                   ├── input
+ │                   ├── params: x:6 y:7
+ │                   ├── args
  │                   │    ├── const: 33
  │                   │    └── const: 2
  │                   └── body
@@ -651,8 +651,8 @@ project
  │                             └── const: 1
  └── projections
       └── udf: add_num_args [as=add_num_args:12]
-           ├── args: x:9 y:10
-           ├── input
+           ├── params: x:9 y:10
+           ├── args
            │    ├── const: 1
            │    └── const: 33
            └── body
@@ -687,8 +687,8 @@ project
  │    └── tuple
  └── projections
       └── udf: add_anon [as=add_anon:4]
-           ├── args: arg1:1 arg2:2
-           ├── input
+           ├── params: arg1:1 arg2:2
+           ├── args
            │    ├── const: 1
            │    └── const: 2
            └── body
@@ -713,11 +713,11 @@ project
  │    └── tuple
  └── projections
       └── udf: add_anon [as=add_anon:7]
-           ├── args: arg1:4 arg2:5
-           ├── input
+           ├── params: arg1:4 arg2:5
+           ├── args
            │    ├── udf: add_anon
-           │    │    ├── args: arg1:1 arg2:2
-           │    │    ├── input
+           │    │    ├── params: arg1:1 arg2:2
+           │    │    ├── args
            │    │    │    ├── const: 1
            │    │    │    └── const: 2
            │    │    └── body
@@ -759,11 +759,11 @@ project
            └── eq
                 ├── variable: a:1
                 └── udf: add_anon
-                     ├── args: arg1:9 arg2:10
-                     ├── input
+                     ├── params: arg1:9 arg2:10
+                     ├── args
                      │    ├── udf: add_anon
-                     │    │    ├── args: arg1:6 arg2:7
-                     │    │    ├── input
+                     │    │    ├── params: arg1:6 arg2:7
+                     │    │    ├── args
                      │    │    │    ├── variable: b:2
                      │    │    │    └── variable: c:3
                      │    │    └── body
@@ -805,8 +805,8 @@ project
  │         └── eq
  │              ├── variable: a:1
  │              └── udf: add_anon
- │                   ├── args: arg1:6 arg2:7
- │                   ├── input
+ │                   ├── params: arg1:6 arg2:7
+ │                   ├── args
  │                   │    ├── const: 33
  │                   │    └── const: 2
  │                   └── body
@@ -823,8 +823,8 @@ project
  │                             └── const: 1
  └── projections
       └── udf: add_anon [as=add_anon:12]
-           ├── args: arg1:9 arg2:10
-           ├── input
+           ├── params: arg1:9 arg2:10
+           ├── args
            │    ├── const: 1
            │    └── const: 33
            └── body
@@ -860,8 +860,8 @@ project
  │    └── tuple
  └── projections
       └── udf: get_abc [as=get_abc:8]
-           ├── args: i:1
-           ├── input
+           ├── params: i:1
+           ├── args
            │    └── const: 3
            └── body
                 └── project
@@ -901,8 +901,8 @@ project
  │    └── tuple
  └── projections
       └── udf: get_abc_star [as=get_abc_star:8]
-           ├── args: i:1
-           ├── input
+           ├── params: i:1
+           ├── args
            │    └── const: 3
            └── body
                 └── project
@@ -942,8 +942,8 @@ project
  │    └── tuple
  └── projections
       └── udf: abc_b [as=abc_b:3]
-           ├── args: i:1
-           ├── input
+           ├── params: i:1
+           ├── args
            │    └── cast: RECORD
            │         └── tuple
            │              ├── const: 1
@@ -979,8 +979,8 @@ project
  │    └── tuple
  └── projections
       └── udf: itof [as=itof:4]
-           ├── args: i:1
-           ├── input
+           ├── params: i:1
+           ├── args
            │    └── const: 123
            └── body
                 └── project
@@ -1011,8 +1011,8 @@ project
  │    └── tuple
  └── projections
       └── udf: stoc [as=stoc:4]
-           ├── args: s:1
-           ├── input
+           ├── params: s:1
+           ├── args
            │    └── const: 'a'
            └── body
                 └── project

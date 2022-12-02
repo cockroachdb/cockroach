@@ -258,11 +258,11 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			argTypes, err := fn.InputArgTypes(d.ctx, d.catalog)
+			paramTypes, err := fn.ParamTypes(d.ctx, d.catalog)
 			if err != nil {
 				return nil, err
 			}
-			ol, err := fd.MatchOverload(argTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath)
+			ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath)
 			if err != nil {
 				return nil, err
 			}
