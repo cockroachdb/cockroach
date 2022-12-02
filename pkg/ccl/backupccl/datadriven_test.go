@@ -84,6 +84,10 @@ type sqlDBKey struct {
 }
 
 type datadrivenTestState struct {
+	// clusters maps a name to its cluster
+	clusters map[string]serverutils.TestClusterInterface
+
+	// servers maps a name to the first server in the cluster
 	servers           map[string]serverutils.TestServerInterface
 	dataDirs          map[string]string
 	sqlDBs            map[sqlDBKey]*gosql.DB
@@ -96,6 +100,7 @@ type datadrivenTestState struct {
 
 func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
+		clusters:          make(map[string]serverutils.TestClusterInterface),
 		servers:           make(map[string]serverutils.TestServerInterface),
 		dataDirs:          make(map[string]string),
 		sqlDBs:            make(map[sqlDBKey]*gosql.DB),
@@ -190,6 +195,7 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	cleanupFn := func() {
 		cleanup()
 	}
+	d.clusters[cfg.name] = tc
 	d.servers[cfg.name] = tc.Server(0)
 	d.dataDirs[cfg.name] = cfg.iodir
 	d.cleanupFns = append(d.cleanupFns, cleanupFn)
@@ -288,8 +294,14 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   - "query-sql [server=<name>] [user=<name>] [regex=<regex pattern>]"
 //     Executes the input SQL query and print the results.
 //
+//     Supported arguments:
+//
 //   - regex: return true if the query result matches the regex pattern and
 //     false otherwise.
+//
+//   - "set-cluster-setting setting=<name> value=<name>"
+//     Sets the cluster setting on all nodes and ensures all nodes in the test cluster
+//     have seen the update.
 //
 //   - "reset"
 //     Clear all state associated with the test.
@@ -524,6 +536,7 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, "user", &user)
 				}
 				ds.noticeBuffer = nil
+				checkForClusterSetting(t, d.Input, ds.clusters[server].NumServers())
 				d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_SERVER/", httpAddr)
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
 				ret := ds.noticeBuffer
@@ -598,6 +611,7 @@ func TestDataDriven(t *testing.T) {
 				if d.HasArg("user") {
 					d.ScanArgs(t, "user", &user)
 				}
+				checkForClusterSetting(t, d.Input, ds.clusters[server].NumServers())
 				rows, err := ds.getSQLDB(t, server, user).Query(d.Input)
 				if err != nil {
 					return err.Error()
@@ -615,6 +629,13 @@ func TestDataDriven(t *testing.T) {
 					return "false"
 				}
 				return output
+			case "set-cluster-setting":
+				var setting, value string
+				d.ScanArgs(t, "setting", &setting)
+				d.ScanArgs(t, "value", &value)
+				server := lastCreatedServer
+				serverutils.SetClusterSetting(t, ds.clusters[server], setting, value)
+				return ""
 
 			case "let":
 				server := lastCreatedServer
@@ -833,5 +854,13 @@ func handleKVRequest(
 		}
 	} else {
 		t.Fatalf("Unknown kv request")
+	}
+}
+
+func checkForClusterSetting(t *testing.T, stmt string, numNodes int) {
+	if numNodes != 1 && strings.Contains(stmt, "SET CLUSTER SETTING") {
+		t.Fatal("You are attempting to set a cluster setting in a multi node cluster. " +
+			"Use the 'set-cluster-setting' dd cmd instead to ensure the setting propagates to all nodes" +
+			" during the cmd.")
 	}
 }
