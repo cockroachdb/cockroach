@@ -327,6 +327,9 @@ func (r Result) format(w *strings.Builder) {
 
 // Error decodes and returns the r.Err if it is set.
 func (r Result) Error() error {
+	if r.Err == nil {
+		return nil
+	}
 	if !r.Err.IsSet() {
 		return nil
 	}
