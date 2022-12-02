@@ -3020,36 +3020,30 @@ EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS us
 distribution: local
 vectorized: true
 ·
-• union all
-│ limit: 4294967295
+• merge join
+│ equality: (user_id) = (id)
+│ right cols are key
 │
-├── • lookup join
-│   │ table: users@users_pkey
-│   │ equality: (crdb_region, user_id) = (crdb_region,id)
-│   │ equality cols are key
-│   │ pred: id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
+├── • index join
+│   │ table: user_settings@user_settings_pkey
 │   │
-│   └── • index join
-│       │ table: user_settings@user_settings_pkey
-│       │
-│       └── • scan
-│             missing stats
-│             table: user_settings@user_settings_user_id_idx
-│             spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+│   └── • scan
+│         missing stats
+│         table: user_settings@user_settings_user_id_idx
+│         spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 │
-└── • lookup join
-    │ table: users@users_pkey
-    │ equality: (crdb_region, user_id) = (crdb_region,id)
-    │ equality cols are key
-    │ pred: id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
+└── • union all
+    │ limit: 1
     │
-    └── • index join
-        │ table: user_settings@user_settings_pkey
-        │
-        └── • scan
-              missing stats
-              table: user_settings@user_settings_user_id_idx
-              spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+    ├── • scan
+    │     missing stats
+    │     table: users@users_pkey
+    │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+    │
+    └── • scan
+          missing stats
+          table: users@users_pkey
+          spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 
 # Ensure that the FK checks and cascades are efficient.
 query T

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -40,7 +41,9 @@ import (
 //	rows from the table. See GenerateConstrainedScans,
 //	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
 //	index joins are introduced into the memo.
-func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
+func (c *CustomFuncs) GenerateIndexScans(
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
+) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
@@ -156,7 +159,7 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 // CanMaybeGenerateLocalityOptimizedScan returns true. See the comment above the
 // GenerateLocalityOptimizedScan rule for more details.
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
 ) {
 	// We can only generate a locality optimized scan if we know there is a hard
 	// upper bound on the number of rows produced by the local spans. We use the
@@ -375,7 +378,10 @@ func (c *CustomFuncs) getLocalAndRemoteFilters(
 // locality-optimized search uses this version of `root`, which has been
 // converted into a locality-optimized `LookupJoinPrivate` by the caller.
 func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
-	grp memo.RelExpr, root memo.RelExpr, localityOptimizedLookupJoinPrivate *memo.LookupJoinPrivate,
+	grp memo.RelExpr,
+	required *physical.Required,
+	root memo.RelExpr,
+	localityOptimizedLookupJoinPrivate *memo.LookupJoinPrivate,
 ) {
 	// Respect the session setting LocalityOptimizedSearch.
 	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
@@ -416,6 +422,12 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 	if !c.IsCanonicalScan(&inputScan.ScanPrivate) {
 		// Only rewrite canonical scans, which also means they are not
 		// locality-optimized.
+		return
+	}
+	// We should only generate a locality-optimized search if there is a limit
+	// hint coming from an ancestor expression with a LIMIT, meaning that the
+	// query could be answered solely from rows returned by the local branch.
+	if required.LimitHint == 0 {
 		return
 	}
 	// Don't try to handle inverted constraints for now. Should `IsCanonicalScan`
@@ -602,8 +614,10 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 // GenerateLocalityOptimizedSearchLOJ generates a locality optimized search on
 // top of a lookup join, `root`, when the input relation to the lookup join is a
 // REGIONAL BY ROW table.
-func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(grp memo.RelExpr, root memo.RelExpr) {
-	c.GenerateLocalityOptimizedSearch(grp, root, nil)
+func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(
+	grp memo.RelExpr, required *physical.Required, root memo.RelExpr,
+) {
+	c.GenerateLocalityOptimizedSearch(grp, required, root, nil)
 }
 
 // mapInputSideOfLookupJoin copies a lookupJoinExpr having a `ScanExpr` as input
