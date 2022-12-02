@@ -170,6 +170,16 @@ func (f *Factory) DetachMemo() *memo.Memo {
 	return m
 }
 
+// ReleaseMemo is just like DetachMemo but it doesn't call Detach on the memo
+// preserving any statistics information for explain purposes (distinct, null
+// count etc).
+func (f *Factory) ReleaseMemo() *memo.Memo {
+	m := f.mem
+	f.mem = nil
+	f.Init(f.ctx, f.evalCtx, nil /* catalog */)
+	return m
+}
+
 // DisableOptimizations disables all transformation rules. The unaltered input
 // expression tree becomes the output expression tree (because no transforms
 // are applied).
