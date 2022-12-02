@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1090,9 +1091,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
 
-	if server := ex.server.cfg.DistSQLSrv; server != nil {
-		// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
-		ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
+	if multitenant.TenantRUEstimateEnabled.Get(ex.server.cfg.SV()) {
+		if server := ex.server.cfg.DistSQLSrv; server != nil {
+			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
+			ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
+		}
 	}
 
 	// If adminAuditLogging is enabled, we want to check for HasAdminRole
@@ -1325,7 +1328,7 @@ func populateQueryLevelStatsAndRegions(
 	} else {
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.
-		if cfg.DistSQLSrv != nil {
+		if multitenant.TenantRUEstimateEnabled.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
 			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
 				if costCfg := costController.GetCostConfig(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)

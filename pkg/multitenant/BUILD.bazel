@@ -16,6 +16,7 @@ go_library(
         "//pkg/kv",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlutil",
         "//pkg/util/metric",
