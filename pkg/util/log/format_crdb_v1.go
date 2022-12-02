@@ -449,6 +449,14 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		r = d.sensitiveEditor(r)
 		entry.Message = string(r.msg)
 		entry.Redactable = r.redactable
+		// crdb_v1 does not support tagging of log entries with
+		// tenant IDs. However, to help the decoded entry play
+		// nicely with utilities that use it, we always default
+		// the entry's IdentificationPayload with the system
+		// tenant ID.
+		entry.IDPayload = &logpb.IdentificationPayload{
+			TenantID: systemTenantID,
+		}
 
 		if strings.HasPrefix(entry.Message, structuredEntryPrefix+"{") /* crdb-v1 prefix */ {
 			// Note: we do not recognize the v2 marker here (" ={") because
