@@ -1,6 +1,7 @@
 # =============================================================================
-# inline.opt contains normalization patterns that replace a variable reference
-# with the expression to which that variable is bound. For example:
+# inline.opt contains normalization patterns that replace variable or function
+# references with the expression to which the variable or function is bound. For
+# example:
 #
 #   SELECT x2+1 FROM (SELECT x+1 AS x2 FROM a)
 #
@@ -293,3 +294,11 @@
 )
 =>
 (InlineProjectProject $input $projections $passthrough)
+
+# InlineUDF converts a UDF to a subquery. A UDF can only be inlined if it is
+# non-volatile and has a single statement in the function body. See
+# IsInlinableUDF for more details.
+[InlineUDF, Normalize]
+(UDF $args:* $private:* & (IsInlinableUDF $args $private))
+=>
+(ConvertUDFToSubquery $args $private)
