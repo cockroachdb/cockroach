@@ -12,6 +12,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1229,7 +1231,12 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: resuming with non-nil error", job.ID())
 		}
-		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
+		resumeCtx := logtags.AddTag(ctx, "job",
+			fmt.Sprintf("%s id=%d", jobType, job.ID()))
+		// Adding all tags as pprof labels (including the one we just added for job
+		// type and id).
+		resumeCtx, undo := pprofutil.SetProfilerLabelsFromCtxTags(resumeCtx)
+		defer undo()
 
 		if err := job.started(ctx, nil /* txn */); err != nil {
 			return err

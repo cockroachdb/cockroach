@@ -13,6 +13,7 @@
 package execinfra
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -292,6 +294,11 @@ type TestingKnobs struct {
 	// IndexBackfillMergerTestingKnobs are the index backfill merger specific
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
+
+	// SetupFlowCb, when non-nil, is called by the execinfrapb.DistSQLServer
+	// when responding to SetupFlow RPCs, after the flow is set up but before it
+	// is started.
+	SetupFlowCb func(context.Context, base.SQLInstanceID, *execinfrapb.SetupFlowRequest) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

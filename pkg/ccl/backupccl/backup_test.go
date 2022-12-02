@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -76,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -205,6 +207,70 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	remoteFoo := "nodelocal://2/foo"
 
 	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts)
+}
+
+// TestBackupRestoreJobTagAndLabel runs a backup and restore and verifies that
+// the flows are executed remotely with a job log tag and a job pprof label.
+func TestBackupRestoreJobTagAndLabel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	ctx := context.Background()
+	getJobTag := func(ctx context.Context) string {
+		tags := logtags.FromContext(ctx)
+		if tags != nil {
+			for _, tag := range tags.Get() {
+				if tag.Key() == "job" {
+					return tag.ValueStr()
+				}
+			}
+		}
+		return ""
+	}
+	found := false
+	var mu syncutil.Mutex
+	// backupRestoreTestSetupWithParams() writes some data and then, within
+	// workloadsql.Setup() it splits and scatters the ranges. When using 3 nodes
+	// scatter means we only move leases which is usually enough. During stress or
+	// race we see that the leases may not be scattered because the other 2
+	// replicas are not yet initialized. In those cases the leases all stay on
+	// node 1 and therefore the flows run locally and the test fails (because
+	// 'found' stays false). The simple solution here is to use 4 nodes where
+	// scatter moves replicas in addition to leases.
+	numNodes := 4
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, numNodes, numAccounts, InitManualReplication,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DisableDefaultTestTenant: true,
+				Knobs: base.TestingKnobs{
+					DistSQL: &execinfra.TestingKnobs{
+						SetupFlowCb: func(ctx context.Context, _ base.SQLInstanceID, _ *execinfrapb.SetupFlowRequest) error {
+							mu.Lock()
+							defer mu.Unlock()
+							tag := getJobTag(ctx)
+							label, ok := pprof.Label(ctx, "job")
+							if tag == "" && !ok {
+								// Skip, it's not a job.
+								return nil
+							}
+							if tag == "" || !ok || tag != label {
+								log.Fatalf(ctx, "the job tag should exist and match the pprof label: tag=%s label=%s ctx=%s",
+									tag, label, ctx)
+							}
+							found = true
+							return nil
+						},
+					},
+				},
+			},
+		},
+	)
+	defer cleanupFn()
+
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+
+	require.True(t, found)
 }
 
 func TestBackupRestorePartitioned(t *testing.T) {
