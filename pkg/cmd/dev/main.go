@@ -16,6 +16,11 @@ import (
 	"os/exec"
 )
 
+const (
+	beaverHubServerEndpoint = "https://beaver-hub-server-jjd2v2r2dq-uk.a.run.app/process"
+	bepFileBasename         = "build_event_binary_file"
+)
+
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("")

@@ -24,6 +24,7 @@ import (
 
 	"github.com/alessio/shellescape"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/spf13/cobra"
 )
 
@@ -120,6 +121,26 @@ var allBuildTargets = func() []string {
 }()
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
+	var tmpDir string
+	if buildutil.CrdbTestBuild {
+		// tmpDir will contain the build event binary file if produced.
+		var err error
+		tmpDir, err = os.MkdirTemp("", "")
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+		if !buildutil.CrdbTestBuild {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
@@ -146,6 +167,11 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	args = append(args, additionalBazelArgs...)
+	if buildutil.CrdbTestBuild {
+		args = append(args, "--build_event_binary_file=/tmp/path")
+	} else {
+		args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
+	}
 
 	if cross == "" {
 		logCommand("bazel", args...)

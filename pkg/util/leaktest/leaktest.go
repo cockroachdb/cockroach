@@ -23,7 +23,6 @@ package leaktest
 import (
 	"fmt"
 	"runtime"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -94,6 +93,10 @@ var PrintLeakedStoppers = func(t testing.TB) {}
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
+	if atomic.LoadUint32(&leakDetectorDisabled) != 0 {
+		return func() {}
+	}
+
 	// Try a best effort GC to help the race tests move along.
 	runtime.GC()
 	orig := interestingGoroutines()
@@ -101,18 +104,14 @@ func AfterTest(t testing.TB) func() {
 		t.Helper()
 		// If there was a panic, "leaked" goroutines are expected.
 		if r := recover(); r != nil {
+			// Inhibit the leak detector for future tests, in case someone (insanely?)
+			// recovers our re-panic below and continues running other tests. We're
+			// likely leaving goroutines around, which may spawn more goroutines in
+			// the middle of another test's execution and trip the leak detector for
+			// that innocent test.
 			atomic.StoreUint32(&leakDetectorDisabled, 1)
-			// NB: we don't want to re-panic here, for the Go test
-			// harness will not recover that for us. Instead, it will
-			// stop running the tests, but we are deciding here to fail
-			// only that one test but keep going otherwise.
-			// We need to explicitly print the stack trace though.
-			t.Fatalf("%v\n%s", r, debug.Stack())
-			return
-		}
-
-		if atomic.LoadUint32(&leakDetectorDisabled) != 0 {
-			return
+			t.Logf("panic: %s", r)
+			panic(r)
 		}
 
 		// If the test already failed, we don't pile on any more errors but we check

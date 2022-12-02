@@ -30,6 +30,7 @@ go_library(
         "//pkg/build/util",
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
+        "//pkg/util/buildutil",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_google_shlex//:shlex",
         "@com_github_spf13_cobra//:cobra",
@@ -68,6 +69,7 @@ disallowed_imports_test(
     "dev_lib",
     allowlist = [
         "//pkg/build/util",
+        "//pkg/util/buildutil",
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
         "@com_github_alessio_shellescape//:shellescape",

@@ -658,7 +658,6 @@ func TestStatusLocalLogs(t *testing.T) {
 // honor the redaction flags.
 func TestStatusLogRedaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 92789, "flaky test")
 
 	testData := []struct {
 		redactableLogs     bool // logging flag
@@ -758,7 +757,8 @@ func TestStatusLogRedaction(t *testing.T) {
 						}
 
 						// Retrieve the log entries using the Logs() RPC.
-						logsURL := fmt.Sprintf("logs/local?redact=%v", tc.redact)
+						// Set a high `max` value to ensure we get the log line we're searching for.
+						logsURL := fmt.Sprintf("logs/local?redact=%v&max=5000", tc.redact)
 						var wrapper2 serverpb.LogEntriesResponse
 						if err := getStatusJSONProto(ts, logsURL, &wrapper2); err != nil {
 							t.Fatal(err)

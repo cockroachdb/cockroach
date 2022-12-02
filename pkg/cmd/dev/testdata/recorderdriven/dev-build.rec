@@ -2,7 +2,7 @@ bazel query pkg/roachpb:roachpb_test --output=label_kind
 ----
 go_test rule //pkg/roachpb:roachpb_test
 
-bazel build //pkg/roachpb:roachpb_test --config=test
+bazel build //pkg/roachpb:roachpb_test --config=test --build_event_binary_file=/tmp/path
 ----
 
 mkdir crdb-checkout/bin
