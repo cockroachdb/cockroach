@@ -177,6 +177,16 @@ func usersRestoreFunc(
 	}
 
 	executor := execCfg.InternalExecutor
+
+	checkCountQuery := fmt.Sprintf(`SELECT count(*) FROM %s`, tempTableName)
+	rowCount, err := executor.QueryRow(ctx, "check system user count", txn, checkCountQuery)
+	if err != nil {
+		return err
+	}
+	count := tree.MustBeDInt(rowCount[0])
+	if count == 0 {
+		return errors.AssertionFailedf("There must be users in the backed up system table")
+	}
 	hasIDColumnQuery := fmt.Sprintf(
 		`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
 	row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnQuery)
@@ -188,6 +198,9 @@ func usersRestoreFunc(
 		return defaultSystemTableRestoreFunc(
 			ctx, execCfg, txn, systemTableName, tempTableName,
 		)
+	} else if count > 0 {
+		// to make the test fail if we're taking an unexpected restore route
+		return errors.AssertionFailedf("the user id column should exist")
 	}
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
