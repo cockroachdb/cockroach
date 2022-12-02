@@ -121,6 +121,8 @@ message ElementProto {
 
   // Enum type elements.
   EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
+
+  // Next element group start id: 140
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID

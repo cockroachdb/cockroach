@@ -118,7 +118,7 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 		elementProtoRegexp = regexp.MustCompile(`(?s)message ElementProto {
   option \(gogoproto.onlyone\) = true;
 (?P<fields>(` + elementFieldPat + "\n)+)" +
-			"}",
+			"\\s*}",
 		)
 		elementFieldRegexp  = regexp.MustCompile(elementFieldPat)
 		elementFieldTypeIdx = elementFieldRegexp.SubexpIndex("type")
