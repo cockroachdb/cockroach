@@ -15,7 +15,7 @@ import {
 } from "src/insightsTable/insightsTable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { capitalize, Duration } from "src/util";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
 import {
   executionDetails,
   InsightNameEnum,
@@ -141,11 +141,15 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Start Time"
-              value={insightDetails.startTime.format(DATE_FORMAT_24_UTC)}
+              value={insightDetails.startTime.format(
+                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+              )}
             />
             <SummaryCardItem
               label="End Time"
-              value={insightDetails.endTime.format(DATE_FORMAT_24_UTC)}
+              value={insightDetails.endTime.format(
+                DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+              )}
             />
             <SummaryCardItem
               label="Elapsed Time"

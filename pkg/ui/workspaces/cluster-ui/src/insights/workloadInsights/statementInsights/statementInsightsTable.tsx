@@ -15,7 +15,12 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import { Count, DATE_FORMAT, Duration, limitText } from "src/util";
+import {
+  Count,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
+  Duration,
+  limitText,
+} from "src/util";
 import { InsightExecEnum, StatementInsightEvent } from "src/insights";
 import {
   InsightCell,
@@ -89,7 +94,8 @@ export function makeStatementInsightsColumns(
     {
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
-      cell: (item: StatementInsightEvent) => item.startTime.format(DATE_FORMAT),
+      cell: (item: StatementInsightEvent) =>
+        item.startTime.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
       sort: (item: StatementInsightEvent) => item.startTime.unix(),
       showByDefault: true,
     },

@@ -19,7 +19,7 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import {
@@ -180,7 +180,7 @@ export const TransactionInsightDetails: React.FC<
                       <SummaryCardItem
                         label="Start Time"
                         value={insightDetails.startTime.format(
-                          DATE_FORMAT_24_UTC,
+                          DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
                         )}
                       />
                     </SummaryCard>
