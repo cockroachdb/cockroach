@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"runtime"
 	"strings"
+	"time"
 	_ "unsafe" // required by go:linkname
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -121,6 +122,11 @@ func RandUint64n(r *rand.Rand, n uint64) uint64 {
 		v = r.Uint64()
 	}
 	return v
+}
+
+// RandDuration returns a random duration in [0, max).
+func RandDuration(r *rand.Rand, max time.Duration) time.Duration {
+	return time.Duration(r.Int63n(int64(max)))
 }
 
 var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
