@@ -1166,6 +1166,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
 
+	var waitForInstanceReaderStarted func(context.Context) error
+	if cfg.sqlInstanceReader != nil {
+		waitForInstanceReaderStarted = cfg.sqlInstanceReader.WaitForStarted
+	}
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -1176,6 +1180,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs,
 		ieFactory,
 		collectionFactory,
+		waitForInstanceReaderStarted,
 	)
 
 	reporter := &diagnostics.Reporter{

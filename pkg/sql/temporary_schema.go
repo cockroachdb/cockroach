@@ -401,6 +401,12 @@ type TemporaryObjectCleaner struct {
 	metrics                 *temporaryObjectCleanerMetrics
 	collectionFactory       *descs.CollectionFactory
 	internalExecutorFactory sqlutil.InternalExecutorFactory
+
+	// waitForInstances is a function to ensure that the status server will know
+	// about the set of live instances at least as of the time of startup. This
+	// primarily matters during tests of the temp table infrastructure in
+	// secondary tenants.
+	waitForInstances func(ctx context.Context) error
 }
 
 // temporaryObjectCleanerMetrics are the metrics for TemporaryObjectCleaner
@@ -428,6 +434,7 @@ func NewTemporaryObjectCleaner(
 	testingKnobs ExecutorTestingKnobs,
 	ief sqlutil.InternalExecutorFactory,
 	cf *descs.CollectionFactory,
+	waitForInstances func(ctx context.Context) error,
 ) *TemporaryObjectCleaner {
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
@@ -441,6 +448,7 @@ func NewTemporaryObjectCleaner(
 		metrics:                 metrics,
 		internalExecutorFactory: ief,
 		collectionFactory:       cf,
+		waitForInstances:        waitForInstances,
 	}
 }
 
@@ -495,6 +503,16 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		if !isLeaseHolder {
 			log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
 			return nil
+		}
+	}
+	// We need to make sure that we have a somewhat up-to-date view of the
+	// set of live instances. If not, we might delete a relatively new
+	// table. In general this shouldn't be necessary because our wait interval
+	// is extremely conservative at 30 minutes by default, but under tests,
+	// it comes up.
+	if c.waitForInstances != nil {
+		if err := c.waitForInstances(ctx); err != nil {
+			return err
 		}
 	}
 
