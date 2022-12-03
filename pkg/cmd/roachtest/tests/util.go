@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,10 +27,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+type usedPorts struct {
+	mu     syncutil.Mutex
+	isUsed map[int]bool
+}
+
+var testPorts usedPorts
 
 // WaitFor3XReplication is like WaitForReplication but specifically requires
 // three as the minimum number of voters a range must be replicated on.
@@ -206,4 +215,32 @@ func maybeUseBuildWithEnabledAssertions(
 	}
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+}
+
+// GetFreeTestPort asks the kernel for a free open port that is ready to use [1].
+// [1] https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
+func GetFreeTestPort() (port int, err error) {
+	testPorts.mu.Lock()
+	defer testPorts.mu.Unlock()
+	var a *net.TCPAddr
+	for {
+		if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
+			var l *net.TCPListener
+			if l, err = net.ListenTCP("tcp", a); err == nil {
+				port := l.Addr().(*net.TCPAddr).Port
+				// Retry if the port number was already picked but the kernel
+				// is unaware because it's not used yet.
+				if !testPorts.isUsed[port] {
+					continue
+				}
+				testPorts.isUsed[port] = true
+				defer func() {
+					_ = l.Close()
+				}()
+				return port, nil
+			}
+		} else {
+			return
+		}
+	}
 }

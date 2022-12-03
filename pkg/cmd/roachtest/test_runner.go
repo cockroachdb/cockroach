@@ -244,9 +244,6 @@ func (r *testRunner) Run(
 		if clustersOpt.clusterName != "" {
 			return fmt.Errorf("--cluster incompatible with --parallelism. Use --parallelism=1")
 		}
-		if clustersOpt.typ == localCluster {
-			return fmt.Errorf("--local incompatible with --parallelism. Use --parallelism=1")
-		}
 	}
 
 	if name := clustersOpt.clusterName; name != "" {

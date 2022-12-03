@@ -23,7 +23,7 @@ $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod destroy --all-local
 
 $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest run acceptance kv/splits cdc/bank \
   --local \
-  --parallelism=1 \
+  --parallelism=3 \
   --cockroach "$BAZEL_BIN/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short" \
   --workload "$BAZEL_BIN/pkg/cmd/workload/workload_/workload" \
   --artifacts /artifacts \

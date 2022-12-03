@@ -221,9 +221,7 @@ func contains(list []string, transformString func(s string) string, str string) 
 func initBinariesAndLibraries() {
 	// If we're running against an existing "local" cluster, force the local flag
 	// to true in order to get the "local" test configurations.
-	if clusterName == "local" {
-		local = true
-	}
+	local = local || config.IsLocalClusterName(clusterName)
 	if local {
 		cloud = spec.Local
 	}
@@ -792,13 +790,14 @@ func (f *clusterFactory) releaseSem() {
 }
 
 func (f *clusterFactory) genName(cfg clusterConfig) string {
+	count := atomic.AddUint64(&f.counter, 1)
 	if cfg.localCluster {
-		return "local" // The roachprod tool understands this magic name.
+		return makeClusterName(
+			fmt.Sprintf("local-%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
 	}
 	if cfg.nameOverride != "" {
 		return cfg.nameOverride
 	}
-	count := atomic.AddUint64(&f.counter, 1)
 	return makeClusterName(
 		fmt.Sprintf("%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
 }
@@ -988,7 +987,7 @@ func attachToExistingCluster(
 	r *clusterRegistry,
 ) (*clusterImpl, error) {
 	exp := spec.Expiration()
-	if name == "local" {
+	if config.IsLocalClusterName(name) {
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
 	c := &clusterImpl{

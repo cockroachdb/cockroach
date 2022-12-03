@@ -101,11 +101,29 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if c.IsLocal() && runtime.GOARCH == "arm64" {
 		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 	}
+	workloadPProfPort, err := GetFreeTestPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	workloadPrometheusPort, err := GetFreeTestPort()
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
 	mvt.OnStartup("setup schema changer workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
 		// Execute the workload init.
-		return c.RunE(ctx, c.All(), "./workload init schemachange")
+		externalPGUrl, err := c.ExternalPGUrl(ctx, t.L(), c.All(), "" /* tenant */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, url := range externalPGUrl {
+			runCmd := roachtestutil.NewCommand("./workload init schemachange "+url).Flag("pprofport", workloadPProfPort)
+			if err := c.RunE(ctx, []int{i}, runCmd.String()); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	mvt.InMixedVersion("run backup", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		// Verify that backups can be created in various configurations. This is
@@ -133,7 +151,11 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 			l.Printf("running schema workload step")
-			runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
+			runCmd := roachtestutil.NewCommand("./workload run schemachange").
+				Flag("pprofport", workloadPProfPort).
+				Flag("prometheus-port", workloadPrometheusPort).
+				Flag("verbose", 1).Flag("max-ops", 10).
+				Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
 			randomNode := h.RandomNode(rng, c.All())
 			return c.RunE(ctx, option.NodeListOption{randomNode}, runCmd.String())
 		},

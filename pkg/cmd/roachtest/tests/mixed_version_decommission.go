@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -91,7 +92,7 @@ func runDecommissionMixedVersions(
 		// to communicate with the cluster (i.e. most commands against it will fail).
 		// This is also why we're making sure to avoid decommissioning pinnedUpgrade
 		// itself, as we use it to check the membership after.
-		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), h.getRandNode(), ""),
+		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), h.getRandNode(), "", t.L()),
 		checkOneMembership(pinnedUpgrade, "decommissioned"),
 	)
 
@@ -147,11 +148,16 @@ func recommissionAllStep(from int, binaryVersion string) versionStep {
 
 // fullyDecommissionStep is like partialDecommissionStep, except it uses
 // `--wait=all`.
-func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
+func fullyDecommissionStep(target, from int, binaryVersion string, l *logger.Logger) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
+		addresses, err := c.ExternalAddr(ctx, l, []int{from})
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := addresses[0]
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
-			"--wait=all", "--checks=skip", "--insecure", strconv.Itoa(target))
+			"--host", addr, "--wait=all", "--checks=skip", "--insecure", strconv.Itoa(target))
 	}
 }
 

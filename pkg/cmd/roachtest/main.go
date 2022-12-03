@@ -76,7 +76,7 @@ func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 func main() {
 	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
-	parallelism := 10
+	parallelism := 0
 	var cpuQuota int
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
@@ -429,9 +429,13 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		bindTo = "localhost"
 
 		fmt.Printf("--local specified. Binding http listener to localhost only")
-		if cfg.parallelism != 1 {
-			fmt.Printf("--local specified. Overriding --parallelism to 1.\n")
+	}
+	if cfg.parallelism == 0 {
+		// No custom value was passed for parallelism so set the default values.
+		if local {
 			cfg.parallelism = 1
+		} else {
+			cfg.parallelism = 10
 		}
 	}
 

@@ -26,7 +26,7 @@ func runDecommissionSelf(ctx context.Context, t test.Test, c cluster.Cluster) {
 	u := newVersionUpgradeTest(c,
 		uploadVersionStep(allNodes, clusterupgrade.MainVersion),
 		startVersion(allNodes, clusterupgrade.MainVersion),
-		fullyDecommissionStep(2, 2, clusterupgrade.MainVersion),
+		fullyDecommissionStep(2, 2, clusterupgrade.MainVersion, t.L()),
 		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			// Stop n2 and exclude it from post-test consistency checks,
 			// as this node can't contact cluster any more and operations
