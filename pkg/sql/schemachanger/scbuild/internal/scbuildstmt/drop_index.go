@@ -25,26 +25,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO (xiang): To enable full support for DROP INDEX, we still need to
+// TODO (xiang): To remove fallbacks for DROP INDEX we still need to:
 //   1. Model adding and dropping FK constraints correctly
 //      for dropping an index with dependent FK constraint;
-//   2. Fix the "revertibility bug" in the planner as it currently
-//      seems to ignore non-revertible operations and plan
-//      them to happen in a much early phase (say, stmt phase);
-//   2.a. Once the above two are done, add a test where
-//        we drop an index with a dependent FK constraint and a
-//        dependent view to end-to-end test, scbuild test, scplan test.
-//   2.b. Answer the question "Are there any CCL required `DROP INDEX` usage?"
-//        If yes, add a end-to-end test in `pkg/ccl/schemachangerccl`.
+//   2. Once the above two are done, add a test where
+//      we drop an index with a dependent FK constraint and a
+//      dependent view to end-to-end test, scbuild test, scplan test.
 //   3. Check if requires CCL binary for eventual zone config removal.
-//   4. Make all existing unit tests and logic tests pass using this
-//      new `DROP INDEX` implementation. This will likely involve
-//      rewriting expected output since there are the legacy and declarative
-//      schema changer exhibits minor behavior difference. Ideally, we
-//      should modify the tests in a way such that if we turn off the
-//      declarative schema changer for `DROP INDEX`, the legacy schema
-//      changer's `DROP INDEX` will be able to pass all the tests as well.
-//   5. Set `DROP INDEX` to be fully-supported in `process.go`.
 
 // DropIndex implements DROP INDEX.
 // It resolves the to-be-dropped index into elements and inform `BuildCtx`

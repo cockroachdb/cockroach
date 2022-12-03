@@ -102,8 +102,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
-	// TODO (Xiang): turn on `DROP INDEX` as fully supported.
-	reflect.TypeOf((*tree.DropIndex)(nil)): {fn: DropIndex, on: false, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
 }
 
 func init() {

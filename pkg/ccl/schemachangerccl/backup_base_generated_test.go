@@ -108,6 +108,11 @@ func TestBackupbase_drop_index_vanilla_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_vanilla_index", newCluster)
 }
+func TestBackupbase_drop_index_with_materialized_view_dep(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_with_materialized_view_dep", newCluster)
+}
 func TestBackupbase_drop_multiple_columns_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -1393,7 +1393,7 @@ CREATE VIEW child AS SELECT count(*) FROM parent@idx
 statement ok
 SET use_declarative_schema_changer = 'unsafe'
 
-statement error pgcode 2BP01 cannot drop index "parent@idx" because view "child" depends on it
+statement error pgcode 2BP01 cannot drop index "idx" because view "child" depends on it
 DROP INDEX parent@idx
 
 statement ok

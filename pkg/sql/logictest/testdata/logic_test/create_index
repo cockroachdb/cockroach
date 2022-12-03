@@ -193,8 +193,6 @@ query T noticetrace
 DROP INDEX CONCURRENTLY IF EXISTS create_index_concurrently_idx
 ----
 NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
-NOTICE: the data for dropped indexes is reclaimed asynchronously
-HINT: The reclamation delay can be customized in the zone configuration for the table.
 
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
