@@ -851,6 +851,20 @@ func (b *builderState) ResolveIndex(
 func (b *builderState) ResolveIndexByName(
 	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
+	// If a table name is specified, confirm its not a systme table first.
+	if tableIndexName.Table.ObjectName != "" {
+		desc := b.resolveRelation(tableIndexName.Table.ToUnresolvedObjectName(), p)
+		if desc == nil {
+			return nil
+		}
+		tableDesc := desc.desc.(catalog.TableDescriptor)
+		b.ensureDescriptor(tableDesc.GetParentSchemaID())
+		if catalog.IsSystemDescriptor(tableDesc) {
+			schemaDesc := b.descCache[tableDesc.GetParentSchemaID()].desc
+			panic(catalog.NewMutableAccessToVirtualSchemaError(schemaDesc.(catalog.SchemaDescriptor)))
+		}
+	}
+
 	found, prefix, tbl, idx := b.cr.MayResolveIndex(b.ctx, *tableIndexName)
 	if !found {
 		if !p.IsExistenceOptional {
