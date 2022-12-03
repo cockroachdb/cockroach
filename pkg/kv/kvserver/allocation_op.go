@@ -42,6 +42,8 @@ type AllocationTransferLeaseOp struct {
 	sideEffects        func()
 }
 
+var _ AllocationOp = &AllocationTransferLeaseOp{}
+
 // lhBeingRemoved returns true when the leaseholder is will be removed if this
 // operation succeeds, otherwise false. This is always true for lease
 // transfers.
@@ -76,6 +78,8 @@ type AllocationChangeReplicasOp struct {
 	sideEffects       func()
 }
 
+var _ AllocationOp = &AllocationChangeReplicasOp{}
+
 // lhBeingRemoved returns true when the voter removals for this change replicas
 // operation includes the leaseholder store.
 func (o AllocationChangeReplicasOp) lhBeingRemoved() bool {
@@ -107,6 +111,8 @@ func (o AllocationChangeReplicasOp) trackPlanningMetrics() {
 // atomic change replicas operation and remove any remaining learners.
 type AllocationFinalizeAtomicReplicationOp struct{}
 
+var _ AllocationOp = &AllocationFinalizeAtomicReplicationOp{}
+
 // TODO(kvoli): This always returns false, however it is possible that the LH
 // may have been removed here.
 func (o AllocationFinalizeAtomicReplicationOp) lhBeingRemoved() bool                               { return false }
@@ -115,6 +121,8 @@ func (o AllocationFinalizeAtomicReplicationOp) trackPlanningMetrics()           
 
 // AllocationNoop represents no operation.
 type AllocationNoop struct{}
+
+var _ AllocationOp = &AllocationNoop{}
 
 func (o AllocationNoop) lhBeingRemoved() bool                               { return false }
 func (o AllocationNoop) applyImpact(storepool storepool.AllocatorStorePool) {}
