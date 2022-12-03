@@ -1169,8 +1169,9 @@ func (p *Partition) SetDatums(datums []tree.Datums) {
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.
 type TableStat struct {
-	js stats.JSONStatistic
-	tt *Table
+	js      stats.JSONStatistic
+	tt      *Table
+	evalCtx *eval.Context
 }
 
 var _ cat.TableStatistic = &TableStat{}
@@ -1216,7 +1217,11 @@ func (ts *TableStat) AvgSize() uint64 {
 
 // Histogram is part of the cat.TableStatistic interface.
 func (ts *TableStat) Histogram() []cat.HistogramBucket {
-	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := ts.evalCtx
+	if evalCtx == nil {
+		evalCtxVal := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx = &evalCtxVal
+	}
 	if ts.js.HistogramColumnType == "" || ts.js.HistogramBuckets == nil {
 		return nil
 	}
@@ -1248,7 +1253,7 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 
 	for i := offset; i < len(histogram); i++ {
 		bucket := &ts.js.HistogramBuckets[i-offset]
-		datum, err := rowenc.ParseDatumStringAs(context.Background(), colType, bucket.UpperBound, &evalCtx)
+		datum, err := rowenc.ParseDatumStringAs(context.Background(), colType, bucket.UpperBound, evalCtx)
 		if err != nil {
 			panic(err)
 		}
