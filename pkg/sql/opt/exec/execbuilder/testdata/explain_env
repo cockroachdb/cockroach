@@ -17,14 +17,14 @@ ALTER TABLE x INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 123123,
     "distinct_count": 100,
-    "histo_buckets": []
+    "histo_col_type": ""
   },
   {
     "columns": ["b"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 123123,
     "distinct_count": 123123,
-    "histo_buckets": []
+    "histo_col_type": ""
   }
 ]'
 
@@ -204,3 +204,59 @@ query T
 EXPLAIN (OPT, ENV) SELECT * FROM y;
 ----
 https://cockroachdb.github.io/text/decode.html#eJy0VtFv27YTfq7-ioNf6vwQF3LywxA46IPrqoM31y5stWhRFAQtnWTOFMmSlGp52P8-kHIad5WsFUPzEETMfXf33X135GgE71AbJsUEZjLZa0mT3csXgAdMtiXjKWqwaCxUjVUQjEZAOZdfiNKoqEZCDZHKEsWpgB01YHcIKWa05BYqykucgMwyh0ukscQkVBjyhdkdOVmRRHJi2BF74Cl1mdS8026-WV3D65cfvPHJNxP2ou-7c2OrqTA0sUwKojSTmtm6CyikLigPNlHcCv9cUs5sTWRGDOqKJQjPIdHMsoTye4DHqA8ONeYlp7orH400JVLwzoQeqtSCLQ2STLquofaOTJ8TZpomZyXnxNItx6Zxl3C-FMxY85nDc3fSSpOWVroQKLxXVijOEmaJQY6JJZnUpFSu1Z2hRBv8nK7zsaU22RFjqcUChe1O_BtvwqC2JKPGEkXt7l-BipJbptwfMmUZS6jLwbjG-7r1VPrk5MjyI83JH5J1D1ET9KBcmahICcuF1EiEtKRihjk3ieRlIQxhgiRS9UmFCYu6ovziUClpbK7ROACnOsdGE04NRMsvnYUdh2HoMTI5TYKyrGBHTImi2jJXJUwJEykevLfLvIULKnWKGlPCqbE93JzqvYyIxp0s0OVKmmKnlyO5ZWYUZ82qIpwVrDPYTfj_uxPGc9OnUdOYUNMnum9BO2aszDUtfgjlxef3p6U_Fu9cNr4J2LcUVE6szotnhhWMU7cbid1pNDvJO0saPrv1UI0ZasKl3JfKq9z4Kc32vUG1VDR3fWRClbaRABN53yLS6C1PsZomPodfblt3ku-h-cyJoRmedNOXmLuLmMjJY1X99aZQ21Jv_RLoLEo73i1d1w1dciRKyy3dMn7hBupwo6lIZUEMdgu9QbICj1J0Dv7beObMSpFIYaymzI2rkG6zVL4FZ7PbO1lNzSpMrNSXbnoRBLN1NI0jiKcvFhGocstZ8uwAw-AJhfkyvoPlKobl28XiOniyPZ00X7PVchOvp_NlDAei9ljDm_X89XT9AX6PPsCQwnQzu7oOnsyXL6P3cCBbwtIDDLf-PLi6D4LpIo7W_4w8X_4WzWLYxNN4vonnsw08_RgAAPzpf7ufAa1y_8oYTCC8fjw-rePBBD5-PWzsB1-_P53ba6QWU0LtYAKDm3B8NwrHo3AM4XgShpMwHJwZu6uWicQ9n0rhAOPwPLbfJ_5pZWvlEhucg_06fQCew9ya_Orw5nZ8c-v_99f1f6W8_SmUfYY_j3Xw6el9uyKPTpFq_50kNWZdojy2iFLtH1R5Zpjt4dVqHc1_XTZGGrMrWEevonW0nEWbhxTqYdkp22OrbDvZ1I5N-R2ZqotK3UKlbGFSk4pkzvIbPlUbm8OQ9pShFXYcqv3jULt4fqiri0Ndd1cnev9mMZ0vYbh6E19DtHx3BZto4Wz_B6_Wq9dQ3wej0WgU-CdLHfwdAAD__7P6TfQ=
+
+# Check that we remove histograms from statistics correctly.
+
+statement ok
+CREATE TABLE b (
+  b BOOL NOT NULL,
+  INDEX (b)
+)
+
+statement ok
+ALTER TABLE b INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2022-12-02 18:34:29.574932",
+          "distinct_count": 2,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1000,
+                  "num_range": 0,
+                  "upper_bound": "false"
+              },
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "true"
+              }
+          ],
+          "histo_col_type": "BOOL",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1100
+      },
+      {
+          "avg_size": 0,
+          "columns": [
+              "rowid"
+          ],
+          "created_at": "2022-12-02 18:34:29.574932",
+          "distinct_count": 0,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 0
+      }
+]'
+
+query T
+EXPLAIN (OPT, ENV) SELECT * FROM b
+----
+https://cockroachdb.github.io/text/decode.html#eJy8Vk9vG7kPPXc-BeFL0x_iwHH6200d9OA6LuBd1y7iadGiKAjNDD3mRiMpksb5s9jvvpDGaZ2Fx24PuzkEicRHUo_k43S78JGsY60GMNL5tdUiX12-AbqjPKtZFmTBk_OwbqySpNsFIaW-RWPJCEsoHGrj0UihYCUc-BVBQUtRSw9rIWsagF4uAy7XzqPLhXJ4y36FGyvMtUTHD3QAXoiQyb1stZss5sfw7vJzNN74ZuX3-j7fNvZWKCdyz1qhsawt-_s2oNK2EjJZjNOd8JtaSPb3qJfoyK45J3gNuWXPuZAXAN-jPjq0VNZS2LZ8LIkCtZKtCT2ytANbO8KlDlUjGx25Q07YNUVe1lKiF5mkpnD7cJEKdt7dSHgdTnY-U9RehxCkoleujOScPTqSlHtcaou1CaVuDaV2wbefG3xkwucrdF54qkj59sSfeFOOrMelcB6N8KsfAlW19GzCH7rgJeci5OBC4SNvB5jeOHng8kGU-Ifm9iFqgt6ZQJNQBXKptCVU2uOaHQc3uZZ1pRyywlybQ63CypNdC7l3qIx2vrTkAkAKW1LTE6Eb0OrbVmJPe71exOh8MwnGc8UPVKAR1nNgiQpkVdBd9Lb_3SoE1bYgSwVK4fyBt4Wuj22Ella6opArNmQX-yMFMXNGciNVKLni1mD93svzDSa-zW5GzVIu3KGmewpasfO6tKL6KVRsvqifXvxcvO22iUWgQ6JgSvS2rE4cVyxF0Eb0K0tupWUrpb2Tswi1tCSLUuvr2sQud3FKl9cHg1ptRBnqyMrUvmkBVuUhIbIULTexmiK-hl_OdmpSrKG7kejEkjZ9cyixsItYlfid1bjeDFlf2yyKQCspu_FBdEM1bC0JjdWZyFju2UAtbqxQha7QUXujN0iu6EGr1sH_kI6CWa1yrZy3gsO4Kh2UZR1LsDW7Byer4WxNudd236ZXSTK6Gg_TMaTDN9MxmDqTnJ9kcJQ8y-DNfD6F2TyF2Yfp9Dh5ZvUtFzCZpefx9ONkMQmgRwu4HL8dfpimUCu-qaMEcHH04jh5NprPFunVcDJLIUNzTffw_mrybnj1GX4ff4ajxu9wMQq2k9nl-BNkmCEXd3CUxfPkxUWSDKfp-OqfiU5mv41HKSzSYTpZpJPRAp5_SQAA_oy_w09HrMv4UdIZwOnx9-ONencG8OXbYbzIOt_-_7ptb0l4KlD4zgA6_V6_3z3td3t9OD0fnL0c9F-d_P_Xl6_O-p0tTFjQrPLw0VWrgOtvXUYNip9j_t6E7DrbUCWqeIYYdjjik7sgz48ue1sXQXYfz09Pe71489fxHkZ6P8JIrNC_yErvv2NlQ0ny9flFkow_vZ8OJzM4mr9Pj2E8-_gCFuNpaKj_wdur-TvILpJut9tN4sbMkr8DAAD__1Fj5XE=
