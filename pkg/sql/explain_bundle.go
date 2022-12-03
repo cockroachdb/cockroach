@@ -750,7 +750,7 @@ func (c *stmtEnvCollector) PrintTableStats(
 ) error {
 	var maybeRemoveHistoBuckets string
 	if hideHistograms {
-		maybeRemoveHistoBuckets = " - 'histo_buckets'"
+		maybeRemoveHistoBuckets = ` - 'histo_buckets' - 'histo_version' || '{"histo_col_type": ""}'`
 	}
 
 	stats, err := c.query(fmt.Sprintf(
