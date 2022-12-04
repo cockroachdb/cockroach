@@ -1,0 +1,104 @@
+# Full completion choice when there is no context whatsoever.
+complete
+select * from @
+----
+complete 0 14
+msg: ""
+completions:
+- "database":
+  "defaultdb" () -> "defaultdb" (0, 0)
+  "postgres" () -> "postgres" (0, 0)
+  "system" () -> "system" (0, 0)
+- "functions":
+  "_st_contains(" (Returns true if no points of geometry_b lie in the exterior of geometry_a, and t) -> "_st_contains(" (0, 0)
+  "_st_containsproperly(" (Returns true if geometry_b intersects the interior of geometry_a but not the bou) -> "_st_containsproperly(" (0, 0)
+  "_st_coveredby(" (Returns true if no point in geometry_a is outside geometry_b.) -> "_st_coveredby(" (0, 0)
+  "_st_covers(" (Returns true if no point in geometry_b is outside geometry_a.) -> "_st_covers(" (0, 0)
+  "_st_crosses(" (Returns true if geometry_a has some - but not all - interior points in common wi) -> "_st_crosses(" (0, 0)
+  "_st_dfullywithin(" (Returns true if every pair of points comprising geometry_a and geometry_b are wi) -> "_st_dfullywithin(" (0, 0)
+  "_st_dfullywithinexclusive(" (Returns true if every pair of points comprising geometry_a and geometry_b are wi) -> "_st_dfullywithinexclusive(" (0, 0)
+  "_st_dwithin(" (Returns true if any of geometry_a is within distance units of geometry_b, inclus) -> "_st_dwithin(" (0, 0)
+  "_st_dwithinexclusive(" (Returns true if any of geometry_a is within distance units of geometry_b, exclus) -> "_st_dwithinexclusive(" (0, 0)
+  "_st_equals(" (Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geom) -> "_st_equals(" (0, 0)
+  ... entries omitted ...
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (0, 0)
+  "ABSOLUTE" (unreserved) -> "ABSOLUTE" (0, 0)
+  "ACCESS" (unreserved) -> "ACCESS" (0, 0)
+  "ACTION" (unreserved) -> "ACTION" (0, 0)
+  "ADD" (unreserved) -> "ADD" (0, 0)
+  "ADMIN" (unreserved) -> "ADMIN" (0, 0)
+  "AFTER" (unreserved) -> "AFTER" (0, 0)
+  "AGGREGATE" (unreserved) -> "AGGREGATE" (0, 0)
+  "ALL" (reserved) -> "ALL" (0, 0)
+  "ALTER" (unreserved) -> "ALTER" (0, 0)
+  ... entries omitted ...
+- "schema":
+  "crdb_internal" () -> "crdb_internal" (0, 0)
+  "information_schema" () -> "information_schema" (0, 0)
+  "pg_catalog" () -> "pg_catalog" (0, 0)
+  "pg_extension" () -> "pg_extension" (0, 0)
+  "public" () -> "public" (0, 0)
+
+# Complete a database name.
+complete
+select * from defaul@
+----
+complete 0 20
+msg: ""
+completions:
+- "database":
+  "defaultdb" () -> "defaultdb" (0, 6)
+- "functions":
+  "default_to_database_primary_region(" (Returns the given region if the region has been added to the current database.) -> "default_to_database_primary_region(" (0, 6)
+- "keyword":
+  "DEFAULT" (reserved) -> "DEFAULT" (0, 6)
+  "DEFAULTS" (unreserved) -> "DEFAULTS" (0, 6)
+
+
+# Complete a schema name.
+complete
+select * from defaultdb.@
+----
+complete 0 24
+msg: ""
+completions:
+- "schema":
+  "crdb_internal" () -> "crdb_internal" (0, 0)
+  "information_schema" () -> "information_schema" (0, 0)
+  "pg_catalog" () -> "pg_catalog" (0, 0)
+  "pg_extension" () -> "pg_extension" (0, 0)
+  "public" () -> "public" (0, 0)
+
+complete
+select * from defaultdb.pub@
+----
+complete 0 27
+msg: ""
+completions:
+- "schema":
+  "public" () -> "public" (0, 3)
+
+# When there is no table in the target schema, there's no completion available.
+
+complete
+select * from defaultdb.public.@
+----
+complete 0 31
+msg: ""
+(no completions generated)
+
+# If there's just one table, that gets immediately completed.
+sql
+CREATE TABLE mytable(x int)
+----
+ok
+
+complete
+select * from defaultdb.public.@
+----
+complete 0 31
+msg: ""
+completions:
+- "relation":
+  "mytable" () -> "mytable" (0, 0)
