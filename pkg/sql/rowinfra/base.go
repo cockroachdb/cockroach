@@ -59,3 +59,7 @@ func GetDefaultBatchBytesLimit(forceProductionValue bool) BytesLimit {
 	}
 	return defaultBatchBytesLimit
 }
+
+// RowExecCancelCheckInterval is the default cancel check interval for the row
+// execution engine.
+const RowExecCancelCheckInterval = uint32(128)
