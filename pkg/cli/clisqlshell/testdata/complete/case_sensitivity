@@ -1,0 +1,45 @@
+sql
+create table "PG_CATALOG"(foo int)
+----
+ok
+
+# Mixed case and no quoting gets normalized server-side.
+# In this case, pg_CAT selects "pg_catalog".
+complete
+table pg_CAT@
+----
+complete 0 12
+msg: ""
+completions:
+- "schema":
+  "pg_catalog" () -> "pg_catalog" (0, 6)
+
+# Lowercase, quoted designates the lowercase identifier.
+complete
+table "pg_cat@
+----
+complete 0 13
+msg: ""
+completions:
+- "schema":
+  "pg_catalog" () -> "pg_catalog" (0, 7)
+
+# Uppercase, non-quoted get normalized server-side.
+complete
+table PG_CATALOG.PG_CLA@
+----
+complete 0 23
+msg: ""
+completions:
+- "relation":
+  "pg_class" (tables and relation-like objects (incomplete - see also information_schema.table) -> "pg_class" (0, 6)
+
+# If the name is quoted, only the matching identifiers are selected.
+complete
+table "PG_C@
+----
+complete 0 11
+msg: ""
+completions:
+- "relation":
+  "PG_CATALOG" () -> "PG_CATALOG" (0, 5)

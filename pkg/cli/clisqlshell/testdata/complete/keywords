@@ -1,0 +1,67 @@
+complete
+----
+complete 0 0
+msg: ""
+completions:
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (0, 0)
+  "ABSOLUTE" (unreserved) -> "ABSOLUTE" (0, 0)
+  "ACCESS" (unreserved) -> "ACCESS" (0, 0)
+  "ACTION" (unreserved) -> "ACTION" (0, 0)
+  "ADD" (unreserved) -> "ADD" (0, 0)
+  "ADMIN" (unreserved) -> "ADMIN" (0, 0)
+  "AFTER" (unreserved) -> "AFTER" (0, 0)
+  "AGGREGATE" (unreserved) -> "AGGREGATE" (0, 0)
+  "ALL" (reserved) -> "ALL" (0, 0)
+  "ALTER" (unreserved) -> "ALTER" (0, 0)
+  ... entries omitted ...
+
+# Partial completion.
+complete
+ab@
+----
+complete 0 2
+msg: ""
+completions:
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (0, 2)
+  "ABSOLUTE" (unreserved) -> "ABSOLUTE" (0, 2)
+
+# Completion with just one candidate.
+complete
+abort@
+----
+complete 0 5
+msg: ""
+completions:
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (0, 5)
+
+
+# Completion with no candidate.
+complete
+invalid_keyword@
+----
+complete 0 15
+msg: ""
+(no completions generated)
+
+# Completion from beginning of word.
+complete
+@abor
+----
+complete 0 0
+msg: ""
+completions:
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (4, 4)
+
+# Completion from middle of word.
+complete
+ab@or
+----
+complete 0 2
+msg: ""
+completions:
+- "keyword":
+  "ABORT" (unreserved) -> "ABORT" (2, 4)
