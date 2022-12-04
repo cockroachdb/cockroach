@@ -1280,7 +1280,7 @@ func (s *adminServer) statsForSpan(
 			func(ctx context.Context) {
 				// Set a generous timeout on the context for each individual query.
 				var spanResponse *serverpb.SpanStatsResponse
-				err := contextutil.RunWithTimeout(ctx, "request remote stats", 5*base.NetworkTimeout,
+				err := contextutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
 						client, err := s.server.status.dialNode(ctx, nodeID)
 						if err == nil {

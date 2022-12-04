@@ -835,7 +835,7 @@ func (s *statusServer) AllocatorRange(
 			ctx,
 			"server.statusServer: requesting remote Allocator simulation",
 			func(ctx context.Context) {
-				_ = contextutil.RunWithTimeout(ctx, "allocator range", base.NetworkTimeout, func(ctx context.Context) error {
+				_ = contextutil.RunWithTimeout(ctx, "allocator range", 3*time.Second, func(ctx context.Context) error {
 					status, err := s.dialNode(ctx, nodeID)
 					var allocatorResponse *serverpb.AllocatorResponse
 					if err == nil {
@@ -2664,7 +2664,7 @@ func (s *statusServer) iterateNodes(
 
 	nodeQuery := func(ctx context.Context, nodeID roachpb.NodeID) {
 		var client interface{}
-		err := contextutil.RunWithTimeout(ctx, "dial node", base.NetworkTimeout, func(ctx context.Context) error {
+		err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
 			var err error
 			client, err = dialFn(ctx, nodeID)
 			return err

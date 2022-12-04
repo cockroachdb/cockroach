@@ -101,9 +101,6 @@ var (
 		"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
 )
 
-// GRPC Dialer connection timeout.
-var minConnectionTimeout = 5 * time.Second
-
 // errDialRejected is returned from client interceptors when the server's
 // stopper is quiescing. The error is constructed to return true in
 // `grpcutil.IsConnectionRejected` which prevents infinite retry loops during
@@ -574,7 +571,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		rpcCompression:      enableRPCCompression,
 		MasterCtx:           masterCtx,
 		metrics:             makeMetrics(),
-		heartbeatTimeout:    2 * opts.Config.RPCHeartbeatIntervalAndHalfTimeout,
+		heartbeatTimeout:    opts.Config.RPCHeartbeatIntervalAndTimeout,
 		logClosingConnEvery: log.Every(time.Second),
 	}
 
@@ -582,7 +579,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// CLI commands are exempted.
 	if !opts.ClientOnly {
 		rpcCtx.RemoteClocks = newRemoteClockMonitor(
-			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatIntervalAndHalfTimeout, opts.Config.HistogramWindowInterval())
+			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatIntervalAndTimeout, opts.Config.HistogramWindowInterval())
 	}
 
 	if id := opts.Knobs.StorageClusterID; id != nil {
@@ -1751,18 +1748,17 @@ func (rpcCtx *Context) grpcDialRaw(
 	// our setup with onlyOnceDialer below. So note that our choice here is
 	// inconsequential assuming all works as designed.
 	backoff := time.Second
-	if backoff > minConnectionTimeout {
-		// This is for testing where we set a small minConnectionTimeout.
-		// gRPC will internally round up the min connection timeout to the max
-		// backoff. This can be unintuitive and so we opt out of it by lowering the
-		// max backoff.
-		backoff = minConnectionTimeout
+	if backoff > base.DialTimeout {
+		// This is for testing where we set a small DialTimeout. gRPC will
+		// internally round up the min connection timeout to the max backoff. This
+		// can be unintuitive and so we opt out of it by lowering the max backoff.
+		backoff = base.DialTimeout
 	}
 	backoffConfig.BaseDelay = backoff
 	backoffConfig.MaxDelay = backoff
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoffConfig,
-		MinConnectTimeout: minConnectionTimeout}))
+		MinConnectTimeout: base.DialTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(initialConnWindowSize))
 	if class == RangefeedClass {
@@ -2197,7 +2193,7 @@ func (rpcCtx *Context) runHeartbeat(
 			})
 		}
 
-		heartbeatTimer.Reset(rpcCtx.Config.RPCHeartbeatIntervalAndHalfTimeout)
+		heartbeatTimer.Reset(rpcCtx.Config.RPCHeartbeatIntervalAndTimeout)
 	}
 }
 

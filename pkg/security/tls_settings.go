@@ -40,9 +40,6 @@ var ocspMode = settings.RegisterEnumSetting(
 		"and in lax mode all certificates will be accepted.",
 	"off", map[int64]string{ocspOff: "off", ocspLax: "lax", ocspStrict: "strict"}).WithPublic()
 
-// TODO(bdarnell): 3 seconds is the same as base.NetworkTimeout, but
-// we can't use it here due to import cycles. We need a real
-// no-dependencies base package for constants like this.
 var ocspTimeout = settings.RegisterDurationSetting(
 	settings.TenantWritable, "security.ocsp.timeout",
 	"timeout before considering the OCSP server unreachable",

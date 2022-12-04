@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -1426,9 +1425,10 @@ func (rq *replicateQueue) findRemoveVoter(
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
+	timeout := 5 * time.Second
 
 	var candidates []roachpb.ReplicaDescriptor
-	deadline := timeutil.Now().Add(2 * base.NetworkTimeout)
+	deadline := timeutil.Now().Add(timeout)
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next() && timeutil.Now().Before(deadline); {
 		lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
 		if timeutil.Since(lastAddedTime) > newReplicaGracePeriod {
