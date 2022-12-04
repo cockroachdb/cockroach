@@ -59,3 +59,14 @@ func GetDefaultBatchBytesLimit(forceProductionValue bool) BytesLimit {
 	}
 	return defaultBatchBytesLimit
 }
+
+// SetDefaultBatchBytesLimitForTests overrides defaultBatchBytesLimit to the
+// given value. This should only be used for tests when forcing the production
+// via ForceProductionValues testing knob is undesirable.
+func SetDefaultBatchBytesLimitForTests(v BytesLimit) {
+	defaultBatchBytesLimit = v
+}
+
+// RowExecCancelCheckInterval is the default cancel check interval for the row
+// execution engine.
+const RowExecCancelCheckInterval = uint32(128)
