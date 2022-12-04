@@ -47,9 +47,6 @@ const (
 	defaultSQLAddr  = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
 
-	// NetworkTimeout is the timeout used for network operations.
-	NetworkTimeout = 3 * time.Second
-
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = 200 * time.Millisecond
 
@@ -65,10 +62,6 @@ const (
 	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
 	// each heartbeat.
 	defaultRaftHeartbeatIntervalTicks = 5
-
-	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatIntervalAndHalfTimeout
-	// used by the rpc context.
-	defaultRPCHeartbeatInterval = 3 * time.Second
 
 	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
@@ -118,6 +111,44 @@ func DefaultHistogramWindowInterval() time.Duration {
 }
 
 var (
+	// NetworkTimeout is the timeout used for network operations that require a
+	// single network round trip. It is conservatively defined as one maximum
+	// network round trip time (RTT) plus one TCP packet retransmit (RTO), then
+	// multiplied by 2 as a safety margin.
+	//
+	// The maximum RTT between cloud regions is roughly 350ms both in GCP
+	// (asia-south2 to southamerica-west1) and AWS (af-south-1 to sa-east-1). It
+	// can occasionally be up to 500ms, but 400ms is a reasonable upper bound
+	// under nominal conditions.
+	// https://datastudio.google.com/reporting/fc733b10-9744-4a72-a502-92290f608571/page/70YCB
+	// https://www.cloudping.co/grid/p_99/timeframe/1W
+	//
+	// Linux has an RTT-dependant retransmission timeout (RTO) which we can
+	// approximate as 1.5x RTT (smoothed RTT + 4x RTT variance), with a lower
+	// bound of 200ms. Under nominal conditions, this is approximately 600ms.
+	//
+	// The maximum p99 RPC heartbeat latency in any Cockroach Cloud cluster over a
+	// 90-day period was 557ms. This was a single-region US cluster, where the
+	// high latency appeared to be due to CPU overload or throttling: the cluster
+	// had 2 vCPU nodes running at 100%.
+	//
+	// The NetworkTimeout is thus set to 2 * (400ms + 600ms) = 2s.
+	//
+	// TODO(erikgrinaker): Consider reducing this to 1 second, which should be
+	// sufficient but may be fragile under latency fluctuations.
+	NetworkTimeout = envutil.EnvOrDefaultDuration("COCKROACH_NETWORK_TIMEOUT", 2*time.Second)
+
+	// DialTimeout is the timeout used when dialing a node. gRPC connections take
+	// up to 3 roundtrips for the TCP + TLS handshakes. Because NetworkTimeout
+	// allows for both a network roundtrip (RTT) and a TCP retransmit (RTO), with
+	// the RTO being greater than the RTT, and we don't need to tolerate more than
+	// 1 retransmit per connection attempt, 2 * NetworkTimeout is sufficient.
+	DialTimeout = 2 * NetworkTimeout
+
+	// defaultRPCHeartbeatIntervalAndTimeout is the default value of
+	// RPCHeartbeatIntervalAndTimeout used by the RPC context.
+	defaultRPCHeartbeatIntervalAndTimeout = NetworkTimeout
+
 	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
 	// invocations that must pass between elections.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
@@ -221,13 +252,11 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
-	// RPCHeartbeatIntervalAndHalfTimeout controls how often a Ping request is
-	// sent on peer connections to determine connection health and update the
-	// local view of remote clocks.
-	//
-	// Twice this value is used as a timeout for heartbeats, so don't set this too
-	// low.
-	RPCHeartbeatIntervalAndHalfTimeout time.Duration
+	// RPCHeartbeatIntervalAndTimeout controls how often a Ping request is sent on
+	// peer connections to determine connection health and update the local view
+	// of remote clocks. This is also used as a timeout for heartbeats, so don't
+	// set this too low.
+	RPCHeartbeatIntervalAndTimeout time.Duration
 
 	// SecondaryTenantPortOffset is the increment to add to the various
 	// addresses to generate the network configuration for the in-memory
@@ -285,7 +314,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SocketFile = ""
 	cfg.SSLCertsDir = DefaultCertsDirectory
-	cfg.RPCHeartbeatIntervalAndHalfTimeout = defaultRPCHeartbeatInterval
+	cfg.RPCHeartbeatIntervalAndTimeout = defaultRPCHeartbeatIntervalAndTimeout
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""

@@ -747,7 +747,7 @@ func (t *tenantStatusServer) iteratePods(
 
 	instanceQuery := func(ctx context.Context, instance sqlinstance.InstanceInfo) {
 		var client interface{}
-		err := contextutil.RunWithTimeout(ctx, "dial instance", base.NetworkTimeout, func(ctx context.Context) error {
+		err := contextutil.RunWithTimeout(ctx, "dial instance", base.DialTimeout, func(ctx context.Context) error {
 			var err error
 			client, err = dialFn(ctx, instance.InstanceID, instance.InstanceAddr)
 			return err
