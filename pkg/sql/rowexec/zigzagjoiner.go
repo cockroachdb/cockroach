@@ -384,6 +384,7 @@ func valuesSpecToEncDatum(
 func (z *zigzagJoiner) Start(ctx context.Context) {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.cancelChecker.Reset(ctx)
+	z.cancelChecker.UseHighFrequencyChecking()
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 }
 

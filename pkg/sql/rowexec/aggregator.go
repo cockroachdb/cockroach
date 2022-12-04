@@ -344,6 +344,7 @@ func (ag *aggregatorBase) start(ctx context.Context, procName string) {
 	ctx = ag.StartInternal(ctx, procName)
 	ag.input.Start(ctx)
 	ag.cancelChecker.Reset(ctx)
+	ag.cancelChecker.UseHighFrequencyChecking()
 	ag.runningState = aggAccumulating
 }
 

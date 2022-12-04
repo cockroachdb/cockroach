@@ -211,6 +211,7 @@ func (w *windower) Start(ctx context.Context) {
 	ctx = w.StartInternal(ctx, windowerProcName)
 	w.input.Start(ctx)
 	w.cancelChecker.Reset(ctx)
+	w.cancelChecker.UseHighFrequencyChecking()
 	w.runningState = windowerAccumulating
 }
 

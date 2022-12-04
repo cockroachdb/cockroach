@@ -172,6 +172,7 @@ func (h *hashJoiner) Start(ctx context.Context) {
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
 	h.cancelChecker.Reset(ctx)
+	h.cancelChecker.UseHighFrequencyChecking()
 	h.runningState = hjBuilding
 }
 

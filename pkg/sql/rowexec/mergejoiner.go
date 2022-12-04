@@ -111,6 +111,7 @@ func (m *mergeJoiner) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.streamMerger.start(ctx)
 	m.cancelChecker.Reset(ctx)
+	m.cancelChecker.UseHighFrequencyChecking()
 }
 
 // Next is part of the Processor interface.

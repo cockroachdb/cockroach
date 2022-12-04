@@ -139,6 +139,7 @@ func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 	ps.input.Start(ctx)
 	ps.cancelChecker.Reset(ctx)
+	ps.cancelChecker.UseHighFrequencyChecking()
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also

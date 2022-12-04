@@ -30,6 +30,10 @@ type CancelChecker struct {
 
 	// Number of times Check() has been called since last context cancellation check.
 	callsSinceLastCheck uint32
+
+	// If true, uses highFrequencyCancelCheckInterval instead of
+	// cancelCheckInterval.
+	useHighFrequencyCheckInterval bool
 }
 
 // Check returns an error if the associated query has been canceled.
@@ -39,7 +43,15 @@ func (c *CancelChecker) Check() error {
 	// bitwise AND instead of division.
 	const cancelCheckInterval = 1024
 
-	if atomic.LoadUint32(&c.callsSinceLastCheck)%cancelCheckInterval == 0 {
+	// Similar to cancelCheckInterval, but checks more frequently.
+	const highFrequencyCancelCheckInterval = 128
+
+	doCheck := atomic.LoadUint32(&c.callsSinceLastCheck)%cancelCheckInterval == 0
+	if c.useHighFrequencyCheckInterval {
+		doCheck = atomic.LoadUint32(&c.callsSinceLastCheck)%highFrequencyCancelCheckInterval == 0
+	}
+
+	if doCheck {
 		select {
 		case <-c.ctx.Done():
 			// Once the context is canceled, we no longer increment
@@ -61,6 +73,12 @@ func (c *CancelChecker) Reset(ctx context.Context) {
 	*c = CancelChecker{
 		ctx: ctx,
 	}
+}
+
+// UseHighFrequencyChecking tells this cancel checker to check for a cancel
+// every 128 calls instead of every 1024 calls to `Check()`.
+func (c *CancelChecker) UseHighFrequencyChecking() {
+	c.useHighFrequencyCheckInterval = true
 }
 
 // QueryCanceledError is an error representing query cancellation.
