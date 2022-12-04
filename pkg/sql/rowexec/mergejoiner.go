@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
@@ -110,7 +111,7 @@ func newMergeJoiner(
 func (m *mergeJoiner) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.streamMerger.start(ctx)
-	m.cancelChecker.Reset(ctx)
+	m.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
 }
 
 // Next is part of the Processor interface.

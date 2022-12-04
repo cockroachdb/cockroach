@@ -28,18 +28,23 @@ type CancelChecker struct {
 	// Reference to associated context to check.
 	ctx context.Context
 
-	// Number of times Check() has been called since last context cancellation check.
+	// Number of times Check() has been called since last context cancellation
+	// check.
 	callsSinceLastCheck uint32
+
+	// The number of Check() calls to skip the context cancellation check.
+	checkInterval uint32
 }
+
+// The default interval of Check() calls to wait between checks for context
+// cancellation. The value is a power of 2 to allow the compiler to use
+// bitwise AND instead of division.
+const cancelCheckInterval = 1024
 
 // Check returns an error if the associated query has been canceled.
 func (c *CancelChecker) Check() error {
-	// Interval of Check() calls to wait between checks for context
-	// cancellation. The value is a power of 2 to allow the compiler to use
-	// bitwise AND instead of division.
-	const cancelCheckInterval = 1024
 
-	if atomic.LoadUint32(&c.callsSinceLastCheck)%cancelCheckInterval == 0 {
+	if atomic.LoadUint32(&c.callsSinceLastCheck)%c.checkInterval == 0 {
 		select {
 		case <-c.ctx.Done():
 			// Once the context is canceled, we no longer increment
@@ -56,10 +61,18 @@ func (c *CancelChecker) Check() error {
 	return nil
 }
 
-// Reset resets this cancel checker with a fresh context.
-func (c *CancelChecker) Reset(ctx context.Context) {
+// Reset resets this cancel checker with a fresh context. Parameter
+// checkInterval is optional and specifies an override for the default check
+// interval of 1024. Note that checkInterval is expected to be set to a power of
+// 2 by the caller, but Reset does no explicit checking of this.
+func (c *CancelChecker) Reset(ctx context.Context, checkInterval ...uint32) {
 	*c = CancelChecker{
 		ctx: ctx,
+	}
+	if len(checkInterval) > 0 {
+		c.checkInterval = checkInterval[0]
+	} else {
+		c.checkInterval = cancelCheckInterval
 	}
 }
 
