@@ -1510,6 +1510,47 @@ func PrometheusSnapshot(
 	return nil
 }
 
+// SnapshotVolume snapshots any of the volumes attached to the nodes in a
+// cluster specification.
+func SnapshotVolume(l *logger.Logger, clusterName, name, description string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	nodes := c.TargetNodes()
+	for idx := range nodes {
+		cVM := c.VMs[idx]
+		for _, volume := range cVM.NonBootAttachedVolumes {
+			if isWorkloadCollectorVolume(volume) {
+				l.Printf("Creating snapshot for node %d volume %s\n", idx+1, volume.Name)
+				nameSuffix := ""
+				if len(nodes) != 1 {
+					nameSuffix = fmt.Sprintf("-%d", idx+1)
+				}
+				err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+					sID, err := provider.SnapshotVolume(volume, name+nameSuffix, description)
+					if err != nil {
+						return err
+					}
+					l.Printf("Created snapshot %s for volume %s (%s)\n", sID, volume.Name, volume.ProviderResourceID)
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func generateVolumeName(clusterName string, nodeID install.Node) string {
+	return fmt.Sprintf("%s-n%d", clusterName, nodeID)
+}
+
 func genMountCommands(devicePath, mountDir string) string {
 	return strings.Join([]string{
 		"sudo mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard " + devicePath,
@@ -1517,6 +1558,13 @@ func genMountCommands(devicePath, mountDir string) string {
 		"sudo mount -o discard,defaults " + devicePath + " " + mountDir,
 		"sudo chmod 0777 " + mountDir,
 	}, " && ")
+}
+
+func isWorkloadCollectorVolume(v vm.Volume) bool {
+	if v, ok := v.Labels["roachprod_collector"]; ok && v == "true" {
+		return true
+	}
+	return false
 }
 
 // StorageCollectionPerformAction either starts or stops workload collection on
@@ -1548,14 +1596,33 @@ func StorageCollectionPerformAction(
 	}
 
 	mountDir := "/mnt/capture/"
-	if action == "start" {
+	switch action {
+	case "start":
 		err = createAttachMountVolumes(ctx, l, c, opts, mountDir)
 		if err != nil {
 			return err
 		}
+	case "list-volumes":
+		printNodeToVolumeMapping(c)
+		return nil
+	default:
+		return errors.Errorf("Expected one of start or stop as the action got: %s", action)
 	}
 
+	printNodeToVolumeMapping(c)
 	return sendCaptureCommand(ctx, l, c, action, mountDir)
+}
+
+func printNodeToVolumeMapping(c *install.SyncedCluster) {
+	nodes := c.TargetNodes()
+	for _, n := range nodes {
+		cVM := c.VMs[n-1]
+		for _, volume := range cVM.NonBootAttachedVolumes {
+			if isWorkloadCollectorVolume(volume) {
+				fmt.Printf("Node ID: %d (Name: %s) -> Volume Name: %s (ID: %s)\n", n, cVM.Name, volume.Name, volume.ProviderResourceID)
+			}
+		}
+	}
 }
 
 func sendCaptureCommand(
@@ -1639,14 +1706,15 @@ func createAttachMountVolumes(
 	mountDir string,
 ) error {
 	nodes := c.TargetNodes()
-	var buf bytes.Buffer
+	var labels = map[string]string{"roachprod_collector": "true"}
 	for idx, n := range nodes {
 		curNode := nodes[idx : idx+1]
 
-		cVM := c.VMs[n-1]
+		cVM := &c.VMs[n-1]
 		err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-			opts.Name = fmt.Sprintf("%s-n%d", c.Name, n)
+			opts.Name = generateVolumeName(c.Name, n)
 			opts.Zone = cVM.Zone
+			opts.Labels = labels
 
 			volume, err := provider.CreateVolume(opts)
 			if err != nil {
@@ -1657,8 +1725,12 @@ func createAttachMountVolumes(
 			if err != nil {
 				return err
 			}
+			// Save the cluster to cache
+			err = saveCluster(&c.Cluster)
+			if err != nil {
+				return err
+			}
 			l.Printf("Attached Volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-			buf.Reset()
 			err = c.Run(ctx, l, l.Stdout, l.Stderr, curNode,
 				"Mounting volume", genMountCommands(device, mountDir))
 			return err
@@ -1667,7 +1739,7 @@ func createAttachMountVolumes(
 		if err != nil {
 			return err
 		}
-		l.Printf("Successfully mounted volume %s", cVM.ProviderID)
+		l.Printf("Successfully mounted volume to %s", cVM.ProviderID)
 	}
 	return nil
 }
