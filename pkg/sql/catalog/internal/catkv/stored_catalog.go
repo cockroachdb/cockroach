@@ -178,7 +178,7 @@ func (sc *StoredCatalog) ensure(ctx context.Context, c nstree.Catalog) error {
 }
 
 func (sc *StoredCatalog) ensureComment(ctx context.Context, c nstree.Catalog) error {
-	return c.ForEachCommentUnordered(func(key catalogkeys.CommentKey, cmt string) error {
+	return c.ForEachCommentEntry(func(key catalogkeys.CommentKey, cmt string) error {
 		if existing, ok := sc.comments[key]; ok {
 			sc.memAcc.Shrink(ctx, int64(len(existing)))
 		}
@@ -203,7 +203,7 @@ func (sc *StoredCatalog) ensureZoneConfig(ctx context.Context, c nstree.Catalog)
 	}); err != nil {
 		return err
 	}
-	return c.ForEachZoneConfigUnordered(func(id descpb.ID, zc catalog.ZoneConfig) error {
+	return c.ForEachZoneConfigEntry(func(id descpb.ID, zc catalog.ZoneConfig) error {
 		if existing, _ := sc.zoneConfigs.get(id); existing != nil {
 			sc.memAcc.Shrink(ctx, int64(existing.Size()))
 		}
