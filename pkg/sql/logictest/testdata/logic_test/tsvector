@@ -50,3 +50,16 @@ SELECT repeat('a', 1<<20)::tsvector
 
 query error string is too long for tsquery
 SELECT repeat('a', 1<<20)::tsquery
+
+# TSVECTOR should convert to a JSON element as a string.
+query T
+VALUES ( json_build_array('''D'':236A,377C,622A ''SDfdZ'' ''aIjQScIT'':213A,418A,827A ''pHhJoarX'':106C,486C ''pjApqSC'' ''qXLpyjUM'':547C ''uWSPY'':10A,822B':::TSVECTOR)::JSONB
+       )
+----
+["'D':236A,377C,622A 'SDfdZ' 'aIjQScIT':213A,418A,827A 'pHhJoarX':106C,486C 'pjApqSC' 'qXLpyjUM':547C 'uWSPY':10A,822B"]
+
+# TSQUERY should convert to a JSON element as a string.
+query T
+VALUES ( json_build_array($$'cat' & 'rat'$$:::TSQUERY)::JSONB)
+----
+["'cat' & 'rat'"]
