@@ -10,7 +10,10 @@
 
 package admissionpb
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 // WorkPriority represents the priority of work. In an WorkQueue, it is only
 // used for ordering within a tenant. High priority work can starve lower
@@ -39,8 +42,14 @@ const (
 	OneAboveHighPri int = int(HighPri) + 1
 )
 
-// WorkPriorityDict is a mapping of the priorities to a short string name. The
-// name is used as the suffix on exported work queue metrics.
+func (w WorkPriority) String() string {
+	if s, ok := WorkPriorityDict[w]; ok {
+		return s
+	}
+	return fmt.Sprintf("custom-pri=%d", w)
+}
+
+// WorkPriorityDict is a mapping of the priorities to a short string name.
 var WorkPriorityDict = map[WorkPriority]string{
 	LowPri:        "low-pri",
 	TTLLowPri:     "ttl-low-pri",

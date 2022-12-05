@@ -358,7 +358,54 @@ message RaftCommand {
   // from" the proposer.
   map<string, string> trace_data = 16;
 
+  // AdmissionPriority of the command, used within a tenant. See
+  // admission.WorkPriority.
+  //
+  // See RaftAdmissionMeta below for how this information is decoded.
+  int32 admission_priority = 18;
+
+  // AdmissionCreateTime is equivalent to Time.UnixNano() from the creation time
+  // of the request (or a parent request) for which this command is a part of.
+  // See admission.WorkInfo.Priority for details. It is used to give preference
+  // to older requests.
+  //
+  // See RaftAdmissionMeta below for how this information is decoded.
+  int64 admission_create_time = 19;
+
+  // AdmissionProposerNodeID captures where this raft command originated.
+  //
+  // See RaftAdmissionMeta below for how this information is decoded.
+  int32 admission_proposer_node_id = 20 [(gogoproto.customname) = "AdmissionProposerNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
   reserved 1, 2, 10001 to 10014;
+}
+
+// RaftAdmissionMeta contains information used by admission control for select
+// raft commands. It contains a subset of the fields in RaftCommand and is used
+// to optimize for partially decoding select state from a larger protobuf
+// message. When marshaling, we include this data in the prefix of the marshaled
+// byte buffer. Information about whether this data is present is captured in
+// the first bit of the encoded raft proposal (see RaftCommandAdmissionSetting).
+message RaftAdmissionMeta {
+  int32 admission_priority = 18;
+  int64 admission_create_time = 19;
+  int32 admission_proposer_node_id = 20 [(gogoproto.customname) = "AdmissionProposerNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // TODO(irfansharif): If the {marshaling,unmarshaling} performance overhead
+  // proves costly, we could pack the two embedded fields within a single int64.
+  // We could use 8 bits for the priority (we're using an int8 in Go code) and
+  // the remaining bits for the create timestamp with lower precision.
+  //
+  // TODO(irfansharif): If it's still too costly, we could rip all this out and
+  // somewhat forego intra-tenant ordering with respect to priority and create
+  // time. We could introduce a WorkQueue-like thing at the quota pool level for
+  // every tenant-store tuple at each sender to get some degree of sender-side
+  // ordering, and on each receiver directly consider side-loaded proposals as
+  // BulkNormalPri. Quota pool level re-ordering would also work ok for
+  // epoch-LIFO. Since this re-ordering is only with respect to each sender,
+  // this ordering is coarse.
 }
 
 // RaftCommandFooter contains a subset of the fields in RaftCommand. It is used

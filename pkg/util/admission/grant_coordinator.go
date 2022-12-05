@@ -28,12 +28,40 @@ import (
 )
 
 // GrantCoordinators holds {regular,elastic} GrantCoordinators for
-// {regular,elastic} work, and a StoreGrantCoordinators that allows for
+// {regular,elastic} CPU work, and a StoreGrantCoordinators that allows for
 // per-store GrantCoordinators for KVWork that involves writes.
 type GrantCoordinators struct {
 	Regular *GrantCoordinator
 	Elastic *ElasticCPUGrantCoordinator
 	Stores  *StoreGrantCoordinators
+}
+
+// NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
+// regular cluster node. Caller is responsible for:
+// - hooking up GrantCoordinators.Regular to receive calls to CPULoad, and
+// - to set a PebbleMetricsProvider on GrantCoordinators.Stores
+//
+// Regular and elastic requests pass through GrantCoordinators.{Regular,Elastic}
+// respectively, and a subset of requests pass through each store's
+// GrantCoordinator. We arrange these such that requests (that need to) first
+// pass through a store's GrantCoordinator and then through the
+// {regular,elastic} one. This ensures that we are not using slots/elastic CPU
+// tokens in the latter level on requests that are blocked elsewhere for
+// admission. Additionally, we don't want the CPU scheduler signal that is
+// implicitly used in grant chains to delay admission through the per store
+// GrantCoordinators since they are not trying to control CPU usage, so we turn
+// off grant chaining in those coordinators.
+func NewGrantCoordinators(
+	ambientCtx log.AmbientContext, st *cluster.Settings, opts Options, registry *metric.Registry,
+) GrantCoordinators {
+	metrics := makeGrantCoordinatorMetrics()
+	registry.AddMetricStruct(metrics)
+
+	return GrantCoordinators{
+		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry),
+		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry),
+		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
+	}
 }
 
 // Close implements the stop.Closer interface.
@@ -43,9 +71,9 @@ func (gcs GrantCoordinators) Close() {
 	gcs.Elastic.close()
 }
 
-// StoreGrantCoordinators is a container for GrantCoordinators for each store,
-// that is used for KV work admission that takes into account store health.
-// Currently it is intended only for writes to stores.
+// StoreGrantCoordinators is a GrantCoordinators container for all stores on the
+// local node. It's used for KV admission of writes and takes store health into
+// account internally.
 type StoreGrantCoordinators struct {
 	ambientCtx log.AmbientContext
 
@@ -64,6 +92,8 @@ type StoreGrantCoordinators struct {
 	closeCh               chan struct{}
 
 	disableTickerForTesting bool
+
+	IOGrantCoordinator *IOGrantCoordinator
 }
 
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
@@ -167,7 +197,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 		},
 	}
 
-	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, granters, sgc.settings, sgc.workQueueMetrics, opts)
+	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, granters, sgc.settings, sgc.workQueueMetrics, opts, sgc.IOGrantCoordinator)
 	coord.queues[KVWork] = storeReq
 	requesters := storeReq.getRequesters()
 	kvg.regularRequester = requesters[regularWorkClass]
@@ -335,35 +365,9 @@ type makeRequesterFunc func(
 
 type makeStoreRequesterFunc func(
 	_ log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
-	settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester
-
-// NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
-// regular cluster node. Caller is responsible for:
-// - hooking up GrantCoordinators.Regular to receive calls to CPULoad, and
-// - to set a PebbleMetricsProvider on GrantCoordinators.Stores
-//
-// Regular and elastic requests pass through GrantCoordinators.{Regular,Elastic}
-// respectively, and a subset of requests pass through each store's
-// GrantCoordinator. We arrange these such that requests (that need to) first
-// pass through a store's GrantCoordinator and then through the
-// {regular,elastic} one. This ensures that we are not using slots/elastic CPU
-// tokens in the latter level on requests that are blocked elsewhere for
-// admission. Additionally, we don't want the CPU scheduler signal that is
-// implicitly used in grant chains to delay admission through the per store
-// GrantCoordinators since they are not trying to control CPU usage, so we turn
-// off grant chaining in those coordinators.
-func NewGrantCoordinators(
-	ambientCtx log.AmbientContext, st *cluster.Settings, opts Options, registry *metric.Registry,
-) GrantCoordinators {
-	metrics := makeGrantCoordinatorMetrics()
-	registry.AddMetricStruct(metrics)
-
-	return GrantCoordinators{
-		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry),
-		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry),
-		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
-	}
-}
+	settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions,
+	tracker ReturnQuotaTracker,
+) storeRequester
 
 func makeElasticGrantCoordinator(
 	ambientCtx log.AmbientContext, st *cluster.Settings, registry *metric.Registry,
@@ -414,6 +418,7 @@ func makeStoresGrantCoordinators(
 		makeStoreRequesterFunc:      makeStoreRequester,
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
+		IOGrantCoordinator:          newIOGrantCoordinator(registry),
 	}
 	return storeCoordinators
 }
@@ -985,7 +990,7 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 // above but given we're dealing with a different workClass (elasticWorkClass)
 // but for an existing WorkKind (KVWork), and not all APIs on the grant
 // coordinator currently segment across the two, it was easier to copy over some
-// of the mediating code instead (grant chains also don't apply in this scheme).
+// mediating code instead (grant chains also don't apply in this scheme).
 // Try to do something better here and revisit the existing abstractions; see
 // github.com/cockroachdb/cockroach/pull/86638#pullrequestreview-1084437330.
 type ElasticCPUGrantCoordinator struct {

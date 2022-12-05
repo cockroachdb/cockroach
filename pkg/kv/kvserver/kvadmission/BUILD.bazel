@@ -3,10 +3,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "kvadmission",
-    srcs = ["kvadmission.go"],
+    srcs = [
+        "kvadmission.go",
+        "mock.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

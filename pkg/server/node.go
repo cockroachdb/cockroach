@@ -369,9 +369,6 @@ func NewNode(
 	txnMetrics kvcoord.TxnMetrics,
 	stores *kvserver.Stores,
 	clusterID *base.ClusterIDContainer,
-	kvAdmissionQ *admission.WorkQueue,
-	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
-	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
@@ -392,10 +389,6 @@ func NewNode(
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
-	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
-		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
-	)
-	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -903,8 +896,8 @@ func (n *Node) GetTenantWeights() kvadmission.TenantWeights {
 			Weights: sw,
 		})
 		store.VisitReplicas(func(r *kvserver.Replica) bool {
-			tid, valid := r.TenantID()
-			if valid {
+			if r.IsInitialized() {
+				tid := r.TenantID()
 				weights.Node[tid.ToUint64()]++
 				sw[tid.ToUint64()]++
 			}
@@ -1108,8 +1101,12 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
+
 	if handle.ElasticCPUWorkHandle != nil {
 		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
+	}
+	if handle.ReplicationAdmissionWorkHandle != nil {
+		ctx = admission.ContextWithReplicationAdmissionHandle(ctx, handle.ReplicationAdmissionWorkHandle)
 	}
 
 	var writeBytes *kvadmission.StoreWriteBytes
@@ -1117,6 +1114,7 @@ func (n *Node) batchInternal(
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
+
 	var pErr *roachpb.Error
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {

@@ -1542,6 +1542,16 @@ func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
 	return ts.node.storeCfg.SpanConfigSubscriber
 }
 
+// KVAdmissionController is part of the TestServerInterface.
+func (ts *TestServer) KVAdmissionController() interface{} {
+	return ts.node.storeCfg.KVAdmissionController
+}
+
+// IOGrantCoordinator is part of the TestServerInterface.
+func (ts *TestServer) IOGrantCoordinator() interface{} {
+	return ts.node.storeCfg.IOGrantCoordinator
+}
+
 // SystemConfigProvider is part of the TestServerInterface.
 func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider

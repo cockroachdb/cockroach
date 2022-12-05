@@ -90,6 +90,21 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 
 			return nil
 		}
+		if !h.dropReq(req) { // XXX: Debug-only logging.
+			var prefix string
+			if h.name != "" {
+				prefix = fmt.Sprintf("[%s] ", h.name)
+			}
+			log.Infof(
+				ctx,
+				"%s [raft] r%d Raft message %s",
+				prefix,
+				req.RangeID,
+				raft.DescribeMessage(req.Message, func([]byte) string {
+					return "<omitted>"
+				}),
+			)
+		}
 	}
 	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }

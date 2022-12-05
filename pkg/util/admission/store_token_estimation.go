@@ -254,3 +254,10 @@ func max(i, j int64) int64 {
 	}
 	return i
 }
+
+func min(i, j int64) int64 {
+	if i < j {
+		return i
+	}
+	return j
+}

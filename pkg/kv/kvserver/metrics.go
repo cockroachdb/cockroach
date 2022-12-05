@@ -1499,11 +1499,23 @@ not occurring.
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAddSSTableProposalBytes = metric.Metadata{
+		Name:        "addsstable.proposal_bytes",
+		Help:        "Total size in bytes for SSTable ingestions proposed (i.e. sent to Raft by lease holders)",
+		Measurement: "Ingestions",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaAddSSTableApplications = metric.Metadata{
 		Name:        "addsstable.applications",
 		Help:        "Number of SSTable ingestions applied (i.e. applied by Replicas)",
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaAddSSTableApplicationBytes = metric.Metadata{
+		Name:        "addsstable.application_bytes",
+		Help:        "Total size in bytes for SSTable ingestions applied (i.e. applied by Replicas)",
+		Measurement: "Ingestions",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaAddSSTableApplicationCopies = metric.Metadata{
 		Name:        "addsstable.copies",
@@ -1956,7 +1968,9 @@ type StoreMetrics struct {
 	// AddSSTable stats: how many AddSSTable commands were proposed and how many
 	// were applied? How many applications required writing a copy?
 	AddSSTableProposals           *metric.Counter
+	AddSSTableProposalBytes       *metric.Counter
 	AddSSTableApplications        *metric.Counter
+	AddSSTableApplicationBytes    *metric.Counter
 	AddSSTableApplicationCopies   *metric.Counter
 	AddSSTableAsWrites            *metric.Counter
 	AddSSTableProposalTotalDelay  *metric.Counter
@@ -2498,7 +2512,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
+		AddSSTableProposalBytes:       metric.NewCounter(metaAddSSTableProposalBytes),
 		AddSSTableApplications:        metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableApplicationBytes:    metric.NewCounter(metaAddSSTableApplicationBytes),
 		AddSSTableAsWrites:            metric.NewCounter(metaAddSSTableAsWrites),
 		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),

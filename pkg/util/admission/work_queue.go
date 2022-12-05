@@ -178,21 +178,28 @@ type WorkInfo struct {
 	// otherwise.
 	BypassAdmission bool
 
-	// Optional information specified only for WorkQueues where the work is tied
-	// to a range. This allows queued work to return early as soon as the range
-	// is no longer in a relevant state at this node. Currently only KVWork is
-	// tied to a range.
-	// TODO(sumeer): use these in the WorkQueue implementation.
+	// For internal use by wrapper classes. The requested tokens or slots.
+	RequestedCount int64
+
+	// ProposerNodeID is the node at which this work originated. Only used for
+	// replication admission control -- used to know where exactly we need to
+	// return flow tokens after logical admission. The number of flow tokens is
+	// deducted at the proposer, and after logical admission where we inform the
+	// proposer that a certain raft log entry has been admitted, is freed up by
+	// the proposer.
+	ProposerNodeID roachpb.NodeID
+
+	// LocalStoreID is the store at which this work was performed.
+	// XXX: This doesn't have to hang off each work item. The StoreWorkQueue is
+	// for a single store.
+	LocalStoreID roachpb.StoreID
+
+	// Term and index of the raft log entry.
+	Entry TermIndexTuple
 
 	// RangeID is the range at which this work must be performed. Optional (see
 	// comment above).
 	RangeID roachpb.RangeID
-	// RequiresLeaseholder is true iff the work requires the leaseholder.
-	// Optional (see comment above).
-	RequiresLeaseholder bool
-
-	// For internal use by wrapper classes. The requested tokens or slots.
-	requestedCount int64
 }
 
 // WorkQueue maintains a queue of work waiting to be admitted. Ordering of
@@ -228,6 +235,9 @@ type WorkQueue struct {
 	usesTokens  bool
 	tiedToRange bool
 	settings    *cluster.Settings
+
+	returnQuotaTracker ReturnQuotaTracker
+	onLogicalAdmission OnLogicalAdmitted
 
 	// Prevents more than one caller to be in Admit and calling tryGet or adding
 	// to the queue. It allows WorkQueue to release mu before calling tryGet and
@@ -496,13 +506,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
 		return false, nil
 	}
-	if info.requestedCount == 0 {
-		// Callers from outside the admission package don't set requestedCount --
+	if info.RequestedCount == 0 {
+		// Callers from outside the admission package don't set RequestedCount --
 		// these are implicitly requesting a count of 1.
-		info.requestedCount = 1
+		info.RequestedCount = 1
 	}
-	if !q.usesTokens && info.requestedCount != 1 {
-		panic(errors.AssertionFailedf("unexpected requestedCount: %d", info.requestedCount))
+	if !q.usesTokens && info.RequestedCount != 1 {
+		panic(errors.AssertionFailedf("unexpected RequestedCount: %d", info.RequestedCount))
 	}
 	q.metrics.incRequested(info.Priority)
 	tenantID := info.TenantID.ToUint64()
@@ -519,13 +529,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.mu.tenants[tenantID] = tenant
 	}
 	if info.BypassAdmission && roachpb.IsSystemTenantID(tenantID) && q.workKind == KVWork {
-		tenant.used += uint64(info.requestedCount)
+		tenant.used += uint64(info.RequestedCount)
 		if isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
 		}
 		q.mu.Unlock()
 		q.admitMu.Unlock()
-		q.granter.tookWithoutPermission(info.requestedCount)
+		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
 		return true, nil
 	}
@@ -539,9 +549,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if len(q.mu.tenantHeap) == 0 {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
-		tenant.used += uint64(info.requestedCount)
+		tenant.used += uint64(info.RequestedCount)
 		q.mu.Unlock()
-		if q.granter.tryGet(info.requestedCount) {
+		if q.granter.tryGet(info.RequestedCount) {
 			q.admitMu.Unlock()
 			q.metrics.incAdmitted(info.Priority)
 			return true, nil
@@ -571,11 +581,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			if !ok || prevTenant != tenant {
 				panic("prev tenantInfo no longer in map")
 			}
-			if tenant.used < uint64(info.requestedCount) {
-				panic(errors.AssertionFailedf("tenant.used %d < info.requestedCount %d",
-					tenant.used, info.requestedCount))
+			if tenant.used < uint64(info.RequestedCount) {
+				panic(errors.AssertionFailedf("tenant.used %d < info.RequestedCount %d",
+					tenant.used, info.RequestedCount))
 			}
-			tenant.used -= uint64(info.requestedCount)
+			tenant.used -= uint64(info.RequestedCount)
 		} else {
 			if !ok {
 				tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
@@ -583,8 +593,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			}
 			// Don't want to overflow tenant.used if it is already 0 because of
 			// being reset to 0 by the GC goroutine.
-			if tenant.used >= uint64(info.requestedCount) {
-				tenant.used -= uint64(info.requestedCount)
+			if tenant.used >= uint64(info.RequestedCount) {
+				tenant.used -= uint64(info.RequestedCount)
 			}
 		}
 	}
@@ -606,7 +616,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if int(info.Priority) < tenant.fifoPriorityThreshold {
 		ordering = lifoWorkOrdering
 	}
-	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.requestedCount, startTime, q.mu.epochLengthNanos)
+	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.RequestedCount, startTime, q.mu.epochLengthNanos)
 	inTenantHeap := isInTenantHeap(tenant)
 	if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
 		heap.Push(&tenant.waitingWorkHeap, work)
@@ -638,16 +648,16 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant.
 			if !q.usesTokens {
-				if tenant.used < uint64(info.requestedCount) {
-					panic(errors.AssertionFailedf("tenant.used %d < info.requestedCount %d",
-						tenant.used, info.requestedCount))
+				if tenant.used < uint64(info.RequestedCount) {
+					panic(errors.AssertionFailedf("tenant.used %d < info.RequestedCount %d",
+						tenant.used, info.RequestedCount))
 				}
-				tenant.used -= uint64(info.requestedCount)
+				tenant.used -= uint64(info.RequestedCount)
 			}
 			// Else, we don't decrement tenant.used since we don't want to race with
 			// the gc goroutine that will set used=0.
 			q.mu.Unlock()
-			q.granter.returnGrant(info.requestedCount)
+			q.granter.returnGrant(info.RequestedCount)
 			// The channel is sent to after releasing mu, so we don't need to hold
 			// mu when receiving from it. Additionally, we've already called
 			// returnGrant so we're not holding back future grant chains if this one
@@ -711,6 +721,138 @@ func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
 	q.granter.returnGrant(1)
 }
 
+func (q *WorkQueue) EnqueueVirtualWork(ctx context.Context, info WorkInfo, sideloaded bool) {
+	q.metrics.incRequested(info.Priority)
+	tenantID := info.TenantID.ToUint64()
+
+	// The code in this method does not use defer to unlock the mutexes because
+	// it needs the flexibility of selectively unlocking one of these on a
+	// certain code path. When changing the code, be careful in making sure the
+	// mutexes are properly unlocked on all code paths.
+	q.admitMu.Lock()
+	q.mu.Lock()
+	tenant, ok := q.mu.tenants[tenantID]
+	if !ok {
+		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+		q.mu.tenants[tenantID] = tenant
+	}
+	if info.BypassAdmission {
+		// TODO(irfansharif): "Admin" work (like splits, scatters, lease
+		// transfers, etc.), and work originating from AdmissionHeader_OTHER,
+		// don't use flow control tokens above-raft. So there's nothing to
+		// virtually enqueue below-raft, since we have nothing to return. That
+		// said, it might still be useful to physically admit these proposals
+		// for correct token modeling. To do that, we'd have to pass down
+		// information about it being bypassed above-raft.
+		panic("unexpected BypassAdmission bit set for below raft admission")
+	}
+	// Work is subject to admission control.
+
+	// Tell priorityStates about this received work. We don't tell it about work
+	// that has bypassed admission control (there's none of it at this level,
+	// see TODO above), since priorityStates is deciding the threshold for LIFO
+	// queueing based on observed admission latency.
+	tenant.priorityStates.requestAtPriority(info.Priority)
+
+	if len(q.mu.tenantHeap) == 0 {
+		// Fast-path. Try to grab token.
+		// Optimistically update used to avoid locking again.
+		tenant.used += uint64(info.RequestedCount)
+		q.mu.Unlock()
+		if q.granter.tryGet(info.RequestedCount) {
+			q.admitMu.Unlock()
+			q.metrics.incAdmitted(info.Priority)
+
+			q.returnQuotaTracker.TrackQuotaToReturn(ctx,
+				RangeStoreTuple{
+					RangeID: info.RangeID,
+					StoreID: info.LocalStoreID,
+				}, info.Priority, info.ProposerNodeID, info.Entry)
+
+			wc := workClassFromPri(info.Priority)
+			var storeWorkDoneInfo StoreWorkDoneInfo
+			if sideloaded {
+				storeWorkDoneInfo.IngestedBytes = info.RequestedCount
+			} else {
+				storeWorkDoneInfo.WriteBytes = info.RequestedCount
+			}
+			_ = q.onLogicalAdmission.LogicallyAdmitted(
+				StoreWorkHandle{
+					tenantID:         roachpb.MustMakeTenantID(tenant.id),
+					workClass:        wc,
+					admissionEnabled: true,
+				}, storeWorkDoneInfo)
+			// We've now done what we needed to calculation wise WRT the
+			// granter, metrics, and returning flow control tokens.
+			return
+		}
+
+		// Did not get token/slot.
+		//
+		// There is a race here: before q.mu is acquired, the granter could
+		// experience a reduction in load and call
+		// WorkQueue.hasWaitingRequests to see if it should grant, but since
+		// there is nothing in the queue that method will return false. Then the
+		// work here queues up even though granter has spare capacity. We could
+		// add additional synchronization (and complexity to the granter
+		// interface) to deal with this, by keeping the granter's lock
+		// (GrantCoordinator.mu) locked when returning from tryGrant and call
+		// granter again to release that lock after this work has been queued. But
+		// it has the downside of extending the scope of GrantCoordinator.mu.
+		// Instead we tolerate this race in the knowledge that GrantCoordinator
+		// will periodically, at a high frequency, look at the state of the
+		// requesters to see if there is any queued work that can be granted
+		// admission.
+		q.mu.Lock()
+		// The tenant could have been removed when using tokens. See the comment
+		// where the tenantInfo struct is declared.
+		tenant, ok = q.mu.tenants[tenantID]
+		if !ok {
+			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+			q.mu.tenants[tenantID] = tenant
+		}
+		// Don't want to overflow tenant.used if it is already 0 because of
+		// being reset to 0 by the GC goroutine.
+		if tenant.used >= uint64(info.RequestedCount) {
+			tenant.used -= uint64(info.RequestedCount)
+		}
+	}
+
+	// Check for cancellation.
+	startTime := q.timeNow()
+	if ctx.Err() != nil {
+		panic("not equipped to deal with cancelable contexts below raft")
+	}
+
+	// Push onto heap(s).
+	ordering := fifoWorkOrdering
+	if int(info.Priority) < tenant.fifoPriorityThreshold {
+		ordering = lifoWorkOrdering
+	}
+	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.RequestedCount, startTime, q.mu.epochLengthNanos)
+	work.belowRaftAdmissionControl = true
+	work.originNode, work.destinationStore = info.ProposerNodeID, info.LocalStoreID
+	work.entry = info.Entry
+	work.rangeID = info.RangeID
+	work.sideloaded = sideloaded
+	inTenantHeap := isInTenantHeap(tenant)
+	if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
+		heap.Push(&tenant.waitingWorkHeap, work)
+	} else {
+		heap.Push(&tenant.openEpochsHeap, work)
+	}
+	if !inTenantHeap {
+		heap.Push(&q.mu.tenantHeap, tenant)
+	}
+	// Else already in tenantHeap.
+
+	// Release all locks and return immediately without waiting.
+	q.mu.Unlock()
+	q.admitMu.Unlock()
+
+	q.metrics.recordStartWait(info.Priority)
+}
+
 func (q *WorkQueue) hasWaitingRequests() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -740,13 +882,48 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	} else {
 		q.mu.tenantHeap.remove(tenant)
 	}
-	// Get the value of requestedCount before releasing the mutex, since after
+	// Get the value of RequestedCount before releasing the mutex, since after
 	// releasing Admit can notice that item is no longer in the heap and call
 	// releaseWaitingWork to return item to the waitingWorkPool.
 	requestedCount := item.requestedCount
 	q.mu.Unlock()
 	// Reduce critical section by sending on channel after releasing mutex.
-	item.ch <- grantChainID
+	if !item.belowRaftAdmissionControl {
+		item.ch <- grantChainID
+	} else {
+		q.returnQuotaTracker.TrackQuotaToReturn(
+			context.TODO(),
+			RangeStoreTuple{
+				RangeID: item.rangeID,
+				StoreID: item.destinationStore,
+			}, item.priority, item.originNode, item.entry)
+		defer releaseWaitingWork(item)
+
+		wc := regularWorkClass
+		if item.priority < admissionpb.NormalPri {
+			wc = elasticWorkClass
+		}
+		var storeWorkDoneInfo StoreWorkDoneInfo
+		if item.sideloaded {
+			storeWorkDoneInfo.IngestedBytes = item.requestedCount
+		} else {
+			storeWorkDoneInfo.WriteBytes = item.requestedCount
+		}
+		requestedCount = q.onLogicalAdmission.LogicallyAdmitted(
+			StoreWorkHandle{
+				tenantID:         roachpb.MustMakeTenantID(tenant.id),
+				workClass:        wc,
+				admissionEnabled: true,
+			}, storeWorkDoneInfo)
+
+		q.metrics.incAdmitted(item.priority)
+		waitDur := q.timeNow().Sub(item.enqueueingTime)
+		q.metrics.recordFinishWait(item.priority, waitDur)
+		if item.heapIndex != -1 {
+			panic(errors.AssertionFailedf("grantee should be removed from heap"))
+		}
+		log.Eventf(context.TODO(), "admitted, waited in %s queue for %v", workKindString(q.workKind), waitDur)
+	}
 	return requestedCount
 }
 
@@ -772,21 +949,21 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 // additionalTokens count can be negative, in which case it is returning
 // tokens. This is only for WorkQueue's own accounting -- it should not call
 // into granter.
-func (q *WorkQueue) adjustTenantTokens(tenantID roachpb.TenantID, additionalTokens int64) {
+func (q *WorkQueue) adjustTenantTokens(tenantID roachpb.TenantID, additionalTokensNeeded int64) {
 	tid := tenantID.ToUint64()
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	tenant, ok := q.mu.tenants[tid]
 	if ok {
-		if additionalTokens < 0 {
-			toReturn := uint64(-additionalTokens)
+		if additionalTokensNeeded < 0 {
+			toReturn := uint64(-additionalTokensNeeded)
 			if tenant.used < toReturn {
 				tenant.used = 0
 			} else {
 				tenant.used -= toReturn
 			}
 		} else {
-			tenant.used += uint64(additionalTokens)
+			tenant.used += uint64(additionalTokensNeeded)
 		}
 	}
 }
@@ -1243,6 +1420,14 @@ type waitingWork struct {
 	// to false.
 	inWaitingWorkHeap bool
 	enqueueingTime    time.Time
+
+	// Fields below are only used for replication admission control.
+	belowRaftAdmissionControl bool
+	originNode                roachpb.NodeID
+	destinationStore          roachpb.StoreID
+	sideloaded                bool
+	entry                     TermIndexTuple
+	rangeID                   roachpb.RangeID
 }
 
 var waitingWorkPool = sync.Pool{
@@ -1387,11 +1572,31 @@ func (wwh *waitingWorkHeap) Less(i, j int) bool {
 		if (*wwh)[i].arrivalTimeWorkOrdering == lifoWorkOrdering ||
 			(*wwh)[i].arrivalTimeWorkOrdering != (*wwh)[j].arrivalTimeWorkOrdering {
 			// LIFO, and the epoch is closed, so can simply use createTime.
-			return (*wwh)[i].createTime > (*wwh)[j].createTime
+
+			if (*wwh)[i].rangeID != (*wwh)[j].rangeID ||
+				((*wwh)[i].rangeID == roachpb.RangeID(0) || (*wwh)[j].rangeID == roachpb.RangeID(0)) {
+				// If rangeIDs are unequal, or we're not even using range IDs,
+				// sort by createTime in LIFO order.
+				return (*wwh)[i].createTime > (*wwh)[j].createTime
+			}
+
+			// Ignore create time. LIFO doesn't apply. Sort by raft entry
+			// term+index.
+			return (*wwh)[i].entry.Less((*wwh)[j].entry)
 		}
-		// FIFO.
-		return (*wwh)[i].createTime < (*wwh)[j].createTime
+
+		if (*wwh)[i].rangeID != (*wwh)[j].rangeID ||
+			((*wwh)[i].rangeID == roachpb.RangeID(0) || (*wwh)[j].rangeID == roachpb.RangeID(0)) {
+			// If rangeIDs are unequal, or we're not even using range IDs,
+			// sort by createTime in FIFO order.
+			return (*wwh)[i].createTime < (*wwh)[j].createTime
+		}
+
+		// Ignore create time, so FIFO doesn't apply. Sort simply by raft entry
+		// term+index.
+		return (*wwh)[i].entry.Less((*wwh)[j].entry)
 	}
+
 	return (*wwh)[i].priority > (*wwh)[j].priority
 }
 
@@ -1548,7 +1753,7 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) workQu
 		// necessary to call LoadOrStore here as this could be called concurrently.
 		// It is not called the first Load so that we don't have to unnecessarily
 		// create the metrics.
-		statPrefix := fmt.Sprintf("%v.%v", m.name, admissionpb.WorkPriorityDict[priority])
+		statPrefix := fmt.Sprintf("%v.%s", m.name, priority)
 		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix))
 		if !ok {
 			m.registry.AddMetricStruct(val)
@@ -1650,8 +1855,13 @@ type StoreWorkQueue struct {
 	granters [numWorkClasses]granterWithStoreWriteDone
 	mu       struct {
 		syncutil.RWMutex
+		// estimates is used to determine how many tokens are deducted at-admit
+		// time for each request. It's not used for below-raft/replication
+		// admission control where we do know the size of the write being
+		// physically admitted.
 		estimates storeRequestEstimates
-		stats     storeAdmissionStats
+		// stats are used to maintain L0 {write,ingest} linear models.
+		stats storeAdmissionStats
 	}
 }
 
@@ -1660,7 +1870,9 @@ type StoreWorkQueue struct {
 // StoreWorkQueue.AdmittedWorkDone.
 type StoreWorkHandle struct {
 	tenantID roachpb.TenantID
-	// The writeTokens acquired by this request. Must be > 0.
+	// The writeTokens acquired by this request. Must be > 0 when used at admit
+	// time. Ignored/set-to-zero for below-raft logical admission since know
+	// true size of write at the point
 	writeTokens      int64
 	workClass        workClass
 	admissionEnabled bool
@@ -1692,13 +1904,39 @@ func (q *StoreWorkQueue) Admit(
 	estimates := q.mu.estimates
 	q.mu.RUnlock()
 	h.writeTokens = estimates.writeTokens
-	info.WorkInfo.requestedCount = h.writeTokens
+	info.WorkInfo.RequestedCount = h.writeTokens
 	enabled, err := q.q[wc].Admit(ctx, info.WorkInfo)
 	if err != nil {
 		return StoreWorkHandle{}, err
 	}
 	h.admissionEnabled = enabled
 	return h, nil
+}
+
+func (q *StoreWorkQueue) PhysicallyAdmit(
+	ctx context.Context, info StoreWriteWorkInfo, sideloaded bool,
+) {
+	// For now, we compute a workClass based on priority.
+	wc := regularWorkClass
+	if info.Priority < admissionpb.NormalPri {
+		wc = elasticWorkClass
+	}
+
+	h := StoreWorkHandle{
+		tenantID:         info.TenantID,
+		workClass:        wc,
+		admissionEnabled: true,
+		writeTokens:      info.RequestedCount,
+	}
+
+	q.q[wc].EnqueueVirtualWork(ctx, info.WorkInfo, sideloaded)
+	var storeWorkDoneInfo StoreWorkDoneInfo
+	if sideloaded {
+		storeWorkDoneInfo.IngestedBytes = info.RequestedCount
+	} else {
+		storeWorkDoneInfo.WriteBytes = info.RequestedCount
+	}
+	q.PhysicallyAdmitted(h, storeWorkDoneInfo)
 }
 
 // StoreWorkDoneInfo provides information about the work size after the work
@@ -1725,19 +1963,53 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 	return nil
 }
 
-// BypassedWorkDone is called for follower writes, so that admission control
-// can (a) adjust remaining tokens, (b) account for this in the per-work token
-// estimation model.
+func (q *StoreWorkQueue) PhysicallyAdmitted(h StoreWorkHandle, doneInfo StoreWorkDoneInfo) {
+	if !h.admissionEnabled {
+		return
+	}
+	// Only update stats, because the write is happening ~this point. These
+	// statistics are used to maintain the underlying linear models (modeling
+	// relation between physical log writes and total L0 growth, which includes
+	// the state machine application).
+	q.updateStoreAdmissionStats(1, doneInfo, false)
+}
+
+func (q *StoreWorkQueue) LogicallyAdmitted(
+	h StoreWorkHandle, doneInfo StoreWorkDoneInfo,
+) (additionalTokensNeeded int64) {
+	if !h.admissionEnabled {
+		return 0
+	}
+
+	// We didn't deduct any tokens originally.
+	additionalTokensNeeded = q.granters[h.workClass].storeWriteDoneLocked(0, doneInfo)
+	q.q[h.workClass].adjustTenantTokens(h.tenantID, additionalTokensNeeded)
+	return additionalTokensNeeded
+}
+
+type OnLogicalAdmitted interface {
+	LogicallyAdmitted(h StoreWorkHandle, doneInfo StoreWorkDoneInfo) int64
+}
+
+// BypassedWorkDone is called for follower writes that don't use replication
+// admission control, so that we can (a) adjust remaining tokens, (b) account
+// for this in the per-work token estimation model.
 func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDoneInfo) {
+	if q == nil {
+		return
+	}
 	q.updateStoreAdmissionStats(uint64(workCount), doneInfo, true)
 	// Since we have no control over such work, we choose to count it as
-	// regularWorkClass.
+	// regularWorkClass. We deduct tokens without blocking.
 	_ = q.granters[regularWorkClass].storeWriteDone(0, doneInfo)
 }
 
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
 // storeAdmissionStats.
 func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) {
+	if q == nil {
+		return
+	}
 	q.mu.Lock()
 	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
 	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
@@ -1761,6 +2033,9 @@ func (q *StoreWorkQueue) updateStoreAdmissionStats(
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
 func (q *StoreWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
+	if q == nil {
+		return
+	}
 	for i := range q.q {
 		q.q[i].SetTenantWeights(tenantWeights)
 	}
@@ -1799,12 +2074,15 @@ func makeStoreWorkQueue(
 	settings *cluster.Settings,
 	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
+	tracker ReturnQuotaTracker,
 ) storeRequester {
 	q := &StoreWorkQueue{
 		granters: granters,
 	}
 	for i := range q.q {
 		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts)
+		q.q[i].returnQuotaTracker = tracker
+		q.q[i].onLogicalAdmission = q
 	}
 	// Arbitrary initial value. This will be replaced before any meaningful
 	// token constraints are enforced.

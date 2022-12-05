@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -174,6 +175,37 @@ func (ls *Stores) GetReplicaForRangeID(
 		return nil, nil, roachpb.NewRangeNotFoundError(rangeID, 0)
 	}
 	return replica, store, nil
+}
+
+// GetReplicaStoreIDs implements the kvadmission.ReplicaStoreIDsResolver
+// interface.
+func (ls *Stores) GetReplicaStoreIDs(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (ids []roachpb.StoreID, found bool) {
+	repl, _, err := ls.GetReplicaForRangeID(ctx, rangeID)
+	if err != nil {
+		if roachpb.IsRangeNotFoundError(err) {
+			return nil, false
+		}
+		log.Fatalf(ctx, "programming error: %v", err)
+	}
+	for _, desc := range repl.Desc().Replicas().Descriptors() {
+		ids = append(ids, desc.StoreID)
+	}
+	return ids, true
+}
+
+func (ls *Stores) GetFlowTokenTracker(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (tracker admission.FlowTokenTracker, found bool) {
+	repl, _, err := ls.GetReplicaForRangeID(ctx, rangeID)
+	if err != nil {
+		if roachpb.IsRangeNotFoundError(err) {
+			return nil, false
+		}
+		log.Fatalf(ctx, "programming error: %v", err)
+	}
+	return repl, true
 }
 
 // Send implements the client.Sender interface. The store is looked up from the

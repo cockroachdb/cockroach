@@ -475,7 +475,14 @@ type Replica struct {
 		// to the *RaftCommand contained in its associated *ProposalData. This
 		// is because the *RaftCommand can be mutated during reproposals by
 		// Replica.tryReproposeWithNewLeaseIndex.
+		// XXX: Proposals are removed from here once they've been applied. But
+		// for our purposes, they could be applied on a quorum (so we already
+		// expect to get back flow tokens from it) and not a minority (where
+		// messages were completely dropped). That's where it's hairy -- when do
+		// we give up on that follower? The node it belongs to is "holding" flow
+		// tokens.
 		proposals map[kvserverbase.CmdIDKey]*ProposalData
+
 		// Indicates that the replica is in the process of applying log entries.
 		// Updated to true in handleRaftReady before entries are removed from
 		// the proposals map and set to false after they are applied. Useful in
@@ -515,6 +522,8 @@ type Replica struct {
 
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]*replicaChecksum
+
+		flowTokenTracker *flowTokenTracker
 
 		// proposalQuota is the quota pool maintained by the lease holder where
 		// incoming writes acquire quota from a fixed quota pool before going
@@ -697,6 +706,7 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 	r.mu.AssertHeld()
 	delete(r.mu.proposals, p.idKey)
 	p.releaseQuota()
+	// XXX: Release flow-tokens here?
 }
 
 // GetMinBytes gets the replica's minimum byte threshold.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -177,6 +178,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,
 		rttc.stopper,
+		kvadmission.TestingMockKVAdmissionController(),
 	)
 	rttc.transports[nodeID] = transport
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
@@ -222,7 +224,7 @@ func (rttc *raftTransportTestContext) Send(
 		ToReplica:   to,
 		FromReplica: from,
 	}
-	return rttc.transports[from.NodeID].SendAsync(req, rpc.DefaultClass)
+	return rttc.transports[from.NodeID].SendAsync(context.Background(), req, rpc.DefaultClass)
 }
 
 func TestSendAndReceive(t *testing.T) {
@@ -305,7 +307,7 @@ func TestSendAndReceive(t *testing.T) {
 				req := baseReq
 				req.Message.Type = messageType
 
-				if !transports[fromNodeID].SendAsync(&req, rpc.DefaultClass) {
+				if !transports[fromNodeID].SendAsync(context.Background(), &req, rpc.DefaultClass) {
 					t.Errorf("unable to send %s from %d to %d", messageType, fromNodeID, toNodeID)
 				}
 				messageTypeCounts[toStoreID][messageType]++
@@ -375,7 +377,7 @@ func TestSendAndReceive(t *testing.T) {
 	}
 	// NB: argument passed to SendAsync is not safe to use after; make a copy.
 	expReqCopy := *expReq
-	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpc.DefaultClass) {
+	if !transports[storeNodes[fromStoreID]].SendAsync(context.Background(), &expReqCopy, rpc.DefaultClass) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	// NB: we can't use gogoproto's Equal() function here: it will panic
@@ -651,7 +653,7 @@ func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 	rttc.GossipNode(to, ln.Addr())
 	// Try to send a message, make sure we don't block waiting to set up the
 	// connection.
-	transport.SendAsync(&kvserverpb.RaftMessageRequest{
+	transport.SendAsync(context.Background(), &kvserverpb.RaftMessageRequest{
 		RangeID: rangeID,
 		ToReplica: roachpb.ReplicaDescriptor{
 			StoreID:   to,

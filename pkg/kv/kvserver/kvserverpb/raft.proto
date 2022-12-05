@@ -91,7 +91,41 @@ message RaftMessageRequest {
   repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
 
+  repeated RaftLogicallyAdmitted logically_admitted = 11 [(gogoproto.nullable) = false];
+
   reserved 10;
+}
+
+message RaftLogicallyAdmitted {
+  // RangeID on behalf of which this work was logically admitted.
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // StoreID on which this work was logically admitted. It's used to identify
+  // which flow-token bucket on the sender to return tokens back to.
+  //
+  // TODO(irfansharif): We can avoid sending this for every logically admitted
+  // message if the stream we were sending it on did some some handshake at the
+  // start where we identify our own NodeID. That way the replica receiving this
+  // message can specifically identify the StoreID of the replica that must've
+  // logically admitted this data (we'll never store multiple replicas of a
+  // range across multiple stores on the same node).
+  uint64 store_id = 2 [(gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
+  // AdmissionPriority of work that was logically admitted.
+  int32 admission_priority = 3;
+
+  // RaftLogTerm of entry with the highest term that was logically admitted.
+  // This implies logical admission of all entries that sort before (i.e. with
+  // lower raft terms) and with the same admission priority.
+  uint64 raft_log_term = 4;
+
+  // RaftLogIndex of entry with the highest term+index that was logically
+  // admitted. This implies logical admission of all entries that sort before
+  // (i.e. with lower raft terms, or lower indexes if from the same term) and
+  // with the same admission priority.
+  uint64 raft_log_index = 5;
 }
 
 message RaftMessageRequestBatch {

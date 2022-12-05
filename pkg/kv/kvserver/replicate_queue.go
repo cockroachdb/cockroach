@@ -844,9 +844,9 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		}
 
 		if err != nil {
-			log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
+			log.KvDistribution.VInfof(ctx, 1, "error processing replica: %v%s", err, traceOutput)
 		} else if exceededDuration {
-			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
+			log.KvDistribution.VInfof(ctx, 1, "processing replica took %s, exceeding threshold of %s%s",
 				processDuration, loggingThreshold, traceOutput)
 		}
 	}
@@ -1789,7 +1789,7 @@ func (rq *replicateQueue) considerRebalance(
 	if !ok {
 		// If there was nothing to do for the set of voting replicas on this
 		// range, attempt to rebalance non-voters.
-		log.KvDistribution.Infof(ctx, "no suitable rebalance target for voters")
+		log.KvDistribution.VInfof(ctx, 1, "no suitable rebalance target for voters")
 		addTarget, removeTarget, details, ok = rq.allocator.RebalanceNonVoter(
 			ctx,
 			rq.storePool,
@@ -1809,7 +1809,7 @@ func (rq *replicateQueue) considerRebalance(
 	lhRemovalAllowed := addTarget != (roachpb.ReplicationTarget{})
 
 	if !ok {
-		log.KvDistribution.Infof(ctx, "no suitable rebalance target for non-voters")
+		log.KvDistribution.VInfof(ctx, 1, "no suitable rebalance target for non-voters")
 	} else if !lhRemovalAllowed {
 		if transferOp, err := rq.maybeTransferLeaseAwayTarget(
 			ctx, repl, removeTarget.StoreID, canTransferLeaseFrom,

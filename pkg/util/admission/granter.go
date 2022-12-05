@@ -327,6 +327,25 @@ const (
 	numWorkClasses
 )
 
+func workClassFromPri(pri admissionpb.WorkPriority) workClass {
+	class := regularWorkClass
+	if pri < admissionpb.NormalPri {
+		class = elasticWorkClass
+	}
+	return class
+}
+
+func (w workClass) String() string {
+	switch w {
+	case regularWorkClass:
+		return "regular"
+	case elasticWorkClass:
+		return "elastic"
+	default:
+		return "<unknown>"
+	}
+}
+
 // kvStoreTokenGranter implements granterWithLockedCalls. It is used for
 // grants to KVWork to a store, that is limited by IO tokens. It encapsulates
 // two granter-requester pairs, for the two workClasses. The granter in these
@@ -408,6 +427,13 @@ func (cg *kvStoreTokenChildGranter) storeWriteDone(
 	originalTokens int64, doneInfo StoreWorkDoneInfo,
 ) (additionalTokens int64) {
 	return cg.parent.storeWriteDone(cg.workClass, originalTokens, doneInfo)
+}
+
+// storeWriteDoneLocked implements granterWithStoreWriteDone.
+func (cg *kvStoreTokenChildGranter) storeWriteDoneLocked(
+	originalTokens int64, doneInfo StoreWorkDoneInfo,
+) (additionalTokensNeeded int64) {
+	return cg.parent.storeWriteDoneLocked(cg.workClass, originalTokens, doneInfo)
 }
 
 func (sg *kvStoreTokenGranter) tryGet(workClass workClass, count int64) bool {
@@ -598,6 +624,34 @@ func (sg *kvStoreTokenGranter) storeWriteDone(
 
 	// Reminder: coord.mu protects the state in the kvStoreTokenGranter.
 	sg.coord.mu.Lock()
+	additionalL0TokensNeeded := sg.storeWriteDoneLocked(wc, originalTokens, doneInfo)
+	sg.coord.mu.Unlock()
+	// For multi-tenant fairness accounting, we choose to ignore disk bandwidth
+	// tokens. Ideally, we'd have multiple resource dimensions for the fairness
+	// decisions, but we don't necessarily need something more sophisticated
+	// like "Dominant Resource Fairness".
+	return additionalL0TokensNeeded
+}
+
+// storeWriteDoneLocked implements granterWithStoreWriteDone.
+func (sg *kvStoreTokenGranter) storeWriteDoneLocked(
+	wc workClass, originalTokens int64, doneInfo StoreWorkDoneInfo,
+) (additionalTokensNeeded int64) {
+	// Normally, we follow the structure of a foo() method calling into a foo()
+	// method on the GrantCoordinator, which then calls fooLocked() on the
+	// kvStoreTokenGranter. For example, returnGrant follows this structure.
+	// This allows the GrantCoordinator to do two things (a) acquire the mu
+	// before calling into kvStoreTokenGranter, (b) do side-effects, like
+	// terminating grant chains and doing more grants after the call into the
+	// fooLocked() method.
+	// For storeWriteDone we don't bother with this structure involving the
+	// GrantCoordinator (which has served us well across various methods and
+	// various granter implementations), since the decision on when the
+	// GrantCoordinator should call tryGrant is more complicated. And since this
+	// storeWriteDone is unique to the kvStoreTokenGranter (and not implemented
+	// by other granters) this approach seems acceptable.
+
+	// Reminder: coord.mu protects the state in the kvStoreTokenGranter.
 	exhaustedFunc := func() bool {
 		return sg.availableIOTokens <= 0 ||
 			(wc == elasticWorkClass && sg.elasticDiskBWTokensAvailable <= 0)
@@ -620,7 +674,6 @@ func (sg *kvStoreTokenGranter) storeWriteDone(
 			sg.coord.tryGrant()
 		}
 	}
-	sg.coord.mu.Unlock()
 	// For multi-tenant fairness accounting, we choose to ignore disk bandwidth
 	// tokens. Ideally, we'd have multiple resource dimensions for the fairness
 	// decisions, but we don't necessarily need something more sophisticated

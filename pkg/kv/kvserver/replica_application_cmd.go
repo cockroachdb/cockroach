@@ -71,6 +71,12 @@ func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
 }
 
+// UseReplicationAdmissionControl indicates whether the command should be
+// subject to replication admission control.
+func (c *replicatedCmd) UseReplicationAdmissionControl() bool {
+	return c.Entry.UsesReplicationAdmissionControl
+}
+
 // Ctx implements apply.Command.
 func (c *replicatedCmd) Ctx() context.Context {
 	return c.ctx

@@ -13937,14 +13937,13 @@ func isSystemTenantRepl(t *testing.T, repl *Replica) {
 	require.NotNil(t, repl.tenantMetricsRef)
 	// System tenant has no rate limiter.
 	require.Nil(t, repl.tenantLimiter)
-	tenID, ok := repl.TenantID()
-	require.True(t, ok) // repl is initialized
-	require.Equal(t, roachpb.SystemTenantID, tenID)
+	require.True(t, repl.IsInitialized())
+	require.Equal(t, roachpb.SystemTenantID, repl.TenantID())
 	// Even though the system tenant is not populated with a rate limiter and
 	// there is no refcounting for the system tenant, there is a system rate
 	// limiter (which would exist and be used for some requests even if the store
 	// had no replica for the system tenant).
-	require.NotNil(t, repl.store.tenantRateLimiters.GetTenant(context.Background(), tenID, nil /* closer */))
+	require.NotNil(t, repl.store.tenantRateLimiters.GetTenant(context.Background(), repl.TenantID(), nil /* closer */))
 }
 
 // TestStoreTenantMetricsAndRateLimiterRefcount verifies that the refcounting

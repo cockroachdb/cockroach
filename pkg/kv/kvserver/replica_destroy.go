@@ -202,6 +202,28 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	if pq := r.mu.proposalQuota; pq != nil {
 		pq.Close("destroyed")
 	}
+	if r.mu.flowTokenTracker != nil {
+		// XXX: Do we need to free up flow-tokens here? We do. It's also invoked
+		// on the RHS replica as part of the end txn merge trigger. Also invoked
+		// on subsumed replicas if we apply the merge as part of an incoming
+		// snapshot. Question is whether we set this to nil or not. It's also
+		// invoked when a replica is rebalanced away, or no longer part of a
+		// raft group. Or replica being GC-ed.
+		// XXX: XXX: XXX: Maybe use the applied index of the range merge cmd to
+		// set the low watermark on lhs's flow tokens. LHS could lose and then
+		// regain leadership, so maybe it should part of the tombstone? Thing
+		// is, RHS's range ID would never get used again. So things would be
+		// automatically discarded. It's only when the LHS splits, or loses
+		// leadership, that we care about. So maybe tombstone isn't needed as
+		// much as watermarks during range splits/lease acquisitions. BTW when
+		// some (raft, split, merge) requests try to find a replica, they do so
+		// with a specific replica ID. And nuke the old one if one isn't found.
+		// So we could do that too -- instead of just the proposer node ID +
+		// range ID, also include the replica ID, so we can immediately discard
+		// stale messages.
+		r.mu.flowTokenTracker.ReleaseAll(ctx)
+		r.mu.flowTokenTracker = nil
+	}
 	r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)

@@ -267,6 +267,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		SystemConfigProvider: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
+		KVAdmissionController: kvadmission.TestingMockKVAdmissionController(),
 	}
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -1108,6 +1109,10 @@ type StoreConfig struct {
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController kvadmission.Controller
 
+	// IOGrantCoordinator is an optional field used for admission control, used
+	// only for tests.
+	IOGrantCoordinator *admission.IOGrantCoordinator
+
 	// SchedulerLatencyListener listens in on scheduling latencies, information
 	// that's then used to adjust various admission control components (like how
 	// many CPU tokens are granted to elastic work like backups).
@@ -1899,11 +1904,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// Add this range and its stats to our counter.
 		s.metrics.ReplicaCount.Inc(1)
 		// INVARIANT: each initialized Replica is associated to a tenant.
-		if _, ok := rep.TenantID(); ok {
-			s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
-		} else {
+		if !rep.IsInitialized() {
 			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
 		}
+		s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 	}
 
 	// Start Raft processing goroutines.
@@ -3040,7 +3044,7 @@ func (s *Store) RangeFeed(
 		return roachpb.NewError(roachpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
 	}
 
-	tenID, _ := repl.TenantID()
+	tenID := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
 	return repl.RangeFeed(args, stream, pacer)
 }

@@ -113,6 +113,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
+
+			if r.mu.flowTokenTracker != nil {
+				log.Fatal(ctx, "flowTokenTracker was not nil before becoming the leader")
+			}
+			r.mu.flowTokenTracker = newFlowTokenTracker(r.mu.tenantID, r.store.cfg.IOGrantCoordinator)
+			log.VInfof(ctx, 1, "assumed raft leadership: initializing flow tracker")
+
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 			// We unblock all ongoing and subsequent quota acquisition goroutines
@@ -122,6 +129,11 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.quotaReleaseQueue = nil
 			r.mu.proposalQuota = nil
 			r.mu.lastUpdateTimes = nil
+			if r.mu.flowTokenTracker != nil {
+				log.VInfof(ctx, 1, "lost raft leadership: releasing flow tokens")
+				r.mu.flowTokenTracker.ReleaseAll(ctx)
+				r.mu.flowTokenTracker = nil
+			}
 		}
 		return
 	} else if r.mu.proposalQuota == nil {

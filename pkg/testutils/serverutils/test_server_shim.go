@@ -261,6 +261,14 @@ type TestServerInterface interface {
 	// the server.
 	SpanConfigKVSubscriber() interface{}
 
+	// KVAdmissionController returns the embedded kvadmission.Controller for
+	// the server.
+	KVAdmissionController() interface{}
+
+	// IOGrantCoordinator returns the embedded admission.IOGrantCoordinator for
+	// the server.
+	IOGrantCoordinator() interface{}
+
 	// TestTenants returns the test tenants associated with the server
 	TestTenants() []TestTenantInterface
 }

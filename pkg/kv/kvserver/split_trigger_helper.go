@@ -53,7 +53,7 @@ type msgAppDropper interface {
 
 // maybeDropMsgApp returns true if the incoming Raft message should be dropped.
 // It does so if the recipient replica is uninitialized (i.e. has no state) and
-// is waiting for a split trigger to apply,in which case delivering the message
+// is waiting for a split trigger to apply, in which case delivering the message
 // in this situation would result in an unnecessary Raft snapshot: the MsgApp
 // would be rejected and the rejection would prompt the leader to send a
 // snapshot, while the split trigger would likely populate the replica "for

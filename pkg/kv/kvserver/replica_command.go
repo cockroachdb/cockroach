@@ -770,7 +770,7 @@ func (r *Replica) AdminMerge(
 		b.AddRawRequest(&roachpb.EndTxnRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				MergeTrigger: &roachpb.MergeTrigger{
+				MergeTrigger: &roachpb.MergeTrigger{ // XXX: Use this.
 					LeftDesc:             updatedLeftDesc,
 					RightDesc:            rightDesc,
 					RightMVCCStats:       rhsSnapshotRes.MVCCStats,

@@ -177,14 +177,11 @@ func splitPostApply(
 
 	// Update store stats with difference in stats before and after split.
 	if rightReplOrNil != nil {
-		if _, ok := rightReplOrNil.TenantID(); ok {
-			// TODO(tbg): why this check to get here? Is this really checking if the RHS
-			// is already initialized? But isn't it always, at this point?
-			rightReplOrNil.store.metrics.addMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
-		} else {
-			log.Fatalf(ctx, "%s: found replica which is RHS of a split "+
+		if !rightReplOrNil.IsInitialized() {
+			log.Fatalf(ctx, "%s: found uninitialized replica which is RHS of a split "+
 				"without a valid tenant ID", rightReplOrNil)
 		}
+		rightReplOrNil.store.metrics.addMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
 	}
 
 	now := r.store.Clock().NowAsClockTimestamp()

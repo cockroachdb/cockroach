@@ -233,7 +233,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 
 	// NB: we need to do this update early, as some fields are zeroed out below
 	// (AddSST for example).
-	if !cmd.IsLocal() {
+	if !cmd.IsLocal() && !cmd.UseReplicationAdmissionControl() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
 		b.ab.followerStoreWriteBytes.NumEntries++
 		b.ab.followerStoreWriteBytes.WriteBytes += writeBytes
@@ -275,6 +275,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			b.r.store.limiters.BulkIOWriteRate,
 		)
 		b.r.store.metrics.AddSSTableApplications.Inc(1)
+		b.r.store.metrics.AddSSTableApplicationBytes.Inc(int64(len(res.AddSSTable.Data)))
 		if copied {
 			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
 		}

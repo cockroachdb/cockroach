@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -135,6 +137,9 @@ type rangeLeaderInfo struct {
 type proposer interface {
 	locker() sync.Locker
 	rlocker() sync.Locker
+
+	flowTokenTracker() admission.FlowTokenTracker
+
 	// The following require the proposer to hold (at least) a shared lock.
 	getReplicaID() roachpb.ReplicaID
 	destroyed() destroyStatus
@@ -145,6 +150,8 @@ type proposer interface {
 	leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
 	ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool
 	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
+	getReplicaStoreIDs() []roachpb.StoreID
+	tenantID() roachpb.TenantID
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
@@ -269,6 +276,9 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 // ReinsertLocked inserts a command that has already passed through the proposal
 // buffer back into the buffer to be reproposed at a new Raft log index. Unlike
 // Insert, it does not modify the command.
+// XXX: Slow raft command reproposals go through here. Other form of reproposals
+// where MLAI is changed .Insert() to propBuf directly (see
+// tryReproposeWithNewLeaseIndex).
 func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
@@ -380,7 +390,7 @@ func (b *propBuf) flushLocked(ctx context.Context) error {
 // notice the failure of the leader and allow a future lease request through.
 func (b *propBuf) FlushLockedWithRaftGroup(
 	ctx context.Context, raftGroup proposerRaft,
-) (int, error) {
+) (_ int, retErr error) {
 	// We hold the write lock while reading from and flushing the proposal
 	// buffer. This ensures that we synchronize with all producers and other
 	// consumers.
@@ -405,6 +415,15 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
 	ents := make([]raftpb.Entry, 0, used)
+
+	type admitEntHandle struct {
+		handle *admission.ReplicationAdmissionWorkHandle
+		pCtx   context.Context
+	}
+	// Use this slice to track, for each entry that's proposed to raft, whether
+	// it's subject to replication admission control. Updated in tandem with
+	// slice above.
+	admitHandles := make([]admitEntHandle, 0, used)
 
 	// Compute the closed timestamp target, which will be used to assign a closed
 	// timestamp to all proposals in this batch.
@@ -489,11 +508,44 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			if err := proposeBatch(raftGroup, b.p.getReplicaID(), ents); err != nil {
-				firstErr = err
+			propErr, dropped := proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+			if propErr != nil {
+				firstErr = propErr
 				continue
 			}
+			if !dropped {
+				if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
+					panic(
+						fmt.Sprintf("mismatched slice sizes: len(admit)=%d len(ents)=%d cap(admit)=%d cap(ents)=%d",
+							len(admitHandles), len(ents), cap(admitHandles), cap(ents)),
+					)
+				}
+
+				for i, admitHandle := range admitHandles {
+					if admitHandle.handle == nil {
+						continue // nothing to do
+					}
+					log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
+						raft.DescribeEntry(ents[i], func(bytes []byte) string {
+							return "<omitted>"
+						}),
+					)
+					admitHandle.handle.Proposed(
+						admitHandle.pCtx,
+						b.p.tenantID(),
+						b.p.getReplicaStoreIDs(),
+						b.p.flowTokenTracker(),
+						int64(len(ents[i].Data)),
+						admission.TermIndexTuple{
+							Term:  ents[i].Term,
+							Index: ents[i].Index,
+						},
+					)
+				}
+			}
+
 			ents = ents[len(ents):]
+			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -531,15 +583,160 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// dropped the uncommitted portion of the Raft log would already
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
-			})
+			ent := raftpb.Entry{Data: p.encodedCommand}
+			ents = append(ents, ent)
+
+			shouldAdmit := p.createdAtTicks == p.proposedAtTicks && !reproposal && p.replicationAdmissionControlHandle != nil
+			if !shouldAdmit {
+				admitHandles = append(admitHandles, admitEntHandle{})
+			} else {
+				admitHandles = append(admitHandles, admitEntHandle{
+					handle: p.replicationAdmissionControlHandle,
+					pCtx:   p.ctx,
+				})
+			}
 		}
 	}
 	if firstErr != nil {
 		return 0, firstErr
 	}
-	return used, proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+
+	propErr, dropped := proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+	if propErr == nil && !dropped {
+		if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
+			panic(
+				fmt.Sprintf("mismatched slice sizes: len(admit)=%d len(ents)=%d cap(admit)=%d cap(ents)=%d",
+					len(admitHandles), len(ents), cap(admitHandles), cap(ents)),
+			)
+		}
+		for i, admitHandle := range admitHandles {
+			if admitHandle.handle == nil {
+				continue // nothing to do
+			}
+			log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
+				raft.DescribeEntry(ents[i], func(bytes []byte) string {
+					return "<omitted>"
+				}),
+			)
+			admitHandle.handle.Proposed(
+				admitHandle.pCtx,
+				b.p.tenantID(),
+				b.p.getReplicaStoreIDs(),
+				b.p.flowTokenTracker(),
+				int64(len(ents[i].Data)),
+				admission.TermIndexTuple{
+					Term:  ents[i].Term,
+					Index: ents[i].Index,
+				},
+			)
+
+			// XXX: How do we figure out what the underlying raft log
+			// entry's index/term is going to be? Whatever gets appended to
+			// the local storage is also what gets appended to the raft
+			// transport. So maybe try to bind the proposal when sending to
+			// the local storage. Does it happen as part of MsgProp itself?
+			// Yes. When stepping through MsgProps, there's this code in the
+			// underlying raft library that assigns the current term and log
+			// index
+			//  li := r.raftLog.lastIndex()
+			//  for i := range es {
+			//	  es[i].Term = r.Term
+			//	  es[i].Index = li + 1 + uint64(i)
+			//  }
+			// The entries slice we pass here is actually mutated. Maybe we
+			// just rely on it like bad engineers. It has the term/index
+			// we're proposing it lands at.
+			//
+			// XXX: Below raft, when enqueuing virtual work items, track
+			// the raft log term+index. When releasing flow tokens, for now
+			// they're not released with some "prefix" in mind (i.e. if
+			// releasing flow tokens for t=10,i=50, it doesn't imply releasing
+			// it for t=10,i=40). But maybe we could, for the same term, with
+			// some stable sort guarantees in the work queue when all else is
+			// equal. All else being equal is important since admitting a
+			// higher-pri proposal at higher index doesn't mean logically
+			// admitting lower-pri work below. Do we care about create-time
+			// ordering below-raft? Work is getting physically admitted always,
+			// and create-time ordering between two equal-pri proposals is
+			// indistinguishable to the proposer? We don't care about it within
+			// a single raft stream (identified by RangeID), but we do across
+			// different raft streams. You can imagine a separate writer issuing
+			// older normal-pri proposals getting starved out WRT logical
+			// admission by another writer.
+			//
+			// BTW - with this mode of releasing flow-tokens, i.e. release by
+			// raft log index, we don't need to send back the actual token
+			// count. It's all held on the proposer. Just the raft log
+			// term+index that was logically admitted (what the proposer is
+			// using to identify the quota deduction) needs to be sent back.
+			//
+			// Logical admission ordering requirements within a single raft
+			// log: Sort tuple:
+			//  <tenant-ID, admission-pri, range-ID, create-time>
+			//
+			// We have per-tenant heaps, for inter-tenant isolation. So within a
+			// tenant, do we want inter-range isolation? Within a range, we want
+			// to sort entirely by pri. But across ranges, we do want to sort by
+			// create-time (to return flow tokens to sender sending older
+			// requests). So re: "inter-range isolation", no.
+			//
+			// And also, what happens when the term changes? Then we do know
+			// that whatever was logically enqueued has to be discarded. Or at
+			// least we can make it so. If raft leadership changes nodes, then
+			// earlier messages do need to get discarded (even if raft
+			// leadership comes back). If the leaseholder itself calls an
+			// election, all extant proposals with the older log term, what do
+			// we want to have happen with them? We could free up those tokens,
+			// or expect still to hear from them?
+			//
+			// XXX:
+			// - reproposals get counted twice, unless we're relying on ctx
+			// not being used in the reproposal path? Does the !reproposal check
+			// help? Maybe only for slow raft reproposals, not for MLAI
+			// reproposals. Does the ctx there help? It shouldn't be used in the
+			// MLAI path (which is below-raft, at apply time). Write test.
+			// - Concerns: this proposal could get dropped by raft, or by
+			//   specific raft send queues.
+			//   - Raft can be dealt with right below.
+			//   - Either return flow-tokens immediately if raft transport's
+			//     raft request that's being dropped deducted flow-tokens at
+			//     this point.
+			//   - Or reset flow-tokens entirely when messages start getting
+			//     dropped.
+			// At the point where we figure out which replicas we're writing to
+			// to then deduct flow-tokens from, can we be mistaken? Would be
+			// more fool-proof if we pushed it all down to the transport
+			// instead.
+			//
+			// Flow-tokens get deducted when a proposal is first
+			// flushed out of raft proposal buffer. If it's reproposed (with a
+			// new MLAI, or just re-inserted into the proposal buffer), don't
+			// deduct flow-tokens. Also of course for the local path where we
+			// don't use the raft transport, we'd do something different. Likely
+			// just here. Doing it below the transport also would mean that we
+			// don't deduct if it gets dropped when the sender assumes the
+			// receiver replica is unitialized.
+			// We're relying on a follower to have applied proposed
+			// some raft command and only for it to then eventually return
+			// flow-tokens. But what if messages to it keep getting dropped,
+			// eventually raft log gets truncated, and it's caught up via
+			// snapshots? Those deducted tokens need to be reset at the sender.
+			// Either each leaseholder is aware of how many flow tokens it's
+			// deducted for each follower, and it returns them when a follower
+			// is being caught up via snapshot, or resets the entire pool.
+			//
+			// - Look at the life of a proposal from the POV of the
+			// per-replica proposals map. Proposals get cleared out once
+			// they've applied, of when the lease changes hands, etc. Flesh
+			// this out more. When a proposal is no longer tracked in the
+			// map, the replica is no longer going to issue msg apps for it.
+			// A proposal BTW could get subdivided into multiple msg apps.
+			// - This is a newly created proposal, one that's also not a
+			// slow reproposal. It's also not a reproposal because of MLAI
+			// issues.
+		}
+	}
+	return used, propErr
 }
 
 // maybeRejectUnsafeProposalLocked conditionally rejects proposals that are
@@ -898,9 +1095,11 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
-func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
+func proposeBatch(
+	raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry,
+) (_ error, dropped bool) {
 	if len(ents) == 0 {
-		return nil
+		return nil, false
 	}
 	if err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
@@ -911,11 +1110,11 @@ func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftp
 		// ignored prior to the introduction of ErrProposalDropped).
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
-		return nil
+		return nil, true
 	} else if err != nil {
-		return err
+		return err, false
 	}
-	return nil
+	return nil, false
 }
 
 // FlushLockedWithoutProposing is like FlushLockedWithRaftGroup but it does not
@@ -1247,6 +1446,21 @@ func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool
 		r.requiresExpiringLeaseRLocked(),
 		r.store.Clock().Now(),
 	)
+}
+
+func (rp *replicaProposer) getReplicaStoreIDs() (ids []roachpb.StoreID) {
+	for _, desc := range (*Replica)(rp).descRLocked().Replicas().Descriptors() {
+		ids = append(ids, desc.StoreID)
+	}
+	return ids
+}
+
+func (rp *replicaProposer) tenantID() roachpb.TenantID {
+	return (*Replica)(rp).getTenantIDRLocked()
+}
+
+func (rp *replicaProposer) flowTokenTracker() admission.FlowTokenTracker {
+	return (*Replica)(rp)
 }
 
 // rejectProposalWithRedirectLocked is part of the proposer interface.

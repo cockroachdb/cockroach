@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -2908,7 +2909,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   target2.StoreID,
 	}
 
-	tc.Servers[2].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
+	tc.Servers[2].RaftTransport().SendAsync(ctx, &kvserverpb.RaftMessageRequest{
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Heartbeats: []kvserverpb.RaftHeartbeat{
@@ -3178,6 +3179,7 @@ func TestReplicaGCRace(t *testing.T) {
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
+		tc.Servers[0].KVAdmissionController().(kvadmission.Controller),
 	)
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	fromTransport.Listen(fromStore.StoreID(), errChan)
@@ -3187,7 +3189,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// dropped messages (see #18355).
 	sendHeartbeat := func() (sent bool) {
 		r := hbReq
-		return fromTransport.SendAsync(&r, rpc.DefaultClass)
+		return fromTransport.SendAsync(ctx, &r, rpc.DefaultClass)
 	}
 	if sent := sendHeartbeat(); !sent {
 		t.Fatal("failed to send heartbeat")
@@ -3677,13 +3679,14 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
 		nil, /* grpcServer */
 		tc.Servers[0].Stopper(),
+		tc.Servers[0].KVAdmissionController().(kvadmission.Controller),
 	)
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	transport0.Listen(target0.StoreID, errChan)
 
 	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
-	for !transport0.SendAsync(&kvserverpb.RaftMessageRequest{
+	for !transport0.SendAsync(ctx, &kvserverpb.RaftMessageRequest{
 		RangeID:     desc.RangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -4707,7 +4710,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 		var repl *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
-			tc.Servers[0].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
+			tc.Servers[0].RaftTransport().SendAsync(ctx, &kvserverpb.RaftMessageRequest{
 				ToReplica: roachpb.ReplicaDescriptor{
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,

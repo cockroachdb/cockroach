@@ -15,9 +15,11 @@ package kvadmission
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -81,6 +83,15 @@ var rangefeedCatchupScanElasticControlEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// replicationAdmissionControlEnabled determines whether replication admission control
+// is enabled.
+var replicationAdmissionControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.replication_admission_control.enabled",
+	"determines whether replication admission control is enabled",
+	true,
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -108,6 +119,11 @@ type Controller interface {
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
+
+	ReturnWriteBurstQuotaLocally(context.Context, *kvserverpb.RaftMessageRequest)
+	BelowRaftAdmission(context.Context, roachpb.TenantID, roachpb.NodeID, roachpb.StoreID, kvserverpb.RaftAdmissionMeta, int64, bool, admission.TermIndexTuple, roachpb.RangeID)
+	GetQuotaToReturnRemotely(context.Context, roachpb.NodeID) (_ map[admission.RangeStoreTuple]map[admissionpb.WorkPriority]admission.TermIndexTuple, ok bool)
+	admission.ReturnQuotaTracker
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -131,15 +147,23 @@ type TenantWeightsForStore struct {
 	Weights map[uint64]uint32
 }
 
+// ReplicaStoreIDsResolver returns the set of store IDs on which replicas of the
+// given range are placed.
+type ReplicaStoreIDsResolver interface {
+	GetReplicaStoreIDs(context.Context, roachpb.RangeID) (ids []roachpb.StoreID, found bool)
+}
+
 // controllerImpl implements Controller interface.
 type controllerImpl struct {
-	// Admission control queues and coordinators. All three should be nil or
-	// non-nil.
+	// Admission control queues and coordinators.
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	settings                   *cluster.Settings
-	every                      log.EveryN
+	ioGrantCoordinator         *admission.IOGrantCoordinator
+	replicaStoreIDsResolver    ReplicaStoreIDsResolver
+
+	settings *cluster.Settings
+	every    log.EveryN
 }
 
 var _ Controller = &controllerImpl{}
@@ -150,10 +174,11 @@ var _ Controller = &controllerImpl{}
 // (c) information around how much work a request is allowed to do (used for
 // cooperative scheduling with elastic CPU granters).
 type Handle struct {
-	tenantID             roachpb.TenantID
-	storeAdmissionQ      *admission.StoreWorkQueue
-	storeWorkHandle      admission.StoreWorkHandle
-	ElasticCPUWorkHandle *admission.ElasticCPUWorkHandle
+	tenantID                       roachpb.TenantID
+	storeAdmissionQ                *admission.StoreWorkQueue
+	StoreWorkHandle                admission.StoreWorkHandle
+	ElasticCPUWorkHandle           *admission.ElasticCPUWorkHandle
+	ReplicationAdmissionWorkHandle *admission.ReplicationAdmissionWorkHandle
 
 	callAdmittedWorkDoneOnKVAdmissionQ bool
 }
@@ -164,12 +189,16 @@ func MakeController(
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
+	ioGrantCoordinator *admission.IOGrantCoordinator,
+	replicaStoreIDsResolver ReplicaStoreIDsResolver,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
+		ioGrantCoordinator:         ioGrantCoordinator,
+		replicaStoreIDsResolver:    replicaStoreIDsResolver,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}
@@ -216,7 +245,7 @@ func (n *controllerImpl) AdmitKVWork(
 		BypassAdmission: bypassAdmission,
 	}
 
-	admissionEnabled := true
+	admissionEnabled := admission.KVAdmissionControlEnabled.Get(&n.settings.SV)
 	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
 	// it would bypass admission, it would consume a slot. When writes are
 	// throttled, we start generating more txn heartbeats, which then consume
@@ -224,22 +253,49 @@ func (n *controllerImpl) AdmitKVWork(
 	// to continue even when throttling since there are often significant
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
-		if storeAdmissionQ != nil {
-			storeWorkHandle, err := storeAdmissionQ.Admit(
-				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
-			if err != nil {
-				return Handle{}, err
-			}
-			admissionEnabled = storeWorkHandle.AdmissionEnabled()
-			if admissionEnabled {
-				defer func() {
-					if retErr != nil {
-						// No bytes were written.
-						_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
+		if replicationAdmissionControlEnabled.Get(&n.settings.SV) {
+			if !bypassAdmission {
+				storeIDs, found := n.replicaStoreIDsResolver.GetReplicaStoreIDs(ctx, ba.RangeID)
+				sort.Sort(roachpb.StoreIDSlice(storeIDs)) // sort for deadlock avoidance
+				if found {
+					h := &admission.ReplicationAdmissionWorkHandle{
+						Priority:           admissionInfo.Priority,
+						IOGrantCoordinator: n.ioGrantCoordinator,
+						OriginalRangeID:    ba.RangeID,
 					}
-				}()
-				ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
+					for _, storeID := range storeIDs {
+						tenantStoreTuple := admission.TenantStoreTuple{
+							StoreID:  storeID,
+							TenantID: admissionInfo.TenantID,
+						}
+						if err := n.ioGrantCoordinator.WaitForBurstCapacity(ctx, tenantStoreTuple, admissionInfo.Priority, createTime); err != nil {
+							return Handle{}, errors.Wrap(err, "while waiting for burst capacity")
+						}
+						// XXX: XXX: DOcument interaction with splits. We might
+						// be waiting on the wrong set of pools if a split
+						// happens right after, but why that's ok. ALso really
+						// unlikely to be wrong.
+					}
+					ah.ReplicationAdmissionWorkHandle = h
+				}
+			}
+		} else {
+			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+			if storeAdmissionQ != nil {
+				storeWorkHandle, err := storeAdmissionQ.Admit(
+					ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
+				if err != nil {
+					return Handle{}, err
+				}
+				if admissionEnabled {
+					defer func() {
+						if retErr != nil {
+							// No bytes were written.
+							_ = storeAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, admission.StoreWorkDoneInfo{})
+						}
+					}()
+					ah.storeAdmissionQ, ah.StoreWorkHandle = storeAdmissionQ, storeWorkHandle
+				}
 			}
 		}
 	}
@@ -287,12 +343,12 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
-	if ah.storeAdmissionQ != nil {
+	if ah.storeAdmissionQ != nil && ah.ReplicationAdmissionWorkHandle == nil {
 		var doneInfo admission.StoreWorkDoneInfo
 		if writeBytes != nil {
 			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
 		}
-		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
+		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.StoreWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
 			if buildutil.CrdbTestBuild {
@@ -351,13 +407,12 @@ func (n *controllerImpl) SetTenantWeightProvider(
 				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
-					if q != nil {
-						if kvStoresDisabled {
-							storeWeights.Weights = nil
-						}
-						q.SetTenantWeights(storeWeights.Weights)
+					if kvStoresDisabled {
+						storeWeights.Weights = nil
 					}
+					n.storeGrantCoords.
+						TryGetQueueForStore(int32(storeWeights.StoreID)).
+						SetTenantWeights(storeWeights.Weights)
 				}
 				allWeightsDisabled = kvDisabled && kvStoresDisabled
 			case <-stopper.ShouldQuiesce():
@@ -372,11 +427,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 func (n *controllerImpl) SnapshotIngested(
 	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats,
 ) {
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
-	if storeAdmissionQ == nil {
-		return
-	}
-	storeAdmissionQ.StatsToIgnore(ingestStats)
+	n.storeGrantCoords.TryGetQueueForStore(int32(storeID)).StatsToIgnore(ingestStats)
 }
 
 // FollowerStoreWriteBytes implements the Controller interface.
@@ -386,12 +437,83 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 	if followerWriteBytes.WriteBytes == 0 && followerWriteBytes.IngestedBytes == 0 {
 		return
 	}
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	n.storeGrantCoords.TryGetQueueForStore(int32(storeID)).BypassedWorkDone(
+		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo,
+	)
+}
+
+func (n *controllerImpl) BelowRaftAdmission(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	proposerNodeID roachpb.NodeID,
+	receiverStoreID roachpb.StoreID,
+	raftAdmissionMeta kvserverpb.RaftAdmissionMeta,
+	dataSize int64,
+	sideloaded bool,
+	entry admission.TermIndexTuple,
+	rangeID roachpb.RangeID,
+) {
+	if dataSize == 0 {
+		return
+	}
+
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(receiverStoreID))
 	if storeAdmissionQ == nil {
 		return
 	}
-	storeAdmissionQ.BypassedWorkDone(
-		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
+	storeAdmissionQ.PhysicallyAdmit(ctx, admission.StoreWriteWorkInfo{
+		WorkInfo: admission.WorkInfo{
+			TenantID:       tenantID,
+			Priority:       admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority),
+			CreateTime:     raftAdmissionMeta.AdmissionCreateTime,
+			ProposerNodeID: proposerNodeID,
+			LocalStoreID:   receiverStoreID,
+			RequestedCount: dataSize,
+			Entry:          entry,
+			RangeID:        rangeID,
+		},
+	}, sideloaded)
+}
+
+// ReturnWriteBurstQuotaLocally implements the Controller interface.
+func (n *controllerImpl) ReturnWriteBurstQuotaLocally(
+	ctx context.Context, req *kvserverpb.RaftMessageRequest,
+) {
+	for _, admitted := range req.LogicallyAdmitted {
+		ent := admission.TermIndexTuple{
+			Term:  admitted.RaftLogTerm,
+			Index: admitted.RaftLogIndex,
+		}
+		if log.V(1) {
+			log.Infof(ctx, "informed of logical admission (r%d s%s pri=%s %s)",
+				admitted.RangeID, admitted.StoreID, admissionpb.WorkPriority(admitted.AdmissionPriority), ent)
+		}
+		flowTokenTracker, found := n.ioGrantCoordinator.FlowTokenTrackerFinder.GetFlowTokenTracker(ctx, admitted.RangeID)
+		if !found {
+			log.VInfof(ctx, 1, "did not find token bucket to return to (was the proposer replica removed?)")
+			return
+		}
+		flowTokenTracker.Release(ctx, admitted.StoreID, admissionpb.WorkPriority(admitted.AdmissionPriority), ent)
+	}
+}
+
+func (n *controllerImpl) GetQuotaToReturnRemotely(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (
+	_ map[admission.RangeStoreTuple]map[admissionpb.WorkPriority]admission.TermIndexTuple,
+	ok bool,
+) {
+	return n.ioGrantCoordinator.GetQuotaToReturnRemotely(ctx, nodeID)
+}
+
+func (n *controllerImpl) TrackQuotaToReturn(
+	ctx context.Context,
+	rs admission.RangeStoreTuple,
+	pri admissionpb.WorkPriority,
+	returnTo roachpb.NodeID,
+	entry admission.TermIndexTuple,
+) {
+	n.ioGrantCoordinator.TrackQuotaToReturn(ctx, rs, pri, returnTo, entry)
 }
 
 // ProvisionedBandwidth set a value of the provisioned

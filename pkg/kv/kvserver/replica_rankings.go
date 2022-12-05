@@ -251,10 +251,10 @@ func (a RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
 		return
 	}
 
-	tID, ok := repl.Repl().TenantID()
-	if !ok {
+	if !repl.Repl().IsInitialized() {
 		return
 	}
+	tID := repl.Repl().TenantID()
 
 	r, ok := a[tID]
 	if !ok {

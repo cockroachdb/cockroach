@@ -100,6 +100,13 @@ func (tg *testGranter) storeWriteDone(
 		tg.name, originalTokens, doneInfo.WriteBytes, doneInfo.IngestedBytes, tg.additionalTokens)
 	return tg.additionalTokens
 }
+func (tg *testGranter) storeWriteDoneLocked(
+	originalTokens int64, doneInfo StoreWorkDoneInfo,
+) (additionalTokens int64) {
+	tg.buf.printf("storeWriteDoneLocked%s: originalTokens %d, doneBytes(write %d,ingested %d) returning %d",
+		tg.name, originalTokens, doneInfo.WriteBytes, doneInfo.IngestedBytes, tg.additionalTokens)
+	return tg.additionalTokens
+}
 
 type testWork struct {
 	tenantID roachpb.TenantID
@@ -515,7 +522,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				st = cluster.MakeTestingClusterSettings()
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					[numWorkClasses]granterWithStoreWriteDone{tg[regularWorkClass], tg[elasticWorkClass]},
-					st, metrics, opts).(*StoreWorkQueue)
+					st, metrics, opts, nil).(*StoreWorkQueue)
 				tg[regularWorkClass].r = q.getRequesters()[regularWorkClass]
 				tg[elasticWorkClass].r = q.getRequesters()[elasticWorkClass]
 				wrkMap.resetMap()
@@ -659,3 +666,10 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 // - Test race between grant and cancellation
 // - Add microbenchmark with high concurrency and procs for full admission
 //   system
+
+// XXX: Write tests for changes to work queue sorting that includes raft log
+// entry term+index and range ID. We respect create time in some cases (across
+// ranges) and do our usual LIFO/FIFO ordering. But within a range we do no such
+// thing, since this is all below-raft queuing. It might be better to separate
+// out our WorkQueue implementation entirely, pulling it into the StoreWorkQueue
+// or something.

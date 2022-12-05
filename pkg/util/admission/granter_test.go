@@ -126,7 +126,9 @@ func TestGranterBasic(t *testing.T) {
 				settings: settings,
 				makeStoreRequesterFunc: func(
 					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
-					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
+					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions,
+					tracker ReturnQuotaTracker,
+				) storeRequester {
 					makeTestRequester := func(wc workClass) *testRequester {
 						req := &testRequester{
 							workKind:               KVWork,
@@ -313,7 +315,7 @@ func TestStoreCoordinators(t *testing.T) {
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
 			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, tracker ReturnQuotaTracker) storeRequester {
 			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, metrics, opts)
 			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}

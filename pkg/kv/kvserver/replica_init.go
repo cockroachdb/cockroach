@@ -247,15 +247,18 @@ func (r *Replica) IsInitialized() bool {
 }
 
 // TenantID returns the associated tenant ID and a boolean to indicate that it
-// is valid. It will be invalid only if the replica is not initialized.
-func (r *Replica) TenantID() (roachpb.TenantID, bool) {
+// is valid. It will be panic if the replica is not initialized.
+func (r *Replica) TenantID() roachpb.TenantID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getTenantIDRLocked()
 }
 
-func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
-	return r.mu.tenantID, r.mu.tenantID != (roachpb.TenantID{})
+func (r *Replica) getTenantIDRLocked() roachpb.TenantID {
+	if r.mu.tenantID == (roachpb.TenantID{}) {
+		panic("fetching tenant ID from uninitialized replica")
+	}
+	return r.mu.tenantID
 }
 
 // maybeInitializeRaftGroup check whether the internal Raft group has

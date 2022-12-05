@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -156,6 +157,8 @@ type RaftTransport struct {
 	stopper *stop.Stopper
 	metrics *RaftTransportMetrics
 
+	kvAdmissionController kvadmission.Controller
+
 	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*raftSendQueue
 	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
@@ -164,6 +167,8 @@ type RaftTransport struct {
 // raftSendQueue is a queue of outgoing RaftMessageRequest messages.
 type raftSendQueue struct {
 	reqs chan *kvserverpb.RaftMessageRequest
+	// The specific node this queue is sending RaftMessageRequests to.
+	nodeID roachpb.NodeID
 	// The number of bytes in flight. Must be updated *atomically* on sending and
 	// receiving from the reqs channel.
 	bytes atomic.Int64
@@ -176,7 +181,7 @@ func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTr
 		return nil, errors.New("dummy resolver")
 	}
 	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st, tracer,
-		nodedialer.New(nil, resolver), nil, nil)
+		nodedialer.New(nil, resolver), nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
@@ -187,13 +192,15 @@ func NewRaftTransport(
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
+	kvAdmissionController kvadmission.Controller,
 ) *RaftTransport {
 	t := &RaftTransport{
-		AmbientContext: ambient,
-		st:             st,
-		tracer:         tracer,
-		stopper:        stopper,
-		dialer:         dialer,
+		AmbientContext:        ambient,
+		st:                    st,
+		tracer:                tracer,
+		stopper:               stopper,
+		dialer:                dialer,
+		kvAdmissionController: kvAdmissionController,
 	}
 	t.initMetrics()
 	if grpcServer != nil {
@@ -288,6 +295,12 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					batch, err := stream.Recv()
 					if err != nil {
 						return err
+						// XXX: Are stream resets detected here? I think so.
+						// Here then we need to reset quota pools. Do it for
+						// specific stores. Which TS tuples? All of them? We
+						// don't have a way of getting the StoreID here, but
+						// maybe it could be included in the very first stream
+						// message.
 					}
 					if len(batch.Requests) == 0 {
 						continue
@@ -295,6 +308,11 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 
 					for i := range batch.Requests {
 						req := &batch.Requests[i]
+						// XXX: DOC. Return flow-control-tokens locally back
+						// here to the specified store. Further below in the code
+						// it can get dropped if the raft receive queues are
+						// full. We want it to be as low as possible.
+						t.kvAdmissionController.ReturnWriteBurstQuotaLocally(ctx, req)
 						t.metrics.MessagesRcvd.Inc(1)
 						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
 							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
@@ -398,7 +416,7 @@ func (t *RaftTransport) processQueue(
 	ctx := stream.Context()
 
 	if err := t.stopper.RunAsyncTask(
-		ctx, "storage.RaftTransport: processing queue",
+		ctx, "storage.RaftTransport: processing raft message responses",
 		func(ctx context.Context) {
 			errCh <- func() error {
 				for {
@@ -439,6 +457,56 @@ func (t *RaftTransport) processQueue(
 			size := int64(req.Size())
 			q.bytes.Add(-size)
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
+
+			// XXX: DOC. Transfer ownership of to-return-flow-control tokens
+			// from TDS to raft transport. We're piggybacking responses.
+			// Append to last request in batch.Requests, creating one if not
+			// present. When this stream is closed due to inactivity, either
+			// send one last thing back, or make sure something is closed such
+			// that the sender can detect it and reset pools for this store.
+			// - We do need some guaranteed-delivery process when there's
+			// nothing to piggy back on.
+			// - Double check interactions with quiescence. When we're quiescing
+			// a range, we need to make sure all quota is returned. Ensure that it's
+			// tracked in the outbox.
+			// XXX: Also deduct sender side flow-control tokens here? How do we
+			// deal with re-proposals? We don't want to deduct twice. Right now
+			// we're deducting once it exits the proposal buffer. So it's only
+			// once?
+			// Also need to plumb in tenant ID info here, or resolve it by
+			// looking at RangeID. Assumption I'm making: reliable stream after
+			// this point, which if disconnects, we can also reliably detect. On
+			// the receiver end of the stream: we'll logically admit every
+			// message that deducted flow-control tokens. We'll never drop them.
+			// - How do flow-tokens work in the face of reproposals? And
+			// token deductions closer to the raft transport? For every command
+			// that's proposed, we want to deduct just once, independent of the
+			// number of reproposals. Once that command's entry is appended, we
+			// want to enqueue virtually. If we've deducted, we want to make
+			// sure flow-tokens are returned. So the receiver must eventually
+			// work off of a copy of that command. Or if it gets rejected, it
+			// must inform us of it so we re-add deducted flow tokens.
+			if rangeStoreToPriToEntry, ok := t.kvAdmissionController.GetQuotaToReturnRemotely(ctx, q.nodeID); ok {
+				for rangeStore, priToEntry := range rangeStoreToPriToEntry {
+					for pri, entry := range priToEntry {
+						if log.V(1) {
+							log.Infof(ctx, "informing n%s of logical admission (r%d s%s pri=%s entry=%d/%d)",
+								q.nodeID, rangeStore.RangeID, rangeStore.StoreID, pri, entry.Term, entry.Index)
+						}
+						req.LogicallyAdmitted = append(
+							req.LogicallyAdmitted,
+							kvserverpb.RaftLogicallyAdmitted{
+								RangeID:           rangeStore.RangeID,
+								StoreID:           rangeStore.StoreID,
+								AdmissionPriority: int32(pri),
+								RaftLogTerm:       entry.Term,
+								RaftLogIndex:      entry.Index,
+							},
+						)
+					}
+				}
+			}
+
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 			// Pull off as many queued requests as possible, within reason.
@@ -479,7 +547,10 @@ func (t *RaftTransport) getQueue(
 	queuesMap := &t.queues[class]
 	value, ok := queuesMap.Load(int64(nodeID))
 	if !ok {
-		q := raftSendQueue{reqs: make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize)}
+		q := raftSendQueue{
+			reqs:   make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize),
+			nodeID: nodeID,
+		}
 		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
 	}
 	return (*raftSendQueue)(value), ok
@@ -491,7 +562,7 @@ func (t *RaftTransport) getQueue(
 // or may not actually be sent but if it's false the message definitely was not
 // sent. It is not safe to continue using the reference to the provided request.
 func (t *RaftTransport) SendAsync(
-	req *kvserverpb.RaftMessageRequest, class rpc.ConnectionClass,
+	ctx context.Context, req *kvserverpb.RaftMessageRequest, class rpc.ConnectionClass,
 ) (sent bool) {
 	toNodeID := req.ToReplica.NodeID
 	defer func() {
@@ -597,6 +668,12 @@ func (t *RaftTransport) startProcessNewQueue(
 		if err := t.processQueue(q, stream); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
+		// XXX: Sender needs to detect this (this == stream breaking) and reset
+		// quota pools. When this closure returns, the stream gets canceled. So
+		// caller should be able to detect.
+		// - We're (silently) dropping messages during clean up. And possibly
+		// leaking flow-control tokens. Sender must detect this. By stream being
+		// closed/reset. And must reset flow-control tokens.
 	}
 	err := t.stopper.RunAsyncTask(ctx, "storage.RaftTransport: sending/receiving messages",
 		func(ctx context.Context) {

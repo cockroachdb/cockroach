@@ -17,6 +17,7 @@ type RaftTransportMetrics struct {
 	SendQueueSize  *metric.Gauge
 	SendQueueBytes *metric.Gauge
 
+	// XXX: Check when this is incremented.
 	MessagesDropped *metric.Counter
 	MessagesSent    *metric.Counter
 	MessagesRcvd    *metric.Counter

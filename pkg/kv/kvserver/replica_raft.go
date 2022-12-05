@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -32,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -191,7 +194,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, "", writeBytes, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, "", nil, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -209,6 +212,113 @@ func (r *Replica) evalAndPropose(
 		proposal.signalProposalResult(pr)
 
 		// Continue with proposal...
+	}
+
+	// XXX: DOC. integration point with replication admission control. We're
+	// deducting from the top-level quota pools here. Below raft is where we'll
+	// enqueue the virtual work item. It'll be symmetric across leader/follower
+	// stores. Below raft though, we'll need to make sure we know whether we're
+	// using replication admission control, and whether we need to enqueue
+	// virtually or not (has it already been enqueued). If that's too difficult,
+	// reason about what happens in the worst case if work is enqueued twice
+	// (momentarily, while the cluster setting update gets gossipped).
+	// - What we deduct needs to be something the receiver can reconstruct on
+	// their end without decoding the command. So using the proposal size as is
+	// is problematic. Now, to return the exact quota deducted at the sender,
+	// the entry would have to be deducted. Or we send the deduction over the
+	// wire and have it be sent back to us. Or we keep track of inflight
+	// deductions (keyed by command ID) and have logical admission responses
+	// return to us the set of IDs that have been logically admitted.
+	// What we deduct from the quota pool doesn't have to be the exact size of
+	// the write proposal. It could also be, for ex., the size of the
+	// RaftMessageRequest that internally serializes the write proposal. This
+	// sizeof(message) is trivially reconstructable on the receiver without
+	// needing to decode anything. Integration with the quota pools then have to
+	// happen at the RaftTransport layer. Both for deductions and restorations.
+	// We might be short-circuiting the RaftTransport layer for the local store.
+	// For that we'd have to do something special (we'd necessarily need another
+	// integration point that's not the RaftTransport one).
+	// Old comment: Can we use commandID on the sender instead of having the
+	// quota deduction roundtrip all the way through? Or MaxLeaseIndex? There
+	// are downsides to using IDs (lack of commutativity), so don't do this. We
+	// we did do it, maybe we use a similar idea to the propBuf. We'll track
+	// writes in some buffer (store-level? range-level?) that hold onto quota
+	// pool deduction metadata. And once we've received the logical admission
+	// for some given proposal ID (uniquely tagged) we'll flush from buffer and
+	// return quota back to pool.
+	//
+	// What's the write bandwidth I can have with a given C? For a
+	// given bandwidth delay product? For RTT = 200ms, and write work that tries
+	// to use up everything it can (demand = infinite):
+	//
+	// t=000ms  take 16MB of quota. send 16MB of writes.
+	// t=100ms  no quota
+	// t=200ms  return 16MB of quota. allow 16MB of writes.
+	// t=300ms  no quota
+	// t=400ms  return 16MB of quota. allow 16MB of writes.
+	// t=500ms  no quota
+	// t=600ms  return 16MB of quota. allow 16MB of writes.
+	// t=700ms  no quota
+	// t=800ms  return 16MB of quota. allow 16MB of writes.
+	// t=900ms  no quota
+	// t=1000ms return 16MB of quota. allow 16MB of writes.
+	//
+	// 5*16 = 80 MB of write work was done (summing all returned quota).
+	// max write bandwidth == C/RTT. 80 MB/s in our example above. That's what
+	// we're throttling at, independent of receiver store's ability to accept
+	// writes. If RTT is larger, we'll need a larger C for the same write
+	// bandwidth, and vice-versa (it'd be 160 MB/s across for a 100ms RTT).
+	//
+	// - With a static C, we are however capping the write burst to exactly C. And
+	//   that could be undesirable for bursty workloads (where demands > C in an
+	//   RTT window). Worth noting that this is already true for a given range,
+	//   where C = 8MB.
+	//
+	// - What's the worst case, coordinated "LSM debt" on the receiver store
+	// if we didn't deduct from quota pool upfront at the sender? To calculate,
+	// assume that every write has to defer logical admission arbitrarily. All
+	// senders at the start are unaware of this, and only hear about it after
+	// 1RTT. For RTT = 200ms:
+	//
+	// t=000ms  (across S senders) send W MB of writes. C=0.
+	// t=100ms  (across S senders) send W MB of writes. C=0.
+	// t=200ms  (across S senders) receive response to W MB of writes from
+	//          t=000ms. C=-W. Prevents future writes until logical admission of
+	//          earlier writes.
+	// t=300ms  (across S senders) receive response to W MB of writes from
+	//          t=100ms. C=-2W. Prevents future writes until logical admission
+	//          of earlier writes.
+	//
+	// In our example above, S*2W amount of write work admission was logically
+	// deferred. Like in the example above, if the client-side write comes at us
+	// "full throttle", the amount of work we allow in at every sender is what
+	// the network link between that sender and some (shared) receiver allows.
+	// If the bandwidth of that link is B, B*RTT == 2W. What's typical for B?
+	// What's typical RTT? So this is the same as Andrew's formula.
+	//
+	// Option 3: # of stores * B * RTT.
+	// Option 2: # of stores * # of tenants * 16MB.
+	//
+	// So option 3 is better if BDP < # of tenants * 16MB. Likely true. Shifting
+	// this back to in terms of recovery time. How to tune C? Why do we tune C?
+	// If too low, we're leaving LSM write bandwidth on the table (non-work
+	// conserving). If it's too high, recovery time is bad. Option 3 helps with
+	// the worst case == we could pick a default for B that's something like 80
+	// MB/s. In our example, we have a token bucket that's generating B MB/s for
+	// a given destination store, and those tokens are consumed across all
+	// tenants. If response is also delayed, the burst is also made practically
+	// larger.
+	// General note: if we have fewer outstanding bytes, we might be
+	// underutilizing/non-work conserving if we suddently have LSM write
+	// capacity available.
+	// Practically: what are probabilities of 2 tenant simultaneously bursting?
+
+	if handle := admission.ReplicationAdmissionHandleFromContext(ctx); handle != nil {
+		proposal.useReplicationAdmissionControl = true
+		proposal.replicationAdmissionControlHandle = handle
+		proposal.command.AdmissionPriority = ba.AdmissionHeader.Priority
+		proposal.command.AdmissionCreateTime = ba.AdmissionHeader.CreateTime
+		proposal.command.AdmissionProposerNodeID = r.NodeID()
 	}
 
 	// Attach information about the proposer's lease to the command, for
@@ -344,7 +454,11 @@ func (r *Replica) propose(
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
-	encodingPrefixByte := raftlog.EntryEncodingStandardPrefixByte
+
+	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
+	if p.useReplicationAdmissionControl {
+		entryEncoding = raftlog.EntryEncodingStandardWithAC
+	}
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -416,8 +530,12 @@ func (r *Replica) propose(
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		encodingPrefixByte = raftlog.EntryEncodingSideloadedPrefixByte
+		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
+		if p.useReplicationAdmissionControl {
+			entryEncoding = raftlog.EntryEncodingSideloadedWithAC
+		}
 		r.store.metrics.AddSSTableProposals.Inc(1)
+		r.store.metrics.AddSSTableProposalBytes.Inc(int64(len(p.command.ReplicatedEvalResult.AddSSTable.Data)))
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
 			return roachpb.NewErrorf("cannot sideload empty SSTable")
@@ -425,6 +543,9 @@ func (r *Replica) propose(
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
+
+	// NB: If (significantly) re-working how raft commands are encoded, make the
+	// equivalent change in raftlog.BenchmarkRaftAdmissionMetaOverhead.
 
 	// Create encoding buffer.
 	preLen := 0
@@ -438,11 +559,44 @@ func (r *Replica) propose(
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		raftlog.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
+		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, p.idKey)
 	}
-	// Encode body of command.
+
+	// Encode the body of the command.
 	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
+
+	// Encode below-raft admission data, if any.
+	admissionMetaLen := 0
+	if p.useReplicationAdmissionControl {
+		if !prefix {
+			panic("expected to encode prefix for raft commands using replication admission control")
+		}
+		// Encode admission metadata data at the start, right after the command
+		// prefix.
+		raftAdmissionMeta := &kvserverpb.RaftAdmissionMeta{
+			AdmissionPriority:       p.command.AdmissionPriority,
+			AdmissionCreateTime:     p.command.AdmissionCreateTime,
+			AdmissionProposerNodeID: p.command.AdmissionProposerNodeID,
+		}
+		admissionMetaLen = raftAdmissionMeta.Size() // part of cmdLen from above
+		if _, err := protoutil.MarshalTo(
+			raftAdmissionMeta,
+			data[preLen:preLen+admissionMetaLen],
+		); err != nil {
+			return roachpb.NewError(err)
+		}
+		log.VInfof(ctx, 1, "encoded raft admission meta: pri=%s create-time=%d proposer=n%s",
+			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority),
+			raftAdmissionMeta.AdmissionCreateTime,
+			raftAdmissionMeta.AdmissionProposerNodeID,
+		)
+		p.command.AdmissionPriority = 0       // zero out what we've already encoded
+		p.command.AdmissionCreateTime = 0     // zero out what we've already encoded
+		p.command.AdmissionProposerNodeID = 0 // zero out what we've already encoded
+	}
+
+	// Encode the rest of the command.
+	if _, err := protoutil.MarshalTo(p.command, data[preLen+admissionMetaLen:]); err != nil {
 		return roachpb.NewError(err)
 	}
 	p.encodedCommand = data
@@ -937,6 +1091,76 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
 		},
 	}
+	// XXX: DOC. This is the point below raft where we enqueue the virtual work
+	// item into the local store's work queue? Who sent us this command? The raft
+	// message's .From should be sufficient. But that requires decoding, which
+	// we don't want to do. So look at raft leader instead? For the sending
+	// StoreID, we can cross-reference the replica descriptor for the replica ID
+	// (as for TenantID, it hangs off the Replica). How do we get the source
+	// storeID for the entry? Just the raft leader? We have a leaderID above,
+	// how accurate is that with respect to who sent us the entry to persist?
+	// Say it's not accurate, we've received an entry from an old leader and
+	// send back its quota to the new one. Is that problematic? The old leader
+	// no longer needs this quota since it's no longer proposing. The new leader
+	// may be given back some quota but that's transient, and as if some pieces
+	// of work got free admission. So it might over admit but only slightly.
+	// Worst case we also include sender data in RaftAdmissionMeta. Can raft
+	// leadership change across these entries we're persisting?
+	// Actually this is problematic, since the per-remote-store quota pool
+	// is used by all proposing replicas on the sender store. So it might
+	// get emptied out without refill, affecting other replicas.
+	// - The entries sent locally, I think the raft library just short
+	// circuits internally. On the decoded command, we actually know through
+	// .IsLocal().
+	// - Want the RaftAdmissionHeader without having to decode the command
+	// fully, since we'll do that later and it's expensive. Once decoded here,
+	// given we know it's not going to be important later, consider dropping it
+	// from the raft entries before persisting it for perf reasons.
+	//
+	// - What happens when this replica isn't initialized?
+	if r.IsInitialized() {
+		tenantID := r.TenantID()
+		for _, entry := range rd.Entries {
+			if len(entry.Data) == 0 {
+				continue // nothing to do
+			}
+
+			typ, err := raftlog.EncodingOf(entry)
+			if err != nil {
+				return stats, err
+			}
+			if !typ.UsesReplicationAdmissionControl() {
+				continue // nothing to do
+			}
+			data, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
+			if err != nil {
+				log.Fatalf(ctx, "unable to decode raft command admission data: %v", err)
+			}
+			log.VInfof(ctx, 1, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%s,s%s] tenant=t%s tokens=%d sideloaded=%t raft-entry=%d/%d",
+				admissionpb.WorkPriority(data.AdmissionPriority),
+				data.AdmissionCreateTime,
+				data.AdmissionProposerNodeID,
+				r.NodeID(),
+				r.StoreID(),
+				tenantID,
+				len(entry.Data),
+				typ.IsSideloaded(),
+				entry.Term,
+				entry.Index,
+			)
+			r.store.cfg.KVAdmissionController.BelowRaftAdmission(
+				ctx,
+				tenantID,
+				data.AdmissionProposerNodeID,
+				r.StoreID(),
+				data,
+				int64(len(entry.Data)),
+				typ.IsSideloaded(),
+				admission.TermIndexTuple{Term: entry.Term, Index: entry.Index},
+				r.RangeID,
+			)
+		}
+	}
 	if state, err = s.StoreEntries(ctx, state, logstore.MakeReady(rd), &stats.append); err != nil {
 		return stats, errors.Wrap(err, "while storing log entries")
 	}
@@ -1206,6 +1430,8 @@ const (
 	reasonSnapshotApplied
 	reasonTicks
 )
+
+// XXX: This is where one set of reproposals originate.
 
 // refreshProposalsLocked goes through the pending proposals, notifying
 // proposers whose proposals need to be retried, and resubmitting proposals
@@ -1534,6 +1760,7 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
 	}
+
 	if !r.sendRaftMessageRequest(ctx, req) {
 		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
@@ -1565,7 +1792,10 @@ func (r *Replica) sendRaftMessageRequest(
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
-	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
+	if r.IsInitialized() {
+		ctx = roachpb.NewContextForTenant(ctx, r.TenantID())
+	}
+	return r.store.cfg.Transport.SendAsync(ctx, req, r.connectionClass.get())
 }
 
 func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {
@@ -2111,6 +2341,13 @@ func (r *Replica) acquireMergeLock(
 			&merge.LeftDesc, &merge.RightDesc, rightDesc)
 	}
 	return rightRepl.raftMu.Unlock, nil
+}
+
+// UseEncodingWithBelowRaftAdmissionData returns whether we should use an
+// encoding that includes below-raft admission control data.
+func (r *Replica) UseEncodingWithBelowRaftAdmissionData(ctx context.Context) bool {
+	return r.store.ClusterSettings().Version.IsActive(ctx,
+		clusterversion.V23_1UseEncodingWithBelowRaftAdmissionData)
 }
 
 // handleTruncatedStateBelowRaftPreApply is called before applying a Raft

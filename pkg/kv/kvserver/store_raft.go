@@ -490,6 +490,12 @@ func (s *Store) HandleRaftResponse(
 		}
 		switch val := resp.Union.GetValue().(type) {
 		case *roachpb.Error:
+			// XXX: Do we need to deal with these explicitly? Are these
+			// possibilities that we're leaking flow-control tokens? It might be
+			// that because of the source of these errors, we never end up
+			// appending to the raft log, and thus virtually enqueuing + freeing
+			// up flow-tokens. Do we just liberally reset flow-control tokens
+			// for the store it came from? We also know the tenant it came from.
 			switch tErr := val.GetDetail().(type) {
 			case *roachpb.ReplicaTooOldError:
 				if replErr != nil {
@@ -881,7 +887,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
-	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
+	if !s.cfg.Transport.SendAsync(ctx, chReq, rpc.SystemClass) {
 		for _, beat := range beats {
 			if repl, ok := s.mu.replicasByRangeID.Load(beat.RangeID); ok {
 				repl.addUnreachableRemoteReplica(beat.ToReplicaID)

@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -249,6 +251,36 @@ func (t *testProposer) rejectProposalWithLeaseTransferRejectedLocked(
 	t.onRejectProposalWithLeaseTransferRejectedLocked(lease, reason)
 }
 
+func (t *testProposer) getReplicaStoreIDs() (ids []roachpb.StoreID) {
+	return []roachpb.StoreID{roachpb.StoreID(1)}
+}
+
+func (t *testProposer) tenantID() roachpb.TenantID {
+	return roachpb.SystemTenantID
+}
+
+func (t *testProposer) flowTokenTracker() admission.FlowTokenTracker {
+	return &testFlowTokenTracker{}
+}
+
+type testFlowTokenTracker struct{}
+
+func (*testFlowTokenTracker) TrackReplicaMuLocked(
+	context.Context,
+	roachpb.StoreID,
+	admissionpb.WorkPriority,
+	int64,
+	admission.TermIndexTuple,
+	roachpb.RangeID,
+) bool {
+	return true
+}
+
+func (*testFlowTokenTracker) Release(
+	context.Context, roachpb.StoreID, admissionpb.WorkPriority, admission.TermIndexTuple,
+) {
+}
+
 // proposalCreator holds on to a lease and creates proposals using it.
 type proposalCreator struct {
 	lease kvserverpb.LeaseStatus
@@ -303,7 +335,7 @@ func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	cmdLen := p.command.Size()
 	needed := raftlog.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
 	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
-	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardPrefixByte, p.idKey)
+	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardWithAC, p.idKey)
 	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
 	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
 		panic(err)

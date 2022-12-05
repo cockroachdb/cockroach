@@ -161,7 +161,7 @@ func (t *testElasticCPUInternalWorkQueue) Admit(
 	_ context.Context, info WorkInfo,
 ) (enabled bool, err error) {
 	if !t.disabled {
-		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.requestedCount)))
+		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.RequestedCount)))
 	}
 	return !t.disabled, nil
 }

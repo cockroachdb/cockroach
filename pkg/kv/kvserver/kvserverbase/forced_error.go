@@ -31,7 +31,7 @@ const (
 	// assigned lease index had been consumed, and it is known that this proposal
 	// had not applied previously. The command can be retried at a higher lease
 	// index.
-	ProposalRejectionIllegalLeaseIndex
+	ProposalRejectionIllegalLeaseIndex // XXX: These rejections also happen at apply time. So we should be ok.
 )
 
 // noopOnEmptyRaftCommandErr is returned from CheckForcedErr when an empty raft

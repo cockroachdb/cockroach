@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -484,8 +485,26 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		/* deterministic */ false,
 	)
 
+	gcoords.Stores.IOGrantCoordinator.FlowTokenTrackerFinder = stores
+	admissionControl := struct {
+		kvAdmissionController    kvadmission.Controller
+		schedulerLatencyListener admission.SchedulerLatencyListener
+		ioGrantCoordinator       *admission.IOGrantCoordinator
+	}{
+		kvAdmissionController: kvadmission.MakeController(
+			gcoords.Regular.GetWorkQueue(admission.KVWork),
+			gcoords.Elastic,
+			gcoords.Stores,
+			gcoords.Stores.IOGrantCoordinator,
+			stores,
+			cfg.Settings,
+		),
+		schedulerLatencyListener: gcoords.Elastic.SchedulerLatencyListener,
+		ioGrantCoordinator:       gcoords.Stores.IOGrantCoordinator,
+	}
+
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper, admissionControl.kvAdmissionController,
 	)
 	registry.AddMetricStruct(raftTransport.Metrics())
 
@@ -704,6 +723,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 		RangeLogWriter:           rangeLogWriter,
+		KVAdmissionController:    admissionControl.kvAdmissionController,
+		IOGrantCoordinator:       admissionControl.ioGrantCoordinator,
+		SchedulerLatencyListener: admissionControl.schedulerLatencyListener,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -743,9 +765,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		txnMetrics,
 		stores,
 		cfg.ClusterIDContainer,
-		gcoords.Regular.GetWorkQueue(admission.KVWork),
-		gcoords.Elastic,
-		gcoords.Stores,
 		tenantUsage,
 		tenantSettingsWatcher,
 		spanConfig.kvAccessor,
@@ -1650,6 +1669,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
 	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node, s.node)
+	s.storeGrantCoords.IOGrantCoordinator.SetNodeID(s.NodeID())
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.

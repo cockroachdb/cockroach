@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,7 +81,7 @@ type ProposalData struct {
 
 	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
 	// proposal has been passed to raft modifying this field requires holding the
-	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
+	// raftMu. Once the proposal comes out of Raft, ownership of this quota is
 	// passed to r.mu.quotaReleaseQueue.
 	quotaAlloc *quotapool.IntAlloc
 
@@ -124,6 +125,11 @@ type ProposalData struct {
 	// tok identifies the request to the propBuf. Once the proposal is made, the
 	// token will be used to stop tracking this request.
 	tok TrackedRequestToken
+
+	// useReplicationAdmissionControl indicates whether this raft command
+	// should be subject to replication admission control.
+	useReplicationAdmissionControl    bool
+	replicationAdmissionControlHandle *admission.ReplicationAdmissionWorkHandle
 }
 
 // finishApplication is called when a command application has finished. The

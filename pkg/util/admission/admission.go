@@ -52,7 +52,7 @@
 //   get through if there's quota, but elastic work will only get through if
 //   there's some baseline amount of quota.
 // - When a request comes in to a leaseholder, it waits for the quota to be
-//   non-zero before proceeding. After which it goes through, acquires a slot, 
+//   non-zero before proceeding. After which it goes through, acquires a slot,
 // - Store/resource under contention is the receiver store. The tokens on this
 //   store do need to get proportioned across tenants.
 // - What if the burst size was tenant+stores instead of tenant*stores? If you
@@ -391,6 +391,7 @@ type granterWithIOTokens interface {
 type granterWithStoreWriteDone interface {
 	granter
 	storeWriteDone(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
+	storeWriteDoneLocked(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
 }
 
 // cpuOverloadIndicator is meant to be an instantaneous indicator of cpu
