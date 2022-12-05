@@ -950,24 +950,70 @@ var rootStorageCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 }
 
-var storageCollectionCmd = &cobra.Command{
-	Use: `collection {start|stop} <cluster>`,
+var rootStorageCollectionCmd = &cobra.Command{
+	Use: `collection`,
 	Short: "the collection command allows for enable or disabling the workload" +
 		"collector for a provided cluster (including a subset of nodes)",
-	Args: cobra.ExactArgs(2),
+	Args: cobra.MinimumNArgs(1),
+}
+
+var collectionStartCmd = &cobra.Command{
+	Use:   `start <cluster>`,
+	Short: "start the workload collector for a provided cluster (including a subset of nodes)",
+	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		action := args[0]
-		if action != "start" && action != "stop" {
-			return errors.New("One of `start` or `stop` must be provided")
-		}
-		cluster := args[1]
+		cluster := args[0]
 		return roachprod.StorageCollectionPerformAction(
 			context.Background(),
 			roachprodLibraryLogger,
 			cluster,
-			action,
+			"start",
 			volumeCreateOpts,
 		)
+	}),
+}
+
+var collectionStopCmd = &cobra.Command{
+	Use:   `stop <cluster>`,
+	Short: "stop the workload collector for a provided cluster (including a subset of nodes)",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		return roachprod.StorageCollectionPerformAction(
+			context.Background(),
+			roachprodLibraryLogger,
+			cluster,
+			"stop",
+			volumeCreateOpts,
+		)
+	}),
+}
+
+var collectionListVolumes = &cobra.Command{
+	Use:   `list-volumes <cluster>`,
+	Short: "list the nodes and their attached collector volumes",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		return roachprod.StorageCollectionPerformAction(
+			context.Background(),
+			roachprodLibraryLogger,
+			cluster,
+			"list-volumes",
+			volumeCreateOpts,
+		)
+	}),
+}
+
+var storageSnapshotCmd = &cobra.Command{
+	Use:   `snapshot <cluster> <name> <description>`,
+	Short: "snapshot a clusters workload collector volume",
+	Args:  cobra.ExactArgs(3),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		name := args[1]
+		desc := args[2]
+		return roachprod.StorageSnapshotVolume(roachprodLibraryLogger, cluster, name, desc)
 	}),
 }
 

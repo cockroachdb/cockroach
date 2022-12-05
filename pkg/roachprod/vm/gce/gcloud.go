@@ -164,19 +164,52 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 
 	var volumes []vm.Volume
 
+	args := []string{
+		"compute",
+		"disks",
+		"list",
+		"--zones", jsonVM.Zone,
+		"--format", "json",
+		"--filter", "users:(" + jsonVM.Name + ")",
+	}
+
+	var attachedDiskToDisk map[string]describeVolumeCommandResponse
+	var disks []describeVolumeCommandResponse
+
 	for _, disk := range jsonVM.Disks {
-		if !disk.Boot {
-			vol := vm.Volume{
-				ProviderResourceID: disk.DeviceName,
-				ProviderVolumeType: disk.Type,
-				Zone:               jsonVM.Zone,
+		if !disk.Boot && disk.Source != "" {
+			if attachedDiskToDisk == nil {
+				err = runJSONCommand(args, &disks)
+				if err != nil {
+					vmErrors = append(vmErrors, err)
+				}
+
+				attachedDiskToDisk = make(map[string]describeVolumeCommandResponse)
+				for _, disk := range disks {
+					attachedDiskToDisk[disk.SelfLink] = disk
+				}
 			}
-			if val, err := strconv.Atoi(disk.DiskSizeGB); err == nil {
-				vol.Size = val
+			diskDetails, ok := attachedDiskToDisk[disk.Source]
+			if !ok {
+				vmErrors = append(vmErrors, errors.Newf(
+					"unable to find disk %s in mapping of disks that are attached",
+					disk.Source,
+				))
 			} else {
-				vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", disk.DiskSizeGB))
+				vol := vm.Volume{
+					ProviderResourceID: diskDetails.Name,
+					ProviderVolumeType: disk.Type,
+					Zone:               jsonVM.Zone,
+					Name:               diskDetails.Name,
+					Labels:             diskDetails.Labels,
+				}
+				if val, err := strconv.Atoi(disk.DiskSizeGB); err == nil {
+					vol.Size = val
+				} else {
+					vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", disk.DiskSizeGB))
+				}
+				volumes = append(volumes, vol)
 			}
-			volumes = append(volumes, vol)
 		}
 	}
 
@@ -260,18 +293,58 @@ type Provider struct {
 	ServiceAccount string
 }
 
-type createVolumeCommandResponse struct {
-	CreationTimestamp      time.Time `json:"creationTimestamp"`
-	ID                     string    `json:"id"`
-	Kind                   string    `json:"kind"`
-	LabelFingerprint       string    `json:"labelFingerprint"`
-	Name                   string    `json:"name"`
-	PhysicalBlockSizeBytes string    `json:"physicalBlockSizeBytes"`
-	SelfLink               string    `json:"selfLink"`
-	SizeGB                 string    `json:"sizeGb"`
-	Status                 string    `json:"status"`
-	Type                   string    `json:"type"`
-	Zone                   string    `json:"zone"`
+type snapshotCreateJson struct {
+	CreationSizeBytes  string    `json:"creationSizeBytes"`
+	CreationTimestamp  time.Time `json:"creationTimestamp"`
+	Description        string    `json:"description"`
+	DiskSizeGb         string    `json:"diskSizeGb"`
+	DownloadBytes      string    `json:"downloadBytes"`
+	Id                 string    `json:"id"`
+	Kind               string    `json:"kind"`
+	LabelFingerprint   string    `json:"labelFingerprint"`
+	Name               string    `json:"name"`
+	SelfLink           string    `json:"selfLink"`
+	SourceDisk         string    `json:"sourceDisk"`
+	SourceDiskId       string    `json:"sourceDiskId"`
+	Status             string    `json:"status"`
+	StorageBytes       string    `json:"storageBytes"`
+	StorageBytesStatus string    `json:"storageBytesStatus"`
+	StorageLocations   []string  `json:"storageLocations"`
+}
+
+func (p *Provider) SnapshotVolume(volume vm.Volume, name, description string) (string, error) {
+	args := []string{
+		"compute",
+		"snapshots",
+		"create", name,
+		"--source-disk", volume.ProviderResourceID,
+		"--source-disk-zone", volume.Zone,
+		"--description", description,
+		"--format", "json",
+	}
+
+	var createJsonResponse snapshotCreateJson
+	err := runJSONCommand(args, &createJsonResponse)
+	if err != nil {
+		return "", err
+	}
+
+	return createJsonResponse.Name, nil
+}
+
+type describeVolumeCommandResponse struct {
+	CreationTimestamp      time.Time         `json:"creationTimestamp"`
+	ID                     string            `json:"id"`
+	Kind                   string            `json:"kind"`
+	LabelFingerprint       string            `json:"labelFingerprint"`
+	Name                   string            `json:"name"`
+	PhysicalBlockSizeBytes string            `json:"physicalBlockSizeBytes"`
+	SelfLink               string            `json:"selfLink"`
+	SizeGB                 string            `json:"sizeGb"`
+	Status                 string            `json:"status"`
+	Type                   string            `json:"type"`
+	Zone                   string            `json:"zone"`
+	Labels                 map[string]string `json:"labels"`
 }
 
 func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
@@ -283,8 +356,7 @@ func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err err
 	args := []string{
 		"compute",
 		"disks",
-		"create",
-		vco.Name,
+		"create", vco.Name,
 		"--size", strconv.Itoa(vco.Size),
 		"--zone", vco.Zone,
 		"--format", "json",
@@ -315,7 +387,7 @@ func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err err
 		return vol, errors.Newf("Expected type to be one of local-ssd, pd-balanced, pd-extreme, pd-ssd, pd-standard got %s\n", vco.Type)
 	}
 
-	var commandResponse []createVolumeCommandResponse
+	var commandResponse []describeVolumeCommandResponse
 	err = runJSONCommand(args, &commandResponse)
 	if err != nil {
 		return vm.Volume{}, err
@@ -330,12 +402,32 @@ func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err err
 	if err != nil {
 		return vol, err
 	}
+	sb := strings.Builder{}
+	for k, v := range vco.Labels {
+		fmt.Fprintf(&sb, "%s=%s,", k, v)
+	}
+	s := sb.String()
+
+	args = []string{
+		"compute",
+		"disks",
+		"add-labels", vco.Name,
+		"--labels", s[:len(s)-1],
+		"--zone", vco.Zone,
+	}
+	cmd := exec.Command("gcloud", args...)
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		return vol, err
+	}
 
 	return vm.Volume{
 		ProviderResourceID: createdVolume.Name,
+		Name:               createdVolume.Name,
 		ProviderVolumeType: createdVolume.Type,
 		Zone:               vco.Zone,
 		Size:               size,
+		Labels:             vco.Labels,
 	}, err
 }
 
