@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -45,17 +44,15 @@ import (
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
 					DisableProtectedTimestampForMultiTenant: true,
 				},
 			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+		})
+	defer s.Stopper().Stop(ctx)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -71,7 +68,7 @@ func TestCacheBasic(t *testing.T) {
 		DB:       s.DB(),
 		Storage:  p,
 	})
-	require.NoError(t, c.Start(ctx, tc.Stopper()))
+	require.NoError(t, c.Start(ctx, s.Stopper()))
 
 	// Make sure that protected timestamp gets updated.
 	ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -81,7 +78,7 @@ func TestCacheBasic(t *testing.T) {
 
 	// Then we'll add a record and make sure it gets seen.
 	sp := tableSpan(42)
-	r, createdAt := protect(t, tc.Server(0), p, s.Clock().Now(), sp)
+	r, createdAt := protect(t, s, p, s.Clock().Now(), sp)
 	testutils.SucceedsSoon(t, func() error {
 		var coveredBy []*ptpb.Record
 		seenTS := c.Iterate(ctx, sp.Key, sp.EndKey,
@@ -121,18 +118,16 @@ func TestRefresh(t *testing.T) {
 	ptsKnobs := &protectedts.TestingKnobs{
 		DisableProtectedTimestampForMultiTenant: true,
 	}
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: st.requestFilter,
 				},
 				ProtectedTS: ptsKnobs,
 			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+		})
+	defer s.Stopper().Stop(ctx)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(
 			s.ClusterSettings(),
@@ -149,7 +144,7 @@ func TestRefresh(t *testing.T) {
 		DB:       s.DB(),
 		Storage:  p,
 	})
-	require.NoError(t, c.Start(ctx, tc.Stopper()))
+	require.NoError(t, c.Start(ctx, s.Stopper()))
 	t.Run("already up-to-date", func(t *testing.T) {
 		ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
 		st.resetCounters()
@@ -243,17 +238,15 @@ func TestRefresh(t *testing.T) {
 func TestStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	setup := func() (*testcluster.TestCluster, *ptcache.Cache) {
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
+	setup := func() (serverutils.TestServerInterface, *ptcache.Cache) {
+		s, _, _ := serverutils.StartServer(t,
+			base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					ProtectedTS: &protectedts.TestingKnobs{
 						DisableProtectedTimestampForMultiTenant: true,
 					},
 				},
-			},
-		})
-		s := tc.Server(0)
+			})
 		p := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -262,7 +255,7 @@ func TestStart(t *testing.T) {
 			DB:       s.DB(),
 			Storage:  p,
 		})
-		return tc, c
+		return s, c
 	}
 
 	t.Run("double start", func(t *testing.T) {
@@ -273,9 +266,9 @@ func TestStart(t *testing.T) {
 			"cannot start a Cache more than once")
 	})
 	t.Run("already stopped", func(t *testing.T) {
-		tc, c := setup()
-		tc.Stopper().Stop(ctx)
-		require.EqualError(t, c.Start(ctx, tc.Stopper()),
+		s, c := setup()
+		s.Stopper().Stop(ctx)
+		require.EqualError(t, c.Start(ctx, s.Stopper()),
 			stop.ErrUnavailable.Error())
 	})
 }
@@ -283,9 +276,8 @@ func TestStart(t *testing.T) {
 func TestQueryRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(
 			s.ClusterSettings(),
@@ -300,7 +292,7 @@ func TestQueryRecord(t *testing.T) {
 		DB:       s.DB(),
 		Storage:  p,
 	})
-	require.NoError(t, c.Start(ctx, tc.Stopper()))
+	require.NoError(t, c.Start(ctx, s.Stopper()))
 
 	// Wait for the initial fetch.
 	waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -345,9 +337,8 @@ func TestQueryRecord(t *testing.T) {
 
 func TestIterate(t *testing.T) {
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -363,7 +354,7 @@ func TestIterate(t *testing.T) {
 		DB:       s.DB(),
 		Storage:  p,
 	})
-	require.NoError(t, c.Start(ctx, tc.Stopper()))
+	require.NoError(t, c.Start(ctx, s.Stopper()))
 
 	sp42 := tableSpan(42)
 	sp43 := tableSpan(43)
@@ -414,18 +405,16 @@ func (recs *records) sorted() []*ptpb.Record {
 
 func TestGetProtectionTimestamps(t *testing.T) {
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
 					DisableProtectedTimestampForMultiTenant: true,
 				},
 			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
+		})
+	defer s.Stopper().Stop(ctx)
 	// Set the poll interval to be very long.
-	s := tc.Server(0)
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	ts := func(nanos int) hlc.Timestamp {
@@ -509,7 +498,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				DB:       s.DB(),
 				Storage:  p,
 			})
-			require.NoError(t, c.Start(ctx, tc.Stopper()))
+			require.NoError(t, c.Start(ctx, s.Stopper()))
 
 			testCase.test(t, p, c, func(records ...*ptpb.Record) {
 				for _, r := range records {
@@ -522,9 +511,8 @@ func TestGetProtectionTimestamps(t *testing.T) {
 
 func TestSettingChangedLeadsToFetch(t *testing.T) {
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -540,7 +528,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 		DB:       s.DB(),
 		Storage:  p,
 	})
-	require.NoError(t, c.Start(ctx, tc.Stopper()))
+	require.NoError(t, c.Start(ctx, s.Stopper()))
 
 	// Make sure that the initial state has been fetched.
 	ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
