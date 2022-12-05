@@ -174,9 +174,11 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
+
+			numWorkers := changefeedbase.WebhookSinkWorkers.Get(&serverCfg.Settings.SV)
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+					int(numWorkers), timeutil.DefaultTimeSource{}, metricsBuilder)
 			})
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink

@@ -172,8 +172,7 @@ func TestWebhookSink(t *testing.T) {
 		require.NoError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
 		require.Regexp(t, "x509", sinkSrcNoCert.Flush(context.Background()))
-		require.EqualError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
+		require.Regexp(t, "x509", sinkSrcNoCert.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc))
 
 		params.Set(changefeedbase.SinkParamSkipTLSVerify, "true")
 		sinkDestHost.RawQuery = params.Encode()
@@ -191,8 +190,8 @@ func TestWebhookSink(t *testing.T) {
 		err = sinkSrc.Flush(context.Background())
 		require.Error(t, err)
 		require.Contains(t, err.Error(), fmt.Sprintf(`Post "%s":`, sinkDest.URL()))
-		require.EqualError(t, sinkSrc.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
+		require.Error(t, sinkSrc.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, sinkSrc.Close())
 
 		sinkDestHTTP, err := cdctest.StartMockWebhookSinkInsecure()
 		require.NoError(t, err)
@@ -207,8 +206,7 @@ func TestWebhookSink(t *testing.T) {
 		require.EqualError(t, sinkSrcWrongProtocol.Flush(context.Background()),
 			fmt.Sprintf(`Post "%s": http: server gave HTTP response to HTTPS client`, fmt.Sprintf("https://%s", strings.TrimPrefix(sinkDestHTTP.URL(),
 				"http://"))))
-		require.EqualError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
+		require.Error(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc))
 
 		sinkDestSecure, err := cdctest.StartMockWebhookSinkSecure(cert)
 		require.NoError(t, err)
@@ -305,8 +303,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		require.NoError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
 		require.EqualError(t, sinkSrcNoCreds.Flush(context.Background()), "401 Unauthorized: ")
-		require.EqualError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
+		require.Error(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc))
 
 		// wrong credentials should result in a 401 as well
 		var wrongAuthHeader string
@@ -318,8 +315,7 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		require.NoError(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
 		require.EqualError(t, sinkSrcWrongCreds.Flush(context.Background()), "401 Unauthorized: ")
-		require.EqualError(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
+		require.Error(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc))
 
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCreds.Close())

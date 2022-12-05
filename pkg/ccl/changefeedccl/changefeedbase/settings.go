@@ -279,3 +279,14 @@ var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	"determines whether changefeed event processing integrates with elastic CPU control",
 	true,
 )
+
+// WebhookSinkWorkers specifies the number of workers to use to handle batching
+// and emitting to a webhook sink.
+var WebhookSinkWorkers = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.webhook_sink_workers",
+	"the number of workers to use when emitting events to the sink: "+
+		"0 assigns a reasonable default, >0 assigns the setting value",
+	0,
+	settings.NonNegativeInt,
+)
