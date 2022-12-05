@@ -23,10 +23,9 @@ import (
 // addPartialIndexPredicatesForTable finds all partial indexes in the table and
 // adds their predicates to the table metadata (see
 // TableMeta.partialIndexPredicates). The predicates are converted from strings
-// to ScalarExprs here.
-//
-// The predicates are used as "known truths" about table data. Any predicates
-// containing non-immutable operators are omitted.
+// to ScalarExprs here. The predicates are used as known truths about table
+// data. If any predicates contain non-immutable expressions, this function
+// panics.
 //
 // scan is an optional argument that is a Scan expression on the table. If scan
 // outputs all the ordinary columns in the table, we avoid constructing a new
