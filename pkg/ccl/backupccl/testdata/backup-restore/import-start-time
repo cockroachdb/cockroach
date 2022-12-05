@@ -5,7 +5,7 @@
 ## -check that the ImportStartTime is set on the descriptor
 ## -check that it's removed after cancellation / success
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql

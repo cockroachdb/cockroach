@@ -82,12 +82,16 @@ var clusterVersionKeys = map[string]clusterversion.Key{
 }
 
 type sqlDBKey struct {
-	server string
-	user   string
+	name string
+	user string
 }
 
 type datadrivenTestState struct {
-	servers           map[string]serverutils.TestServerInterface
+	// cluster maps the user defined cluster name to its cluster
+	clusters map[string]serverutils.TestClusterInterface
+
+	// firstNode maps the cluster name to the first node in the cluster
+	firstNode         map[string]serverutils.TestServerInterface
 	dataDirs          map[string]string
 	sqlDBs            map[sqlDBKey]*gosql.DB
 	jobTags           map[string]jobspb.JobID
@@ -99,7 +103,8 @@ type datadrivenTestState struct {
 
 func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
-		servers:           make(map[string]serverutils.TestServerInterface),
+		clusters:          make(map[string]serverutils.TestClusterInterface),
+		firstNode:         make(map[string]serverutils.TestServerInterface),
 		dataDirs:          make(map[string]string),
 		sqlDBs:            make(map[sqlDBKey]*gosql.DB),
 		jobTags:           make(map[string]jobspb.JobID),
@@ -109,14 +114,14 @@ func newDatadrivenTestState() datadrivenTestState {
 }
 
 func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
-	// While the testCluster cleanupFns would close the dbConn and servers, close
+	// While the testCluster cleanupFns would close the dbConn and clusters, close
 	// them manually to ensure all queries finish on tests that share these
 	// resources.
 	for _, db := range d.sqlDBs {
 		backuputils.CheckForInvalidDescriptors(t, db)
 		db.Close()
 	}
-	for _, s := range d.servers {
+	for _, s := range d.firstNode {
 		s.Stopper().Stop(ctx)
 	}
 	for _, f := range d.cleanupFns {
@@ -125,7 +130,7 @@ func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 	d.noticeBuffer = nil
 }
 
-type serverCfg struct {
+type clusterCfg struct {
 	name           string
 	iodir          string
 	nodes          int
@@ -137,7 +142,7 @@ type serverCfg struct {
 	disableTenant  bool
 }
 
-func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
+func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
 	params := base.TestClusterArgs{}
@@ -199,27 +204,28 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	cleanupFn := func() {
 		cleanup()
 	}
-	d.servers[cfg.name] = tc.Server(0)
+	d.clusters[cfg.name] = tc
+	d.firstNode[cfg.name] = tc.Server(0)
 	d.dataDirs[cfg.name] = cfg.iodir
 	d.cleanupFns = append(d.cleanupFns, cleanupFn)
 
 	return nil
 }
 
-func (d *datadrivenTestState) getIODir(t *testing.T, server string) string {
-	dir, ok := d.dataDirs[server]
+func (d *datadrivenTestState) getIODir(t *testing.T, name string) string {
+	dir, ok := d.dataDirs[name]
 	if !ok {
-		t.Fatalf("server %s does not exist", server)
+		t.Fatalf("cluster %s does not exist", name)
 	}
 	return dir
 }
 
-func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string) *gosql.DB {
-	key := sqlDBKey{server, user}
+func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *gosql.DB {
+	key := sqlDBKey{name, user}
 	if db, ok := d.sqlDBs[key]; ok {
 		return db
 	}
-	addr := d.servers[server].ServingSQLAddr()
+	addr := d.firstNode[name].ServingSQLAddr()
 	pgURL, cleanup := sqlutils.PGUrl(t, addr, "TestBackupRestoreDataDriven", url.User(user))
 	d.cleanupFns = append(d.cleanupFns, cleanup)
 
@@ -245,14 +251,14 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 // commands. The test files are in testdata/backup-restore. The following
 // syntax is provided:
 //
-//   - "new-server name=<name> [args]"
-//     Create a new server with the input name.
+//   - "new-cluster name=<name> [args]"
+//     Create a new cluster with the input name.
 //
 //     Supported arguments:
 //
 //   - share-io-dir: can be specified to share an IO directory with an existing
-//     server. This is useful when restoring from a backup taken in another
-//     server.
+//     cluster. This is useful when restoring from a backup taken in another
+//     cluster.
 //
 //   - allow-implicit-access: can be specified to set
 //     `EnableNonAdminImplicitAndArbitraryOutbound` to true
@@ -269,7 +275,7 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   - splits: specifies the number of ranges the bank table is split into.
 //
 //   - before-version=<beforeVersion>: creates a mixed version cluster where all
-//     nodes running the test server binary think the clusterVersion is one
+//     nodes running the test cluster binary think the clusterVersion is one
 //     version before the passed in <beforeVersion> key. See cockroach_versions.go
 //     for possible values.
 //
@@ -278,13 +284,13 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   - disable-tenant : ensures the test is never run in a multitenant environment by
 //     setting testserverargs.DisableDefaultTestTenant to true.
 //
-//   - "upgrade-server version=<version>"
-//     Upgrade the cluster version of the active server to the passed in
+//   - "upgrade-cluster version=<version>"
+//     Upgrade the cluster version of the active cluster to the passed in
 //     clusterVersion key. See cockroach_versions.go for possible values.
 //
-//   - "exec-sql [server=<name>] [user=<name>] [args]"
-//     Executes the input SQL query on the target server. By default, server is
-//     the last created server.
+//   - "exec-sql [cluster=<name>] [user=<name>] [args]"
+//     Executes the input SQL query on the target cluster. By default, cluster is
+//     the last created cluster.
 //
 //     Supported arguments:
 //
@@ -297,16 +303,22 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   - ignore-notice: does not print out the notice that is buffered during
 //     query execution.
 //
-//   - "query-sql [server=<name>] [user=<name>] [regex=<regex pattern>]"
+//   - "query-sql [cluster=<name>] [user=<name>] [regex=<regex pattern>]"
 //     Executes the input SQL query and print the results.
+//
+//     Supported arguments:
 //
 //   - regex: return true if the query result matches the regex pattern and
 //     false otherwise.
 //
+//   - "set-cluster-setting setting=<name> value=<name>"
+//     Sets the cluster setting on all nodes and ensures all nodes in the test cluster
+//     have seen the update.
+//
 //   - "reset"
 //     Clear all state associated with the test.
 //
-//   - "job" [server=<name>] [user=<name>] [args]
+//   - "job" [cluster=<name>] [user=<name>] [args]
 //     Executes job specific operations.
 //
 //     Supported arguments:
@@ -373,7 +385,7 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   - "corrupt-backup" uri=<collectionUri>
 //     Finds the latest backup in the provided collection uri an flips a bit in one SST in the backup
 //
-//   - "link-backup" server=<server> src-path=<testDataPathRelative> dest-path=<fileIO path relative>
+//   - "link-backup" cluster=<cluster> src-path=<testDataPathRelative> dest-path=<fileIO path relative>
 //     Creates a symlink from the testdata path to the file IO path, so that we
 //     can restore precreated backup. src-path and dest-path are comma seperated
 //     paths that will be joined.
@@ -392,14 +404,14 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
-		var lastCreatedServer string
+		var lastCreatedCluster string
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx, t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
 			execWithTagAndPausePoint := func(jobType jobspb.Type) string {
 				const user = "root"
-				sqlDB := ds.getSQLDB(t, lastCreatedServer, user)
+				sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
 				// First, run the schema change.
 
 				_, err := sqlDB.Exec(d.Input)
@@ -455,7 +467,7 @@ func TestDataDriven(t *testing.T) {
 				ds = newDatadrivenTestState()
 				return ""
 
-			case "new-server":
+			case "new-cluster":
 				var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
 				var splits int
 				var disableTenant bool
@@ -497,8 +509,8 @@ func TestDataDriven(t *testing.T) {
 					disableTenant = true
 				}
 
-				lastCreatedServer = name
-				cfg := serverCfg{
+				lastCreatedCluster = name
+				cfg := clusterCfg{
 					name:           name,
 					iodir:          iodir,
 					nodes:          nodes,
@@ -509,20 +521,20 @@ func TestDataDriven(t *testing.T) {
 					testingKnobCfg: testingKnobCfg,
 					disableTenant:  disableTenant,
 				}
-				err := ds.addServer(t, cfg)
+				err := ds.addCluster(t, cfg)
 				if err != nil {
 					return err.Error()
 				}
 				return ""
 
-			case "switch-server":
+			case "switch-cluster":
 				var name string
 				d.ScanArgs(t, "name", &name)
-				lastCreatedServer = name
+				lastCreatedCluster = name
 				return ""
 
-			case "upgrade-server":
-				server := lastCreatedServer
+			case "upgrade-cluster":
+				cluster := lastCreatedCluster
 				user := "root"
 
 				var version string
@@ -534,22 +546,23 @@ func TestDataDriven(t *testing.T) {
 					t.Fatalf("clusterVersion %s does not exist in data driven global map", version)
 				}
 				clusterVersion := clusterversion.ByKey(key)
-				_, err := ds.getSQLDB(t, server, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
+				_, err := ds.getSQLDB(t, cluster, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
 				require.NoError(t, err)
 				return ""
 
 			case "exec-sql":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				user := "root"
-				if d.HasArg("server") {
-					d.ScanArgs(t, "server", &server)
+				if d.HasArg("cluster") {
+					d.ScanArgs(t, "cluster", &cluster)
 				}
 				if d.HasArg("user") {
 					d.ScanArgs(t, "user", &user)
 				}
 				ds.noticeBuffer = nil
-				d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_SERVER/", httpAddr)
-				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+				checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
+				d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_server/", httpAddr)
+				_, err := ds.getSQLDB(t, cluster, user).Exec(d.Input)
 				ret := ds.noticeBuffer
 
 				if d.HasArg("ignore-notice") {
@@ -564,11 +577,11 @@ func TestDataDriven(t *testing.T) {
 					// Find job ID of the pausepoint job.
 					var jobID jobspb.JobID
 					require.NoError(t,
-						ds.getSQLDB(t, server, user).QueryRow(
+						ds.getSQLDB(t, cluster, user).QueryRow(
 							`SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1`).Scan(&jobID))
 					fmt.Printf("expecting pausepoint, found job ID %d\n\n\n", jobID)
 
-					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
 					jobutils.WaitForJobToPause(t, runner, jobID)
 					ret = append(ds.noticeBuffer, "job paused at pausepoint")
 					ret = append(ret, "")
@@ -614,15 +627,16 @@ func TestDataDriven(t *testing.T) {
 				return strings.Join(ret, "\n")
 
 			case "query-sql":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				user := "root"
-				if d.HasArg("server") {
-					d.ScanArgs(t, "server", &server)
+				if d.HasArg("cluster") {
+					d.ScanArgs(t, "cluster", &cluster)
 				}
 				if d.HasArg("user") {
 					d.ScanArgs(t, "user", &user)
 				}
-				rows, err := ds.getSQLDB(t, server, user).Query(d.Input)
+				checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
+				rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
 				if err != nil {
 					return err.Error()
 				}
@@ -639,14 +653,21 @@ func TestDataDriven(t *testing.T) {
 					return "false"
 				}
 				return output
+			case "set-cluster-setting":
+				var setting, value string
+				d.ScanArgs(t, "setting", &setting)
+				d.ScanArgs(t, "value", &value)
+				cluster := lastCreatedCluster
+				serverutils.SetClusterSetting(t, ds.clusters[cluster], setting, value)
+				return ""
 
 			case "let":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				user := "root"
 				if len(d.CmdArgs) == 0 {
 					t.Fatalf("Must specify at least one variable name.")
 				}
-				rows, err := ds.getSQLDB(t, server, user).Query(d.Input)
+				rows, err := ds.getSQLDB(t, cluster, user).Query(d.Input)
 				if err != nil {
 					return err.Error()
 				}
@@ -710,7 +731,7 @@ func TestDataDriven(t *testing.T) {
 				return execWithTagAndPausePoint(jobspb.TypeSchemaChange)
 
 			case "job":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				const user = "root"
 
 				if d.HasArg("cancel") {
@@ -721,7 +742,7 @@ func TestDataDriven(t *testing.T) {
 					if jobID, ok = ds.jobTags[cancelJobTag]; !ok {
 						t.Fatalf("could not find job with tag %s", cancelJobTag)
 					}
-					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
 					runner.Exec(t, `CANCEL JOB $1`, jobID)
 					jobutils.WaitForJobToCancel(t, runner, jobID)
 				} else if d.HasArg("resume") {
@@ -732,7 +753,7 @@ func TestDataDriven(t *testing.T) {
 					if jobID, ok = ds.jobTags[resumeJobTag]; !ok {
 						t.Fatalf("could not find job with tag %s", resumeJobTag)
 					}
-					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
 					runner.Exec(t, `RESUME JOB $1`, jobID)
 				} else if d.HasArg("wait-for-state") {
 					var tag string
@@ -742,7 +763,7 @@ func TestDataDriven(t *testing.T) {
 					if jobID, ok = ds.jobTags[tag]; !ok {
 						t.Fatalf("could not find job with tag %s", tag)
 					}
-					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
+					runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, cluster, user))
 					var state string
 					d.ScanArgs(t, "wait-for-state", &state)
 					switch state {
@@ -768,11 +789,11 @@ func TestDataDriven(t *testing.T) {
 
 				var target string
 				d.ScanArgs(t, "target", &target)
-				handleKVRequest(ctx, t, lastCreatedServer, ds, request, target)
+				handleKVRequest(ctx, t, lastCreatedCluster, ds, request, target)
 				return ""
 
 			case "save-cluster-ts":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				const user = "root"
 				var timestampTag string
 				d.ScanArgs(t, "tag", &timestampTag)
@@ -780,15 +801,15 @@ func TestDataDriven(t *testing.T) {
 					t.Fatalf("cannot reuse cluster ts tag %s", timestampTag)
 				}
 				var ts string
-				err := ds.getSQLDB(t, server, user).QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
+				err := ds.getSQLDB(t, cluster, user).QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts)
 				require.NoError(t, err)
 				ds.clusterTimestamps[timestampTag] = ts
 				return ""
 
 			case "create-dummy-system-table":
-				db := ds.servers[lastCreatedServer].DB()
-				execCfg := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig)
-				testTenants := ds.servers[lastCreatedServer].TestTenants()
+				db := ds.firstNode[lastCreatedCluster].DB()
+				execCfg := ds.firstNode[lastCreatedCluster].ExecutorConfig().(sql.ExecutorConfig)
+				testTenants := ds.firstNode[lastCreatedCluster].TestTenants()
 				if len(testTenants) > 0 {
 					execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
 				}
@@ -812,7 +833,7 @@ func TestDataDriven(t *testing.T) {
 				return ""
 
 			case "corrupt-backup":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				const user = "root"
 				var uri string
 				d.ScanArgs(t, "uri", &uri)
@@ -820,9 +841,9 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				var filePath string
 				filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN %s] LIMIT 1", uri)
-				err = ds.getSQLDB(t, server, user).QueryRow(filePathQuery).Scan(&filePath)
+				err = ds.getSQLDB(t, cluster, user).QueryRow(filePathQuery).Scan(&filePath)
 				require.NoError(t, err)
-				fullPath := filepath.Join(ds.getIODir(t, server), parsedURI.Path, filePath)
+				fullPath := filepath.Join(ds.getIODir(t, cluster), parsedURI.Path, filePath)
 				print(fullPath)
 				data, err := os.ReadFile(fullPath)
 				require.NoError(t, err)
@@ -832,11 +853,11 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "link-backup":
-				server := lastCreatedServer
+				cluster := lastCreatedCluster
 				sourceRelativePath := ""
 				destRelativePath := ""
-				ioDir := ds.getIODir(t, server)
-				d.ScanArgs(t, "server", &server)
+				ioDir := ds.getIODir(t, cluster)
+				d.ScanArgs(t, "cluster", &cluster)
 				d.ScanArgs(t, "src-path", &sourceRelativePath)
 				d.ScanArgs(t, "dest-path", &destRelativePath)
 				splitSrcPath := strings.Split(sourceRelativePath, ",")
@@ -855,12 +876,12 @@ func TestDataDriven(t *testing.T) {
 }
 
 func handleKVRequest(
-	ctx context.Context, t *testing.T, server string, ds datadrivenTestState, request, target string,
+	ctx context.Context, t *testing.T, cluster string, ds datadrivenTestState, request, target string,
 ) {
 	user := "root"
 	if request == "DeleteRange" {
 		var tableID uint32
-		err := ds.getSQLDB(t, server, user).QueryRow(`SELECT id FROM system.namespace WHERE name = $1`,
+		err := ds.getSQLDB(t, cluster, user).QueryRow(`SELECT id FROM system.namespace WHERE name = $1`,
 			target).Scan(&tableID)
 		require.NoError(t, err)
 		bankSpan := makeTableSpan(keys.SystemSQLCodec, tableID)
@@ -872,10 +893,18 @@ func handleKVRequest(
 			},
 			UseRangeTombstone: true,
 		}
-		if _, err := kv.SendWrapped(ctx, ds.servers[server].DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
+		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
 			t.Fatal(err)
 		}
 	} else {
 		t.Fatalf("Unknown kv request")
+	}
+}
+
+func checkForClusterSetting(t *testing.T, stmt string, numNodes int) {
+	if numNodes != 1 && strings.Contains(stmt, "SET CLUSTER SETTING") {
+		t.Fatal("You are attempting to set a cluster setting in a multi node cluster. " +
+			"Use the 'set-cluster-setting' dd cmd instead to ensure the setting propagates to all nodes" +
+			" during the cmd.")
 	}
 }

@@ -4,7 +4,7 @@
 # cannot fix this specific corrupt descriptor problem automatically) and does
 # not publish restoring database with the corrupt descriptor.
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql

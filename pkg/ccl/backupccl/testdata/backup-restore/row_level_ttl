@@ -1,4 +1,4 @@
-new-server name=s1 allow-implicit-access
+new-cluster name=s1 allow-implicit-access
 ----
 
 exec-sql
@@ -15,7 +15,7 @@ exec-sql
 BACKUP INTO 'nodelocal://1/full_cluster_backup/'
 ----
 
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 ----
 
 query-sql
