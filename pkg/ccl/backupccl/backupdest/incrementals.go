@@ -27,11 +27,6 @@ import (
 // The default subdirectory for incremental backups.
 const (
 	incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
-
-	// listingDelimDataSlash is used when listing to find backups and groups all the
-	// data sst files in each backup, which start with "data/", into a single result
-	// that can be skipped over quickly.
-	listingDelimDataSlash = "data/"
 )
 
 // backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
@@ -65,7 +60,7 @@ func FindPriorBackups(
 	defer sp.Finish()
 
 	var prev []string
-	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
+	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
 		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
 			return err
 		} else if ok {

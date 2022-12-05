@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -483,7 +484,7 @@ func GetEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]
 	var files []string
 	// Look for all files in dest that start with "/ENCRYPTION-INFO"
 	// and return them.
-	err := dest.List(ctx, "", "", func(p string) error {
+	err := dest.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
 		paths := strings.Split(p, "/")
 		p = paths[len(paths)-1]
 		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
