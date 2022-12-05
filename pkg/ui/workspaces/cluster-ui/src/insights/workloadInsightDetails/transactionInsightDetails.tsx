@@ -174,7 +174,7 @@ export const TransactionInsightDetails: React.FC<
             </Row>
             {insightDetails && (
               <>
-                <Row gutter={24}>
+                <Row gutter={24} type="flex">
                   <Col className="gutter-row" span={12}>
                     <SummaryCard>
                       <SummaryCardItem

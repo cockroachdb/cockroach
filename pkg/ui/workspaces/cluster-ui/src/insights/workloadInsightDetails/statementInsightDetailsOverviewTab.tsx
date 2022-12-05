@@ -136,7 +136,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
 
   return (
     <section className={cx("section")}>
-      <Row gutter={24}>
+      <Row gutter={24} type="flex">
         <Col span={12}>
           <SummaryCard>
             <SummaryCardItem
