@@ -2853,7 +2853,7 @@ func (r *Replica) followerSendSnapshot(
 				From:     uint64(req.CoordinatorReplica.ReplicaID),
 				To:       uint64(req.RecipientReplica.ReplicaID),
 				Term:     req.Term,
-				Snapshot: snap.RaftSnap,
+				Snapshot: &snap.RaftSnap,
 			},
 		},
 		RangeSize:           rangeSize,

@@ -1470,7 +1470,9 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 			ToReplica:   rep2Desc,
 		},
 	}
-	header.RaftMessageRequest.Message.Snapshot.Data = uuid.UUID{}.GetBytes()
+	header.RaftMessageRequest.Message.Snapshot = &raftpb.Snapshot{
+		Data: uuid.UUID{}.GetBytes(),
+	}
 	// Cause this stream to return an error as soon as we ask it for something.
 	// This injects an error into HandleSnapshotStream when we try to send the
 	// "snapshot accepted" message.
