@@ -139,7 +139,7 @@ func (tn *tenantNode) createTenantCert(
 	names = append(names, "localhost", "127.0.0.1")
 
 	cmd := fmt.Sprintf(
-		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s",
+		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s --overwrite",
 		tn.tenantID, strings.Join(names, " "))
 	c.Run(ctx, c.Node(tn.node), cmd)
 }
@@ -248,7 +248,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		return err
 	})
 
-	t.L().Printf("sql server for tenant %d (%d) running at %s", tn.tenantID, tn.instanceID, tn.pgURL)
+	t.L().Printf("sql server for tenant %d (instance %d) now running", tn.tenantID, tn.instanceID)
 }
 
 func startTenantServer(

@@ -224,6 +224,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptutil",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/security",

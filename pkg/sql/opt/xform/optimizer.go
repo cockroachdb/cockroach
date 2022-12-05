@@ -484,9 +484,9 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	}
 
 	// Check whether the optimization has been canceled (most likely due to a
-	// statement timeout). Internally, only every 1024th Check() call will poll
-	// on the Done channel, so this should only have negligible performance
-	// overhead.
+	// statement timeout). Internally, only every 1024th Check() call (or every
+	// nth Check(), if overridden, where n is a power of 2) will poll on the Done
+	// channel, so this should only have negligible performance overhead.
 	if err := o.cancelChecker.Check(); err != nil {
 		panic(err)
 	}

@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -65,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -158,6 +158,7 @@ type baseStatusServer struct {
 	sqlServer          *SQLServer
 	rpcCtx             *rpc.Context
 	stopper            *stop.Stopper
+	serverIterator     ServerIterator
 }
 
 func isInternalAppName(app string) bool {
@@ -493,15 +494,26 @@ type statusServer struct {
 	cfg                      *base.Config
 	admin                    *adminServer
 	db                       *kv.DB
-	gossip                   *gossip.Gossip
 	metricSource             metricMarshaler
-	nodeLiveness             *liveness.NodeLiveness
-	storePool                *storepool.StorePool
-	stores                   *kvserver.Stores
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
-	spanConfigReporter       spanconfig.Reporter
+}
+
+// systemStatusServer is an extension of the standard
+// statusServer defined above with a few extra fields
+// that support additional implementations of APIs that
+// require system tenant access. This includes endpoints
+// that require gossip, or information about nodes and
+// stores.
+type systemStatusServer struct {
+	*statusServer
+
+	gossip             *gossip.Gossip
+	storePool          *storepool.StorePool
+	stores             *kvserver.Stores
+	nodeLiveness       *liveness.NodeLiveness
+	spanConfigReporter spanconfig.Reporter
 }
 
 // StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
@@ -549,6 +561,48 @@ func newStatusServer(
 	adminAuthzCheck *adminPrivilegeChecker,
 	adminServer *adminServer,
 	db *kv.DB,
+	metricSource metricMarshaler,
+	rpcCtx *rpc.Context,
+	stopper *stop.Stopper,
+	sessionRegistry *sql.SessionRegistry,
+	closedSessionCache *sql.ClosedSessionCache,
+	remoteFlowRunner *flowinfra.RemoteFlowRunner,
+	internalExecutor *sql.InternalExecutor,
+	serverIterator ServerIterator,
+) *statusServer {
+	ambient.AddLogTag("status", nil)
+	ambient.AddLogTag("tenant", rpcCtx.TenantID)
+
+	server := &statusServer{
+		baseStatusServer: &baseStatusServer{
+			AmbientContext:     ambient,
+			privilegeChecker:   adminAuthzCheck,
+			sessionRegistry:    sessionRegistry,
+			closedSessionCache: closedSessionCache,
+			remoteFlowRunner:   remoteFlowRunner,
+			st:                 st,
+			rpcCtx:             rpcCtx,
+			stopper:            stopper,
+			serverIterator:     serverIterator,
+		},
+		cfg:              cfg,
+		admin:            adminServer,
+		db:               db,
+		metricSource:     metricSource,
+		internalExecutor: internalExecutor,
+	}
+
+	return server
+}
+
+// newSystemStatusServer allocates and returns a statusServer.
+func newSystemStatusServer(
+	ambient log.AmbientContext,
+	st *cluster.Settings,
+	cfg *base.Config,
+	adminAuthzCheck *adminPrivilegeChecker,
+	adminServer *adminServer,
+	db *kv.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
 	nodeLiveness *liveness.NodeLiveness,
@@ -560,8 +614,9 @@ func newStatusServer(
 	closedSessionCache *sql.ClosedSessionCache,
 	remoteFlowRunner *flowinfra.RemoteFlowRunner,
 	internalExecutor *sql.InternalExecutor,
+	serverIterator ServerIterator,
 	spanConfigReporter spanconfig.Reporter,
-) *statusServer {
+) *systemStatusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
@@ -573,20 +628,23 @@ func newStatusServer(
 			st:                 st,
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
+			serverIterator:     serverIterator,
 		},
-		cfg:                cfg,
-		admin:              adminServer,
-		db:                 db,
-		gossip:             gossip,
-		metricSource:       metricSource,
-		nodeLiveness:       nodeLiveness,
-		storePool:          storePool,
-		stores:             stores,
-		internalExecutor:   internalExecutor,
-		spanConfigReporter: spanConfigReporter,
+		cfg:              cfg,
+		admin:            adminServer,
+		db:               db,
+		metricSource:     metricSource,
+		internalExecutor: internalExecutor,
 	}
 
-	return server
+	return &systemStatusServer{
+		statusServer:       server,
+		gossip:             gossip,
+		storePool:          storePool,
+		stores:             stores,
+		nodeLiveness:       nodeLiveness,
+		spanConfigReporter: spanConfigReporter,
+	}
 }
 
 // setStmtDiagnosticsRequester is used to provide a StmtDiagnosticsRequester to
@@ -611,42 +669,30 @@ func (s *statusServer) RegisterGateway(
 	return serverpb.RegisterStatusHandler(ctx, mux, conn)
 }
 
-func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
-	return parseNodeID(s.gossip, nodeIDParam)
+// RegisterService registers the GRPC service.
+func (s *systemStatusServer) RegisterService(g *grpc.Server) {
+	serverpb.RegisterStatusServer(g, s)
 }
 
-func parseNodeID(
-	gossip *gossip.Gossip, nodeIDParam string,
-) (nodeID roachpb.NodeID, isLocal bool, err error) {
-	// No parameter provided or set to local.
-	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
-		return gossip.NodeID.Get(), true, nil
-	}
-
-	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
-	if err != nil {
-		return 0, false, errors.Wrap(err, "node ID could not be parsed")
-	}
-	nodeID = roachpb.NodeID(id)
-	return nodeID, nodeID == gossip.NodeID.Get(), nil
+func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
+	id, local, err := s.serverIterator.parseServerID(nodeIDParam)
+	return roachpb.NodeID(id), local, err
 }
 
 func (s *statusServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.StatusClient, error) {
-	addr, err := s.gossip.GetNodeIDAddress(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
+	conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
 	if err != nil {
 		return nil, err
 	}
 	return serverpb.NewStatusClient(conn), nil
 }
 
-// Gossip returns gossip network status.
-func (s *statusServer) Gossip(
+// Gossip returns gossip network status. It is implemented
+// in the systemStatusServer since the system tenant has
+// access to gossip.
+func (s *systemStatusServer) Gossip(
 	ctx context.Context, req *serverpb.GossipRequest,
 ) (*gossip.InfoStatus, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -674,7 +720,7 @@ func (s *statusServer) Gossip(
 	return status.Gossip(ctx, req)
 }
 
-func (s *statusServer) EngineStats(
+func (s *systemStatusServer) EngineStats(
 	ctx context.Context, req *serverpb.EngineStatsRequest,
 ) (*serverpb.EngineStatsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -717,7 +763,7 @@ func (s *statusServer) EngineStats(
 }
 
 // Allocator returns simulated allocator info for the ranges on the given node.
-func (s *statusServer) Allocator(
+func (s *systemStatusServer) Allocator(
 	ctx context.Context, req *serverpb.AllocatorRequest,
 ) (*serverpb.AllocatorResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -810,7 +856,7 @@ func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.Trac
 }
 
 // AllocatorRange returns simulated allocator info for the requested range.
-func (s *statusServer) AllocatorRange(
+func (s *systemStatusServer) AllocatorRange(
 	ctx context.Context, req *serverpb.AllocatorRangeRequest,
 ) (*serverpb.AllocatorRangeResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -1044,16 +1090,16 @@ func (s *statusServer) Details(
 		return status.Details(ctx, req)
 	}
 
-	remoteNodeID := s.gossip.NodeID.Get()
+	remoteNodeID := roachpb.NodeID(s.serverIterator.getID())
 	resp := &serverpb.DetailsResponse{
 		NodeID:     remoteNodeID,
 		BuildInfo:  build.GetInfo(),
 		SystemInfo: s.si.systemInfo(ctx),
 	}
-	if addr, err := s.gossip.GetNodeIDAddress(remoteNodeID); err == nil {
+	if addr, err := s.serverIterator.getServerIDAddress(ctx, serverID(remoteNodeID)); err == nil {
 		resp.Address = *addr
 	}
-	if addr, err := s.gossip.GetNodeIDSQLAddress(remoteNodeID); err == nil {
+	if addr, err := s.serverIterator.getServerIDSQLAddress(ctx, serverID(remoteNodeID)); err == nil {
 		resp.SQLAddress = *addr
 	}
 
@@ -1375,7 +1421,7 @@ func (s *statusServer) Profile(
 }
 
 // Regions implements the serverpb.StatusServer interface.
-func (s *statusServer) Regions(
+func (s *systemStatusServer) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
 ) (*serverpb.RegionsResponse, error) {
 	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
@@ -1438,19 +1484,7 @@ func (s *statusServer) NodesList(
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
-	statuses, _, err := s.getNodeStatuses(ctx, 0 /* limit */, 0 /* offset */)
-	if err != nil {
-		return nil, serverError(ctx, err)
-	}
-	resp := &serverpb.NodesListResponse{
-		Nodes: make([]serverpb.NodeDetails, len(statuses)),
-	}
-	for i, status := range statuses {
-		resp.Nodes[i].NodeID = int32(status.Desc.NodeID)
-		resp.Nodes[i].Address = status.Desc.Address
-		resp.Nodes[i].SQLAddress = status.Desc.SQLAddress
-	}
-	return resp, nil
+	return s.serverIterator.nodesList(ctx)
 }
 
 // Nodes returns all node statuses.
@@ -1464,7 +1498,7 @@ func (s *statusServer) NodesList(
 // information will not have an entry. Clients can exploit the fact
 // that status "UNKNOWN" has value 0 (the default) when accessing the
 // map.
-func (s *statusServer) Nodes(
+func (s *systemStatusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -1482,7 +1516,7 @@ func (s *statusServer) Nodes(
 	return resp, nil
 }
 
-func (s *statusServer) NodesUI(
+func (s *systemStatusServer) NodesUI(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponseExternal, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -1614,7 +1648,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 //
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *statusServer) ListNodesInternal(
+func (s *systemStatusServer) ListNodesInternal(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
 	resp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
@@ -1623,15 +1657,15 @@ func (s *statusServer) ListNodesInternal(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *statusServer) getNodeStatuses(
-	ctx context.Context, limit, offset int,
+func getNodeStatuses(
+	ctx context.Context, db *kv.DB, limit, offset int,
 ) (statuses []statuspb.NodeStatus, next int, _ error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
 	b := &kv.Batch{}
 	b.Scan(startKey, endKey)
-	if err := s.db.Run(ctx, b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		return nil, 0, err
 	}
 
@@ -1653,13 +1687,13 @@ func (s *statusServer) getNodeStatuses(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *statusServer) nodesHelper(
+func (s *systemStatusServer) nodesHelper(
 	ctx context.Context, limit, offset int,
 ) (*serverpb.NodesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	statuses, next, err := s.getNodeStatuses(ctx, limit, offset)
+	statuses, next, err := getNodeStatuses(ctx, s.db, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1673,45 +1707,6 @@ func (s *statusServer) nodesHelper(
 		return nil, 0, err
 	}
 	return &resp, next, nil
-}
-
-// nodesStatusWithLiveness is like Nodes but for internal
-// use within this package.
-//
-// Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
-func (s *statusServer) nodesStatusWithLiveness(
-	ctx context.Context,
-) (map[roachpb.NodeID]nodeStatusWithLiveness, error) {
-	nodes, err := s.ListNodesInternal(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	clock := s.admin.server.clock
-	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
-	if err != nil {
-		return nil, err
-	}
-	ret := make(map[roachpb.NodeID]nodeStatusWithLiveness)
-	for _, node := range nodes.Nodes {
-		nodeID := node.Desc.NodeID
-		livenessStatus := statusMap[nodeID]
-		if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
-			// Skip over removed nodes.
-			continue
-		}
-		ret[nodeID] = nodeStatusWithLiveness{
-			NodeStatus:     node,
-			livenessStatus: livenessStatus,
-		}
-	}
-	return ret, nil
-}
-
-// nodeStatusWithLiveness combines a NodeStatus with a NodeLivenessStatus.
-type nodeStatusWithLiveness struct {
-	statuspb.NodeStatus
-	livenessStatus livenesspb.NodeLivenessStatus
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
@@ -1807,7 +1802,7 @@ func (s *statusServer) Metrics(
 }
 
 // RaftDebug returns raft debug information for all known nodes.
-func (s *statusServer) RaftDebug(
+func (s *systemStatusServer) RaftDebug(
 	ctx context.Context, req *serverpb.RaftDebugRequest,
 ) (*serverpb.RaftDebugResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -1922,7 +1917,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 }
 
 // Ranges returns range info for the specified node.
-func (s *statusServer) Ranges(
+func (s *systemStatusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
 	resp, next, err := s.rangesHelper(ctx, req, int(req.Limit), int(req.Offset))
@@ -1933,7 +1928,7 @@ func (s *statusServer) Ranges(
 }
 
 // Ranges returns range info for the specified node.
-func (s *statusServer) rangesHelper(
+func (s *systemStatusServer) rangesHelper(
 	ctx context.Context, req *serverpb.RangesRequest, limit, offset int,
 ) (*serverpb.RangesResponse, int, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -2134,7 +2129,21 @@ func (s *statusServer) rangesHelper(
 	return &output, next, nil
 }
 
-func (s *statusServer) TenantRanges(
+func (t *statusServer) TenantRanges(
+	ctx context.Context, req *serverpb.TenantRangesRequest,
+) (*serverpb.TenantRangesResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// The tenant range report contains replica metadata which is admin-only.
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.TenantRanges(ctx, req)
+}
+
+func (s *systemStatusServer) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
 ) (*serverpb.TenantRangesResponse, error) {
 	propagateGatewayMetadata(ctx)
@@ -2284,7 +2293,7 @@ func (s *statusServer) TenantRanges(
 }
 
 // HotRanges returns the hottest ranges on each store on the requested node(s).
-func (s *statusServer) HotRanges(
+func (s *systemStatusServer) HotRanges(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -2297,7 +2306,7 @@ func (s *statusServer) HotRanges(
 	}
 
 	response := &serverpb.HotRangesResponse{
-		NodeID:            s.gossip.NodeID.Get(),
+		NodeID:            roachpb.NodeID(s.serverIterator.getID()),
 		HotRangesByNodeID: make(map[roachpb.NodeID]serverpb.HotRangesResponse_NodeResponse),
 	}
 
@@ -2531,7 +2540,9 @@ func decodeTableID(codec keys.SQLCodec, key roachpb.Key) (roachpb.Key, uint32, b
 	return remaining, tableID, true
 }
 
-func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
+func (s *systemStatusServer) localHotRanges(
+	ctx context.Context,
+) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
 	err := s.stores.VisitStores(func(store *kvserver.Store) error {
 		ranges := store.HottestReplicas()
@@ -2577,7 +2588,7 @@ func (s *statusServer) Range(
 
 	response := &serverpb.RangeResponse{
 		RangeID:           roachpb.RangeID(req.RangeId),
-		NodeID:            s.gossip.NodeID.Get(),
+		NodeID:            roachpb.NodeID(s.serverIterator.getID()),
 		ResponsesByNodeID: make(map[roachpb.NodeID]serverpb.RangeResponse_NodeResponse),
 	}
 
@@ -2631,7 +2642,7 @@ func (s *statusServer) ListLocalSessions(
 		return nil, err
 	}
 	for i := range sessions {
-		sessions[i].NodeID = s.gossip.NodeID.Get()
+		sessions[i].NodeID = roachpb.NodeID(s.serverIterator.getID())
 	}
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
@@ -2647,7 +2658,7 @@ func (s *statusServer) iterateNodes(
 	responseFn func(nodeID roachpb.NodeID, resp interface{}),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) error {
-	nodeStatuses, err := s.nodesStatusWithLiveness(ctx)
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
 	if err != nil {
 		return err
 	}
@@ -2671,7 +2682,7 @@ func (s *statusServer) iterateNodes(
 		})
 		if err != nil {
 			err = errors.Wrapf(err, "failed to dial into node %d (%s)",
-				nodeID, nodeStatuses[nodeID].livenessStatus)
+				nodeID, nodeStatuses[serverID(nodeID)])
 			responseChan <- nodeResponse{nodeID: nodeID, err: err}
 			return
 		}
@@ -2679,7 +2690,7 @@ func (s *statusServer) iterateNodes(
 		res, err := nodeFn(ctx, client, nodeID)
 		if err != nil {
 			err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
-				errorCtx, nodeID, nodeStatuses[nodeID].livenessStatus)
+				errorCtx, nodeID, nodeStatuses[serverID(nodeID)])
 		}
 		responseChan <- nodeResponse{nodeID: nodeID, response: res, err: err}
 	}
@@ -2697,7 +2708,7 @@ func (s *statusServer) iterateNodes(
 				Sem:        sem,
 				WaitForSem: true,
 			},
-			func(ctx context.Context) { nodeQuery(ctx, nodeID) },
+			func(ctx context.Context) { nodeQuery(ctx, roachpb.NodeID(nodeID)) },
 		); err != nil {
 			return err
 		}
@@ -2739,7 +2750,7 @@ func (s *statusServer) paginatedIterateNodes(
 	if limit == 0 {
 		return paginationState{}, s.iterateNodes(ctx, errorCtx, dialFn, nodeFn, responseFn, errorFn)
 	}
-	nodeStatuses, err := s.nodesStatusWithLiveness(ctx)
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
 	if err != nil {
 		return paginationState{}, err
 	}
@@ -2750,7 +2761,7 @@ func (s *statusServer) paginatedIterateNodes(
 		nodeIDs = append(nodeIDs, requestedNodes...)
 	} else {
 		for nodeID := range nodeStatuses {
-			nodeIDs = append(nodeIDs, nodeID)
+			nodeIDs = append(nodeIDs, roachpb.NodeID(nodeID))
 		}
 	}
 	// Sort all nodes by IDs, as this is what mergeNodeIDs expects.
@@ -2881,14 +2892,18 @@ func (s *statusServer) CancelSession(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
-	}
-
+	sessionID := clusterunique.IDFromBytes(req.SessionID)
+	nodeID := sessionID.GetNodeID()
+	local := nodeID == int32(s.serverIterator.getID())
 	if !local {
-		status, err := s.dialNode(ctx, nodeID)
+		status, err := s.dialNode(ctx, roachpb.NodeID(nodeID))
 		if err != nil {
+			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
+				return &serverpb.CancelSessionResponse{
+					Canceled: false,
+					Error:    fmt.Sprintf("session ID %s not found", sessionID),
+				}, nil
+			}
 			return nil, serverError(ctx, err)
 		}
 		return status.CancelSession(ctx, req)
@@ -2917,16 +2932,29 @@ func (s *statusServer) CancelSession(
 func (s *statusServer) CancelQuery(
 	ctx context.Context, req *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
-	nodeID, local, err := s.parseNodeID(req.NodeId)
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	queryID, err := clusterunique.IDFromString(req.QueryID)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return &serverpb.CancelQueryResponse{
+			Canceled: false,
+			Error:    errors.Wrapf(err, "query ID %s malformed", queryID).Error(),
+		}, nil
 	}
+
+	nodeID := queryID.GetNodeID()
+	local := nodeID == int32(s.serverIterator.getID())
 	if !local {
 		// This request needs to be forwarded to another node.
-		ctx = propagateGatewayMetadata(ctx)
-		ctx = s.AnnotateCtx(ctx)
-		status, err := s.dialNode(ctx, nodeID)
+		status, err := s.dialNode(ctx, roachpb.NodeID(nodeID))
 		if err != nil {
+			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
+				return &serverpb.CancelQueryResponse{
+					Canceled: false,
+					Error:    fmt.Sprintf("query ID %s not found", queryID),
+				}, nil
+			}
 			return nil, serverError(ctx, err)
 		}
 		return status.CancelQuery(ctx, req)
@@ -3206,7 +3234,7 @@ func (s *statusServer) ListExecutionInsights(
 
 // SpanStats requests the total statistics stored on a node for a given key
 // span, which may include multiple ranges.
-func (s *statusServer) SpanStats(
+func (s *systemStatusServer) SpanStats(
 	ctx context.Context, req *serverpb.SpanStatsRequest,
 ) (*serverpb.SpanStatsResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -3272,7 +3300,7 @@ func (s *statusServer) Diagnostics(
 }
 
 // Stores returns details for each store.
-func (s *statusServer) Stores(
+func (s *systemStatusServer) Stores(
 	ctx context.Context, req *serverpb.StoresRequest,
 ) (*serverpb.StoresResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
@@ -3446,7 +3474,7 @@ func (s *statusServer) JobRegistryStatus(
 		return status.JobRegistryStatus(ctx, req)
 	}
 
-	remoteNodeID := s.gossip.NodeID.Get()
+	remoteNodeID := roachpb.NodeID(s.serverIterator.getID())
 	resp := &serverpb.JobRegistryStatusResponse{
 		NodeID: remoteNodeID,
 	}
@@ -3541,7 +3569,7 @@ func (s *statusServer) TransactionContentionEvents(
 		}
 	}
 
-	if s.gossip.NodeID.Get() == 0 {
+	if roachpb.NodeID(s.serverIterator.getID()) == 0 {
 		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
 	}
 
