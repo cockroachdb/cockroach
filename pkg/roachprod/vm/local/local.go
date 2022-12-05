@@ -119,6 +119,10 @@ type Provider struct {
 	storage VMStorage
 }
 
+func (p *Provider) SnapshotVolume(volume vm.Volume, name, description string) (string, error) {
+	return "", nil
+}
+
 func (p *Provider) CreateVolume(vm.VolumeCreateOpts) (vm.Volume, error) {
 	return vm.Volume{}, nil
 }
