@@ -240,6 +240,13 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillJobTypeColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"create virtual column indexes_usage based on (statistics->'statistics'->'indexes') with index "+
+			"on table system.statement_statistics",
+		toCV(clusterversion.V23_1_AlterSystemStatementStatisticsAddIndexesUsage),
+		upgrade.NoPrecondition,
+		createIndexOnIndexUsageOnSystemStatementStatistics,
+	),
 }
 
 func init() {

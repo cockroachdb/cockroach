@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestAlterSystemStatementStatisticsTable(t *testing.T) {
+func TestCreateIndexOnIndexUsageOnSystemStatementStatistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -42,7 +42,7 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations - 1),
+						clusterversion.V23_1_AlterSystemStatementStatisticsAddIndexesUsage - 1),
 				},
 			},
 		},
@@ -59,13 +59,13 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 
 	var (
 		validationSchemas = []upgrades.Schema{
-			{Name: "index_recommendations", ValidationFn: upgrades.HasColumn},
-			{Name: "primary", ValidationFn: upgrades.HasColumnFamily},
+			{Name: "indexes_usage", ValidationFn: upgrades.HasColumn},
+			{Name: "indexes_usage_idx", ValidationFn: upgrades.HasIndex},
 		}
 	)
 
 	// Inject the old copy of the descriptor.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementStatisticsTable, getDeprecatedStatementStatisticsDescriptor)
+	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementStatisticsTable, getStatementStatisticsNoIndexDescriptor)
 	// Validate that the table statement_statistics has the old schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -82,7 +82,7 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
+		clusterversion.V23_1_AlterSystemStatementStatisticsAddIndexesUsage,
 		nil,   /* done */
 		false, /* expectError */
 	)
@@ -100,11 +100,12 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 	)
 }
 
-// getDeprecatedStatementStatisticsDescriptor returns the system.statement_statistics
+// getStatementStatisticsNoIndexDescriptor returns the system.statement_statistics
 // table descriptor that was being used before adding a new column in the
 // current version.
-func getDeprecatedStatementStatisticsDescriptor() *descpb.TableDescriptor {
+func getStatementStatisticsNoIndexDescriptor() *descpb.TableDescriptor {
 	sqlStmtHashComputeExpr := `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
+	defaultIndexRec := "ARRAY[]:::STRING[]"
 
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.StatementStatisticsTableName),
@@ -131,8 +132,9 @@ func getDeprecatedStatementStatisticsDescriptor() *descpb.TableDescriptor {
 				ComputeExpr: &sqlStmtHashComputeExpr,
 				Hidden:      true,
 			},
+			{Name: "index_recommendations", ID: 12, Type: types.StringArray, Nullable: false, DefaultExpr: &defaultIndexRec},
 		},
-		NextColumnID: 12,
+		NextColumnID: 13,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
 				Name: "primary",
@@ -140,9 +142,9 @@ func getDeprecatedStatementStatisticsDescriptor() *descpb.TableDescriptor {
 				ColumnNames: []string{
 					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
-					"agg_interval", "metadata", "statistics", "plan",
+					"agg_interval", "metadata", "statistics", "plan", "index_recommendations",
 				},
-				ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12},
 				DefaultColumnID: 0,
 			},
 		},
@@ -185,7 +187,25 @@ func getDeprecatedStatementStatisticsDescriptor() *descpb.TableDescriptor {
 				},
 			},
 		},
-		NextIndexID:    3,
+		Indexes: []descpb.IndexDescriptor{
+			{
+				Name:   "fingerprint_stats_idx",
+				ID:     2,
+				Unique: false,
+				KeyColumnNames: []string{
+					"fingerprint_id",
+					"transaction_fingerprint_id",
+				},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+					catpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{2, 3},
+				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		},
+		NextIndexID:    4,
 		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
 		NextMutationID: 1,
 		FormatVersion:  3,
