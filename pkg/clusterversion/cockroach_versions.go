@@ -170,6 +170,10 @@ const (
 	VPrimordial4
 	VPrimordial5
 	VPrimordial6
+	// NOTE(andrei): Do not introduce new upgrades corresponding to VPrimordial
+	// versions. Old-version nodes might try to run the jobs created for such
+	// upgrades, but they won't know about the respective upgrade, causing the job
+	// to succeed without actually performing the update.
 	VPrimordialMax
 
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.

@@ -27,22 +27,44 @@ import (
 func MarkMigrationCompleted(
 	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version,
 ) error {
+	return markMigrationCompletedInner(ctx, ie, v, false /* ignoreExisting */)
+}
+
+// MarkMigrationCompletedIdempotent is like MarkMigrationCompleted, except it
+// can be called multiple times (or by multiple nodes, concurrently) without
+// failing if the respective row already exists. If the row already exists, is
+// not changed.
+func MarkMigrationCompletedIdempotent(
+	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version,
+) error {
+	return markMigrationCompletedInner(ctx, ie, v, true /* ignoreExisting */)
+}
+
+func markMigrationCompletedInner(
+	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version, ignoreExisting bool,
+) error {
+	query := `
+	INSERT
+	INTO system.migrations
+	(
+		major,
+		minor,
+		patch,
+		internal,
+		completed_at
+	)
+	VALUES ($1, $2, $3, $4, $5)
+`
+	if ignoreExisting {
+		query += "ON CONFLICT DO NOTHING"
+	}
+
 	_, err := ie.ExecEx(
 		ctx,
 		"migration-job-mark-job-succeeded",
 		nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		`
-INSERT
-  INTO system.migrations
-        (
-            major,
-            minor,
-            patch,
-            internal,
-            completed_at
-        )
-VALUES ($1, $2, $3, $4, $5)`,
+		query,
 		v.Major,
 		v.Minor,
 		v.Patch,

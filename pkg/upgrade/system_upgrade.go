@@ -140,13 +140,14 @@ func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFun
 // "permanent": an upgrade that will run regardless of the cluster's bootstrap
 // version.
 func NewPermanentSystemUpgrade(
-	description string, v roachpb.Version, fn SystemUpgradeFunc,
+	description string, v roachpb.Version, fn SystemUpgradeFunc, v22_2StartupMigrationName string,
 ) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
-			description: description,
-			v:           v,
-			permanent:   true,
+			description:               description,
+			v:                         v,
+			permanent:                 true,
+			v22_2StartupMigrationName: v22_2StartupMigrationName,
 		},
 		fn: fn,
 	}
