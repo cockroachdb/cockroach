@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -98,6 +99,23 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestFallbackSpanConfigOverride ensures that
+// COCKROACH_FALLBACK_SPANCONFIG_NUM_REPLICAS_OVERRIDE works as expected.
+func TestFallbackSpanConfigNumReplicasOverride(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer envutil.TestSetEnv(t,
+		"COCKROACH_FALLBACK_SPANCONFIG_NUM_REPLICAS_OVERRIDE", "42")()
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	scKVSubscriber := s.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+
+	conf, err := scKVSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey("non-existent"))
+	require.NoError(t, err)
+	require.Equal(t, int32(42), conf.NumReplicas)
 }
 
 type mockSpanConfigSubscriber struct {
