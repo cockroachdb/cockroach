@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import {
-  executeInternalSql,
+  executeInternalSql, LARGE_RESULT_SIZE,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
 } from "./sqlApi";
@@ -34,6 +34,7 @@ export const databasesRequest: SqlExecutionRequest = {
     },
   ],
   execute: true,
+  max_result_size: LARGE_RESULT_SIZE
 };
 
 // getDatabasesList fetches databases names from the database. Callers of
