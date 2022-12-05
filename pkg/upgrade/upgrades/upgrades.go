@@ -57,26 +57,33 @@ var upgrades = []upgradebase.Upgrade{
 		"add users and roles",
 		toCV(clusterversion.VPrimordial1),
 		addRootUser,
+		// v22_2StartupMigrationName - this upgrade corresponds to 3 old
+		// startupmigrations, out of which "make root a member..." is the last one.
+		"make root a member of the admin role",
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"enable diagnostics reporting",
 		toCV(clusterversion.VPrimordial2),
 		optInToDiagnosticsStatReporting,
+		"enable diagnostics reporting", // v22_2StartupMigrationName
 	),
 	upgrade.NewPermanentSystemUpgrade(
 		"populate initial version cluster setting table entry",
 		toCV(clusterversion.VPrimordial3),
 		populateVersionSetting,
+		"populate initial version cluster setting table entry", // v22_2StartupMigrationName
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"initialize the cluster.secret setting",
 		toCV(clusterversion.VPrimordial4),
 		initializeClusterSecret,
+		"initialize cluster.secret", // v22_2StartupMigrationName
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"update system.locations with default location data",
 		toCV(clusterversion.VPrimordial5),
 		updateSystemLocationData,
+		"update system.locations with default location data", // v22_2StartupMigrationName
 	),
 	// Introduced in v2.1.
 	// TODO(knz): bake this migration into v19.1.
@@ -84,6 +91,7 @@ var upgrades = []upgradebase.Upgrade{
 		"create default databases",
 		toCV(clusterversion.VPrimordial6),
 		createDefaultDbs,
+		"create default databases", // v22_2StartupMigrationName
 	),
 	upgrade.NewTenantUpgrade(
 		"ensure preconditions are met before starting upgrading to v22.2",
