@@ -56,9 +56,9 @@ pq: user testuser does not have USAGE privilege on external_connection root
 query-sql
 SELECT * FROM system.privileges
 ----
-root /externalconn/root {ALL} {}
-testuser /externalconn/testuser-ec {ALL} {}
-testuser /global/ {EXTERNALCONNECTION} {}
+root /externalconn/root {ALL} {} 1
+testuser /externalconn/testuser-ec {ALL} {} 100
+testuser /global/ {EXTERNALCONNECTION} {} 100
 
 # Revoke the USAGE privilege. Note testuser had ALL privileges since they
 # created the External Connection, but revoking USAGE means that they will now
@@ -70,9 +70,9 @@ REVOKE USAGE ON EXTERNAL CONNECTION "testuser-ec" FROM testuser;
 query-sql
 SELECT * FROM system.privileges
 ----
-root /externalconn/root {ALL} {}
-testuser /externalconn/testuser-ec {DROP} {}
-testuser /global/ {EXTERNALCONNECTION} {}
+root /externalconn/root {ALL} {} 1
+testuser /externalconn/testuser-ec {DROP} {} 100
+testuser /global/ {EXTERNALCONNECTION} {} 100
 
 exec-sql user=testuser
 RESTORE TABLE foo FROM LATEST IN 'external://testuser-ec'

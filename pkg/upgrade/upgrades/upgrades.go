@@ -262,6 +262,18 @@ var upgrades = []upgradebase.Upgrade{
 		createJobsMetricsPollingJob,
 		"create jobs metrics polling job",
 	),
+	upgrade.NewTenantUpgrade(
+		"add user_id column to system.privileges table",
+		toCV(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn),
+		upgrade.NoPrecondition,
+		alterSystemPrivilegesAddUserIDColumn,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill user_id column in system.privileges table",
+		toCV(clusterversion.V23_1SystemPrivilegesTableUserIDColumnBackfilled),
+		upgrade.NoPrecondition,
+		backfillSystemPrivilegesUserIDColumn,
+	),
 }
 
 func init() {
