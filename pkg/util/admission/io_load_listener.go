@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
@@ -155,12 +154,7 @@ type ioLoadListener struct {
 	storeID     int32
 	settings    *cluster.Settings
 	kvRequester storeRequester
-	mu          struct {
-		// Used when changing state in kvGranter. This is a pointer since it is
-		// the same as GrantCoordinator.mu.
-		*syncutil.Mutex
-		kvGranter granterWithIOTokens
-	}
+	kvGranter   granterWithIOTokens
 
 	// Stats used to compute interval stats.
 	statsInitialized bool
@@ -351,15 +345,13 @@ func (io *ioLoadListener) allocateTokensTick() {
 			toAllocateElasticDiskBWTokens))
 	}
 	// INVARIANT: toAllocate >= 0.
-	io.mu.Lock()
-	defer io.mu.Unlock()
 	io.byteTokensAllocated += toAllocateByteTokens
 	if io.byteTokensAllocated < 0 {
 		panic(errors.AssertionFailedf("tokens allocated is negative %d", io.byteTokensAllocated))
 	}
-	io.byteTokensUsed += io.mu.kvGranter.setAvailableIOTokensLocked(toAllocateByteTokens)
 	io.elasticDiskBWTokensAllocated += toAllocateElasticDiskBWTokens
-	io.mu.kvGranter.setAvailableElasticDiskBandwidthTokensLocked(toAllocateElasticDiskBWTokens)
+
+	io.byteTokensUsed += io.kvGranter.setAvailableTokens(toAllocateByteTokens, toAllocateElasticDiskBWTokens)
 }
 
 func computeIntervalDiskLoadInfo(
@@ -400,9 +392,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		// Disk Bandwidth tokens.
 		io.aux.diskBW.intervalDiskLoadInfo = computeIntervalDiskLoadInfo(
 			cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats)
-		io.mu.Lock()
-		diskTokensUsed := io.mu.kvGranter.getDiskTokensUsedAndResetLocked()
-		io.mu.Unlock()
+		diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
 		io.aux.diskBW.intervalLSMInfo = intervalLSMInfo{
 			incomingBytes:     int64(cumLSMIncomingBytes) - int64(cumDiskBW.incomingLSMBytes),
 			regularTokensUsed: diskTokensUsed[admissionpb.RegularWorkClass],
@@ -426,9 +416,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
-	io.mu.Lock()
-	io.mu.kvGranter.setAdmittedDoneModelsLocked(l0WriteLM, l0IngestLM, ingestLM)
-	io.mu.Unlock()
+	io.kvGranter.setAdmittedDoneModels(l0WriteLM, l0IngestLM, ingestLM)
 	if _, overloaded := io.ioThreshold.Score(); overloaded || io.aux.doLogFlush ||
 		io.elasticDiskBWTokens != unlimitedTokens {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
