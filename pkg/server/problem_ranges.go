@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func (s *statusServer) ProblemRanges(
+func (s *systemStatusServer) ProblemRanges(
 	ctx context.Context, req *serverpb.ProblemRangesRequest,
 ) (*serverpb.ProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
@@ -31,7 +31,7 @@ func (s *statusServer) ProblemRanges(
 	}
 
 	response := &serverpb.ProblemRangesResponse{
-		NodeID:           s.gossip.NodeID.Get(),
+		NodeID:           roachpb.NodeID(s.serverIterator.getID()),
 		ProblemsByNodeID: make(map[roachpb.NodeID]serverpb.ProblemRangesResponse_NodeProblems),
 	}
 

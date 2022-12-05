@@ -79,7 +79,7 @@ func getSQLUsername(ctx context.Context) username.SQLUsername {
 
 type apiV2ServerOpts struct {
 	admin            *adminServer
-	status           *statusServer
+	status           *systemStatusServer
 	promRuleExporter *metric.PrometheusRuleExporter
 	sqlServer        *SQLServer
 	db               *kv.DB
@@ -95,7 +95,7 @@ type apiV2ServerOpts struct {
 type apiV2Server struct {
 	admin            *adminServer
 	authServer       *authenticationV2Server
-	status           *statusServer
+	status           *systemStatusServer
 	promRuleExporter *metric.PrometheusRuleExporter
 	mux              *mux.Router
 	sqlServer        *SQLServer

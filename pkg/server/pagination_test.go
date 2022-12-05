@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -377,7 +378,7 @@ func TestRPCPaginator(t *testing.T) {
 							numNodes:     len(nodesToQuery),
 							errorCtx:     "test",
 							pagState:     pagState,
-							nodeStatuses: make(map[roachpb.NodeID]nodeStatusWithLiveness),
+							nodeStatuses: make(map[serverID]livenesspb.NodeLivenessStatus),
 							dialFn:       dialFn,
 							nodeFn:       nodeFn,
 							responseFn:   responseFn,

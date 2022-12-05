@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -9336,6 +9337,103 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 			require.Truef(t, afterBackup.Less(thresh), "%v >= %v", afterBackup, thresh)
 			return nil
 		})
+}
+
+// TestProtectRestoreTargets ensures that a protected timestamp is issued before
+// the restore flow begins on the correct target and is released when the restore ends.
+func TestProtectRestoreTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	numAccounts := 100
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		},
+	}
+	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode,
+		numAccounts,
+		InitManualReplication, params)
+	_, emptyDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir,
+		InitManualReplication, params)
+	defer cleanupEmptyCluster()
+	defer cleanupFn()
+
+	ctx := context.Background()
+	if !tc.StartedDefaultTestTenant() {
+		_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.
+			MustMakeTenantID(10)})
+		require.NoError(t, err)
+	}
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+	for _, subtest := range []struct {
+		name        string
+		restoreStmt string
+	}{
+		{
+			name:        "tenant",
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant = '20'`,
+		},
+		{
+			name:        "database",
+			restoreStmt: `RESTORE DATABASE data FROM LATEST IN $1 WITH detached, new_db_name=data2`,
+		},
+		{
+			name:        "table",
+			restoreStmt: `RESTORE TABLE bank FROM LATEST IN $1 WITH detached, into_db='defaultdb'`,
+		},
+		{
+			name:        "cluster",
+			restoreStmt: `RESTORE FROM LATEST IN $1 WITH detached`,
+		},
+	} {
+		if tc.StartedDefaultTestTenant() && subtest.name == "tenant" {
+			// Cannot run a restore of a tenant within a tenant
+			continue
+		}
+		t.Run(subtest.name, func(t *testing.T) {
+			if subtest.name == "cluster" {
+				// Use the empty cluster for cluster restore
+				sqlDB = emptyDB
+				sqlDB.Exec(t, "USE system")
+			}
+			// Begin a Restore and assert that PTS with the correct target was persisted
+			sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'`)
+			var jobId jobspb.JobID
+			sqlDB.QueryRow(t, subtest.restoreStmt, localFoo).Scan(&jobId)
+			jobutils.WaitForJobToPause(t, sqlDB, jobId)
+
+			restoreDetails := jobutils.GetJobPayload(t, sqlDB, jobId).GetRestore()
+			require.NotNil(t, restoreDetails.ProtectedTimestampRecord)
+
+			target := ptutil.GetPTSTarget(t, sqlDB, restoreDetails.ProtectedTimestampRecord)
+			switch subtest.name {
+			case "cluster":
+				// The target cluster object doesn't have any info,
+				// so just assert that the right type was instantiated.
+				require.NotNil(t, target.GetCluster())
+			case "tenant":
+				targetIDs := target.GetTenants()
+				require.Equal(t, roachpb.TenantID{InternalValue: 20}, targetIDs.IDs[0])
+			case "database":
+				targetIDs := target.GetSchemaObjects()
+				require.Equal(t, restoreDetails.DatabaseDescs[0].GetID(), targetIDs.IDs[0])
+			case "table":
+				targetIDs := target.GetSchemaObjects()
+				require.Equal(t, restoreDetails.TableDescs[0].GetID(), targetIDs.IDs[0])
+			}
+			// Finish the restore and ensure the PTS record was removed
+			sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+			sqlDB.Exec(t, `RESUME JOB $1`, jobId)
+			jobutils.WaitForJobToSucceed(t, sqlDB, jobId)
+
+			var count int
+			sqlDB.QueryRow(t, `SELECT count(*) FROM system.protected_ts_records WHERE id = $1`,
+				restoreDetails.ProtectedTimestampRecord).Scan(&count)
+			require.Equal(t, 0, count)
+		})
+	}
 }
 
 // TestBackupRestoreSystemUsers tests RESTORE SYSTEM USERS feature which allows user to
