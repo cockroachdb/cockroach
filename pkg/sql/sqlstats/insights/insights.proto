@@ -70,6 +70,15 @@ message Transaction {
     (gogoproto.nullable) = false];
   string user_priority = 3;
   bool implicit_txn = 4;
+  google.protobuf.Duration contention = 5 [(gogoproto.stdduration) = true];
+  google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 7 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  string user = 8;
+  string application_name = 9;
+  int64 rows_read = 10;
+  int64 rows_written = 11;
+  int64 retry_count = 12;
+  string auto_retry_reason = 13;
 }
 
 message Statement {
@@ -89,8 +98,8 @@ message Statement {
   google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   google.protobuf.Timestamp end_time = 7 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bool full_scan = 8;
-  string user = 9;
-  string application_name = 10;
+  reserved 9; // previously user
+  reserved 10; // previously application_name
   string database = 11;
   string plan_gist = 12;
   int64 rows_read = 13;
