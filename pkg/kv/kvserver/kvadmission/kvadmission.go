@@ -88,9 +88,25 @@ type Controller interface {
 	// populated for admission to work correctly. If err is non-nil, the
 	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
 	// called after the KV work is done executing.
+	// XXX: Check the per-remote-store quota pools underneath this. And do this
+	// before grabbing the CPU slot. CPU slots are also held by read requests --
+	// this is only used by write requests.
 	AdmitKVWork(context.Context, roachpb.TenantID, *roachpb.BatchRequest) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
+	// XXX: Use this to connect to local store queues to the corresponding quota
+	// pool. Does this even exist anymore? When some work is physically
+	// admitted, that's the thing we care about. We'll make note of the
+	// physically {written,ingested} bytes then. We'll deduct that amount from
+	// the quota pool then, and return it (exactly) after logical admission.
+	// - It's not clear when to do this deduction. Is it after the proposal
+	// evaluation? Is the amount deducted an estimation that's available then?
+	// Post-hoc, do we just return that estimate? (there's no error correction
+	// since at that point we're actually trying to return tokens). Do we need
+	// to improve estimations when deducting from the quota pool? Is it ok to
+	// deduct the same amount from all follower-store pools? Can we assume the
+	// same proposal will always lead to the same amount of L0 addition
+	// everywhere?
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
 	// AdmitRangefeedRequest must be called before serving rangefeed requests.
 	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
@@ -131,15 +147,21 @@ type TenantWeightsForStore struct {
 	Weights map[uint64]uint32
 }
 
+// ReplicaStoreIDsResolver returns the set of store IDs on which replicas of the
+// given range are placed.
+type ReplicaStoreIDsResolver interface {
+	GetReplicaStoreIDs(roachpb.RangeID) (ids []roachpb.StoreID, found bool)
+}
+
 // controllerImpl implements Controller interface.
 type controllerImpl struct {
-	// Admission control queues and coordinators. All three should be nil or
-	// non-nil.
+	// Admission control queues and coordinators.
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	settings                   *cluster.Settings
-	every                      log.EveryN
+
+	settings *cluster.Settings
+	every    log.EveryN
 }
 
 var _ Controller = &controllerImpl{}
@@ -224,6 +246,17 @@ func (n *controllerImpl) AdmitKVWork(
 	// to continue even when throttling since there are often significant
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
+		// XXX: This is an integration point. We want an interface to resolve
+		// the set of store IDs for a batch request. We'll use it to wait for
+		// the right set of windows (determined by <StoreID,TenantID> tuple) to
+		// be positive; intra-tenant isolation provided by different quota pools
+		// maintained underneath even if there's a single WorkQueue on top of
+		// all of them. When granting "tokens", i.e when the {local,stores}
+		// stores have logically admitted work, we'll know what tenant it's for,
+		// and inform the WorkQueue directly of it. The WorkQueue in this set up
+		// is primarily tasked with providing intra-tenant prioritization by
+		// preferring to grant admission to higher priority work.
+
 		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
 		if storeAdmissionQ != nil {
 			storeWorkHandle, err := storeAdmissionQ.Admit(
@@ -351,13 +384,12 @@ func (n *controllerImpl) SetTenantWeightProvider(
 				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
-					if q != nil {
-						if kvStoresDisabled {
-							storeWeights.Weights = nil
-						}
-						q.SetTenantWeights(storeWeights.Weights)
+					if kvStoresDisabled {
+						storeWeights.Weights = nil
 					}
+					n.storeGrantCoords.
+						TryGetQueueForStore(int32(storeWeights.StoreID)).
+						SetTenantWeights(storeWeights.Weights)
 				}
 				allWeightsDisabled = kvDisabled && kvStoresDisabled
 			case <-stopper.ShouldQuiesce():
@@ -372,11 +404,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 func (n *controllerImpl) SnapshotIngested(
 	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats,
 ) {
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
-	if storeAdmissionQ == nil {
-		return
-	}
-	storeAdmissionQ.StatsToIgnore(ingestStats)
+	n.storeGrantCoords.TryGetQueueForStore(int32(storeID)).StatsToIgnore(ingestStats)
 }
 
 // FollowerStoreWriteBytes implements the Controller interface.
@@ -386,12 +414,9 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 	if followerWriteBytes.WriteBytes == 0 && followerWriteBytes.IngestedBytes == 0 {
 		return
 	}
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
-	if storeAdmissionQ == nil {
-		return
-	}
-	storeAdmissionQ.BypassedWorkDone(
-		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
+	n.storeGrantCoords.TryGetQueueForStore(int32(storeID)).BypassedWorkDone(
+		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo,
+	)
 }
 
 // ProvisionedBandwidth set a value of the provisioned

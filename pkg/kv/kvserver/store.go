@@ -3840,6 +3840,21 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 	return (*Store)(s).engine
 }
 
+var _ kvadmission.ReplicaStoreIDsResolver = &Store{}
+
+// GetReplicaStoreIDs implements the kvadmission.ReplicaStoreIDsResolver
+// interface.
+func (s *Store) GetReplicaStoreIDs(rangeID roachpb.RangeID) (ids []roachpb.StoreID, found bool) {
+	repl, ok := s.mu.replicasByRangeID.Load(rangeID)
+	if !ok {
+		return nil, false
+	}
+	for _, desc := range repl.Desc().Replicas().Descriptors() {
+		ids = append(ids, desc.StoreID)
+	}
+	return ids, true
+}
+
 // WriteClusterVersion writes the given cluster version to the store-local
 // cluster version key. We only accept a raw engine to ensure we're persisting
 // the write durably.

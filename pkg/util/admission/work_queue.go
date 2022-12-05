@@ -1729,6 +1729,9 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 // can (a) adjust remaining tokens, (b) account for this in the per-work token
 // estimation model.
 func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDoneInfo) {
+	if q == nil {
+		return
+	}
 	q.updateStoreAdmissionStats(uint64(workCount), doneInfo, true)
 	// Since we have no control over such work, we choose to count it as
 	// regularWorkClass.
@@ -1738,6 +1741,9 @@ func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDon
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
 // storeAdmissionStats.
 func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) {
+	if q == nil {
+		return
+	}
 	q.mu.Lock()
 	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
 	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
@@ -1761,6 +1767,9 @@ func (q *StoreWorkQueue) updateStoreAdmissionStats(
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
 func (q *StoreWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
+	if q == nil {
+		return
+	}
 	for i := range q.q {
 		q.q[i].SetTenantWeights(tenantWeights)
 	}
