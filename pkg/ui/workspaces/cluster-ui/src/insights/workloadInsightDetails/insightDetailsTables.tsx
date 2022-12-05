@@ -12,15 +12,22 @@ import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
 import { EventExecution, InsightExecEnum } from "../types";
-import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";
+import {
+  insightsTableTitles,
+  QueriesCell,
+  TransactionDetailsLink,
+} from "../workloadInsights/util";
+import { TimeScale } from "../../timeScaleDropdown";
 
 interface InsightDetailsTableProps {
   data: EventExecution[];
   execType: InsightExecEnum;
+  setTimeScale?: (tw: TimeScale) => void;
 }
 
 export function makeInsightDetailsColumns(
   execType: InsightExecEnum,
+  setTimeScale: (tw: TimeScale) => void,
 ): ColumnDescriptor<EventExecution>[] {
   return [
     {
@@ -32,7 +39,12 @@ export function makeInsightDetailsColumns(
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: EventExecution) => String(item.fingerprintID),
+      cell: (item: EventExecution) =>
+        TransactionDetailsLink(
+          item.fingerprintID,
+          item.startTime,
+          setTimeScale,
+        ),
       sort: (item: EventExecution) => item.fingerprintID,
     },
     {
@@ -84,7 +96,7 @@ export function makeInsightDetailsColumns(
 export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
-  const columns = makeInsightDetailsColumns(props.execType);
+  const columns = makeInsightDetailsColumns(props.execType, props.setTimeScale);
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: false,
     columnTitle: "contention",

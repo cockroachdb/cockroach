@@ -227,6 +227,7 @@ export const TransactionInsightDetails: React.FC<
                     <WaitTimeDetailsTable
                       data={blockingExecutions}
                       execType={insightDetails.execType}
+                      setTimeScale={setTimeScale}
                     />
                   </div>
                 </Col>
