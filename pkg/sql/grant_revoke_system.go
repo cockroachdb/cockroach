@@ -36,14 +36,12 @@ import (
 func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
+	privilegesTableHasUserIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
+		clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn)
+
 	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
 	}
-
-	deleteStmt := fmt.Sprintf(
-		`DELETE FROM system.%s VALUES WHERE username = $1 AND path = $2`,
-		catconstants.SystemPrivilegeTableName,
-	)
 
 	// Get the privilege path for this grant.
 	systemPrivilegeObjects, err := n.makeSystemPrivilegeObject(params.ctx, params.p)
@@ -62,6 +60,23 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		err = params.p.MustCheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.p.User(), n.isGrant)
 		if err != nil {
 			return err
+		}
+
+		deleteStmt := fmt.Sprintf(
+			`DELETE FROM system.%s VALUES WHERE username = $1 AND path = $2`, catconstants.SystemPrivilegeTableName)
+		upsertStmt := fmt.Sprintf(
+			`UPSERT INTO system.%s (username, path, privileges, grant_options) VALUES ($1, $2, $3, $4)`,
+			catconstants.SystemPrivilegeTableName)
+		if privilegesTableHasUserIDCol {
+			upsertStmt = fmt.Sprintf(`
+UPSERT INTO system.%s (username, path, privileges, grant_options, user_id)
+VALUES ($1, $2, $3, $4, (
+	SELECT CASE $1
+		WHEN '%s' THEN %d
+		ELSE (SELECT user_id FROM system.users WHERE username = $1)
+	END
+))`,
+				catconstants.SystemPrivilegeTableName, username.PublicRole, username.PublicRoleID)
 		}
 
 		if n.isGrant {
@@ -93,13 +108,12 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 					continue
 				}
 
-				insertStmt := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4)`, catconstants.SystemPrivilegeTableName)
 				_, err := params.p.InternalSQLTxn().ExecEx(
 					params.ctx,
 					`insert-system-privilege`,
 					params.p.txn,
 					sessiondata.RootUserSessionDataOverride,
-					insertStmt,
+					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
 					privilege.ListFromBitField(userPrivs.Privileges, n.grantOn).SortedNames(),
@@ -110,12 +124,11 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				}
 			}
 		} else {
-
 			// Handle revoke case.
 			for _, user := range n.grantees {
 				syntheticPrivDesc.Revoke(user, n.desiredprivs, n.grantOn, n.withGrantOption)
 				userPrivs, found := syntheticPrivDesc.FindUser(user)
-				upsert := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4)`, catconstants.SystemPrivilegeTableName)
+
 				// For Public role and virtual tables, leave an empty
 				// row to indicate that SELECT has been revoked.
 				if !found && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
@@ -124,7 +137,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 						`insert-system-privilege`,
 						params.p.txn,
 						sessiondata.RootUserSessionDataOverride,
-						upsert,
+						upsertStmt,
 						user.Normalized(),
 						systemPrivilegeObject.GetPath(),
 						[]string{},
@@ -159,7 +172,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 					`insert-system-privilege`,
 					params.p.txn,
 					sessiondata.RootUserSessionDataOverride,
-					upsert,
+					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
 					privilege.ListFromBitField(userPrivs.Privileges, n.grantOn).SortedNames(),
