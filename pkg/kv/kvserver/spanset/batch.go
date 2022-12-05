@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
@@ -457,10 +456,6 @@ func (s spanSetReader) NewMVCCIterator(
 }
 
 func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.EngineIterator {
-	if !s.spansOnly {
-		log.Warningf(context.Background(),
-			"cannot do strict timestamp checking of EngineIterator, resorting to best effort")
-	}
 	return &EngineIterator{
 		i:         s.r.NewEngineIterator(opts),
 		spans:     s.spans,
