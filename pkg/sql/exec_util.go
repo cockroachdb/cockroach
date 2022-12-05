@@ -1342,7 +1342,7 @@ type ExecutorConfig struct {
 	// EventsExporter is the client for the Observability Service.
 	EventsExporter obs.EventsExporter
 
-	// NodeDescs stores node descriptors in an in-memory cache.
+	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
 }
 
@@ -1405,7 +1405,7 @@ type ExecutorTestingKnobs struct {
 
 	// BeforeExecute is called by the Executor before plan execution. It is useful
 	// for synchronizing statement execution.
-	BeforeExecute func(ctx context.Context, stmt string)
+	BeforeExecute func(ctx context.Context, stmt string, descriptors *descs.Collection)
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.

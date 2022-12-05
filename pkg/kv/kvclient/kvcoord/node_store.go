@@ -12,11 +12,14 @@ package kvcoord
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// NodeDescStore stores a collection of NodeDescriptors.
+// NodeDescStore stores a collection of NodeDescriptors and StoreDescriptors.
 //
 // Implementations of the interface are expected to be threadsafe.
 type NodeDescStore interface {
-	// GetNodeDescriptor looks up the descriptor of the node by ID.
-	// It returns an error if the node is not known by the store.
+	// GetNodeDescriptor looks up the node descriptor by node ID.
+	// It returns an error if the node is not known by the cache.
 	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	// GetStoreDescriptor looks up the store descriptor by store ID.
+	// It returns an error if the store is not known by the cache.
+	GetStoreDescriptor(roachpb.StoreID) (*roachpb.StoreDescriptor, error)
 }

@@ -937,7 +937,14 @@ func (rq *replicateQueue) processOneChange(
 	// will change quickly enough in order to not get the same error and
 	// outcome.
 	if err != nil {
-		// Annotate the planning error if it is associated with a decomission
+		// If there was a change during the planning process, possibly due to
+		// allocator errors finding a target, we should report this as a failure
+		// for the associated allocator action metric if we are not in dry run.
+		if !dryRun {
+			rq.metrics.trackErrorByAllocatorAction(ctx, change.Action)
+		}
+
+		// Annotate the planning error if it is associated with a decommission
 		// allocator action so that the replica will be put into purgatory
 		// rather than waiting for the next scanner cycle. This is also done
 		// for application failures below.

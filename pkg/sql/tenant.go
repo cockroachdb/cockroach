@@ -352,7 +352,7 @@ func (p *planner) CreateTenantWithID(
 		},
 	}
 
-	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.Descriptors())
 	if err != nil {
 		return err
 	}

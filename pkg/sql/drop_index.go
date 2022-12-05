@@ -349,7 +349,7 @@ func (p *planner) dropIndexByName(
 
 	// Check if requires CCL binary for eventual zone config removal.
 	_, zone, _, err := GetZoneConfigInTxn(
-		ctx, p.txn, p.ExecCfg().Codec, tableDesc.ID, nil /* index */, "", false,
+		ctx, p.txn, p.Descriptors(), tableDesc.ID, nil /* index */, "", false,
 	)
 	if err != nil {
 		return err

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -502,7 +503,8 @@ func TestReclaimLoop(t *testing.T) {
 	const expiration = 5 * time.Hour
 	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
-	err := storage.RunInstanceIDReclaimLoop(ctx, s.Stopper(), ts, func() hlc.Timestamp {
+	ief := s.InternalExecutorFactory().(descs.TxnManager)
+	err := storage.RunInstanceIDReclaimLoop(ctx, s.Stopper(), ts, ief, func() hlc.Timestamp {
 		return sessionExpiry
 	})
 	require.NoError(t, err)
