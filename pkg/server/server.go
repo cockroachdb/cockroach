@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -599,6 +600,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// We do the same for opting out of strict GC enforcement; it
 			// really only applies to user table ranges
 			fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
+
+			// fallbackSpanConfigNumReplicasOverride controls what replication
+			// factor is used for ranges with no explicit span configs set.
+			var fallbackSpanConfigNumReplicasOverride = envutil.EnvOrDefaultInt(
+				"COCKROACH_FALLBACK_SPANCONFIG_NUM_REPLICAS_OVERRIDE", int(fallbackConf.NumReplicas))
+			fallbackConf.NumReplicas = int32(fallbackSpanConfigNumReplicasOverride)
 
 			spanConfig.subscriber = spanconfigkvsubscriber.New(
 				clock,
