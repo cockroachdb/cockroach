@@ -1,4 +1,4 @@
-new-server name=s1
+new-cluster name=s1
 ----
 
 subtest basic-backup-userfile
@@ -136,7 +136,7 @@ subtest end
 
 subtest incremental-location-backup-restore-userfile
 
-switch-server name=s1
+switch-cluster name=s1
 ----
 
 exec-sql

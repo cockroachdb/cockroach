@@ -1,4 +1,4 @@
-new-server name=s1
+new-cluster name=s1
 ----
 
 # Test that a backup job does not read its own lock file on resumption,

@@ -1,7 +1,7 @@
 # This test ensures that a failed or cancelled restore cleans up the ttl schedule
 # that is created when resotring a table with a row level ttl configuration.
 
-new-server name=s1 nodes=1
+new-cluster name=s1 nodes=1
 ----
 
 subtest restore-fail-cleans-up-ttl-schedules-before-publishing

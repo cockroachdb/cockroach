@@ -1,4 +1,4 @@
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
@@ -177,7 +177,7 @@ REVOKE RESTORE ON DATABASE nonadmin FROM testuser;
 subtest end
 
 subtest cluster-restore
-new-server name=s2 allow-implicit-access share-io-dir=s1
+new-cluster name=s2 allow-implicit-access share-io-dir=s1
 ----
 
 exec-sql

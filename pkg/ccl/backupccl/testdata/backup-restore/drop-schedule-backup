@@ -1,7 +1,7 @@
 # These tests validate the DROP SCHEDULE command for dropping the incremental scheduled
 # backup when the full scheduled backup is dropped.
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
