@@ -250,6 +250,7 @@ type Volume struct {
 	ProviderVolumeType string
 	Zone               string
 	Encrypted          bool
+	Name               string
 	Labels             map[string]string
 	Size               int
 }
@@ -264,6 +265,7 @@ type VolumeCreateOpts struct {
 	Type             string
 	SourceSnapshotID string
 	Zone             string
+	Labels           map[string]string
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
@@ -298,6 +300,7 @@ type Provider interface {
 
 	CreateVolume(vco VolumeCreateOpts) (Volume, error)
 	AttachVolumeToVM(volume Volume, vm *VM) (string, error)
+	SnapshotVolume(volume Volume, name, description string) (string, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can
