@@ -194,9 +194,6 @@ func (s *Container) RecordStatement(
 		StartTime:            value.StartTime,
 		EndTime:              value.EndTime,
 		FullScan:             value.FullScan,
-		User:                 value.SessionData.User().Normalized(),
-		ApplicationName:      value.SessionData.ApplicationName,
-		Database:             value.SessionData.Database,
 		PlanGist:             value.PlanGist,
 		Retries:              int64(value.AutoRetryCount),
 		AutoRetryReason:      autoRetryReason,
@@ -319,11 +316,17 @@ func (s *Container) RecordTransaction(
 	}
 
 	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
-		ID:            value.TransactionID,
-		FingerprintID: key,
-		UserPriority:  value.Priority.String(),
-		ImplicitTxn:   value.ImplicitTxn})
-
+		ID:              value.TransactionID,
+		FingerprintID:   key,
+		UserPriority:    value.Priority.String(),
+		ImplicitTxn:     value.ImplicitTxn,
+		Contention:      &value.ExecStats.ContentionTime,
+		StartTime:       value.StartTime,
+		EndTime:         value.EndTime,
+		User:            value.SessionData.User().Normalized(),
+		ApplicationName: value.SessionData.ApplicationName,
+		Database:        value.SessionData.Database,
+	})
 	return nil
 }
 
