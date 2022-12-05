@@ -9339,9 +9339,9 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		})
 }
 
-// TestProtectRestoreSpans ensures that a protected timestamp is issued before
+// TestProtectRestoreTargets ensures that a protected timestamp is issued before
 // the restore flow begins on the correct target and is released when the restore ends.
-func TestProtectRestoreSpans(t *testing.T) {
+func TestProtectRestoreTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

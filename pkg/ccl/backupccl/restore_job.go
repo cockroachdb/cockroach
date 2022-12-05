@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1357,10 +1358,10 @@ func createImportingDescriptors(
 	return dataToPreRestore, preValidation, trackedRestore, nil
 }
 
-// protectRestoreSpans issues a protected timestamp over the span we seek to
-// restore. If a pts already exists in the job record, due to previous call of
-// this function, this noops.
-func protectRestoreSpans(
+// protectRestoreTargets issues a protected timestamp over the targets we seek
+// to restore and writes the pts record to the job record. If a pts already
+// exists in the job record, due to previous call of this function, this noops.
+func protectRestoreTargets(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	job *jobs.Job,
@@ -1404,6 +1405,10 @@ func protectRestoreSpans(
 		}
 		target = ptpb.MakeSchemaObjectsTarget(tableIDs)
 	}
+	// Set the PTS with a timestamp less than any upcoming batch request
+	// timestamps from future addSSTable requests. This ensures that a target's
+	// gcthreshold never creeps past a batch request timestamp, preventing a slow
+	// addSStable request from failing.
 	protectedTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	return execCfg.ProtectedTimestampManager.Protect(ctx, job, target, protectedTime)
 }
@@ -1595,11 +1600,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		mainData.addTenant(from, to)
 	}
 
-	_, err = protectRestoreSpans(ctx, p.ExecCfg(), r.job, details, mainData.tenantRekeys)
+	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.tenantRekeys)
 	if err != nil {
 		return err
 	}
-	// the restore details now have pts
 	details = r.job.Details().(jobspb.RestoreDetails)
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
 		"restore.before_flow"); err != nil {
@@ -2281,7 +2285,12 @@ func (r *restoreResumer) OnFailOrCancel(
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
 
-	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
+	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); errors.Is(err, protectedts.ErrNotExists) {
+		// No reason to return an error which might cause problems if it doesn't
+		// seem to exist.
+		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		err = nil
+	} else if err != nil {
 		return err
 	}
 
