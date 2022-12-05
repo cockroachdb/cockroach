@@ -11,6 +11,7 @@ go_library(
         "editor.go",
         "editor_bubbline.go",
         "editor_bufio.go",
+        "editor_copy.go",
         "editor_editline.go",
         "parser.go",
         "sql.go",
