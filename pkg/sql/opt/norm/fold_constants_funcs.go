@@ -15,7 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -325,6 +328,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) (_ opt.Sc
 func (c *CustomFuncs) foldOIDFamilyCast(
 	input opt.ScalarExpr, typ *types.T,
 ) (_ opt.ScalarExpr, isValid bool, retErr error) {
+	flags := cat.Flags{AvoidDescriptorCaches: false, NoTableStats: true}
 	datum := memo.ExtractConstDatum(input)
 
 	inputFamily := input.DataType().Family()
@@ -342,7 +346,27 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 		default:
 			return nil, false, nil
 		}
-	case oid.T_regtype, oid.T_regclass:
+	case oid.T_regclass:
+		switch inputFamily {
+		case types.StringFamily:
+			s := tree.MustBeDString(datum)
+			tn, err := parser.ParseQualifiedTableName(string(s))
+			if err != nil {
+				return nil, true, err
+			}
+
+			ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
+			if err != nil {
+				return nil, true, err
+			}
+
+			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+			dOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
+
+		default:
+			return nil, false, nil
+		}
+	case oid.T_regtype, oid.T_regnamespace:
 		switch inputFamily {
 		case types.StringFamily:
 			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
@@ -350,7 +374,6 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 				return nil, false, err
 			}
 			dOid = tree.MustBeDOid(cDatum)
-
 		default:
 			return nil, false, nil
 		}
