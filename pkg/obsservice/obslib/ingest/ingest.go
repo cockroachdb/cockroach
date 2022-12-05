@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	otlogs "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -248,7 +248,7 @@ VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 
 			hex.EncodeToString(insight.Statement.ID.GetBytes()),
 			encodeUint64ToBytes(uint64(insight.Statement.FingerprintID)),
 			insight.Problem.String(),
-			encodeCauses(insight.Causes),
+			pq.Array(encodeCauses(insight.Causes)),
 			insight.Statement.Query,
 			insight.Statement.Status.String(),
 			timeutil.Unix(0, insight.Statement.StartTime.UnixNano()),
@@ -262,12 +262,11 @@ VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 
 			insight.Statement.RowsWritten,
 			insight.Transaction.UserPriority,
 			insight.Statement.Retries,
-			// TODO(abarganier): Do we need to use something like sql.NullString here?
-			insight.Statement.AutoRetryReason,
-			insight.Statement.Nodes,
-			encodeContentionTime(insight.Statement.Contention),
-			encodeContentionEvents(insight.Statement.ContentionEvents),
-			encodeIndexRecommendations(insight.Statement.IndexRecommendations),
+			encodeAutoRetryReason(insight.Statement.AutoRetryReason),
+			pq.Array(insight.Statement.Nodes),
+			nil, // TODO(todd): insight.Statement.Contention,
+			nil, // TODO(todd): insight.Statement.ContentionEvents,
+			pq.Array(encodeIndexRecommendations(insight.Statement.IndexRecommendations)),
 			insight.Transaction.ImplicitTxn,
 		)
 
@@ -278,32 +277,19 @@ VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 
 	return nil
 }
 
+func encodeAutoRetryReason(autoRetryReason string) *string {
+	if autoRetryReason == "" {
+		return nil
+	}
+	return &autoRetryReason
+}
+
 func encodeCauses(causes []insights.Cause) []string {
 	out := make([]string, len(causes))
 	for i := 0; i < len(causes); i++ {
 		out[i] = causes[i].String()
 	}
 	return out
-}
-
-func encodeContentionEvents(events []roachpb.ContentionEvent) interface{} {
-	// TODO(todd): Is this the correct way to encode to JSON? Does it
-	// match the format when querying the same row in crdb_internal?
-	jsonpb := protoutil.JSONPb{}
-	json, err := jsonpb.Marshal(events)
-	if err != nil {
-		panic(err)
-	}
-	// TODO(abarganier): Seems like if the JSON is null, it resolves to the string 'null'
-	// instead of an actual nil value. What's a better way to handle this?
-	if len(json) == 0 || string(json) == "null" {
-		return nil
-	}
-	return string(json)
-}
-
-func encodeContentionTime(contention *time.Duration) interface{} {
-	return contention
 }
 
 func encodeIndexRecommendations(recommendations []string) []string {

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -192,6 +193,7 @@ func TestEventIngestionIntegration(t *testing.T) {
 		// Generate an execution insight and check that we get an event.
 		_, err = sqlDB.Exec("set application_name = $1", t.Name())
 		_, err = sqlDB.Exec("set cluster setting sql.insights.latency_threshold = '100ms'", t.Name())
+		_, err = sqlDB.Exec("create table test")
 		_, err = sqlDB.Exec("select pg_sleep(0.2)")
 		require.NoError(t, err)
 
@@ -210,6 +212,9 @@ func TestEventIngestionIntegration(t *testing.T) {
 
 			s := sqlDB.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "crdb_internal.cluster_execution_insights"), t.Name())
 			require.NoError(t, s.Scan(expected.fields()...))
+			// TODO(todd): Say why.
+			expected.contention = sql.NullString{}
+			expected.contentionEvents = sql.NullString{}
 
 			// TODO(todd): Yuck. It would be nice if Scan could skip fields or something.
 			var timestamp time.Time
@@ -226,6 +231,9 @@ func TestEventIngestionIntegration(t *testing.T) {
 			// Why is this?
 			require.NoError(t, err)
 			require.Equal(t, expected, actual)
+
+			fmt.Printf("expected: %v\n\n\n\n", expected)
+			fmt.Printf("actual: %v\n", actual)
 			return nil
 		})
 	})
@@ -239,7 +247,7 @@ type insightRow struct {
 	statementID              string
 	statementFingerprintID   []byte
 	problem                  string
-	causes                   []uint8 // Huh?
+	causes                   pq.StringArray
 	query                    string
 	status                   string
 	startTime                time.Time
@@ -254,10 +262,10 @@ type insightRow struct {
 	priority                 string
 	retries                  int64
 	lastRetryReason          sql.NullString
-	execNodeIDs              []uint8 // Huh?
+	execNodeIDs              pq.Int64Array
 	contention               sql.NullString
 	contentionEvents         sql.NullString
-	indexRecommendations     []uint8 // Huh?
+	indexRecommendations     pq.StringArray
 	implicitTransaction      bool
 }
 
