@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,6 +59,10 @@ type ServerIterator interface {
 	getAllNodes(
 		ctx context.Context,
 	) (map[serverID]livenesspb.NodeLivenessStatus, error)
+	// nodes returns a list of nodes or instances for the
+	// cluster or tenant suitable for returning as the Nodes
+	// RPC response.
+	nodes(ctx context.Context) (*serverpb.NodesResponse, error)
 	// nodesList returns a list of nodes or instances for the
 	// cluster or tenant suitable for returning as the NodesList
 	// RPC response.
@@ -82,6 +87,23 @@ type tenantFanoutClient struct {
 	sqlServer *SQLServer
 	rpcCtx    *rpc.Context
 	stopper   *stop.Stopper
+}
+
+func (t *tenantFanoutClient) nodes(ctx context.Context) (*serverpb.NodesResponse, error) {
+	instances, err := t.sqlServer.sqlInstanceReader.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var resp serverpb.NodesResponse
+	for _, instance := range instances {
+		resp.Nodes = append(resp.Nodes, statuspb.NodeStatus{
+			Desc: roachpb.NodeDescriptor{
+				NodeID:   roachpb.NodeID(instance.InstanceID),
+				Locality: instance.Locality,
+			},
+		})
+	}
+	return &resp, err
 }
 
 func (t *tenantFanoutClient) nodesList(ctx context.Context) (*serverpb.NodesListResponse, error) {
@@ -178,6 +200,12 @@ type kvFanoutClient struct {
 	clock        *hlc.Clock
 	st           *cluster.Settings
 	ambientCtx   log.AmbientContext
+}
+
+func (k kvFanoutClient) nodes(_ context.Context) (*serverpb.NodesResponse, error) {
+	// This is a no-op because the systemStatusServer provides its own Nodes
+	// implementation rather than using the one from its embedded statusServer.
+	return &serverpb.NodesResponse{}, nil
 }
 
 func (k kvFanoutClient) nodesList(ctx context.Context) (*serverpb.NodesListResponse, error) {
