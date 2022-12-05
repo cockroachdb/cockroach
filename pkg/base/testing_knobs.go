@@ -29,7 +29,6 @@ type TestingKnobs struct {
 	SQLTypeSchemaChanger         ModuleTestingKnobs
 	GCJob                        ModuleTestingKnobs
 	PGWireTestingKnobs           ModuleTestingKnobs
-	StartupMigrationManager      ModuleTestingKnobs
 	DistSQL                      ModuleTestingKnobs
 	SQLEvalContext               ModuleTestingKnobs
 	NodeLiveness                 ModuleTestingKnobs
