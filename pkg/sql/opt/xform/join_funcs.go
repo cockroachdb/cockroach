@@ -284,15 +284,9 @@ func (c *CustomFuncs) GenerateLookupJoins(
 //	         |
 //	       Scan(t)
 //
-// This function and its associated rule currently require that:
-//
-//  1. The join is an inner join.
-//  2. The right side projects only virtual computed columns.
-//  3. All the projected virtual columns are covered by a single index.
-//
-// It should be possible to support semi- and anti- joins. Left joins may be
-// possible with additional complexity.
-// TODO(mgartner): update this comment.
+// This function and its associated rule currently require that the right side
+// projects only virtual computed columns and all those columns are covered by a
+// single index.
 //
 // It should also be possible to support cases where all the virtual columns are
 // not covered by a single index by wrapping the lookup join in a Project that
