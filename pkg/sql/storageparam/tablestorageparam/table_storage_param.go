@@ -198,7 +198,6 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
-	// todo(wall): remove in 23.1
 	`ttl_automatic_column`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlAutomaticColumnNotice)
@@ -316,7 +315,6 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
-	// todo(wall): remove in 23.1
 	`ttl_range_concurrency`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlRangeConcurrencyNotice)
