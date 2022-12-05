@@ -415,6 +415,15 @@ const (
 	// the allocator and store rebalancer. It assumes that at this version,
 	// stores now include their CPU in the StoreCapacity proto when gossiping.
 	V23_1AllocatorCPUBalancing
+
+	// V23_1SystemPrivilegesTableHasUserIDColumn is the version where the
+	// user_id column has been added to the system.privileges table.
+	V23_1SystemPrivilegesTableHasUserIDColumn
+
+	// V23_1SystemPrivilegesTableUserIDColumnBackfilled is the version where the
+	// user_id column in the system.privileges table has been backfilled.
+	V23_1SystemPrivilegesTableUserIDColumnBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -716,6 +725,15 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1AllocatorCPUBalancing,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 40},
 	},
+	{
+		Key:     V23_1SystemPrivilegesTableHasUserIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 42},
+	},
+	{
+		Key:     V23_1SystemPrivilegesTableUserIDColumnBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 44},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
