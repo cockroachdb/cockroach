@@ -258,6 +258,9 @@ func (r replicaList) Len() int {
 }
 
 func (r replicaList) Less(i, j int) bool {
+	if r[i].Range() == r[j].Range() {
+		return r[i].ReplicaID() < r[j].ReplicaID()
+	}
 	return r[i].Range() < r[j].Range()
 }
 
@@ -343,7 +346,12 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 
 	store := s.stores[storeID]
 	nodeID := store.nodeID
-	rng, _ := s.rng(rangeID)
+	rng, ok := s.rng(rangeID)
+	if !ok {
+		panic(
+			fmt.Sprintf("programming error: attemtpted to add replica for a range=%d that doesn't exist",
+				rangeID))
+	}
 
 	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
 	replica := &replica{
@@ -361,7 +369,7 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 	// we want to ensure that for any range that has replicas, a leaseholder
 	// exists at all times.
 	if len(rng.replicas) == 1 {
-		s.TransferLease(rangeID, storeID)
+		s.setLeaseholder(rangeID, storeID)
 	}
 
 	return replica, true
@@ -454,6 +462,7 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	ranges.rangeSeqGen++
 	rangeID := s.ranges.rangeSeqGen
 
+	// Create placeholder range that will be populated with any missing fields.
 	r := &rng{
 		rangeID:     rangeID,
 		startKey:    splitKey,
@@ -498,7 +507,10 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	// There was no predecessor (LHS), meaning there was no initial range in
 	// the rangeTree. In this case we cannot split the range into two.
 	if predecessorRange == nil {
-		return nil, nil, false
+		panic(fmt.Sprintf("programming error: no predecessor range found for "+
+			"split at %d, missing initial range",
+			splitKey),
+		)
 	}
 
 	// Set the predecessor (LHS) end key to the start key of the split (RHS).
@@ -523,18 +535,23 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 		s.load[r.rangeID] = predecessorLoad.Split()
 	}
 
+	// Set the span config to be the same as the predecessor range.
+	r.config = predecessorRange.config
+
 	// If there are existing replicas for the LHS of the split, then also
 	// create replicas on the same stores for the RHS.
-	for storeID, replica := range predecessorRange.replicas {
+	for _, replica := range predecessorRange.Replicas() {
+		storeID := replica.StoreID()
 		s.AddReplica(rangeID, storeID)
 		if replica.HoldsLease() {
 			// The successor range's leaseholder was on this store, copy the
 			// leaseholder store over for the new split range.
-			s.setLeaseHolder(r.rangeID, storeID)
-
+			leaseholderStore, _ := s.LeaseholderStore(r.rangeID)
+			// NB: This operation cannot fail.
+			s.replaceLeaseHolder(r.rangeID, storeID, leaseholderStore.StoreID())
 			// Reset the recorded load split statistics on the predecessor
 			// range.
-			s.loadsplits[storeID].ResetRange(predecessorRange.rangeID)
+			s.loadsplits[storeID].ResetRange(predecessorRange.RangeID())
 		}
 	}
 
@@ -558,41 +575,51 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	if !s.ValidTransfer(rangeID, storeID) {
 		return false
 	}
-
-	rng := s.ranges.rangeMap[rangeID]
-
-	oldLeaseHolderID := rng.leaseholder
-	for oldStoreID, repl := range rng.replicas {
-		if repl.replicaID == oldLeaseHolderID {
-			// Reset the load stats on the old range, within the old
-			// leaseholder store.
-			s.loadsplits[oldStoreID].ResetRange(rangeID)
-			s.load[rangeID].ResetLoad()
-		}
+	oldStore, ok := s.LeaseholderStore(rangeID)
+	if !ok {
+		return false
 	}
 
-	// Apply the lease transfer to state.
-	s.setLeaseHolder(rangeID, storeID)
-
+	// Reset the load stats on the old range, within the old
+	// leaseholder store.
+	s.loadsplits[oldStore.StoreID()].ResetRange(rangeID)
+	s.loadsplits[storeID].ResetRange(rangeID)
+	s.load[rangeID].ResetLoad()
 	s.usageInfo.LeaseTransfers++
+
+	// Apply the lease transfer to state.
+	s.replaceLeaseHolder(rangeID, storeID, oldStore.StoreID())
 	return true
 }
 
-func (s *state) setLeaseHolder(rangeID RangeID, storeID StoreID) {
-	rng := s.ranges.rangeMap[rangeID]
-
+func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID) {
 	// Remove the old leaseholder.
-	oldLeaseHolderID := rng.leaseholder
-	for _, repl := range rng.replicas {
-		if repl.replicaID == oldLeaseHolderID {
-			repl.holdsLease = false
-		}
-	}
-
+	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
+	s.setLeaseholder(rangeID, storeID)
+}
+
+func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
+	rng := s.ranges.rangeMap[rangeID]
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
+}
+
+func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
+	rng := s.ranges.rangeMap[rangeID]
+	if repl, ok := rng.replicas[storeID]; ok {
+		if repl.holdsLease {
+			repl.holdsLease = false
+			return
+		}
+	}
+
+	panic(fmt.Sprintf(
+		"programming error: attempted remove a leaseholder that doesn't exist or doesn't "+
+			"hold lease for range=%d, store=%d",
+		rangeID, storeID),
+	)
 }
 
 // ValidTransfer returns whether transferring the lease for the Range with ID

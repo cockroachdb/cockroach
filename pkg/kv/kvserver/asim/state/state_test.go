@@ -11,6 +11,7 @@
 package state
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -408,5 +409,29 @@ func TestNewStateDeterministic(t *testing.T) {
 				require.Equal(t, ref.Ranges(), tc.newStateFn().Ranges())
 			}
 		})
+	}
+}
+
+// TestSplitRangeDeterministic asserts that range splits are deterministic.
+func TestSplitRangeDeterministic(t *testing.T) {
+	run := func() (State, func(key Key) (Range, Range, bool)) {
+		s := NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000)
+		return s, func(key Key) (Range, Range, bool) {
+			return s.SplitRange(key)
+		}
+	}
+	stateA, runA := run()
+	stateB, runB := run()
+
+	// Check that the states are initially equal.
+	require.Equal(t, stateA.Ranges(), stateB.Ranges(), "initial states for testing splits are not equal")
+	rand := rand.New(rand.NewSource(42))
+	for i := 1; i < 1000; i++ {
+		splitKey := rand.Intn(10000)
+		lhsA, rhsA, okA := runA(Key(splitKey))
+		lhsB, rhsB, okB := runB(Key(splitKey))
+		require.Equal(t, okA, okB, "ok not equal, failed after %d splits", i)
+		require.Equal(t, lhsA, lhsB, "lhs not equal, failed after %d splits", i)
+		require.Equal(t, rhsA, rhsB, "rhs not equal, failed after %d splits", i)
 	}
 }
