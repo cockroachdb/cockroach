@@ -493,7 +493,7 @@ func (p *Provider) waitForIPs(
 		return m
 	}
 	for waitForIPRetry.Next() {
-		vms, err := p.listRegions(l, regions, *opts)
+		vms, err := p.listRegions(l, regions, *opts, vm.ListOptions{})
 		if err != nil {
 			return err
 		}
@@ -635,19 +635,19 @@ func (p *Provider) stsGetCallerIdentity() (string, error) {
 }
 
 // List is part of the vm.Provider interface.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
 	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-	return p.listRegions(l, regions, *defaultOpts)
+	return p.listRegions(l, regions, *defaultOpts, opts)
 }
 
 // listRegions lists VMs in the regions passed.
 // It ignores region-specific errors.
 func (p *Provider) listRegions(
-	l *logger.Logger, regions []string, opts ProviderOpts,
+	l *logger.Logger, regions []string, opts ProviderOpts, listOpts vm.ListOptions,
 ) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
@@ -657,7 +657,7 @@ func (p *Provider) listRegions(
 		// capture loop variable
 		region := r
 		g.Go(func() error {
-			vms, err := p.listRegion(region, opts)
+			vms, err := p.listRegion(region, opts, listOpts)
 			if err != nil {
 				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
 				return nil
@@ -774,7 +774,9 @@ func (p *Provider) getVolumesForInstance(
 
 // listRegion extracts the roachprod-managed instances in the
 // given region.
-func (p *Provider) listRegion(region string, opts ProviderOpts) (vm.List, error) {
+func (p *Provider) listRegion(
+	region string, opts ProviderOpts, listOpt vm.ListOptions,
+) (vm.List, error) {
 	var data struct {
 		Reservations []struct {
 			Instances []struct {
@@ -854,26 +856,30 @@ func (p *Provider) listRegion(region string, opts ProviderOpts) (vm.List, error)
 				errs = append(errs, vm.ErrNoExpiration)
 			}
 
-			var volMap map[string]vm.Volume
 			var nonBootableVolumes []vm.Volume
-			rootDevice := in.RootDeviceName
-			for _, bdm := range in.BlockDeviceMappings {
-				if bdm.DeviceName != rootDevice {
-					// volMap does not exist so lazy initialize it here
-					if volMap == nil {
-						volMap, err = p.getVolumesForInstance(region, in.InstanceID)
-						if err != nil {
-							errs = append(errs, err)
+			if listOpt.IncludeVolumes {
+				var volMap map[string]vm.Volume
+				rootDevice := in.RootDeviceName
+				for _, bdm := range in.BlockDeviceMappings {
+					if bdm.DeviceName != rootDevice {
+						// volMap does not exist so lazy initialize it here
+						if volMap == nil {
+							// TODO(leon, jackson): Change this to fetch the volumes in a
+							// batch instead of fetching them one at a time
+							volMap, err = p.getVolumesForInstance(region, in.InstanceID)
+							if err != nil {
+								errs = append(errs, err)
+							}
 						}
-					}
-					if vol, ok := volMap[bdm.Disk.VolumeID]; ok {
-						nonBootableVolumes = append(nonBootableVolumes, vol)
-					} else {
-						errs = append(errs, errors.Newf(
-							"Attempted to add volume %s however it is not in the attached volumes for instance %s",
-							bdm.Disk.VolumeID,
-							in.InstanceID,
-						))
+						if vol, ok := volMap[bdm.Disk.VolumeID]; ok {
+							nonBootableVolumes = append(nonBootableVolumes, vol)
+						} else {
+							errs = append(errs, errors.Newf(
+								"Attempted to add volume %s however it is not in the attached volumes for instance %s",
+								bdm.Disk.VolumeID,
+								in.InstanceID,
+							))
+						}
 					}
 				}
 			}

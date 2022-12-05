@@ -70,6 +70,7 @@ var (
 	logsTo                time.Time
 	logsInterval          time.Duration
 	volumeCreateOpts      vm.VolumeCreateOpts
+	listOpts              = vm.ListOptions
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
@@ -209,6 +210,8 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
 	stopCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+
+	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 

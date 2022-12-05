@@ -268,6 +268,10 @@ type VolumeCreateOpts struct {
 	Labels           map[string]string
 }
 
+type ListOptions struct {
+	IncludeVolumes bool
+}
+
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
@@ -282,7 +286,7 @@ type Provider interface {
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	List(l *logger.Logger) (List, error)
+	List(l *logger.Logger, opts ListOptions) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
 
