@@ -16,7 +16,7 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0
-	go.etcd.io/etcd/raft/v3 v3.6.0-alpha.0.0.20221126025132-285e44378fa1
+	go.etcd.io/etcd/raft/v3 v3.6.0-alpha.0.0.20221202061758-8651478ce2bc
 	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/exp/typeparams v0.0.0-20220713135740-79cabaa25d75 // indirect
