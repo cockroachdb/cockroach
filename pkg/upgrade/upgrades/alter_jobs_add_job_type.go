@@ -21,16 +21,10 @@ import (
 )
 
 // TODO should we put the different type for createStats?
-const addTypeColumn = `
+const addTypeColumnStmt = `
 ALTER table system.jobs
 ADD COLUMN type STRING
 FAMILY "fam_0_id_status_created_payload"
-`
-
-const dn = `
-UPDATE system.jobs
-SET type = crdb_internal.payload_type(payload)
-WHERE type IS NULL
 `
 
 func alterSystemJobsAddJobType(
@@ -39,17 +33,29 @@ func alterSystemJobsAddJobType(
 	op := operation{
 		name:           "add-jobs-type-col",
 		schemaList:     []string{"type"},
-		query:          addTypeColumn,
+		query:          addTypeColumnStmt,
 		schemaExistsFn: hasColumn,
 	}
 	if err := migrateTable(ctx, cs, d, op, keys.JobsTableID, systemschema.SQLInstancesTable()); err != nil {
 		return err
 	}
 
-	_, err := d.InternalExecutor.Exec(ctx, "backfill-jobs-type-column", nil /* txn */, dn, username.RootUser)
+	return nil
+}
+
+const backfillTypeColumnStmt = `
+UPDATE system.jobs
+SET type = crdb_internal.payload_type(payload)
+WHERE type IS NULL
+`
+
+func backfillSystemJobsTypeColumn(
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+) error {
+
+	_, err := d.InternalExecutor.Exec(ctx, "backfill-jobs-type-column", nil /* txn */, backfillTypeColumnStmt, username.RootUser)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }

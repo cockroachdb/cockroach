@@ -12,7 +12,6 @@ package upgrades_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -36,56 +35,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeResumer struct{}
-
-func (r *fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	return nil
-}
-
-func (r *fakeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
-	return nil
-}
-
-// attempt to create details for each job type,
-// exclude
-//	jobspb.TypeUnspecified - there are no job details which yield this time.
-
-var jobDetails = []jobspb.Details{
-	jobspb.BackupDetails{},
-	jobspb.RestoreDetails{},
-	jobspb.SchemaChangeDetails{},
-	jobspb.ImportDetails{},
-	jobspb.ChangefeedDetails{},
-	jobspb.CreateStatsDetails{},
-	jobspb.CreateStatsDetails{
-		Name: jobspb.AutoStatsName,
-	}, // type autocreate stats createStatsName := d.CreateStats.Name
-	jobspb.SchemaChangeGCDetails{},
-	jobspb.TypeSchemaChangeDetails{},
-	jobspb.StreamIngestionDetails{},
-	jobspb.NewSchemaChangeDetails{},
-	jobspb.MigrationDetails{},
-	jobspb.AutoSpanConfigReconciliationDetails{},
-	jobspb.AutoSQLStatsCompactionDetails{},
-	jobspb.StreamReplicationDetails{},
-	jobspb.RowLevelTTLDetails{},
-	jobspb.SchemaTelemetryDetails{},
-}
-
 // TestAlterSystemJobsTableAddJobTypeColumn verifies that the migration to add the type column to the system.jobs
 // table succeeds. This test creates jobs of each type before performing the migration and ensures that
 // column values are backfilled correctly by the migration.
 func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	//Job type 0 is reserved for the unspecified job type, which is
-	//unused.
-	//for typ := 1; typ < jobspb.NumJobTypes; typ++ {
-	//	jobs.RegisterConstructor(jobspb.Type(typ), func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-	//		return &fakeResumer{}
-	//	}, jobs.UsesTenantCostControl)
-	//}
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -138,12 +93,12 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 
 	// Job type 0 is reserved for the unspecified job type, which is
 	// unused.
-	for typ := 1; typ < jobspb.NumJobTypes; typ++ {
+	jobspb.ForEachType(func(typ jobspb.Type) {
 		createJob(jobs.Record{
-			Details:  jobDetails[typ-1],
+			Details:  jobspb.JobDetailsForEveryJobType[typ],
 			Progress: jobspb.ImportProgress{},
 		})
-	}
+	}, false)
 
 	// Run the upgrade.
 	upgrades.Upgrade(
@@ -153,6 +108,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 		nil,   /* done */
 		false, /* expectError */
 	)
+
 	// Validate that the table has new schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -166,26 +122,21 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 		true, /* expectExists */
 	)
 
-	var typeStr string
-	rows, err := sqlDB.Query("SELECT type FROM system.jobs")
-	require.NoError(t, err)
-
-	keys := map[string]struct{}{}
-	for k := range jobspb.Type_value {
-		keys[strings.ReplaceAll(k, "_", " ")] = struct{}{}
-	}
-
-	for rows.Next() {
-		err = rows.Scan(&typeStr)
-		if _, ok := keys[typeStr]; ok {
-			delete(keys, typeStr)
-		}
-	}
-	assert.True(t, len(keys) == 1)
-	assert.Contains(t, keys, "UNSPECIFIED")
-
 	var count int
-	row := sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE type IS NULL")
+	row := sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE type IS NOT NULL")
+	row.Scan(&count)
+	assert.Equal(t, count, 0)
+
+	// Run the upgrade.
+	upgrades.Upgrade(
+		t,
+		sqlDB,
+		clusterversion.V23_1BackfillTypeColumnInJobsTable,
+		nil,   /* done */
+		false, /* expectError */
+	)
+
+	row = sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE type IS NULL")
 	row.Scan(&count)
 	assert.Equal(t, count, 0)
 }

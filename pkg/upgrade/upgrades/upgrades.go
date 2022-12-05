@@ -231,10 +231,16 @@ var upgrades = []upgradebase.Upgrade{
 		systemJobInfoTableMigration,
 	),
 	upgrade.NewTenantUpgrade(
-		"add column locality to table system.sql_instances",
+		"add type column to table system.jobs",
 		toCV(clusterversion.V23_1AddTypeColumnToJobsTable),
 		upgrade.NoPrecondition,
 		alterSystemJobsAddJobType,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill type column in system.jobs",
+		toCV(clusterversion.V23_1BackfillTypeColumnInJobsTable),
+		upgrade.NoPrecondition,
+		backfillSystemJobsTypeColumn,
 	),
 }
 
