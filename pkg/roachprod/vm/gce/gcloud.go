@@ -107,12 +107,15 @@ type jsonVM struct {
 		}
 	}
 	MachineType string
+	SelfLink    string
 	Zone        string
 	instanceDisksResponse
 }
 
 // Convert the JSON VM data into our common VM type
-func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
+func (jsonVM *jsonVM) toVM(
+	project string, disks []describeVolumeCommandResponse, opts *ProviderOpts,
+) (ret *vm.VM) {
 	var vmErrors []error
 	var err error
 
@@ -164,51 +167,24 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 
 	var volumes []vm.Volume
 
-	args := []string{
-		"compute",
-		"disks",
-		"list",
-		"--zones", jsonVM.Zone,
-		"--format", "json",
-		"--filter", "users:(" + jsonVM.Name + ")",
-	}
-
-	var attachedDiskToDisk map[string]describeVolumeCommandResponse
-	var disks []describeVolumeCommandResponse
-
-	for _, disk := range jsonVM.Disks {
-		if !disk.Boot && disk.Source != "" {
-			if attachedDiskToDisk == nil {
-				err = runJSONCommand(args, &disks)
-				if err != nil {
-					vmErrors = append(vmErrors, err)
+	for _, jsonVMDisk := range jsonVM.Disks {
+		if jsonVMDisk.Source != "" && !jsonVMDisk.Boot {
+			for _, detailedDisk := range disks {
+				if detailedDisk.SelfLink == jsonVMDisk.Source {
+					vol := vm.Volume{
+						ProviderResourceID: detailedDisk.Name,
+						ProviderVolumeType: jsonVMDisk.Type,
+						Zone:               jsonVM.Zone,
+						Name:               detailedDisk.Name,
+						Labels:             detailedDisk.Labels,
+					}
+					if val, err := strconv.Atoi(jsonVMDisk.DiskSizeGB); err == nil {
+						vol.Size = val
+					} else {
+						vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", jsonVMDisk.DiskSizeGB))
+					}
+					volumes = append(volumes, vol)
 				}
-
-				attachedDiskToDisk = make(map[string]describeVolumeCommandResponse)
-				for _, disk := range disks {
-					attachedDiskToDisk[disk.SelfLink] = disk
-				}
-			}
-			diskDetails, ok := attachedDiskToDisk[disk.Source]
-			if !ok {
-				vmErrors = append(vmErrors, errors.Newf(
-					"unable to find disk %s in mapping of disks that are attached",
-					disk.Source,
-				))
-			} else {
-				vol := vm.Volume{
-					ProviderResourceID: diskDetails.Name,
-					ProviderVolumeType: disk.Type,
-					Zone:               jsonVM.Zone,
-					Name:               diskDetails.Name,
-					Labels:             diskDetails.Labels,
-				}
-				if val, err := strconv.Atoi(disk.DiskSizeGB); err == nil {
-					vol.Size = val
-				} else {
-					vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", disk.DiskSizeGB))
-				}
-				volumes = append(volumes, vol)
 			}
 		}
 	}
@@ -345,6 +321,7 @@ type describeVolumeCommandResponse struct {
 	Type                   string            `json:"type"`
 	Zone                   string            `json:"zone"`
 	Labels                 map[string]string `json:"labels"`
+	Users                  []string          `json:"users"`
 }
 
 func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
@@ -960,7 +937,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 }
 
 // List queries gcloud to produce a list of VM info objects.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
@@ -971,10 +948,38 @@ func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 			return nil, err
 		}
 
+		userVMToDetailedDisk := make(map[string][]describeVolumeCommandResponse)
+		if opts.IncludeVolumes {
+			var jsonVMSelfLinks []string
+			for _, jsonVM := range jsonVMS {
+				jsonVMSelfLinks = append(jsonVMSelfLinks, jsonVM.SelfLink)
+			}
+
+			args = []string{
+				"compute",
+				"disks",
+				"list",
+				"--project", prj,
+				"--format", "json",
+				"--filter", "users:(" + strings.Join(jsonVMSelfLinks, ",") + ")",
+			}
+
+			var disks []describeVolumeCommandResponse
+			if err := runJSONCommand(args, &disks); err != nil {
+				return nil, err
+			}
+
+			for _, d := range disks {
+				for _, u := range d.Users {
+					userVMToDetailedDisk[u] = append(userVMToDetailedDisk[u], d)
+				}
+			}
+		}
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
 			defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-			vms = append(vms, *jsonVM.toVM(prj, defaultOpts))
+			disks := userVMToDetailedDisk[jsonVM.SelfLink]
+			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts))
 		}
 	}
 

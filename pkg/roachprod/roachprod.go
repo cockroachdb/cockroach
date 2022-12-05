@@ -246,7 +246,7 @@ func acquireFilesystemLock() (unlockFn func(), _ error) {
 // protects both the reading and the writing in order to prevent the hazard
 // caused by concurrent goroutines reading cloud state in a different order
 // than writing it to disk.
-func Sync(l *logger.Logger) (*cloud.Cloud, error) {
+func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	if !config.Quiet {
 		l.Printf("Syncing...")
 	}
@@ -256,7 +256,7 @@ func Sync(l *logger.Logger) (*cloud.Cloud, error) {
 	}
 	defer unlock()
 
-	cld, err := cloud.ListCloud(l)
+	cld, err := cloud.ListCloud(l, options)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func List(l *logger.Logger, listMine bool, clusterNamePattern string) (cloud.Clo
 		}
 	}
 
-	cld, err := Sync(l)
+	cld, err := Sync(l, vm.ListOptions{})
 	if err != nil {
 		return cloud.Cloud{}, err
 	}
@@ -522,7 +522,7 @@ func Reset(l *logger.Logger, clusterName string) error {
 		return nil
 	}
 
-	cld, err := cloud.ListCloud(l)
+	cld, err := cloud.ListCloud(l, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -541,7 +541,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := Sync(l)
+	cld, err := Sync(l, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -611,7 +611,7 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := cloud.ListCloud(l)
+	cld, err := cloud.ListCloud(l, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -626,7 +626,7 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 	}
 
 	// Reload the clusters and print details.
-	cld, err = cloud.ListCloud(l)
+	cld, err = cloud.ListCloud(l, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -1123,7 +1123,7 @@ func Destroy(
 		if err != nil {
 			return err
 		}
-		cld, err = cloud.ListCloud(l)
+		cld, err = cloud.ListCloud(l, vm.ListOptions{})
 		if err != nil {
 			return err
 		}
@@ -1153,7 +1153,7 @@ func Destroy(
 			}
 			if cld == nil {
 				var err error
-				cld, err = cloud.ListCloud(l)
+				cld, err = cloud.ListCloud(l, vm.ListOptions{})
 				if err != nil {
 					return err
 				}
@@ -1200,7 +1200,7 @@ func (e *ClusterAlreadyExistsError) Error() string {
 }
 
 func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
-	cld, err := cloud.ListCloud(l)
+	cld, err := cloud.ListCloud(l, vm.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -1247,7 +1247,7 @@ func Create(
 	}
 
 	if !isLocal {
-		cld, err := cloud.ListCloud(l)
+		cld, err := cloud.ListCloud(l, vm.ListOptions{})
 		if err != nil {
 			return err
 		}
@@ -1302,7 +1302,7 @@ func GC(l *logger.Logger, dryrun bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := cloud.ListCloud(l)
+	cld, err := cloud.ListCloud(l, vm.ListOptions{})
 	if err == nil {
 		// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
 		err = cloud.GCClusters(l, cld, dryrun)
@@ -1613,6 +1613,7 @@ func StorageCollectionPerformAction(
 		if err != nil {
 			return err
 		}
+	case "stop":
 	case "list-volumes":
 		printNodeToVolumeMapping(c)
 		return nil
@@ -1640,7 +1641,7 @@ func sendCaptureCommand(
 	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, action string, captureDir string,
 ) error {
 	nodes := c.TargetNodes()
-	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
+	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, err := c.ParallelE(l,
 		fmt.Sprintf("Performing workload capture %s", action),
 		len(nodes),
@@ -1679,7 +1680,11 @@ func sendCaptureCommand(
 					Action:  action,
 				}
 				if captureDir != "" {
-					wpa.CaptureDirectory = path.Join(captureDir, "store_"+strconv.Itoa(info.StoreID))
+					wpa.CaptureDirectory = path.Join(
+						captureDir,
+						"store_"+strconv.Itoa(info.StoreID),
+						timeutil.Now().Format("20060102150405"),
+					)
 				}
 
 				jsonValue, err := json.Marshal(wpa)
@@ -1724,6 +1729,13 @@ func createAttachMountVolumes(
 		cVM := &c.VMs[n-1]
 		err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
 			opts.Name = generateVolumeName(c.Name, n)
+			for _, vol := range cVM.NonBootAttachedVolumes {
+				if vol.Name == opts.Name {
+					l.Printf(
+						"A volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, n)
+					return nil
+				}
+			}
 			opts.Zone = cVM.Zone
 			opts.Labels = labels
 

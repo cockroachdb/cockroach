@@ -315,7 +315,7 @@ var syncCmd = &cobra.Command{
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync(roachprodLibraryLogger)
+		_, err := roachprod.Sync(roachprodLibraryLogger, vm.ListOptions{IncludeVolumes: listOpts.IncludeVolumes})
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),
