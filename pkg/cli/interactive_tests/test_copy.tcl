@@ -4,11 +4,15 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql --no-line-editor
+spawn $argv sql 
 eexpect root@
 
-send "DROP TABLE IF EXISTS t;\r"
-send "CREATE TABLE t (id INT PRIMARY KEY, t TEXT);\r"
+send "drop table if exists t;\r"
+eexpect "DROP TABLE"
+eexpect root@
+send "create table t (id INT PRIMARY KEY, t TEXT);\r"
+eexpect "CREATE TABLE"
+eexpect root@
 
 start_test "Check that errors are reported as appropriate."
 
@@ -98,25 +102,29 @@ eexpect eof
 spawn $argv sql
 eexpect root@
 
-start_test "check CTRL+C during COPY exits the COPY mode as appropriate"
+## The following test can be re-enabled after fixing this issue:
+# https://github.com/cockroachdb/cockroach/issues/93053
 
-send "COPY t FROM STDIN CSV;\r"
-eexpect ">>"
-send "5,cancel me\r"
+# start_test "check CTRL+C during COPY exits the COPY mode as appropriate"
+#
+# send "COPY t FROM STDIN CSV;\r"
+# eexpect ">>"
+# send "5,cancel me\r"
+#
+# interrupt
+#
+# eexpect "ERROR: COPY canceled by user"
+# eexpect root@
+#
+# send "SELECT * FROM t ORDER BY id ASC;\r"
+# eexpect "(6 rows)"
+# eexpect root@
+#
+# end_test
 
-interrupt
-
-eexpect "ERROR: COPY canceled by user"
+send "truncate table t;\r"
+eexpect "TRUNCATE"
 eexpect root@
-
-send "SELECT * FROM t ORDER BY id ASC;\r"
-eexpect "(6 rows)"
-eexpect root@
-
-send "TRUNCATE TABLE t;\r"
-eexpect root@
-
-end_test
 
 send_eof
 eexpect eof
@@ -128,7 +136,10 @@ eexpect ":/# "
 
 start_test "Test file input invalid"
 
-send "cat >/tmp/test_copy.sql <<EOF\rCOPY t FROM STDIN CSV;\rinvalid text;,t\rEOF\r"
+send "cat >/tmp/test_copy.sql <<EOF\r"
+send "COPY t FROM STDIN CSV;\r"
+send "invalid text;,t\r"
+send "EOF\r"
 eexpect ":/# "
 send "$argv sql --insecure -f /tmp/test_copy.sql\r"
 eexpect "ERROR: could not parse"
@@ -141,7 +152,12 @@ end_test
 
 start_test "Test file input with valid content"
 
-send "cat >/tmp/test_copy.sql <<EOF\rCOPY t FROM STDIN CSV;\r1,a\r\\.\r\rCOPY t FROM STDIN;\rEOF\r"
+send "cat >/tmp/test_copy.sql <<EOF\r"
+send "COPY t FROM STDIN CSV;\r"
+send "1,a\r"
+send "\\.\r\r"
+send "COPY t FROM STDIN;\r"
+send "EOF\r"
 # Tab doesn't work nicely in cat<<EOF, so use echo to append the character with tab.
 send "echo -e '2\\tb' >> /tmp/test_copy.sql\r"
 eexpect ":/# "
