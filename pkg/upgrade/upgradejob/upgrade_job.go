@@ -77,13 +77,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	mc := execCtx.MigrationJobDeps()
 	m, ok := mc.GetUpgrade(v)
 	if !ok {
-		// TODO(ajwerner): Consider treating this as an assertion failure. Jobs
-		// should only be created for a cluster version if there is an associated
-		// upgrade. It seems possible that an upgrade job could be launched by
-		// a node running a older version where an upgrade then runs on a job
-		// with a newer version where the upgrade has been re-ordered to be later.
-		// This should only happen between alphas but is theoretically not illegal.
-		return nil
+		return errors.AssertionFailedf("found job for unknown upgrade at version: %s", v)
 	}
 	switch m := m.(type) {
 	case *upgrade.SystemUpgrade:
