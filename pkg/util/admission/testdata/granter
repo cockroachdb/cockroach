@@ -386,14 +386,8 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 153722867280912930, elastic-disk-bw-tokens-avail: 153722867280912930
 
 # Set tokens to a large value that permits all request sizes in this file.
-set-io-tokens tokens=100000
-----
-GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 100000, elastic-disk-bw-tokens-avail: 153722867280912930
-
-# Set elastic tokens to a large value that permits all request sizes in this
-# file.
-set-elastic-disk-bw-tokens tokens=100000
+# Set elastic tokens to a large value that permits all request sizes.
+set-tokens io-tokens=100000 elastic-disk-bw-tokens=100000
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 100000, elastic-disk-bw-tokens-avail: 100000
@@ -406,7 +400,7 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 90000, elastic-disk-bw-tokens-avail: 100000
 
 # Set the io tokens to a smaller value.
-set-io-tokens tokens=500
+set-tokens io-tokens=500 elastic-disk-bw-tokens=100000
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 500, elastic-disk-bw-tokens-avail: 100000
@@ -459,7 +453,7 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -100, elastic-disk-bw-tokens-avail: 99900
 
 # Increment by 50 tokens.
-set-io-tokens tokens=50
+set-tokens io-tokens=50 elastic-disk-bw-tokens=99900
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -50, elastic-disk-bw-tokens-avail: 99900
@@ -510,19 +504,20 @@ GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -99, elastic-disk-bw-tokens-avail: 100300
 
 # kv-elastic is granted.
-set-io-tokens tokens=100
+set-tokens io-tokens=100 elastic-disk-bw-tokens=100300
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: 100100
 
-set-elastic-disk-bw-tokens tokens=50
+# Nothing is granted.
+set-tokens io-tokens=0 elastic-disk-bw-tokens=50
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: -199, elastic-disk-bw-tokens-avail: 50
 
 # Both kinds of tokens are decremented and become negative.
-set-io-tokens tokens=200
+set-tokens io-tokens=200 elastic-disk-bw-tokens=50
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
@@ -530,7 +525,7 @@ GrantCoordinator:
 
 # IO tokens become positive. But no grant to elastic work since
 # elastic-disk-bw tokens are negative.
-set-io-tokens tokens=300
+set-tokens io-tokens=300 elastic-disk-bw-tokens=0
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 101, elastic-disk-bw-tokens-avail: -150
@@ -549,21 +544,21 @@ kv-elastic: tryGet(10) returned false
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -150
 
-# Still negative.
-set-elastic-disk-bw-tokens tokens=50
+# Still negative. Add elastic-disk-bw-tokens, but don't change io tokens.
+set-tokens io-tokens=91 elastic-disk-bw-tokens=50
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 91, elastic-disk-bw-tokens-avail: -100
 
-# Even more IO tokens.
-set-io-tokens tokens=400
+# Add some io-tokens.
+set-tokens io-tokens=400 elastic-disk-bw-tokens=0
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 400, elastic-disk-bw-tokens-avail: -100
 
 # Finally both tokens are positive and we grant until the elastic-disk-bw
 # tokens become negative.
-set-elastic-disk-bw-tokens tokens=120
+set-tokens io-tokens=400 elastic-disk-bw-tokens=120
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:

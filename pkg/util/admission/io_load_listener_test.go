@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -58,8 +57,7 @@ func TestIOLoadListener(t *testing.T) {
 				// test -- the channels provide synchronization and prevent this
 				// test code and the ioLoadListener from being concurrently
 				// active.
-				ioll.mu.Mutex = &syncutil.Mutex{}
-				ioll.mu.kvGranter = kvGranter
+				ioll.kvGranter = kvGranter
 
 				// Reset the cumulative data
 				cumFlushBytes = 0
@@ -206,8 +204,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		settings:    st,
 		kvRequester: req,
 	}
-	ioll.mu.Mutex = &syncutil.Mutex{}
-	ioll.mu.kvGranter = kvGranter
+	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
 	for i := int64(0); i < adjustmentInterval; i++ {
 		// Override the totalNumByteTokens manually to trigger the overflow bug.
@@ -307,8 +304,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
 	}
-	ioll.mu.Mutex = &syncutil.Mutex{}
-	ioll.mu.kvGranter = kvGranter
+	ioll.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
 		randomValues()
 		ioll.pebbleMetricsTick(ctx, StoreMetrics{
@@ -358,24 +354,23 @@ type testGranterWithIOTokens struct {
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
-func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
-	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensForTokenTickDurationToString(tokens))
+func (g *testGranterWithIOTokens) setAvailableTokens(
+	ioTokens int64, elasticDiskBandwidthTokens int64,
+) (tokensUsed int64) {
+	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s",
+		tokensForTokenTickDurationToString(ioTokens),
+		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens))
 	if g.allTokensUsed {
-		return tokens * 2
+		return ioTokens * 2
 	}
 	return 0
 }
 
-func (g *testGranterWithIOTokens) setAvailableElasticDiskBandwidthTokensLocked(tokens int64) {
-	fmt.Fprintf(&g.buf, " setAvailableElasticDiskTokens: %s",
-		tokensForTokenTickDurationToString(tokens))
-}
-
-func (g *testGranterWithIOTokens) getDiskTokensUsedAndResetLocked() [admissionpb.NumWorkClasses]int64 {
+func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
 	return g.diskBandwidthTokensUsed
 }
 
-func (g *testGranterWithIOTokens) setAdmittedDoneModelsLocked(
+func (g *testGranterWithIOTokens) setAdmittedDoneModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
@@ -402,20 +397,19 @@ type testGranterNonNegativeTokens struct {
 
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
-func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
-	require.LessOrEqual(g.t, int64(0), tokens)
+func (g *testGranterNonNegativeTokens) setAvailableTokens(
+	ioTokens int64, elasticDiskBandwidthTokens int64,
+) (tokensUsed int64) {
+	require.LessOrEqual(g.t, int64(0), ioTokens)
+	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
 	return 0
 }
 
-func (g *testGranterNonNegativeTokens) setAvailableElasticDiskBandwidthTokensLocked(tokens int64) {
-	require.LessOrEqual(g.t, int64(0), tokens)
-}
-
-func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndResetLocked() [admissionpb.NumWorkClasses]int64 {
+func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
 	return [admissionpb.NumWorkClasses]int64{}
 }
 
-func (g *testGranterNonNegativeTokens) setAdmittedDoneModelsLocked(
+func (g *testGranterNonNegativeTokens) setAdmittedDoneModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)
