@@ -321,11 +321,6 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
-		sess, err := c.newSession(l, node)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
-		defer sess.Close()
 
 		var cmd string
 		if c.IsLocal() {
@@ -335,7 +330,13 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		sess, err := c.newSession(l, node, cmd)
+		if err != nil {
+			return newRunResultDetails(node, err), err
+		}
+		defer sess.Close()
+
+		out, cmdErr := sess.CombinedOutput(ctx)
 		res := newRunResultDetails(node, cmdErr)
 		res.CombinedOut = out
 
@@ -371,19 +372,20 @@ func (c *SyncedCluster) startNode(
 	}
 
 	if err := func() error {
-		sess, err := c.newSession(l, node)
+		var cmd string
+		if c.IsLocal() {
+			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+		}
+		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
+
+		sess, err := c.newSession(l, node, cmd)
 		if err != nil {
 			return err
 		}
 		defer sess.Close()
 
 		sess.SetStdin(strings.NewReader(startCmd))
-		var cmd string
-		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
-		}
-		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
-		if out, err := sess.CombinedOutput(ctx, cmd); err != nil {
+		if out, err := sess.CombinedOutput(ctx); err != nil {
 			return errors.Wrapf(err, "failed to upload start script: %s", out)
 		}
 
@@ -392,18 +394,19 @@ func (c *SyncedCluster) startNode(
 		return "", err
 	}
 
-	sess, err := c.newSession(l, node)
-	if err != nil {
-		return "", err
-	}
-	defer sess.Close()
-
 	var cmd string
 	if c.IsLocal() {
 		cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	cmd += "./cockroach.sh"
-	out, err := sess.CombinedOutput(ctx, cmd)
+
+	sess, err := c.newSession(l, node, cmd)
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
 		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
@@ -632,13 +635,13 @@ func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger,
 	l.Printf("%s: initializing cluster\n", c.Name)
 	initCmd := c.generateInitCmd(node)
 
-	sess, err := c.newSession(l, node)
+	sess, err := c.newSession(l, node, initCmd)
 	if err != nil {
 		return err
 	}
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(ctx, initCmd)
+	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "~ %s\n%s", initCmd, out)
 	}
@@ -653,13 +656,13 @@ func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger
 	l.Printf("%s: setting cluster settings", c.Name)
 	clusterSettingCmd := c.generateClusterSettingCmd(l, node)
 
-	sess, err := c.newSession(l, node)
+	sess, err := c.newSession(l, node, clusterSettingCmd)
 	if err != nil {
 		return err
 	}
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(ctx, clusterSettingCmd)
+	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
 	}

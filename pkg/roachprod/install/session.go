@@ -27,12 +27,12 @@ import (
 )
 
 type session interface {
-	CombinedOutput(ctx context.Context, cmd string) ([]byte, error)
-	Run(ctx context.Context, cmd string) error
+	CombinedOutput(ctx context.Context) ([]byte, error)
+	Run(ctx context.Context) error
 	SetStdin(r io.Reader)
 	SetStdout(w io.Writer)
 	SetStderr(w io.Writer)
-	Start(cmd string) error
+	Start() error
 	StdinPipe() (io.WriteCloser, error)
 	StdoutPipe() (io.Reader, error)
 	StderrPipe() (io.Reader, error)
@@ -48,7 +48,7 @@ type remoteSession struct {
 }
 
 // TODO: MG investigate - ssh log is not produced for the 3rd and final attempt
-func newRemoteSession(l *logger.Logger, user, host string) (*remoteSession, error) {
+func newRemoteSession(l *logger.Logger, user, host string, cmd string) (*remoteSession, error) {
 	var logfile string
 	var loggingArgs []string
 	cl, err := l.ChildLogger(filepath.Join("ssh", host, fmt.Sprintf("%s_%s", timeutil.Now().Format(`150405.000000000`), host)))
@@ -80,9 +80,10 @@ func newRemoteSession(l *logger.Logger, user, host string) (*remoteSession, erro
 	}
 	args = append(args, loggingArgs...)
 	args = append(args, sshAuthArgs()...)
+	args = append(args, cmd)
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	return &remoteSession{cmd, cancel, logfile}, nil
+	fullCmd := exec.CommandContext(ctx, "ssh", args...)
+	return &remoteSession{fullCmd, cancel, logfile}, nil
 }
 
 func (s *remoteSession) errWithDebug(err error) error {
@@ -93,9 +94,7 @@ func (s *remoteSession) errWithDebug(err error) error {
 	return err
 }
 
-func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, error) {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *remoteSession) CombinedOutput(ctx context.Context) ([]byte, error) {
 	var b []byte
 	var err error
 	commandFinished := make(chan struct{})
@@ -115,9 +114,7 @@ func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte,
 	}
 }
 
-func (s *remoteSession) Run(ctx context.Context, cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *remoteSession) Run(ctx context.Context) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
@@ -134,8 +131,7 @@ func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 	}
 }
 
-func (s *remoteSession) Start(cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
+func (s *remoteSession) Start() error {
 	return rperrors.ClassifyCmdError(s.errWithDebug(s.Cmd.Start()))
 }
 
@@ -186,15 +182,13 @@ type localSession struct {
 	cancel func()
 }
 
-func newLocalSession() *localSession {
+func newLocalSession(cmd string) *localSession {
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "/bin/bash", "-c")
-	return &localSession{cmd, cancel}
+	fullCmd := exec.CommandContext(ctx, "/bin/bash", "-c", cmd)
+	return &localSession{fullCmd, cancel}
 }
 
-func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, error) {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *localSession) CombinedOutput(ctx context.Context) ([]byte, error) {
 	var b []byte
 	var err error
 	commandFinished := make(chan struct{})
@@ -213,9 +207,7 @@ func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, 
 	}
 }
 
-func (s *localSession) Run(ctx context.Context, cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *localSession) Run(ctx context.Context) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
@@ -232,8 +224,7 @@ func (s *localSession) Run(ctx context.Context, cmd string) error {
 	}
 }
 
-func (s *localSession) Start(cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
+func (s *localSession) Start() error {
 	return rperrors.ClassifyCmdError(s.Cmd.Start())
 }
 
