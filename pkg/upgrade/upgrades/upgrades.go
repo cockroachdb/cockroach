@@ -253,6 +253,18 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		alterSystemSQLInstancesAddSqlAddr,
 	),
+	upgrade.NewTenantUpgrade(
+		"add user_id column to system.privileges table",
+		toCV(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn),
+		upgrade.NoPrecondition,
+		alterSystemPrivilegesAddUserIDColumn,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill user_id column in system.privileges table",
+		toCV(clusterversion.V23_1SystemPrivilegesTableUserIDColumnBackfilled),
+		upgrade.NoPrecondition,
+		backfillSystemPrivilegesUserIDColumn,
+	),
 }
 
 func init() {

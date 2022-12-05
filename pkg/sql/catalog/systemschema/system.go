@@ -738,8 +738,10 @@ CREATE TABLE system.privileges (
 	path STRING NOT NULL,
 	privileges STRING[] NOT NULL,
 	grant_options STRING[] NOT NULL,
+	user_id OID,
 	CONSTRAINT "primary" PRIMARY KEY (username, path),
-	FAMILY "primary" (username, path, privileges, grant_options)
+	UNIQUE INDEX (user_id, path),
+	FAMILY "primary" (username, path, privileges, grant_options, user_id)
 );`
 
 	SystemExternalConnectionsTableSchema = `
@@ -2828,13 +2830,14 @@ var (
 				{Name: "path", ID: 2, Type: types.String},
 				{Name: "privileges", ID: 3, Type: types.StringArray},
 				{Name: "grant_options", ID: 4, Type: types.StringArray},
+				{Name: "user_id", ID: 5, Type: types.Oid, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"username", "path", "privileges", "grant_options"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+					ColumnNames: []string{"username", "path", "privileges", "grant_options", "user_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -2844,6 +2847,16 @@ var (
 				KeyColumnNames:      []string{"username", "path"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:                "privileges_user_id_path_key",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"user_id", "path"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{5, 2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
 	)
