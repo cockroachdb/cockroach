@@ -1,5 +1,5 @@
 # disabled for tenants as they can't set storage.mvcc.range_tombstones.enabled
-new-server name=s1 nodes=1 disable-tenant
+new-cluster name=s1 nodes=1 disable-tenant
 ----
 
 subtest restore-retry
@@ -17,7 +17,7 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster_backup';
 ----
 
-new-server name=s2 nodes=1 share-io-dir=s1 disable-tenant
+new-cluster name=s2 nodes=1 share-io-dir=s1 disable-tenant
 ----
 
 exec-sql

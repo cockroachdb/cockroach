@@ -2,10 +2,10 @@
 # versions to ensure that they can unmarshalled correctly in the current
 # version.
 
-new-server name=s1
+new-cluster name=s1
 ----
 
-link-backup server=s1 src-path=show_schedules_old,system_scheduled_jobs_22_1 dest-path=system_scheduled_jobs_22_1
+link-backup cluster=s1 src-path=show_schedules_old,system_scheduled_jobs_22_1 dest-path=system_scheduled_jobs_22_1
 ----
 
 exec-sql
