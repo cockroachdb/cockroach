@@ -1014,7 +1014,7 @@ func CheckForPreviousBackup(
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
 	// that of our job.
-	if err := defaultStore.List(ctx, "", "", func(s string) error {
+	if err := defaultStore.List(ctx, "", backupbase.ListingDelimDataSlash, func(s string) error {
 		s = strings.TrimPrefix(s, "/")
 		if strings.HasPrefix(s, BackupLockFilePrefix) {
 			jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)

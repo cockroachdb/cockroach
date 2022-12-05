@@ -480,7 +480,7 @@ func ListFullBackupsInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) ([]string, error) {
 	var backupPaths []string
-	if err := store.List(ctx, "", listingDelimDataSlash, func(f string) error {
+	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
 		if backupPathRE.MatchString(f) {
 			backupPaths = append(backupPaths, f)
 		}
