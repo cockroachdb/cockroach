@@ -44,7 +44,7 @@ import (
 // continue-grant-chain work=<kind>
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>] [clamp=<int>]
 // init-store-grant-coordinator
-// set-io-tokens tokens=<int>
+// set-tokens io-tokens=<int>
 // try-get-soft-slots slots=<int>
 // return-soft-slots slots=<int>
 func TestGranterBasic(t *testing.T) {
@@ -160,12 +160,10 @@ func TestGranterBasic(t *testing.T) {
 			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
 			require.True(t, ok)
 			coord = (*GrantCoordinator)(unsafeGranter)
-			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
+			kvStoreGranter := coord.mu.granters[KVWork].(*kvStoreTokenGranter)
 			// Use the same model for all 3 kinds of models.
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
-			coord.mu.Lock()
-			kvStoreGranter.setAdmittedDoneModelsLocked(tlm, tlm, tlm)
-			coord.mu.Unlock()
+			kvStoreGranter.setAdmittedDoneModels(tlm, tlm, tlm)
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -219,7 +217,7 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("clamp") {
 				var clamp int
 				d.ScanArgs(t, "clamp", &clamp)
-				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
+				kvsa := coord.mu.cpuLoadListener.(*kvSlotAdjuster)
 				kvsa.setModerateSlotsClamp(clamp)
 			}
 
@@ -230,26 +228,14 @@ func TestGranterBasic(t *testing.T) {
 			coord.CPULoad(runnable, procs, samplePeriod)
 			return flushAndReset()
 
-		case "set-io-tokens":
-			var tokens int
-			d.ScanArgs(t, "tokens", &tokens)
+		case "set-tokens":
+			var ioTokens int
+			var elasticTokens int
+			d.ScanArgs(t, "io-tokens", &ioTokens)
+			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.mu.Lock()
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
-			coord.mu.Unlock()
-			coord.testingTryGrant()
-			return flushAndReset()
-
-		case "set-elastic-disk-bw-tokens":
-			var tokens int
-			d.ScanArgs(t, "tokens", &tokens)
-			// We are not using a real ioLoadListener, and simply setting the
-			// tokens (the ioLoadListener has its own test).
-			coord.mu.Lock()
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableElasticDiskBandwidthTokensLocked(
-				int64(tokens))
-			coord.mu.Unlock()
+			coord.mu.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(int64(ioTokens), int64(elasticTokens))
 			coord.testingTryGrant()
 			return flushAndReset()
 

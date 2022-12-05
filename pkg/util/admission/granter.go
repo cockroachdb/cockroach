@@ -351,7 +351,7 @@ type kvStoreTokenGranter struct {
 	// burst tokens.
 	availableIOTokens int64
 	// startingIOTokens is the number of tokens set by
-	// setAvailableIOTokensLocked. It is used to compute the tokens used, by
+	// setAvailableTokens. It is used to compute the tokens used, by
 	// computing startingIOTokens-availableIOTokens.
 	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
@@ -535,33 +535,36 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 	return grantFailLocal
 }
 
-// setAvailableIOTokensLocked implements granterWithIOTokens.
-func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
+// setAvailableTokens implements granterWithIOTokens.
+func (sg *kvStoreTokenGranter) setAvailableTokens(
+	ioTokens int64, elasticDiskBandwidthTokens int64,
+) (tokensUsed int64) {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
 	tokensUsed = sg.startingIOTokens - sg.availableIOTokens
 	// It is possible for availableIOTokens to be negative because of
 	// tookWithoutPermission or because tryGet will satisfy requests until
 	// availableIOTokens become <= 0. We want to remember this previous
 	// over-allocation.
-	sg.subtractTokens(-tokens, true)
-	if sg.availableIOTokens > tokens {
+	sg.subtractTokens(-ioTokens, true)
+	if sg.availableIOTokens > ioTokens {
 		// Clamp to tokens.
-		sg.availableIOTokens = tokens
+		sg.availableIOTokens = ioTokens
 	}
-	sg.startingIOTokens = tokens
+	sg.startingIOTokens = ioTokens
+
+	sg.elasticDiskBWTokensAvailable += elasticDiskBandwidthTokens
+	if sg.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokens {
+		sg.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokens
+	}
+
 	return tokensUsed
 }
 
-// setAvailableElasticDiskBandwidthTokensLocked implements
-// granterWithIOTokens.
-func (sg *kvStoreTokenGranter) setAvailableElasticDiskBandwidthTokensLocked(tokens int64) {
-	sg.elasticDiskBWTokensAvailable += tokens
-	if sg.elasticDiskBWTokensAvailable > tokens {
-		sg.elasticDiskBWTokensAvailable = tokens
-	}
-}
-
 // getDiskTokensUsedAndResetLocked implements granterWithIOTokens.
-func (sg *kvStoreTokenGranter) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
+func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() [numWorkClasses]int64 {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
 	result := sg.diskBWTokensUsed
 	for i := range sg.diskBWTokensUsed {
 		sg.diskBWTokensUsed[i] = 0
@@ -570,9 +573,11 @@ func (sg *kvStoreTokenGranter) getDiskTokensUsedAndResetLocked() [numWorkClasses
 }
 
 // setAdmittedModelsLocked implements granterWithIOTokens.
-func (sg *kvStoreTokenGranter) setAdmittedDoneModelsLocked(
+func (sg *kvStoreTokenGranter) setAdmittedDoneModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
 	sg.l0WriteLM = l0WriteLM
 	sg.l0IngestLM = l0IngestLM
 	sg.ingestLM = ingestLM
@@ -592,7 +597,7 @@ func (sg *kvStoreTokenGranter) storeWriteDone(
 	// For storeWriteDone we don't bother with this structure involving the
 	// GrantCoordinator (which has served us well across various methods and
 	// various granter implementations), since the decision on when the
-	// GrantCoordinator should call tryGrant is more complicated. And since this
+	// GrantCoordinator should call tryGrantLocked is more complicated. And since this
 	// storeWriteDone is unique to the kvStoreTokenGranter (and not implemented
 	// by other granters) this approach seems acceptable.
 
@@ -617,7 +622,7 @@ func (sg *kvStoreTokenGranter) storeWriteDone(
 	if additionalL0TokensNeeded < 0 || additionalDiskBWTokensNeeded < 0 {
 		isExhausted := exhaustedFunc()
 		if wasExhausted && !isExhausted {
-			sg.coord.tryGrant()
+			sg.coord.tryGrantLocked()
 		}
 	}
 	sg.coord.mu.Unlock()
@@ -727,7 +732,7 @@ type SoftSlotGranter struct {
 // MakeSoftSlotGranter constructs a SoftSlotGranter given a GrantCoordinator
 // that is responsible for KV and lower layers.
 func MakeSoftSlotGranter(gc *GrantCoordinator) (*SoftSlotGranter, error) {
-	kvGranter, ok := gc.granters[KVWork].(*slotGranter)
+	kvGranter, ok := gc.mu.granters[KVWork].(*slotGranter)
 	if !ok {
 		return nil, errors.Errorf("GrantCoordinator does not support soft slots")
 	}

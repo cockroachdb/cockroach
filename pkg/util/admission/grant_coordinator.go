@@ -45,7 +45,7 @@ func (gcs GrantCoordinators) Close() {
 
 // StoreGrantCoordinators is a container for GrantCoordinators for each store,
 // that is used for KV work admission that takes into account store health.
-// Currently it is intended only for writes to stores.
+// Currently, it is intended only for writes to stores.
 type StoreGrantCoordinators struct {
 	ambientCtx log.AmbientContext
 
@@ -139,8 +139,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	coord := &GrantCoordinator{
 		settings:       sgc.settings,
 		useGrantChains: false,
-		numProcs:       1,
 	}
+	coord.mu.numProcs = 1
 
 	kvg := &kvStoreTokenGranter{
 		coord: coord,
@@ -172,16 +172,15 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	requesters := storeReq.getRequesters()
 	kvg.regularRequester = requesters[regularWorkClass]
 	kvg.elasticRequester = requesters[elasticWorkClass]
-	coord.granters[KVWork] = kvg
+	coord.mu.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
 		storeID:               storeID,
 		settings:              sgc.settings,
 		kvRequester:           storeReq,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+		kvGranter:             kvg,
 	}
-	coord.ioLoadListener.mu.Mutex = &coord.mu
-	coord.ioLoadListener.mu.kvGranter = kvg
 	return coord
 }
 
@@ -220,27 +219,43 @@ func (sgc *StoreGrantCoordinators) close() {
 type GrantCoordinator struct {
 	ambientCtx log.AmbientContext
 
-	settings                *cluster.Settings
-	lastCPULoadSamplePeriod time.Duration
+	settings *cluster.Settings
 
 	// mu is ordered before any mutex acquired in a requester implementation.
 	// TODO(sumeer): move everything covered by mu into a nested struct.
-	mu syncutil.Mutex
-	// NB: Some granters can be nil.
-	granters [numWorkKinds]granterWithLockedCalls
+	mu struct {
+		syncutil.Mutex
+		// grantChainActive indicates whether a grant chain is active. If active,
+		// grantChainID is the ID of that chain. If !active, grantChainID is the ID
+		// of the next chain that will become active. IDs are assigned by
+		// incrementing grantChainID. If !useGrantChains, grantChainActive is never
+		// true.
+		grantChainActive bool
+		grantChainID     grantChainID
+		// Index into granters, which represents the current WorkKind at which the
+		// grant chain is operating. Only relevant when grantChainActive is true.
+		grantChainIndex WorkKind
+		// See the comment at delayForGrantChainTermination for motivation.
+		grantChainStartTime time.Time
+		// NB: Some granters can be nil.
+		granters [numWorkKinds]granterWithLockedCalls
+
+		// The cpu fields can be nil, and the IO field can be nil, since a
+		// GrantCoordinator typically handles one of these two resources.
+		cpuOverloadIndicator    cpuOverloadIndicator
+		cpuLoadListener         CPULoadListener
+		lastCPULoadSamplePeriod time.Duration
+
+		// The latest value of GOMAXPROCS, received via CPULoad. Only initialized if
+		// the cpu resource is being handled by this GrantCoordinator.
+		numProcs int
+	}
 	// The WorkQueues behaving as requesters in each granterWithLockedCalls.
 	// This is kept separately only to service GetWorkQueue calls and to call
 	// close().
 	queues [numWorkKinds]requesterClose
-	// The cpu fields can be nil, and the IO field can be nil, since a
-	// GrantCoordinator typically handles one of these two resources.
-	cpuOverloadIndicator cpuOverloadIndicator
-	cpuLoadListener      CPULoadListener
-	ioLoadListener       *ioLoadListener
 
-	// The latest value of GOMAXPROCS, received via CPULoad. Only initialized if
-	// the cpu resource is being handled by this GrantCoordinator.
-	numProcs int
+	ioLoadListener *ioLoadListener
 
 	// See the comment at continueGrantChain that explains how a grant chain
 	// functions and the motivation. When !useGrantChains, grant chains are
@@ -253,19 +268,6 @@ type GrantCoordinator struct {
 	// to be turned off in a non-deterministic manner so add a testing flag to
 	// disable that feature.
 	testingDisableSkipEnforcement bool
-
-	// grantChainActive indicates whether a grant chain is active. If active,
-	// grantChainID is the ID of that chain. If !active, grantChainID is the ID
-	// of the next chain that will become active. IDs are assigned by
-	// incrementing grantChainID. If !useGrantChains, grantChainActive is never
-	// true.
-	grantChainActive bool
-	grantChainID     grantChainID
-	// Index into granters, which represents the current WorkKind at which the
-	// grant chain is operating. Only relevant when grantChainActive is true.
-	grantChainIndex WorkKind
-	// See the comment at delayForGrantChainTermination for motivation.
-	grantChainStartTime time.Time
 }
 
 var _ CPULoadListener = &GrantCoordinator{}
@@ -442,13 +444,13 @@ func makeRegularGrantCoordinator(
 	coord := &GrantCoordinator{
 		ambientCtx:                    ambientCtx,
 		settings:                      st,
-		cpuOverloadIndicator:          kvSlotAdjuster,
-		cpuLoadListener:               kvSlotAdjuster,
 		useGrantChains:                true,
 		testingDisableSkipEnforcement: opts.TestingDisableSkipEnforcement,
-		numProcs:                      1,
-		grantChainID:                  1,
 	}
+	coord.mu.grantChainID = 1
+	coord.mu.cpuOverloadIndicator = kvSlotAdjuster
+	coord.mu.cpuLoadListener = kvSlotAdjuster
+	coord.mu.numProcs = 1
 
 	kvg := &slotGranter{
 		coord:                  coord,
@@ -464,7 +466,7 @@ func makeRegularGrantCoordinator(
 	req := makeRequester(ambientCtx, KVWork, kvg, st, wqMetrics, makeWorkQueueOptions(KVWork))
 	coord.queues[KVWork] = req
 	kvg.requester = req
-	coord.granters[KVWork] = kvg
+	coord.mu.granters[KVWork] = kvg
 
 	tg := &tokenGranter{
 		coord:                coord,
@@ -478,7 +480,7 @@ func makeRegularGrantCoordinator(
 		ambientCtx, SQLKVResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLKVResponseWork))
 	coord.queues[SQLKVResponseWork] = req
 	tg.requester = req
-	coord.granters[SQLKVResponseWork] = tg
+	coord.mu.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
 		coord:                coord,
@@ -492,7 +494,7 @@ func makeRegularGrantCoordinator(
 		SQLSQLResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLSQLResponseWork))
 	coord.queues[SQLSQLResponseWork] = req
 	tg.requester = req
-	coord.granters[SQLSQLResponseWork] = tg
+	coord.mu.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
 		coord:              coord,
@@ -506,7 +508,7 @@ func makeRegularGrantCoordinator(
 		SQLStatementLeafStartWork, sg, st, wqMetrics, makeWorkQueueOptions(SQLStatementLeafStartWork))
 	coord.queues[SQLStatementLeafStartWork] = req
 	sg.requester = req
-	coord.granters[SQLStatementLeafStartWork] = sg
+	coord.mu.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
 		coord:              coord,
@@ -520,7 +522,7 @@ func makeRegularGrantCoordinator(
 		SQLStatementRootStartWork, sg, st, wqMetrics, makeWorkQueueOptions(SQLStatementRootStartWork))
 	coord.queues[SQLStatementRootStartWork] = req
 	sg.requester = req
-	coord.granters[SQLStatementRootStartWork] = sg
+	coord.mu.granters[SQLStatementRootStartWork] = sg
 	return coord
 }
 
@@ -542,14 +544,14 @@ func NewGrantCoordinatorSQL(
 	registry.AddMetricStruct(metrics)
 	sqlNodeCPU := &sqlNodeCPUOverloadIndicator{}
 	coord := &GrantCoordinator{
-		ambientCtx:           ambientCtx,
-		settings:             st,
-		cpuOverloadIndicator: sqlNodeCPU,
-		cpuLoadListener:      sqlNodeCPU,
-		useGrantChains:       true,
-		numProcs:             1,
-		grantChainID:         1,
+		ambientCtx:     ambientCtx,
+		settings:       st,
+		useGrantChains: true,
 	}
+	coord.mu.grantChainID = 1
+	coord.mu.cpuOverloadIndicator = sqlNodeCPU
+	coord.mu.cpuLoadListener = sqlNodeCPU
+	coord.mu.numProcs = 1
 
 	tg := &tokenGranter{
 		coord:                coord,
@@ -563,7 +565,7 @@ func NewGrantCoordinatorSQL(
 		SQLKVResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLKVResponseWork))
 	coord.queues[SQLKVResponseWork] = req
 	tg.requester = req
-	coord.granters[SQLKVResponseWork] = tg
+	coord.mu.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
 		coord:                coord,
@@ -577,7 +579,7 @@ func NewGrantCoordinatorSQL(
 		SQLSQLResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLSQLResponseWork))
 	coord.queues[SQLSQLResponseWork] = req
 	tg.requester = req
-	coord.granters[SQLSQLResponseWork] = tg
+	coord.mu.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
 		coord:              coord,
@@ -591,7 +593,7 @@ func NewGrantCoordinatorSQL(
 		SQLStatementLeafStartWork, sg, st, wqMetrics, makeWorkQueueOptions(SQLStatementLeafStartWork))
 	coord.queues[SQLStatementLeafStartWork] = req
 	sg.requester = req
-	coord.granters[SQLStatementLeafStartWork] = sg
+	coord.mu.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
 		coord:              coord,
@@ -605,7 +607,7 @@ func NewGrantCoordinatorSQL(
 		SQLStatementRootStartWork, sg, st, wqMetrics, makeWorkQueueOptions(SQLStatementRootStartWork))
 	coord.queues[SQLStatementRootStartWork] = req
 	sg.requester = req
-	coord.granters[SQLStatementRootStartWork] = sg
+	coord.mu.granters[SQLStatementRootStartWork] = sg
 
 	return coord
 }
@@ -622,8 +624,8 @@ func (coord *GrantCoordinator) allocateIOTokensTick() {
 	coord.ioLoadListener.allocateTokensTick()
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	if !coord.grantChainActive {
-		coord.tryGrant()
+	if !coord.mu.grantChainActive {
+		coord.tryGrantLocked()
 	}
 	// Else, let the grant chain finish. NB: we turn off grant chains on the
 	// GrantCoordinators used for IO, so the if-condition is always true.
@@ -634,8 +636,8 @@ func (coord *GrantCoordinator) allocateIOTokensTick() {
 func (coord *GrantCoordinator) testingTryGrant() {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	if !coord.grantChainActive {
-		coord.tryGrant()
+	if !coord.mu.grantChainActive {
+		coord.tryGrantLocked()
 	}
 }
 
@@ -658,18 +660,19 @@ func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
 	ctx := coord.ambientCtx.AnnotateCtx(context.Background())
 
+	coord.mu.Lock()
+	defer coord.mu.Unlock()
+
 	if log.V(1) {
-		if coord.lastCPULoadSamplePeriod != 0 && coord.lastCPULoadSamplePeriod != samplePeriod &&
+		if coord.mu.lastCPULoadSamplePeriod != 0 && coord.mu.lastCPULoadSamplePeriod != samplePeriod &&
 			KVAdmissionControlEnabled.Get(&coord.settings.SV) {
 			log.Infof(ctx, "CPULoad switching to period %s", samplePeriod.String())
 		}
 	}
-	coord.lastCPULoadSamplePeriod = samplePeriod
+	coord.mu.lastCPULoadSamplePeriod = samplePeriod
 
-	coord.mu.Lock()
-	defer coord.mu.Unlock()
-	coord.numProcs = procs
-	coord.cpuLoadListener.CPULoad(runnable, procs, samplePeriod)
+	coord.mu.numProcs = procs
+	coord.mu.cpuLoadListener.CPULoad(runnable, procs, samplePeriod)
 
 	// Slot adjustment and token refilling requires 1ms periods to work well. If
 	// the CPULoad ticks are less frequent, there is no guarantee that the
@@ -681,18 +684,18 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 	// can't adjust slots or refill tokens fast enough. So we explicitly tell
 	// the granters to not do token or slot enforcement.
 	skipEnforcement := samplePeriod > time.Millisecond
-	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
-	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
-	if coord.granters[KVWork] != nil {
+	coord.mu.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
+	coord.mu.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
+	if coord.mu.granters[KVWork] != nil {
 		if !coord.testingDisableSkipEnforcement {
-			kvg := coord.granters[KVWork].(*slotGranter)
+			kvg := coord.mu.granters[KVWork].(*slotGranter)
 			kvg.skipSlotEnforcement = skipEnforcement
 		}
 	}
-	if coord.grantChainActive && !coord.tryTerminateGrantChain() {
+	if coord.mu.grantChainActive && !coord.tryTerminateGrantChain() {
 		return
 	}
-	coord.tryGrant()
+	coord.tryGrantLocked()
 }
 
 // tryGet is called by granter.tryGet with the WorkKind.
@@ -705,7 +708,7 @@ func (coord *GrantCoordinator) tryGet(
 	// to this workKind. So it may be more reasonable to queue. But we have some
 	// concerns about incurring the delay of multiple goroutine context switches
 	// so we ignore this case.
-	res := coord.granters[workKind].tryGetLocked(count, demuxHandle)
+	res := coord.mu.granters[workKind].tryGetLocked(count, demuxHandle)
 	switch res {
 	case grantSuccess:
 		// Grant chain may be active, but it did not get in the way of this grant,
@@ -716,7 +719,7 @@ func (coord *GrantCoordinator) tryGet(
 		// This could be a transient overload, that may not be noticed by the
 		// grant chain. We don't want it to continue granting to lower priority
 		// WorkKinds, while a higher priority one is waiting, so we terminate it.
-		if coord.grantChainActive && coord.grantChainIndex >= workKind {
+		if coord.mu.grantChainActive && coord.mu.grantChainIndex >= workKind {
 			coord.tryTerminateGrantChain()
 		}
 		return false
@@ -731,10 +734,10 @@ func (coord *GrantCoordinator) tryGet(
 func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64, demuxHandle int8) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	coord.granters[workKind].returnGrantLocked(count, demuxHandle)
-	if coord.grantChainActive {
-		if coord.grantChainIndex > workKind &&
-			coord.granters[workKind].requesterHasWaitingRequests() {
+	coord.mu.granters[workKind].returnGrantLocked(count, demuxHandle)
+	if coord.mu.grantChainActive {
+		if coord.mu.grantChainIndex > workKind &&
+			coord.mu.granters[workKind].requesterHasWaitingRequests() {
 			// There are waiting requests that will not be served by the grant chain.
 			// Better to terminate it and start afresh.
 			if !coord.tryTerminateGrantChain() {
@@ -745,7 +748,7 @@ func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64, demux
 			return
 		}
 	}
-	coord.tryGrant()
+	coord.tryGrantLocked()
 }
 
 // tookWithoutPermission is called by granter.tookWithoutPermission with the
@@ -755,22 +758,22 @@ func (coord *GrantCoordinator) tookWithoutPermission(
 ) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	coord.granters[workKind].tookWithoutPermissionLocked(count, demuxHandle)
+	coord.mu.granters[workKind].tookWithoutPermissionLocked(count, demuxHandle)
 }
 
 // continueGrantChain is called by granter.continueGrantChain with the
 // WorkKind. Never called if !coord.useGrantChains.
-func (coord *GrantCoordinator) continueGrantChain(workKind WorkKind, grantChainID grantChainID) {
+func (coord *GrantCoordinator) continueGrantChain(_ WorkKind, grantChainID grantChainID) {
 	if grantChainID == noGrantChain {
 		return
 	}
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	if coord.grantChainID != grantChainID {
+	if coord.mu.grantChainID != grantChainID {
 		// Someone terminated grantChainID by incrementing coord.grantChainID.
 		return
 	}
-	coord.tryGrant()
+	coord.tryGrantLocked()
 }
 
 // delayForGrantChainTermination causes a delay in terminating a grant chain.
@@ -797,36 +800,36 @@ var delayForGrantChainTermination = 100 * time.Millisecond
 func (coord *GrantCoordinator) tryTerminateGrantChain() bool {
 	now := timeutil.Now()
 	if delayForGrantChainTermination > 0 &&
-		now.Sub(coord.grantChainStartTime) < delayForGrantChainTermination {
+		now.Sub(coord.mu.grantChainStartTime) < delayForGrantChainTermination {
 		return false
 	}
 	// Incrementing the ID will cause the existing grant chain to die out when
 	// the grantee calls continueGrantChain.
-	coord.grantChainID++
-	coord.grantChainActive = false
-	coord.grantChainStartTime = time.Time{}
+	coord.mu.grantChainID++
+	coord.mu.grantChainActive = false
+	coord.mu.grantChainStartTime = time.Time{}
 	return true
 }
 
-// tryGrant tries to either continue an existing grant chain, or if no grant
+// tryGrantLocked tries to either continue an existing grant chain, or if no grant
 // chain is active, tries to start a new grant chain when grant chaining is
 // enabled, or grants as much as it can when grant chaining is disabled.
-func (coord *GrantCoordinator) tryGrant() {
+func (coord *GrantCoordinator) tryGrantLocked() {
 	startingChain := false
-	if !coord.grantChainActive {
+	if !coord.mu.grantChainActive {
 		// NB: always set to true when !coord.useGrantChains, and we won't
 		// actually use this to start a grant chain (see below).
 		startingChain = true
-		coord.grantChainIndex = 0
+		coord.mu.grantChainIndex = 0
 	}
 	// Assume that we will not be able to start a new grant chain, or that the
 	// existing one will die out. The code below will set it to true if neither
 	// is true.
-	coord.grantChainActive = false
+	coord.mu.grantChainActive = false
 	grantBurstCount := 0
 	// Grant in a burst proportional to numProcs, to generate a runnable for
 	// each.
-	grantBurstLimit := coord.numProcs
+	grantBurstLimit := coord.mu.numProcs
 	// Additionally, increase the burst size proportional to a fourth of the
 	// overload threshold. We experimentally observed that this resulted in
 	// better CPU utilization. We don't use the full overload threshold since we
@@ -841,9 +844,9 @@ func (coord *GrantCoordinator) tryGrant() {
 	// Only the case of a grant chain being active returns from within the
 	// OuterLoop.
 OuterLoop:
-	for ; coord.grantChainIndex < numWorkKinds; coord.grantChainIndex++ {
+	for ; coord.mu.grantChainIndex < numWorkKinds; coord.mu.grantChainIndex++ {
 		localDone := false
-		granter := coord.granters[coord.grantChainIndex]
+		granter := coord.mu.granters[coord.mu.grantChainIndex]
 		if granter == nil {
 			// A GrantCoordinator can be limited to certain WorkKinds, and the
 			// remaining will be nil.
@@ -852,16 +855,16 @@ OuterLoop:
 		for granter.requesterHasWaitingRequests() && !localDone {
 			chainID := noGrantChain
 			if grantBurstCount+1 == grantBurstLimit && coord.useGrantChains {
-				chainID = coord.grantChainID
+				chainID = coord.mu.grantChainID
 			}
 			res := granter.tryGrantLocked(chainID)
 			switch res {
 			case grantSuccess:
 				grantBurstCount++
 				if grantBurstCount == grantBurstLimit && coord.useGrantChains {
-					coord.grantChainActive = true
+					coord.mu.grantChainActive = true
 					if startingChain {
-						coord.grantChainStartTime = timeutil.Now()
+						coord.mu.grantChainStartTime = timeutil.Now()
 					}
 					return
 				}
@@ -880,7 +883,7 @@ OuterLoop:
 	// startingChain is always true when !useGrantChains, so this if-block is
 	// not executed.
 	if !startingChain {
-		coord.grantChainID++
+		coord.mu.grantChainID++
 	}
 }
 
@@ -898,23 +901,23 @@ func (coord *GrantCoordinator) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
+func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	s.Printf("(chain: id: %d active: %t index: %d)",
-		coord.grantChainID, coord.grantChainActive, coord.grantChainIndex,
+		coord.mu.grantChainID, coord.mu.grantChainActive, coord.mu.grantChainIndex,
 	)
 
 	spaceStr := redact.RedactableString(" ")
 	newlineStr := redact.RedactableString("\n")
 	curSep := spaceStr
-	for i := range coord.granters {
+	for i := range coord.mu.granters {
 		kind := WorkKind(i)
 		switch kind {
 		case KVWork:
-			switch g := coord.granters[i].(type) {
+			switch g := coord.mu.granters[i].(type) {
 			case *slotGranter:
-				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
+				kvsa := coord.mu.cpuLoadListener.(*kvSlotAdjuster)
 				s.Printf(
 					"%s%s: used: %d, high(moderate)-total: %d(%d) moderate-clamp: %d", curSep, workKindString(kind),
 					g.usedSlots, g.totalHighLoadSlots, g.totalModerateLoadSlots, kvsa.moderateSlotsClamp)
@@ -926,13 +929,13 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 					g.elasticDiskBWTokensAvailable)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
-			if coord.granters[i] != nil {
-				g := coord.granters[i].(*slotGranter)
+			if coord.mu.granters[i] != nil {
+				g := coord.mu.granters[i].(*slotGranter)
 				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalHighLoadSlots)
 			}
 		case SQLKVResponseWork, SQLSQLResponseWork:
-			if coord.granters[i] != nil {
-				g := coord.granters[i].(*tokenGranter)
+			if coord.mu.granters[i] != nil {
+				g := coord.mu.granters[i].(*tokenGranter)
 				s.Printf("%s%s: avail: %d", curSep, workKindString(kind), g.availableBurstTokens)
 				if kind == SQLKVResponseWork {
 					curSep = newlineStr

@@ -555,7 +555,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// work here queues up even though granter has spare capacity. We could
 		// add additional synchronization (and complexity to the granter
 		// interface) to deal with this, by keeping the granter's lock
-		// (GrantCoordinator.mu) locked when returning from tryGrant and call
+		// (GrantCoordinator.mu) locked when returning from tryGrantLocked and call
 		// granter again to release that lock after this work has been queued. But
 		// it has the downside of extending the scope of GrantCoordinator.mu.
 		// Instead we tolerate this race in the knowledge that GrantCoordinator
