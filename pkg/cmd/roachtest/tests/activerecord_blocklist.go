@@ -33,9 +33,7 @@ var activeRecordBlocklist = blocklist{
 	"PostgresqlRangeTest#test_timezone_array_awareness_tsrange":                                                                         "27791",
 	"PostgresqlRangeTest#test_timezone_array_awareness_tzrange":                                                                         "27791",
 	// TODO(yang): investigate cause further
-	"PostgreSQLReferentialIntegrityTest#test_all_foreign_keys_valid_having_foreign_keys_in_multiple_schemas":                             "unknown",
-	"PostgresqlTimestampWithAwareTypesTest#test_timestamp_with_zone_values_with_rails_time_zone_support_and_time_zone_set":               "expected ActiveSupport::TimeWithZone, not Time",
-	"PostgresqlTimestampWithTimeZoneTest#test_timestamp_with_zone_values_with_rails_time_zone_support_and_timestamptz_and_time_zone_set": "expected ActiveSupport::TimeWithZone, not Time",
+	"PostgreSQLReferentialIntegrityTest#test_all_foreign_keys_valid_having_foreign_keys_in_multiple_schemas": "unknown",
 }
 
 var activeRecordIgnoreList = blocklist{
@@ -73,6 +71,8 @@ var activeRecordIgnoreList = blocklist{
 	"LengthValidationTest#test_validates_size_of_association_using_within":                                                                                     "flaky - sometimes complains that a relation does not exist",
 	"PostgresqlInfinityTest#test_where_clause_with_infinite_range_on_a_datetime_column":                                                                        "flaky - sometimes complains that a relation does not exist",
 	"PostgresqlIntervalTest#test_interval_type":                                                                                                                "flaky",
+	"PostgresqlTimestampWithAwareTypesTest#test_timestamp_with_zone_values_with_rails_time_zone_support_and_time_zone_set":                                     "flaky - sometimes complains given Time instead of ActiveSupport::TimeWithZone",
+	"PostgresqlTimestampWithTimeZoneTest#test_timestamp_with_zone_values_with_rails_time_zone_support_and_timestamptz_and_time_zone_set":                       "flaky - sometimes complains given Time instead of ActiveSupport::TimeWithZone",
 	"RelationTest#test_finding_last_with_arel_order":                                                                                                           "flaky - sometimes complains that a relation does not exist",
 	"RelationTest#test_joins_with_select_custom_attribute":                                                                                                     "flaky - sometimes complains that a relation does not exist",
 	"RelationTest#test_order_triggers_eager_loading_when_ordering_using_hash_syntax":                                                                           "flaky - sometimes complains that a relation does not exist",
