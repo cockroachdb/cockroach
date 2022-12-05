@@ -5906,6 +5906,11 @@ func MVCCExportToSST(
 	if summary.DataSize == 0 {
 		// If no records were added to the sstable, skip
 		// completing it and return an empty summary.
+		//
+		// We still propogate the resumeKey because our
+		// iteration may have been halted because of resource
+		// limitiations before any keys were added to the
+		// returned SST.
 		return roachpb.BulkOpSummary{}, resumeKey, nil
 	}
 
@@ -5977,6 +5982,7 @@ func mvccExportToWriter(
 		rangeKeyMasking = opts.EndTS
 	}
 
+	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		StartKey:             opts.StartKey.Key,
@@ -5989,7 +5995,10 @@ func mvccExportToWriter(
 	defer iter.Close()
 
 	paginated := opts.TargetSize > 0
-	trackKeyBoundary := paginated || opts.ResourceLimiter != nil
+
+	hasElasticCPULimiter := elasticCPUHandle != nil
+	hasTimeBasedResourceLimiter := opts.ResourceLimiter != nil
+	trackKeyBoundary := paginated || hasTimeBasedResourceLimiter || hasElasticCPULimiter
 	firstIteration := true
 	skipTombstones := !opts.ExportAllRevisions && opts.StartTS.IsEmpty()
 
@@ -6031,7 +6040,6 @@ func mvccExportToWriter(
 		return maxSize
 	}
 
-	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -6049,15 +6057,15 @@ func mvccExportToWriter(
 			curKey = append(curKey[:0], unsafeKey.Key...)
 		}
 
-		// TODO(irfansharif): Remove this time-based resource limiter once
-		// enabling elastic CPU limiting by default. There needs to be a
-		// compelling reason to need two mechanisms.
-		if opts.ResourceLimiter != nil {
+		if firstIteration {
 			// Don't check resources on first iteration to ensure we can make some progress regardless
 			// of starvation. Otherwise operations could spin indefinitely.
-			if firstIteration {
-				firstIteration = false
-			} else {
+			firstIteration = false
+		} else {
+			// TODO(irfansharif): Remove this time-based resource limiter once
+			// enabling elastic CPU limiting by default. There needs to be a
+			// compelling reason to need two mechanisms.
+			if opts.ResourceLimiter != nil {
 				// In happy day case we want to only stop at key boundaries as it allows callers to use
 				// produced sst's directly. But if we can't find key boundary within reasonable number of
 				// iterations we would split mid key.
@@ -6077,16 +6085,17 @@ func mvccExportToWriter(
 					break
 				}
 			}
-		}
 
-		// Check if we're over our allotted CPU time + on a key boundary (we
-		// prefer callers being able to use SSTs directly). Going over limit is
-		// accounted for in admission control by penalizing the subsequent
-		// request, so doing it slightly is fine.
-		if overLimit, _ := elasticCPUHandle.OverLimit(); overLimit && isNewKey {
-			resumeKey = unsafeKey.Clone()
-			resumeKey.Timestamp = hlc.Timestamp{}
-			break
+			// Check if we're over our allotted CPU time + on a key boundary (we
+			// prefer callers being able to use SSTs directly). Going over limit is
+			// accounted for in admission control by penalizing the subsequent
+			// request, so doing it slightly is fine.
+			stopAllowed := isNewKey || opts.StopMidKey
+			if overLimit, _ := elasticCPUHandle.OverLimit(); overLimit && stopAllowed {
+				resumeKey = unsafeKey.Clone()
+				resumeKey.Timestamp = hlc.Timestamp{}
+				break
+			}
 		}
 
 		// When we encounter an MVCC range tombstone stack, we buffer it in
@@ -6144,7 +6153,7 @@ func mvccExportToWriter(
 				reachedTargetSize := opts.TargetSize > 0 && uint64(curSize) >= opts.TargetSize
 				newSize := curSize + maxRangeKeysSizeIfTruncated(rangeKeys.Bounds.Key)
 				reachedMaxSize := opts.MaxSize > 0 && newSize > int64(opts.MaxSize)
-				if paginated && (reachedTargetSize || reachedMaxSize) {
+				if curSize > 0 && paginated && (reachedTargetSize || reachedMaxSize) {
 					rangeKeys.Clear()
 					rangeKeysSize = 0
 					resumeKey = unsafeKey.Clone()
