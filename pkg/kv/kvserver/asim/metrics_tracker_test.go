@@ -41,7 +41,7 @@ func Example_tickEmptyState() {
 	_ = m.Tick(start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
-	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0
+	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,0,0,0
 }
 
 func TestTickEmptyState(t *testing.T) {
@@ -55,7 +55,7 @@ func TestTickEmptyState(t *testing.T) {
 
 	expected :=
 		"tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves\n" +
-			"2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0\n"
+			"2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,0,0,0\n"
 	require.Equal(t, expected, buf.String())
 }
 
@@ -68,8 +68,8 @@ func Example_multipleWriters() {
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
-	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0
-	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0
+	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,0,0,0
+	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,0,0,0
 }
 
 func Example_leaseTransfer() {
@@ -81,7 +81,7 @@ func Example_leaseTransfer() {
 	_ = m.Tick(start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
-	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,2,0,0
+	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0
 }
 
 func Example_rebalance() {
@@ -100,7 +100,7 @@ func Example_rebalance() {
 	_ = m.Tick(start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
-	//2022-03-21 11:00:00 +0000 UTC,1,3,21,2,9,1,7,2,9,2,1,7
+	//2022-03-21 11:00:00 +0000 UTC,1,3,21,2,9,1,7,2,9,1,1,7
 }
 
 func Example_workload() {
