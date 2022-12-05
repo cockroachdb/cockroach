@@ -161,7 +161,7 @@ type TestTenantInterface interface {
 	// as an interface{}.
 	RangeDescIteratorFactory() interface{}
 
-	// !!!
+	//Tracer returns a reference to the tenant's Tracer.
 	Tracer() *tracing.Tracer
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
