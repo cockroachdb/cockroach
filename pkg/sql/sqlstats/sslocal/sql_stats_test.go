@@ -474,7 +474,15 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
 				statsCollector.
-					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{}))
+					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{
+						SessionData: &sessiondata.SessionData{
+							SessionData: sessiondatapb.SessionData{
+								UserProto:       username.RootUserName().EncodeProto(),
+								Database:        "defaultdb",
+								ApplicationName: "appname_findme",
+							},
+						},
+					}))
 		}()
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID, err := statsCollector.RecordStatement(
@@ -483,15 +491,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 					Query:       fingerprint,
 					ImplicitTxn: testCase.implicit,
 				},
-				sqlstats.RecordedStmtStats{
-					SessionData: &sessiondata.SessionData{
-						SessionData: sessiondatapb.SessionData{
-							UserProto:       username.RootUserName().EncodeProto(),
-							Database:        "defaultdb",
-							ApplicationName: "appname_findme",
-						},
-					},
-				},
+				sqlstats.RecordedStmtStats{},
 			)
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
@@ -592,15 +592,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 				stmtFingerprintID, err := statsCollector.RecordStatement(
 					ctx,
 					roachpb.StatementStatisticsKey{Query: fingerprint},
-					sqlstats.RecordedStmtStats{
-						SessionData: &sessiondata.SessionData{
-							SessionData: sessiondatapb.SessionData{
-								UserProto:       username.RootUserName().EncodeProto(),
-								Database:        "defaultdb",
-								ApplicationName: "appname_findme",
-							},
-						},
-					},
+					sqlstats.RecordedStmtStats{},
 				)
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
@@ -608,7 +600,15 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 
 			transactionFingerprintID := roachpb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID)
-			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{})
+			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{
+				SessionData: &sessiondata.SessionData{
+					SessionData: sessiondatapb.SessionData{
+						UserProto:       username.RootUserName().EncodeProto(),
+						Database:        "defaultdb",
+						ApplicationName: "appname_findme",
+					},
+				},
+			})
 			require.NoError(t, err)
 
 			// Gather the collected stats so that we can assert on them.
