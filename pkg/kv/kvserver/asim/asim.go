@@ -104,6 +104,7 @@ func NewSimulator(
 			settings.PacerLoopInterval,
 			settings.PacerMinIterInterval,
 			settings.PacerMaxIterIterval,
+			settings.Seed,
 		)
 		controllers[storeID] = op.NewController(
 			changer,
