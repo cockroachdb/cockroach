@@ -41,6 +41,7 @@ func (t byNameMap) delete(d catalog.NameKey) (removed catalog.NameEntry) {
 
 func (t byNameMap) clear() {
 	clear(t.t)
+	btreeSyncPool.Put(t.t)
 }
 
 func (t byNameMap) ascend(f EntryIterator) error {
@@ -71,4 +72,12 @@ func (t byNameMap) ascendSchemasForDatabase(dbID descpb.ID, f EntryIterator) err
 	return ascendRange(t.t, min, max, func(k interface{}) error {
 		return f(k.(catalog.NameEntry))
 	})
+}
+
+func (t byNameMap) initialized() bool {
+	return t != byNameMap{}
+}
+
+func makeByNameMap() byNameMap {
+	return byNameMap{t: btreeSyncPool.Get().(*btree.BTree)}
 }
