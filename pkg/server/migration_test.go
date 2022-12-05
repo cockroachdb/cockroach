@@ -27,11 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestValidateTargetClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := func(major, minor int32) roachpb.Version {
 		return roachpb.Version{Major: major, Minor: minor}
@@ -108,6 +110,7 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 // version.
 func TestBumpClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := func(major, minor int32) roachpb.Version {
 		return roachpb.Version{Major: major, Minor: minor}
@@ -204,6 +207,7 @@ func TestBumpClusterVersion(t *testing.T) {
 
 func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numStores = 3
 	var storeSpecs []base.StoreSpec
@@ -241,6 +245,7 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 // version.
 func TestUpgradeHappensAfterMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
