@@ -1534,7 +1534,7 @@ func GetLocalityRegionEnumPhysicalRepresentation(
 	) error {
 		enumReps, primaryRegion = nil, "" // reset for retry
 		var err error
-		enumReps, primaryRegion, err = getRegionEnumRepresentations(ctx, txn, dbID, descsCol)
+		enumReps, primaryRegion, err = GetRegionEnumRepresentations(ctx, txn, dbID, descsCol)
 		return err
 	}); err != nil {
 		return nil, err
@@ -1554,11 +1554,11 @@ func GetLocalityRegionEnumPhysicalRepresentation(
 	return nil, errors.AssertionFailedf("primary region not found")
 }
 
-// getRegionEnumRepresentations returns representations stored in the
+// GetRegionEnumRepresentations returns representations stored in the
 // multi-region enum type associated with dbID, and the primary region of it.
 // An ErrNotMultiRegionDatabase error will be returned if the database isn't
 // multi-region.
-func getRegionEnumRepresentations(
+func GetRegionEnumRepresentations(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
 ) (enumReps map[catpb.RegionName][]byte, primaryRegion catpb.RegionName, err error) {
 	dbDesc, regionEnumDesc, err := getDBAndRegionEnumDescs(

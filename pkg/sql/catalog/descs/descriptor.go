@@ -79,6 +79,33 @@ func (tc *Collection) GetImmutableDescriptorByID(
 	return tc.getDescriptorByID(ctx, txn, flags, id)
 }
 
+// MaybeGetTable implements the catalog.ZoneConfigHydrationHelper interface.
+func (tc *Collection) MaybeGetTable(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (catalog.TableDescriptor, error) {
+	// Ignore ids without a descriptor.
+	if id == keys.RootNamespaceID || keys.IsPseudoTableID(uint32(id)) {
+		return nil, nil
+	}
+	desc, err := tc.GetImmutableDescriptorByID(
+		ctx,
+		txn,
+		id,
+		tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if desc.DescriptorType() == catalog.Table {
+		return desc.(catalog.TableDescriptor), nil
+	}
+	return nil, nil
+}
+
 // GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
 func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {
@@ -156,6 +183,14 @@ func (tc *Collection) GetZoneConfigs(
 		return nil, errors.Errorf("Failed to fetch zone config for IDs: %v", idsForStorageRead.Ordered())
 	}
 	return ret, nil
+}
+
+// MaybeGetZoneConfig implements the catalog.ZoneConfigHydrationHelper
+// interface.
+func (tc *Collection) MaybeGetZoneConfig(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (catalog.ZoneConfig, error) {
+	return tc.GetZoneConfig(ctx, txn, id)
 }
 
 // AddUncommittedZoneConfig adds a zone config to the uncommitted cache.

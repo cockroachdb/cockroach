@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,6 +53,22 @@ type relocateRequest struct {
 	subjectReplicas tree.RelocateSubject
 	toStoreDesc     *roachpb.StoreDescriptor
 	fromStoreDesc   *roachpb.StoreDescriptor
+}
+
+// TODO(ewall): replace with NodeDescs.GetStoreDescriptor.
+func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
+	var storeDesc roachpb.StoreDescriptor
+	gossipStoreKey := gossip.MakeStoreDescKey(storeID)
+	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
+	if err != nil {
+		return nil, err
+	}
+	if err := g.GetInfoProto(
+		gossipStoreKey, &storeDesc,
+	); err != nil {
+		return nil, errors.Wrapf(err, "error looking up store %d", storeID)
+	}
+	return &storeDesc, nil
 }
 
 func (n *relocateRange) startExec(params runParams) error {

@@ -1352,7 +1352,7 @@ func (s *SQLServer) preStart(
 		}
 		// Start instance ID reclaim loop.
 		if err := s.sqlInstanceStorage.RunInstanceIDReclaimLoop(
-			ctx, stopper, timeutil.DefaultTimeSource{}, session.Expiration,
+			ctx, stopper, timeutil.DefaultTimeSource{}, s.internalExecutorFactory, session.Expiration,
 		); err != nil {
 			return err
 		}
