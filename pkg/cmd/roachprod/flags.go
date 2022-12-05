@@ -257,25 +257,29 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 
-	rootStorageCmd.AddCommand(storageCollectionCmd)
-	storageCollectionCmd.Flags().IntVarP(&volumeCreateOpts.Size,
+	rootStorageCmd.AddCommand(rootStorageCollectionCmd)
+	rootStorageCollectionCmd.AddCommand(collectionStartCmd)
+	rootStorageCollectionCmd.AddCommand(collectionStopCmd)
+	rootStorageCollectionCmd.AddCommand(storageSnapshotCmd)
+	rootStorageCollectionCmd.AddCommand(collectionListVolumes)
+	collectionStartCmd.Flags().IntVarP(&volumeCreateOpts.Size,
 		"volume-size", "s", 10,
 		"the size of the volume in Gigabytes (GB) to create for each store")
 
-	storageCollectionCmd.Flags().BoolVar(&volumeCreateOpts.Encrypted,
+	collectionStartCmd.Flags().BoolVar(&volumeCreateOpts.Encrypted,
 		"volume-encrypted", false,
 		"determines if the volume will be encrypted")
 
-	storageCollectionCmd.Flags().StringVar(&volumeCreateOpts.Architecture,
+	collectionStartCmd.Flags().StringVar(&volumeCreateOpts.Architecture,
 		"volume-arch", "",
 		"the architecture the volume should target. This flag is only relevant for gcp or azure. It is ignored "+
 			"if supplied for other providers.")
 
-	storageCollectionCmd.Flags().IntVarP(&volumeCreateOpts.IOPS,
+	collectionStartCmd.Flags().IntVarP(&volumeCreateOpts.IOPS,
 		"volume-iops", "i", 0,
 		"the iops to provision for the volume")
 
-	storageCollectionCmd.Flags().StringVarP(&volumeCreateOpts.Type,
+	collectionStartCmd.Flags().StringVarP(&volumeCreateOpts.Type,
 		"volume-type", "t", "",
 		"the volume type that should be created. Provide a volume type that is connected to"+
 			" the provider chosen for the cluster. If no volume type is provided the provider default will be used.")

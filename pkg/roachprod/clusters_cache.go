@@ -65,9 +65,9 @@ func InitDirs() error {
 	return os.MkdirAll(os.ExpandEnv(config.DefaultDebugDir), 0755)
 }
 
-// saveCluster creates (or overwrites) the file in config.ClusterDir storing the
+// SaveCluster creates (or overwrites) the file in config.ClusterDir storing the
 // given metadata.
-func saveCluster(c *cloud.Cluster) error {
+func SaveCluster(c *cloud.Cluster) error {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetIndent("", "  ")
@@ -183,7 +183,7 @@ func LoadClusters() error {
 func syncClustersCache(cloud *cloud.Cloud) error {
 	// Write all cluster files.
 	for _, c := range cloud.Clusters {
-		if err := saveCluster(c); err != nil {
+		if err := SaveCluster(c); err != nil {
 			return err
 		}
 	}
@@ -247,8 +247,9 @@ type localVMStorage struct{}
 var _ local.VMStorage = localVMStorage{}
 
 // SaveCluster is part of the local.VMStorage interface.
+// TODO(leon): remove this call as it just calls the public method
 func (localVMStorage) SaveCluster(cluster *cloud.Cluster) error {
-	return saveCluster(cluster)
+	return SaveCluster(cluster)
 }
 
 // DeleteCluster is part of the local.VMStorage interface.
