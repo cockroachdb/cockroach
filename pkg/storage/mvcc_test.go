@@ -5965,8 +5965,8 @@ func TestMVCCExportToSSTResourceLimits(t *testing.T) {
 
 // TestMVCCExportToSSTExhaustedAtStart is a regression test for a bug
 // in which mis-handling of resume spans would cause MVCCExportToSST
-// would return an empty resume key in cases where out various
-// resource limiters caused an early return of a resume span.
+// to return an empty resume key in cases where the resource limiters
+// caused an early return of a resume span.
 func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6040,6 +6040,108 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 				EndTS:              limits.maxTimestamp,
 				ExportAllRevisions: true,
 			})
+		})
+	t.Run("elastic CPU limit always exhausted",
+		func(t *testing.T) {
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			limits := dataLimits{
+				minKey:          minKey,
+				maxKey:          maxKey,
+				minTimestamp:    minTimestamp,
+				maxTimestamp:    maxTimestamp,
+				tombstoneChance: 0.01,
+			}
+			generateData(t, engine, limits, (limits.maxKey-limits.minKey)*10)
+			data := exportAllData(t, engine, queryLimits{
+				minKey:       minKey,
+				maxKey:       maxKey,
+				minTimestamp: minTimestamp,
+				maxTimestamp: maxTimestamp,
+				latest:       false,
+			})
+
+			// Our ElasticCPUWorkHandle will always
+			// fail. But, we should still make progress,
+			// one key at a time.
+			ctx := admission.ContextWithElasticCPUWorkHandle(context.Background(), admission.TestingNewElasticCPUHandleWithCallback(func() (bool, time.Duration) {
+				return false, 0
+			}))
+			assertExportEqualWithOptions(t, ctx, engine, data, MVCCExportOptions{
+				StartKey:           MVCCKey{Key: testKey(limits.minKey), Timestamp: limits.minTimestamp},
+				EndKey:             testKey(limits.maxKey),
+				StartTS:            limits.minTimestamp,
+				EndTS:              limits.maxTimestamp,
+				ExportAllRevisions: true,
+			})
+		})
+	t.Run("elastic CPU limit exhausted respects StopMidKey",
+		func(t *testing.T) {
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			// Construct a data set that contains 6
+			// revisions of the same key.
+			//
+			// We expect that MVCCExportToSST with
+			// ExportAllRevisions set to true but with
+			// StopMidKey set to false to always return
+			// all or none of this key.
+			revisionCount := 6
+			rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+			key := testKey(6)
+			start := minTimestamp.Add(1, 0)
+			nextKey := func(i int64) MVCCKey { return MVCCKey{Key: key, Timestamp: start.Add(i, 0)} }
+			nextValue := func() MVCCValue { return MVCCValue{Value: roachpb.MakeValueFromBytes(randutil.RandBytes(rng, 256))} }
+			for i := 0; i < revisionCount; i++ {
+				require.NoError(t, engine.PutMVCC(nextKey(int64(i)), nextValue()), "write data to test storage")
+			}
+			require.NoError(t, engine.Flush(), "Flush engine data")
+
+			sstFile := &MemFile{}
+			opts := MVCCExportOptions{
+				StartKey:           MVCCKey{Key: testKey(minKey), Timestamp: minTimestamp},
+				EndKey:             testKey(maxKey),
+				StartTS:            minTimestamp,
+				EndTS:              maxTimestamp,
+				ExportAllRevisions: true,
+				ResourceLimiter:    nil,
+				StopMidKey:         false,
+			}
+
+			// Create an ElasticCPUWorkHandler that will
+			// simulate a resource constraint failure
+			// after some number of loop iterations.
+			ctx := context.Background()
+			callsBeforeFailure := 2
+			ctx = admission.ContextWithElasticCPUWorkHandle(ctx, admission.TestingNewElasticCPUHandleWithCallback(func() (bool, time.Duration) {
+				if callsBeforeFailure > 0 {
+					callsBeforeFailure--
+					return false, 0
+				}
+				return true, 0
+			}))
+
+			// With StopMidKey=false, we expect 6
+			// revisions or 0 revisions.
+			_, _, err := MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			require.NoError(t, err)
+			chunk := sstToKeys(t, sstFile.Data())
+			require.Equal(t, 6, len(chunk))
+
+			// With StopMidKey=true, we can stop in the
+			// middle of iteration.
+			callsBeforeFailure = 2
+			sstFile = &MemFile{}
+			opts.StopMidKey = true
+			_, _, err = MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			require.NoError(t, err)
+			chunk = sstToKeys(t, sstFile.Data())
+			// We expect 3 here rather than 2 because the
+			// first iteration never calls the handler.
+			require.Equal(t, 3, len(chunk))
+
 		})
 	t.Run("resource limit exhausted",
 		func(t *testing.T) {

@@ -366,11 +366,11 @@ error: (*storage.ExceedMaxSizeError:) export size (12 bytes) exceeds max size (1
 
 # MaxSize with TargetSize will bail out before exceeding MaxSize, but it
 # depends on StopMidKey.
-run ok
+run error
 export fingerprint k=a end=z ts=6 allRevisions targetSize=1 maxSize=1
 ----
-export:  fingerprint=true resume="a"/0,0
-fingerprint: 0
+error: (*storage.ExceedMaxSizeError:) export size (3 bytes) exceeds max size (1 bytes)
+
 
 run error
 export fingerprint k=a end=z ts=6 allRevisions targetSize=10 maxSize=10
