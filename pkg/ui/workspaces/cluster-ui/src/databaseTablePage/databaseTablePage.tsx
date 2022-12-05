@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext } from "react";
 import { Col, Row, Tabs, Tooltip } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -50,6 +50,9 @@ import { CircleFilled } from "../icon";
 import { performanceTuningRecipes } from "src/util/docs";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
+import { CockroachCloudContext } from "../contexts";
+import IdxRecAction from "../insights/indexActionBtn";
+import { RecommendationType } from "../indexDetailsPage";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
@@ -138,7 +141,7 @@ interface IndexStat {
 }
 
 interface IndexRecommendation {
-  type: string;
+  type: RecommendationType;
   reason: string;
 }
 
@@ -344,18 +347,15 @@ export class DatabaseTablePage extends React.Component<
         </div>
       );
     }
-    return indexStat.indexRecommendations.map(recommendation => {
+    return indexStat.indexRecommendations.map((recommendation, key) => {
       let text: string;
       switch (recommendation.type) {
         case "DROP_UNUSED":
           text = "Drop unused index";
       }
-      // TODO(thomas): using recommendation.type as the key seems not good.
-      //  - if it is possible for an index to have multiple recommendations of the same type
-      //  this could cause issues.
       return (
         <Tooltip
-          key={recommendation.type}
+          key={key}
           placement="bottom"
           title={
             <div className={cx("index-recommendations-text__tooltip-anchor")}>
@@ -373,6 +373,31 @@ export class DatabaseTablePage extends React.Component<
         </Tooltip>
       );
     });
+  };
+
+  private renderActionCell = (indexStat: IndexStat): React.ReactNode => {
+    const isCockroachCloud = useContext(CockroachCloudContext);
+    if (isCockroachCloud || indexStat.indexRecommendations.length === 0) {
+      return <></>;
+    }
+
+    const query = indexStat.indexRecommendations.map(recommendation => {
+      switch (recommendation.type) {
+        case "DROP_UNUSED":
+          return `DROP INDEX ${this.props.name}@${indexStat.indexName};`;
+      }
+    });
+    if (query.length === 0) {
+      return <></>;
+    }
+
+    return (
+      <IdxRecAction
+        actionQuery={query.join(" ")}
+        actionType={"DropIndex"}
+        database={this.props.databaseName}
+      />
+    );
   };
 
   private indexStatsColumns: ColumnDescriptor<IndexStat>[] = [
@@ -419,6 +444,11 @@ export class DatabaseTablePage extends React.Component<
       ),
       cell: this.renderIndexRecommendations,
       sort: indexStat => indexStat.indexRecommendations.length,
+    },
+    {
+      name: "action",
+      title: "",
+      cell: this.renderActionCell,
     },
   ];
 
