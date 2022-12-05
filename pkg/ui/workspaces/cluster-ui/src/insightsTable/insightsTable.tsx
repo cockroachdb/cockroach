@@ -76,7 +76,8 @@ function typeCell(value: string): React.ReactElement {
 
 function descriptionCell(
   insightRec: InsightRecommendation,
-  disableStmtLink?: boolean,
+  disableStmtLink: boolean,
+  isCockroachCloud: boolean,
 ): React.ReactElement {
   const clusterSettingsLink = (
     <>
@@ -91,6 +92,11 @@ function descriptionCell(
     insightRec.execution?.statement,
     insightRec.execution?.summary,
   );
+
+  const indexLink = isCockroachCloud
+    ? `databases/${insightRec.database}/${insightRec.indexDetails?.schema}/${insightRec.indexDetails?.table}/${insightRec.indexDetails?.indexName}`
+    : `database/${insightRec.database}/table/${insightRec.indexDetails?.table}/index/${insightRec.indexDetails?.indexName}`;
+
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
@@ -130,10 +136,7 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Index: </span>{" "}
-            <Link
-              to={`database/${insightRec.database}/table/${insightRec.indexDetails.table}/index/${insightRec.indexDetails.indexName}`}
-              className={cx("table-link")}
-            >
+            <Link to={indexLink} className={cx("table-link")}>
               {insightRec.indexDetails.indexName}
             </Link>
           </div>
@@ -296,7 +299,7 @@ export function makeInsightsColumns(
       name: "details",
       title: insightsTableTitles.details(),
       cell: (item: InsightRecommendation) =>
-        descriptionCell(item, disableStmtLink),
+        descriptionCell(item, disableStmtLink, isCockroachCloud),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
