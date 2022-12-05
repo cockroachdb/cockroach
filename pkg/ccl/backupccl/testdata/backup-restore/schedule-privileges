@@ -1,4 +1,4 @@
-new-server name=s1
+new-cluster name=s1
 ----
 
 subtest create-scheduled-privileges

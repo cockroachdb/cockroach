@@ -1,6 +1,6 @@
 subtest backup_file_table
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql

@@ -11,7 +11,7 @@
 # disabled to run within tenants because the kv request cmd only works on system tenants
 
 
-new-server name=s1 disable-tenant
+new-cluster name=s1 disable-tenant
 ----
 
 exec-sql

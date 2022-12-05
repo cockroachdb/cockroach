@@ -1,6 +1,6 @@
 # Test that temporary tables do not show up in any backup.
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
@@ -112,7 +112,7 @@ SELECT table_name FROM [SHOW TABLES] ORDER BY table_name
 ----
 perm_table
 
-new-server name=s2 share-io-dir=s1
+new-cluster name=s2 share-io-dir=s1
 ----
 
 exec-sql

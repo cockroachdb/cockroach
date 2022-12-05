@@ -16,7 +16,7 @@
 # offline tables.
 
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
@@ -116,7 +116,7 @@ b2 baz table 3 incremental
 
 # Ensure the restored cluster contains nothing from the in-progress restoring database as of system
 # time t0
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 ----
 
 
@@ -131,7 +131,7 @@ SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'b2';
 
 
 # Ensure restored cluster contains the restored database as of latest time
-new-server name=s3 share-io-dir=s1 allow-implicit-access
+new-cluster name=s3 share-io-dir=s1 allow-implicit-access
 ----
 
 

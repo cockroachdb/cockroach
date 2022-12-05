@@ -1,6 +1,6 @@
 # Test full cluster backup/restore here.
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
@@ -24,11 +24,11 @@ BACKUP INTO 'nodelocal://0/test/'
 ----
 
 # Start a new cluster with the same IO dir.
-new-server name=s2 share-io-dir=s1
+new-cluster name=s2 share-io-dir=s1
 ----
 
 # Restore into the new cluster.
-exec-sql server=s2
+exec-sql cluster=s2
 RESTORE FROM LATEST IN 'nodelocal://0/test/'
 ----
 
@@ -107,7 +107,7 @@ pq: cannot drop type "farewell" because other objects ([d2.public.t1 d2.public.t
 reset
 ----
 
-new-server name=s
+new-cluster name=s
 ----
 
 exec-sql

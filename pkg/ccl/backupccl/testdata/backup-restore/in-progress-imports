@@ -5,7 +5,7 @@
 # On an unfinalized cluster: a backed up import should not get restored
 
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 
@@ -182,7 +182,7 @@ d foofoo table 3 incremental
 
 
 # Ensure all the RESTOREs contain foo (no data) and foofoo (1 row) as of system time t0
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 ----
 
 
@@ -246,7 +246,7 @@ SELECT * FROM d.foofoo;
 
 
 # Ensure the imported data exists as of latest time
-new-server name=s3 share-io-dir=s1 allow-implicit-access
+new-cluster name=s3 share-io-dir=s1 allow-implicit-access
 ----
 
 
@@ -334,7 +334,7 @@ SELECT * FROM d.foofoo;
 # More investigation required.
 
 
-new-server name=s4 share-io-dir=s1 allow-implicit-access beforeVersion=Start22_2 disable-tenant
+new-cluster name=s4 share-io-dir=s1 allow-implicit-access beforeVersion=Start22_2 disable-tenant
 ----
 
 exec-sql
@@ -508,7 +508,7 @@ d foo table 2 incremental
 d foofoo table 3 incremental
 
 
-upgrade-server version=Start22_2
+upgrade-cluster version=Start22_2
 ----
 
 exec-sql
@@ -532,7 +532,7 @@ d foofoo table 3 incremental
 
 
 # Restore the backups taken from a mixed version chain
-new-server name=s5 share-io-dir=s1 allow-implicit-access disable-tenant
+new-cluster name=s5 share-io-dir=s1 allow-implicit-access disable-tenant
 ----
 
 

@@ -1,4 +1,4 @@
-new-server name=s1 allow-implicit-access
+new-cluster name=s1 allow-implicit-access
 ----
 
 # Create test schedules.
