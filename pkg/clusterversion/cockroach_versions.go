@@ -363,6 +363,10 @@ const (
 	// column in the system.jobs table.
 	V23_1BackfillTypeColumnInJobsTable
 
+	// V23_1_AlterSystemStatementStatisticsAddIndexesUsage creates indexes usage virtual column
+	// based on (statistics->>'indexes') with inverted index on table system.statement_statistics.
+	V23_1_AlterSystemStatementStatisticsAddIndexesUsage
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -628,6 +632,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1BackfillTypeColumnInJobsTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 20},
+	},
+	{
+		Key:     V23_1_AlterSystemStatementStatisticsAddIndexesUsage,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
 	},
 
 	// *************************************************
