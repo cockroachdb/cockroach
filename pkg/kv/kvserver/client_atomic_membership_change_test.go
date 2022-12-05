@@ -86,7 +86,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 				// the descriptor already matches since the descriptor is updated
 				// a hair earlier.
 				cfg, _, err := confchange.Restore(confchange.Changer{
-					Tracker:   tracker.MakeProgressTracker(1),
+					Tracker:   tracker.MakeProgressTracker(1, 0),
 					LastIndex: 1,
 				}, desc.Replicas().ConfState())
 				require.NoError(t, err)
