@@ -411,6 +411,14 @@ const (
 	// responsible for polling the jobs table for metrics.
 	V23_1_CreateJobsMetricsPollingJob
 
+	// V23_1SystemPrivilegesTableHasUserIDColumn is the version where the
+	// user_id column has been added to the system.privileges table.
+	V23_1SystemPrivilegesTableHasUserIDColumn
+
+	// V23_1SystemPrivilegesTableUserIDColumnBackfilled is the version where the
+	// user_id column in the system.privileges table has been backfilled.
+	V23_1SystemPrivilegesTableUserIDColumnBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -707,6 +715,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_CreateJobsMetricsPollingJob,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 38},
+	},
+	{
+		Key:     V23_1SystemPrivilegesTableHasUserIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 40},
+	},
+	{
+		Key:     V23_1SystemPrivilegesTableUserIDColumnBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 42},
 	},
 
 	// *************************************************
