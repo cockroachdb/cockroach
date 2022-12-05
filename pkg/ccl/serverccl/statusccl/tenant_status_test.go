@@ -60,7 +60,21 @@ func TestTenantStatusAPI(t *testing.T) {
 		StoreDisableCoalesceAdjacent: true,
 	}
 
-	testHelper := serverccl.NewTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	tenantLocalities := []roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "gcp-us-west1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "gcp-us-central1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "gcp-us-east1"}}},
+	}
+
+	testHelper := serverccl.NewTestTenantHelperWithTenantArgs(
+		t,
+		3, /* tenantClusterSize */
+		knobs,
+		func(tenantIdx int, tenantArgs *base.TestTenantArgs) {
+			tenantArgs.Locality = tenantLocalities[tenantIdx]
+		},
+	)
+
 	defer testHelper.Cleanup(ctx, t)
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
@@ -113,6 +127,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("tenant_logs", func(t *testing.T) {
 		testTenantLogs(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_nodes", func(t *testing.T) {
+		testTenantNodes(ctx, t, testHelper, tenantLocalities)
 	})
 }
 
@@ -1237,6 +1255,37 @@ func testTenantAuthOnStatements(
 	helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
 	err = client.GetJSONChecked("/_status/statements", &serverpb.StatementsResponse{})
 	require.NoError(t, err)
+}
+
+func testTenantNodes(
+	ctx context.Context,
+	t *testing.T,
+	helper serverccl.TenantTestHelper,
+	tenantLocalities []roachpb.Locality,
+) {
+	// TODO(todd): Get this test working over HTTP, #93267.
+	//
+	// When I first tried, I ran into errors about the SQL user
+	// `authentic_user_noadmin` already existing, but at first glance it seemed
+	// that the sync.Once mechanism used in its setup had already accounted
+	// for that scenario; that we're properly passing by reference all the way
+	// through; and that these tests aren't being run in parallel.
+	tenantA := helper.TestCluster().TenantStatusSrv(0)
+	resp, err := tenantA.Nodes(ctx, &serverpb.NodesRequest{})
+	require.NoError(t, err)
+
+	expected := map[roachpb.NodeID]roachpb.Locality{
+		1: tenantLocalities[0],
+		2: tenantLocalities[1],
+		3: tenantLocalities[2],
+	}
+
+	actual := make(map[roachpb.NodeID]roachpb.Locality)
+	for _, node := range resp.Nodes {
+		actual[node.Desc.NodeID] = node.Desc.Locality
+	}
+
+	require.Equal(t, expected, actual)
 }
 
 // assertStartKeyInRange compares the pretty printed startKey with the provided

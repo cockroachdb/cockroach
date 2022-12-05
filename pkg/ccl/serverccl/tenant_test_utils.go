@@ -93,17 +93,11 @@ type TestTenant interface {
 var _ TestTenant = &testTenant{}
 
 func newTestTenant(
-	t *testing.T,
-	server serverutils.TestServerInterface,
-	tenantID roachpb.TenantID,
-	knobs base.TestingKnobs,
+	t *testing.T, server serverutils.TestServerInterface, args base.TestTenantArgs,
 ) TestTenant {
 	t.Helper()
 
-	tenantParams := tests.CreateTestTenantParams(tenantID)
-	tenantParams.TestingKnobs = knobs
-
-	tenant, tenantConn := serverutils.StartTenant(t, server, tenantParams)
+	tenant, tenantConn := serverutils.StartTenant(t, server, args)
 	sqlDB := sqlutils.MakeSQLRunner(tenantConn)
 	status := tenant.StatusServer().(serverpb.SQLStatusServer)
 	sqlStats := tenant.PGServer().(*pgwire.Server).SQLServer.
@@ -151,6 +145,20 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
+	return NewTestTenantHelperWithTenantArgs(t, tenantClusterSize, knobs, func(int, *base.TestTenantArgs) {})
+}
+
+// NewTestTenantHelperWithTenantArgs constructs a TenantTestHelper instance,
+// offering the caller the opportunity to modify the arguments passed when
+// starting each tenant.
+func NewTestTenantHelperWithTenantArgs(
+	t *testing.T,
+	tenantClusterSize int,
+	knobs base.TestingKnobs,
+	customizeTenantArgs func(tenantIdx int, tenantArgs *base.TestTenantArgs),
+) TenantTestHelper {
+	t.Helper()
+
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = knobs
 	// We're running tenant tests, no need for a default tenant.
@@ -168,6 +176,7 @@ func NewTestTenantHelper(
 			tenantClusterSize,
 			security.EmbeddedTenantIDs()[0],
 			knobs,
+			customizeTenantArgs,
 		),
 		// Spin up a small tenant cluster under a different tenant ID to test
 		// tenant isolation.
@@ -177,6 +186,7 @@ func NewTestTenantHelper(
 			1, /* tenantClusterSize */
 			security.EmbeddedTenantIDs()[1],
 			knobs,
+			func(int, *base.TestTenantArgs) {},
 		),
 	}
 }
@@ -224,13 +234,16 @@ func newTenantClusterHelper(
 	tenantClusterSize int,
 	tenantID uint64,
 	knobs base.TestingKnobs,
+	customizeTenantArgs func(tenantIdx int, tenantArgs *base.TestTenantArgs),
 ) TenantClusterHelper {
 	t.Helper()
 
 	var cluster tenantCluster = make([]TestTenant, tenantClusterSize)
 	for i := 0; i < tenantClusterSize; i++ {
-		cluster[i] =
-			newTestTenant(t, server, roachpb.MustMakeTenantID(tenantID), knobs)
+		args := tests.CreateTestTenantParams(roachpb.MustMakeTenantID(tenantID))
+		args.TestingKnobs = knobs
+		customizeTenantArgs(i, &args)
+		cluster[i] = newTestTenant(t, server, args)
 	}
 
 	return cluster
