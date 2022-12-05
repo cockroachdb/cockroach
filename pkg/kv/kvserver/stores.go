@@ -176,6 +176,22 @@ func (ls *Stores) GetReplicaForRangeID(
 	return replica, store, nil
 }
 
+// GetReplicaStoreIDs implements the kvadmission.ReplicaStoreIDsResolver
+// interface.
+func (ls *Stores) GetReplicaStoreIDs(ctx context.Context, rangeID roachpb.RangeID) (ids []roachpb.StoreID, found bool) {
+	repl, _, err := ls.GetReplicaForRangeID(ctx, rangeID)
+	if err != nil {
+		if roachpb.IsRangeNotFoundError(err) {
+			return nil, false
+		}
+		log.Fatalf(ctx, "programming error: %v", err)
+	}
+	for _, desc := range repl.Desc().Replicas().Descriptors() {
+		ids = append(ids, desc.StoreID)
+	}
+	return ids, true
+}
+
 // Send implements the client.Sender interface. The store is looked up from the
 // store map using the ID specified in the request.
 func (ls *Stores) Send(

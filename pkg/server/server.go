@@ -744,6 +744,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gcoords.Regular.GetWorkQueue(admission.KVWork),
 		gcoords.Elastic,
 		gcoords.Stores,
+		gcoords.IOGrantCoordinator,
 		tenantUsage,
 		tenantSettingsWatcher,
 		spanConfig.kvAccessor,

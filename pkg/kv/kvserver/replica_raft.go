@@ -190,7 +190,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, "", writeBytes, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, "", nil, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -209,6 +209,12 @@ func (r *Replica) evalAndPropose(
 
 		// Continue with proposal...
 	}
+
+	// XXX: XXX: Second integration point with replication admission control. Deduct
+	// from the top-level quota pools here.
+	// XXX: Make sure the work is enqueued in the local store's work queue
+	// virtually. Does this happen here? it needs to be symmetric with how it
+	// happens on the follower stores. so probably not here.
 
 	// Attach information about the proposer's lease to the command, for
 	// verification below raft. Lease requests are special since they are not
@@ -936,6 +942,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
 		},
 	}
+	// XXX: XXX: Is this the point below raft where we enqueue the virtual work
+	// item into the local store's work queue? Enqueue once we have the
+	// receiver-side code prototyped. TODO(receiver-side-prototype).
 	if state, err = s.StoreEntries(ctx, state, logstore.MakeReady(rd), &stats.append); err != nil {
 		return stats, errors.Wrap(err, "while storing log entries")
 	}

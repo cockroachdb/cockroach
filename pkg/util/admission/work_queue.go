@@ -806,7 +806,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	q.mu.Unlock()
 	// Reduce critical section by sending on channel after releasing mutex.
 	item.ch <- grantChainID
-	return requestedCount
+	return requestedCount // XXX: These are the logical tokens consumed.
 }
 
 func (q *WorkQueue) gcTenantsAndResetTokens() {
@@ -1756,6 +1756,24 @@ func (q *StoreWorkQueue) Admit(
 	if err != nil {
 		return StoreWorkHandle{}, err
 	}
+	// XXX: TODO(receiver-side-prototype). After we rework the WorkQueue, we'll
+	// have some code point where we're explicitly consuming logical tokens for
+	// a given tenant. The virtual work item queued in the queue should indicate
+	// what sender store it came from, and also for what tenant ID. So when that
+	// work item is dequeued[1], we know exactly which sender node needs to know
+	// about it, and for which of its TDS. We'll send this information back
+	// through and RPC response payload, or if that TDS is local (we're a
+	// leaseholder store), short circuit. In both cases, we'll want to invoke
+	// AdjustBurstCapacity on the sender node with the amount that was deducted
+	// from the TDS for that specific virtual work item on the node the virtual
+	// work item/requeust originated.
+	//
+	// [1]: it could be partial -- if our work item was 20MB of sender-side
+	// quota, and we've generated only 10MB of logical tokens for consumption,
+	// the virtually queued item needs to stay in the queue but now with 10MB
+	// outstanding. Actually it can't be partial. For each work item, we need to
+	// know what value was actually deducted from the TDS at the sender so we
+	// return exactly that amount.
 	h.admissionEnabled = enabled
 	return h, nil
 }
@@ -1788,6 +1806,9 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 // can (a) adjust remaining tokens, (b) account for this in the per-work token
 // estimation model.
 func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDoneInfo) {
+	if q == nil {
+		return
+	}
 	q.updateStoreAdmissionStats(uint64(workCount), doneInfo, true)
 	// Since we have no control over such work, we choose to count it as
 	// regularWorkClass.
@@ -1797,6 +1818,9 @@ func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDon
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
 // storeAdmissionStats.
 func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) {
+	if q == nil {
+		return
+	}
 	q.mu.Lock()
 	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
 	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
@@ -1820,6 +1844,9 @@ func (q *StoreWorkQueue) updateStoreAdmissionStats(
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
 func (q *StoreWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
+	if q == nil {
+		return
+	}
 	for i := range q.q {
 		q.q[i].SetTenantWeights(tenantWeights)
 	}

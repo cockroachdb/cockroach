@@ -371,6 +371,7 @@ func NewNode(
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
+	ioGrantCoordinator *admission.IOGrantCoordinator,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
@@ -392,7 +393,7 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
-		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, n.sendAccountingRequest, cfg.Settings,
+		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, n.sendAccountingRequest, ioGrantCoordinator, stores, cfg.Settings,
 	)
 	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -1119,6 +1120,7 @@ func (n *Node) batchInternal(
 		log.Eventf(ctx, "node received request: %s", args.Summary())
 	}
 
+	// XXX: Wait for write burst here.
 	tStart := timeutil.Now()
 	handle, err := n.storeCfg.KVAdmissionController.AdmitKVWork(ctx, tenID, args)
 	if err != nil {
