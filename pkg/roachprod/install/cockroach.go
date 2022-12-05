@@ -330,10 +330,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -378,10 +375,7 @@ func (c *SyncedCluster) startNode(
 		}
 		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		sess.SetStdin(strings.NewReader(startCmd))
@@ -400,10 +394,7 @@ func (c *SyncedCluster) startNode(
 	}
 	cmd += "./cockroach.sh"
 
-	sess, err := c.newSession(l, node, cmd)
-	if err != nil {
-		return "", err
-	}
+	sess := c.newSession(l, node, cmd)
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)
@@ -635,10 +626,7 @@ func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger,
 	l.Printf("%s: initializing cluster\n", c.Name)
 	initCmd := c.generateInitCmd(node)
 
-	sess, err := c.newSession(l, node, initCmd)
-	if err != nil {
-		return err
-	}
+	sess := c.newSession(l, node, initCmd)
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)
@@ -656,10 +644,7 @@ func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger
 	l.Printf("%s: setting cluster settings", c.Name)
 	clusterSettingCmd := c.generateClusterSettingCmd(l, node)
 
-	sess, err := c.newSession(l, node, clusterSettingCmd)
-	if err != nil {
-		return err
-	}
+	sess := c.newSession(l, node, clusterSettingCmd)
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)

@@ -48,7 +48,7 @@ type remoteSession struct {
 }
 
 // TODO: MG investigate - ssh log is not produced for the 3rd and final attempt
-func newRemoteSession(l *logger.Logger, user, host string, cmd string) (*remoteSession, error) {
+func newRemoteSession(l *logger.Logger, user, host string, cmd string) *remoteSession {
 	var logfile string
 	var loggingArgs []string
 	cl, err := l.ChildLogger(filepath.Join("ssh", host, fmt.Sprintf("%s_%s", timeutil.Now().Format(`150405.000000000`), host)))
@@ -83,7 +83,7 @@ func newRemoteSession(l *logger.Logger, user, host string, cmd string) (*remoteS
 	args = append(args, cmd)
 	ctx, cancel := context.WithCancel(context.Background())
 	fullCmd := exec.CommandContext(ctx, "ssh", args...)
-	return &remoteSession{fullCmd, cancel, logfile}, nil
+	return &remoteSession{fullCmd, cancel, logfile}
 }
 
 func (s *remoteSession) errWithDebug(err error) error {

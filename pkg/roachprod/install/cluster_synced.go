@@ -221,10 +221,7 @@ func (c *SyncedCluster) GetInternalIP(
 		return c.Host(n), nil
 	}
 
-	sess, err := c.newSession(l, n, `hostname --all-ip-addresses`)
-	if err != nil {
-		return "", errors.Wrapf(err, "GetInternalIP: failed dial %s:%d", c.Name, n)
-	}
+	sess := c.newSession(l, n, `hostname --all-ip-addresses`)
 	defer sess.Close()
 
 	var stdout, stderr strings.Builder
@@ -290,9 +287,9 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
 }
 
-func (c *SyncedCluster) newSession(l *logger.Logger, node Node, cmd string) (session, error) {
+func (c *SyncedCluster) newSession(l *logger.Logger, node Node, cmd string) session {
 	if c.IsLocal() {
-		return newLocalSession(cmd), nil
+		return newLocalSession(cmd)
 	}
 	return newRemoteSession(l, c.user(node), c.Host(node), cmd)
 }
@@ -363,11 +360,10 @@ fi`,
 			sig,                       // [3]
 			waitCmd,                   // [4]
 		)
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
+
 		out, cmdErr := sess.CombinedOutput(ctx)
 		res := newRunResultDetails(node, cmdErr)
 		res.CombinedOut = out
@@ -404,10 +400,7 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -446,10 +439,7 @@ else
   echo ${out}
 fi
 `
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -602,12 +592,7 @@ done
 				return
 			}
 
-			sess, err := c.newSession(l, node, buf.String())
-			if err != nil {
-				ch <- NodeMonitorInfo{Node: node, Err: err}
-				wg.Done()
-				return
-			}
+			sess := c.newSession(l, node, buf.String())
 			defer sess.Close()
 
 			p, err := sess.StdoutPipe()
@@ -720,10 +705,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
 
-	sess, err := c.newSession(l, node, nodeCmd)
-	if err != nil {
-		return newRunResultDetails(node, err), err
-	}
+	sess := c.newSession(l, node, nodeCmd)
 	defer sess.Close()
 
 	var res *RunResultDetails
@@ -881,14 +863,10 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res := &RunResultDetails{Node: node}
 		cmd := "test -e /mnt/data1/.roachprod-initialized"
 		for j := 0; j < 600; j++ {
-			sess, err := c.newSession(l, node, cmd)
-			if err != nil {
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
+			sess := c.newSession(l, node, cmd)
 			defer sess.Close()
 
-			_, err = sess.CombinedOutput(ctx)
+			_, err := sess.CombinedOutput(ctx)
 			if err != nil {
 				time.Sleep(500 * time.Millisecond)
 				continue
@@ -954,11 +932,9 @@ test -f .ssh/id_rsa || \
 tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 `
 
-		sess, err := c.newSession(l, 1, cmd)
-		if err != nil {
-			return newRunResultDetails(1, err), err
-		}
+		sess := c.newSession(l, 1, cmd)
 		defer sess.Close()
+
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		sess.SetStdout(&stdout)
@@ -983,10 +959,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		node := nodes[i]
 		cmd := `tar xf -`
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(sshTar))
@@ -1059,10 +1032,7 @@ done
 exit 1
 `
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		var stdout bytes.Buffer
@@ -1113,10 +1083,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(knownHostsData))
@@ -1163,10 +1130,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-			sess, err := c.newSession(l, node, cmd)
-			if err != nil {
-				return newRunResultDetails(node, err), err
-			}
+			sess := c.newSession(l, node, cmd)
 			defer sess.Close()
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
@@ -1221,10 +1185,7 @@ mkdir -p certs
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
-		sess, err := c.newSession(l, 1, cmd)
-		if err != nil {
-			return newRunResultDetails(1, err), err
-		}
+		sess := c.newSession(l, 1, cmd)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1328,10 +1289,7 @@ tar cvf %[5]s $CERT_DIR
 			bundleName,
 		)
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1356,10 +1314,7 @@ func (c *SyncedCluster) cockroachBinSupportsTenantScope(
 	l *logger.Logger, ctx context.Context, node Node,
 ) bool {
 	cmd := fmt.Sprintf("%s cert create-client --help | grep '\\--tenant-scope'", cockroachNodeBinary(c, node))
-	sess, err := c.newSession(l, node, cmd)
-	if err != nil {
-		return false
-	}
+	sess := c.newSession(l, node, cmd)
 	defer sess.Close()
 
 	return sess.Run(ctx) == nil
@@ -1422,10 +1377,7 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	display := fmt.Sprintf("%s: checking %s", c.Name, path)
 	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, err := c.newSession(l, node, `test -e `+path)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, `test -e `+path)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1511,10 +1463,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 			cmd += "tar xf -"
 		}
 
-		sess, err := c.newSession(l, node, cmd)
-		if err != nil {
-			return newRunResultDetails(node, err), err
-		}
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(certsTar))
