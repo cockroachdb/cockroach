@@ -14,9 +14,11 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,23 +44,40 @@ type supportedStatement struct {
 // supported.
 func isFullySupported(
 	n tree.Statement, onByDefault bool, extraFn interface{}, mode sessiondatapb.NewSchemaChangerMode,
-) bool {
+) (ret bool) {
 	// If the unsafe modes of the new schema changer are used then any implemented
 	// operation will be exposed.
 	if mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
 		mode == sessiondatapb.UseNewSchemaChangerUnsafe ||
 		onByDefault {
+		ret = true
 		// If a command is labeled as fully supported, it can still have additional,
 		// checks via callback function.
 		if extraFn != nil {
 			fn := reflect.ValueOf(extraFn)
 			in := []reflect.Value{reflect.ValueOf(n), reflect.ValueOf(mode)}
 			values := fn.Call(in)
-			return values[0].Bool()
+			ret = values[0].Bool()
 		}
-		return true
+		// If `n` is `ALTER TABLE`, then further check each individual command, as
+		// they might have their own extra checks.
+		if alterTableStmt, isAlterTable := n.(*tree.AlterTable); ret && isAlterTable {
+			// Hoist the constraints to separate clauses because other code assumes that
+			// that is how the commands will look.
+			alterTableStmt.HoistAddColumnConstraints(func() {
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
+			})
+			for _, cmd := range alterTableStmt.Cmds {
+				info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+				if info.on && info.extraChecks != nil && !reflect.ValueOf(info.extraChecks).
+					Call([]reflect.Value{reflect.ValueOf(cmd)})[0].Bool() {
+					panic(scerrors.NotImplementedError(cmd))
+				}
+			}
+		}
+		return ret
 	}
-	return false
+	return ret
 }
 
 // Tracks operations which are fully supported when the declarative schema
