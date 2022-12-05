@@ -30,6 +30,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 
 	// Assert the config and various derived values.
 	leaseActive, leaseRenewal := cfg.RangeLeaseDurations()
+	livenessActive, livenessRenewal := cfg.LivenessRangeLeaseDurations()
 	nodeActive, nodeRenewal := cfg.NodeLivenessDurations()
 	raftElectionTimeout := cfg.RaftElectionTimeout()
 	raftHeartbeatInterval := cfg.RaftTickInterval * time.Duration(cfg.RaftHeartbeatIntervalTicks)
@@ -41,6 +42,8 @@ func TestDefaultRaftConfig(t *testing.T) {
 		s += fmt.Sprintf("RaftElectionTimeout: %s\n", raftElectionTimeout)
 		s += fmt.Sprintf("RangeLeaseDurations: active=%s renewal=%s\n", leaseActive, leaseRenewal)
 		s += fmt.Sprintf("RangeLeaseAcquireTimeout: %s\n", cfg.RangeLeaseAcquireTimeout())
+		s += fmt.Sprintf("LivenessRangeLeaseDurations: active=%s renewal=%s\n",
+			livenessActive, livenessRenewal)
 		s += fmt.Sprintf("NodeLivenessDurations: active=%s renewal=%s\n", nodeActive, nodeRenewal)
 		s += fmt.Sprintf("SentinelGossipTTL: %s\n", cfg.SentinelGossipTTL())
 		echotest.Require(t, s, testutils.TestDataPath(t, "raft_config"))

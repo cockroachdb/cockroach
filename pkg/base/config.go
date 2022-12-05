@@ -114,6 +114,18 @@ const (
 	// eagerly renewed 8 seconds into each lease.
 	defaultRangeLeaseRenewalFraction = 0.5
 
+	// defaultLivenessRangeMultiplier specifies the liveness range lease active
+	// duration as a multiple of the standard range lease active duration. When
+	// the liveness leaseholder is lost, other nodes will be unable to heartbeat
+	// and extend their own leases, which can cause a loss of all leases in the
+	// cluster. It is set to half of the regular lease active duration to
+	// counteract this.
+	defaultLivenessRangeLeaseActiveMultiplier = 0.5
+
+	// defaultLivenessRangeLeaseRenewalFraction is like
+	// defaultRangeLeaseRenewalFraction, but for the liveness range lease.
+	defaultLivenessRangeLeaseRenewalFraction = 0.6
+
 	// livenessRenewalFraction specifies what fraction the node liveness
 	// renewal duration should be of the node liveness duration. For example,
 	// with a value of 0.2 and a liveness duration of 10 seconds, each node's
@@ -412,6 +424,17 @@ type RaftConfig struct {
 	// and a value of -1 means never preemptively renew the lease. A value of 1
 	// means always renew.
 	RangeLeaseRenewalFraction float64
+	// LivenessRangeLeaseActiveMultiplier specifies what multiple the liveness
+	// range active duration should be of the regular lease active duration. When
+	// the liveness leaseholder is lost, other nodes are unable to heartbeat and
+	// extend their epoch-based leases, which can cascade into a loss of all
+	// leases in the cluster, so this should be set lower than that.
+	LivenessRangeLeaseActiveMultiplier float64
+	// LivenessRangeLeaseRenewalFraction is like RangeLeaseRenewalFraction but for
+	// the liveness range lease. It is set to 0.6 such that, in the default
+	// configuration, a 2.5s liveness lease is renewed every 1.0s, giving it 1.0s
+	// to succeed before entering the 0.5s stasis period.
+	LivenessRangeLeaseRenewalFraction float64
 
 	// RaftLogTruncationThreshold controls how large a single Range's Raft log
 	// can grow. When a Range's Raft log grows above this size, the Range will
@@ -485,6 +508,12 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RangeLeaseRenewalFraction == 0 {
 		cfg.RangeLeaseRenewalFraction = defaultRangeLeaseRenewalFraction
+	}
+	if cfg.LivenessRangeLeaseActiveMultiplier == 0 {
+		cfg.LivenessRangeLeaseActiveMultiplier = defaultLivenessRangeLeaseActiveMultiplier
+	}
+	if cfg.LivenessRangeLeaseRenewalFraction == 0 {
+		cfg.LivenessRangeLeaseRenewalFraction = defaultLivenessRangeLeaseRenewalFraction
 	}
 	// TODO(andrei): -1 is a special value for RangeLeaseRenewalFraction which
 	// really means "0" (never renew), except that the zero value means "use
@@ -579,6 +608,19 @@ func (cfg RaftConfig) RangeLeaseAcquireTimeout() time.Duration {
 	// timeouts, assuming negligible RTT; otherwise, lease acquisition will
 	// typically be retried, only adding a bit of tail latency.
 	return 2 * cfg.RaftElectionTimeout()
+}
+
+// LivenessRangeLeaseDurations computes durations for range lease expiration and
+// renewal based for the liveness range lease.
+func (cfg RaftConfig) LivenessRangeLeaseDurations() (active, renewal time.Duration) {
+	active = time.Duration(cfg.LivenessRangeLeaseActiveMultiplier *
+		float64(cfg.RangeLeaseActiveDuration()))
+	renewalFraction := cfg.LivenessRangeLeaseRenewalFraction
+	if renewalFraction == -1 {
+		renewalFraction = 0
+	}
+	renewal = time.Duration(float64(active) * renewalFraction)
+	return
 }
 
 // NodeLivenessDurations computes durations for node liveness expiration and

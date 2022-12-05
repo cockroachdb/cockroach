@@ -273,8 +273,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// based leases, it's possible for the new leaseholder that's delayed
 		// in applying the lease transfer to maintain its lease (assuming the
 		// node it's on is able to heartbeat its liveness record).
+		var active time.Duration
+		if p.repl.isLivenessRangeRLocked() {
+			active, _ = p.repl.store.cfg.LivenessRangeLeaseDurations()
+		} else {
+			active = p.repl.store.cfg.RangeLeaseActiveDuration()
+		}
 		reqLease.Expiration = &hlc.Timestamp{}
-		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
+		*reqLease.Expiration = status.Now.ToTimestamp().Add(active.Nanoseconds(), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
@@ -803,6 +809,13 @@ func (r *Replica) requiresExpiringLeaseRLocked() bool {
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
+// isLivenessRange returns true if this range contains the node liveness data.
+func (r *Replica) isLivenessRangeRLocked() bool {
+	return r.store.cfg.NodeLiveness != nil &&
+		r.mu.state.Desc.StartKey.Compare(roachpb.RKey(keys.NodeLivenessKeyMax)) < 0 &&
+		r.mu.state.Desc.EndKey.Compare(roachpb.RKey(keys.NodeLivenessPrefix)) > 0
+}
+
 // requestLeaseLocked executes a request to obtain or extend a lease
 // asynchronously and returns a channel on which the result will be posted. If
 // there's already a request in progress, we join in waiting for the results of
@@ -1032,10 +1045,12 @@ func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 // lease's expiration (and stasis period).
 func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
-	if r.requiresExpiringLeaseRLocked() {
-		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
-	} else {
+	if !r.requiresExpiringLeaseRLocked() {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
+	} else if r.isLivenessRangeRLocked() {
+		_, leaseRenewal = r.store.cfg.LivenessRangeLeaseDurations()
+	} else {
+		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
 	}
 	leaseRenewalMinusStasis := leaseRenewal - r.store.Clock().MaxOffset()
 	if leaseRenewalMinusStasis < 0 {
@@ -1419,7 +1434,13 @@ func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
 	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return false
 	}
-	renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+	var renewalDuration time.Duration
+	if r.isLivenessRangeRLocked() {
+		_, renewalDuration = r.store.cfg.LivenessRangeLeaseDurations()
+	} else {
+		renewalDuration = r.store.cfg.RangeLeaseRenewalDuration()
+	}
+	renewal := st.Lease.Expiration.Add(-renewalDuration.Nanoseconds(), 0)
 	return renewal.LessEq(st.Now.ToTimestamp())
 }
 

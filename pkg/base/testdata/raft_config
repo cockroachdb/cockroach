@@ -6,6 +6,8 @@ echo
  RaftHeartbeatIntervalTicks: (int) 5,
  RangeLeaseRaftElectionTimeoutMultiplier: (float64) 2.5,
  RangeLeaseRenewalFraction: (float64) 0.5,
+ LivenessRangeLeaseActiveMultiplier: (float64) 0.5,
+ LivenessRangeLeaseRenewalFraction: (float64) 0.6,
  RaftLogTruncationThreshold: (int64) 16777216,
  RaftProposalQuota: (int64) 8388608,
  RaftMaxUncommittedEntriesSize: (uint64) 16777216,
@@ -18,5 +20,6 @@ RaftHeartbeatInterval: 1s
 RaftElectionTimeout: 2s
 RangeLeaseDurations: active=5s renewal=2.5s
 RangeLeaseAcquireTimeout: 4s
+LivenessRangeLeaseDurations: active=2.5s renewal=1.5s
 NodeLivenessDurations: active=5s renewal=2.5s
 SentinelGossipTTL: 5s
