@@ -129,9 +129,10 @@ type Direct interface {
 	) (descpb.ID, error)
 }
 
-// direct wraps a StoredCatalog to implement the Direct interface.
+// direct wraps a CatalogReader to implement the Direct interface.
 type direct struct {
-	StoredCatalog
+	cr      CatalogReader
+	dvmp    DescriptorValidationModeProvider
 	version clusterversion.ClusterVersion
 }
 
@@ -141,10 +142,10 @@ var _ Direct = &direct{}
 func MakeDirect(
 	codec keys.SQLCodec, version clusterversion.ClusterVersion, dvmp DescriptorValidationModeProvider,
 ) Direct {
-	return &direct{
-		StoredCatalog: MakeStoredCatalog(NewUncachedCatalogReader(codec), dvmp, nil /* monitor */),
-		version:       version,
-	}
+	cr := NewCatalogReader(
+		codec, version, nil /* maybeSystemDatabaseCache */, nil, /* maybeMonitor */
+	)
+	return &direct{cr: cr, dvmp: dvmp, version: version}
 }
 
 // DefaultDescriptorValidationModeProvider is the default implementation of
@@ -184,9 +185,11 @@ func (d *direct) MustGetDescriptorsByID(
 	if err != nil {
 		return nil, err
 	}
-	if d.ValidateDescriptorsOnRead() {
-		vd := d.NewValidationDereferencer(txn)
-		ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
+	if d.dvmp.ValidateDescriptorsOnRead() {
+		vd := NewCatalogReaderBackedValidationDereferencer(d.cr, txn, d.dvmp)
+		ve := validate.Validate(
+			ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...,
+		)
 		if err := ve.CombinedError(); err != nil {
 			return nil, err
 		}
@@ -215,11 +218,8 @@ func (d *direct) readDescriptorsForDirectAccess(
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	c, err := d.GetDescriptorEntries(ctx, txn, ids, isRequired, expectedType)
+	c, err := d.cr.GetByIDs(ctx, txn, ids, isRequired, expectedType)
 	if err != nil {
-		return nil, err
-	}
-	if err = d.ensure(ctx, c); err != nil {
 		return nil, err
 	}
 	descs := make([]catalog.Descriptor, len(ids))
@@ -235,7 +235,7 @@ func (d *direct) readDescriptorsForDirectAccess(
 
 // GetCatalogUnvalidated is part of the Direct interface.
 func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return d.ScanAll(ctx, txn)
+	return d.cr.ScanAll(ctx, txn)
 }
 
 // MustGetDatabaseDescByID is part of the Direct interface.
@@ -369,4 +369,19 @@ func (d *direct) LookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, dbName string,
 ) (descpb.ID, error) {
 	return d.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
+}
+
+// LookupDescriptorID is part of the Direct interface.
+func (d *direct) LookupDescriptorID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaID descpb.ID, objectName string,
+) (descpb.ID, error) {
+	key := descpb.NameInfo{ParentID: dbID, ParentSchemaID: schemaID, Name: objectName}
+	c, err := d.cr.GetByNames(ctx, txn, []descpb.NameInfo{key})
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if e := c.LookupNamespaceEntry(&key); e != nil {
+		return e.GetID(), nil
+	}
+	return descpb.InvalidID, nil
 }
