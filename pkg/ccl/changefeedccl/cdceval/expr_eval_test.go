@@ -51,7 +51,7 @@ func TestEvaluator(t *testing.T) {
 CREATE TABLE foo (
   a INT, 
   b STRING, 
-  c STRING,
+  c VARCHAR,
   d STRING AS (concat(b, c)) VIRTUAL,
   e status DEFAULT 'inactive',
   f STRING,

@@ -167,6 +167,7 @@ var kvMsgRegexp = regexp.MustCompile(
 		"^Get ",
 		"^Scan ",
 		"^querying next range at ",
+		"^key:.*, desc: ",
 		"^output row: ",
 		"^rows affected: ",
 		"^execution failed after ",
