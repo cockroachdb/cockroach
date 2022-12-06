@@ -454,6 +454,8 @@ func evaluateBatch(
 	if baHeader.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = baHeader.Txn
+		// Reset response transaction's sequence number.
+		br.Txn.Sequence = 0
 		// Note that br.Txn.ReadTimestamp might be higher than baHeader.Timestamp if
 		// we had an EndTxn that decided that it can refresh to something higher
 		// than baHeader.Timestamp because there were no refresh spans.
