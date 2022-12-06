@@ -25,39 +25,20 @@ import (
 // in case we've picked not the most up-to-date replica.
 const nextReplicaIDIncrement = 10
 
-// updatedLocationsMap is tracking which stores we plan to update with a plan.
-// This information is used to present a user with a list of nodes where update
-// must run to apply this plan saving them from running update on _every_ node
-// in the cluster.
-type updatedLocationsMap map[roachpb.NodeID]storeIDSet
-
-func (m updatedLocationsMap) add(node roachpb.NodeID, store roachpb.StoreID) {
-	var set storeIDSet
-	var ok bool
-	if set, ok = m[node]; !ok {
-		set = make(storeIDSet)
-		m[node] = set
-	}
-	set[store] = struct{}{}
-}
-
-func (m updatedLocationsMap) asMapOfSlices() map[roachpb.NodeID][]roachpb.StoreID {
-	newMap := make(map[roachpb.NodeID][]roachpb.StoreID)
-	for k, v := range m {
-		newMap[k] = storeSliceFromSet(v)
-	}
-	return newMap
+type NodeStores struct {
+	NodeID   roachpb.NodeID
+	StoreIDs []roachpb.StoreID
 }
 
 // PlanningReport provides aggregate stats and details of replica updates that
 // is used for user confirmation.
 type PlanningReport struct {
 	// TotalReplicas is the number of replicas that were found on nodes present
-	// in the cluster
+	// in the cluster.
 	TotalReplicas int
 	// DiscardedNonSurvivors is the number of replicas from ranges that lost
-	// quorum that
-	// we decided not to use according to selection criteria used by planner.
+	// quorum that we decided not to use according to selection criteria used by
+	// planner.
 	DiscardedNonSurvivors int
 	// TODO(oleg): track total analyzed range count in subsequent version
 
@@ -65,20 +46,22 @@ type PlanningReport struct {
 	// from. This set is filled from analyzed descriptors and may not strictly
 	// match stores on which collection was run if some stores are empty.
 	PresentStores []roachpb.StoreID
-	// MissingStores is a deduced list of stores that were found in replica
-	// descriptors but were not found in range descriptors e.g. collection was not
-	// run on those stores because they are dead or because of human error.
-	MissingStores []roachpb.StoreID
+	// MissingNodes is a sorted slice of missing nodes and their corresponding
+	// stores. This list is deduced from stores found in range descriptors of
+	// replicas, but not found in actual replicas. e.g. no collection was run
+	// on those stores or nodes.
+	MissingNodes []NodeStores
 
 	// PlannedUpdates contains detailed update info about each planned update.
 	// This information is presented to user for action confirmation and can
 	// contain details that are not needed for actual plan application.
-	PlannedUpdates []ReplicaUpdateReport
+	PlannedUpdates []PlannedReplicaUpdate
 	// UpdatedNodes contains information about nodes with their stores where plan
-	// needs to be applied. Stores are sorted in ascending order.
-	UpdatedNodes map[roachpb.NodeID][]roachpb.StoreID
+	// needs to be applied. Nodes and stores are sorted in ascending order.
+	UpdatedNodes []NodeStores
 
-	// Problems contains any keyspace coverage problems
+	// Problems contains any keyspace coverage problems or range descriptor
+	// inconsistency between storage info and range metadata.
 	Problems []Problem
 }
 
@@ -92,20 +75,30 @@ func (p PlanningReport) Error() error {
 	return nil
 }
 
-// ReplicaUpdateReport contains detailed info about changes planned for
+// PlannedReplicaUpdate contains detailed info about changes planned for
 // particular replica that was chosen as a designated survivor for the range.
-// This information is more detailed than update plan and collected for
-// reporting purposes.
-// While information in update plan is meant for loqrecovery components, Report
-// is meant for cli interaction to keep user informed of changes.
-type ReplicaUpdateReport struct {
-	RangeID                    roachpb.RangeID
-	StartKey                   roachpb.RKey
-	Replica                    roachpb.ReplicaDescriptor
-	OldReplica                 roachpb.ReplicaDescriptor
-	StoreID                    roachpb.StoreID
+type PlannedReplicaUpdate struct {
+	RangeID    roachpb.RangeID
+	StartKey   roachpb.RKey
+	NewReplica roachpb.ReplicaDescriptor
+	OldReplica roachpb.ReplicaDescriptor
+	StoreID    roachpb.StoreID
+	// Discarded replicas based on survivor descriptor content.
 	DiscardedAvailableReplicas roachpb.ReplicaSet
 	DiscardedDeadReplicas      roachpb.ReplicaSet
+	// Discarded actual replicas from stores (including stale).
+	DiscardedReplicasCount int
+	NextReplicaID          roachpb.ReplicaID
+}
+
+func (u PlannedReplicaUpdate) asReplicaUpdate() loqrecoverypb.ReplicaUpdate {
+	return loqrecoverypb.ReplicaUpdate{
+		RangeID:       u.RangeID,
+		StartKey:      loqrecoverypb.RecoveryKey(u.StartKey),
+		OldReplicaID:  u.OldReplica.ReplicaID,
+		NewReplica:    u.NewReplica,
+		NextReplicaID: u.NextReplicaID,
+	}
 }
 
 // PlanReplicas analyzes captured replica information to determine which
@@ -119,22 +112,109 @@ type ReplicaUpdateReport struct {
 // An error is returned in case of unrecoverable error in the collected data
 // that prevents creation of any sane plan or correctable user error.
 func PlanReplicas(
-	ctx context.Context, nodes []loqrecoverypb.NodeReplicaInfo, deadStores []roachpb.StoreID,
+	ctx context.Context,
+	nodes []loqrecoverypb.NodeReplicaInfo,
+	descriptors []roachpb.RangeDescriptor,
+	deadStoreIDs []roachpb.StoreID,
+	deadNodeIDs []roachpb.NodeID,
 ) (loqrecoverypb.ReplicaUpdatePlan, PlanningReport, error) {
-	var report PlanningReport
-	updatedLocations := make(updatedLocationsMap)
 	var replicas []loqrecoverypb.ReplicaInfo
 	for _, node := range nodes {
 		replicas = append(replicas, node.Replicas...)
 	}
-	availableStoreIDs, missingStores, err := validateReplicaSets(replicas, deadStores)
+	availableStoreIDs, deadNodes, err := validateReplicaSets(replicas, deadStoreIDs, deadNodeIDs)
 	if err != nil {
 		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
 	}
-	report.PresentStores = storeSliceFromSet(availableStoreIDs)
-	report.MissingStores = storeSliceFromSet(missingStores)
-
 	replicasByRangeID := groupReplicasByRangeID(replicas)
+
+	var report PlanningReport
+	report.MissingNodes = deadNodes.asSortedSlice()
+	report.PresentStores = availableStoreIDs.storeSliceFromSet()
+	report.TotalReplicas = len(replicas)
+
+	if len(descriptors) > 0 {
+		report.PlannedUpdates, report.Problems, err = planReplicasWithMeta(ctx, descriptors, replicasByRangeID, availableStoreIDs)
+	} else {
+		report.PlannedUpdates, report.Problems, err = planReplicasWithoutMeta(ctx, replicasByRangeID, availableStoreIDs)
+	}
+	if err != nil {
+		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
+	}
+
+	updates := make([]loqrecoverypb.ReplicaUpdate, len(report.PlannedUpdates))
+	updatedLocations := make(locationsMap)
+	for i, u := range report.PlannedUpdates {
+		updates[i] = u.asReplicaUpdate()
+		updatedLocations.add(u.NewReplica.NodeID, u.NewReplica.StoreID)
+		report.DiscardedNonSurvivors += u.DiscardedReplicasCount
+	}
+	report.UpdatedNodes = updatedLocations.asSortedSlice()
+
+	var decommissionedNodeIDs []roachpb.NodeID // this is all wrong!
+	for id := range updatedLocations {
+		decommissionedNodeIDs = append(decommissionedNodeIDs, id)
+	}
+
+	return loqrecoverypb.ReplicaUpdatePlan{
+		Updates:               updates,
+		DecommissionedNodeIDs: decommissionedNodeIDs,
+	}, report, err
+}
+
+func planReplicasWithMeta(
+	ctx context.Context,
+	descriptors []roachpb.RangeDescriptor,
+	replicasByRangeID map[roachpb.RangeID][]loqrecoverypb.ReplicaInfo,
+	availableStoreIDs storeIDSet,
+) ([]PlannedReplicaUpdate, []Problem, error) {
+	var updates []PlannedReplicaUpdate
+	var problems []Problem
+	for _, d := range descriptors {
+		if !d.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
+			_, ok := availableStoreIDs[rep.StoreID]
+			return ok
+		}) {
+			remainingReplicas, replicasFound := replicasByRangeID[d.RangeID]
+			if !replicasFound {
+				problems = append(problems, allReplicasLost{
+					rangeID: d.RangeID,
+					span:    d.KeySpan().AsRawSpanWithNoLocals(),
+				})
+			} else {
+				rankedRangeReplicas := rankReplicasBySurvivability(remainingReplicas)
+				if !d.StartKey.Equal(rankedRangeReplicas.startKey()) || !d.EndKey.Equal(rankedRangeReplicas.endKey()) {
+					problems = append(problems, rangeMetaMismatch{
+						rangeID:  0,
+						span:     rankedRangeReplicas.span(),
+						metaSpan: d.KeySpan().AsRawSpanWithNoLocals(),
+					})
+					continue
+				}
+				u, ok := makeReplicaUpdateIfNeeded(ctx, rankedRangeReplicas, availableStoreIDs)
+				if !ok {
+					log.Infof(ctx, "range r%d didn't lose quorum", rankedRangeReplicas.rangeID())
+					continue
+				}
+				problems = append(problems, checkDescriptor(rankedRangeReplicas)...)
+				updates = append(updates, u)
+				log.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
+					rankedRangeReplicas.survivor().Desc, u.NewReplica)
+			}
+		}
+	}
+
+	sort.Slice(problems, func(i, j int) bool {
+		return problems[i].Span().Key.Compare(problems[j].Span().Key) < 0
+	})
+	return updates, problems, nil
+}
+
+func planReplicasWithoutMeta(
+	ctx context.Context,
+	replicasByRangeID map[roachpb.RangeID][]loqrecoverypb.ReplicaInfo,
+	availableStoreIDs storeIDSet,
+) ([]PlannedReplicaUpdate, []Problem, error) {
 	// proposedSurvivors contain decisions for all ranges in keyspace. it
 	// contains ranges that lost quorum as well as the ones that didn't.
 	var proposedSurvivors []rankedReplicas
@@ -143,31 +223,26 @@ func PlanReplicas(
 	}
 	problems, err := checkKeyspaceCovering(proposedSurvivors)
 	if err != nil {
-		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
+		return nil, nil, err
 	}
 
-	var plan []loqrecoverypb.ReplicaUpdate
+	var updates []PlannedReplicaUpdate
 	for _, p := range proposedSurvivors {
-		report.TotalReplicas += len(p)
 		u, ok := makeReplicaUpdateIfNeeded(ctx, p, availableStoreIDs)
-		if ok {
-			problems = append(problems, checkDescriptor(p)...)
-			plan = append(plan, u)
-			report.DiscardedNonSurvivors += len(p) - 1
-			report.PlannedUpdates = append(report.PlannedUpdates, makeReplicaUpdateReport(ctx, p, u))
-			updatedLocations.add(u.NodeID(), u.StoreID())
-			log.Infof(ctx, "replica has lost quorum, recovering: %s -> %s", p.survivor().Desc, u)
-		} else {
+		if !ok {
 			log.Infof(ctx, "range r%d didn't lose quorum", p.rangeID())
+			continue
 		}
+		problems = append(problems, checkDescriptor(p)...)
+		updates = append(updates, u)
+		log.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
+			p.survivor().Desc, u.NewReplica)
 	}
 
 	sort.Slice(problems, func(i, j int) bool {
 		return problems[i].Span().Key.Compare(problems[j].Span().Key) < 0
 	})
-	report.Problems = problems
-	report.UpdatedNodes = updatedLocations.asMapOfSlices()
-	return loqrecoverypb.ReplicaUpdatePlan{Updates: plan}, report, nil
+	return updates, problems, nil
 }
 
 // validateReplicaSets evaluates provided set of replicas and an optional
@@ -184,52 +259,60 @@ func PlanReplicas(
 // If inconsistency is found e.g. no info was provided for a store but it is
 // not present in explicit deadStoreIDs list, error is returned.
 func validateReplicaSets(
-	replicas []loqrecoverypb.ReplicaInfo, deadStores []roachpb.StoreID,
-) (availableStoreIDs, missingStoreIDs storeIDSet, _ error) {
+	replicas []loqrecoverypb.ReplicaInfo,
+	deadStoreIDs []roachpb.StoreID,
+	deadNodeIDs []roachpb.NodeID,
+) (availableStoreIDs storeIDSet, deadNodes locationsMap, _ error) {
+	allNodes := make(locationsMap)
+	availableNodes := make(locationsMap)
+
 	// Populate availableStoreIDs with all StoreIDs from which we collected info
 	// and, populate missingStoreIDs with all StoreIDs referenced in replica
 	// descriptors for which no information was collected.
-	availableStoreIDs = make(storeIDSet)
-	missingStoreIDs = make(storeIDSet)
 	for _, replicaDescriptor := range replicas {
-		availableStoreIDs[replicaDescriptor.StoreID] = struct{}{}
+		availableNodes.add(replicaDescriptor.NodeID, replicaDescriptor.StoreID)
 		for _, replicaDesc := range replicaDescriptor.Desc.InternalReplicas {
-			missingStoreIDs[replicaDesc.StoreID] = struct{}{}
+			allNodes.add(replicaDesc.NodeID, replicaDesc.StoreID)
 		}
 	}
-	// The difference between all referenced StoreIDs (missingStoreIDs) and the
-	// present StoreIDs (presentStoreIDs) should exactly equal the user-provided
-	// list of dead stores (deadStores), and the former must be a superset of the
-	// latter (since each descriptor found on a store references that store).
-	// Verify all of these conditions and error out if one of them does not hold.
-	for id := range availableStoreIDs {
-		delete(missingStoreIDs, id)
-	}
-	// Stores that doesn't have info, but are not in explicit list.
-	missingButNotDeadStoreIDs := make(storeIDSet)
-	for id := range missingStoreIDs {
-		missingButNotDeadStoreIDs[id] = struct{}{}
-	}
-	// Suspicious are available, but requested dead.
-	suspiciousStoreIDs := make(storeIDSet)
-	for _, id := range deadStores {
-		delete(missingButNotDeadStoreIDs, id)
-		if _, ok := availableStoreIDs[id]; ok {
-			suspiciousStoreIDs[id] = struct{}{}
+
+	availableStoreIDs = availableNodes.stores()
+	deadNodes = allNodes.diff(availableNodes)
+
+	// If dead stores were provided check that no replicas are provided for those
+	// stores and that all detected dead stores are present.
+	if len(deadStoreIDs) > 0 {
+		ds := idSetFromSlice(deadStoreIDs)
+		if susp := availableStoreIDs.intersect(ds); len(susp) > 0 {
+			return nil, nil, errors.Errorf(
+				"stores %s are listed as dead, but replica info is provided for them",
+				susp.joinStoreIDs())
+		}
+		dds := deadNodes.stores()
+		if nonList := dds.diff(ds); len(nonList) > 0 {
+			return nil, nil, errors.Errorf(
+				"information about stores %s were not provided, nor they are listed as dead",
+				nonList.joinStoreIDs())
 		}
 	}
-	if len(suspiciousStoreIDs) > 0 {
-		return nil, nil, errors.Errorf(
-			"stores %s are listed as dead, but replica info is provided for them",
-			joinStoreIDs(suspiciousStoreIDs))
+
+	// If dead nodes were provided check that no replicas are provided for those
+	// nodes and that all detected dead nodes are present.
+	if len(deadNodeIDs) > 0 {
+		dn := locationsFromSlice(deadNodeIDs)
+		if susp := availableNodes.intersect(dn); len(susp) > 0 {
+			return nil, nil, errors.Errorf(
+				"nodes %s are listed as dead, but replica info is provided for them",
+				susp.joinNodeIDs())
+		}
+		if nonList := deadNodes.diff(dn); len(nonList) > 0 {
+			return nil, nil, errors.Errorf(
+				"information about nodes %s were not provided, nor they are listed as dead",
+				nonList.joinNodeIDs())
+		}
 	}
-	if len(deadStores) > 0 && len(missingButNotDeadStoreIDs) > 0 {
-		// We can't proceed with this if dead nodes were explicitly provided.
-		return nil, nil, errors.Errorf(
-			"information about stores %s were not provided, nor they are listed as dead",
-			joinStoreIDs(missingButNotDeadStoreIDs))
-	}
-	return availableStoreIDs, missingStoreIDs, nil
+
+	return availableStoreIDs, deadNodes, nil
 }
 
 func groupReplicasByRangeID(
@@ -423,12 +506,12 @@ func checkKeyspaceCovering(replicas []rankedReplicas) ([]Problem, error) {
 // range from update plan.
 func makeReplicaUpdateIfNeeded(
 	ctx context.Context, p rankedReplicas, liveStoreIDs storeIDSet,
-) (loqrecoverypb.ReplicaUpdate, bool) {
+) (PlannedReplicaUpdate, bool) {
 	if p.survivor().Desc.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
 		_, ok := liveStoreIDs[rep.StoreID]
 		return ok
 	}) {
-		return loqrecoverypb.ReplicaUpdate{}, false
+		return PlannedReplicaUpdate{}, false
 	}
 
 	// We want to have replicaID which is greater or equal nextReplicaID across
@@ -453,22 +536,39 @@ func makeReplicaUpdateIfNeeded(
 			"while performing keyspace coverage check: %s", err)
 	}
 
+	// Replicas that belonged to unavailable nodes based on surviving range
+	// descriptor.
+	discardedDead := p.survivor().Desc.Replicas().DeepCopy()
+	discardedDead.RemoveReplica(replica.NodeID, replica.StoreID)
+	// Replicas that belong to available nodes, but discarded as they are
+	// not preferred choice.
+	discardedAvailable := roachpb.ReplicaSet{}
+	for _, storeReplica := range p[1:] {
+		discardedDead.RemoveReplica(storeReplica.NodeID, storeReplica.StoreID)
+		r, _ := storeReplica.Desc.GetReplicaDescriptor(storeReplica.StoreID)
+		discardedAvailable.AddReplica(r)
+	}
+
 	// The range needs to be recovered and this replica is a designated survivor.
 	// To recover the range rewrite it as having a single replica:
 	// - Rewrite the replicas list.
 	// - Bump the replica ID so that in case there are other surviving nodes that
 	//   were members of the old incarnation of the range, they no longer
 	//   recognize this revived replica (because they are not in sync with it).
-	return loqrecoverypb.ReplicaUpdate{
-		RangeID:      p.rangeID(),
-		StartKey:     loqrecoverypb.RecoveryKey(p.startKey()),
-		OldReplicaID: replica.ReplicaID,
+	return PlannedReplicaUpdate{
+		RangeID:  p.rangeID(),
+		StartKey: p.startKey(),
 		NewReplica: roachpb.ReplicaDescriptor{
 			NodeID:    p.nodeID(),
 			StoreID:   p.storeID(),
 			ReplicaID: nextReplicaID + nextReplicaIDIncrement,
 		},
-		NextReplicaID: nextReplicaID + nextReplicaIDIncrement + 1,
+		OldReplica:                 replica,
+		StoreID:                    p.storeID(),
+		DiscardedAvailableReplicas: discardedAvailable,
+		DiscardedDeadReplicas:      discardedDead,
+		DiscardedReplicasCount:     len(p) - 1,
+		NextReplicaID:              nextReplicaID + nextReplicaIDIncrement + 1,
 	}, true
 }
 
@@ -514,44 +614,4 @@ func checkDescriptor(rankedDescriptors rankedReplicas) (problems []Problem) {
 		}
 	}
 	return
-}
-
-// makeReplicaUpdateReport creates a detailed report of changes that needs to
-// be performed on range. It uses decision as well as information about all
-// replicas of range to provide information about what is being discarded and
-// how new replica would be configured.
-func makeReplicaUpdateReport(
-	ctx context.Context, p rankedReplicas, update loqrecoverypb.ReplicaUpdate,
-) ReplicaUpdateReport {
-	oldReplica, err := p.survivor().Replica()
-	if err != nil {
-		// We don't expect invalid replicas reaching this stage because we will err
-		// out on earlier stages. This is covered by invalid input tests and if we
-		// ended up here that means tests are not run, or code changed sufficiently
-		// and both checks and tests were lost.
-		log.Fatalf(ctx, "unexpected invalid replica info while making recovery plan: %s", err)
-	}
-
-	// Replicas that belonged to unavailable nodes based on surviving range
-	// descriptor.
-	discardedDead := p.survivor().Desc.Replicas()
-	discardedDead.RemoveReplica(update.NodeID(), update.StoreID())
-	// Replicas that we collected info about for the range, but decided they are
-	// not preferred choice.
-	discardedAvailable := roachpb.ReplicaSet{}
-	for _, replica := range p[1:] {
-		discardedDead.RemoveReplica(replica.NodeID, replica.StoreID)
-		r, _ := replica.Desc.GetReplicaDescriptor(replica.StoreID)
-		discardedAvailable.AddReplica(r)
-	}
-
-	return ReplicaUpdateReport{
-		RangeID:                    p.rangeID(),
-		StartKey:                   p.startKey(),
-		OldReplica:                 oldReplica,
-		Replica:                    update.NewReplica,
-		StoreID:                    p.storeID(),
-		DiscardedDeadReplicas:      discardedDead,
-		DiscardedAvailableReplicas: discardedAvailable,
-	}
 }

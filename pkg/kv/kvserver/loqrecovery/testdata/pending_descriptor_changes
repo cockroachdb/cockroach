@@ -209,7 +209,7 @@ ok
 
 make-plan
 ----
-[]
+ok
 
 
 # Check that if non survivor replica has pending changes, it doesn't prevent recovery from
