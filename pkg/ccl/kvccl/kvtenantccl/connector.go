@@ -334,7 +334,7 @@ func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
-		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+		return nil, kvcoord.NewNodeNotFoundError(nodeID)
 	}
 	return desc, nil
 }
@@ -345,7 +345,7 @@ func (c *Connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreD
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.storeDescs[storeID]
 	if !ok {
-		return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
+		return nil, kvcoord.NewStoreNotFoundError(storeID)
 	}
 	return desc, nil
 }

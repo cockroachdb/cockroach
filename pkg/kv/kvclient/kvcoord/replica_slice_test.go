@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,14 +39,14 @@ func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.Node
 			return &nd, nil
 		}
 	}
-	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+	return nil, NewNodeNotFoundError(nodeID)
 }
 
 // GetStoreDescriptor is part of the NodeDescStore interface.
 func (ns *mockNodeStore) GetStoreDescriptor(
 	storeID roachpb.StoreID,
 ) (*roachpb.StoreDescriptor, error) {
-	return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
+	return nil, NewStoreNotFoundError(storeID)
 }
 
 func TestNewReplicaSlice(t *testing.T) {

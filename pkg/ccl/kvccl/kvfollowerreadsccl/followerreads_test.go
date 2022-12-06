@@ -479,11 +479,11 @@ func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 			return desc, nil
 		}
 	}
-	return nil, errors.Errorf("unable to look up descriptor for n%d", id)
+	return nil, kvcoord.NewNodeNotFoundError(id)
 }
 
 func (s mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	return nil, errors.Errorf("unable to look up descriptor for store ID %d", id)
+	return nil, roachpb.NewStoreNotFoundError(id)
 }
 
 // TestOracle tests the Oracle exposed by this package.
