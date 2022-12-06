@@ -62,6 +62,30 @@ var statementsBufPool = sync.Pool{
 	},
 }
 
+// Instead of creating and allocating a map to track duplicate
+// causes each time, we just iterate through the array since
+// we don't expect it to be very large.
+func addCause(arr []Cause, n Cause) []Cause {
+	for i := range arr {
+		if arr[i] == n {
+			return arr
+		}
+	}
+	return append(arr, n)
+}
+
+// Instead of creating and allocating a map to track duplicate
+// problems each time, we just iterate through the array since
+// we don't expect it to be very large.
+func addProblem(arr []Problem, n Problem) []Problem {
+	for i := range arr {
+		if arr[i] == n {
+			return arr
+		}
+	}
+	return append(arr, n)
+}
+
 func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
@@ -84,21 +108,31 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
+	insight := makeInsight(sessionID, transaction)
+
 	for i, s := range *statements {
-		insight := makeInsight(sessionID, transaction, s)
 		if slowStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
-				insight.Problem = Problem_SlowExecution
-				insight.Causes = r.causes.examine(insight.Causes, s)
+				s.Problem = Problem_SlowExecution
+				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
 				// Note that we'll be building better failure support for 23.1.
 				// For now, we only mark failed statements that were also slow.
-				insight.Problem = Problem_FailedExecution
+				s.Problem = Problem_FailedExecution
 			}
+
+			// Bubble up stmt problems and causes.
+			for i := range s.Causes {
+				insight.Transaction.Causes = addCause(insight.Transaction.Causes, s.Causes[i])
+			}
+			insight.Transaction.Problems = addProblem(insight.Transaction.Problems, s.Problem)
 		}
-		r.sink.AddInsight(insight)
+
+		insight.Statements = append(insight.Statements, s)
 	}
+
+	r.sink.AddInsight(insight)
 }
 
 // TODO(todd):
