@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -47,17 +48,30 @@ type remoteSession struct {
 	logfile string // captures ssh -vvv
 }
 
-// TODO: MG investigate - ssh log is not produced for the 3rd and final attempt
-func newRemoteSession(l *logger.Logger, user, host string, cmd string) *remoteSession {
-	var logfile string
+func newRemoteSession(
+	l *logger.Logger, user, host string, cmd string, cmdDebugName string,
+) *remoteSession {
 	var loggingArgs []string
-	cl, err := l.ChildLogger(filepath.Join("ssh", host, fmt.Sprintf("%s_%s", timeutil.Now().Format(`150405.000000000`), host)))
+
+	if cmdDebugName == "" {
+		cmdDebugName = GenFilenameFromArgs(strings.Fields(cmd)...)
+	}
+
+	logfile := fmt.Sprintf(
+		"ssh_%s_%s_%s",
+		timeutil.Now().Format(`150405.000000000`),
+		host,
+		cmdDebugName,
+	)
+
+	cl, err := l.ChildLogger(logfile)
+
 	// Running roachprod from the cli will result in a fileless logger
 	if err == nil && l.File != nil {
-		logfile = cl.File.Name()
 		loggingArgs = []string{
-			"-vvv", "-E", logfile,
+			"-vvv", "-E", cl.File.Name(),
 		}
+		cl.Close()
 	} else {
 		// NB: -q suppresses -E, at least on *nix.
 		loggingArgs = []string{"-q"}

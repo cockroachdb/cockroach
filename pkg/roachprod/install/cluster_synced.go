@@ -221,7 +221,7 @@ func (c *SyncedCluster) GetInternalIP(
 		return c.Host(n), nil
 	}
 
-	sess := c.newSession(l, n, `hostname --all-ip-addresses`)
+	sess := c.newSession(l, n, `hostname --all-ip-addresses`, "get-internal-ip")
 	defer sess.Close()
 
 	var stdout, stderr strings.Builder
@@ -287,11 +287,15 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 	return fmt.Sprintf(`ROACHPROD=%s[ \/]`, escaped)
 }
 
-func (c *SyncedCluster) newSession(l *logger.Logger, node Node, cmd string) session {
+// cmdDebugName is the suffix of the generated ssh debug file
+// If it is "", a suffix will be generated from the cmd string
+func (c *SyncedCluster) newSession(
+	l *logger.Logger, node Node, cmd string, cmdDebugName string,
+) session {
 	if c.IsLocal() {
 		return newLocalSession(cmd)
 	}
-	return newRemoteSession(l, c.user(node), c.Host(node), cmd)
+	return newRemoteSession(l, c.user(node), c.Host(node), cmd, cmdDebugName)
 }
 
 // Stop is used to stop cockroach on all nodes in the cluster.
@@ -361,7 +365,7 @@ fi`,
 			waitCmd,                   // [4]
 		)
 
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "node-stop")
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -400,7 +404,7 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "node-wipe")
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -439,7 +443,7 @@ else
   echo ${out}
 fi
 `
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "node-status")
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -592,7 +596,7 @@ done
 				return
 			}
 
-			sess := c.newSession(l, node, buf.String())
+			sess := c.newSession(l, node, buf.String(), "node-monitor")
 			defer sess.Close()
 
 			p, err := sess.StdoutPipe()
@@ -705,7 +709,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
 
-	sess := c.newSession(l, node, nodeCmd)
+	sess := c.newSession(l, node, nodeCmd, GenFilenameFromArgs(expandedCmd))
 	defer sess.Close()
 
 	var res *RunResultDetails
@@ -863,7 +867,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res := &RunResultDetails{Node: node}
 		cmd := "test -e /mnt/data1/.roachprod-initialized"
 		for j := 0; j < 600; j++ {
-			sess := c.newSession(l, node, cmd)
+			sess := c.newSession(l, node, cmd, "node-wait")
 			defer sess.Close()
 
 			_, err := sess.CombinedOutput(ctx)
@@ -932,7 +936,7 @@ test -f .ssh/id_rsa || \
 tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 `
 
-		sess := c.newSession(l, 1, cmd)
+		sess := c.newSession(l, 1, cmd, "ssh-gen-key")
 		defer sess.Close()
 
 		var stdout bytes.Buffer
@@ -959,7 +963,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		node := nodes[i]
 		cmd := `tar xf -`
 
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "ssh-dist-key")
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(sshTar))
@@ -1032,7 +1036,7 @@ done
 exit 1
 `
 
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "ssh-scan-hosts")
 		defer sess.Close()
 
 		var stdout bytes.Buffer
@@ -1083,7 +1087,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "ssh-dist-known-hosts")
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(knownHostsData))
@@ -1130,7 +1134,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-			sess := c.newSession(l, node, cmd)
+			sess := c.newSession(l, node, cmd, "ssh-add-extra-keys")
 			defer sess.Close()
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
@@ -1185,7 +1189,7 @@ mkdir -p certs
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
-		sess := c.newSession(l, 1, cmd)
+		sess := c.newSession(l, 1, cmd, "init-certs")
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1289,7 +1293,7 @@ tar cvf %[5]s $CERT_DIR
 			bundleName,
 		)
 
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "create-tenant-cert-bundle")
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1314,7 +1318,7 @@ func (c *SyncedCluster) cockroachBinSupportsTenantScope(
 	l *logger.Logger, ctx context.Context, node Node,
 ) bool {
 	cmd := fmt.Sprintf("%s cert create-client --help | grep '\\--tenant-scope'", cockroachNodeBinary(c, node))
-	sess := c.newSession(l, node, cmd)
+	sess := c.newSession(l, node, cmd, "")
 	defer sess.Close()
 
 	return sess.Run(ctx) == nil
@@ -1377,7 +1381,7 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	display := fmt.Sprintf("%s: checking %s", c.Name, path)
 	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess := c.newSession(l, node, `test -e `+path)
+		sess := c.newSession(l, node, `test -e `+path, "")
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1463,7 +1467,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 			cmd += "tar xf -"
 		}
 
-		sess := c.newSession(l, node, cmd)
+		sess := c.newSession(l, node, cmd, "dist-local-certs")
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(certsTar))
@@ -2408,4 +2412,42 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 	}
 
 	return nil
+}
+
+// GenFilenameFromArgs given a list of cmd args, returns a string up to
+// `maxLen` in length. It is alphanumeric with hyphen delimiters.
+// e.g. [/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg-dmesgtxt
+func GenFilenameFromArgs(args ...string) string {
+	var sb strings.Builder
+	length := 0
+	wasHyphen := true
+
+	writeByte := func(b byte) {
+		if b == '-' && wasHyphen {
+			return
+		}
+		sb.WriteByte(b)
+		wasHyphen = b == '-'
+		length++
+	}
+
+	for _, s := range args {
+		writeByte('-')
+		for i := 0; i < len(s); i++ {
+			b := s[i]
+			if b == ' ' {
+				writeByte('-')
+			} else if ('a' <= b && b <= 'z') ||
+				('A' <= b && b <= 'Z') ||
+				('0' <= b && b <= '9') {
+				writeByte(b)
+			}
+
+			if length == 50 {
+				return sb.String()
+			}
+		}
+	}
+
+	return sb.String()
 }
