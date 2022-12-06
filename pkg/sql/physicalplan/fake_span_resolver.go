@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 const avgRangesPerNode = 5
@@ -55,6 +56,7 @@ type fakeSpanResolverIterator struct {
 	// isolation so that using the resolver doesn't introduce conflicts.
 	db  *kv.DB
 	err error
+	rng *rand.Rand
 
 	// ranges are ordered by the key; the start key of the first one is the
 	// beginning of the current range and the end key of the last one is the end
@@ -64,7 +66,8 @@ type fakeSpanResolverIterator struct {
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
 func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
-	return &fakeSpanResolverIterator{fsr: fsr, db: txn.DB()}
+	rng, _ := randutil.NewTestRand()
+	return &fakeSpanResolverIterator{fsr: fsr, db: txn.DB(), rng: rng}
 }
 
 // Seek is part of the SpanResolverIterator interface. Each Seek call generates
@@ -124,13 +127,13 @@ func (fit *fakeSpanResolverIterator) Seek(
 	if maxSplits > len(splitKeys) {
 		maxSplits = len(splitKeys)
 	}
-	numSplits := rand.Intn(maxSplits + 1)
+	numSplits := fit.rng.Intn(maxSplits + 1)
 
 	// Use Robert Floyd's algorithm to generate numSplits distinct integers
 	// between 0 and len(splitKeys), just because it's so cool!
 	chosen := make(map[int]struct{})
 	for j := len(splitKeys) - numSplits; j < len(splitKeys); j++ {
-		t := rand.Intn(j + 1)
+		t := fit.rng.Intn(j + 1)
 		if _, alreadyChosen := chosen[t]; !alreadyChosen {
 			// Insert T.
 			chosen[t] = struct{}{}
@@ -164,7 +167,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 		fit.ranges[i] = fakeRange{
 			startKey: splits[i],
 			endKey:   splits[i+1],
-			replica:  fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))],
+			replica:  fit.fsr.nodes[fit.rng.Intn(len(fit.fsr.nodes))],
 		}
 	}
 
