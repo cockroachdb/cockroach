@@ -24,7 +24,7 @@ func (r *Replica) maybeRateLimitBatch(ctx context.Context, ba *roachpb.BatchRequ
 	if r.tenantLimiter == nil {
 		return nil
 	}
-	tenantID, ok := roachpb.TenantFromContext(ctx)
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok || tenantID == roachpb.SystemTenantID {
 		return nil
 	}

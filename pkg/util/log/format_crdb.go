@@ -19,6 +19,10 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
+// TenantIDLogTagKey is the log tag key used when tagging
+// log entries with a tenant ID.
+const TenantIDLogTagKey = 'T'
+
 const severityChar = "IWEF"
 
 // MessageTimeFormat is the format of the timestamp in log message headers of crdb formatted logs.

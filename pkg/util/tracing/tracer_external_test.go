@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // For tenant functionality.
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -158,4 +159,8 @@ func TestTraceForTenantWithLocalKVServer(t *testing.T) {
 		}
 	}
 	require.True(t, found)
+
+	// Check that the RPC used the internalClientAdapter.
+	_, ok := testStmtTrace.FindLogMessage(kvbase.RoutingRequestLocallyMsg)
+	require.True(t, ok)
 }

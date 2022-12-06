@@ -431,8 +431,13 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 	return nil
 }
 
-func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
-	ctx = roachpb.NewContextForTenant(ctx, tenID)
+// contextWithClientTenant inserts a tenant identifier in the context,
+// identifying the tenant that's the client for an RPC. The identifier can be
+// retrieved later through roachpb.ClientTenantFromContext(ctx). The tenant
+// information is used both as a log tag, and also for purposes like rate
+// limiting tenant calls.
+func contextWithClientTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
+	ctx = roachpb.ContextWithClientTenant(ctx, tenID)
 	const key = "tenant"
 	// Don't set a log tag if the tenant is not set and there is no existing log
 	// tag.

@@ -4923,7 +4923,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Tenant.CreateTenantWithID(ctx, uint64(sTenID), ""); err != nil {
+				if err := evalCtx.Tenant.CreateTenantWithID(ctx, uint64(sTenID), "" /* tenantName */); err != nil {
 					return nil, err
 				}
 				return args[0], nil

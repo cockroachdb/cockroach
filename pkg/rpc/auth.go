@@ -64,7 +64,7 @@ func (a kvAuth) unaryInterceptor(
 	if err != nil {
 		return nil, err
 	}
-	ctx = contextWithTenant(ctx, tenID)
+	ctx = contextWithClientTenant(ctx, tenID)
 	if tenID.IsSet() {
 		if err := a.tenant.authorize(tenID, info.FullMethod, req); err != nil {
 			return nil, err
@@ -81,7 +81,7 @@ func (a kvAuth) streamInterceptor(
 	if err != nil {
 		return err
 	}
-	ctx = contextWithTenant(ctx, tenID)
+	ctx = contextWithClientTenant(ctx, tenID)
 	if tenID != (roachpb.TenantID{}) {
 		origSS := ss
 		ss = &wrappedServerStream{
@@ -99,10 +99,21 @@ func (a kvAuth) streamInterceptor(
 	return handler(srv, ss)
 }
 
+// authenticate returns the client tenant ID of an RPC. An empty TenantID is
+// returned if authorization should not be performed because the caller is
+// allowed to perform any RPC.
 func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
-	if grpcutil.IsLocalRequestContext(ctx) {
-		// This is an in-process request. Bypass authentication check.
-		return roachpb.TenantID{}, nil
+	// Deal with local requests done through the internalClientAdapter. There's no
+	// TLS for these calls, so the regular authentication code path doesn't apply.
+	{
+		clientTenantID, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
+			if clientTenantID == roachpb.SystemTenantID {
+				// Bypass authentication check.
+				return roachpb.TenantID{}, nil
+			}
+			return clientTenantID, nil
+		}
 	}
 
 	p, ok := peer.FromContext(ctx)

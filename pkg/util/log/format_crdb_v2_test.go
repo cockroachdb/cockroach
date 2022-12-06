@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -31,16 +32,20 @@ type testIDPayload struct {
 	tenantID string
 }
 
-func (t testIDPayload) ServerIdentityString(key ServerIdentificationKey) string {
+func (t testIDPayload) ServerIdentityString(key serverident.ServerIdentificationKey) string {
 	switch key {
-	case IdentifyTenantID:
+	case serverident.IdentifyTenantID:
 		return t.tenantID
 	default:
 		return ""
 	}
 }
 
-var _ ServerIdentificationPayload = (*testIDPayload)(nil)
+func (t testIDPayload) TenantID() interface{} {
+	return nil
+}
+
+var _ serverident.ServerIdentificationPayload = (*testIDPayload)(nil)
 
 func TestFormatCrdbV2(t *testing.T) {
 	tm, err := time.Parse(MessageTimeFormat, "060102 15:04:05.654321")
@@ -55,7 +60,7 @@ func TestFormatCrdbV2(t *testing.T) {
 
 	tenantIDPayload := testIDPayload{tenantID: "2"}
 	tenantCtx := context.Background()
-	tenantCtx = context.WithValue(tenantCtx, ServerIdentificationContextKey{}, tenantIDPayload)
+	tenantCtx = context.WithValue(tenantCtx, serverident.ServerIdentificationContextKey{}, tenantIDPayload)
 	tenantCtx = logtags.AddTag(tenantCtx, "noval", nil)
 	tenantCtx = logtags.AddTag(tenantCtx, "p", "3")
 	tenantCtx = logtags.AddTag(tenantCtx, "longKey", "456")
