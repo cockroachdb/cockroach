@@ -78,7 +78,7 @@ func getSQLUsername(ctx context.Context) username.SQLUsername {
 }
 
 type apiV2ServerOpts struct {
-	admin            *adminServer
+	admin            *systemAdminServer
 	status           *systemStatusServer
 	promRuleExporter *metric.PrometheusRuleExporter
 	sqlServer        *SQLServer
@@ -93,7 +93,7 @@ type apiV2ServerOpts struct {
 // To register a new API endpoint, add it to the route definitions in
 // registerRoutes().
 type apiV2Server struct {
-	admin            *adminServer
+	admin            *systemAdminServer
 	authServer       *authenticationV2Server
 	status           *systemStatusServer
 	promRuleExporter *metric.PrometheusRuleExporter
