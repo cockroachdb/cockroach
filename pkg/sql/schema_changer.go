@@ -3263,6 +3263,8 @@ func (p *planner) CanPerformDropOwnedBy(
 ) (bool, error) {
 	row, err := p.QueryRowEx(ctx, `role-has-synthetic-privileges`, sessiondata.NodeUserSessionDataOverride,
 		`SELECT count(1) FROM system.privileges WHERE username = $1`, role.Normalized())
-
+	if err != nil {
+		return false, err
+	}
 	return tree.MustBeDInt(row[0]) == 0, err
 }
