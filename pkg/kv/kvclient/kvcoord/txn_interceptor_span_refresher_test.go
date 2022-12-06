@@ -123,13 +123,15 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 
 	cases := []struct {
 		// If name is not set, the test will use pErr.String().
-		name string
+		name     string
+		withRead bool
 		// OnFirstSend, if set, is invoked to evaluate the batch. If not set, pErr()
 		// will be used to provide an error.
 		onFirstSend  func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 		pErr         func() *roachpb.Error
 		expRefresh   bool
 		expRefreshTS hlc.Timestamp
+		expRetry     bool
 	}{
 		{
 			pErr: func() *roachpb.Error {
@@ -138,6 +140,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp,
+			expRetry:     true,
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -146,6 +149,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp,
+			expRetry:     true,
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -154,6 +158,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp.Add(15, 0),
+			expRetry:     true,
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -164,6 +169,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp.Add(25, 1), // see ExistingTimestamp
+			expRetry:     true,
 		},
 		{
 			pErr: func() *roachpb.Error {
@@ -175,12 +181,14 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp.Add(30, 0), // see LocalUncertaintyLimit
+			expRetry:     true,
 		},
 		{
 			pErr: func() *roachpb.Error {
 				return roachpb.NewErrorf("no refresh")
 			},
 			expRefresh: false,
+			expRetry:   false,
 		},
 		{
 			name: "write_too_old flag",
@@ -193,6 +201,23 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp.Add(20, 1), // Same as br.Txn.WriteTimestamp.
+			// No retry because batch contained no reads.
+			expRetry: false,
+		},
+		{
+			name:     "write_too_old flag with read in batch",
+			withRead: true,
+			onFirstSend: func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.WriteTooOld = true
+				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
+				return br, nil
+			},
+			expRefresh:   true,
+			expRefreshTS: txn.WriteTimestamp.Add(20, 1), // Same as br.Txn.WriteTimestamp.
+			// Retry because batch contained reads.
+			expRetry: true,
 		},
 	}
 	for _, tc := range cases {
@@ -224,8 +249,14 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 
 			// Hook up a chain of mocking functions.
 			onFirstSend := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				require.Len(t, ba.Requests, 1)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				if tc.withRead {
+					require.Len(t, ba.Requests, 2)
+					require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
+					require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+				} else {
+					require.Len(t, ba.Requests, 1)
+					require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				}
 
 				// Return a transaction retry error.
 				if tc.onFirstSend != nil {
@@ -239,8 +270,14 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				// Should not be called if !expRefresh.
 				require.True(t, tc.expRefresh)
 
-				require.Len(t, ba.Requests, 1)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				if tc.withRead {
+					require.Len(t, ba.Requests, 2)
+					require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
+					require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+				} else {
+					require.Len(t, ba.Requests, 1)
+					require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				}
 
 				// Don't return an error.
 				br = ba.CreateReply()
@@ -273,6 +310,10 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			// Send a request that will hit a retry error. Depending on the
 			// error type, we may or may not perform a refresh.
 			ba.Requests = nil
+			if tc.withRead {
+				getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+				ba.Add(&getArgs)
+			}
 			putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
 			ba.Add(&putArgs)
 
@@ -285,15 +326,18 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
 				require.Equal(t, int64(1), tsr.refreshSuccess.Count())
 				require.Equal(t, int64(0), tsr.refreshFail.Count())
-				require.Equal(t, int64(1), tsr.refreshAutoRetries.Count())
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
 				require.Zero(t, tsr.refreshedTimestamp)
 				require.Equal(t, int64(0), tsr.refreshSuccess.Count())
-				require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
 				// Note that we don't check the tsr.refreshFail metric here as tests
 				// here expect the refresh to not be attempted, not to fail.
+			}
+			if tc.expRetry {
+				require.Equal(t, int64(1), tsr.refreshAutoRetries.Count())
+			} else {
+				require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
 			}
 		})
 	}

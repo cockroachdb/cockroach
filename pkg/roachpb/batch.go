@@ -207,6 +207,12 @@ func (ba *BatchRequest) IsUnsplittable() bool {
 	return ba.hasFlag(isUnsplittable)
 }
 
+// NeedsRefresh returns true iff the BatchRequest contains a request that
+// requires a refresh when the transaction's read timestamp changes.
+func (ba *BatchRequest) NeedsRefresh() bool {
+	return ba.hasFlag(needsRefresh)
+}
+
 // IsSingleRequest returns true iff the BatchRequest contains a single request.
 func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1

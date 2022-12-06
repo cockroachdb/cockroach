@@ -248,25 +248,34 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		// intents. Not doing so, though, gives the SQL a chance to auto-retry.
 		// TODO(andrei): Implement a more discerning policy based on whether
 		// auto-retries are still possible.
-		//
-		// For the refresh, we have two options: either refresh everything read
-		// *before* this batch, and then retry this batch, or refresh the current
-		// batch's reads too and then, if successful, there'd be nothing to retry.
-		// We take the former option by setting br = nil below to minimized the
-		// chances that the refresh fails.
 		bumpedTxn := br.Txn.Clone()
 		bumpedTxn.WriteTooOld = false
 		pErr = roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionRetryError(roachpb.RETRY_WRITE_TOO_OLD,
 				"WriteTooOld flag converted to WriteTooOldError"),
 			bumpedTxn)
-		br = nil
+		// For a refresh after a successful request, we have two options: either
+		// refresh everything read *before* this batch, and then retry this batch,
+		// or refresh the current batch's reads too and then, if successful, there'd
+		// be nothing to retry. If the current batch contains refresh spans, we take
+		// the former option by setting br = nil to minimize the chances that the
+		// refresh fails. However, if the current batch contains no refresh spans,
+		// we take the latter approach, which allows us to avoid retrying part or
+		// all of the batch.
+		if ba.NeedsRefresh() {
+			br = nil
+		} else {
+			// Allow maybeRefreshAndRetrySend to use the response, but remove the
+			// transaction proto so that it can't be accidentally reused.
+			br.Txn = nil
+		}
 	}
 	if pErr != nil {
 		if maxRefreshAttempts > 0 {
-			br, pErr = sr.maybeRefreshAndRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+			br, pErr = sr.maybeRefreshAndRetrySend(ctx, ba, br, pErr, maxRefreshAttempts)
 		} else {
 			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
+			br = nil
 		}
 	}
 	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
@@ -277,10 +286,15 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 
 // maybeRefreshAndRetrySend attempts to catch serializable errors and avoid them
 // by refreshing the txn at a larger timestamp. If it succeeds at refreshing the
-// txn timestamp, it recurses into sendLockedWithRefreshAttempts and retries the
-// batch. If the refresh fails, the input pErr is returned.
+// txn timestamp, it may recurse into sendLockedWithRefreshAttempts and retry
+// the batch. However, if a response is also provided, it can be used to avoid
+// part or all of the retry. If the refresh fails, the input pErr is returned.
 func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
-	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+	maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	txn := pErr.GetTxn()
 	if txn == nil || !sr.canForwardReadTimestamp(txn) {
@@ -304,10 +318,21 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 		// TODO(lidor): we should add refreshErr info to the returned error. See issue #41057.
 		return nil, pErr
 	}
+	log.Eventf(ctx, "refresh succeeded")
 
-	// We've refreshed all of the read spans successfully and bumped
-	// ba.Txn's timestamps. Attempt the request again.
-	log.Eventf(ctx, "refresh succeeded; retrying original request")
+	et, hasET := ba.GetArg(roachpb.EndTxn)
+	splitET := hasET && len(ba.Requests) > 1 && !et.(*roachpb.EndTxnRequest).Require1PC
+
+	// The original request was successful and did not contain an EndTxn. Return
+	// it without a retry using the updated transaction proto.
+	if br != nil && !hasET {
+		log.Eventf(ctx, "original response still valid; returning it")
+		br.Txn = refreshToTxn
+		return br, nil
+	}
+
+	// We've refreshed all the read spans successfully and bumped ba.Txn's
+	// timestamps. Attempt the request again.
 	ba = ba.ShallowCopy()
 	ba.UpdateTxn(refreshToTxn)
 	sr.refreshAutoRetries.Inc(1)
@@ -322,12 +347,12 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	// of writes in the batch and then rejected wholesale when the EndTxn tries
 	// to evaluate the pushed batch. When split, the writes will be pushed but
 	// succeed, the transaction will be refreshed, and the EndTxn will succeed.
-	args, hasET := ba.GetArg(roachpb.EndTxn)
-	if len(ba.Requests) > 1 && hasET && !args.(*roachpb.EndTxnRequest).Require1PC {
-		log.Eventf(ctx, "sending EndTxn separately from rest of batch on retry")
+	if splitET {
+		log.Eventf(ctx, "retrying EndTxn separately from rest of batch request")
 		return sr.splitEndTxnAndRetrySend(ctx, ba)
 	}
 
+	log.Eventf(ctx, "retrying original request")
 	retryBr, retryErr := sr.sendLockedWithRefreshAttempts(ctx, ba, maxRefreshAttempts-1)
 	if retryErr != nil {
 		log.VEventf(ctx, 2, "retry failed with %s", retryErr)

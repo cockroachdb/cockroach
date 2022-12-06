@@ -2403,7 +2403,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Put(ctx, "a", "put")
 			},
 			priorReads:    true,
-			txnCoordRetry: true,
+			txnCoordRetry: false,
 		},
 		{
 			name: "write too old with put after timestamp leaked",
@@ -2427,7 +2427,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.Put(ctx, "a", "put")
 			},
-			txnCoordRetry: true,
+			txnCoordRetry: false,
 		},
 		{
 			name: "write too old with get conflict",
