@@ -401,9 +401,12 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 	<-explicitCommitCh
 }
 
-// TestTxnCommitterRetryAfterStaging verifies that txnCommitter returns a retry
-// error when a write performed in parallel with staging a transaction is pushed
-// to a timestamp above the staging timestamp.
+// TestTxnCommitterRetryAfterStaging verifies that txnCommitter returns a
+// successful batch response with a STAGING status when a write performed in
+// parallel with staging a transaction is pushed to a timestamp above the
+// staging timestamp. The spanRefresher is responsible for detecting this
+// status, refreshing, and re-issuing the EndTxn suffix as a non-parallel
+// commit.
 func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -435,7 +438,7 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 			require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
 
 			br := ba.CreateReply()
-			br.Txn = ba.Txn
+			br.Txn = ba.Txn.Clone()
 			br.Txn.Status = roachpb.STAGING
 			br.Responses[1].GetInner().(*roachpb.EndTxnResponse).StagingTimestamp = br.Txn.WriteTimestamp
 
@@ -444,19 +447,17 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 			// WriteTooOld flag). The intent will be written but the response
 			// transaction's timestamp will be larger than the staging timestamp.
 			br.Txn.WriteTooOld = writeTooOld
-			br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(1, 0)
+			br.Txn.WriteTimestamp = ba.Txn.WriteTimestamp.Add(1, 0)
 			return br, nil
 		})
 
 		br, pErr := tc.SendLocked(ctx, ba)
-		require.Nil(t, br)
-		require.NotNil(t, pErr)
-		require.IsType(t, &roachpb.TransactionRetryError{}, pErr.GetDetail())
-		expReason := roachpb.RETRY_SERIALIZABLE
-		if writeTooOld {
-			expReason = roachpb.RETRY_WRITE_TOO_OLD
-		}
-		require.Equal(t, expReason, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.NotNil(t, br.Txn)
+		require.Equal(t, roachpb.STAGING, br.Txn.Status)
+		require.Equal(t, writeTooOld, br.Txn.WriteTooOld)
+		require.Equal(t, ba.Txn.WriteTimestamp.Add(1, 0), br.Txn.WriteTimestamp)
 	})
 }
 

@@ -238,12 +238,18 @@ func (tc *txnCommitter) SendLocked(
 	// performed this check. However, the transaction proto may have changed due
 	// to writes evaluated concurrently with the EndTxn even if none of those
 	// writes returned an error. Remember that the transaction proto we see here
-	// could be a combination of protos from responses, all merged by
-	// DistSender.
-	if pErr := needTxnRetryAfterStaging(br); pErr != nil {
-		log.VEventf(ctx, 2, "parallel commit failed since some writes were pushed. "+
-			"Synthesized err: %s", pErr)
-		return nil, pErr
+	// could be a combination of protos from responses, all merged by DistSender.
+	if needRetry, err := needTxnRetryAfterStaging(br); err != nil {
+		return nil, roachpb.NewError(err)
+	} else if needRetry {
+		// If the parallel commit attempt failed, return the STAGING transaction
+		// record up in the BatchResponse to the txnSpanRefresher. The refresher
+		// will catch the response, refresh the transaction's reads, and will then
+		// re-issue the EndTxn request on its own. Since the EndTxn request is
+		// alone, the re-issued batch will not be considered a parallel commit, so
+		// the transaction record will be moved directly to COMMITTED.
+		log.VEventf(ctx, 2, "parallel commit failed since some writes were pushed")
+		return br, nil
 	}
 
 	// If the transaction doesn't need to retry then it is implicitly committed!
@@ -426,17 +432,17 @@ func mergeIntoSpans(s []roachpb.Span, ws []roachpb.SequencedWrite) ([]roachpb.Sp
 // needTxnRetryAfterStaging determines whether the transaction needs to refresh
 // (see txnSpanRefresher) or retry based on the batch response of a parallel
 // commit attempt.
-func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
+func needTxnRetryAfterStaging(br *roachpb.BatchResponse) (bool, error) {
 	if len(br.Responses) == 0 {
-		return roachpb.NewErrorf("no responses in BatchResponse: %v", br)
+		return false, errors.AssertionFailedf("no responses in BatchResponse: %v", br)
 	}
 	lastResp := br.Responses[len(br.Responses)-1].GetInner()
 	etResp, ok := lastResp.(*roachpb.EndTxnResponse)
 	if !ok {
-		return roachpb.NewErrorf("unexpected response in BatchResponse: %v", lastResp)
+		return false, errors.AssertionFailedf("unexpected response in BatchResponse: %v", lastResp)
 	}
 	if etResp.StagingTimestamp.IsEmpty() {
-		return roachpb.NewErrorf("empty StagingTimestamp in EndTxnResponse: %v", etResp)
+		return false, errors.AssertionFailedf("empty StagingTimestamp in EndTxnResponse: %v", etResp)
 	}
 	if etResp.StagingTimestamp.Less(br.Txn.WriteTimestamp) {
 		// If the timestamp that the transaction record was staged at
@@ -449,16 +455,10 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 		// Note that we leave the transaction record that we wrote in the STAGING
 		// state, which is not ideal. But as long as we continue heartbeating the
 		// txn record, it being PENDING or STAGING does not make a difference.
-		reason := roachpb.RETRY_SERIALIZABLE
-		if br.Txn.WriteTooOld {
-			reason = roachpb.RETRY_WRITE_TOO_OLD
-		}
-		err := roachpb.NewTransactionRetryError(
-			reason, "serializability failure concurrent with STAGING")
-		txn := cloneWithStatus(br.Txn, roachpb.PENDING)
-		return roachpb.NewErrorWithTxn(err, txn)
+		return true, nil
 	}
-	return nil
+	// Implicitly committed.
+	return false, nil
 }
 
 // makeTxnCommitExplicitAsync launches an async task that attempts to move the

@@ -231,6 +231,32 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		pErr.GetTxn().WriteTooOld = false
 	}
 
+	if pErr == nil && br.Txn.Status == roachpb.STAGING {
+		// If pErr == nil but the txnCommitter did not consider the transaction to
+		// be implicitly committed then one of the transaction's write timestamp
+		// must be above its staging timestamp (see needTxnRetryAfterStaging). We
+		// refresh the transaction so that we can re-issue the EndTxn request at a
+		// higher timestamp and try to commit again.
+		reason := roachpb.RETRY_SERIALIZABLE
+		if br.Txn.WriteTooOld {
+			reason = roachpb.RETRY_WRITE_TOO_OLD
+		}
+		pendingTxn := cloneWithStatus(br.Txn, roachpb.PENDING)
+		pErr = roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionRetryError(reason,
+				"serializability failure concurrent with STAGING"),
+			pendingTxn)
+		// The batch attempted a parallel commit, so nothing in the batch should
+		// require a refresh. This means that part of the response can be returned
+		// without accounting for any new refresh spans during the refresh.
+		if ba.NeedsRefresh() {
+			return nil, roachpb.NewError(errors.AssertionFailedf(
+				"parallel commit batch unexpectedly contains requests that need refresh: %v", ba))
+		}
+		// Allow maybeRefreshAndRetrySend to use part of the response, but remove
+		// the STAGING transaction proto.
+		br.Txn = nil
+	}
 	if pErr == nil && br.Txn.WriteTooOld {
 		// If we got a response with the WriteTooOld flag set, then we pretend that
 		// we got a WriteTooOldError, which will cause us to attempt to refresh and
@@ -337,6 +363,14 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	ba.UpdateTxn(refreshToTxn)
 	sr.refreshAutoRetries.Inc(1)
 
+	// Each request in the original batch was successful, but together the batch
+	// failed to parallel commit. Retry just the EndTxn with the updated write
+	// timestamp and stitch the response back together if it succeeds.
+	if br != nil && splitET {
+		log.Eventf(ctx, "retrying EndTxn alone")
+		return sr.retryEndTxnAndAttachToResponse(ctx, ba, br)
+	}
+
 	// To prevent starvation of batches that are trying to commit, split off the
 	// EndTxn request into its own batch on auto-retries. This avoids starvation
 	// in two ways. First, it helps ensure that we lay down intents if any of
@@ -361,6 +395,31 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 
 	log.VEventf(ctx, 2, "retry successful @%s", retryBr.Txn.ReadTimestamp)
 	return retryBr, nil
+}
+
+// retryEndTxnAndAttachToResponse retries only the EndTxn request suffix of the
+// batch request with an updated transaction proto. The other requests in the
+// batch are not retried under the assumption that their results are the same
+// before and after the refresh. The function then stitches the EndTxn response
+// together with the existing responses for all other requests.
+func (sr *txnSpanRefresher) retryEndTxnAndAttachToResponse(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	// Issue a batch containing only the EndTxn request.
+	etIdx := len(ba.Requests) - 1
+	baSuffix := ba.ShallowCopy()
+	baSuffix.Requests = ba.Requests[etIdx:]
+	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	// Combine the original response with the EndTxn response.
+	br.Responses[etIdx].Reset()
+	if err := br.Combine(brSuffix, []int{etIdx}); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	return br, nil
 }
 
 // splitEndTxnAndRetrySend splits the batch in two, with a prefix containing all
