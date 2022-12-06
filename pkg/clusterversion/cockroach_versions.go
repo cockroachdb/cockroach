@@ -354,6 +354,14 @@ const (
 	// supported through `CREATE SCHEDULE FOR CHANGEFEED` statement.
 	V23_1ScheduledChangefeeds
 
+	// V23_1AddTypeColumnToJobsTable adds the nullable job_type
+	// column to the system.jobs table.
+	V23_1AddTypeColumnToJobsTable
+
+	// V23_1BackfillTypeColumnInJobsTable backfills the job_type
+	// column in the system.jobs table.
+	V23_1BackfillTypeColumnInJobsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -611,6 +619,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1ScheduledChangefeeds,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 16},
+	},
+	{
+		Key:     V23_1AddTypeColumnToJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 18},
+	},
+	{
+		Key:     V23_1BackfillTypeColumnInJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 20},
 	},
 
 	// *************************************************
