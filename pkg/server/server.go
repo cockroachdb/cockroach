@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -145,10 +146,11 @@ type Server struct {
 	tsServer        *ts.Server
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
-	eventsServer  *obs.EventsServer
-	raftTransport *kvserver.RaftTransport
-	stopper       *stop.Stopper
-	stopTrigger   *stopTrigger
+	eventsServer   *obs.EventsServer
+	recoveryServer *loqrecovery.Server
+	raftTransport  *kvserver.RaftTransport
+	stopper        *stop.Stopper
+	stopTrigger    *stopTrigger
 
 	debug    *debug.Server
 	kvProber *kvprober.Prober
@@ -1017,6 +1019,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	)
 
+	recoveryServer := loqrecovery.NewServer(stores, g, cfg.Locality, rpcContext, cfg.TestingKnobs.LOQRecovery)
+
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
 		cfg:                    cfg,
@@ -1050,6 +1054,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
 		eventsServer:           eventsServer,
+		recoveryServer:         recoveryServer,
 		raftTransport:          raftTransport,
 		stopper:                stopper,
 		stopTrigger:            stopTrigger,
