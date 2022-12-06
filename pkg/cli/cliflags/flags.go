@@ -1822,8 +1822,7 @@ See start --help for more flag details and examples.
 	}
 
 	ConfirmActions = FlagInfo{
-		Name:      "confirm",
-		Shorthand: "p",
+		Name: "confirm",
 		Description: `
 Confirm action:
 <PRE>
