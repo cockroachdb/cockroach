@@ -86,8 +86,6 @@ func DefaultEnvVars() []string {
 		// when moving snapshots around, though.
 		// (For other perf. related knobs, see https://github.com/cockroachdb/cockroach/issues/17165)
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-		// Get rid of an annoying popup in the UI.
-		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 		// Allow upgrading a stable release data-dir to a dev version.
 		// N.B. many roachtests which perform upgrade scenarios require this env. var after changes in [1]; otherwise,
 		// the tests will fail even on release branches when attempting to upgrade previous (stable) release to an alpha.
