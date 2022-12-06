@@ -837,10 +837,17 @@ message CertBundleResponse {
 
 message RecoveryCollectReplicaInfoRequest {}
 
+message RecoveryCollectReplicaRestartNodeStream {
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+
 message RecoveryCollectReplicaInfoResponse {
   oneof info {
     roachpb.RangeDescriptor range_descriptor = 1;
     cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo replica_info = 2;
+    RecoveryCollectReplicaRestartNodeStream node_stream_restarted = 3;
   }
 }
 

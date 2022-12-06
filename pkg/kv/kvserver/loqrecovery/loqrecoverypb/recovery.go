@@ -93,3 +93,21 @@ func (m *ReplicaRecoveryRecord) AsStructuredLog() eventpb.DebugRecoverReplica {
 		EndKey:            m.EndKey.AsRKey().String(),
 	}
 }
+
+func (m *ClusterReplicaInfo) Merge(o ClusterReplicaInfo) error {
+	if len(o.Descriptors) > 0 {
+		if len(m.Descriptors) > 0 {
+			return errors.New("only single cluster replica info could contain descriptors")
+		}
+		m.Descriptors = append(m.Descriptors, o.Descriptors...)
+	}
+	m.LocalInfo = append(m.LocalInfo, o.LocalInfo...)
+	return nil
+}
+
+func (m *ClusterReplicaInfo) ReplicaCount() (size int) {
+	for _, i := range m.LocalInfo {
+		size += len(i.Replicas)
+	}
+	return size
+}

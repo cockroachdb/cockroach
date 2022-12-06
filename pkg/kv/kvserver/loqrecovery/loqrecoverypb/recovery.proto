@@ -51,9 +51,21 @@ message ReplicaInfo {
     (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
 }
 
-// Collection of replica information gathered from a collect-info run on a single node.
+// Collection of replica information gathered in a collect-info run.
+// ReplicaInfo in Replicas could belong to multiple nodes/stores.
 message NodeReplicaInfo {
   repeated ReplicaInfo replicas = 1 [(gogoproto.nullable) = false];
+}
+
+// Replica info collected from one or more nodes of a cluster.
+message ClusterReplicaInfo {
+  // Descriptors contains range descriptors collected from meta ranges.
+  repeated roachpb.RangeDescriptor descriptors = 1 [(gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "descriptors,omitempty"];
+  // LocalInfo contains one or more NodeReplicaInfo structs each containing a
+  // subset of full info. They are not guaranteed to be split by node, each
+  // each element should contain disjoint subset of replica infos.
+  repeated NodeReplicaInfo local_info = 2 [(gogoproto.nullable) = false];
 }
 
 // ReplicaUpdate contains information that needs to be updated on replica on the node

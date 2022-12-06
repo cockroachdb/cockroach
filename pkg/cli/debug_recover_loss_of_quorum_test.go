@@ -78,10 +78,71 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 	replicas, err := readReplicaInfoData([]string{replicaInfoFileName})
 	require.NoError(t, err, "failed to read generated replica info")
 	stores := map[roachpb.StoreID]interface{}{}
-	for _, r := range replicas[0].Replicas {
+	for _, r := range replicas.LocalInfo[0].Replicas {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
+}
+
+// TestCollectInfoFromOnlineCluster verifies that given a test cluster with
+// one stopped node, we can collect replica info and metadata from remaining
+// nodes using an admin recovery call.
+func TestCollectInfoFromOnlineCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		NoServer: true,
+	})
+	defer c.Cleanup()
+
+	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+
+		ServerArgs: base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			Insecure:   true,
+		},
+	})
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+	tc.ToggleReplicateQueues(false)
+
+	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
+	var totalRanges int
+	require.NoError(t, r.Scan(&totalRanges), "failed to query range count")
+
+	tc.StopServer(0)
+	replicaInfoFileName := dir + "/all-nodes.json"
+
+	c.RunWithArgs([]string{
+		"debug",
+		"recover",
+		"collect-info",
+		"--insecure",
+		"--host",
+		tc.Server(2).ServingRPCAddr(),
+		replicaInfoFileName,
+	})
+
+	replicas, err := readReplicaInfoData([]string{replicaInfoFileName})
+	require.NoError(t, err, "failed to read generated replica info")
+	stores := map[roachpb.StoreID]interface{}{}
+	for _, r := range replicas.LocalInfo[0].Replicas {
+		stores[r.StoreID] = struct{}{}
+	}
+	require.Equal(t, 2, len(stores), "collected replicas from stores")
+	require.Equal(t, totalRanges, len(replicas.Descriptors),
+		"number of collected descriptors from metadata")
+	require.Equal(t, totalRanges*2, len(replicas.LocalInfo[0].Replicas),
+		"number of collected replicas")
+
+	// Shutdown.
+	tc.Stopper().Stop(ctx)
 }
 
 // TestLossOfQuorumRecovery performs a sanity check on end to end recovery workflow.
