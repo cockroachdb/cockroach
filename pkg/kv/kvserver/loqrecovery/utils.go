@@ -15,7 +15,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
 )
 
 type storeIDSet map[roachpb.StoreID]struct{}
@@ -171,4 +175,25 @@ func (e *RecoveryError) ErrorDetail() string {
 		descriptions = append(descriptions, fmt.Sprintf("%v", id))
 	}
 	return strings.Join(descriptions, "\n")
+}
+
+func RecoveryFileVersion() loqrecoverypb.Version {
+	v := clusterversion.MakeVersionHandle(&settings.Values{}).BinaryVersion()
+	return loqrecoverypb.Version{
+		Major: v.Major,
+		Minor: v.Minor,
+	}
+}
+
+// CanUseFileVersion checks that provided version is compatible with binary
+// version. It checks major and minor versions only. This is simple check for
+// use with transient recovery info files only to prevent incorrect files being
+// used in error.
+func CanUseFileVersion(v loqrecoverypb.Version) error {
+	c := RecoveryFileVersion()
+	if v.Equal(c) {
+		return nil
+	}
+	return errors.Newf("recovery file must have same major and minor version, data created with %s while binary is %s",
+		v, c)
 }

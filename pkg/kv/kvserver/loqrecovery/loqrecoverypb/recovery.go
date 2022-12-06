@@ -11,6 +11,8 @@
 package loqrecoverypb
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -92,4 +94,44 @@ func (m *ReplicaRecoveryRecord) AsStructuredLog() eventpb.DebugRecoverReplica {
 		StartKey:          m.StartKey.AsRKey().String(),
 		EndKey:            m.EndKey.AsRKey().String(),
 	}
+}
+
+func (m *ClusterReplicaInfo) Merge(o ClusterReplicaInfo) error {
+	if len(o.Descriptors) > 0 {
+		if len(m.Descriptors) > 0 {
+			return errors.New("only single cluster replica info could contain descriptors")
+		}
+		m.Descriptors = append(m.Descriptors, o.Descriptors...)
+	}
+	type nsk struct {
+		n roachpb.NodeID
+		s roachpb.StoreID
+	}
+	existing := make(map[nsk]struct{})
+	for _, n := range m.LocalInfo {
+		for _, r := range n.Replicas {
+			existing[nsk{n: r.NodeID, s: r.StoreID}] = struct{}{}
+		}
+	}
+	for _, n := range o.LocalInfo {
+		for _, r := range n.Replicas {
+			if _, ok := existing[nsk{n: r.NodeID, s: r.StoreID}]; ok {
+				return errors.Newf("failed to merge cluster info, replicas from n%d/s%d are already present",
+					r.NodeID, r.StoreID)
+			}
+		}
+	}
+	m.LocalInfo = append(m.LocalInfo, o.LocalInfo...)
+	return nil
+}
+
+func (m *ClusterReplicaInfo) ReplicaCount() (size int) {
+	for _, i := range m.LocalInfo {
+		size += len(i.Replicas)
+	}
+	return size
+}
+
+func (v *Version) String() string {
+	return fmt.Sprintf("%d.%d", v.Major, v.Minor)
 }
