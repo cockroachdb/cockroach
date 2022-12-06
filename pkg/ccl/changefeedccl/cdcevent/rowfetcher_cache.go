@@ -110,7 +110,7 @@ func refreshUDT(
 	}); err != nil {
 		// Manager can return all kinds of errors during chaos, but based on
 		// its usage, none of them should ever be terminal.
-		return nil, err
+		return nil, changefeedbase.MarkRetryableError(err)
 	}
 	// Immediately release the lease, since we only need it for the exact
 	// timestamp requested.
@@ -144,7 +144,7 @@ func (c *rowFetcherCache) tableDescForKey(
 	if err != nil {
 		// Manager can return all kinds of errors during chaos, but based on
 		// its usage, none of them should ever be terminal.
-		return nil, family, err
+		return nil, family, changefeedbase.MarkRetryableError(err)
 	}
 	tableDesc = desc.Underlying().(catalog.TableDescriptor)
 	// Immediately release the lease, since we only need it for the exact
