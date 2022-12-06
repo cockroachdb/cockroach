@@ -41,14 +41,23 @@ func TestStore(t *testing.T) {
 
 func addInsight(store *lockingStore, idBase uint64) {
 	store.AddInsight(&Insight{
-		Statement: &Statement{ID: clusterunique.ID{Uint128: uint128.FromInts(0, idBase)}},
+		Transaction: &Transaction{},
+		Statements: []StatementInsight{
+			{
+				Statement: &Statement{
+					ID: clusterunique.ID{Uint128: uint128.FromInts(0, idBase)},
+				},
+			},
+		},
 	})
 }
 
 func assertInsightStatementIDs(t *testing.T, store *lockingStore, expected []uint64) {
 	var actual []uint64
 	store.IterateInsights(context.Background(), func(ctx context.Context, insight *Insight) {
-		actual = append(actual, insight.Statement.ID.Lo)
+		for _, s := range insight.Statements {
+			actual = append(actual, s.Statement.ID.Lo)
+		}
 	})
 	require.ElementsMatch(t, expected, actual)
 }

@@ -100,11 +100,13 @@ func TestIngester(t *testing.T) {
 			// transactions.
 			var actual []testEvent
 			store.IterateInsights(ctx, func(ctx context.Context, insight *Insight) {
-				actual = append(actual, testEvent{
-					sessionID:     insight.Session.ID.Lo,
-					transactionID: insight.Transaction.ID.ToUint128().Lo,
-					statementID:   insight.Statement.ID.Lo,
-				})
+				for _, s := range insight.Statements {
+					actual = append(actual, testEvent{
+						sessionID:     insight.Session.ID.Lo,
+						transactionID: insight.Transaction.ID.ToUint128().Lo,
+						statementID:   s.Statement.ID.Lo,
+					})
+				}
 			})
 
 			require.ElementsMatch(t, tc.insights, actual)

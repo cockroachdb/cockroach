@@ -30,6 +30,7 @@ func TestRegistry(t *testing.T) {
 	session := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
 	transaction := &Transaction{ID: uuid.FastMakeV4()}
 	statement := &Statement{
+		Status:           Statement_Completed,
 		ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 		FingerprintID:    roachpb.StmtFingerprintID(100),
 		LatencyInSeconds: 2,
@@ -46,8 +47,9 @@ func TestRegistry(t *testing.T) {
 		expected := []*Insight{{
 			Session:     session,
 			Transaction: transaction,
-			Statement:   statement,
-			Problem:     Problem_SlowExecution,
+			Statements: []StatementInsight{
+				{Statement: statement, Problem: Problem_SlowExecution},
+			},
 		}}
 		var actual []*Insight
 
@@ -58,7 +60,7 @@ func TestRegistry(t *testing.T) {
 			},
 		)
 
-		require.Equal(t, expected, actual)
+		require.Equal(t, expected[0], actual[0])
 	})
 
 	t.Run("failure detection", func(t *testing.T) {
@@ -82,8 +84,9 @@ func TestRegistry(t *testing.T) {
 		expected := []*Insight{{
 			Session:     session,
 			Transaction: transaction,
-			Statement:   s,
-			Problem:     Problem_FailedExecution,
+			Statements: []StatementInsight{
+				{Statement: s, Problem: Problem_FailedExecution},
+			},
 		}}
 		var actual []*Insight
 
@@ -159,13 +162,15 @@ func TestRegistry(t *testing.T) {
 		expected := []*Insight{{
 			Session:     session,
 			Transaction: transaction,
-			Statement:   statement,
-			Problem:     Problem_SlowExecution,
+			Statements: []StatementInsight{
+				{Statement: statement, Problem: Problem_SlowExecution},
+			},
 		}, {
 			Session:     otherSession,
 			Transaction: otherTransaction,
-			Statement:   otherStatement,
-			Problem:     Problem_SlowExecution,
+			Statements: []StatementInsight{
+				{Statement: otherStatement, Problem: Problem_SlowExecution},
+			},
 		}}
 		var actual []*Insight
 		store.IterateInsights(
@@ -197,17 +202,16 @@ func TestRegistry(t *testing.T) {
 		registry.ObserveStatement(session.ID, siblingStatment)
 		registry.ObserveTransaction(session.ID, transaction)
 
-		expected := []*Insight{{
-			Session:     session,
-			Transaction: transaction,
-			Statement:   statement,
-			Problem:     Problem_SlowExecution,
-		}, {
-			Session:     session,
-			Transaction: transaction,
-			Statement:   siblingStatment,
-			Problem:     Problem_None,
-		}}
+		expected := []*Insight{
+			{
+				Session:     session,
+				Transaction: transaction,
+				Statements: []StatementInsight{
+					{Statement: statement, Problem: Problem_SlowExecution},
+					{Statement: siblingStatment, Problem: Problem_None},
+				},
+			},
+		}
 		var actual []*Insight
 		store.IterateInsights(
 			context.Background(),

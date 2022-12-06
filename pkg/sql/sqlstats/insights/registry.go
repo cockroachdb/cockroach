@@ -84,21 +84,46 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
+	insight := makeInsight(sessionID, transaction)
+	causesUnique := map[Cause]struct{}{}
+	problemsUnique := map[Problem]struct{}{}
+
 	for i, s := range *statements {
-		insight := makeInsight(sessionID, transaction, s)
+		stmt := StatementInsight{
+			Statement: s,
+		}
+
 		if slowStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
-				insight.Problem = Problem_SlowExecution
-				insight.Causes = r.causes.examine(insight.Causes, s)
+				stmt.Problem = Problem_SlowExecution
+				stmt.Causes = r.causes.examine(stmt.Causes, s)
 			case Statement_Failed:
 				// Note that we'll be building better failure support for 23.1.
 				// For now, we only mark failed statements that were also slow.
-				insight.Problem = Problem_FailedExecution
+				stmt.Problem = Problem_FailedExecution
 			}
+
 		}
-		r.sink.AddInsight(insight)
+
+		// Bubble up stmt problems and causes.
+		problemsUnique[stmt.Problem] = struct{}{}
+		for _, c := range stmt.Causes {
+			causesUnique[c] = struct{}{}
+		}
+
+		insight.Statements = append(insight.Statements, stmt)
 	}
+
+	for c := range causesUnique {
+		insight.Transaction.Causes = append(insight.Transaction.Causes, c)
+	}
+
+	for p := range problemsUnique {
+		insight.Transaction.Problems = append(insight.Transaction.Problems, p)
+	}
+
+	r.sink.AddInsight(insight)
 }
 
 // TODO(todd):
