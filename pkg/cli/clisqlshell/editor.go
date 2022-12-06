@@ -46,7 +46,10 @@ func getEditor(useEditor bool, displayPrompt bool) editor {
 	if useLibEdit {
 		return &editlineReader{}
 	}
-	return &bubblineReader{}
+	return &bimodalEditor{
+		main: &bubblineReader{},
+		copy: &bufioReader{displayPrompt: displayPrompt},
+	}
 }
 
 var useLibEdit = envutil.EnvOrDefaultBool("COCKROACH_SQL_FORCE_LIBEDIT", false)

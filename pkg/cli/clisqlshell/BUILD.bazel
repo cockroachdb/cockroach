@@ -9,6 +9,7 @@ go_library(
         "context.go",
         "doc.go",
         "editor.go",
+        "editor_bimodal.go",
         "editor_bubbline.go",
         "editor_bufio.go",
         "editor_editline.go",
