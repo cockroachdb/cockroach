@@ -25,6 +25,7 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -58,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -3219,6 +3223,120 @@ func (s *systemAdminServer) SendKVBatch(
 	return br, nil
 }
 
+func (s *systemAdminServer) RecoveryCollectReplicaInfo(
+	request *serverpb.RecoveryCollectReplicaInfoRequest,
+	stream serverpb.Admin_RecoveryCollectReplicaInfoServer,
+) error {
+	ctx := stream.Context()
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return err
+	}
+	log.Ops.Info(ctx, "streaming cluster replica recovery info")
+
+	return s.server.recoveryServer.ServeClusterReplicas(ctx, request, stream, s.server.db, s)
+}
+
+func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
+	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
+	stream serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
+) error {
+	ctx := stream.Context()
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Ops.Info(ctx, "streaming local replica recovery info")
+	return s.server.recoveryServer.ServeLocalReplicas(ctx, request, stream)
+}
+
+func (s *systemAdminServer) RecoveryStagePlan(
+	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
+) (*serverpb.RecoveryStagePlanResponse, error) {
+	return nil, errors.AssertionFailedf("To be implemented by #93044")
+}
+
+func (s *systemAdminServer) RecoveryNodeStatus(
+	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
+) (*serverpb.RecoveryNodeStatusResponse, error) {
+	return nil, errors.AssertionFailedf("To be implemented by #93043")
+}
+
+func (s *systemAdminServer) RecoveryVerify(
+	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
+) (*serverpb.RecoveryVerifyResponse, error) {
+	return nil, errors.AssertionFailedf("To be implemented by #93043")
+}
+
+// VisitAvailableNodesWithRetry implements loqrecovery.ClusterAdminClient to
+// allow recovery module to perform operations on all cluster nodes.
+func (s *systemAdminServer) VisitAvailableNodesWithRetry(
+	ctx context.Context,
+	retryOpts retry.Options,
+	visitor func(nodeID roachpb.NodeID, client serverpb.AdminClient) error,
+) error {
+
+	collectNodeWithRetry := func(nodeID roachpb.NodeID) error {
+		var err error
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			log.Infof(ctx, "visiting node n%d, attempt %d", nodeID, r.CurrentAttempt())
+			var client serverpb.AdminClient
+			client, err = s.dialNode(ctx, nodeID)
+			// Nodes would contain dead nodes that we don't need to visit. We can skip
+			// them and let caller handle incomplete info.
+			if err != nil {
+				if grpcutil.IsConnectionUnavailable(err) {
+					return nil
+				}
+				// This was an initial heartbeat type error, we must retry as node seems
+				// live.
+				continue
+			}
+			err = visitor(nodeID, client)
+			if err == nil {
+				return nil
+			}
+			if !loqrecovery.IsRetryableError(err) {
+				// For non retryable errors abort immediately.
+				return err
+			}
+		}
+		return err
+	}
+
+	var nodeIDs []roachpb.NodeID
+	if err := s.server.gossip.IterateInfos(gossip.KeyNodeDescPrefix, func(key string, i gossip.Info) error {
+		b, err := i.Value.GetBytes()
+		if err != nil {
+			return errors.Wrapf(err, "failed to get node gossip info for key %s", key)
+		}
+
+		var d roachpb.NodeDescriptor
+		if err := protoutil.Unmarshal(b, &d); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal node gossip info for key %s", key)
+		}
+
+		// Don't use node descriptors with NodeID 0, because that's meant to
+		// indicate that the node has been removed from the cluster.
+		if d.NodeID != 0 {
+			nodeIDs = append(nodeIDs, d.NodeID)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	for _, nodeID := range nodeIDs {
+		if err := collectNodeWithRetry(nodeID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
@@ -4060,36 +4178,4 @@ func (s *adminServer) SetTraceRecordingType(
 		return nil
 	})
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil
-}
-
-func (s *adminServer) RecoveryCollectReplicaInfo(
-	request *serverpb.RecoveryCollectReplicaInfoRequest,
-	server serverpb.Admin_RecoveryCollectReplicaInfoServer,
-) error {
-	return errors.AssertionFailedf("To be implemented by #93040")
-}
-
-func (s *adminServer) RecoveryCollectLocalReplicaInfo(
-	request *serverpb.RecoveryCollectLocalReplicaInfoRequest,
-	server serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
-) error {
-	return errors.AssertionFailedf("To be implemented by #93040")
-}
-
-func (s *adminServer) RecoveryStagePlan(
-	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
-) (*serverpb.RecoveryStagePlanResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93044")
-}
-
-func (s *adminServer) RecoveryNodeStatus(
-	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
-) (*serverpb.RecoveryNodeStatusResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93043")
-}
-
-func (s *adminServer) RecoveryVerify(
-	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
-) (*serverpb.RecoveryVerifyResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93043")
 }

@@ -78,10 +78,71 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 	replicas, err := readReplicaInfoData([]string{replicaInfoFileName})
 	require.NoError(t, err, "failed to read generated replica info")
 	stores := map[roachpb.StoreID]interface{}{}
-	for _, r := range replicas[0].Replicas {
+	for _, r := range replicas.LocalInfo[0].Replicas {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
+}
+
+// TestCollectInfoFromOnlineCluster verifies that given a test cluster with
+// one stopped node, we can collect replica info and metadata from remaining
+// nodes using an admin recovery call.
+func TestCollectInfoFromOnlineCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		NoServer: true,
+	})
+	defer c.Cleanup()
+
+	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			Insecure:   true,
+		},
+	})
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+	tc.ToggleReplicateQueues(false)
+
+	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
+	var totalRanges int
+	require.NoError(t, r.Scan(&totalRanges), "failed to query range count")
+
+	tc.StopServer(0)
+	replicaInfoFileName := dir + "/all-nodes.json"
+
+	c.RunWithArgs([]string{
+		"debug",
+		"recover",
+		"collect-info",
+		"--insecure",
+		"--host",
+		tc.Server(2).ServingRPCAddr(),
+		replicaInfoFileName,
+	})
+
+	replicas, err := readReplicaInfoData([]string{replicaInfoFileName})
+	require.NoError(t, err, "failed to read generated replica info")
+	stores := map[roachpb.StoreID]interface{}{}
+	totalReplicas := 0
+	for _, li := range replicas.LocalInfo {
+		for _, r := range li.Replicas {
+			stores[r.StoreID] = struct{}{}
+		}
+		totalReplicas += len(li.Replicas)
+	}
+	require.Equal(t, 2, len(stores), "collected replicas from stores")
+	require.Equal(t, 2, len(replicas.LocalInfo), "collected info is not split by node")
+	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
+	require.Equal(t, totalRanges, len(replicas.Descriptors),
+		"number of collected descriptors from metadata")
 }
 
 // TestLossOfQuorumRecovery performs a sanity check on end to end recovery workflow.
@@ -273,43 +334,49 @@ func createIntentOnRangeDescriptor(
 func TestJsonSerialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	nr := loqrecoverypb.NodeReplicaInfo{
-		Replicas: []loqrecoverypb.ReplicaInfo{
+	nr := loqrecoverypb.ClusterReplicaInfo{
+		ClusterID:        "id1",
+		CockroachVersion: roachpb.Version{Major: 22, Minor: 1},
+		LocalInfo: []loqrecoverypb.NodeReplicaInfo{
 			{
-				NodeID:  1,
-				StoreID: 2,
-				Desc: roachpb.RangeDescriptor{
-					RangeID:  3,
-					StartKey: roachpb.RKey(keys.MetaMin),
-					EndKey:   roachpb.RKey(keys.MetaMax),
-					InternalReplicas: []roachpb.ReplicaDescriptor{
-						{
-							NodeID:    1,
-							StoreID:   2,
-							ReplicaID: 3,
-							Type:      roachpb.VOTER_INCOMING,
-						},
-					},
-					NextReplicaID: 4,
-					Generation:    7,
-				},
-				RaftAppliedIndex:   13,
-				RaftCommittedIndex: 19,
-				RaftLogDescriptorChanges: []loqrecoverypb.DescriptorChangeInfo{
+				Replicas: []loqrecoverypb.ReplicaInfo{
 					{
-						ChangeType: 1,
-						Desc:       &roachpb.RangeDescriptor{},
-						OtherDesc:  &roachpb.RangeDescriptor{},
+						NodeID:  1,
+						StoreID: 2,
+						Desc: roachpb.RangeDescriptor{
+							RangeID:  3,
+							StartKey: roachpb.RKey(keys.MetaMin),
+							EndKey:   roachpb.RKey(keys.MetaMax),
+							InternalReplicas: []roachpb.ReplicaDescriptor{
+								{
+									NodeID:    1,
+									StoreID:   2,
+									ReplicaID: 3,
+									Type:      roachpb.VOTER_INCOMING,
+								},
+							},
+							NextReplicaID: 4,
+							Generation:    7,
+						},
+						RaftAppliedIndex:   13,
+						RaftCommittedIndex: 19,
+						RaftLogDescriptorChanges: []loqrecoverypb.DescriptorChangeInfo{
+							{
+								ChangeType: 1,
+								Desc:       &roachpb.RangeDescriptor{},
+								OtherDesc:  &roachpb.RangeDescriptor{},
+							},
+						},
 					},
 				},
 			},
 		},
 	}
 	jsonpb := protoutil.JSONPb{Indent: "  "}
-	data, err := jsonpb.Marshal(nr)
+	data, err := jsonpb.Marshal(&nr)
 	require.NoError(t, err)
 
-	var nrFromJSON loqrecoverypb.NodeReplicaInfo
-	require.NoError(t, jsonpb.Unmarshal(data, &nrFromJSON))
-	require.Equal(t, nr, nrFromJSON, "objects before and after serialization")
+	var crFromJSON loqrecoverypb.ClusterReplicaInfo
+	require.NoError(t, jsonpb.Unmarshal(data, &crFromJSON))
+	require.Equal(t, nr, crFromJSON, "objects before and after serialization")
 }
