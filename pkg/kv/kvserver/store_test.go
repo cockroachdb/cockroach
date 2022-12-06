@@ -2909,7 +2909,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			},
 			Message: raftpb.Message{
 				Type: raftpb.MsgSnap,
-				Snapshot: raftpb.Snapshot{
+				Snapshot: &raftpb.Snapshot{
 					Data: []byte{},
 					Metadata: raftpb.SnapshotMetadata{
 						Index: 1,
