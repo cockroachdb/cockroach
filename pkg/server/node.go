@@ -1152,7 +1152,7 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
-	tenantID, ok := roachpb.TenantFromContext(ctx)
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
 		tenantID = roachpb.SystemTenantID
 	} else {
@@ -1311,7 +1311,7 @@ func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
 func filterRangeLookupResponseForTenant(
 	ctx context.Context, descs []roachpb.RangeDescriptor,
 ) []roachpb.RangeDescriptor {
-	tenID, ok := roachpb.TenantFromContext(ctx)
+	tenID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
 		// If we do not know the tenant, don't permit any pre-fetching.
 		return []roachpb.RangeDescriptor{}
@@ -1574,7 +1574,7 @@ func (n *Node) GossipSubscription(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	_, isSecondaryTenant := roachpb.TenantFromContext(ctx)
+	_, isSecondaryTenant := roachpb.ClientTenantFromContext(ctx)
 
 	// Register a callback for each of the requested patterns. We don't want to
 	// block the gossip callback goroutine on a slow consumer, so we instead

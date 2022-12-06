@@ -811,6 +811,15 @@ func makeTenantSQLServerArgs(
 		Settings:         st,
 		Knobs:            rpcTestingKnobs,
 	})
+	// If there is a local KV server, hook this SQLServer to it so that the
+	// SQLServer can perform some RPCs directly, without going through gRPC.
+	if lsi := sqlCfg.LocalKVServerInfo; lsi != nil {
+		rpcContext.SetLocalInternalServer(
+			lsi.InternalServer,
+			true, // tenant
+			lsi.ServerInterceptors,
+			rpcContext.ClientInterceptors())
+	}
 
 	var dsKnobs kvcoord.ClientTestingKnobs
 	if dsKnobsP, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {

@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -720,7 +721,7 @@ func (f entryDecoderV2Fragment) getTags(editor redactEditor) string {
 }
 
 func (f entryDecoderV2Fragment) getTenantID() string {
-	out := systemTenantID
+	out := serverident.SystemTenantID
 	switch tagsStr := string(f[v2TagsIdx]); tagsStr {
 	case "-":
 	default:
