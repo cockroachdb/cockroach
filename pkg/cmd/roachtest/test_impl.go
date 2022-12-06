@@ -335,9 +335,13 @@ func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 			// We don't actually log through this logger since it adds an unrelated
 			// file:line caller (namely ours). The error already has stack traces
 			// so it's better to write only it to the file to avoid confusion.
-			path := cl.File.Name()
+			if cl.File != nil {
+				path := cl.File.Name()
+				if len(path) > 0 {
+					_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure.squashedErr)), 0644)
+				}
+			}
 			cl.Close() // we just wanted the filename
-			_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure.squashedErr)), 0644)
 		}
 	}
 
