@@ -190,7 +190,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 					// trying to be nimble.
 					ids = append(ids, rs.GoroutineID)
 				}
-				fmt.Fprintln(&buf, rec)
+				fmt.Fprintln(&buf, trace)
 				fmt.Fprintln(&buf)
 			}
 			sl := make([]byte, 5<<20 /* 5mb */)

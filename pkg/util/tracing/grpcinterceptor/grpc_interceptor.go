@@ -221,7 +221,8 @@ func ClientInterceptor(
 	) error {
 		// Local RPCs don't need any special tracing, since the caller's context
 		// will be used on the "server".
-		if grpcutil.IsLocalRequestContext(ctx) {
+		_, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 		parent := tracing.SpanFromContext(ctx)
@@ -285,7 +286,8 @@ func StreamClientInterceptor(
 	) (grpc.ClientStream, error) {
 		// Local RPCs don't need any special tracing, since the caller's context
 		// will be used on the "server".
-		if grpcutil.IsLocalRequestContext(ctx) {
+		_, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 		parent := tracing.SpanFromContext(ctx)
@@ -293,6 +295,7 @@ func StreamClientInterceptor(
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 
+		// Create a span that will live for the life of the stream.
 		clientSpan := tracer.StartSpan(
 			method,
 			tracing.WithParent(parent),
@@ -303,6 +306,7 @@ func StreamClientInterceptor(
 		if !methodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
+
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
@@ -310,10 +314,15 @@ func StreamClientInterceptor(
 			clientSpan.Finish()
 			return cs, err
 		}
-		return newTracingClientStream(ctx, cs, desc, clientSpan), nil
+		return newTracingClientStream(
+			ctx, cs, desc,
+			// Pass ownership of clientSpan to the stream.
+			clientSpan), nil
 	}
 }
 
+// newTracingClientStream creates and implementation of grpc.ClientStream that
+// finishes `clientSpan` when the stream terminates.
 func newTracingClientStream(
 	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *tracing.Span,
 ) grpc.ClientStream {

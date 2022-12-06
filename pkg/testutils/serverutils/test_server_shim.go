@@ -244,7 +244,9 @@ type TestServerInterface interface {
 		ctx context.Context, tenantName string, args base.TestSharedProcessTenantArgs,
 	) (TestTenantInterface, *gosql.DB, error)
 
-	// StartTenant spawns off tenant process connecting to this TestServer.
+	// StartTenant starts a SQL tenant communicating with this TestServer.
+	//
+	// See also StartSharedProcessTenant.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.

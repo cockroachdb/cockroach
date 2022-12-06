@@ -480,7 +480,7 @@ func (s *Server) getTenantID(ctx context.Context, tenantName string) (roachpb.Te
 	datums, err := ie.QueryRow(ctx, "get-tenant-id", nil, /* txn */
 		`SELECT id, active FROM system.tenants WHERE name = $1 LIMIT 1`, tenantName)
 	if err != nil {
-		return nil, err
+		return roachpb.TenantID{}, err
 	}
 	if datums == nil {
 		return roachpb.TenantID{}, errors.Mark(errors.Newf("no tenant found with name %q", tenantName), ErrInvalidTenant)
@@ -596,7 +596,11 @@ func (s *Server) makeSharedProcessTenantConfig(
 	// TODO(knz): Maybe enforce the SQL Instance ID to be equal to the KV node ID?
 	// See: https://github.com/cockroachdb/cockroach/issues/84602
 	parentCfg := s.cfg
-	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, index, parentCfg, stopper)
+	localServerInfo := LocalKVServerInfo{
+		InternalServer:     s.node,
+		ServerInterceptors: s.grpc.serverInterceptorsInfo,
+	}
+	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper)
 	if err != nil {
 		return nil, BaseConfig{}, SQLConfig{}, err
 	}
@@ -665,6 +669,7 @@ func makeInMemoryTenantServerConfig(
 	tenantID roachpb.TenantID,
 	index int,
 	kvServerCfg Config,
+	kvServerInfo LocalKVServerInfo,
 	stopper *stop.Stopper,
 ) (baseCfg BaseConfig, sqlCfg SQLConfig, err error) {
 	st := cluster.MakeClusterSettings()
@@ -796,6 +801,8 @@ func makeInMemoryTenantServerConfig(
 	sqlCfg.MemoryPoolSize = kvServerCfg.SQLConfig.MemoryPoolSize
 	sqlCfg.TableStatCacheSize = kvServerCfg.SQLConfig.TableStatCacheSize
 	sqlCfg.QueryCacheSize = kvServerCfg.SQLConfig.QueryCacheSize
+
+	sqlCfg.LocalKVServerInfo = &kvServerInfo
 
 	return baseCfg, sqlCfg, nil
 }

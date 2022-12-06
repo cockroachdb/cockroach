@@ -279,30 +279,30 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	buf.WriteByte('"')
 
 	// Server identifiers.
-	if entry.clusterID != "" {
+	if entry.ClusterID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['x'].tags[tags])
 		buf.WriteString(`":"`)
-		escapeString(buf, entry.clusterID)
+		escapeString(buf, entry.ClusterID)
 		buf.WriteByte('"')
 	}
-	if entry.nodeID != "" {
+	if entry.NodeID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['N'].tags[tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.nodeID)
+		buf.WriteString(entry.NodeID)
 	}
-	if entry.tenantID != "" {
+	if entry.TenantID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['T'].tags[tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.tenantID)
+		buf.WriteString(entry.TenantID)
 	}
-	if entry.sqlInstanceID != "" {
+	if entry.SQLInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.sqlInstanceID)
+		buf.WriteString(entry.SQLInstanceID)
 	}
 
 	// The binary version.
