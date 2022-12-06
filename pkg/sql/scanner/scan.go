@@ -60,6 +60,15 @@ type Scanner struct {
 
 	// Comments is the list of parsed comments from the SQL statement.
 	Comments []string
+
+	// lastAttemptedID indicates the ID of the last attempted
+	// token. Used to recognizd which token an error was encountered
+	// on.
+	lastAttemptedID int32
+	// quoted indicates if the last identifier scanned was
+	// quoted. Used to distinguish between quoted and non-quoted in
+	// Inspect.
+	quoted bool
 }
 
 // In returns the input string.
@@ -124,6 +133,8 @@ func (s *Scanner) Scan(lval ScanSymType) {
 	lval.SetID(0)
 	lval.SetPos(int32(s.pos))
 	lval.SetStr("EOF")
+	s.quoted = false
+	s.lastAttemptedID = 0
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
 		return
@@ -138,6 +149,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 	lval.SetID(int32(ch))
 	lval.SetPos(int32(s.pos - 1))
 	lval.SetStr(s.in[lval.Pos():s.pos])
+	s.lastAttemptedID = int32(ch)
 
 	switch ch {
 	case '$':
@@ -153,6 +165,8 @@ func (s *Scanner) Scan(lval ScanSymType) {
 
 	case identQuote:
 		// "[^"]"
+		s.lastAttemptedID = int32(lexbase.IDENT)
+		s.quoted = true
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
 			lval.SetID(lexbase.IDENT)
 		}
@@ -160,6 +174,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 
 	case singleQuote:
 		// '[^']'
+		s.lastAttemptedID = int32(lexbase.SCONST)
 		if s.scanString(lval, ch, false /* allowEscapes */, true /* requireUTF8 */) {
 			lval.SetID(lexbase.SCONST)
 		}
@@ -169,6 +184,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		// Bytes?
 		if s.peek() == singleQuote {
 			// b'[^']'
+			s.lastAttemptedID = int32(lexbase.BCONST)
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
 				lval.SetID(lexbase.BCONST)
@@ -186,6 +202,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 		// Escaped string?
 		if s.peek() == singleQuote {
 			// [eE]'[^']'
+			s.lastAttemptedID = int32(lexbase.SCONST)
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
 				lval.SetID(lexbase.SCONST)
@@ -224,6 +241,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 			lval.SetID(lexbase.DOT_DOT)
 			return
 		case lexbase.IsDigit(t):
+			s.lastAttemptedID = int32(lexbase.FCONST)
 			s.scanNumber(lval, ch)
 			return
 		}
@@ -421,6 +439,7 @@ func (s *Scanner) Scan(lval ScanSymType) {
 
 	default:
 		if lexbase.IsDigit(ch) {
+			s.lastAttemptedID = int32(lexbase.ICONST)
 			s.scanNumber(lval, ch)
 			return
 		}
@@ -544,6 +563,7 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 }
 
 func (s *Scanner) scanIdent(lval ScanSymType) {
+	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
 	start := s.pos
 	isASCII := true
@@ -724,6 +744,7 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 }
 
 func (s *Scanner) scanPlaceholder(lval ScanSymType) {
+	s.lastAttemptedID = int32(lexbase.PLACEHOLDER)
 	start := s.pos
 	for lexbase.IsDigit(s.peek()) {
 		s.pos++
@@ -742,6 +763,7 @@ func (s *Scanner) scanPlaceholder(lval ScanSymType) {
 
 // scanHexString scans the content inside x'....'.
 func (s *Scanner) scanHexString(lval ScanSymType, ch int) bool {
+	s.lastAttemptedID = int32(lexbase.BCONST)
 	buf := s.buffer()
 
 	var curbyte byte
@@ -799,6 +821,7 @@ outer:
 
 // scanBitString scans the content inside B'....'.
 func (s *Scanner) scanBitString(lval ScanSymType, ch int) bool {
+	s.lastAttemptedID = int32(lexbase.BITCONST)
 	buf := s.buffer()
 outer:
 	for {
@@ -938,6 +961,7 @@ outer:
 // scanDollarQuotedString scans for so called dollar-quoted strings, which start/end with either $$ or $tag$, where
 // tag is some arbitrary string.  e.g. $$a string$$ or $escaped$a string$escaped$.
 func (s *Scanner) scanDollarQuotedString(lval ScanSymType) bool {
+	s.lastAttemptedID = int32(lexbase.SCONST)
 	buf := s.buffer()
 	start := s.pos
 
@@ -1117,3 +1141,56 @@ func (s fakeSym) Str() string               { return s.s }
 func (s *fakeSym) SetStr(v string)          { s.s = v }
 func (s fakeSym) UnionVal() interface{}     { return nil }
 func (s fakeSym) SetUnionVal(v interface{}) {}
+
+// InspectToken is the type of token that can be scanned by Inspect.
+type InspectToken struct {
+	ID      int32
+	MaybeID int32
+	Start   int32
+	End     int32
+	Str     string
+	Quoted  bool
+}
+
+// Inspect analyses the string and returns the tokens found in it. If
+// an incomplete token was encountered at the end, an InspectToken
+// entry with ID -1 is appended.
+//
+// If a syntax error was encountered, it is returned as a token with
+// type ERROR.
+//
+// See TestInspect and the examples in testdata/inspect for more details.
+func Inspect(sql string) []InspectToken {
+	var s Scanner
+	var lval fakeSym
+	var tokens []InspectToken
+	s.Init(sql)
+	for {
+		s.Scan(&lval)
+		tok := InspectToken{
+			ID:      lval.id,
+			MaybeID: s.lastAttemptedID,
+			Str:     lval.s,
+			Start:   lval.pos,
+			End:     int32(s.pos),
+			Quoted:  s.quoted,
+		}
+
+		// A special affordance for unterminated quoted identifiers: try
+		// to find the normalized text of the identifier found so far.
+		if lval.id == lexbase.ERROR && s.lastAttemptedID == lexbase.IDENT && s.quoted {
+			maybeIdent := sql[tok.Start:tok.End] + "\""
+			var si Scanner
+			si.Init(maybeIdent)
+			si.Scan(&lval)
+			if lval.id == lexbase.IDENT {
+				tok.Str = lval.s
+			}
+		}
+
+		tokens = append(tokens, tok)
+		if lval.id == 0 || lval.id == lexbase.ERROR {
+			return tokens
+		}
+	}
+}

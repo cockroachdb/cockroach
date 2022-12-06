@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -42,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -2007,27 +2006,52 @@ func (ex *connExecutor) runShowTransferState(
 func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "COMPLETIONS", Typ: types.String}})
-	offsetVal, ok := n.Offset.AsConstantInt()
-	if !ok {
-		return errors.Newf("invalid offset %v", n.Offset)
+	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
+	log.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
+	ie := ex.server.cfg.InternalExecutor
+	sd := ex.planner.SessionData()
+	override := sessiondata.InternalExecutorOverride{
+		SearchPath: &sd.SearchPath,
+		Database:   sd.Database,
+		User:       sd.User(),
 	}
-	offset, err := strconv.Atoi(offsetVal.String())
-	if err != nil {
-		return err
+	// If a txn is currently open, reuse it. If not,
+	// we will read in a fresh txn.
+	//
+	// TODO(janexing): better bind the internal executor with the txn.
+	var txn *kv.Txn
+	if _, ok := ex.machine.CurState().(stateOpen); ok {
+		txn = func() *kv.Txn {
+			ex.state.mu.RLock()
+			defer ex.state.mu.RUnlock()
+			return ex.state.mu.txn
+		}()
 	}
-	completions, err := delegate.RunShowCompletions(n.Statement.RawString(), offset)
+	queryIterFn := func(ctx context.Context, opName string, stmt string, args ...interface{}) (eval.InternalRows, error) {
+		return ie.QueryIteratorEx(ctx, opName, txn,
+			override,
+			stmt, args...)
+	}
+
+	completions, err := newCompletionsGenerator(queryIterFn, n)
 	if err != nil {
+		log.Warningf(ctx, "COMPLETION GENERATOR FAILED: %v", err)
 		return err
 	}
 
-	for _, completion := range completions {
-		err = res.AddRow(ctx, tree.Datums{tree.NewDString(completion)})
+	var hasNext bool
+	for hasNext, err = completions.Next(ctx); hasNext; hasNext, err = completions.Next(ctx) {
+		row := completions.Values()
+		err = res.AddRow(ctx, row)
 		if err != nil {
+			log.Warningf(ctx, "COMPLETION ADDROW FAILED: %v", err)
 			return err
 		}
 	}
-	return nil
+	if err != nil {
+		log.Warningf(ctx, "COMPLETION GENERATOR NEXT FAILED: %v", err)
+	}
+	return err
 }
 
 // showQueryStatsFns maps column names as requested by the SQL clients

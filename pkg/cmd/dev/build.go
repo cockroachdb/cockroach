@@ -122,7 +122,7 @@ var allBuildTargets = func() []string {
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	var tmpDir string
-	if buildutil.CrdbTestBuild {
+	if !buildutil.CrdbTestBuild {
 		// tmpDir will contain the build event binary file if produced.
 		var err error
 		tmpDir, err = os.MkdirTemp("", "")
