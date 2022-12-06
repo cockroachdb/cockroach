@@ -131,6 +131,7 @@ func migrateTable(
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			op.query); err != nil {
+			fmt.Println(err)
 			return err
 		}
 		return nil
