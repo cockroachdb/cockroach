@@ -79,7 +79,7 @@ type commentsByType struct {
 type byIDEntry struct {
 	id       descpb.ID
 	desc     catalog.Descriptor
-	comments [catalogkeys.MaxCommentTypeValue]commentsByType
+	comments [catalogkeys.MaxCommentTypeValue + 1]commentsByType
 	zc       catalog.ZoneConfig
 }
 
