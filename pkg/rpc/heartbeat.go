@@ -98,7 +98,7 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 	// active cluster version. They are permitted to broadcast any version which
 	// is supported by this binary.
 	minVersion := activeVersion.Version
-	if tenantID, isTenant := roachpb.TenantFromContext(ctx); isTenant &&
+	if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
 		!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
 		minVersion = st.Version.BinaryMinSupportedVersion()
 	}
