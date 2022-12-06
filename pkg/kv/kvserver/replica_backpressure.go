@@ -180,17 +180,21 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *roachpb.BatchR
 			return nil
 		}
 
+		const errHint = `For help understanding this error and troubleshooting, visit:
+
+    https://www.cockroachlabs.com/docs/stable/common-errors.html#split-failed-while-applying-backpressure-are-rows-updated-in-a-tight-loop`
+
 		// Wait for the callback to be called.
 		select {
 		case <-ctx.Done():
-			return errors.Wrapf(
+			return errors.WithHint(errors.Wrapf(
 				ctx.Err(), "aborted while applying backpressure to %s on range %s", ba, r.Desc(),
-			)
+			), errHint)
 		case err := <-splitC:
 			if err != nil {
-				return errors.Wrapf(
+				return errors.WithHint(errors.Wrapf(
 					err, "split failed while applying backpressure to %s on range %s", ba, r.Desc(),
-				)
+				), errHint)
 			}
 		}
 	}
