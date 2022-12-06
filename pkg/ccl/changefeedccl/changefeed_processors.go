@@ -249,6 +249,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
 
 	if err != nil {
+		err = changefeedbase.MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -279,7 +280,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-
+	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
 		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
@@ -916,6 +917,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
+		err = changefeedbase.MarkRetryableError(err)
 		cf.MoveToDraining(err)
 		return
 	}
@@ -923,6 +925,8 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	if b, ok := cf.sink.(*bufferSink); ok {
 		cf.resolvedBuf = &b.buf
 	}
+
+	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
@@ -1039,6 +1043,8 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 						"shut down due to schema change and %s=%q",
 						changefeedbase.OptSchemaChangePolicy,
 						changefeedbase.OptSchemaChangePolicyStop))
+				} else {
+					err = changefeedbase.MarkRetryableError(err)
 				}
 			}
 
@@ -1283,7 +1289,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, err
+			return false, changefeedbase.MarkRetryableError(
+				errors.New("cf.knobs.RaiseRetryableError"))
 		}
 	}
 
