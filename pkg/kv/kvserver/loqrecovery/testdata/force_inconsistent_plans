@@ -45,6 +45,7 @@ range has unapplied descriptor change
 
 make-plan force=true
 ----
+Replica updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 1
@@ -61,6 +62,8 @@ make-plan force=true
     StoreID: 1
     ReplicaID: 14
   NextReplicaID: 15
+Decommissioned nodes:
+[n2, n3, n4]
 
 # Check that with a range gap between two recoverable replicas could be forced to proceed.
 # Range 2 is missing but ranges 1 and 3 still need to recover quorum. Forcing plan should
@@ -102,6 +105,7 @@ range gap /Table/{3-4}
 
 make-plan force=true
 ----
+Replica updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 1
@@ -118,6 +122,8 @@ make-plan force=true
     StoreID: 1
     ReplicaID: 14
   NextReplicaID: 15
+Decommissioned nodes:
+[n2, n3]
 
 
 # Check that cluster with a range gap between two healthy replicas could be forced to proceed and produce
@@ -179,4 +185,4 @@ range gap /Table/{3-4}
 
 make-plan force=true
 ----
-[]
+ok
