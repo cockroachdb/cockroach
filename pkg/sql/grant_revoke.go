@@ -540,6 +540,7 @@ func (p *planner) getTablePatternsComposition(
 	if targets.Tables.SequenceOnly {
 		return sequenceOnly, nil
 	}
+	var allObjectIDs []descpb.ID
 	for _, tableTarget := range targets.Tables.TablePatterns {
 		tableGlob, err := tableTarget.NormalizeTablePattern()
 		if err != nil {
@@ -549,48 +550,56 @@ func (p *planner) getTablePatternsComposition(
 		if err != nil {
 			return unknownComposition, err
 		}
+		allObjectIDs = append(allObjectIDs, objectIDs...)
+	}
 
-		// Check if the table is a virtual table.
-		var virtualTableIDs descpb.IDs
-		var nonVirtualTableIDs descpb.IDs
-		for _, objectID := range objectIDs {
-			isVirtual := false
-			for _, vs := range virtualSchemas {
-				if _, ok := vs.tableDefs[objectID]; ok {
-					isVirtual = true
-					break
-				}
+	if len(allObjectIDs) == 0 {
+		return unknownComposition, nil
+	}
+
+	// Check if the table is a virtual table.
+	var virtualIDs descpb.IDs
+	var nonVirtualIDs descpb.IDs
+	for _, objectID := range allObjectIDs {
+		isVirtual := false
+		for _, vs := range virtualSchemas {
+			if _, ok := vs.tableDefs[objectID]; ok {
+				isVirtual = true
+				break
 			}
+		}
 
-			if isVirtual {
-				virtualTableIDs = append(nonVirtualTableIDs, objectID)
-			} else {
-				nonVirtualTableIDs = append(virtualTableIDs, objectID)
+		if isVirtual {
+			virtualIDs = append(nonVirtualIDs, objectID)
+		} else {
+			nonVirtualIDs = append(virtualIDs, objectID)
+		}
+	}
+	haveVirtualTables := virtualIDs.Len() > 0
+	haveNonVirtualTables := nonVirtualIDs.Len() > 0
+	if haveVirtualTables && haveNonVirtualTables {
+		return unknownComposition, pgerror.Newf(
+			pgcode.FeatureNotSupported, "cannot mix grants between virtual and non-virtual tables",
+		)
+	}
+	if !haveNonVirtualTables {
+		return virtualTablesOnly, nil
+	}
+	// Note that part of the reason the code is structured this way is that
+	// resolving mutable descriptors for virtual table IDs results in an error.
+	muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, nonVirtualIDs...)
+	if err != nil {
+		return unknownComposition, err
+	}
+
+	for _, mut := range muts {
+		if mut != nil && mut.DescriptorType() == catalog.Table {
+			tableDesc, err := catalog.AsTableDescriptor(mut)
+			if err != nil {
+				return unknownComposition, err
 			}
-		}
-
-		if len(nonVirtualTableIDs) != 0 && len(virtualTableIDs) != 0 {
-			return unknownComposition, errors.Newf("cannot mix grants between virtual and non-virtual tables")
-		}
-
-		if len(nonVirtualTableIDs) == 0 {
-			return virtualTablesOnly, nil
-		}
-
-		muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, nonVirtualTableIDs...)
-		if err != nil {
-			return unknownComposition, err
-		}
-
-		for _, mut := range muts {
-			if mut != nil && mut.DescriptorType() == catalog.Table {
-				tableDesc, err := catalog.AsTableDescriptor(mut)
-				if err != nil {
-					return unknownComposition, err
-				}
-				if !tableDesc.IsSequence() {
-					return containsTable, nil
-				}
+			if !tableDesc.IsSequence() {
+				return containsTable, nil
 			}
 		}
 	}
