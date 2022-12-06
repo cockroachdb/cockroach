@@ -73,7 +73,21 @@ func (p *Projection) SetValueDatumAt(pos int, d tree.Datum) error {
 	}
 
 	col := p.cols[pos]
-	if d == tree.DNull || col.Typ.Equal(d.ResolvedType()) {
+
+	// The resolved type of the datum may be different from
+	// column type. When expression was planned, we receive the
+	// list of result columns (and types).  However, when we evaluate
+	// we may receive a different, but equivalent type.
+	// The reasons for this is described in a comment on T.Family() method,
+	// and is duplicated below:
+	// Execution operators and functions are permissive in terms of input (allow
+	// any type within a given family), and typically return only values having
+	// canonical types as output. For example, the IntFamily Plus operator allows
+	// values having any IntFamily type as input. But then it will always convert
+	// those values to 64-bit integers, and return a final 64-bit integer value
+	// (types.Int). Doing this vastly reduces the required number of operator
+	// overloads.
+	if d == tree.DNull || col.Typ.Equivalent(d.ResolvedType()) {
 		p.datums[pos].Datum = d
 		return nil
 	}
