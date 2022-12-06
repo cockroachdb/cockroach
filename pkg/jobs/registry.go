@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -378,8 +379,8 @@ func (r *Registry) batchJobInsertStmt(
 	ctx context.Context, sessionID sqlliveness.SessionID, records []*Record, modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	instanceID := r.ID()
-	const numColumns = 7
-	columns := [numColumns]string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`}
+	columns := []string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`, `job_type`}
+	numColumns := len(columns)
 	marshalPanic := func(m protoutil.Message) []byte {
 		data, err := protoutil.Marshal(m)
 		if err != nil {
@@ -408,7 +409,17 @@ func (r *Registry) batchJobInsertStmt(
 			progress.ModifiedMicros = modifiedMicros
 			return marshalPanic(&progress)
 		},
+		`job_type`: func(rec *Record) interface{} {
+			return (&jobspb.Payload{Details: jobspb.WrapPayloadDetails(rec.Details)}).Type().String()
+		},
 	}
+
+	// To run the upgrade below, migration and schema change jobs will need to be
+	// created using the old schema, which does not have the job_type column.
+	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+		numColumns -= 1
+	}
+
 	appendValues := func(rec *Record, vals *[]interface{}) (err error) {
 		defer func() {
 			switch r := recover(); r.(type) {
@@ -419,7 +430,8 @@ func (r *Registry) batchJobInsertStmt(
 				panic(r)
 			}
 		}()
-		for _, c := range columns {
+		for j := 0; j < numColumns; j++ {
+			c := columns[j]
 			*vals = append(*vals, valueFns[c](rec))
 		}
 		return nil
@@ -436,7 +448,7 @@ func (r *Registry) batchJobInsertStmt(
 			buf.WriteString(", ")
 		}
 		buf.WriteString("(")
-		for j := range columns {
+		for j := 0; j < numColumns; j++ {
 			if j > 0 {
 				buf.WriteString(", ")
 			}
@@ -473,6 +485,7 @@ func (r *Registry) CreateJobWithTxn(
 	if txn != nil {
 		start = txn.ReadTimestamp().GoTime()
 	}
+	jobType := j.mu.payload.Type()
 	j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(start)
 	payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 	if err != nil {
@@ -482,9 +495,28 @@ func (r *Registry) CreateJobWithTxn(
 	if err != nil {
 		return nil, err
 	}
-	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
-INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
-VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(),
+
+	cols := [7]string{"id", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
+	numCols := len(cols)
+	vals := [7]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
+	placeholders := func() string {
+		var p strings.Builder
+		for i := 0; i < numCols; i++ {
+			if i > 0 {
+				p.WriteByte(',')
+			}
+			p.WriteByte('$')
+			p.WriteString(strconv.Itoa(i + 1))
+		}
+		return p.String()
+	}
+	// To run the upgrade below, migration and schema change jobs will need
+	// to be created using the old schema of the jobs table.
+	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+		numCols -= 1
+	}
+	insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`, strings.Join(cols[:numCols], ","), placeholders())
+	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, insertStmt, vals[:numCols]...,
 	); err != nil {
 		return nil, err
 	}

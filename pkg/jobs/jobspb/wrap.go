@@ -141,6 +141,41 @@ func DetailsType(d isPayload_Details) Type {
 	}
 }
 
+// ForEachType executes f for each job Type.
+func ForEachType(f func(typ Type), includeTypeUnspecified bool) {
+	start := TypeBackup
+	if includeTypeUnspecified {
+		start = TypeUnspecified
+	}
+	for typ := start; typ < NumJobTypes; typ++ {
+		f(typ)
+	}
+}
+
+// JobDetailsForEveryJobType is an array of Details keyed by every job type,
+// except for jobspb.TypeUnspecified.
+var JobDetailsForEveryJobType = map[Type]Details{
+	TypeBackup:       BackupDetails{},
+	TypeRestore:      RestoreDetails{},
+	TypeSchemaChange: SchemaChangeDetails{},
+	TypeImport:       ImportDetails{},
+	TypeChangefeed:   ChangefeedDetails{},
+	TypeCreateStats:  CreateStatsDetails{},
+	TypeAutoCreateStats: CreateStatsDetails{
+		Name: AutoStatsName,
+	},
+	TypeSchemaChangeGC:               SchemaChangeGCDetails{},
+	TypeTypeSchemaChange:             TypeSchemaChangeDetails{},
+	TypeStreamIngestion:              StreamIngestionDetails{},
+	TypeNewSchemaChange:              NewSchemaChangeDetails{},
+	TypeMigration:                    MigrationDetails{},
+	TypeAutoSpanConfigReconciliation: AutoSpanConfigReconciliationDetails{},
+	TypeAutoSQLStatsCompaction:       AutoSQLStatsCompactionDetails{},
+	TypeStreamReplication:            StreamReplicationDetails{},
+	TypeRowLevelTTL:                  RowLevelTTLDetails{},
+	TypeAutoSchemaTelemetry:          SchemaTelemetryDetails{},
+}
+
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
 // struct necessary to make it usable as the Details field of a Progress.
 //
@@ -375,11 +410,30 @@ func (m *ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte,
 // DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.
 type DescRewriteMap map[descpb.ID]*DescriptorRewrite
 
+// assertDetailsMap asserts that the entries in JobDetailsForEveryJobType are correct.
+func assertDetailsMap() {
+	if len(JobDetailsForEveryJobType) != NumJobTypes-1 {
+		panic("JobDetailsForEveryJobType does not have an entry for each Type")
+	}
+	ForEachType(
+		func(typ Type) {
+			payload := Payload{
+				Details: WrapPayloadDetails(JobDetailsForEveryJobType[typ]),
+			}
+			if typ != payload.Type() {
+				panic(fmt.Errorf("JobDetailsForEveryJobType has the incorrect entry for type %s", typ))
+			}
+		}, false,
+	)
+}
+
 func init() {
 	if len(Type_name) != NumJobTypes {
 		panic(fmt.Errorf("NumJobTypes (%d) does not match generated job type name map length (%d)",
 			NumJobTypes, len(Type_name)))
 	}
+
+	assertDetailsMap()
 
 	protoreflect.RegisterShorthands((*Progress)(nil), "progress")
 	protoreflect.RegisterShorthands((*Payload)(nil), "payload")
