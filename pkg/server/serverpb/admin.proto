@@ -837,10 +837,23 @@ message CertBundleResponse {
 
 message RecoveryCollectReplicaInfoRequest {}
 
+// RecoveryCollectReplicaRestartNodeStream is sent by collector node to client
+// if it experiences a transient failure collecting data from one of the nodes.
+// This message instructs client to drop any data that it collected locally
+// for specified node as streaming for this node would be restarted.
+// This mechanism is needed to avoid restarting the whole collection procedure
+// in large cluster if one of the nodes fails transiently.
+message RecoveryCollectReplicaRestartNodeStream {
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+
 message RecoveryCollectReplicaInfoResponse {
   oneof info {
     roachpb.RangeDescriptor range_descriptor = 1;
     cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo replica_info = 2;
+    RecoveryCollectReplicaRestartNodeStream node_stream_restarted = 3;
   }
 }
 

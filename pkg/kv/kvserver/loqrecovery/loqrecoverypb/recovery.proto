@@ -22,6 +22,16 @@ enum DescriptorChangeType {
   ReplicaChange = 2;
 }
 
+// Version contains a binary version used to generate transient artifact files.
+// This version matches corresponding fields or the cluster version.
+message Version {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+
+  int32 major = 1;
+  int32 minor = 2;
+}
+
 // DescriptorChangeInfo future descriptor change info extracted from commit
 // triggers in raft log.
 message DescriptorChangeInfo {
@@ -51,9 +61,30 @@ message ReplicaInfo {
     (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
 }
 
-// Collection of replica information gathered from a collect-info run on a single node.
+// Collection of replica information gathered in a collect-info run.
+// ReplicaInfo in Replicas does not have to be constrained to a single node,
+// but in practice info collected from remote cluster will contain info per
+// node. In case of offline collection, replicas will belong to all stores
+// provided to the command regardless of owning node.
 message NodeReplicaInfo {
   repeated ReplicaInfo replicas = 1 [(gogoproto.nullable) = false];
+}
+
+// Replica info collected from one or more nodes of a cluster.
+message ClusterReplicaInfo {
+  // Version of cockroach binary that created the file.
+  roachpb.Version cockroach_version = 1 [(gogoproto.nullable) = false];
+  // ClusterID contains id of the cluster from which info was collected.
+  string cluster_id = 2 [(gogoproto.customname) = "ClusterID"];
+  // Descriptors contains range descriptors collected from meta ranges.
+  // Descriptors are optional and only present in collected info if system
+  // ranges didn't lose quorum. It could also be partial in some cases.
+  repeated roachpb.RangeDescriptor descriptors = 3 [(gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "descriptors,omitempty"];
+  // LocalInfo contains one or more NodeReplicaInfo structs each containing a
+  // subset of full info. They are not guaranteed to be split by node, each
+  // element should contain disjoint subset of replica infos.
+  repeated NodeReplicaInfo local_info = 4 [(gogoproto.nullable) = false];
 }
 
 // ReplicaUpdate contains information that needs to be updated on replica on the node
