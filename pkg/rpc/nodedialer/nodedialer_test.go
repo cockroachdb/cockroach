@@ -251,7 +251,10 @@ func TestConnHealthInternal(t *testing.T) {
 	// Set up an internal server and relevant configuration. The RPC connection
 	// will then be considered internal, and we don't have to dial it.
 	rpcCtx := newTestContext(clock, maxOffset, stopper)
-	rpcCtx.SetLocalInternalServer(&internalServer{}, rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
+	rpcCtx.SetLocalInternalServer(
+		&internalServer{},
+		false, // tenant
+		rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	rpcCtx.Config.AdvertiseAddr = localAddr.String()
 

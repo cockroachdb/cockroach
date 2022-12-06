@@ -424,6 +424,9 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 	return nil
 }
 
+// contextWithTenant inserts a tenant identifier in the context, identifying the
+// tenant calling an RPC. The identifier can be retrieved later through
+// roachpb.TenantFromContext(ctx).
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
 	ctx = roachpb.NewContextForTenant(ctx, tenID)
 	ctx = logtags.AddTag(ctx, "tenant", tenID.String())
