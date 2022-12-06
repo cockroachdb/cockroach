@@ -79,7 +79,7 @@ type commentsByType struct {
 type byIDEntry struct {
 	id       descpb.ID
 	desc     catalog.Descriptor
-	comments [catalogkeys.MaxCommentTypeValue]commentsByType
+	comments [catalogkeys.MaxCommentTypeValue + 1]commentsByType
 	zc       catalog.ZoneConfig
 }
 
@@ -126,30 +126,4 @@ func (e byIDEntry) ByteSize() (n int64) {
 		n += int64(e.comments[ct].subObjectOrdinals.Len()*2) * int64(unsafe.Sizeof(dummy))
 	}
 	return n
-}
-
-func (e byIDEntry) forEachComment(fn func(key catalogkeys.CommentKey, value string) error) error {
-	for ct := range e.comments {
-		byType := &e.comments[ct]
-		if byType.subObjectOrdinals.Empty() {
-			continue
-		}
-		var err error
-		visitor := func(subID, ordinal int) {
-			if err != nil {
-				return
-			}
-			key := catalogkeys.CommentKey{
-				ObjectID:    uint32(e.id),
-				SubID:       uint32(subID),
-				CommentType: catalogkeys.CommentType(ct),
-			}
-			err = fn(key, byType.comments[ordinal])
-		}
-		byType.subObjectOrdinals.ForEach(visitor)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
