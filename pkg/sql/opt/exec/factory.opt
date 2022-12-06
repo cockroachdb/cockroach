@@ -772,3 +772,8 @@ define LiteralValues {
     Rows tree.ExprContainer
     Columns colinfo.ResultColumns
 }
+
+# ShowCompletions implements SHOW COMPLETIONS.
+define ShowCompletions {
+    Command *tree.ShowCompletions
+}

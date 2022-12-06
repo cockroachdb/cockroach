@@ -305,6 +305,21 @@ define ExportPrivate {
     Columns ColList
 }
 
+# ShowCompletions represents a SHOW COMPLETIONS statement.
+[Relational]
+define ShowCompletions {
+    _ ShowCompletionsPrivate
+}
+
+[Private]
+define ShowCompletionsPrivate {
+    # Command is the tree.ShowCompletions AST node.
+    Command ShowCompletions
+
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
+}
+
 # CreateStatistics represents a CREATE STATISTICS or ANALYZE statement.
 [Relational]
 define CreateStatistics {

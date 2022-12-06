@@ -119,6 +119,7 @@ exports_files([
 # gazelle:exclude pkg/sql/lexbase/keywords.go
 # gazelle:exclude pkg/sql/lexbase/tokens.go
 # gazelle:exclude pkg/sql/lexbase/reserved_keywords.go
+# gazelle:exclude pkg/sql/scanner/token_names_test.go
 # gazelle:exclude pkg/sql/schemachanger/scexec/mocks_generated_test.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude pkg/testutils/**/testdata/**

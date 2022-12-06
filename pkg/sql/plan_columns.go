@@ -128,6 +128,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.SequenceSelectColumns)
 	case *exportNode:
 		return n.getColumns(mut, colinfo.ExportColumns)
+	case *completionsNode:
+		return n.getColumns(mut, colinfo.ShowCompletionsColumns)
 
 	// The columns in the hookFnNode are returned by the hook function; we don't
 	// know if they can be modified in place or not.

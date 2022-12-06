@@ -158,6 +158,9 @@ func getResultColumns(
 		}
 		return nil, nil
 
+	case showCompletionsOp:
+		return colinfo.ShowCompletionsColumns, nil
+
 	case alterTableSplitOp:
 		return colinfo.AlterTableSplitColumns, nil
 

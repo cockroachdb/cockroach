@@ -1110,3 +1110,16 @@ AgHyAQIA//8HHgAAByoFKiHyAQAA
     └── • scan
           table: ?@?
           spans: 1 span
+
+# ConstructShowCompletions
+gist-explain-roundtrip
+SHOW COMPLETIONS AT OFFSET 10 FOR 'select 123'
+----
+hash: 4360397581899285807
+plan-gist: AjwGCg==
+explain(shape):
+• show completions
+  offset: 10
+  syntax: "select 123"
+explain(gist):
+• show completions

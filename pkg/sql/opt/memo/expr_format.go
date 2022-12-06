@@ -273,7 +273,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
 		*AlterTableRelocateExpr, *AlterRangeRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
-		*CancelSessionsExpr, *CreateViewExpr, *ExportExpr:
+		*CancelSessionsExpr, *CreateViewExpr, *ExportExpr, *ShowCompletionsExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 

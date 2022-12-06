@@ -2077,6 +2077,13 @@ func (ef *execFactory) ConstructControlSchedules(
 	}, nil
 }
 
+// ConstructShowCompletions is part of the exec.Factory interface.
+func (ef *execFactory) ConstructShowCompletions(command *tree.ShowCompletions) (exec.Node, error) {
+	return &completionsNode{
+		n: command,
+	}, nil
+}
+
 // ConstructCancelQueries is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
 	return &cancelQueriesNode{

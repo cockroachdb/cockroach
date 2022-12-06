@@ -1,0 +1,13 @@
+# some pg_catalog functions contain a period.
+# in that case, the completion erases the period and the token
+# before that and rewrites the result.
+#
+# NB: see the spaces before and after the period. Still works.
+complete
+select crdb_INTERNAL . force_err@
+----
+complete 0 32
+msg: ""
+completions:
+- "functions":
+  "crdb_internal.force_error(" (This function is used only by CockroachDB's developers for testing purposes.) -> "crdb_internal.force_error(" (0, 25)

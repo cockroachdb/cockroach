@@ -1,0 +1,255 @@
+filter
+xobjs:
+----
+
+subtest at_ident
+
+comp at=8
+select xor
+----
+ii'
+  ^
+--
+xobjs: not completing
+
+comp at=12
+select xor
+----
+ii_
+  ^
+--
+xobjs: not completing
+
+subtest end
+
+subtest after_period
+
+comp at=10
+select a.xor
+----
+ii.i'
+    ^
+--
+xobjs: completing for "xor" (9,12), schema: "public", db: "a"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"xor", 9, 12, "a", "public"}
+
+comp at=10
+select a.
+----
+ii._
+   ^
+--
+xobjs: completing for "" (10,10), schema: "public", db: "a"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"", 10, 10, "a", "public"}
+
+comp at=9
+select a.
+----
+ii.'
+   ^
+--
+xobjs: completing for "" (9,9), schema: "public", db: "a"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"", 9, 9, "a", "public"}
+
+
+subtest end
+
+subtest after_two_component_prefix
+
+comp at=12
+select a.b.xor
+----
+ii.i.i'
+      ^
+--
+xobjs: completing for "xor" (11,14), schema: "b", db: "a"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"xor", 11, 14, "a", "b"}
+
+comp at=12
+select a.b.
+----
+ii.i._
+     ^
+--
+xobjs: completing for "" (12,12), schema: "b", db: "a"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"", 12, 12, "a", "b"}
+
+comp at=11
+select a.b.
+----
+ii.i.'
+     ^
+--
+xobjs: completing for "" (11,11), schema: "b", db: "a"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"", 11, 11, "a", "b"}
+
+
+subtest end
+
+subtest quoted_ident
+
+comp at=16
+select mydb."pg_
+----
+ii.i'
+    ^
+--
+xobjs: completing for "pg_" (12,16), schema: "public", db: "mydb"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"pg_", 12, 16, "mydb", "public"}
+
+# Quoted uppercase is an entire schema entirely.
+comp at=16
+select mydb."PG_
+----
+ii.i'
+    ^
+--
+xobjs: completing for "PG_" (12,16), schema: "public", db: "mydb"
+--sql:
+WITH t AS (
+SELECT name, table_id
+  FROM "".crdb_internal.tables
+ WHERE database_name = $4:::STRING
+   AND schema_name = $5:::STRING
+   AND left(name, length($1:::STRING)) = $1:::STRING
+)
+SELECT name AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.table_id = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.table_id = pc.object_id AND pc.type = 1
+--placeholders: []interface {}{"PG_", 12, 16, "mydb", "public"}
+
+
+subtest end

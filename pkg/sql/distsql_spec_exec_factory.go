@@ -1141,6 +1141,12 @@ func (e *distSQLSpecExecFactory) ConstructCancelQueries(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cancel queries")
 }
 
+func (e *distSQLSpecExecFactory) ConstructShowCompletions(
+	input *tree.ShowCompletions,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: show completions")
+}
+
 func (e *distSQLSpecExecFactory) ConstructCancelSessions(
 	input exec.Node, ifExists bool,
 ) (exec.Node, error) {
