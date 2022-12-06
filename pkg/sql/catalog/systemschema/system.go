@@ -207,6 +207,7 @@ CREATE TABLE system.jobs (
 	claim_instance_id INT8,
 	num_runs          INT8,
 	last_run          TIMESTAMP,
+	job_type              STRING,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
@@ -216,7 +217,8 @@ CREATE TABLE system.jobs (
     created
   ) STORING(last_run, num_runs, claim_instance_id)
     WHERE ` + JobsRunStatsIdxPredicate + `,
-	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
+  INDEX jobs_job_type_idx (job_type),
+	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id, job_type),
 	FAMILY progress (progress),
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
@@ -1401,16 +1403,17 @@ var (
 				{Name: "claim_instance_id", ID: 9, Type: types.Int, Nullable: true},
 				{Name: "num_runs", ID: 10, Type: types.Int, Nullable: true},
 				{Name: "last_run", ID: 11, Type: types.Timestamp, Nullable: true},
+				{Name: "job_type", ID: 12, Type: types.String, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					// NB: We are using family name that existed prior to adding created_by_type and
-					// created_by_id columns.  This is done to minimize and simplify migration work
+					// NB: We are using family name that existed prior to adding created_by_type,
+					// created_by_id, and job_type columns. This is done to minimize and simplify migration work
 					// that needed to be done.
 					Name:        "fam_0_id_status_created_payload",
 					ID:          0,
-					ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7},
+					ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id", "job_type"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7, 12},
 				},
 				{
 					Name:            "progress",
@@ -1461,6 +1464,16 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				Predicate:           JobsRunStatsIdxPredicate,
+			},
+			descpb.IndexDescriptor{
+				Name:                "jobs_job_type_idx",
+				ID:                  5,
+				Unique:              false,
+				KeyColumnNames:      []string{"job_type"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{12},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		))
 

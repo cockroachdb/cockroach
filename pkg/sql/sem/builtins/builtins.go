@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -86,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -4075,6 +4077,35 @@ value if you rely on the HLC for accuracy.`,
 								EmitDefaults: bool(tree.MustBeDBool(args[2])),
 								EmitRedacted: bool(tree.MustBeDBool(args[3])),
 							},
+						)
+					},
+				},
+			}
+		}()...),
+
+	"crdb_internal.job_payload_type": makeBuiltin(
+		jsonProps(),
+		func() []tree.Overload {
+			returnType := tree.FixedReturnType(types.String)
+			getJobPayloadType := func(data []byte) (tree.Datum, error) {
+				var msg jobspb.Payload
+				if err := protoutil.Unmarshal(data, &msg); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(msg.Type().String()), nil
+			}
+
+			return []tree.Overload{
+				{
+					Info:       "Reads the type from the jobspb.Payload protocol message.",
+					Volatility: volatility.Immutable,
+					Types: tree.ParamTypes{
+						{Name: "data", Typ: types.Bytes},
+					},
+					ReturnType: returnType,
+					Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+						return getJobPayloadType(
+							[]byte(tree.MustBeDBytes(args[0])),
 						)
 					},
 				},

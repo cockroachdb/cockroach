@@ -443,6 +443,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.num_inverted_index_entries(val: jsonb, version: int) -> int`:                                                         1336,
 	`crdb_internal.num_inverted_index_entries(val: string, version: int) -> int`:                                                        1337,
 	`crdb_internal.num_inverted_index_entries(val: anyelement[], version: int) -> int`:                                                  1338,
+	`crdb_internal.job_payload_type(data: bytes) -> string`:                                                                             2061,
 	`crdb_internal.payloads_for_span(span_id: int) -> tuple{string AS payload_type, jsonb AS payload_jsonb}`:                            349,
 	`crdb_internal.payloads_for_trace(trace_id: int) -> tuple{int AS span_id, string AS payload_type, jsonb AS payload_jsonb}`:          350,
 	`crdb_internal.pb_to_json(pbname: string, data: bytes) -> jsonb`:                                                                    1270,
