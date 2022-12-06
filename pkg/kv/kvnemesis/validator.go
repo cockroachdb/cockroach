@@ -646,7 +646,8 @@ func (v *validator) processOp(op Operation) {
 		if err := errorFromResult(t.Result); err != nil {
 			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
 				kvserver.IsIllegalReplicationChangeError(err) ||
-				kvserver.IsReplicationChangeInProgressError(err)
+				kvserver.IsReplicationChangeInProgressError(err) ||
+				errors.Is(err, roachpb.ErrReplicaCannotHoldLease)
 		}
 		if !ignore {
 			v.failIfError(op, t.Result) // fail on all other errors
