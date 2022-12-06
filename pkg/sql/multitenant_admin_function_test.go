@@ -174,25 +174,21 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 		},
 		{
 			desc:                 "ALTER TABLE x UNSPLIT ALL",
+			setup:                "ALTER TABLE t SPLIT AT VALUES (1);",
 			query:                "ALTER TABLE t UNSPLIT ALL;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
+			allowSplitAndScatter: true,
 		},
 		{
-			desc:                     "ALTER TABLE x UNSPLIT ALL SkipSQLSystemTenantCheck",
-			query:                    "ALTER TABLE t UNSPLIT ALL;",
-			skipSQLSystemTenantCheck: true,
-		},
-		{
-			desc:                 "ALTER INDEX x UNSPLIT ALL",
-			setup:                "CREATE INDEX idx on t(i);",
+			desc: "ALTER INDEX x UNSPLIT ALL",
+			// Multiple setup statements required because of https://github.com/cockroachdb/cockroach/issues/90535.
+			setups: []string{
+				"CREATE INDEX idx on t(i);",
+				"ALTER INDEX t@idx SPLIT AT VALUES (1);",
+			},
 			query:                "ALTER INDEX t@idx UNSPLIT ALL;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
-		},
-		{
-			desc:                     "ALTER INDEX x UNSPLIT ALL SkipSQLSystemTenantCheck",
-			setup:                    "CREATE INDEX idx on t(i);",
-			query:                    "ALTER INDEX t@idx UNSPLIT ALL;",
-			skipSQLSystemTenantCheck: true,
+			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
+			allowSplitAndScatter: true,
 		},
 		{
 			desc:                 "ALTER TABLE x SCATTER",
