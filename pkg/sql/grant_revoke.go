@@ -44,12 +44,9 @@ import (
 //	Notes: postgres requires the object owner.
 //	       mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
-	grantOn, err := p.getGrantOnObject(ctx, n.Targets, sqltelemetry.IncIAMGrantPrivilegesCounter)
+	grantOn, err := p.getPrivilegeObjectTypeFromGrantTargetList(ctx, n.Targets)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot get the privileges on the grant targets")
-	}
-	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
-		return nil, err
 	}
 
 	grantees, err := decodeusername.FromRoleSpecList(
@@ -94,6 +91,22 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	}, nil
 }
 
+// getPrivilegeObjectTypeFromGrantTargetList will determine the implied
+// ObjectType from a list of targets for grant or revoke. It avoids leasing,
+// which, generally, is the policy of name resolution when performing ddl
+// statements.
+func (p *planner) getPrivilegeObjectTypeFromGrantTargetList(
+	ctx context.Context, targets tree.GrantTargetList,
+) (grantOn privilege.ObjectType, err error) {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		grantOn, err = p.getGrantOnObject(ctx, targets, sqltelemetry.IncIAMRevokePrivilegesCounter)
+	})
+	if err != nil {
+		return "", err
+	}
+	return grantOn, nil
+}
+
 // Revoke removes privileges from users.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
@@ -102,9 +115,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //	Notes: postgres requires the object owner.
 //	       mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
-	grantOn, err := p.getGrantOnObject(ctx, n.Targets, sqltelemetry.IncIAMRevokePrivilegesCounter)
+	grantOn, err := p.getPrivilegeObjectTypeFromGrantTargetList(ctx, n.Targets)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot get the privileges on the grant targets")
+		return nil, errors.Wrap(err, "cannot get the privileges on the revoke targets")
 	}
 
 	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
