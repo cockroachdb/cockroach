@@ -5,6 +5,7 @@ go_library(
     name = "errorutil",
     srcs = [
         "catch.go",
+        "descriptor.go",
         "error.go",
         "tenant.go",
         "tenant_deprecated_wrapper.go",
@@ -12,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/errorutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log/logcrash",
