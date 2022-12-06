@@ -602,7 +602,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		return memo, nil
 	}
 
-	return f.Memo(), nil
+	return f.ReleaseMemo(), nil
 }
 
 // runExecBuilder execbuilds a plan using the given factory and stores the

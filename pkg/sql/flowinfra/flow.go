@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -420,7 +421,8 @@ func (f *FlowBase) StartInternal(ctx context.Context, processors []execinfra.Pro
 
 	f.status = flowRunning
 
-	if !f.Gateway && f.CollectStats {
+	if multitenant.TenantRUEstimateEnabled.Get(&f.Cfg.Settings.SV) &&
+		!f.Gateway && f.CollectStats {
 		// Remote flows begin collecting CPU usage here, and finish when the last
 		// outbox finishes. Gateway flows are handled by the connExecutor.
 		f.FlowCtx.TenantCPUMonitor.StartCollection(ctx, f.Cfg.TenantCostController)
