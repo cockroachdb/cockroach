@@ -139,10 +139,10 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			st := statusWithState(raft.StateLeader)
 			st.Progress = map[uint64]tracker.Progress{
 				2: {
-					State:        state,
-					RecentActive: true,
-					ProbeSent:    true, // Unifies string output below.
-					Inflights:    &tracker.Inflights{},
+					State:            state,
+					RecentActive:     true,
+					MsgAppFlowPaused: true, // Unifies string output below.
+					Inflights:        &tracker.Inflights{},
 				},
 				// Healthy follower just for kicks.
 				3: {State: tracker.StateReplicate},

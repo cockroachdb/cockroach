@@ -1438,7 +1438,7 @@ func SendEmptySnapshot(
 			To:       uint64(to.ReplicaID),
 			From:     uint64(from.ReplicaID),
 			Term:     hs.Term,
-			Snapshot: outgoingSnap.RaftSnap,
+			Snapshot: &outgoingSnap.RaftSnap,
 		},
 	}
 
