@@ -134,7 +134,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
 			// Retry.
 			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
-				log.Printf("Sending BEP file to beaver hub failed - %v", err)
+				log.Printf("Internal Error: Sending BEP file to beaver hub failed - %v", err)
 			}
 		}
 		if !buildutil.CrdbTestBuild {
