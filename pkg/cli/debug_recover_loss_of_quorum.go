@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // confirmActionFlag defines a pflag to parse a confirm option.
@@ -290,30 +293,70 @@ var debugRecoverPlanCmd = &cobra.Command{
 	Long: `
 Devise a plan to restore ranges that lost a quorum.
 
-This command will read files with information about replicas collected from all
-surviving nodes of a cluster and make a decision which replicas should be survivors
-for the ranges where quorum was lost.
-Decision is then written into a file or stdout.
+Command analyzes information about replicas from all surviving nodes of a
+cluster, finds ranges that lost quorum and makes a decision which replicas
+should act as survivors to restore quorum.
+
+Information about replicas could be provided in files generated on optional
+collection phase or collected directly by connecting to the cluster. If former
+case, file names should be provided as arguments. In latter case, cluster
+connection parameters must be specified.
+
+After data is analyzed, decision is written into a plan file or to stdout.
 
 This command only creates a plan and doesn't change any data.'
 
 See debug recover command help for more details on how to use this command.
 `,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	RunE: runDebugPlanReplicaRemoval,
 }
 
 var debugRecoverPlanOpts struct {
 	outputFileName string
 	deadStoreIDs   []int
+	deadNodeIDs    []int
 	confirmAction  confirmActionFlag
 	force          bool
 }
 
+var planSpecificFlags = map[string]struct{}{
+	"plan":           {},
+	"dead-store-ids": {},
+	"dead-node-ids":  {},
+	"force":          {},
+	"confirm":        {},
+}
+
 func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
-	replicas, err := readReplicaInfoData(args)
-	if err != nil {
-		return err
+	var replicas loqrecoverypb.ClusterReplicaInfo
+	var err error
+
+	if debugRecoverPlanOpts.deadStoreIDs != nil && debugRecoverPlanOpts.deadNodeIDs != nil {
+		return errors.New("debug recover make-plan command accepts either --dead-node-ids or --dead-store-ids")
+	}
+
+	var stats loqrecovery.CollectionStats
+	if len(args) == 0 {
+		// If no replica info is provided, try to connect to a cluster default or
+		// explicitly provided to retrieve replica info.
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+
+		c, finish, err := getAdminClient(ctx, serverCfg)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get admin connection to cluster")
+		}
+		defer finish()
+		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(cmd.Context(), c)
+		if err != nil {
+			return errors.Wrapf(err, "failed to retrieve replica info from cluster")
+		}
+	} else {
+		replicas, err = readReplicaInfoData(args)
+		if err != nil {
+			return err
+		}
 	}
 
 	var deadStoreIDs []roachpb.StoreID
@@ -321,30 +364,47 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 		deadStoreIDs = append(deadStoreIDs, roachpb.StoreID(id))
 	}
 
-	plan, report, err := loqrecovery.PlanReplicas(cmd.Context(), replicas.LocalInfo, deadStoreIDs)
+	var deadNodeIDs []roachpb.NodeID
+	for _, id := range debugRecoverPlanOpts.deadNodeIDs {
+		deadNodeIDs = append(deadNodeIDs, roachpb.NodeID(id))
+	}
+
+	plan, report, err := loqrecovery.PlanReplicas(
+		cmd.Context(),
+		replicas.LocalInfo,
+		replicas.Descriptors,
+		deadStoreIDs,
+		deadNodeIDs)
 	if err != nil {
 		return err
 	}
 
+	if stats.Nodes > 0 {
+		_, _ = fmt.Fprintf(stderr, `Nodes scanned:           %d
+`, stats.Nodes)
+	}
 	_, _ = fmt.Fprintf(stderr, `Total replicas analyzed: %d
 Ranges without quorum:   %d
 Discarded live replicas: %d
 
 `, report.TotalReplicas, len(report.PlannedUpdates), report.DiscardedNonSurvivors)
+	_, _ = fmt.Fprintf(stderr, "Proposed changes:\n")
 	for _, r := range report.PlannedUpdates {
-		_, _ = fmt.Fprintf(stderr, "Recovering range r%d:%s updating replica %s to %s. "+
+		_, _ = fmt.Fprintf(stderr, "  range r%d:%s updating replica %s to %s. "+
 			"Discarding available replicas: [%s], discarding dead replicas: [%s].\n",
-			r.RangeID, r.StartKey, r.OldReplica, r.Replica,
+			r.RangeID, r.StartKey, r.OldReplica, r.NewReplica,
 			r.DiscardedAvailableReplicas, r.DiscardedDeadReplicas)
 	}
 
-	deadStoreMsg := fmt.Sprintf("\nDiscovered dead stores from provided files: %s",
-		joinStoreIDs(report.MissingStores))
+	argStoresMsg := ""
 	if len(deadStoreIDs) > 0 {
-		_, _ = fmt.Fprintf(stderr, "%s, (matches --dead-store-ids)\n\n", deadStoreMsg)
-	} else {
-		_, _ = fmt.Fprintf(stderr, "%s\n\n", deadStoreMsg)
+		argStoresMsg = ", (matches --dead-store-ids)"
 	}
+	if len(deadNodeIDs) > 0 {
+		argStoresMsg = ", (matches --dead-node-ids)"
+	}
+	_, _ = fmt.Fprintf(stderr, "\nDiscovered dead nodes would be marked as decommissioned:\n%s\n%s\n\n",
+		formatNodeStores(report.MissingNodes, "  "), argStoresMsg)
 
 	planningErr := report.Error()
 	if planningErr != nil {
@@ -405,6 +465,7 @@ Discarded live replicas: %d
 		return nil
 	}
 
+	planFile := "<plan file>"
 	var writer io.Writer = os.Stdout
 	if len(debugRecoverPlanOpts.outputFileName) > 0 {
 		if _, err = os.Stat(debugRecoverPlanOpts.outputFileName); err == nil {
@@ -416,6 +477,7 @@ Discarded live replicas: %d
 		}
 		defer outFile.Close()
 		writer = outFile
+		planFile = path.Base(debugRecoverPlanOpts.outputFileName)
 	}
 
 	jsonpb := protoutil.JSONPb{Indent: "  "}
@@ -427,8 +489,20 @@ Discarded live replicas: %d
 		return errors.Wrap(err, "failed to write recovery plan")
 	}
 
-	_, _ = fmt.Fprint(stderr, "Plan created\nTo complete recovery, distribute the plan to the"+
-		" below nodes and invoke `debug recover apply-plan` on:\n")
+	// No args means we collected connection info from cluster and need to
+	// preserve flags for subsequent invocation.
+	remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {
+		_, filter := planSpecificFlags[flag]
+		return filter
+	})
+
+	_, _ = fmt.Fprintf(stderr, `Plan created.
+To stage recovery application in half-online mode invoke:
+
+'cockroach debug recover apply-plan %s %s'
+
+Alternatively distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
+`, remoteArgs, planFile, planFile)
 	for node, stores := range report.UpdatedNodes {
 		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node, joinStoreIDs(stores))
 	}
@@ -589,12 +663,53 @@ func joinStoreIDs(storeIDs []roachpb.StoreID) string {
 	return strings.Join(storeNames, ", ")
 }
 
+func formatNodeStores(locations map[roachpb.NodeID][]roachpb.StoreID, indent string) string {
+	nodeIDs := make([]roachpb.NodeID, 0, len(locations))
+	hasMultiStore := false
+	for k, v := range locations {
+		nodeIDs = append(nodeIDs, k)
+		hasMultiStore = hasMultiStore || len(v) > 1
+	}
+	sort.Slice(nodeIDs, func(i, j int) bool {
+		return nodeIDs[i] < nodeIDs[j]
+	})
+	if !hasMultiStore {
+		// we only have a single store per node, no need to list stores.
+		nodeNames := make([]string, 0, len(nodeIDs))
+		for _, id := range nodeIDs {
+			nodeNames = append(nodeNames, fmt.Sprintf("n%d", id))
+		}
+		return indent + strings.Join(nodeNames, ", ")
+	}
+	nodeDetails := make([]string, 0, len(nodeIDs))
+	for _, id := range nodeIDs {
+		nodeDetails = append(nodeDetails, indent+fmt.Sprintf("n%d: store(s): %s", id, joinStoreIDs(locations[id])))
+	}
+	return strings.Join(nodeDetails, "\n")
+}
+
+// getCLIClusterFlags recreates command line flags from current command
+// discarding any flags that filter returns true for.
+func getCLIClusterFlags(fromCfg bool, cmd *cobra.Command, filter func(flag string) bool) string {
+	if !fromCfg {
+		return " --host <node-hostname>[:<port>] [--certs-dir <certificates-dir>|--insecure]"
+	}
+	var buf strings.Builder
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed && !filter(f.Name) {
+			_, _ = fmt.Fprintf(&buf, " --%s=%v", f.Name, f.Value.String())
+		}
+	})
+	return buf.String()
+}
+
 // setDebugRecoverContextDefaults resets values of command line flags to
 // their default values to ensure tests don't interfere with each other.
 func setDebugRecoverContextDefaults() {
 	debugRecoverCollectInfoOpts.Stores.Specs = nil
 	debugRecoverPlanOpts.outputFileName = ""
 	debugRecoverPlanOpts.confirmAction = prompt
+	debugRecoverPlanOpts.deadStoreIDs = nil
 	debugRecoverPlanOpts.deadStoreIDs = nil
 	debugRecoverExecuteOpts.Stores.Specs = nil
 	debugRecoverExecuteOpts.confirmAction = prompt

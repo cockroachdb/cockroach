@@ -1,0 +1,80 @@
+# Test verifies that if we have metadata and all replicas are lost for that range
+# it is reported as an error.
+# This problem is more specific that general gap when check is done in absence of
+# metadata. We know exact range id and its span.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/5
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 2
+  StartKey: /Table/5
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+- RangeID: 3
+  StartKey: /Table/1
+  Replicas:
+  - { NodeID: 3, StoreID: 3, ReplicaID: 1}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 2}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 3}
+- RangeID: 2
+  StartKey: /Table/5
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range does not have any replicas remaining
+  r3 /Table/{1-5}
