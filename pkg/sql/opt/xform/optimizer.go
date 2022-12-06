@@ -633,7 +633,7 @@ func (o *Optimizer) enforceProps(
 		return o.optimizeEnforcer(state, enforcer, required, member, memberProps)
 	}
 
-	if !required.Ordering.Any() {
+	if ordering.CanEnforce(member, &required.Ordering) {
 		// Try Sort enforcer that requires no ordering from its input.
 		enforcer := &memo.SortExpr{Input: member}
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
