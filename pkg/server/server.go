@@ -1180,7 +1180,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Connect the node as loopback handler for RPC requests to the
 	// local node.
-	s.rpcContext.SetLocalInternalServer(s.node, s.grpc.serverInterceptorsInfo, s.rpcContext.ClientInterceptors())
+	s.rpcContext.SetLocalInternalServer(
+		s.node,
+		false, // tenant
+		s.grpc.serverInterceptorsInfo, s.rpcContext.ClientInterceptors())
 
 	// Load the TLS configuration for the HTTP server.
 	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()

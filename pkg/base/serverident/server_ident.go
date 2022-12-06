@@ -8,18 +8,32 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package log
+package serverident
 
 import "context"
 
-// systemTenantID is the string representation of
+// SystemTenantID is the string representation of
 // roachpb.SystemTenantID. Injected at initialization to avoid
 // an import dependency cycle. See SetSystemTenantID.
-var systemTenantID string
+var SystemTenantID string
 
 // ServerIdentificationContextKey is the type of a context.Value key
 // used to carry ServerIdentificationPayload values.
 type ServerIdentificationContextKey struct{}
+
+func ContextWithServerIdentification(
+	ctx context.Context, serverID ServerIdentificationPayload,
+) context.Context {
+	return context.WithValue(ctx, ServerIdentificationContextKey{}, serverID)
+}
+
+func ServerIdentificationFromContext(ctx context.Context) ServerIdentificationPayload {
+	r := ctx.Value(ServerIdentificationContextKey{})
+	if r == nil {
+		return nil
+	}
+	return r.(ServerIdentificationPayload)
+}
 
 // ServerIdentificationPayload is the type of a context.Value payload
 // associated with a ServerIdentificationContextKey.
@@ -28,6 +42,12 @@ type ServerIdentificationPayload interface {
 	// given retrieval key. If there is no value known for a given key,
 	// the method can return the empty string.
 	ServerIdentityString(key ServerIdentificationKey) string
+
+	// TenantID returns the roachpb.TenantID identifying the server. It's returned
+	// as an interface{} because the log pkg cannot depend on roachpb (and the log pkg
+	// is the one putting the ServerIdentificationPayload into the ctx, so it makes
+	// sense for this interface to live in log).
+	TenantID() interface{}
 }
 
 // ServerIdentificationKey represents a possible parameter to the
@@ -48,46 +68,43 @@ const (
 	IdentifyTenantID
 )
 
-type idPayload struct {
+type IDPayload struct {
 	// the Cluster ID is reported on every new log file so as to ease
 	// the correlation of panic reports with self-reported log files.
-	clusterID string
+	ClusterID string
 	// the node ID is reported like the cluster ID, for the same reasons.
 	// We avoid using roahcpb.NodeID to avoid a circular reference.
-	nodeID string
+	NodeID string
 	// ditto for the tenant ID.
 	//
 	// NB: Use TenantID() to access/read this value to take advantage
 	// of default behaviors.
-	tenantID string
+	TenantIDInternal string
 	// ditto for the SQL instance ID.
-	sqlInstanceID string
+	SQLInstanceID string
 }
 
-func getIdentificationPayload(ctx context.Context) (res idPayload) {
-	r := ctx.Value(ServerIdentificationContextKey{})
-	if r == nil {
-		return res
+func GetIdentificationPayload(ctx context.Context) IDPayload {
+	si := ServerIdentificationFromContext(ctx)
+	if si == nil {
+		return IDPayload{}
 	}
-	si, ok := r.(ServerIdentificationPayload)
-	if !ok {
-		return res
+	return IDPayload{
+		ClusterID:        si.ServerIdentityString(IdentifyClusterID),
+		NodeID:           si.ServerIdentityString(IdentifyKVNodeID),
+		SQLInstanceID:    si.ServerIdentityString(IdentifyInstanceID),
+		TenantIDInternal: si.ServerIdentityString(IdentifyTenantID),
 	}
-	res.clusterID = si.ServerIdentityString(IdentifyClusterID)
-	res.nodeID = si.ServerIdentityString(IdentifyKVNodeID)
-	res.sqlInstanceID = si.ServerIdentityString(IdentifyInstanceID)
-	res.tenantID = si.ServerIdentityString(IdentifyTenantID)
-	return res
 }
 
 // TenantID returns the tenant ID associated with this idPayload.
 // if the idPayload has no tenant ID set, we default to the system
 // tenant ID. NB: This function should never return an empty string.
-func (ip idPayload) TenantID() string {
-	if ip.tenantID == "" {
-		return systemTenantID
+func (ip IDPayload) TenantID() string {
+	if ip.TenantIDInternal == "" {
+		return SystemTenantID
 	}
-	return ip.tenantID
+	return ip.TenantIDInternal
 }
 
 // SetSystemTenantID is used to set the string representation of
@@ -98,8 +115,8 @@ func (ip idPayload) TenantID() string {
 //
 // Panics if the value has already been set.
 func SetSystemTenantID(sysTenantID string) {
-	if systemTenantID != "" {
+	if SystemTenantID != "" {
 		panic("programming error: system tenant ID log tag value already set")
 	}
-	systemTenantID = sysTenantID
+	SystemTenantID = sysTenantID
 }

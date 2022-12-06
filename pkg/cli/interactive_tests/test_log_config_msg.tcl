@@ -10,7 +10,7 @@ start_server $argv
 start_test "Check that the cluster and node ID is reported at the start of the first log file."
 spawn tail -n 1000 -F logs/db/logs/cockroach.log
 eexpect "node startup completed"
-eexpect "start.go*clusterID:"
+eexpect "start.go*ClusterID:"
 eexpect "start.go*nodeID:"
 end_test
 
@@ -26,6 +26,6 @@ start_test "Check that the cluster and node ID is reported at the start of new l
 # somewhere.
 system "grep -q 'restarted pre-existing node' logs/db/logs/*.log"
 # Verify that the last log file does contain the cluster ID.
-system "grep -q 'start\.go.*clusterID:' logs/db/logs/cockroach.log"
+system "grep -q 'start\.go.*ClusterID:' logs/db/logs/cockroach.log"
 system "grep -q 'start\.go.*nodeID:' logs/db/logs/cockroach.log"
 end_test

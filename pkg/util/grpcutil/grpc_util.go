@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
@@ -32,13 +33,17 @@ const errConnectionInterruptedMsg = "connection interrupted (did the remote node
 type localRequestKey struct{}
 
 // NewLocalRequestContext returns a Context that can be used for local (in-process) requests.
-func NewLocalRequestContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, localRequestKey{}, struct{}{})
+func NewLocalRequestContext(ctx context.Context, tenantID roachpb.TenantID) context.Context {
+	return context.WithValue(ctx, localRequestKey{}, tenantID)
 }
 
 // IsLocalRequestContext returns true if this context is marked for local (in-process) use.
-func IsLocalRequestContext(ctx context.Context) bool {
-	return ctx.Value(localRequestKey{}) != nil
+func IsLocalRequestContext(ctx context.Context) (roachpb.TenantID, bool) {
+	val := ctx.Value(localRequestKey{})
+	if val == nil {
+		return roachpb.TenantID{}, false
+	}
+	return val.(roachpb.TenantID), true
 }
 
 // IsTimeout returns true if err's Cause is a gRPC timeout, or the request

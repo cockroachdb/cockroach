@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -453,7 +454,7 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		// tenant IDs. However, to help the decoded entry play
 		// nicely with utilities that use it, we always default
 		// the entry's tenantID with the system tenant ID.
-		entry.TenantID = systemTenantID
+		entry.TenantID = serverident.SystemTenantID
 
 		if strings.HasPrefix(entry.Message, structuredEntryPrefix+"{") /* crdb-v1 prefix */ {
 			// Note: we do not recognize the v2 marker here (" ={") because

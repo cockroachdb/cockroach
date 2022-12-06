@@ -849,6 +849,8 @@ func (ts *TestServer) StartSharedProcessTenant(
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
+//
+// See also StartSharedProcessTenant.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
