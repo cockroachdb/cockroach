@@ -16,6 +16,7 @@ proto_library(
     deps = [
         "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:timestamp_proto",
     ],
 )
 
@@ -42,6 +43,7 @@ go_library(
         "//pkg/util/keysutil",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
     ],
