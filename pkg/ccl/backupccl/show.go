@@ -578,18 +578,23 @@ func backupShowerDefault(
 						dataSizeDatum = tree.NewDInt(tree.DInt(tableSize.DataSize))
 						rowCountDatum = tree.NewDInt(tree.DInt(tableSize.Rows))
 
-						displayOptions := sql.ShowCreateDisplayOptions{
-							FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
-							IgnoreComments: true,
+						// Only resolve the table schemas if running `SHOW BACKUP SCHEMAS`.
+						// In all other cases we discard these results and so it is wasteful
+						// to construct the SQL representation of the table's schema.
+						if showSchemas {
+							displayOptions := sql.ShowCreateDisplayOptions{
+								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
+								IgnoreComments: true,
+							}
+							createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
+								tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
+							if err != nil {
+								// We expect that we might get an error here due to X-DB
+								// references, which were possible on 20.2 betas and rcs.
+								log.Errorf(ctx, "error while generating create statement: %+v", err)
+							}
+							createStmtDatum = nullIfEmpty(createStmt)
 						}
-						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-							tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
-						if err != nil {
-							// We expect that we might get an error here due to X-DB
-							// references, which were possible on 20.2 betas and rcs.
-							log.Errorf(ctx, "error while generating create statement: %+v", err)
-						}
-						createStmtDatum = nullIfEmpty(createStmt)
 					default:
 						descriptorType = "unknown"
 					}
