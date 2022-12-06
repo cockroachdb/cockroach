@@ -120,6 +120,10 @@ message ReplicaUpdatePlan {
   // part of loss of quorum recovery process.
   repeated int32 decommissioned_node_ids = 3 [(gogoproto.customname) = "DecommissionedNodeIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Version of cockroach binary that created the file.
+  roachpb.Version cockroach_version = 4 [(gogoproto.nullable) = false];
+  // ClusterID contains id of the cluster from which info was collected.
+  string cluster_id = 5 [(gogoproto.customname) = "ClusterID"];
 }
 
 // ReplicaRecoveryRecord is a struct that loss of quorum recovery commands
