@@ -29,11 +29,14 @@ type testingB interface {
 	// logScope is used to wrap log.Scope and make it available only in
 	// appropriate contexts.
 	logScope() (getDirectory func() string, close func())
+	isBenchmark() bool
 }
 
 type bShim struct {
 	*testing.B
 }
+
+func (b bShim) isBenchmark() bool { return true }
 
 var _ testingB = bShim{}
 
@@ -57,6 +60,8 @@ type tShim struct {
 	scope   *log.TestLogScope
 	results *resultSet
 }
+
+func (ts tShim) isBenchmark() bool { return false }
 
 var _ testingB = tShim{}
 
