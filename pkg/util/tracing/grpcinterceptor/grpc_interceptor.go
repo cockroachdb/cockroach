@@ -15,7 +15,9 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -209,8 +211,13 @@ func injectSpanMeta(
 // metadata; they will also look in the context.Context for an active
 // in-process parent Span and establish a ChildOf relationship if such a parent
 // Span could be found.
+//
+// localKVTracer is the Tracer of the in-process KV server, if any. This needs
+// to be passed when the interalClientAdapter is used by a tenant and configured
+// to use this interceptor to talk to an in-process KV server; otherwise pass
+// nil.
 func ClientInterceptor(
-	tracer *tracing.Tracer, init func(*tracing.Span),
+	tracer *tracing.Tracer, localKVTracer *tracing.Tracer, init func(*tracing.Span),
 ) grpc.UnaryClientInterceptor {
 	if init == nil {
 		init = func(*tracing.Span) {}
@@ -223,24 +230,45 @@ func ClientInterceptor(
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		// Local RPCs don't need any special tracing, since the caller's context
-		// will be used on the "server".
-		if grpcutil.IsLocalRequestContext(ctx) {
-			return invoker(ctx, method, req, resp, cc, opts...)
+		// Make a copy of the captured tracer; we might re-assign it below.
+		tracer := tracer
+		var parentOpt tracing.SpanOption
+		clientTenantID, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		// Handle local requests, done through the internalClientAdapter.
+		if localRequest {
+			// Local RPCs don't need any special tracing, since the caller's context
+			// will be used on the "server".
+			if clientTenantID == roachpb.SystemTenantID {
+				return invoker(ctx, method, req, resp, cc, opts...)
+			}
+
+			if localKVTracer == nil {
+				log.Fatalf(ctx, "interceptor called for local request, but kv tracer was not set")
+			}
+
+			// If it's a tenant calling to local KV, we need to muck with the tracing:
+			// we start a span with a "remote parent" using the Tracer for the local
+			// KV server. If we didn't do this, we'd have a client span created with
+			// the tenant's Tracer getting a child created with the KV server's
+			// Tracer, which is illegal.
+			parentOpt = tracing.WithRemoteParentFromLocalSpan(tracing.SpanFromContext(ctx))
+			tracer = localKVTracer
+		} else {
+			parentOpt = tracing.WithParent(tracing.SpanFromContext(ctx))
 		}
-		parent := tracing.SpanFromContext(ctx)
-		clientSpan := tracer.StartSpan(
-			method,
-			tracing.WithParent(parent),
-			tracing.WithClientSpanKind,
-		)
+
+		clientSpan := tracer.StartSpan(method, parentOpt, tracing.WithClientSpanKind)
 		init(clientSpan)
 		defer clientSpan.Finish()
 
-		// For most RPCs we pass along tracing info as gRPC metadata. Some select
-		// RPCs carry the tracing in the request protos, which is more efficient.
-		if !methodExcludedFromTracing(method) {
-			ctx = injectSpanMeta(ctx, tracer, clientSpan)
+		if localRequest {
+			ctx = tracing.ContextWithSpan(ctx, clientSpan)
+		} else {
+			// For most RPCs we pass along tracing info as gRPC metadata. Some select
+			// RPCs carry the tracing in the request protos, which is more efficient.
+			if !methodExcludedFromTracing(method) {
+				ctx = injectSpanMeta(ctx, tracer, clientSpan)
+			}
 		}
 		var err error
 		if invoker != nil {
@@ -269,8 +297,13 @@ func ClientInterceptor(
 // metadata; they will also look in the context.Context for an active
 // in-process parent Span and establish a ChildOf relationship if such a parent
 // Span could be found.
+//
+// localKVTracer is the Tracer of the in-process KV server, if any. This needs
+// to be passed when the interalClientAdapter is used by a tenant and configured
+// to use this interceptor to talk to an in-process KV server; otherwise pass
+// nil.
 func StreamClientInterceptor(
-	tracer *tracing.Tracer, init func(*tracing.Span),
+	tracer *tracing.Tracer, localKVTracer *tracing.Tracer, init func(*tracing.Span),
 ) grpc.StreamClientInterceptor {
 	if init == nil {
 		init = func(*tracing.Span) {}
@@ -283,22 +316,43 @@ func StreamClientInterceptor(
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		// Local RPCs don't need any special tracing, since the caller's context
-		// will be used on the "server".
-		if grpcutil.IsLocalRequestContext(ctx) {
-			return streamer(ctx, desc, cc, method, opts...)
+		// Make a copy of the captured tracer; we might re-assign it below.
+		tracer := tracer
+		var parentOpt tracing.SpanOption
+		clientTenantID, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		// Handle local requests, done through the internalClientAdapter.
+		if localRequest {
+			// Local RPCs don't need any special tracing, since the caller's context
+			// will be used on the "server".
+			if clientTenantID == roachpb.SystemTenantID {
+				return streamer(ctx, desc, cc, method, opts...)
+			}
+
+			// If it's a tenant calling to local KV, we need to muck with the tracing:
+			// we start a span with a "remote parent" using the Tracer for the local
+			// KV server. If we didn't do this, we'd have a client span created with
+			// the tenant's Tracer getting a child created with the KV server's
+			// Tracer, which is illegal.
+			parentOpt = tracing.WithRemoteParentFromLocalSpan(tracing.SpanFromContext(ctx))
+			tracer = localKVTracer
+		} else {
+			parentOpt = tracing.WithParent(tracing.SpanFromContext(ctx))
 		}
-		parent := tracing.SpanFromContext(ctx)
+
+		// Create a span that will live for the life of the stream.
 		clientSpan := tracer.StartSpan(
 			method,
-			tracing.WithParent(parent),
+			parentOpt,
 			tracing.WithClientSpanKind,
 		)
 		init(clientSpan)
 
-		if !methodExcludedFromTracing(method) {
+		if localRequest {
+			ctx = tracing.ContextWithSpan(ctx, clientSpan)
+		} else if !methodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
+
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
@@ -306,10 +360,15 @@ func StreamClientInterceptor(
 			clientSpan.Finish()
 			return cs, err
 		}
-		return newTracingClientStream(ctx, cs, desc, clientSpan), nil
+		return newTracingClientStream(
+			ctx, cs, desc,
+			// Pass ownership of clientSpan to the stream.
+			clientSpan), nil
 	}
 }
 
+// newTracingClientStream creates and implementation of grpc.ClientStream that
+// finishes `clientSpan` when the stream terminates.
 func newTracingClientStream(
 	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *tracing.Span,
 ) grpc.ClientStream {

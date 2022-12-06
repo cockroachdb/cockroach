@@ -142,7 +142,7 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 			ctx = logtags.WithTags(ctx, ac.tags)
 		}
 		if ac.ServerIDs != nil {
-			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+			ctx = ContextWithServerIdentification(ctx, ac.ServerIDs)
 		}
 		return ctx
 	}
@@ -155,8 +155,8 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 	if ac.tags != nil {
 		ctx = logtags.AddTags(ctx, ac.tags)
 	}
-	if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
-		ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+	if ac.ServerIDs != nil && ServerIdentificationFromContext(ctx) == nil {
+		ctx = ContextWithServerIdentification(ctx, ac.ServerIDs)
 	}
 	return ctx
 }
@@ -182,8 +182,8 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		if ac.tags != nil {
 			ctx = logtags.AddTags(ctx, ac.tags)
 		}
-		if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
-			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+		if ac.ServerIDs != nil && ServerIdentificationFromContext(ctx) == nil {
+			ctx = ContextWithServerIdentification(ctx, ac.ServerIDs)
 		}
 	}
 

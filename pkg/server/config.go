@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -122,8 +123,7 @@ type BaseConfig struct {
 
 	Tracer *tracing.Tracer
 
-	// idProvider is an interface that makes the logging package
-	// able to peek into the server IDs defined by this configuration.
+	// idProvider contains the tenant and server identity.
 	idProvider *idProvider
 
 	// IDContainer is the Node ID / SQL Instance ID container
@@ -466,6 +466,19 @@ type SQLConfig struct {
 	// node clocks have necessarily passed it.
 	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
 	Linearizable bool
+
+	// LocalKVServerInfo is set in configs for shared-process tenants. It contains
+	// info for making Batch requests to the local KV server without using gRPC.
+	LocalKVServerInfo *LocalKVServerInfo
+}
+
+// LocalKVServerInfo is used to group information about the local KV server
+// necessary for creating the internalClientAdapter for an in-process tenant
+// talking to that server.
+type LocalKVServerInfo struct {
+	InternalServer     roachpb.InternalServer
+	ServerInterceptors rpc.ServerInterceptorInfo
+	Tracer             *tracing.Tracer
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
@@ -835,6 +848,8 @@ func (cfg *Config) InitNode(ctx context.Context) error {
 		cfg.GossipBootstrapAddresses = addresses
 	}
 
+	cfg.BaseConfig.idProvider.SetTenant(roachpb.SystemTenantID)
+
 	return nil
 }
 
@@ -968,6 +983,11 @@ type idProvider struct {
 }
 
 var _ log.ServerIdentificationPayload = (*idProvider)(nil)
+
+// TenantID is part of the log.ServerIdentificationPayload interface.
+func (s *idProvider) TenantID() interface{} {
+	return s.tenantID
+}
 
 // ServerIdentityString implements the log.ServerIdentificationPayload interface.
 func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) string {

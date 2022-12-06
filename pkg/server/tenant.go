@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -744,6 +745,10 @@ func makeTenantSQLServerArgs(
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
+	var localKVTracer *tracing.Tracer
+	if sqlCfg.LocalKVServerInfo != nil {
+		localKVTracer = sqlCfg.LocalKVServerInfo.Tracer
+	}
 	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
 		TenantID:         sqlCfg.TenantID,
 		NodeID:           baseCfg.IDContainer,
@@ -754,7 +759,16 @@ func makeTenantSQLServerArgs(
 		Stopper:          stopper,
 		Settings:         st,
 		Knobs:            rpcTestingKnobs,
+		LocalKVTracer:    localKVTracer,
 	})
+	// If there is a local KV server, hook this SQLServer to it so that the
+	// SQLServer can perform some RPCs directly, without going through gRPC.
+	if lsi := sqlCfg.LocalKVServerInfo; lsi != nil {
+		rpcContext.SetLocalInternalServer(
+			lsi.InternalServer,
+			lsi.ServerInterceptors,
+			rpcContext.ClientInterceptors())
+	}
 
 	var dsKnobs kvcoord.ClientTestingKnobs
 	if dsKnobsP, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {

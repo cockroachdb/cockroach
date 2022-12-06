@@ -167,6 +167,16 @@ type ServerInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamServerInterceptor
 }
 
+func (si ServerInterceptorInfo) Clone() ServerInterceptorInfo {
+	s := ServerInterceptorInfo{
+		UnaryInterceptors:  make([]grpc.UnaryServerInterceptor, len(si.UnaryInterceptors)),
+		StreamInterceptors: make([]grpc.StreamServerInterceptor, len(si.StreamInterceptors)),
+	}
+	copy(s.UnaryInterceptors, si.UnaryInterceptors)
+	copy(s.StreamInterceptors, si.StreamInterceptors)
+	return s
+}
+
 // ClientInterceptorInfo contains the client-side interceptors that a Context
 // uses for RPC calls.
 type ClientInterceptorInfo struct {
@@ -458,6 +468,14 @@ type ContextOptions struct {
 	// utility, not a server, and thus misses server configuration, a
 	// cluster version, a node ID, etc.
 	ClientOnly bool
+
+	// LocalKVTracer is set if the rpc.Context is going to be used by a tenant
+	// which will call SetLocalInternalServer to tie the Context to an in-process
+	// KV server. In that case, LocalKVTracer is the Tracer of the local KV server.
+	//
+	// This fields needs to be set at construction time because that's when it's
+	// captured by interceptors.
+	LocalKVTracer *tracing.Tracer
 }
 
 func (c ContextOptions) validate() error {
@@ -609,9 +627,9 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		}
 
 		rpcCtx.clientUnaryInterceptors = append(rpcCtx.clientUnaryInterceptors,
-			grpcinterceptor.ClientInterceptor(tracer, tagger))
+			grpcinterceptor.ClientInterceptor(tracer, opts.LocalKVTracer, tagger))
 		rpcCtx.clientStreamInterceptors = append(rpcCtx.clientStreamInterceptors,
-			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
+			grpcinterceptor.StreamClientInterceptor(tracer, opts.LocalKVTracer, tagger))
 	}
 	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
 	// can add another interceptor, but it can only do it dynamically, based on
@@ -640,10 +658,12 @@ func (rpcCtx *Context) Metrics() *Metrics {
 // Note: the node ID ought to be retyped, see
 // https://github.com/cockroachdb/cockroach/pull/73309
 func (rpcCtx *Context) GetLocalInternalClientForAddr(
-	target string, nodeID roachpb.NodeID,
+	ctx context.Context, nodeID roachpb.NodeID,
 ) RestrictedInternalClient {
-	if target == rpcCtx.Config.AdvertiseAddr && nodeID == rpcCtx.NodeID.Get() {
-		return rpcCtx.localInternalClient
+	if nodeID != 0 && nodeID == rpcCtx.NodeID.Get() {
+		if rpcCtx.localInternalClient != nil {
+			return rpcCtx.localInternalClient
+		}
 	}
 	return nil
 }
@@ -734,7 +754,7 @@ func makeInternalClientAdapter(
 			reply := new(roachpb.BatchResponse)
 			// Create a new context from the existing one with the "local request" field set.
 			// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
-			ctx = grpcutil.NewLocalRequestContext(ctx)
+			ctx = grpcutil.NewLocalRequestContext(ctx, log.ServerIdentificationFromContext(ctx).TenantID().(roachpb.TenantID))
 			err := batchClientHandler(ctx, grpcinterceptor.BatchMethodName, ba, reply, nil /* ClientConn */, opts...)
 			return reply, err
 		},
@@ -932,7 +952,7 @@ func (a internalClientAdapter) RangeFeed(
 		sender: pipeWriter{},
 	}
 	rawServerStream := &serverStream{
-		ctx: grpcutil.NewLocalRequestContext(ctx),
+		ctx: grpcutil.NewLocalRequestContext(ctx, log.ServerIdentificationFromContext(ctx).TenantID().(roachpb.TenantID)),
 		// RangeFeed is a server-streaming RPC, so the server does not receive
 		// anything.
 		receiver: pipeReader{},
@@ -1048,7 +1068,7 @@ func (a internalClientAdapter) MuxRangeFeed(
 		sender:   requestWriter,
 	}
 	rawServerStream := &serverStream{
-		ctx:      grpcutil.NewLocalRequestContext(ctx),
+		ctx:      grpcutil.NewLocalRequestContext(ctx, log.ServerIdentificationFromContext(ctx).TenantID().(roachpb.TenantID)),
 		receiver: requestReader,
 		sender:   eventWriter,
 	}
@@ -1341,7 +1361,8 @@ func IsLocal(iface RestrictedInternalClient) bool {
 	return ok // internalClientAdapter is used for local connections.
 }
 
-// SetLocalInternalServer sets the context's local internal batch server.
+// SetLocalInternalServer links the local server to the Context, allowing some
+// RPCs to bypass gRPC.
 //
 // serverInterceptors lists the interceptors that will be run on RPCs done
 // through this local server.
@@ -1366,7 +1387,7 @@ func (rpcCtx *Context) ConnHealth(
 	target string, nodeID roachpb.NodeID, class ConnectionClass,
 ) error {
 	// The local client is always considered healthy.
-	if rpcCtx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+	if rpcCtx.GetLocalInternalClientForAddr(context.TODO(), nodeID) != nil {
 		return nil
 	}
 	if conn, ok := rpcCtx.m.Get(connKey{target, nodeID, class}); ok {

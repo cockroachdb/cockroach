@@ -153,7 +153,7 @@ func (n *Dialer) DialInternalClient(
 
 	{
 		// If we're dialing the local node, don't go through gRPC.
-		localClient := n.rpcContext.GetLocalInternalClientForAddr(addr.String(), nodeID)
+		localClient := n.rpcContext.GetLocalInternalClientForAddr(ctx, nodeID)
 		if localClient != nil && !n.testingKnobs.TestingNoLocalClientOptimization {
 			log.VEvent(ctx, 2, kvbase.RoutingRequestLocallyMsg)
 			return localClient, nil

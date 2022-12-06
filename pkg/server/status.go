@@ -575,7 +575,7 @@ func newStatusServer(
 	clock *hlc.Clock,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
-	ambient.AddLogTag("tenant", rpcCtx.TenantID)
+	ambient.AddLogTag("tenant1", rpcCtx.TenantID)
 
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{

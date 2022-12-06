@@ -1259,7 +1259,7 @@ func setupSpanForIncomingRPC(
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
-	localRequest := grpcutil.IsLocalRequestContext(ctx)
+	_, localRequest := grpcutil.IsLocalRequestContext(ctx)
 	// For non-local requests, we'll need to attach the recording to the outgoing
 	// BatchResponse if the request is traced. We ignore whether the request is
 	// traced or not here; if it isn't, the recording will be empty.

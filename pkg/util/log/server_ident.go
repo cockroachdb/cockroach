@@ -16,6 +16,20 @@ import "context"
 // used to carry ServerIdentificationPayload values.
 type ServerIdentificationContextKey struct{}
 
+func ContextWithServerIdentification(
+	ctx context.Context, serverID ServerIdentificationPayload,
+) context.Context {
+	return context.WithValue(ctx, ServerIdentificationContextKey{}, serverID)
+}
+
+func ServerIdentificationFromContext(ctx context.Context) ServerIdentificationPayload {
+	r := ctx.Value(ServerIdentificationContextKey{})
+	if r == nil {
+		return nil
+	}
+	return r.(ServerIdentificationPayload)
+}
+
 // ServerIdentificationPayload is the type of a context.Value payload
 // associated with a ServerIdentificationContextKey.
 type ServerIdentificationPayload interface {
@@ -23,6 +37,12 @@ type ServerIdentificationPayload interface {
 	// given retrieval key. If there is no value known for a given key,
 	// the method can return the empty string.
 	ServerIdentityString(key ServerIdentificationKey) string
+
+	// TenantID returns the roachpb.TenantID identifying the server. It's returned
+	// as an interface{} because the log pkg cannot depend on roachpb (and the log pkg
+	// is the one putting the ServerIdentificationPayload into the ctx, so it makes
+	// sense for this interface to live in log).
+	TenantID() interface{}
 }
 
 // ServerIdentificationKey represents a possible parameter to the
@@ -53,18 +73,15 @@ type idPayload struct {
 	sqlInstanceID string
 }
 
-func getIdentificationPayload(ctx context.Context) (res idPayload) {
-	r := ctx.Value(ServerIdentificationContextKey{})
-	if r == nil {
-		return res
+func getIdentificationPayload(ctx context.Context) idPayload {
+	si := ServerIdentificationFromContext(ctx)
+	if si == nil {
+		return idPayload{}
 	}
-	si, ok := r.(ServerIdentificationPayload)
-	if !ok {
-		return res
+	return idPayload{
+		clusterID:     si.ServerIdentityString(IdentifyClusterID),
+		nodeID:        si.ServerIdentityString(IdentifyKVNodeID),
+		sqlInstanceID: si.ServerIdentityString(IdentifyInstanceID),
+		tenantID:      si.ServerIdentityString(IdentifyTenantID),
 	}
-	res.clusterID = si.ServerIdentityString(IdentifyClusterID)
-	res.nodeID = si.ServerIdentityString(IdentifyKVNodeID)
-	res.sqlInstanceID = si.ServerIdentityString(IdentifyInstanceID)
-	res.tenantID = si.ServerIdentityString(IdentifyTenantID)
-	return res
 }
