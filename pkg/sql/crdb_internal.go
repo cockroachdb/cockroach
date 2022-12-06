@@ -6948,94 +6948,93 @@ func populateExecutionInsights(
 		return err
 	}
 	for _, insight := range response.Insights {
-		causes := tree.NewDArray(types.String)
-		for _, cause := range insight.Causes {
-			if err = causes.Append(tree.NewDString(cause.String())); err != nil {
-				return err
+		for _, s := range insight.Statements {
+
+			causes := tree.NewDArray(types.String)
+			for _, cause := range s.Causes {
+				if err = causes.Append(tree.NewDString(cause.String())); err != nil {
+					return err
+				}
 			}
-		}
 
-		var startTimestamp *tree.DTimestamp
-		startTimestamp, err = tree.MakeDTimestamp(insight.Statement.StartTime, time.Nanosecond)
-		if err != nil {
-			return err
-		}
-
-		var endTimestamp *tree.DTimestamp
-		endTimestamp, err = tree.MakeDTimestamp(insight.Statement.EndTime, time.Nanosecond)
-		if err != nil {
-			return err
-		}
-
-		execNodeIDs := tree.NewDArray(types.Int)
-		for _, nodeID := range insight.Statement.Nodes {
-			if err = execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
-				return err
-			}
-		}
-
-		autoRetryReason := tree.DNull
-		if insight.Statement.AutoRetryReason != "" {
-			autoRetryReason = tree.NewDString(insight.Statement.AutoRetryReason)
-		}
-
-		contentionTime := tree.DNull
-		if insight.Statement.Contention != nil {
-			contentionTime = tree.NewDInterval(
-				duration.MakeDuration(insight.Statement.Contention.Nanoseconds(), 0, 0),
-				types.DefaultIntervalTypeMetadata,
-			)
-		}
-
-		contentionEvents := tree.DNull
-		if len(insight.Statement.ContentionEvents) > 0 {
-			var contentionEventsJSON json.JSON
-			contentionEventsJSON, err = convertContentionEventsToJSON(ctx, p, insight.Statement.ContentionEvents)
+			var startTimestamp *tree.DTimestamp
+			startTimestamp, err = tree.MakeDTimestamp(s.StartTime, time.Nanosecond)
 			if err != nil {
 				return err
 			}
 
-			contentionEvents = tree.NewDJSON(contentionEventsJSON)
-		}
-
-		indexRecommendations := tree.NewDArray(types.String)
-		for _, recommendation := range insight.Statement.IndexRecommendations {
-			if err = indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+			var endTimestamp *tree.DTimestamp
+			endTimestamp, err = tree.MakeDTimestamp(s.EndTime, time.Nanosecond)
+			if err != nil {
 				return err
 			}
-		}
 
-		err = errors.CombineErrors(err, addRow(
-			tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
-			tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
-			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
-			tree.NewDString(hex.EncodeToString(insight.Statement.ID.GetBytes())),
-			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Statement.FingerprintID)))),
-			tree.NewDString(insight.Problem.String()),
-			causes,
-			tree.NewDString(insight.Statement.Query),
-			tree.NewDString(insight.Statement.Status.String()),
-			startTimestamp,
-			endTimestamp,
-			tree.MakeDBool(tree.DBool(insight.Statement.FullScan)),
-			tree.NewDString(insight.Transaction.User),
-			tree.NewDString(insight.Transaction.ApplicationName),
-			tree.NewDString(insight.Statement.Database),
-			tree.NewDString(insight.Statement.PlanGist),
-			tree.NewDInt(tree.DInt(insight.Statement.RowsRead)),
-			tree.NewDInt(tree.DInt(insight.Statement.RowsWritten)),
-			tree.NewDString(insight.Transaction.UserPriority),
-			tree.NewDInt(tree.DInt(insight.Statement.Retries)),
-			autoRetryReason,
-			execNodeIDs,
-			contentionTime,
-			contentionEvents,
-			indexRecommendations,
-			tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
-		))
+			execNodeIDs := tree.NewDArray(types.Int)
+			for _, nodeID := range s.Nodes {
+				if err = execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
+					return err
+				}
+			}
 
-		if err != nil {
-			return err
+			autoRetryReason := tree.DNull
+			if s.AutoRetryReason != "" {
+				autoRetryReason = tree.NewDString(s.AutoRetryReason)
+			}
+
+			contentionTime := tree.DNull
+			if s.Contention != nil {
+				contentionTime = tree.NewDInterval(
+					duration.MakeDuration(s.Contention.Nanoseconds(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				)
+			}
+
+			contentionEvents := tree.DNull
+			if len(s.ContentionEvents) > 0 {
+				var contentionEventsJSON json.JSON
+				contentionEventsJSON, err = convertContentionEventsToJSON(ctx, p, s.ContentionEvents)
+				if err != nil {
+					return err
+				}
+
+				contentionEvents = tree.NewDJSON(contentionEventsJSON)
+			}
+
+			indexRecommendations := tree.NewDArray(types.String)
+			for _, recommendation := range s.IndexRecommendations {
+				if err = indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+					return err
+				}
+			}
+
+			err = errors.CombineErrors(err, addRow(
+				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
+				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
+				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
+				tree.NewDString(hex.EncodeToString(s.ID.GetBytes())),
+				tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(s.FingerprintID)))),
+				tree.NewDString(s.Problem.String()),
+				causes,
+				tree.NewDString(s.Query),
+				tree.NewDString(s.Status.String()),
+				startTimestamp,
+				endTimestamp,
+				tree.MakeDBool(tree.DBool(s.FullScan)),
+				tree.NewDString(insight.Transaction.User),
+				tree.NewDString(insight.Transaction.ApplicationName),
+				tree.NewDString(s.Database),
+				tree.NewDString(s.PlanGist),
+				tree.NewDInt(tree.DInt(s.RowsRead)),
+				tree.NewDInt(tree.DInt(s.RowsWritten)),
+				tree.NewDString(insight.Transaction.UserPriority),
+				tree.NewDInt(tree.DInt(s.Retries)),
+				autoRetryReason,
+				execNodeIDs,
+				contentionTime,
+				contentionEvents,
+				indexRecommendations,
+				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
+			))
 		}
 	}
 	return
