@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const noPlan = "no plan"
+
 // setExplainBundleResult sets the result of an EXPLAIN ANALYZE (DEBUG)
 // statement. warnings will be printed out as is in the CLI.
 //
@@ -242,9 +244,9 @@ func (b *stmtBundleBuilder) addStatement() {
 func (b *stmtBundleBuilder) addOptPlans() {
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
-		b.z.AddFile("opt.txt", "no plan")
-		b.z.AddFile("opt-v.txt", "no plan")
-		b.z.AddFile("opt-vv.txt", "no plan")
+		b.z.AddFile("opt.txt", noPlan)
+		b.z.AddFile("opt-v.txt", noPlan)
+		b.z.AddFile("opt-vv.txt", noPlan)
 		return
 	}
 
