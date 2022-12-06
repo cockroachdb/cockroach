@@ -43,6 +43,9 @@ type RoundTripBenchTestCase struct {
 func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
 	for _, tc := range tests {
 		b.Run(tc.Name, func(b testingB) {
+			if tc.SkipIssue != 0 {
+				skip.WithIssue(b, tc.SkipIssue)
+			}
 			executeRoundTripTest(b, tc, cc)
 		})
 	}
@@ -175,14 +178,18 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 
 	res := float64(roundTrips) / float64(b.N())
 
+	reportf := b.Errorf
+	if b.isBenchmark() {
+		reportf = b.Logf
+	}
 	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
-		b.Errorf(`%s: got %v, expected %v`, b.Name(), res, exp)
+		reportf(`%s: got %v, expected %v`, b.Name(), res, exp)
 		dir := getDir()
 		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
 		require.NoError(b, err)
 		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
 		require.NoError(b, os.WriteFile(path, []byte(jaegerJSON), 0666))
-		b.Errorf("wrote jaeger trace to %s", path)
+		reportf("wrote jaeger trace to %s", path)
 	}
 	b.ReportMetric(res, roundTripsMetric)
 }
