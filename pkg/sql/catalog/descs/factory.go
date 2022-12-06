@@ -161,7 +161,6 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		opt(&cfg)
 	}
 	v := cf.settings.Version.ActiveVersion(ctx)
-	cr := catkv.NewCatalogReader(cf.codec, v, cf.systemDatabase)
 	return &Collection{
 		settings:                cf.settings,
 		version:                 v,
@@ -171,7 +170,7 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		uncommitted:             makeUncommittedDescriptors(cfg.monitor),
 		uncommittedComments:     makeUncommittedComments(),
 		uncommittedZoneConfigs:  makeUncommittedZoneConfigs(),
-		stored:                  catkv.MakeStoredCatalog(cr, cfg.dsdp, cfg.monitor),
+		cr:                      catkv.NewCatalogReader(cf.codec, v, cf.systemDatabase, cfg.monitor),
 		temporarySchemaProvider: cfg.dsdp,
 		validationModeProvider:  cfg.dsdp,
 	}
