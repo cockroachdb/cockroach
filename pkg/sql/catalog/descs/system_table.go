@@ -48,10 +48,19 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 	if err := r.internalExecutorFactory.DescsTxn(ctx, r.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection,
 	) (err error) {
-		id, err = descriptors.stored.LookupDescriptorID(
-			ctx, txn, keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
-		)
-		return err
+		ni := descpb.NameInfo{
+			ParentID:       keys.SystemDatabaseID,
+			ParentSchemaID: keys.SystemPublicSchemaID,
+			Name:           tableName,
+		}
+		read, err := descriptors.cr.GetByNames(ctx, txn, []descpb.NameInfo{ni})
+		if err != nil {
+			return err
+		}
+		if e := read.LookupNamespaceEntry(&ni); e != nil {
+			id = e.GetID()
+		}
+		return nil
 	}); err != nil {
 		return 0, err
 	}

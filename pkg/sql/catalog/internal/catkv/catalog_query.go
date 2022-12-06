@@ -36,9 +36,9 @@ import (
 // Objects of this type should be exclusively created and used by catalogReader
 // methods.
 type catalogQuery struct {
-	catalogReader
-	isRequired   bool
-	expectedType catalog.DescriptorType
+	codec                keys.SQLCodec
+	isDescriptorRequired bool
+	expectedType         catalog.DescriptorType
 }
 
 // query the catalog to retrieve data from the descriptor and namespace tables.
@@ -85,7 +85,6 @@ func (cq catalogQuery) query(
 			}
 		}
 	}
-	cq.systemDatabaseCache.update(cq.version, out.Catalog)
 	return nil
 }
 
@@ -112,7 +111,7 @@ func (cq catalogQuery) processDescriptorResultRow(
 	if expectedType == "" {
 		expectedType = catalog.Any
 	}
-	desc, err := build(expectedType, id, row.Value, cq.isRequired)
+	desc, err := build(expectedType, id, row.Value, cq.isDescriptorRequired)
 	if err != nil {
 		return wrapError(expectedType, id, err)
 	}
