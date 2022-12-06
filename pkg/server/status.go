@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -159,6 +160,7 @@ type baseStatusServer struct {
 	rpcCtx             *rpc.Context
 	stopper            *stop.Stopper
 	serverIterator     ServerIterator
+	clock              *hlc.Clock
 }
 
 func isInternalAppName(app string) bool {
@@ -492,7 +494,6 @@ type statusServer struct {
 	*baseStatusServer
 
 	cfg                      *base.Config
-	admin                    *adminServer
 	db                       *kv.DB
 	metricSource             metricMarshaler
 	si                       systemInfoOnce
@@ -506,6 +507,9 @@ type statusServer struct {
 // require system tenant access. This includes endpoints
 // that require gossip, or information about nodes and
 // stores.
+// In general, add new RPC implementations to the base
+// statusServer to ensure feature parity with system and
+// app tenants.
 type systemStatusServer struct {
 	*statusServer
 
@@ -559,7 +563,6 @@ func newStatusServer(
 	st *cluster.Settings,
 	cfg *base.Config,
 	adminAuthzCheck *adminPrivilegeChecker,
-	adminServer *adminServer,
 	db *kv.DB,
 	metricSource metricMarshaler,
 	rpcCtx *rpc.Context,
@@ -569,6 +572,7 @@ func newStatusServer(
 	remoteFlowRunner *flowinfra.RemoteFlowRunner,
 	internalExecutor *sql.InternalExecutor,
 	serverIterator ServerIterator,
+	clock *hlc.Clock,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	ambient.AddLogTag("tenant", rpcCtx.TenantID)
@@ -584,9 +588,9 @@ func newStatusServer(
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 			serverIterator:     serverIterator,
+			clock:              clock,
 		},
 		cfg:              cfg,
-		admin:            adminServer,
 		db:               db,
 		metricSource:     metricSource,
 		internalExecutor: internalExecutor,
@@ -601,7 +605,6 @@ func newSystemStatusServer(
 	st *cluster.Settings,
 	cfg *base.Config,
 	adminAuthzCheck *adminPrivilegeChecker,
-	adminServer *adminServer,
 	db *kv.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
@@ -616,6 +619,7 @@ func newSystemStatusServer(
 	internalExecutor *sql.InternalExecutor,
 	serverIterator ServerIterator,
 	spanConfigReporter spanconfig.Reporter,
+	clock *hlc.Clock,
 ) *systemStatusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
@@ -629,9 +633,9 @@ func newSystemStatusServer(
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 			serverIterator:     serverIterator,
+			clock:              clock,
 		},
 		cfg:              cfg,
-		admin:            adminServer,
 		db:               db,
 		metricSource:     metricSource,
 		internalExecutor: internalExecutor,
@@ -1701,7 +1705,7 @@ func (s *systemStatusServer) nodesHelper(
 		Nodes: statuses,
 	}
 
-	clock := s.admin.server.clock
+	clock := s.clock
 	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
 	if err != nil {
 		return nil, 0, err
@@ -3296,7 +3300,7 @@ func (s *statusServer) Diagnostics(
 		return status.Diagnostics(ctx, req)
 	}
 
-	return s.admin.server.sqlServer.diagnosticsReporter.CreateReport(ctx, telemetry.ReadOnly), nil
+	return s.sqlServer.diagnosticsReporter.CreateReport(ctx, telemetry.ReadOnly), nil
 }
 
 // Stores returns details for each store.
@@ -3478,7 +3482,7 @@ func (s *statusServer) JobRegistryStatus(
 	resp := &serverpb.JobRegistryStatusResponse{
 		NodeID: remoteNodeID,
 	}
-	for _, jID := range s.admin.server.sqlServer.jobRegistry.CurrentlyRunningJobs() {
+	for _, jID := range s.sqlServer.jobRegistry.CurrentlyRunningJobs() {
 		job := serverpb.JobRegistryStatusResponse_Job{
 			Id: int64(jID),
 		}
@@ -3500,7 +3504,7 @@ func (s *statusServer) JobStatus(
 		return nil, err
 	}
 
-	j, err := s.admin.server.sqlServer.jobRegistry.LoadJob(ctx, jobspb.JobID(req.JobId))
+	j, err := s.sqlServer.jobRegistry.LoadJob(ctx, jobspb.JobID(req.JobId))
 	if err != nil {
 		if je := (*jobs.JobNotFoundError)(nil); errors.As(err, &je) {
 			return nil, status.Errorf(codes.NotFound, "%v", err)

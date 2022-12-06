@@ -35,15 +35,15 @@ var ErrAddJoinTokenConsumed = errors.New("add/join token consumed but then anoth
 func (s *adminServer) RequestCA(
 	ctx context.Context, req *serverpb.CARequest,
 ) (*serverpb.CAResponse, error) {
-	settings := s.server.ClusterSettings()
+	settings := s.st
 	if settings == nil {
 		return nil, errors.AssertionFailedf("could not look up cluster settings")
 	}
-	if !sql.FeatureTLSAutoJoinEnabled.Get(&settings.SV) {
+	if !sql.FeatureTLSAutoJoinEnabled.Get(&s.st.SV) {
 		return nil, errors.New("feature disabled by administrator")
 	}
 
-	cm, err := s.server.rpcContext.GetCertificateManager()
+	cm, err := s.rpcContext.GetCertificateManager()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get certificate manager")
 	}
@@ -56,7 +56,7 @@ func (s *adminServer) RequestCA(
 }
 
 func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security.JoinToken) error {
-	return s.server.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		row, err := s.ie.QueryRow(
 			ctx, "select-consume-join-token", txn,
 			"SELECT id, secret FROM system.join_tokens WHERE id = $1 AND now() < expiration",
@@ -91,7 +91,7 @@ func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security
 func (s *adminServer) RequestCertBundle(
 	ctx context.Context, req *serverpb.CertBundleRequest,
 ) (*serverpb.CertBundleResponse, error) {
-	settings := s.server.ClusterSettings()
+	settings := s.st
 	if settings == nil {
 		return nil, errors.AssertionFailedf("could not look up cluster settings")
 	}
@@ -113,7 +113,7 @@ func (s *adminServer) RequestCertBundle(
 	}
 
 	// Collect certs to send to client.
-	certBundle, err := collectLocalCABundle(s.server.cfg.SSLCertsDir)
+	certBundle, err := collectLocalCABundle(s.sqlServer.cfg.SSLCertsDir)
 	if err != nil {
 		// TODO(aaron-crl): Log the reason for the error on the server.
 		// errors.Wrapf(err, "failed to collect LocalCABundle")
