@@ -123,6 +123,7 @@ def _impl(ctx):
     linker_flags = [
         "-lstdc++",
         "-L%{repo_path}/lib",
+        "-Wl,-no_adhoc_codesign",
     ]
 
     default_linker_flags = feature(
