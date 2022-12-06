@@ -97,7 +97,7 @@ func PrepareUpdateReplicas(
 
 	// Map contains a set of store names that were found in plan for this node,
 	// but were not configured in this command invocation.
-	missing := make(map[roachpb.StoreID]struct{})
+	missing := make(storeIDSet)
 	for _, update := range plan.Updates {
 		if nodeID != update.NodeID() {
 			continue
@@ -132,7 +132,7 @@ func PrepareUpdateReplicas(
 	}
 
 	if len(missing) > 0 {
-		report.MissingStores = storeSliceFromSet(missing)
+		report.MissingStores = missing.storeSliceFromSet()
 	}
 	return report, nil
 }
