@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
@@ -300,9 +301,14 @@ func (r *Replica) canDropLatchesBeforeEval(
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
 	for _, req := range ba.Requests {
-		start, end := req.GetInner().Header().Key, req.GetInner().Header().EndKey
-		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntents(
-			ctx, rw, ba.Txn, ba.Header.Timestamp, start, end, &intents, maxIntents,
+		reqHeader := req.GetInner().Header()
+		start, end, seq := reqHeader.Key, reqHeader.EndKey, reqHeader.Sequence
+		var txnID uuid.UUID
+		if ba.Txn != nil {
+			txnID = ba.Txn.ID
+		}
+		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
+			ctx, rw, txnID, ba.Header.Timestamp, start, end, seq, &intents, maxIntents,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, roachpb.NewError(
