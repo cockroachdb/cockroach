@@ -338,6 +338,15 @@ const (
 	// V23_1_CreateSystemJobInfoTable creates the system.job_info table.
 	V23_1CreateSystemJobInfoTable
 
+	// V23_1AddTypeColumnToJobsTable adds the type column to the
+	// system.jobs table.
+	V23_1AddTypeColumnToJobsTable
+
+	// V23_1BackfillTypeColumnInJobsTable backfills values for the
+	// type column in the system.jobs table. This is relevant for
+	// job rows created prior to V23_1AddTypeColumnToJobsTable.
+	V23_1BackfillTypeColumnInJobsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -583,6 +592,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1CreateSystemJobInfoTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 10},
+	},
+	{
+		Key:     V23_1AddTypeColumnToJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     V23_1BackfillTypeColumnInJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 14},
 	},
 
 	// *************************************************

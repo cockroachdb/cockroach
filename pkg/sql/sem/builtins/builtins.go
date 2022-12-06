@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -4023,6 +4024,38 @@ value if you rely on the HLC for accuracy.`,
 								EmitDefaults: bool(tree.MustBeDBool(args[2])),
 								EmitRedacted: bool(tree.MustBeDBool(args[3])),
 							},
+						)
+					},
+				},
+			}
+		}()...),
+
+	"crdb_internal.payload_type": makeBuiltin(
+		jsonProps(),
+		func() []tree.Overload {
+			returnType := tree.FixedReturnType(types.String)
+			const info = "Reads the type from the jobspb.Payload protocol message."
+			volatility := volatility.Immutable
+			getPayloadType := func(data []byte) (tree.Datum, error) {
+				msg, err := protoreflect.DecodeMessage("payload", data)
+				if err != nil {
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid protocol message")
+				}
+				typ := msg.(*jobspb.Payload).Type().String()
+				return tree.NewDString(typ), nil
+			}
+
+			return []tree.Overload{
+				{
+					Info:       info,
+					Volatility: volatility,
+					Types: tree.ParamTypes{
+						{"data", types.Bytes},
+					},
+					ReturnType: returnType,
+					Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+						return getPayloadType(
+							[]byte(tree.MustBeDBytes(args[0])),
 						)
 					},
 				},

@@ -105,7 +105,8 @@ CREATE TABLE public.jobs (
 	INDEX jobs_status_created_idx (status ASC, created ASC),
 	INDEX jobs_created_by_type_created_by_id_idx (created_by_type ASC, created_by_id ASC) STORING (status),
 	INDEX jobs_run_stats_idx (claim_session_id ASC, status ASC, created ASC) STORING (last_run, num_runs, claim_instance_id) WHERE status IN ('running':::STRING, 'reverting':::STRING, 'pending':::STRING, 'pause-requested':::STRING, 'cancel-requested':::STRING),
-	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
+	INDEX jobs_type_idx (type ASC),
+  FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id, type),
 	FAMILY progress (progress),
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );
