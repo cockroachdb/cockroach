@@ -3713,12 +3713,19 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 			replicaLocalityArr := tree.NewDArray(types.String)
 			for _, replica := range votersAndNonVoters {
+				// The table should still be rendered even if node locality is unavailable,
+				// so use NULL if nodeDesc is not found.
+				// See https://github.com/cockroachdb/cockroach/issues/92915.
+				replicaLocalityDatum := tree.DNull
 				nodeDesc, err := p.ExecCfg().NodeDescs.GetNodeDescriptor(replica.NodeID)
 				if err != nil {
-					return nil, err
+					if !errorutil.IsDescriptorNotFoundError(err) {
+						return nil, err
+					}
+				} else {
+					replicaLocalityDatum = tree.NewDString(nodeDesc.Locality.String())
 				}
-				replicaLocality := tree.NewDString(nodeDesc.Locality.String())
-				if err := replicaLocalityArr.Append(replicaLocality); err != nil {
+				if err := replicaLocalityArr.Append(replicaLocalityDatum); err != nil {
 					return nil, err
 				}
 			}

@@ -568,7 +568,7 @@ func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDesc
 		desc := (*roachpb.StoreDescriptor)(value)
 		return desc, nil
 	}
-	return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
+	return nil, roachpb.NewStoreNotFoundError(storeID)
 }
 
 // LogStatus logs the current status of gossip such as the incoming and
@@ -997,7 +997,7 @@ func (g *Gossip) getNodeDescriptor(
 		return nodeDescriptor, nil
 	}
 
-	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+	return nil, errorutil.NewNodeNotFoundError(nodeID)
 }
 
 // getNodeIDAddress looks up the address of the node by ID. The method accepts a

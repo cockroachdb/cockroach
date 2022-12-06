@@ -24,6 +24,7 @@ go_library(
         "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/util/contextutil",
+        "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
