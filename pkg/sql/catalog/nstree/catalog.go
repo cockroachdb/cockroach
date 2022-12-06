@@ -56,17 +56,15 @@ func (c Catalog) ForEachCommentEntry(fn func(key catalogkeys.CommentKey, cmt str
 	})
 }
 
-// ForEachZoneConfigEntry iterates through all descriptor zone configs
-// in order of increasing descriptor IDs.
-func (c Catalog) ForEachZoneConfigEntry(
-	fn func(id descpb.ID, zoneConfig catalog.ZoneConfig) error,
-) error {
+// ForEachZoneConfigEntry iterates over all zone config table entries in an
+// ordered fashion.
+func (c Catalog) ForEachZoneConfigEntry(fn func(id descpb.ID, zc catalog.ZoneConfig) error) error {
 	if !c.IsInitialized() {
 		return nil
 	}
 	return c.byID.ascend(func(entry catalog.NameEntry) error {
-		if e := entry.(*byIDEntry); e.zc != nil {
-			return fn(e.id, e.zc)
+		if zc := entry.(*byIDEntry).zc; zc != nil {
+			return fn(entry.GetID(), zc)
 		}
 		return nil
 	})
@@ -83,9 +81,20 @@ func (c Catalog) ForEachNamespaceEntry(fn func(e NamespaceEntry) error) error {
 	})
 }
 
-// ForEachSchemaNamespaceEntryInDatabase iterates over all namespace
-// entries in an ordered fashion for the entries corresponding to
-// schemas in the requested database.
+// ForEachDatabaseNamespaceEntry iterates over all database name -> ID mappings
+// in the same order as in system.namespace.
+func (c Catalog) ForEachDatabaseNamespaceEntry(fn func(e NamespaceEntry) error) error {
+	if !c.IsInitialized() {
+		return nil
+	}
+	return c.byName.ascendDatabases(func(entry catalog.NameEntry) error {
+		return fn(entry.(NamespaceEntry))
+	})
+}
+
+// ForEachSchemaNamespaceEntryInDatabase iterates over all schema name -> ID
+// mappings in the same order as in system.namespace for the mappings
+// corresponding to schemas in the requested database.
 func (c Catalog) ForEachSchemaNamespaceEntryInDatabase(
 	dbID descpb.ID, fn func(e NamespaceEntry) error,
 ) error {
@@ -107,6 +116,35 @@ func (c Catalog) LookupDescriptorEntry(id descpb.ID) catalog.Descriptor {
 		return nil
 	}
 	return e.(*byIDEntry).desc
+}
+
+// LookupCommentEntry looks up a comment by (CommentType, ID, SubID).
+func (c Catalog) LookupCommentEntry(key catalogkeys.CommentKey) (_ string, found bool) {
+	if !c.IsInitialized() {
+		return "", false
+	}
+	e := c.byID.get(descpb.ID(key.ObjectID))
+	if e == nil {
+		return "", false
+	}
+	cbt := &e.(*byIDEntry).comments[key.CommentType]
+	ordinal, ok := cbt.subObjectOrdinals.Get(int(key.SubID))
+	if !ok {
+		return "", false
+	}
+	return cbt.comments[ordinal], true
+}
+
+// LookupZoneConfigEntry looks up a zone config by ID.
+func (c Catalog) LookupZoneConfigEntry(id descpb.ID) catalog.ZoneConfig {
+	if !c.IsInitialized() {
+		return nil
+	}
+	e := c.byID.get(id)
+	if e == nil {
+		return nil
+	}
+	return e.(*byIDEntry).zc
 }
 
 // LookupNamespaceEntry looks up a descriptor ID by name.

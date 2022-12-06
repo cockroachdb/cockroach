@@ -37,8 +37,10 @@ func (mc *MutableCatalog) maybeInitialize() {
 
 // Clear empties the MutableCatalog.
 func (mc *MutableCatalog) Clear() {
-	mc.byID.clear()
-	mc.byName.clear()
+	if mc.IsInitialized() {
+		mc.byID.clear()
+		mc.byName.clear()
+	}
 	*mc = MutableCatalog{}
 }
 
@@ -137,4 +139,59 @@ func (mc *MutableCatalog) UpsertZoneConfig(
 	mc.byteSize -= e.ByteSize()
 	e.zc = zone.NewZoneConfigWithRawBytes(zoneConfig, rawBytes)
 	mc.byteSize += e.ByteSize()
+}
+
+// FilterByIDs returns a subset of the catalog only for the desired IDs.
+func (mc *MutableCatalog) FilterByIDs(ids []descpb.ID) Catalog {
+	if !mc.IsInitialized() {
+		return Catalog{}
+	}
+	var ret MutableCatalog
+	for _, id := range ids {
+		found := mc.byID.get(id)
+		if found == nil {
+			continue
+		}
+		e := ret.ensureForID(id)
+		*e = *found.(*byIDEntry)
+	}
+	return ret.Catalog
+}
+
+// FilterByNames returns a subset of the catalog only for the desired names.
+func (mc *MutableCatalog) FilterByNames(nameInfos []descpb.NameInfo) Catalog {
+	if !mc.IsInitialized() {
+		return Catalog{}
+	}
+	var ret MutableCatalog
+	for _, ni := range nameInfos {
+		found := mc.byName.getByName(ni.ParentID, ni.ParentSchemaID, ni.Name)
+		if found == nil {
+			continue
+		}
+		e := ret.ensureForName(&ni)
+		*e = *found.(*byNameEntry)
+	}
+	return ret.Catalog
+}
+
+// AddAll adds the contents of the provided catalog to this one.
+func (mc *MutableCatalog) AddAll(c Catalog) {
+	if !c.IsInitialized() {
+		return
+	}
+	_ = c.byName.ascend(func(entry catalog.NameEntry) error {
+		e := mc.ensureForName(entry)
+		mc.byteSize -= e.ByteSize()
+		*e = *(entry.(*byNameEntry))
+		mc.byteSize += e.ByteSize()
+		return nil
+	})
+	_ = c.byID.ascend(func(entry catalog.NameEntry) error {
+		e := mc.ensureForID(entry.GetID())
+		mc.byteSize -= e.ByteSize()
+		*e = *(entry.(*byIDEntry))
+		mc.byteSize += e.ByteSize()
+		return nil
+	})
 }

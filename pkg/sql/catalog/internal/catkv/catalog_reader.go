@@ -13,7 +13,6 @@ package catkv
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,16 +23,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// CatalogReader queries the system.namespace and system.descriptor tables,
-// leveraging the SystemDatabaseCache if it is present in the implementation.
-//
-// The main use case for CatalogReader should be StoredCatalog.
+// CatalogReader queries the system tables containing catalog data.
 type CatalogReader interface {
 
 	// Codec returns the codec used by this CatalogReader.
 	Codec() keys.SQLCodec
+
+	// Cache returns the whole contents of the in-memory cache in use by this
+	// CatalogReader if there is one.
+	Cache() nstree.Catalog
+
+	// IsIDInCache return true when all the by-ID catalog data for this ID
+	// is known to be in the cache.
+	IsIDInCache(id descpb.ID) bool
+
+	// IsNameInCache return true when all the by-name catalog data for this name
+	// key is known to be in the cache.
+	IsNameInCache(key catalog.NameKey) bool
+
+	// IsDescIDKnownToNotExist returns true when we know that there definitely
+	// exists no descriptor in storage with that ID.
+	IsDescIDKnownToNotExist(id, maybeParentID descpb.ID) bool
+
+	// Reset resets any state that the CatalogReader may hold.
+	Reset(ctx context.Context)
 
 	// ScanAll scans the entirety of the descriptor and namespace tables.
 	ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error)
@@ -50,9 +66,10 @@ type CatalogReader interface {
 		db catalog.DatabaseDescriptor,
 	) (nstree.Catalog, error)
 
-	// ScanNamespaceForDatabaseEntries scans the portion of the namespace table
-	// which contains all name entries for children of a given database.
-	ScanNamespaceForDatabaseEntries(
+	// ScanNamespaceForDatabaseSchemasAndObjects scans the portion of the
+	// namespace table which contains all name entries for children of a
+	// given database.
+	ScanNamespaceForDatabaseSchemasAndObjects(
 		ctx context.Context,
 		txn *kv.Txn,
 		db catalog.DatabaseDescriptor,
@@ -64,45 +81,22 @@ type CatalogReader interface {
 		ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 	) (nstree.Catalog, error)
 
-	// GetDescriptorEntries gets the descriptors for the desired IDs, but looks in
-	// the system database cache first if there is one. It also reads all metadata
-	// (e.g. comments and zoneconfig) of the descriptors.
-	GetDescriptorEntries(
+	// GetByIDs reads the system.descriptor, system.comments and system.zone
+	// entries for the desired IDs, but looks in the system database cache
+	// first if there is one.
+	GetByIDs(
 		ctx context.Context,
 		txn *kv.Txn,
 		ids []descpb.ID,
-		isRequired bool,
+		isDescriptorRequired bool,
 		expectedType catalog.DescriptorType,
 	) (nstree.Catalog, error)
 
-	// GetZoneConfigs gets zone config information for the desire IDs. Note: this
-	// is barely used for normal descriptors, it's only used to fetch Zone Configs
-	// for RootNameSpace and PseudoTableIDS which might zone configs but not
-	// descriptors. This fact make it not possible to scan zone configs together
-	// with descriptors.
-	GetZoneConfigs(
-		ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
-	) (nstree.Catalog, error)
-
-	// GetNamespaceEntries gets the descriptor IDs for the desired names, but
+	// GetByNames reads the system.namespace entries for the given keys, but
 	// looks in the system database cache first if there is one.
-	GetNamespaceEntries(
+	GetByNames(
 		ctx context.Context, txn *kv.Txn, nameInfos []descpb.NameInfo,
 	) (nstree.Catalog, error)
-}
-
-// NewCatalogReader is the constructor for the default CatalogReader
-// implementation.
-func NewCatalogReader(
-	codec keys.SQLCodec,
-	version clusterversion.ClusterVersion,
-	systemDatabaseCache *SystemDatabaseCache,
-) CatalogReader {
-	return &catalogReader{
-		codec:               codec,
-		version:             version,
-		systemDatabaseCache: systemDatabaseCache,
-	}
 }
 
 // NewUncachedCatalogReader is the constructor for the default CatalogReader
@@ -117,13 +111,6 @@ func NewUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
 // objects and running them, leveraging the SystemDatabaseCache if present.
 type catalogReader struct {
 	codec keys.SQLCodec
-
-	// systemDatabaseCache is a cache of system database catalog information.
-	// Its presence is entirely optional and only serves to eliminate superfluous
-	// round trips to KV.
-	systemDatabaseCache *SystemDatabaseCache
-	// version only needs to be set when systemDatabaseCache is set.
-	version clusterversion.ClusterVersion
 }
 
 var _ CatalogReader = (*catalogReader)(nil)
@@ -133,21 +120,38 @@ func (cr catalogReader) Codec() keys.SQLCodec {
 	return cr.codec
 }
 
+// Reset is part of the CatalogReader interface.
+func (cr catalogReader) Reset(_ context.Context) {}
+
+// Cache is part of the CatalogReader interface.
+func (cr catalogReader) Cache() nstree.Catalog {
+	return nstree.Catalog{}
+}
+
+// IsIDInCache is part of the CatalogReader interface.
+func (cr catalogReader) IsIDInCache(_ descpb.ID) bool {
+	return false
+}
+
+// IsNameInCache is part of the CatalogReader interface.
+func (cr catalogReader) IsNameInCache(_ catalog.NameKey) bool {
+	return false
+}
+
+// IsDescIDKnownToNotExist is part of the CatalogReader interface.
+func (cr catalogReader) IsDescIDKnownToNotExist(_, _ descpb.ID) bool {
+	return false
+}
+
 // ScanAll is part of the CatalogReader interface.
 func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
-	log.Eventf(ctx, "fetching all descriptors and namespace entries")
-	cq := catalogQuery{catalogReader: cr}
+	cq := catalogQuery{codec: cr.codec}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		b.Header.MaxSpanRequestKeys = 0
-		descsPrefix := catalogkeys.MakeAllDescsMetadataKey(codec)
-		b.Scan(descsPrefix, descsPrefix.PrefixEnd())
-		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
-		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
-		commentPrefix := catalogkeys.CommentsMetadataPrefix(codec)
-		b.Scan(commentPrefix, commentPrefix.PrefixEnd())
-		zonesPrefix := config.ZonesPrimaryIndexPrefix(codec)
-		b.Scan(zonesPrefix, zonesPrefix.PrefixEnd())
+		scan(ctx, b, catalogkeys.MakeAllDescsMetadataKey(codec))
+		scan(ctx, b, codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID))
+		scan(ctx, b, catalogkeys.CommentsMetadataPrefix(codec))
+		scan(ctx, b, config.ZonesPrimaryIndexPrefix(codec))
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -159,10 +163,9 @@ func (cr catalogReader) scanNamespace(
 	ctx context.Context, txn *kv.Txn, prefix roachpb.Key,
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
-	cq := catalogQuery{catalogReader: cr}
+	cq := catalogQuery{codec: cr.codec}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		b.Header.MaxSpanRequestKeys = 0
-		b.Scan(prefix, prefix.PrefixEnd())
+		scan(ctx, b, prefix)
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -188,8 +191,9 @@ func (cr catalogReader) ScanNamespaceForDatabaseSchemas(
 	)
 }
 
-// ScanNamespaceForDatabaseEntries is part of the CatalogReader interface.
-func (cr catalogReader) ScanNamespaceForDatabaseEntries(
+// ScanNamespaceForDatabaseSchemasAndObjects is part of the CatalogReader
+// interface.
+func (cr catalogReader) ScanNamespaceForDatabaseSchemasAndObjects(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
 	return cr.scanNamespace(
@@ -207,54 +211,36 @@ func (cr catalogReader) ScanNamespaceForSchemaObjects(
 	}))
 }
 
-// GetDescriptorEntries is part of the CatalogReader interface.
-func (cr catalogReader) GetDescriptorEntries(
+// GetByIDs is part of the CatalogReader interface.
+func (cr catalogReader) GetByIDs(
 	ctx context.Context,
 	txn *kv.Txn,
 	ids []descpb.ID,
-	isRequired bool,
+	isDescriptorRequired bool,
 	expectedType catalog.DescriptorType,
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 	if len(ids) == 0 {
 		return nstree.Catalog{}, nil
 	}
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "looking up descriptors by id: %v", ids)
+	cq := catalogQuery{
+		codec:                cr.codec,
+		isDescriptorRequired: isDescriptorRequired,
+		expectedType:         expectedType,
 	}
-	var needsQuery bool
-	for _, id := range ids {
-		if desc := cr.systemDatabaseCache.lookupDescriptor(cr.version, id); desc != nil {
-			mc.UpsertDescriptorEntry(desc)
-		} else if id != descpb.InvalidID {
-			needsQuery = true
-		}
-	}
-	// Only run a query when absolutely necessary.
-	if needsQuery {
-		cq := catalogQuery{
-			catalogReader: cr,
-			isRequired:    isRequired,
-			expectedType:  expectedType,
-		}
-		err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-			for _, id := range ids {
-				if id != descpb.InvalidID && mc.LookupDescriptorEntry(id) == nil {
-					b.Get(catalogkeys.MakeDescMetadataKey(codec, id))
-					// Fetch all the comments on the descriptor in same batch.
-					for _, t := range catalogkeys.AllCommentTypes {
-						cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id)
-						b.Scan(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd())
-					}
-					b.Get(config.MakeZoneKey(codec, id))
-				}
+	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
+		for _, id := range ids {
+			get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, id))
+			for _, t := range catalogkeys.AllCommentTypes {
+				scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id))
 			}
-		})
-		if err != nil {
-			return nstree.Catalog{}, err
+			get(ctx, b, config.MakeZoneKey(codec, id))
 		}
+	})
+	if err != nil {
+		return nstree.Catalog{}, err
 	}
-	if isRequired {
+	if isDescriptorRequired {
 		for _, id := range ids {
 			if mc.LookupDescriptorEntry(id) == nil {
 				return nstree.Catalog{}, wrapError(expectedType, id, requiredError(expectedType, id))
@@ -264,55 +250,49 @@ func (cr catalogReader) GetDescriptorEntries(
 	return mc.Catalog, nil
 }
 
-// GetZoneConfigs is part of the CatalogReader interface.
-func (cr catalogReader) GetZoneConfigs(
-	ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
-) (nstree.Catalog, error) {
-	var mc nstree.MutableCatalog
-	cq := catalogQuery{
-		catalogReader: cr,
-	}
-	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		ids.ForEach(func(id descpb.ID) {
-			b.Get(config.MakeZoneKey(codec, id))
-		})
-	})
-	if err != nil {
-		return nstree.Catalog{}, err
-	}
-
-	return mc.Catalog, nil
-}
-
-// GetNamespaceEntries is part of the CatalogReader interface.
-func (cr catalogReader) GetNamespaceEntries(
+// GetByNames is part of the CatalogReader interface.
+func (cr catalogReader) GetByNames(
 	ctx context.Context, txn *kv.Txn, nameInfos []descpb.NameInfo,
 ) (nstree.Catalog, error) {
 	if len(nameInfos) == 0 {
 		return nstree.Catalog{}, nil
 	}
 	var mc nstree.MutableCatalog
-	var needsQuery bool
-	for _, nameInfo := range nameInfos {
-		if id, ts := cr.systemDatabaseCache.lookupDescriptorID(cr.version, nameInfo); id != descpb.InvalidID {
-			mc.UpsertNamespaceEntry(nameInfo, id, ts)
-		} else if nameInfo.Name != "" {
-			needsQuery = true
-		}
-	}
-	// Only run a query when absolutely necessary.
-	if needsQuery {
-		cq := catalogQuery{catalogReader: cr}
-		err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-			for _, nameInfo := range nameInfos {
-				if nameInfo.Name != "" && mc.LookupNamespaceEntry(nameInfo) == nil {
-					b.Get(catalogkeys.EncodeNameKey(codec, nameInfo))
-				}
+	cq := catalogQuery{codec: cr.codec}
+	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
+		for _, nameInfo := range nameInfos {
+			if nameInfo.Name != "" {
+				get(ctx, b, catalogkeys.EncodeNameKey(codec, nameInfo))
 			}
-		})
-		if err != nil {
-			return nstree.Catalog{}, err
 		}
+	})
+	if err != nil {
+		return nstree.Catalog{}, err
 	}
 	return mc.Catalog, nil
+}
+
+func get(ctx context.Context, b *kv.Batch, key roachpb.Key) {
+	b.Get(key)
+	if isEventLoggingEnabled(ctx) {
+		log.VEventfDepth(ctx, 1, 2, "Get %s", key)
+	}
+}
+
+func scan(ctx context.Context, b *kv.Batch, prefix roachpb.Key) {
+	b.Header.MaxSpanRequestKeys = 0
+	b.Scan(prefix, prefix.PrefixEnd())
+	if isEventLoggingEnabled(ctx) {
+		log.VEventfDepth(ctx, 1, 2, "Scan %s", prefix)
+	}
+}
+
+// TestingSpanOperationName is the operation name for the context
+// span in place for event logging in CatalogReader implementations.
+const TestingSpanOperationName = "catalog-reader-test-case"
+
+func isEventLoggingEnabled(ctx context.Context) bool {
+	// Presently, we don't want to log any events outside of tests.
+	sp := tracing.SpanFromContext(ctx)
+	return sp != nil && sp.IsVerbose() && sp.OperationName() == TestingSpanOperationName
 }
