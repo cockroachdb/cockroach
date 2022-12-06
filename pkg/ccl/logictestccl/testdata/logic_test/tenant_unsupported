@@ -51,7 +51,7 @@ ALTER TABLE kv SPLIT AT VALUES ('foo')
 statement error pq: could not UNSPLIT AT \('foo'\): rpc error: code = Unauthenticated desc = request \[1 AdmUnsplit\] not permitted
 ALTER TABLE kv UNSPLIT AT VALUES ('foo')
 
-statement error operation is unsupported in multi-tenancy mode
+statement ok
 ALTER TABLE kv UNSPLIT ALL
 
 statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmScatter\] not permitted
