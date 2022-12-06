@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -3660,34 +3659,27 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if !hasPermission {
 			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
 		}
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
-			Key:    keys.MinKey,
-			EndKey: keys.MaxKey,
-		})
+
+		execCfg := p.ExecCfg()
+		rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, execCfg.Codec.TenantSpan())
 		if err != nil {
 			return nil, nil, err
 		}
 
-		var desc roachpb.RangeDescriptor
-
-		i := 0
-
 		return func() (tree.Datums, error) {
-			if i >= len(ranges) {
+			if !rangeDescIterator.Valid() {
 				return nil, nil
 			}
 
-			r := ranges[i]
-			i++
+			rangeDesc := rangeDescIterator.CurRangeDescriptor()
 
-			if err := r.ValueProto(&desc); err != nil {
-				return nil, err
-			}
+			rangeDescIterator.Next()
 
+			replicas := rangeDesc.Replicas()
 			votersAndNonVoters := append([]roachpb.ReplicaDescriptor(nil),
-				desc.Replicas().VoterAndNonVoterDescriptors()...)
+				replicas.VoterAndNonVoterDescriptors()...)
 			var learnerReplicaStoreIDs []int
-			for _, rd := range desc.Replicas().LearnerDescriptors() {
+			for _, rd := range replicas.LearnerDescriptors() {
 				learnerReplicaStoreIDs = append(learnerReplicaStoreIDs, int(rd.StoreID))
 			}
 			sort.Slice(votersAndNonVoters, func(i, j int) bool {
@@ -3701,13 +3693,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 			votersArr := tree.NewDArray(types.Int)
-			for _, replica := range desc.Replicas().VoterDescriptors() {
+			for _, replica := range replicas.VoterDescriptors() {
 				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
 					return nil, err
 				}
 			}
 			nonVotersArr := tree.NewDArray(types.Int)
-			for _, replica := range desc.Replicas().NonVoterDescriptors() {
+			for _, replica := range replicas.NonVoterDescriptors() {
 				if err := nonVotersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
 					return nil, err
 				}
@@ -3732,21 +3724,21 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			tableID, dbName, schemaName, tableName, indexName := lookupNamesByKey(
-				p, desc.StartKey.AsRawKey(), dbNames, tableNames, schemaNames,
+				p, rangeDesc.StartKey.AsRawKey(), dbNames, tableNames, schemaNames,
 				indexNames, schemaParents, parents,
 			)
 
 			splitEnforcedUntil := tree.DNull
-			if !desc.StickyBit.IsEmpty() {
-				splitEnforcedUntil = eval.TimestampToInexactDTimestamp(desc.StickyBit)
+			if !rangeDesc.StickyBit.IsEmpty() {
+				splitEnforcedUntil = eval.TimestampToInexactDTimestamp(rangeDesc.StickyBit)
 			}
 
 			return tree.Datums{
-				tree.NewDInt(tree.DInt(desc.RangeID)),
-				tree.NewDBytes(tree.DBytes(desc.StartKey)),
-				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
-				tree.NewDBytes(tree.DBytes(desc.EndKey)),
-				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.EndKey.AsRawKey())),
+				tree.NewDInt(tree.DInt(rangeDesc.RangeID)),
+				tree.NewDBytes(tree.DBytes(rangeDesc.StartKey)),
+				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rangeDesc.StartKey.AsRawKey())),
+				tree.NewDBytes(tree.DBytes(rangeDesc.EndKey)),
+				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rangeDesc.EndKey.AsRawKey())),
 				tree.NewDInt(tree.DInt(tableID)),
 				tree.NewDString(dbName),
 				tree.NewDString(schemaName),
