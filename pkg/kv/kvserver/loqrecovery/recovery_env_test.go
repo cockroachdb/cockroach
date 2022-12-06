@@ -127,6 +127,14 @@ type localDataView struct {
 	RaftReplicaID int             `yaml:"RaftReplicaID"`
 }
 
+// testDescriptorData yaml optimized representation of RangeDescriptor
+type testDescriptorData struct {
+	RangeID    roachpb.RangeID         `yaml:"RangeID"`
+	StartKey   string                  `yaml:"StartKey"`
+	Replicas   []replicaDescriptorView `yaml:"Replicas,flow"`
+	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
+}
+
 // Store with its owning NodeID for easier grouping by owning nodes.
 type wrappedStore struct {
 	engine storage.Engine
@@ -137,6 +145,8 @@ type quorumRecoveryEnv struct {
 	// Stores with data
 	clusterID uuid.UUID
 	stores    map[roachpb.StoreID]wrappedStore
+	// Optional mata ranges content
+	meta []roachpb.RangeDescriptor
 
 	// Collected info from nodes
 	replicas loqrecoverypb.ClusterReplicaInfo
@@ -152,6 +162,9 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	case "replication-data":
 		// Populate in-mem engines with data.
 		out = e.handleReplicationData(t, d)
+	case "descriptor-data":
+		// Populate optional descriptor data.
+		out = e.handleDescriptorData(t, d)
 	case "collect-replica-info":
 		// Collect one or more range info "files" from stores.
 		out, err = e.handleCollectReplicas(t, d)
@@ -390,9 +403,62 @@ func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
 	return roachpb.RKey(key)
 }
 
+func (e *quorumRecoveryEnv) handleDescriptorData(t *testing.T, d datadriven.TestData) string {
+	var descriptors []testDescriptorData
+	err := yaml.UnmarshalStrict([]byte(d.Input), &descriptors)
+	if err != nil {
+		t.Fatalf("failed to unmarshal test range descriptor data: %v", err)
+	}
+	e.meta = nil
+	if len(descriptors) == 0 {
+		return "ok"
+	}
+
+	var testDesc testDescriptorData
+
+	makeLastDescriptor := func(nextStartKey string) roachpb.RangeDescriptor {
+		var replicas []roachpb.ReplicaDescriptor
+		var maxReplicaID roachpb.ReplicaID
+		for _, r := range testDesc.Replicas {
+			replicas = append(replicas, r.asReplicaDescriptor())
+			if r.ReplicaID > maxReplicaID {
+				maxReplicaID = r.ReplicaID
+			}
+		}
+		gen := testDesc.Generation
+		if gen == 0 {
+			gen = roachpb.RangeGeneration(maxReplicaID)
+		}
+		return roachpb.RangeDescriptor{
+			RangeID:          testDesc.RangeID,
+			StartKey:         parsePrettyKey(t, testDesc.StartKey),
+			EndKey:           parsePrettyKey(t, nextStartKey),
+			InternalReplicas: replicas,
+			Generation:       gen,
+			NextReplicaID:    maxReplicaID + 1,
+		}
+	}
+
+	for _, d := range descriptors {
+		if testDesc.RangeID != 0 {
+			e.meta = append(e.meta, makeLastDescriptor(d.StartKey))
+		}
+		if d.RangeID == 0 {
+			t.Fatal("RangeID in the test range descriptor can't be 0")
+		}
+		testDesc = d
+	}
+	e.meta = append(e.meta, makeLastDescriptor("/Max"))
+	return "ok"
+}
+
 func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) (string, error) {
 	stores := e.parseStoresArg(t, d, false /* defaultToAll */)
-	plan, report, err := PlanReplicas(context.Background(), e.replicas.LocalInfo, stores)
+	nodes := e.parseNodesArg(t, d)
+	plan, report, err := PlanReplicas(context.Background(), loqrecoverypb.ClusterReplicaInfo{
+		Descriptors: e.replicas.Descriptors,
+		LocalInfo:   e.replicas.LocalInfo,
+	}, stores, nodes)
 	if err != nil {
 		return "", err
 	}
@@ -405,6 +471,9 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 		return "", err
 	}
 	e.plan = plan
+	if len(e.plan.Updates) == 0 {
+		return "", nil
+	}
 	// We only marshal actual data without container to reduce clutter.
 	out, err := yaml.Marshal(e.plan.Updates)
 	if err != nil {
@@ -459,6 +528,7 @@ func (e *quorumRecoveryEnv) handleCollectReplicas(
 			return "", err
 		}
 	}
+	e.replicas.Descriptors = e.meta
 	return "ok", nil
 }
 
@@ -535,6 +605,29 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 	}
 	sort.Slice(stores, func(i, j int) bool { return i < j })
 	return stores
+}
+
+// parseNodesArg parses NodeIDs from nodes arg if available.
+// Results are returned in sorted order to allow consistent output.
+func (e *quorumRecoveryEnv) parseNodesArg(t *testing.T, d datadriven.TestData) []roachpb.NodeID {
+	var nodes []roachpb.NodeID
+	if d.HasArg("nodes") {
+		for _, arg := range d.CmdArgs {
+			if arg.Key == "nodes" {
+				for _, id := range arg.Vals {
+					id, err := strconv.ParseInt(id, 10, 32)
+					if err != nil {
+						t.Fatalf("failed to parse node id: %v", err)
+					}
+					nodes = append(nodes, roachpb.NodeID(id))
+				}
+			}
+		}
+	}
+	if len(nodes) > 0 {
+		sort.Slice(nodes, func(i, j int) bool { return i < j })
+	}
+	return nodes
 }
 
 func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData) string {
