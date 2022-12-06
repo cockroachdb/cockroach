@@ -69,10 +69,11 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 type backupInfoReader interface {
 	showBackup(
 		context.Context,
+		sql.PlanHookState,
 		*mon.BoundAccount,
 		cloud.ExternalStorage,
-		cloud.ExternalStorage,
 		*jobspb.BackupEncryptionOptions,
+		string,
 		[]string,
 		chan<- tree.Datums,
 	) error
@@ -97,11 +98,12 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 // and pass only `stores []cloud.ExternalStorage` object in signature
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
+	p sql.PlanHookState,
 	mem *mon.BoundAccount,
 	store cloud.ExternalStorage,
-	incStore cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
-	incPaths []string,
+	incLocation string,
+	incManifestPaths []string,
 	resultsCh chan<- tree.Datums,
 ) error {
 	var memSize int64
@@ -110,7 +112,7 @@ func (m manifestInfoReader) showBackup(
 	}()
 
 	var err error
-	manifests := make([]BackupManifest, len(incPaths)+1)
+	manifests := make([]BackupManifest, len(incManifestPaths)+1)
 	manifests[0], memSize, err = ReadBackupManifestFromStore(ctx, mem, store, enc)
 
 	if err != nil {
@@ -128,15 +130,29 @@ func (m manifestInfoReader) showBackup(
 		return err
 	}
 
-	for i := range incPaths {
-		m, sz, err := readBackupManifest(ctx, mem, incStore, incPaths[i], enc)
-		if err != nil {
-			return err
+	// Get the BACKUP_MANIFESTs for incremental backups, if there are any.
+	if len(incManifestPaths) > 0 {
+		var fullyResolvedIncManifestURIs []string
+		for _, incManifestPath := range incManifestPaths {
+			incPath := strings.TrimSuffix(incManifestPath, backupManifestName)
+			incURI, err := url.Parse(incLocation)
+			if err != nil {
+				return errors.Wrapf(err, "parsing incremental backup location %s", incLocation)
+			}
+			incURI.Path = JoinURLPath(incURI.Path, incPath)
+			fullyResolvedIncManifestURIs = append(fullyResolvedIncManifestURIs, incURI.String())
 		}
-		memSize += sz
+		prevBackups, size, err := getBackupManifests(ctx, mem, p.User(),
+			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, fullyResolvedIncManifestURIs, enc)
+		if err != nil {
+			return errors.Wrap(err, "failed to fetch incremental backup manifests")
+		}
+		memSize += size
 		// Blank the stats to prevent memory blowup.
-		m.DeprecatedStatistics = nil
-		manifests[i+1] = m
+		for i := range prevBackups {
+			prevBackups[i].DeprecatedStatistics = nil
+			manifests[i+1] = prevBackups[i]
+		}
 	}
 
 	// Ensure that the descriptors in the backup manifests are up to date.
@@ -181,11 +197,12 @@ func (m metadataSSTInfoReader) header() colinfo.ResultColumns {
 
 func (m metadataSSTInfoReader) showBackup(
 	ctx context.Context,
-	mem *mon.BoundAccount,
+	p sql.PlanHookState,
+	_ *mon.BoundAccount,
 	store cloud.ExternalStorage,
-	incStore cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
-	incPaths []string,
+	incLocation string,
+	incManifestPaths []string,
 	resultsCh chan<- tree.Datums,
 ) error {
 	filename := metadataSSTName
@@ -206,7 +223,12 @@ func (m metadataSSTInfoReader) showBackup(
 		return err
 	}
 
-	for _, i := range incPaths {
+	incStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incLocation, p.User())
+	if err != nil {
+		return err
+	}
+	defer incStore.Close()
+	for _, i := range incManifestPaths {
 		filename = strings.TrimSuffix(i, backupManifestName) + metadataSSTName
 		if err := DebugDumpMetadataSST(ctx, incStore, filename, enc, push); err != nil {
 			return err
@@ -390,10 +412,9 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				KMSInfo: defaultKMSInfo,
 			}
 		}
-		explicitIncPaths := make([]string, 0)
-		explicitIncPath := opts[backupOptIncStorage]
-		if len(explicitIncPath) > 0 {
-			explicitIncPaths = append(explicitIncPaths, explicitIncPath)
+		var explicitIncPaths []string
+		if optInc, ok := opts[backupOptIncStorage]; ok {
+			explicitIncPaths = append(explicitIncPaths, optInc)
 		}
 
 		collection, computedSubdir := CollectionAndSubdir(dest, subdir)
@@ -406,7 +427,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			computedSubdir,
 		)
 		var incPaths []string
-		var incStore cloud.ExternalStorage
+		var incLocation string
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				// We can proceed with base backups here just fine, so log a warning and move on.
@@ -417,15 +438,21 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				return err
 			}
 		} else if len(incLocations) > 0 {
+			// There is only always one incremental location since `SHOW BACKUP` is
+			// run on a particular subdirectory in a collection, with or without an
+			// explicit incremental location.
+			incLocation = incLocations[0]
+
 			// There was no error, so check for incrementals.
 			//
 			// If there are incrementals, find the backup paths and return them with the store.
 			// Otherwise, use the vacuous placeholders above.
 
-			incStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incLocations[0], p.User())
+			incStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incLocation, p.User())
 			if err != nil {
 				return err
 			}
+			defer incStore.Close()
 			incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
 			if err != nil {
 				return errors.Wrapf(err, "make incremental storage")
@@ -434,7 +461,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 		defer mem.Close(ctx)
 
-		if err := infoReader.showBackup(ctx, &mem, store, incStore, encryption, incPaths, resultsCh); err != nil {
+		if err := infoReader.showBackup(ctx, p, &mem, store, encryption, incLocation, incPaths, resultsCh); err != nil {
 			return err
 		}
 		if backup.InCollection == nil {
