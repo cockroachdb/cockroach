@@ -50,7 +50,7 @@ func (h *CPUUsageHelper) StartCollection(
 
 // EndCollection should be called at the end of execution for a flow in order to
 // get the estimated number of RUs consumed due to CPU usage. It returns zero
-// for non-tenants.
+// for non-tenants. It is a no-op if StartCollection was never called.
 func (h *CPUUsageHelper) EndCollection(ctx context.Context) (ruFomCPU float64) {
 	if h.costController == nil || h.costController.GetCostConfig() == nil {
 		return 0

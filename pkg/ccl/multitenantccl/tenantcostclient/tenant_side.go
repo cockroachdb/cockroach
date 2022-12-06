@@ -790,10 +790,13 @@ func (c *tenantSideCostController) OnResponseWait(
 	}
 
 	// Record the number of RUs consumed by the IO request.
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.RecordingType() != tracingpb.RecordingOff {
-		sp.RecordStructured(&roachpb.TenantConsumption{
-			RU: float64(totalRU),
-		})
+	if multitenant.TenantRUEstimateEnabled.Get(&c.settings.SV) {
+		if sp := tracing.SpanFromContext(ctx); sp != nil &&
+			sp.RecordingType() != tracingpb.RecordingOff {
+			sp.RecordStructured(&roachpb.TenantConsumption{
+				RU: float64(totalRU),
+			})
+		}
 	}
 
 	c.mu.Lock()

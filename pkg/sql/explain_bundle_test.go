@@ -101,6 +101,19 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html")
 	})
 
+	// #92920 Make sure schema and opt files are created.
+	t.Run("memo-reset", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CREATE TABLE t (i int)")
+		checkBundle(t, fmt.Sprint(rows), "", func(name, contents string) error {
+			if name == "opt.txt" {
+				if contents == noPlan {
+					return errors.Errorf("opt.txt empty")
+				}
+			}
+			return nil
+		}, base, plans, "distsql.html vec.txt vec-v.txt")
+	})
+
 	// Verify that we can issue the statement with prepare (which can happen
 	// depending on the client).
 	t.Run("prepare", func(t *testing.T) {
