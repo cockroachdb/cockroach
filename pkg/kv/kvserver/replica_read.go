@@ -300,9 +300,10 @@ func (r *Replica) canDropLatchesBeforeEval(
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
 	for _, req := range ba.Requests {
-		start, end := req.GetInner().Header().Key, req.GetInner().Header().EndKey
-		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntents(
-			ctx, rw, ba.Txn, ba.Header.Timestamp, start, end, &intents, maxIntents,
+		reqHeader := req.GetInner().Header()
+		start, end, seq := reqHeader.Key, reqHeader.EndKey, reqHeader.Sequence
+		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
+			ctx, rw, ba.Txn, ba.Header.Timestamp, start, end, seq, &intents, maxIntents,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, roachpb.NewError(
