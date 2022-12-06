@@ -294,101 +294,114 @@ func TestTenantRateLimiter(t *testing.T) {
 func TestTenantCtx(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	const magicKey = "424242"
 	tenantID := serverutils.TestTenantID()
 
-	getErr := make(chan error)
-	pushErr := make(chan error)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-					// We'll recognize a GetRequest and a PushRequest, check that the
-					// context looks as expected, and signal their channels.
+	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
+		getErr := make(chan error)
+		pushErr := make(chan error)
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+						// We'll recognize a GetRequest and a PushRequest, check that the
+						// context looks as expected, and signal their channels.
 
-					tenID, isTenantRequest := roachpb.TenantFromContext(ctx)
-					keyRecognized := strings.Contains(ba.Requests[0].GetInner().Header().Key.String(), magicKey)
-					if !keyRecognized {
-						return nil
-					}
-
-					var getReq *roachpb.GetRequest
-					var pushReq *roachpb.PushTxnRequest
-					if isSingleGet := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.Get; isSingleGet {
-						getReq = ba.Requests[0].GetInner().(*roachpb.GetRequest)
-					}
-					if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.PushTxn; isSinglePushTxn {
-						pushReq = ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-					}
-
-					switch {
-					case getReq != nil:
-						var err error
-						if !isTenantRequest || tenID != tenantID {
-							err = errors.Newf("expected Get to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
-								tenantID, isTenantRequest, tenID)
+						tenID, isTenantRequest := roachpb.TenantFromContext(ctx)
+						keyRecognized := strings.Contains(ba.Requests[0].GetInner().Header().Key.String(), magicKey)
+						if !keyRecognized {
+							return nil
 						}
-						getErr <- err
-						return nil
-					case pushReq != nil:
-						// Check that the Push request no longer has the txn request; RPCs
-						// done by KV do not identify the tenant.
-						var err error
-						if isTenantRequest {
-							err = errors.Newf("got unexpected tenant in push: %d", tenID)
+
+						var getReq *roachpb.GetRequest
+						var pushReq *roachpb.PushTxnRequest
+						if isSingleGet := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.Get; isSingleGet {
+							getReq = ba.Requests[0].GetInner().(*roachpb.GetRequest)
 						}
-						pushErr <- err
-						return nil
-					default:
-						// Unrecognized requests pass through.
-						return nil
-					}
+						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.PushTxn; isSinglePushTxn {
+							pushReq = ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
+						}
+
+						switch {
+						case getReq != nil:
+							var err error
+							if !isTenantRequest || tenID != tenantID {
+								err = errors.Newf("expected Get to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
+									tenantID, isTenantRequest, tenID)
+							}
+							getErr <- err
+							return nil
+						case pushReq != nil:
+							// Check that the Push request no longer has the txn request; RPCs
+							// done by KV do not identify the tenant.
+							var err error
+							if isTenantRequest {
+								err = errors.Newf("got unexpected tenant in push: %d", tenID)
+							}
+							pushErr <- err
+							return nil
+						default:
+							// Unrecognized requests pass through.
+							return nil
+						}
+					},
 				},
 			},
-		},
-	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	_, tsql := serverutils.StartTenant(t, s, base.TestTenantArgs{
-		TenantID: tenantID,
-	})
-	defer tsql.Close()
+		})
+		ctx := context.Background()
+		defer s.Stopper().Stop(ctx)
 
-	_, err := tsql.Exec("create table t (x int primary key)")
-	require.NoError(t, err)
-	tx1, err := tsql.BeginTx(ctx, nil /* opts */)
-	require.NoError(t, err)
-	_, err = tx1.Exec("insert into t(x) values ($1)", magicKey)
-	require.NoError(t, err)
+		var tsql *gosql.DB
+		if sharedProcess {
+			var err error
+			_, tsql, err = s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+				TenantName: "test",
+				TenantID:   tenantID,
+			})
+			require.NoError(t, err)
+		} else {
+			_, tsql = serverutils.StartTenant(t, s, base.TestTenantArgs{
+				TenantName: "test",
+				TenantID:   tenantID,
+			})
+			defer tsql.Close()
+		}
 
-	var tx2 *gosql.Tx
-	var tx2C = make(chan struct{})
-	go func() {
-		var err error
-		tx2, err = tsql.BeginTx(ctx, nil /* opts */)
-		assert.NoError(t, err)
-		_, err = tx2.Exec("select * from t where x = $1", magicKey)
-		assert.NoError(t, err)
-		close(tx2C)
-	}()
-
-	// Wait for tx2 goroutine to send the PushTxn request, and then roll back tx1
-	// to unblock tx2.
-	select {
-	case err := <-getErr:
+		_, err := tsql.Exec("create table t (x int primary key)")
 		require.NoError(t, err)
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for Get")
-	}
-	select {
-	case err := <-pushErr:
+		tx1, err := tsql.BeginTx(ctx, nil /* opts */)
 		require.NoError(t, err)
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for PushTxn")
-	}
-	_ = tx1.Rollback()
-	// Wait for tx2 to be unblocked.
-	<-tx2C
-	_ = tx2.Rollback()
+		_, err = tx1.Exec("insert into t(x) values ($1)", magicKey)
+		require.NoError(t, err)
+
+		var tx2 *gosql.Tx
+		var tx2C = make(chan struct{})
+		go func() {
+			var err error
+			tx2, err = tsql.BeginTx(ctx, nil /* opts */)
+			assert.NoError(t, err)
+			_, err = tx2.Exec("select * from t where x = $1", magicKey)
+			assert.NoError(t, err)
+			close(tx2C)
+		}()
+
+		// Wait for tx2 goroutine to send the PushTxn request, and then roll back tx1
+		// to unblock tx2.
+		select {
+		case err := <-getErr:
+			require.NoError(t, err)
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for Get")
+		}
+		select {
+		case err := <-pushErr:
+			require.NoError(t, err)
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for PushTxn")
+		}
+		_ = tx1.Rollback()
+		// Wait for tx2 to be unblocked.
+		<-tx2C
+		_ = tx2.Rollback()
+	})
 }

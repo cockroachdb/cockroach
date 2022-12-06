@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -292,7 +293,7 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 	buf.Write(cp[ttycolor.Blue])
 	// We must always tag with tenant ID.
 	buf.WriteByte('[')
-	writeTagToBuffer(buf, []byte(TenantIDLogTagKey), []byte(entry.TenantID()))
+	writeTagToBuffer(buf, []byte(serverident.TenantIDLogTagKey), []byte(entry.TenantID()))
 	if entry.payload.tags != nil {
 		buf.WriteByte(',')
 		entry.payload.tags.formatToBuffer(buf)
@@ -713,12 +714,12 @@ func (f entryDecoderV2Fragment) getTags(editor redactEditor) string {
 }
 
 func (f entryDecoderV2Fragment) getTenantID() string {
-	out := systemTenantID
+	out := serverident.SystemTenantID
 	switch tagsStr := string(f[v2TagsIdx]); tagsStr {
 	case "-":
 	default:
 		tags := string(f[v2TagsIdx])
-		if strings.HasPrefix(tags, TenantIDLogTagKey) {
+		if strings.HasPrefix(tags, serverident.TenantIDLogTagKey) {
 			out = strings.Split(tags, ",")[0][1:]
 		}
 	}

@@ -16,7 +16,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,7 +41,7 @@ var MaxTenantID = MustMakeTenantID(math.MaxUint64)
 func init() {
 	// Inject the string representation of SystemTenantID into the log package
 	// to avoid an import dependency cycle.
-	log.SetSystemTenantID(
+	serverident.SetSystemTenantID(
 		strconv.FormatUint(SystemTenantID.ToUint64(), 10))
 }
 
