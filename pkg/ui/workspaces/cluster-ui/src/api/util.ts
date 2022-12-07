@@ -40,3 +40,21 @@ export class TimeoutError extends Error {
     this.timeout = timeout;
   }
 }
+
+// parseReplicaLocalities collects unique regions from a list of region strings of the form:
+// [
+//   "region=us-east1,az=b",
+//   "region=us-east2,az=c",
+//   "region=us-east3,az=d"
+// ]
+export function parseReplicaLocalities(localities: string[]): string[] {
+  const regions: Set<string> = new Set<string>();
+  localities.forEach(locality => {
+    const regionField = locality.split(",")[0];
+    const regionName = regionField.split("=")[1];
+    if (regionName !== "") {
+      regions.add(regionName);
+    }
+  });
+  return Array.from(regions.values());
+}
