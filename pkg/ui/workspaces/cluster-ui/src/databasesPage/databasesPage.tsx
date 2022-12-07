@@ -81,10 +81,6 @@ const booleanSettingCx = classnames.bind(booleanSettingStyles);
 //       rangeCount: number;
 //       nodes: number[];
 //       nodesByRegionString: string;
-//       missingTables: { // DatabasesPageDataMissingTable[]
-//         loading: boolean;
-//         name: string;
-//       }[];
 //     }[];
 //   }
 export interface DatabasesPageData {
@@ -109,7 +105,6 @@ export interface DatabasesPageDataDatabase {
   sizeInBytes: number;
   tableCount: number;
   rangeCount: number;
-  missingTables: DatabasesPageDataMissingTable[];
   // Array of node IDs used to unambiguously filter by node and region.
   nodes?: number[];
   // String of nodes grouped by region in alphabetical order, e.g.
@@ -119,22 +114,9 @@ export interface DatabasesPageDataDatabase {
   numIndexRecommendations: number;
 }
 
-// A "missing" table is one for which we were unable to gather size and range
-// count information during the backend call to fetch DatabaseDetails. We
-// expose it here so that the component has the opportunity to try to refresh
-// those properties for the table directly.
-export interface DatabasesPageDataMissingTable {
-  // Note that we don't need a "loaded" property here because we expect
-  // the reducers supplying our properties to remove a missing table from
-  // the list once we've loaded its data.
-  loading: boolean;
-  name: string;
-}
-
 export interface DatabasesPageActions {
   refreshDatabases: () => void;
   refreshDatabaseDetails: (database: string) => void;
-  refreshTableStats: (database: string, table: string) => void;
   refreshSettings: () => void;
   refreshNodes?: () => void;
   onFilterChange?: (value: Filters) => void;
@@ -310,12 +292,6 @@ export class DatabasesPage extends React.Component<
       ) {
         return this.props.refreshDatabaseDetails(database.name);
       }
-
-      database.missingTables.forEach(table => {
-        if (!table.loading) {
-          return this.props.refreshTableStats(database.name, table.name);
-        }
-      });
     });
   }
 

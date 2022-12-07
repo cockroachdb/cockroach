@@ -102,7 +102,6 @@ const withData: DatabasesPageProps = {
       sizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
       tableCount: _.random(5, 100),
       rangeCount: _.random(50, 500),
-      missingTables: [],
       nodesByRegionString:
         "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
       numIndexRecommendations: 0,

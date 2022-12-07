@@ -21,6 +21,7 @@ import {
   defaultFilters,
   util,
   ViewMode,
+  api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -141,12 +142,24 @@ describe("Database Details Page", function () {
   });
 
   it("makes a row for each table", async function () {
-    fakeApi.stubDatabaseDetails("things", {
-      table_names: ["foo", "bar"],
-    });
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("things"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [
+            { table_schema: "public", table_name: "foo" },
+            { table_schema: "public", table_name: "bar" },
+          ],
+        },
+      ],
+    );
 
     await driver.refreshDatabaseDetails();
-
     driver.assertProperties({
       loading: false,
       loaded: true,
@@ -220,9 +233,22 @@ describe("Database Details Page", function () {
   });
 
   it("loads table details", async function () {
-    fakeApi.stubDatabaseDetails("things", {
-      table_names: ["foo", "bar"],
-    });
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("things"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [
+            { table_schema: "public", table_name: "foo" },
+            { table_schema: "public", table_name: "bar" },
+          ],
+        },
+      ],
+    );
 
     fakeApi.stubTableDetails("things", "foo", {
       grants: [
@@ -378,9 +404,19 @@ describe("Database Details Page", function () {
   });
 
   it("sorts roles meaningfully", async function () {
-    fakeApi.stubDatabaseDetails("things", {
-      table_names: ["foo"],
-    });
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("things"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [{ table_schema: "public", table_name: "foo" }],
+        },
+      ],
+    );
 
     fakeApi.stubTableDetails("things", "foo", {
       grants: [
@@ -407,9 +443,19 @@ describe("Database Details Page", function () {
   });
 
   it("sorts grants meaningfully", async function () {
-    fakeApi.stubDatabaseDetails("things", {
-      table_names: ["foo"],
-    });
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("things"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [{ table_schema: "public", table_name: "foo" }],
+        },
+      ],
+    );
 
     fakeApi.stubTableDetails("things", "foo", {
       grants: [
@@ -440,9 +486,22 @@ describe("Database Details Page", function () {
   });
 
   it("loads table stats", async function () {
-    fakeApi.stubDatabaseDetails("things", {
-      table_names: ["foo", "bar"],
-    });
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("things"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [
+            { table_schema: "public", table_name: "foo" },
+            { table_schema: "public", table_name: "bar" },
+          ],
+        },
+      ],
+    );
 
     fakeApi.stubTableStats("things", "foo", {
       range_count: new Long(4200),

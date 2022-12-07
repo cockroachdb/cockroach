@@ -10,14 +10,13 @@
 
 import { createMemoryHistory } from "history";
 import _ from "lodash";
-import Long from "long";
 import { bindActionCreators, Store } from "redux";
 import {
   DatabasesPageActions,
   DatabasesPageData,
   DatabasesPageDataDatabase,
-  DatabasesPageDataMissingTable,
   defaultFilters,
+  api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -48,10 +47,6 @@ class TestDriver {
     return this.actions.refreshNodes();
   }
 
-  async refreshTableStats(database: string, table: string) {
-    return this.actions.refreshTableStats(database, table);
-  }
-
   async refreshSettings() {
     return this.actions.refreshSettings();
   }
@@ -67,26 +62,12 @@ class TestDriver {
     expect(this.findDatabase(database)).toEqual(expected);
   }
 
-  assertMissingTableProperties(
-    database: string,
-    table: string,
-    expected: DatabasesPageDataMissingTable,
-  ) {
-    expect(this.findMissingTable(this.findDatabase(database), table)).toEqual(
-      expected,
-    );
-  }
-
   private findDatabase(name: string) {
     return _.find(this.properties().databases, row => row.name == name);
   }
-
-  private findMissingTable(database: DatabasesPageDataDatabase, name: string) {
-    return _.find(database.missingTables, table => table.name == name);
-  }
 }
 
-describe("Databases Page", function () {
+describe.only("Databases Page", function () {
   let driver: TestDriver;
 
   beforeEach(function () {
@@ -147,7 +128,6 @@ describe("Databases Page", function () {
           tableCount: 0,
           rangeCount: 0,
           nodesByRegionString: "",
-          missingTables: [],
           numIndexRecommendations: 0,
         },
         {
@@ -160,7 +140,6 @@ describe("Databases Page", function () {
           tableCount: 0,
           rangeCount: 0,
           nodesByRegionString: "",
-          missingTables: [],
           numIndexRecommendations: 0,
         },
       ],
@@ -204,211 +183,78 @@ describe("Databases Page", function () {
       nodes: nodes,
     });
 
-    fakeApi.stubDatabases(["system", "test"]);
+    fakeApi.stubDatabases(["systeM", "test"]);
 
-    fakeApi.stubDatabaseDetails("system", {
-      table_names: ["foo", "bar"],
-      stats: {
-        node_ids: [1, 2, 4],
-        missing_tables: [],
-        range_count: new Long(3),
-        approximate_disk_bytes: new Long(7168),
-      },
-    });
-
-    fakeApi.stubDatabaseDetails("test", {
-      table_names: ["widgets"],
-      stats: {
-        node_ids: [3, 5, 6],
-        missing_tables: [],
-        range_count: new Long(42),
-        approximate_disk_bytes: new Long(1234),
-      },
-    });
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("systeM"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [
+            { table_schema: "public", table_name: "foo" },
+            { table_schema: "public", table_name: "bar" },
+          ],
+        },
+        // Ranges
+        {
+          rows: fakeApi.createMockDatabaseRangesForTable(3, "systeM", "foo", 3),
+        },
+      ],
+    );
 
     await driver.refreshNodes();
     await driver.refreshDatabases();
-    await driver.refreshDatabaseDetails("system");
-    await driver.refreshDatabaseDetails("test");
+    await driver.refreshDatabaseDetails("systeM");
 
-    driver.assertDatabaseProperties("system", {
+    driver.assertDatabaseProperties("systeM", {
       loading: false,
       loaded: true,
       lastError: null,
-      name: "system",
-      nodes: [1, 2, 4],
-      sizeInBytes: 7168,
+      name: "systeM",
+      nodes: [1, 2, 3],
+      sizeInBytes: 0, // TODO(thomas): fix when we have disk size
       tableCount: 2,
       rangeCount: 3,
-      nodesByRegionString: "gcp-us-east1(n1,n2,n4)",
-      missingTables: [],
+      nodesByRegionString: "gcp-us-east1(n1,n2), gcp-europe-west1(n3)",
       numIndexRecommendations: 0,
     });
+
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+      clusterUiApi.createDatabaseDetailsReq("test"),
+      [
+        // Id
+        { rows: [] },
+        // Grants
+        { rows: [] },
+        // Tables
+        {
+          rows: [{ table_schema: "public", table_name: "widgets" }],
+        },
+        // Ranges
+        {
+          rows: fakeApi.createMockDatabaseRangesForTable(4, "test", "foo", 6),
+        },
+      ],
+    );
+
+    await driver.refreshDatabaseDetails("test");
 
     driver.assertDatabaseProperties("test", {
       loading: false,
       loaded: true,
       lastError: null,
       name: "test",
-      nodes: [3, 5, 6],
-      sizeInBytes: 1234,
+      nodes: [1, 2, 3, 4, 5, 6],
+      sizeInBytes: 0, // TODO(thomas): fix when we have disk size
       tableCount: 1,
-      rangeCount: 42,
-      nodesByRegionString: "gcp-europe-west1(n3,n6), gcp-europe-west2(n5)",
-      missingTables: [],
+      rangeCount: 4,
+      nodesByRegionString:
+        "gcp-us-east1(n1,n2,n4), gcp-europe-west2(n5), gcp-europe-west1(n3,n6)",
       numIndexRecommendations: 0,
-    });
-  });
-
-  describe("fallback cases", function () {
-    describe("missing tables", function () {
-      it("exposes them so the component can refresh them", async function () {
-        fakeApi.stubDatabases(["system"]);
-
-        fakeApi.stubDatabaseDetails("system", {
-          table_names: ["foo", "bar"],
-          stats: {
-            missing_tables: [{ name: "bar" }],
-            range_count: new Long(3),
-            approximate_disk_bytes: new Long(7168),
-          },
-        });
-
-        await driver.refreshDatabases();
-        await driver.refreshDatabaseDetails("system");
-
-        driver.assertDatabaseProperties("system", {
-          loading: false,
-          loaded: true,
-          lastError: null,
-          name: "system",
-          nodes: [],
-          sizeInBytes: 7168,
-          tableCount: 2,
-          rangeCount: 3,
-          nodesByRegionString: "",
-          missingTables: [{ loading: false, name: "bar" }],
-          numIndexRecommendations: 0,
-        });
-      });
-
-      it("merges available individual stats into the totals", async function () {
-        fakeApi.stubDatabases(["system"]);
-
-        fakeApi.stubDatabaseDetails("system", {
-          table_names: ["foo", "bar"],
-          stats: {
-            missing_tables: [{ name: "bar" }],
-            range_count: new Long(3),
-            approximate_disk_bytes: new Long(7168),
-          },
-        });
-
-        fakeApi.stubTableStats("system", "bar", {
-          range_count: new Long(5),
-          approximate_disk_bytes: new Long(1024),
-        });
-
-        await driver.refreshDatabases();
-        await driver.refreshDatabaseDetails("system");
-        await driver.refreshTableStats("system", "bar");
-
-        driver.assertDatabaseProperties("system", {
-          loading: false,
-          loaded: true,
-          lastError: null,
-          name: "system",
-          nodes: [],
-          sizeInBytes: 8192,
-          tableCount: 2,
-          rangeCount: 8,
-          nodesByRegionString: "",
-          missingTables: [],
-          numIndexRecommendations: 0,
-        });
-      });
-    });
-
-    describe("missing stats", function () {
-      it("builds a list of missing tables", async function () {
-        fakeApi.stubDatabases(["system"]);
-
-        fakeApi.stubDatabaseDetails("system", {
-          table_names: ["foo", "bar"],
-        });
-
-        await driver.refreshDatabases();
-        await driver.refreshDatabaseDetails("system");
-
-        driver.assertDatabaseProperties("system", {
-          loading: false,
-          loaded: true,
-          lastError: null,
-          name: "system",
-          nodes: [],
-          sizeInBytes: 0,
-          tableCount: 2,
-          rangeCount: 0,
-          nodesByRegionString: "",
-          missingTables: [
-            { loading: false, name: "foo" },
-            { loading: false, name: "bar" },
-          ],
-          numIndexRecommendations: 0,
-        });
-      });
-
-      it("merges individual stats into the totals", async function () {
-        fakeApi.stubDatabases(["system"]);
-
-        fakeApi.stubDatabaseDetails("system", {
-          table_names: ["foo", "bar"],
-        });
-
-        fakeApi.stubTableStats("system", "foo", {
-          range_count: new Long(3),
-          approximate_disk_bytes: new Long(7168),
-        });
-
-        fakeApi.stubTableStats("system", "bar", {
-          range_count: new Long(5),
-          approximate_disk_bytes: new Long(1024),
-        });
-
-        await driver.refreshDatabases();
-        await driver.refreshDatabaseDetails("system");
-        await driver.refreshTableStats("system", "foo");
-
-        driver.assertDatabaseProperties("system", {
-          loading: false,
-          loaded: true,
-          lastError: null,
-          name: "system",
-          nodes: [],
-          sizeInBytes: 7168,
-          tableCount: 2,
-          rangeCount: 3,
-          nodesByRegionString: "",
-          missingTables: [{ loading: false, name: "bar" }],
-          numIndexRecommendations: 0,
-        });
-
-        await driver.refreshTableStats("system", "bar");
-
-        driver.assertDatabaseProperties("system", {
-          loading: false,
-          loaded: true,
-          lastError: null,
-          name: "system",
-          nodes: [],
-          sizeInBytes: 8192,
-          tableCount: 2,
-          rangeCount: 8,
-          nodesByRegionString: "",
-          missingTables: [],
-          numIndexRecommendations: 0,
-        });
-      });
     });
   });
 });

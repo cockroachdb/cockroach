@@ -105,14 +105,12 @@ const databasesReducerObj = new CachedDataReducer(
 );
 export const refreshDatabases = databasesReducerObj.refresh;
 
-export const databaseRequestToID = (
-  req: api.DatabaseDetailsRequestMessage,
-): string => req.database;
+export const databaseRequestPayloadToID = (dbName: string): string => dbName;
 
 const databaseDetailsReducerObj = new KeyedCachedDataReducer(
-  api.getDatabaseDetails,
+  clusterUiApi.getDatabaseDetails,
   "databaseDetails",
-  databaseRequestToID,
+  databaseRequestPayloadToID,
   null,
   moment.duration(10, "m"),
 );
@@ -516,7 +514,7 @@ export interface APIReducersState {
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
-  databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
+  databaseDetails: KeyedCachedDataReducerState<clusterUiApi.DatabaseDetailsResponse>;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;

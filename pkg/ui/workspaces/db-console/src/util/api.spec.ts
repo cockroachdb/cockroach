@@ -23,6 +23,7 @@ import Severity = cockroach.util.log.Severity;
 import {
   buildSQLApiDatabasesResponse,
   buildSQLApiEventsResponse,
+  buildSqlExecutionResponse,
 } from "src/util/fakeApi";
 
 describe("rest api", function () {
@@ -114,56 +115,109 @@ describe("rest api", function () {
     it("correctly requests info about a specific database", function () {
       // Mock out the fetch query
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}`,
-        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-Cockroach-API-Session": "cookie",
+        },
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
-          const encodedResponse =
-            protos.cockroach.server.serverpb.DatabaseDetailsResponse.encode({
-              table_names: ["table1", "table2"],
-              grants: [
-                { user: "root", privileges: ["ALL"] },
-                { user: "other", privileges: [] },
-              ],
-            }).finish();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.createDatabaseDetailsReq(dbName),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
+          const mockResp =
+            buildSqlExecutionResponse<clusterUiApi.DatabaseDetailsRow>([
+              // Database ID query
+              { rows: [{ database_id: "1" }] },
+              // Database grants query
+              {
+                rows: [
+                  {
+                    database_name: "test",
+                    grantee: "admin",
+                    privilege_type: "ALL",
+                    is_grantable: true,
+                  },
+                  {
+                    database_name: "test",
+                    grantee: "public",
+                    privilege_type: "CONNECT",
+                    is_grantable: false,
+                  },
+                ],
+              },
+              // Database tables query
+              {
+                rows: [{ table_schema: "public", table_name: "table1" }],
+              },
+              // Database ranges query
+              {
+                rows: [
+                  {
+                    range_id: 1,
+                    table_id: 1,
+                    database_name: "test",
+                    schema_name: "public",
+                    table_name: "table1",
+                    replicas: [1, 2, 3],
+                    regions: ["gcp-europe-west1", "gcp-europe-west2"],
+                    range_size: 125,
+                  },
+                ],
+              },
+              // Database index usage statistics query
+              {
+                rows: [
+                  {
+                    database_name: "test",
+                    table_name: "table1",
+                    table_id: 1,
+                    index_name: "test_idx",
+                    index_id: 1,
+                    index_type: "primary",
+                    total_reads: 12,
+                    last_read: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
+                    unused_threshold: "30m",
+                  },
+                ],
+              },
+            ]);
+
           return {
-            body: encodedResponse,
+            body: JSON.stringify(mockResp),
           };
         },
       });
 
-      return api
-        .getDatabaseDetails(
-          new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
-            database: dbName,
-          }),
-        )
-        .then(result => {
-          expect(
-            fetchMock.calls(`${api.API_PREFIX}/databases/${dbName}`).length,
-          ).toBe(1);
-          expect(result.table_names.length).toBe(2);
-          expect(result.grants.length).toBe(2);
-        });
+      return clusterUiApi.getDatabaseDetails(dbName).then(result => {
+        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(result.id_resp.id.database_id).toEqual("1");
+        expect(result.tables_resp.tables.length).toBe(1);
+        expect(result.grants_resp.grants.length).toBe(2);
+        expect(result.stats.ranges_data.count).toBe(1);
+        expect(result.stats.index_stats.num_index_recommendations).toBe(0);
+      });
     });
 
     it("correctly handles an error", function (done) {
       // Mock out the fetch query, but return a 500 status code
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}`,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.createDatabaseDetailsReq(dbName),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return { throws: new Error() };
         },
       });
 
-      api
-        .getDatabaseDetails(
-          new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
-            database: dbName,
-          }),
-        )
+      clusterUiApi
+        .getDatabaseDetails(dbName)
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -176,21 +230,19 @@ describe("rest api", function () {
     it("correctly times out", function (done) {
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: `${api.API_PREFIX}/databases/${dbName}`,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.createDatabaseDetailsReq(dbName),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return new Promise<any>(() => {});
         },
       });
 
-      api
-        .getDatabaseDetails(
-          new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
-            database: dbName,
-          }),
-          moment.duration(0),
-        )
+      clusterUiApi
+        .getDatabaseDetails(dbName, moment.duration(0))
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
