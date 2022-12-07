@@ -156,8 +156,16 @@ func TestConnHealth(t *testing.T) {
 	// dials the node.
 	hb.setErr(nil)
 	{
-		_, err := nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
-		require.NoError(t, err)
+		// In practice this dial almost always immediately succeeds. However,
+		// because the previous connection was marked as unhealthy and might
+		// still just be about to be removed, the DialNoBreaker might pull
+		// the broken connection out of the pool and fail on it.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/91798
+		require.Eventually(t, func() bool {
+			_, err := nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
+			return err == nil
+		}, 10*time.Second, time.Millisecond)
 		require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
 	}
 
