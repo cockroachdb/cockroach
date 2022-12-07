@@ -686,13 +686,6 @@ func (sp *Span) reset(
 	sp.finishStack = ""
 }
 
-// visitOpenChildren calls the visitor for every open child. The receiver's lock
-// is held for the duration of the iteration, so the visitor should be quick.
-// The visitor is not allowed to hold on to children after it returns.
-func (sp *Span) visitOpenChildren(visitor func(sp *Span)) {
-	sp.i.crdb.visitOpenChildren(visitor)
-}
-
 // SetOtelStatus sets the status of the OpenTelemetry span (if any).
 func (sp *Span) SetOtelStatus(code codes.Code, msg string) {
 	if sp.i.otelSpan == nil {
