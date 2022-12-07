@@ -66,62 +66,6 @@ export function stubClusterSettings(
   );
 }
 
-// Same as SqlTxnResult, but all fields are optional.
-export type mockSqlTxnResult<RowType> = {
-  statement?: number; // Statement index from input array
-  tag?: string; // Short stmt tag
-  start?: string; // Start timestamp, encoded as RFC3339
-  end?: string; // End timestamp, encoded as RFC3339
-  rows_affected?: number;
-  columns?: clusterUiApi.SqlResultColumn[];
-  rows?: RowType[];
-  error?: Error;
-};
-
-// buildSqlTxnResult provides default values for mandatory fields
-// of a SqlTxnResult.
-function buildSqlTxnResult<RowType>(
-  mock: mockSqlTxnResult<RowType>,
-): clusterUiApi.SqlTxnResult<RowType> {
-  const statement = mock.statement ? mock.statement : 1;
-  const rowsAffected = mock.rows_affected ? mock.rows_affected : 0;
-  const startTimestamp = mock.start ? mock.start : new Date().toISOString();
-  const endTimestamp = mock.end
-    ? mock.end
-    : moment(startTimestamp).add(1, "s").toISOString();
-  const stmtTag = mock.tag ? mock.tag : "SELECT";
-  return {
-    statement: statement,
-    tag: stmtTag,
-    start: startTimestamp,
-    end: endTimestamp,
-    rows_affected: rowsAffected,
-    columns: mock.columns,
-    rows: mock.rows,
-    error: mock.error,
-  };
-}
-
-export function buildSqlExecutionResponse<T>(
-  mockTxnResults: mockSqlTxnResult<T>[],
-  error?: clusterUiApi.SqlExecutionErrorMessage,
-): clusterUiApi.SqlExecutionResponse<T> {
-  const sqlTxnResults: clusterUiApi.SqlTxnResult<T>[] = mockTxnResults.map(
-    (mock, idx) => {
-      mock.statement = idx + 1;
-      return buildSqlTxnResult(mock);
-    },
-  );
-  const resp: clusterUiApi.SqlExecutionResponse<T> = {
-    execution: {
-      retries: 0,
-      txn_results: sqlTxnResults,
-    },
-    error: error,
-  };
-  return resp;
-}
-
 export function buildSQLApiDatabasesResponse(databases: string[]) {
   const rows: clusterUiApi.DatabasesColumns[] = databases.map(database => {
     return {
@@ -222,7 +166,7 @@ export function buildSQLApiEventsResponse(events: clusterUiApi.EventsResponse) {
   };
 }
 
-export function stubDatabases(databases: string[]) {
+export function stubDatabases(databases: string[], times?: number) {
   const response = buildSQLApiDatabasesResponse(databases);
   fetchMock.mock({
     headers: {
@@ -240,31 +184,7 @@ export function stubDatabases(databases: string[]) {
         body: JSON.stringify(response),
       };
     },
-  });
-}
-
-export function stubSqlApiCall<T>(
-  req: any,
-  mockTxnResults: mockSqlTxnResult<T>[],
-) {
-  const response = buildSqlExecutionResponse(mockTxnResults);
-  fetchMock.mock({
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "X-Cockroach-API-Session": "cookie",
-    },
-    matcher: clusterUiApi.SQL_API_PATH,
-    method: "POST",
-    response: (_url: string, requestObj: RequestInit) => {
-      expect(JSON.parse(requestObj.body.toString())).toEqual({
-        ...req,
-        application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-      });
-      return {
-        body: JSON.stringify(response),
-      };
-    },
+    times: times,
   });
 }
 
@@ -280,7 +200,9 @@ export function stubTableDetails(
   response: cockroach.server.serverpb.ITableDetailsResponse,
 ) {
   stubGet(
-    `/databases/${database}/tables/${table}`,
+    `/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(
+      table,
+    )}`,
     TableDetailsResponse.encode(response),
     API_PREFIX,
   );
@@ -292,7 +214,9 @@ export function stubTableStats(
   response: cockroach.server.serverpb.ITableStatsResponse,
 ) {
   stubGet(
-    `/databases/${database}/tables/${table}/stats`,
+    `/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(
+      table,
+    )}/stats`,
     TableStatsResponse.encode(response),
     API_PREFIX,
   );
@@ -331,4 +255,87 @@ export function createMockDatabaseRangesForTable(
     });
   }
   return res;
+}
+
+export function stubSqlApiCall<T>(
+  req: any,
+  mockTxnResults: mockSqlTxnResult<T>[],
+  times?: number,
+) {
+  const response = buildSqlExecutionResponse(mockTxnResults);
+  fetchMock.mock({
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Cockroach-API-Session": "cookie",
+    },
+    matcher: clusterUiApi.SQL_API_PATH,
+    method: "POST",
+    response: (_url: string, requestObj: RequestInit) => {
+      expect(JSON.parse(requestObj.body.toString())).toEqual({
+        ...req,
+        application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+      });
+      return {
+        body: JSON.stringify(response),
+      };
+    },
+    times: times,
+  });
+}
+
+export function buildSqlExecutionResponse<T>(
+  mockTxnResults: mockSqlTxnResult<T>[],
+  error?: clusterUiApi.SqlExecutionErrorMessage,
+): clusterUiApi.SqlExecutionResponse<T> {
+  const sqlTxnResults: clusterUiApi.SqlTxnResult<T>[] = mockTxnResults.map(
+    (mock, idx) => {
+      mock.statement = idx + 1;
+      return buildSqlTxnResult(mock);
+    },
+  );
+  const resp: clusterUiApi.SqlExecutionResponse<T> = {
+    execution: {
+      retries: 0,
+      txn_results: sqlTxnResults,
+    },
+    error: error,
+  };
+  return resp;
+}
+
+// Same as SqlTxnResult, but all fields are optional.
+export type mockSqlTxnResult<RowType> = {
+  statement?: number; // Statement index from input array
+  tag?: string; // Short stmt tag
+  start?: string; // Start timestamp, encoded as RFC3339
+  end?: string; // End timestamp, encoded as RFC3339
+  rows_affected?: number;
+  columns?: clusterUiApi.SqlResultColumn[];
+  rows?: RowType[];
+  error?: Error;
+};
+
+// buildSqlTxnResult provides default values for mandatory fields
+// of a SqlTxnResult.
+function buildSqlTxnResult<RowType>(
+  mock: mockSqlTxnResult<RowType>,
+): clusterUiApi.SqlTxnResult<RowType> {
+  const statement = mock.statement ? mock.statement : 1;
+  const rowsAffected = mock.rows_affected ? mock.rows_affected : 0;
+  const startTimestamp = mock.start ? mock.start : new Date().toISOString();
+  const endTimestamp = mock.end
+    ? mock.end
+    : moment(startTimestamp).add(1, "s").toISOString();
+  const stmtTag = mock.tag ? mock.tag : "SELECT";
+  return {
+    statement: statement,
+    tag: stmtTag,
+    start: startTimestamp,
+    end: endTimestamp,
+    rows_affected: rowsAffected,
+    columns: mock.columns,
+    rows: mock.rows,
+    error: mock.error,
+  };
 }

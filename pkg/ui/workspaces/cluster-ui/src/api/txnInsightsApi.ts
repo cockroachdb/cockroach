@@ -417,10 +417,14 @@ export async function getTxnInsightsApi(
   const result = await executeInternalSql<TxnInsightsResponseRow>(request);
 
   if (sqlResultsAreEmpty(result)) {
-    return formatApiResult([], result.error, "retrieving insights information");
+    return formatApiResult<TxnInsightEvent[]>(
+      [],
+      result.error,
+      "retrieving insights information",
+    );
   }
 
-  return formatApiResult(
+  return formatApiResult<TxnInsightEvent[]>(
     result.execution.txn_results[0].rows.map(formatTxnInsightsRow),
     result.error,
     "retrieving insights information",

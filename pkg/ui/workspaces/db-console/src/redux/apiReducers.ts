@@ -531,7 +531,9 @@ export interface APIReducersState {
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
-  databaseDetails: KeyedCachedDataReducerState<clusterUiApi.DatabaseDetailsResponse>;
+  databaseDetails: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsResponse>
+  >;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;

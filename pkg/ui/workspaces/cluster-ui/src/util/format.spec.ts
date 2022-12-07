@@ -76,7 +76,7 @@ describe("Format utils", () => {
     });
   });
 
-  describe.only("EncodeUriName", () => {
+  describe("EncodeUriName", () => {
     it("decode simple string no special characters", () => {
       expect(EncodeUriName("123abc")).toBe("123abc");
     });

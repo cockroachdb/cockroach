@@ -65,6 +65,8 @@ export type SqlApiResponse<ResultType> = {
   results: ResultType;
 };
 
+export type SqlApiQueryResponse<Result> = Result & { error?: Error };
+
 export const SQL_API_PATH = "/api/v2/sql/";
 
 /**
@@ -167,11 +169,11 @@ export function isMaxSizeError(message: string): boolean {
   return !!message?.includes("max result size exceeded");
 }
 
-export function formatApiResult(
-  results: Array<any>,
+export function formatApiResult<ResultType>(
+  results: ResultType,
   error: SqlExecutionErrorMessage,
   errorMessageContext: string,
-): SqlApiResponse<any> {
+): SqlApiResponse<ResultType> {
   const maxSizeError = isMaxSizeError(error?.message);
 
   if (error && !maxSizeError) {
