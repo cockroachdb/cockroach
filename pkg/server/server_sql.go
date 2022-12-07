@@ -614,6 +614,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
+	// Note: this closer is added after flowinfra.RemoteFlowRunner.
 	cfg.stopper.AddCloser(tempEngine)
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
