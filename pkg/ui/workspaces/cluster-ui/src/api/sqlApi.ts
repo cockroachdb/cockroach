@@ -57,7 +57,7 @@ export type SqlExecutionErrorMessage = {
   message: string;
   code: string;
   severity: string;
-  source: { file: string; line: number; function: "string" };
+  source: { file: string; line: number; function: string };
 };
 
 export type SqlApiResponse<ResultType> = {
@@ -124,9 +124,7 @@ export function sqlResultsAreEmpty(
 ): boolean {
   return (
     !result.execution?.txn_results?.length ||
-    result.execution.txn_results.every(
-      txn => !txn.rows || txn.rows.length === 0,
-    )
+    result.execution.txn_results.every(txn => txnResultIsEmpty(txn))
   );
 }
 
@@ -193,4 +191,8 @@ export function formatApiResult(
     maxSizeReached: maxSizeError,
     results: results,
   };
+}
+
+export function txnResultIsEmpty(txn_result: SqlTxnResult<unknown>): boolean {
+  return !txn_result.rows || txn_result.rows?.length === 0;
 }
