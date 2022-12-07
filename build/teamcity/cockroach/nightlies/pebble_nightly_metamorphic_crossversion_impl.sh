@@ -31,6 +31,7 @@ test_args="--test_arg=-test.v $test_args"
 
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- \
                                       test @com_github_cockroachdb_pebble//internal/metamorphic/crossversion:crossversion_test \
+                                      --test_env TC_SERVER_URL=$TC_SERVER_URL \
                                       --test_timeout=25200 '--test_filter=TestMetaCrossVersion$' \
                                       --define gotags=bazel,invariants \
                                       --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 6h -maxfails 1 -stderr -p 1" \
