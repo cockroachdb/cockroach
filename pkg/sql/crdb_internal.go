@@ -6572,7 +6572,9 @@ CREATE TABLE crdb_internal.%s (
 	contention                 INTERVAL,
 	contention_events          JSONB,
 	index_recommendations      STRING[] NOT NULL,
-	implicit_txn               BOOL NOT NULL
+	implicit_txn               BOOL NOT NULL,
+	txn_start_time             TIMESTAMP NOT NULL,
+	txn_end_time               TIMESTAMP NOT NULL
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -6629,6 +6631,18 @@ func populateExecutionInsights(
 
 		var endTimestamp *tree.DTimestamp
 		endTimestamp, err = tree.MakeDTimestamp(insight.Statement.EndTime, time.Nanosecond)
+		if err != nil {
+			return err
+		}
+
+		var txnStart *tree.DTimestamp
+		txnStart, err = tree.MakeDTimestamp(insight.Transaction.StartTime, time.Nanosecond)
+		if err != nil {
+			return err
+		}
+
+		var txnEnd *tree.DTimestamp
+		txnEnd, err = tree.MakeDTimestamp(insight.Transaction.EndTime, time.Nanosecond)
 		if err != nil {
 			return err
 		}
@@ -6698,6 +6712,8 @@ func populateExecutionInsights(
 			contentionEvents,
 			indexRecommendations,
 			tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
+			txnStart,
+			txnEnd,
 		))
 
 		if err != nil {
