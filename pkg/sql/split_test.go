@@ -147,7 +147,7 @@ func TestSplitAt(t *testing.T) {
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION '-1 day'::interval",
-			error: "SPLIT AT: expiration time should be greater than or equal to current time",
+			error: "SPLIT AT: expiration interval must be non-negative",
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION '0.1us'",

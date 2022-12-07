@@ -50,8 +50,14 @@ SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
 statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME now()
 
-statement error cannot specify timestamp in the future
+statement error pq: AS OF SYSTEM TIME: interval value should be negative with absolute value >= 1ns
 SELECT * FROM t AS OF SYSTEM TIME '10s'
+
+statement error pq: AS OF SYSTEM TIME: interval value should be negative with absolute value >= 1ns
+SELECT * FROM t AS OF SYSTEM TIME interval '20 microsecond'
+
+statement error pq: AS OF SYSTEM TIME: interval value should be negative with absolute value >= 1ns
+SELECT * FROM t AS OF SYSTEM TIME interval '1 microsecond'
 
 # Verify that the TxnTimestamp used to generate now() and current_timestamp() is
 # set to the historical timestamp.
@@ -70,13 +76,13 @@ SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01 00:00:00-1:00'
 
 # Verify that zero intervals indistinguishable from zero cause an error.
 
-statement error pq: AS OF SYSTEM TIME: interval value '0.1us' too small, absolute value must be >= 1µs
+statement error pq: AS OF SYSTEM TIME: interval value should be negative with absolute value >= 1ns: unsupported interval duration: '0.1us'
 SELECT * FROM t AS OF SYSTEM TIME '0.1us'
 
-statement error pq: AS OF SYSTEM TIME: interval value '0-0' too small, absolute value must be >= 1µs
+statement error pq: AS OF SYSTEM TIME: interval value should be negative with absolute value >= 1ns: unsupported interval duration: '0-0'
 SELECT * FROM t AS OF SYSTEM TIME '0-0'
 
-statement error pq: AS OF SYSTEM TIME: interval value '-0.1us' too small, absolute value must be >= 1µs
+statement error pq: AS OF SYSTEM TIME: interval value should be negative with absolute value >= 1ns: unsupported interval duration: '-0.1us'
 SELECT * FROM t AS OF SYSTEM TIME '-0.1us'
 
 statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
