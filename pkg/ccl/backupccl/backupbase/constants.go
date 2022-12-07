@@ -43,4 +43,9 @@ const (
 	// DefaultIncrementalsSubdir is the default name of the subdirectory to which
 	// incremental backups will be written.
 	DefaultIncrementalsSubdir = "incrementals"
+
+	// ListingDelimDataSlash is used when listing to find backups/backup metadata
+	// and groups all the data sst files in each backup, which start with "data/",
+	// into a single result that can be skipped over quickly.
+	ListingDelimDataSlash = "data/"
 )

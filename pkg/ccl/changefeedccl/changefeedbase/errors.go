@@ -77,6 +77,14 @@ func (e *terminalError) Error() string {
 	return "terminal changefeed error"
 }
 
+// TODO(yevgeniy): retryableError and all machinery related
+// to MarkRetryableError maybe removed once 23.1 is released.
+type retryableError struct{}
+
+func (e *retryableError) Error() string {
+	return "retryable changefeed error"
+}
+
 // WithTerminalError decorates underlying error to indicate
 // that the error is a terminal changefeed error.
 func WithTerminalError(cause error) error {
@@ -84,6 +92,14 @@ func WithTerminalError(cause error) error {
 		return nil
 	}
 	return errors.Mark(cause, &terminalError{})
+}
+
+// MarkRetryableError wraps the given error, marking it as retryable.s
+func MarkRetryableError(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return errors.Mark(cause, &retryableError{})
 }
 
 // AsTerminalError determines if the cause error is a terminal changefeed
