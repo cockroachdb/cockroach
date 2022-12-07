@@ -22,6 +22,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_settings... writing output: debug/crdb_internal.cluster_settings.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_txn_execution_insights... writing output: debug/crdb_internal.cluster_txn_execution_insights.txt... done
 [cluster] retrieving SQL data for crdb_internal.default_privileges... writing output: debug/crdb_internal.default_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
 [cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
@@ -96,6 +97,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/1/crdb_internal.node_statement_statistics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/1/crdb_internal.node_transaction_statistics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/1/crdb_internal.node_txn_execution_insights.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
 [node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... converting to JSON... writing binary output: debug/nodes/1/gossip.json... done
