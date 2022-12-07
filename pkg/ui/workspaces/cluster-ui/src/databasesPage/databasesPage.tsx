@@ -315,12 +315,7 @@ export class DatabasesPage extends React.Component<
         this.setState({ lastDetailsError: lastDetailsError });
       }
 
-      if (
-        !database.loaded &&
-        !database.loading &&
-        (database.lastError === undefined ||
-          database.lastError?.name === "GetDatabaseInfoError")
-      ) {
+      if (!database.loaded && !database.loading && !database.lastError) {
         this.props.refreshDatabaseDetails(database.name);
         return;
       }

@@ -28,7 +28,7 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { getNodesByRegionString } from "../utils";
+import { combineLoadingErrors, getNodesByRegionString } from "../utils";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 
 const selectLoading = createSelector(
@@ -80,9 +80,9 @@ const selectDatabases = createSelector(
   ): DatabasesPageDataDatabase[] =>
     (databases?.databases || []).map(database => {
       const details = databaseDetails[database];
-      const stats = details?.data?.stats;
+      const stats = details?.data?.results.stats;
       const sizeInBytes = stats?.pebble_data?.approximate_disk_bytes || 0;
-      const rangeCount = stats?.ranges_data.count || 0;
+      const rangeCount = stats?.ranges_data.range_count || 0;
       const nodes = stats?.ranges_data.node_ids || [];
       const nodesByRegionString = getNodesByRegionString(
         nodes,
@@ -94,6 +94,7 @@ const selectDatabases = createSelector(
 
       const combinedErr = combineLoadingErrors(
         details?.lastError,
+        details?.data?.maxSizeReached,
         databases?.error?.message,
       );
 
@@ -103,7 +104,7 @@ const selectDatabases = createSelector(
         lastError: combinedErr,
         name: database,
         sizeInBytes: sizeInBytes,
-        tableCount: details?.data?.tables_resp.tables?.length || 0,
+        tableCount: details?.data?.results.tables_resp.tables?.length || 0,
         rangeCount: rangeCount,
         nodes: nodes,
         nodesByRegionString,
@@ -111,30 +112,6 @@ const selectDatabases = createSelector(
       };
     }),
 );
-
-function combineLoadingErrors(detailsErr: Error, dbList: string): Error {
-  if (!dbList) {
-    return detailsErr;
-  }
-
-  if (!detailsErr) {
-    return new GetDatabaseInfoError(
-      `Failed to load all databases. Partial results are shown. Debug info: ${dbList}`,
-    );
-  }
-
-  return new GetDatabaseInfoError(
-    `Failed to load all databases and database details. Partial results are shown. Debug info: ${dbList}, details error: ${detailsErr}`,
-  );
-}
-
-export class GetDatabaseInfoError extends Error {
-  constructor(message: string) {
-    super(message);
-
-    this.name = this.constructor.name;
-  }
-}
 
 export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   loading: selectLoading(state),

@@ -158,11 +158,15 @@ export async function getStmtInsightsApi(
   const result = await executeInternalSql<StmtInsightsResponseRow>(request);
 
   if (sqlResultsAreEmpty(result)) {
-    return formatApiResult([], result.error, "retrieving insights information");
+    return formatApiResult<StmtInsightEvent[]>(
+      [],
+      result.error,
+      "retrieving insights information",
+    );
   }
   const stmtInsightEvent = formatStmtInsights(result.execution?.txn_results[0]);
   await addStmtContentionInfoApi(stmtInsightEvent);
-  return formatApiResult(
+  return formatApiResult<StmtInsightEvent[]>(
     stmtInsightEvent,
     result.error,
     "retrieving insights information",
