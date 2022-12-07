@@ -154,6 +154,7 @@ describe.only("Databases Page", function () {
   });
 
   it("fills in database details and node/region info", async function () {
+    const oldDate = new Date(2020, 12, 25, 0, 0, 0, 0);
     const regions = [
       "gcp-us-east1",
       "gcp-us-east1",
@@ -183,10 +184,10 @@ describe.only("Databases Page", function () {
       nodes: nodes,
     });
 
-    fakeApi.stubDatabases(["system", "test"]);
+    fakeApi.stubDatabases(["test"], 1);
 
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("system"),
+      clusterUiApi.createDatabaseDetailsReq("test"),
       [
         // Id
         { rows: [] },
@@ -199,85 +200,63 @@ describe.only("Databases Page", function () {
             { table_schema: "public", table_name: "bar" },
           ],
         },
-        // Ranges
+        // Regions and replicas
         {
           rows: [
             {
-              replicas: [1,2,3],
+              replicas: [1, 2, 3],
               regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
             },
             {
-              replicas: [1,2,3],
+              replicas: [1, 2, 3],
               regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
             },
             {
-              replicas: [1,2,3],
+              replicas: [1, 2, 3],
               regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
-            }
+            },
+          ],
+        },
+        // Index Usage Stats
+        {
+          rows: [
+            // Generate drop index recommendation
+            {
+              database_name: "test",
+              last_read: oldDate.toISOString(),
+              created_at: oldDate.toISOString(),
+              unused_threshold: "1s",
+            },
+            // No index recommendation
+            {
+              database_name: "test",
+              last_read: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              unused_threshold: "168h0m0s",
+            },
+          ],
+        },
+        // Zone Config
+        {
+          rows: [],
+        },
+        // Span Stats
+        {
+          rows: [
+            {
+              approximate_disk_bytes: 100,
+              live_bytes: 200,
+              total_bytes: 300,
+              range_count: 400,
+            },
           ],
         },
       ],
+      1,
     );
 
     await driver.refreshNodes();
     await driver.refreshDatabases();
-    await driver.refreshDatabaseDetails("system");
-
-    driver.assertDatabaseProperties("system", {
-      loading: false,
-      loaded: true,
-      lastError: null,
-      name: "system",
-      nodes: [1, 2, 3],
-      sizeInBytes: 0, // TODO(thomas): fix when we have disk size
-      tableCount: 2,
-      rangeCount: 3,
-      nodesByRegionString: "gcp-us-east1(n1,n2), gcp-europe-west1(n3)",
-      numIndexRecommendations: 0,
-    });
-
-    fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("test"),
-      [
-        // Id
-        { rows: [] },
-        // Grants
-        { rows: [] },
-        // Tables
-        {
-          rows: [{ table_schema: "public", table_name: "widgets" }],
-        },
-        // Ranges
-        {
-          rows: [
-            {
-              replicas: [1,2,3,4,5,6],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
-            },
-            {
-              replicas: [1,2,3,4,5,6],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
-            },
-            {
-              replicas: [1,2,3,4,5,6],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
-            },
-            {
-              replicas: [1,2,3,4,5,6],
-              regions: ["gcp-europe-west1", "gcp-europe-west2"],
-              range_size: 10,
-            }
-          ],
-        },
-      ],
-    );
-
     await driver.refreshDatabaseDetails("test");
 
     driver.assertDatabaseProperties("test", {
@@ -285,13 +264,12 @@ describe.only("Databases Page", function () {
       loaded: true,
       lastError: null,
       name: "test",
-      nodes: [1, 2, 3, 4, 5, 6],
-      sizeInBytes: 0, // TODO(thomas): fix when we have disk size
-      tableCount: 1,
-      rangeCount: 4,
-      nodesByRegionString:
-        "gcp-us-east1(n1,n2,n4), gcp-europe-west2(n5), gcp-europe-west1(n3,n6)",
-      numIndexRecommendations: 0,
+      nodes: [1, 2, 3],
+      sizeInBytes: 100,
+      tableCount: 2,
+      rangeCount: 400,
+      nodesByRegionString: "gcp-europe-west1(n3), gcp-us-east1(n1,n2)",
+      numIndexRecommendations: 1,
     });
   });
 });

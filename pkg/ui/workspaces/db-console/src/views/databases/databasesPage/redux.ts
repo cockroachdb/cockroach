@@ -82,7 +82,7 @@ const selectDatabases = createSelector(
       const details = databaseDetails[database];
       const stats = details?.data?.stats;
       const sizeInBytes = stats?.pebble_data?.approximate_disk_bytes || 0;
-      const rangeCount = stats?.ranges_data.count || 0;
+      const rangeCount = stats?.ranges_data.range_count || 0;
       const nodes = stats?.ranges_data.node_ids || [];
       const nodesByRegionString = getNodesByRegionString(
         nodes,

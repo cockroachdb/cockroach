@@ -36,7 +36,6 @@ export function recommendDropUnusedIndex(
   ) {
     return { recommend: false, reason: "" };
   }
-
   const createdAt = indexUsageStat.created_at
     ? moment.utc(indexUsageStat.created_at)
     : minDate;
@@ -52,15 +51,19 @@ export function recommendDropUnusedIndex(
     return { recommend: true, reason: indexNeverUsedReason };
   }
 
+  const duration = moment.duration(moment().diff(lastActive));
   const unusedThreshold = moment.duration(
     "PT" + indexUsageStat.unused_threshold.toUpperCase(),
   );
-  return {
-    recommend: true,
-    reason: `This index has not been used in over ${formatMomentDuration(
-      unusedThreshold,
-    )} and can be removed for better write performance.`,
-  };
+  if (duration >= unusedThreshold) {
+    return {
+      recommend: true,
+      reason: `This index has not been used in over ${formatMomentDuration(
+        unusedThreshold,
+      )} and can be removed for better write performance.`,
+    };
+  }
+  return { recommend: false, reason: "" };
 }
 
 export function formatMomentDuration(duration: moment.Duration): string {

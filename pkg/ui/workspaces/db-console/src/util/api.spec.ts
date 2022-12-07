@@ -26,6 +26,9 @@ import {
   buildSqlExecutionResponse,
 } from "src/util/fakeApi";
 
+const { ZoneConfig } = cockroach.config.zonepb;
+const { ZoneConfigurationLevel } = cockroach.server.serverpb;
+
 describe("rest api", function () {
   describe("databases request", function () {
     afterEach(fetchMock.restore);
@@ -107,8 +110,25 @@ describe("rest api", function () {
     });
   });
 
-  describe("database details request", function () {
+  describe.only("database details request", function () {
     const dbName = "test";
+    const mockZoneConfig = new ZoneConfig({
+      inherited_constraints: true,
+      inherited_lease_preferences: true,
+      null_voter_constraints_is_empty: true,
+      global_reads: true,
+      gc: {
+        ttl_seconds: 100,
+      },
+    });
+    const mockZoneConfigBytes = ZoneConfig.encode(mockZoneConfig).finish();
+    // Convert bytes representation to hex string - format returned by API.
+    const hexStringPrefix = "\\x";
+    const mockZoneConfigHexString =
+      hexStringPrefix +
+      Array.from(mockZoneConfigBytes)
+        .map(x => x.toString(16).padStart(2, "0"))
+        .join("");
 
     afterEach(fetchMock.restore);
 
@@ -135,16 +155,12 @@ describe("rest api", function () {
               {
                 rows: [
                   {
-                    database_name: "test",
                     grantee: "admin",
                     privilege_type: "ALL",
-                    is_grantable: true,
                   },
                   {
-                    database_name: "test",
                     grantee: "public",
                     privilege_type: "CONNECT",
-                    is_grantable: false,
                   },
                 ],
               },
@@ -152,13 +168,12 @@ describe("rest api", function () {
               {
                 rows: [{ table_schema: "public", table_name: "table1" }],
               },
-              // Database ranges query
+              // Database replicas and regions query
               {
                 rows: [
                   {
                     replicas: [1, 2, 3],
                     regions: ["gcp-europe-west1", "gcp-europe-west2"],
-                    range_size: 125,
                   },
                 ],
               },
@@ -170,6 +185,24 @@ describe("rest api", function () {
                     last_read: new Date().toISOString(),
                     created_at: new Date().toISOString(),
                     unused_threshold: "30m",
+                  },
+                ],
+              },
+              // Database zone config query
+              {
+                rows: [
+                  {
+                    zone_config_bytes: mockZoneConfigHexString,
+                  },
+                ],
+              },
+              {
+                rows: [
+                  {
+                    approximate_disk_bytes: 100,
+                    live_bytes: 200,
+                    total_bytes: 300,
+                    range_count: 400,
                   },
                 ],
               },
@@ -186,8 +219,15 @@ describe("rest api", function () {
         expect(result.id_resp.id.database_id).toEqual("1");
         expect(result.tables_resp.tables.length).toBe(1);
         expect(result.grants_resp.grants.length).toBe(2);
-        expect(result.stats.ranges_data.count).toBe(1);
         expect(result.stats.index_stats.num_index_recommendations).toBe(0);
+        expect(result.zone_config_resp.zone_config).toEqual(mockZoneConfig);
+        expect(result.zone_config_resp.zone_config_level).toBe(
+          ZoneConfigurationLevel.DATABASE,
+        );
+        expect(result.stats.pebble_data.approximate_disk_bytes).toBe(100);
+        expect(result.stats.ranges_data.live_bytes).toBe(200);
+        expect(result.stats.ranges_data.total_bytes).toBe(300);
+        expect(result.stats.ranges_data.range_count).toBe(400);
       });
     });
 

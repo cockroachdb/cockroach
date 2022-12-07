@@ -222,7 +222,7 @@ export function buildSQLApiEventsResponse(events: clusterUiApi.EventsResponse) {
   };
 }
 
-export function stubDatabases(databases: string[]) {
+export function stubDatabases(databases: string[], times?: number) {
   const response = buildSQLApiDatabasesResponse(databases);
   fetchMock.mock({
     headers: {
@@ -240,12 +240,14 @@ export function stubDatabases(databases: string[]) {
         body: JSON.stringify(response),
       };
     },
+    times: times,
   });
 }
 
 export function stubSqlApiCall<T>(
   req: any,
   mockTxnResults: mockSqlTxnResult<T>[],
+  times?: number,
 ) {
   const response = buildSqlExecutionResponse(mockTxnResults);
   fetchMock.mock({
@@ -265,6 +267,7 @@ export function stubSqlApiCall<T>(
         body: JSON.stringify(response),
       };
     },
+    times: times,
   });
 }
 
