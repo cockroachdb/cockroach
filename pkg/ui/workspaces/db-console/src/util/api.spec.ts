@@ -23,8 +23,11 @@ import Severity = cockroach.util.log.Severity;
 import {
   buildSQLApiDatabasesResponse,
   buildSQLApiEventsResponse,
-  buildSqlExecutionResponse,
+  stubSqlApiCall,
 } from "src/util/fakeApi";
+
+const { ZoneConfig } = cockroach.config.zonepb;
+const { ZoneConfigurationLevel } = cockroach.server.serverpb;
 
 describe("rest api", function () {
   describe("databases request", function () {
@@ -109,85 +112,108 @@ describe("rest api", function () {
 
   describe("database details request", function () {
     const dbName = "test";
+    const mockOldDate = new Date(2023, 2, 3);
+    const mockZoneConfig = new ZoneConfig({
+      inherited_constraints: true,
+      inherited_lease_preferences: true,
+      null_voter_constraints_is_empty: true,
+      global_reads: true,
+      gc: {
+        ttl_seconds: 100,
+      },
+    });
+    const mockZoneConfigBytes = ZoneConfig.encode(mockZoneConfig).finish();
+    const mockZoneConfigHexString = Array.from(mockZoneConfigBytes)
+      .map(x => x.toString(16).padStart(2, "0"))
+      .join("");
 
     afterEach(fetchMock.restore);
 
     it("correctly requests info about a specific database", function () {
       // Mock out the fetch query
-      fetchMock.mock({
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-Cockroach-API-Session": "cookie",
-        },
-        matcher: clusterUiApi.SQL_API_PATH,
-        method: "POST",
-        response: (_url: string, requestObj: RequestInit) => {
-          expect(JSON.parse(requestObj.body.toString())).toEqual({
-            ...clusterUiApi.createDatabaseDetailsReq(dbName),
-            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-          });
-          const mockResp =
-            buildSqlExecutionResponse<clusterUiApi.DatabaseDetailsRow>([
-              // Database ID query
-              { rows: [{ database_id: "1" }] },
-              // Database grants query
+      stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+        clusterUiApi.createDatabaseDetailsReq(dbName),
+        [
+          // Database ID query
+          { rows: [{ database_id: "1" }] },
+          // Database grants query
+          {
+            rows: [
               {
-                rows: [
-                  {
-                    database_name: "test",
-                    grantee: "admin",
-                    privilege_type: "ALL",
-                    is_grantable: true,
-                  },
-                  {
-                    database_name: "test",
-                    grantee: "public",
-                    privilege_type: "CONNECT",
-                    is_grantable: false,
-                  },
-                ],
+                user: "admin",
+                privileges: ["ALL"],
               },
-              // Database tables query
               {
-                rows: [{ table_schema: "public", table_name: "table1" }],
+                user: "public",
+                privileges: ["CONNECT"],
               },
-              // Database ranges query
+            ],
+          },
+          // Database tables query
+          {
+            rows: [{ table_schema: "public", table_name: "table1" }],
+          },
+          // Database replicas and regions query
+          {
+            rows: [
               {
-                rows: [
-                  {
-                    replicas: [1, 2, 3],
-                    regions: ["gcp-europe-west1", "gcp-europe-west2"],
-                    range_size: 125,
-                  },
-                ],
+                replicas: [1, 2, 3],
+                regions: ["gcp-europe-west1", "gcp-europe-west2"],
               },
-              // Database index usage statistics query
+            ],
+          },
+          // Database index usage statistics query
+          {
+            rows: [
               {
-                rows: [
-                  {
-                    database_name: "test",
-                    last_read: new Date().toISOString(),
-                    created_at: new Date().toISOString(),
-                    unused_threshold: "30m",
-                  },
-                ],
+                last_read: mockOldDate.toISOString(),
+                created_at: mockOldDate.toISOString(),
+                unused_threshold: "1m",
               },
-            ]);
-
-          return {
-            body: JSON.stringify(mockResp),
-          };
-        },
-      });
+            ],
+          },
+          // Database zone config query
+          {
+            rows: [
+              {
+                zone_config_bytes: mockZoneConfigHexString,
+              },
+            ],
+          },
+          {
+            rows: [
+              {
+                approximate_disk_bytes: 100,
+                live_bytes: 200,
+                total_bytes: 300,
+                range_count: 400,
+              },
+            ],
+          },
+        ],
+        1,
+      );
 
       return clusterUiApi.getDatabaseDetails(dbName).then(result => {
         expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
-        expect(result.id_resp.id.database_id).toEqual("1");
-        expect(result.tables_resp.tables.length).toBe(1);
-        expect(result.grants_resp.grants.length).toBe(2);
-        expect(result.stats.ranges_data.count).toBe(1);
-        expect(result.stats.index_stats.num_index_recommendations).toBe(0);
+        expect(result.results.id_resp.id.database_id).toEqual("1");
+        expect(result.results.tables_resp.tables.length).toBe(1);
+        expect(result.results.grants_resp.grants.length).toBe(2);
+        expect(result.results.stats.index_stats.num_index_recommendations).toBe(
+          1,
+        );
+        expect(result.results.zone_config_resp.zone_config).toEqual(
+          mockZoneConfig,
+        );
+        expect(result.results.zone_config_resp.zone_config_level).toBe(
+          ZoneConfigurationLevel.DATABASE,
+        );
+        expect(result.results.stats.pebble_data.approximate_disk_bytes).toBe(
+          100,
+        );
+        expect(result.results.stats.ranges_data.live_bytes).toBe(200);
+        expect(result.results.stats.ranges_data.total_bytes).toBe(300);
+        expect(result.results.stats.ranges_data.range_count).toBe(400);
       });
     });
 

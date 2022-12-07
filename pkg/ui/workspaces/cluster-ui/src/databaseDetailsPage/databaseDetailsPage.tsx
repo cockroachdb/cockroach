@@ -268,7 +268,7 @@ export class DatabaseDetailsPage extends React.Component<
     if (
       !this.props.loaded &&
       !this.props.loading &&
-      this.props.lastError === undefined
+      this.props.lastError === null
     ) {
       return this.props.refreshDatabaseDetails(this.props.name);
     }
