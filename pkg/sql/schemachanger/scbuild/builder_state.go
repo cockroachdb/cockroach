@@ -898,7 +898,7 @@ func (b *builderState) ResolveConstraint(
 	c := b.descCache[relationID]
 	rel := c.desc.(catalog.TableDescriptor)
 	var constraintID catid.ConstraintID
-	scpb.ForEachConstraintName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+	scpb.ForEachConstraintWithoutIndexName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
 		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
 			constraintID = e.ConstraintID
 		}
