@@ -1944,10 +1944,13 @@ func (ex *connExecutor) execCmd() error {
 			// https://www.postgresql.org/docs/14/protocol-flow.html.
 			// The behavior is configurable, in case users want to preserve the
 			// behavior from v21.2 and earlier.
+			// Similar to Postgres if the current statement is DDL, we will force
+			// a commit to ensure database consistency.
 			implicitTxnForBatch := ex.sessionData().EnableImplicitTransactionForBatchStatements
 			canAutoCommit := ex.implicitTxn() &&
 				(tcmd.LastInBatchBeforeShowCommitTimestamp ||
-					tcmd.LastInBatch || !implicitTxnForBatch)
+					tcmd.LastInBatch || !implicitTxnForBatch ||
+					tcmd.AST.StatementType() == tree.TypeDDL)
 			ev, payload, err = ex.execStmt(
 				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)
