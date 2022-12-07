@@ -277,6 +277,10 @@ type ResolveParams struct {
 	// RequiredPrivilege defines the privilege required for the resolved
 	// descriptor.
 	RequiredPrivilege privilege.Kind
+
+	// RequireOwnership if set to true, requires current user be the owner of the
+	// resolved descriptor. It preempts RequiredPrivilege.
+	RequireOwnership bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.
