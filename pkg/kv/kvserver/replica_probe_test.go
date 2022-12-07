@@ -58,6 +58,41 @@ func TestReplicaProbeRequest(t *testing.T) {
 		}
 		return 0, args.ForcedError
 	}
+	// NB: At one point we tried to verify that the probe the tests sends below
+	// is seen in command application on *all* replicas.
+	//
+	// This was flaky[^1] due to snapshot application (g1 and g2 are the
+	// intertwined operations):
+	//
+	// - g1    | `tc.AddXOrFatal` begins
+	// - g1    | it calls into ChangeReplicas
+	// - g1    | Replica added to descriptor
+	//      g2 | leader sends first MsgApp
+	// -    g2 | follower gets MsgApp, rejects it, leader enqueues in Raft snapshot queue
+	// - g1    | block raft snapshots to follower
+	// - g1    | send INITIAL snapshot
+	// - g1    | unblock raft snapshots to follower
+	// - g1    | AddVoterOrWhatever returns to the test
+	// - g1    | test sends probe
+	// -    g2 | raft log queue processes the queued Replica (followers's
+	//           MsgAppResp following INITIAL snapshot not having reached leader yet)[^1]
+	// -    g2 | it sends another snap which includes the probe
+	// -    g2 | follower applies the probe via the snap.
+	// - g1    | times out waiting for the interceptor to see the probe on follower.
+	//
+	// We attempted to disable the raft snapshot queue. This caused deadlocks: if raft
+	// (erroneously or not) requests a snapshot, it will not replicate to the follower
+	// until it has been caught up. But the quorum size here is two, so this would cause
+	// a hanging test. We tried to work around this by marking snapshots as failed when
+	// the raft snapshot queue is disabled, but this then threw off other tests[^2] that
+	// wanted to observe this state.
+	//
+	// So we just check that the probe applies on at least one Replica, which
+	// always has to be true.
+	//
+	// [^1]: https://github.com/cockroachdb/cockroach/pull/92380
+	// [^2]: TestMigrateWithInflightSnapshot, TestSnapshotsToDrainingNodes, TestRaftSnapshotQueueSeesLearner
+
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		// We set an ApplyFilter even though the probe should never
 		// show up there (since it always catches a forced error),
@@ -111,7 +146,10 @@ func TestReplicaProbeRequest(t *testing.T) {
 		if exp, act := len(seen.m), len(tc.Servers); exp != act {
 			return errors.Errorf("waiting for stores to apply command: %d/%d", act, exp)
 		}
-		n := 2 * len(tc.Servers) // sent two probes per server
+		// We'll usually see 2 * len(tc.Servers) probes since we sent two probes, but see
+		// the comment about errant snapshots above. We just want this test to be reliable
+		// so expect at least one probe in command application.
+		n := 1
 		for storeID, count := range seen.m {
 			if count < n {
 				return errors.Errorf("saw only %d probes on s%d", count, storeID)
