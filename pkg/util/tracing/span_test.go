@@ -370,7 +370,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	defer ch.Finish()
 	children := sp.i.crdb.mu.openChildren
 	require.Len(t, children, 1)
-	require.Equal(t, ch.i.crdb, children[0].spanRef.i.crdb)
+	require.Equal(t, ch.i.crdb, children[0].span())
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child's structured event is in the recording.
 	rec := sp.GetRecording(tracingpb.RecordingStructured)

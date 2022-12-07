@@ -549,11 +549,6 @@ func (sp *Span) UpdateGoroutineIDToCurrent() {
 	sp.i.crdb.setGoroutineID(goid.Get())
 }
 
-// parentFinished makes sp a root.
-func (sp *Span) parentFinished() {
-	sp.i.crdb.parentFinished()
-}
-
 // reset prepares sp for (re-)use.
 //
 // sp might be a re-allocated span that was previously used and Finish()ed. In
