@@ -1076,7 +1076,9 @@ func TestLint(t *testing.T) {
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
+			":!roachpb/api_requestheader.go",
 			":!storage/mvcc_value.go",
+			":!storage/enginepb/mvcc3_valueheader.go",
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scplan/scviz/maps.go",
 		)
@@ -2000,6 +2002,7 @@ func TestLint(t *testing.T) {
 			"../../col/coldata",
 			"../../keys",
 			"../../kv/kvclient/rangecache",
+			"../../roachpb",
 			"../../sql/catalog/descs",
 			"../../sql/colcontainer",
 			"../../sql/colconv",

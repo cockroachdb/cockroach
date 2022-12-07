@@ -11,12 +11,28 @@
 package kvnemesis
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
+)
+
+var (
+	k1  = tk(1)
+	k2  = tk(2)
+	k3  = tk(3)
+	k4  = tk(4)
+	k5  = tk(5)
+	k6  = tk(6)
+	k7  = tk(7)
+	k8  = tk(8)
+	k9  = tk(9)
+	k10 = tk(10)
+	k11 = tk(11)
 )
 
 func TestOperationsFormat(t *testing.T) {
@@ -24,48 +40,28 @@ func TestOperationsFormat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tests := []struct {
-		step     Step
-		expected string
+		step Step
 	}{
-		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
-		{step: step(del(`a`)), expected: `db0.Del(ctx, "a")`},
-		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`))), expected: `
-			{
-			  b := &Batch{}
-			  b.Get(ctx, "b")
-			  b.ReverseScanForUpdate(ctx, "c", "e")
-			  b.Get(ctx, "f")
-			  db0.Run(ctx, b)
-			}
-		`},
+		{step: step(get(k1))},
+		{step: step(del(k1, 1))},
+		{step: step(batch(get(k2), reverseScanForUpdate(k3, k5), get(k6)))},
 		{
 			step: step(
 				closureTxn(ClosureTxnType_Commit,
-					batch(get(`g`), get(`h`), del(`i`)),
-					delRange(`j`, `k`),
-					put(`k`, `l`),
+					batch(get(k7), get(k8), del(k9, 1)),
+					delRange(k10, k11, 2),
+					put(k11, 3),
 				)),
-			expected: `
-			db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			  {
-			    b := &Batch{}
-			    b.Get(ctx, "g")
-			    b.Get(ctx, "h")
-			    b.Del(ctx, "i")
-			    txn.Run(ctx, b)
-			  }
-			  txn.DelRange(ctx, "j", "k", true)
-			  txn.Put(ctx, "k", l)
-			  return nil
-			})
-			`,
 		},
 	}
 
-	for _, test := range tests {
-		expected := strings.TrimSpace(test.expected)
-		var actual strings.Builder
-		test.step.format(&actual, formatCtx{indent: "\t\t\t"})
-		assert.Equal(t, expected, strings.TrimSpace(actual.String()))
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	for i, test := range tests {
+		name := fmt.Sprint(i)
+		t.Run(name, w.Run(t, name, func(t *testing.T) string {
+			var actual strings.Builder
+			test.step.format(&actual, formatCtx{indent: "···"})
+			return strings.TrimLeft(actual.String(), "\n")
+		}))
 	}
 }

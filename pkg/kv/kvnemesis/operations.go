@@ -13,8 +13,10 @@ package kvnemesis
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -32,6 +34,8 @@ func (op Operation) Result() *Result {
 	case *DeleteOperation:
 		return &o.Result
 	case *DeleteRangeOperation:
+		return &o.Result
+	case *DeleteRangeUsingTombstoneOperation:
 		return &o.Result
 	case *SplitOperation:
 		return &o.Result
@@ -75,6 +79,13 @@ type formatCtx struct {
 	// TODO(dan): error handling.
 }
 
+func (fctx formatCtx) maybeCtx() string {
+	if fctx.receiver == `b` {
+		return ""
+	}
+	return "ctx, "
+}
+
 func (s Step) format(w *strings.Builder, fctx formatCtx) {
 	if fctx.receiver != `` {
 		panic(`cannot specify receiver in Step.format fctx`)
@@ -111,6 +122,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *DeleteOperation:
 		o.format(w, fctx)
 	case *DeleteRangeOperation:
+		o.format(w, fctx)
+	case *DeleteRangeUsingTombstoneOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -169,11 +182,15 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		w.WriteString(`})`)
 		o.Result.format(w)
 		if o.Txn != nil {
-			fmt.Fprintf(w, ` txnpb:(%s)`, o.Txn)
+			fmt.Fprintf(w, "\n%s// ^-- txnpb:(%s)", fctx.indent, o.Txn)
 		}
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
 	}
+}
+
+func fmtKey(k []byte) string {
+	return fmt.Sprintf(`tk(%d)`, fk(string(k)))
 }
 
 func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -181,23 +198,24 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 	if op.ForUpdate {
 		methodName = `GetForUpdate`
 	}
-	fmt.Fprintf(w, `%s.%s(ctx, %s)`, fctx.receiver, methodName, roachpb.Key(op.Key))
-	switch op.Result.Type {
-	case ResultType_Error:
-		err := errors.DecodeError(context.TODO(), *op.Result.Err)
-		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
-	case ResultType_Value:
-		v := `nil`
-		if len(op.Result.Value) > 0 {
-			v = `"` + mustGetStringValue(op.Result.Value) + `"`
-		}
-		fmt.Fprintf(w, ` // (%s, nil)`, v)
-	}
+	fmt.Fprintf(w, `%s.%s(%s%s)`, fctx.receiver, methodName, fctx.maybeCtx(), fmtKey(op.Key))
+	op.Result.format(w)
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Put(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Value)
+	fmt.Fprintf(w, `%s.Put(%s%s, sv(%d))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
+}
+
+// sv stands for sequence value, i.e. the value dictated by the given sequence number.
+func sv(seq kvnemesisutil.Seq) string {
+	return `v` + strconv.Itoa(int(seq))
+}
+
+// Value returns the value written by this put. This is a function of the
+// sequence number.
+func (op PutOperation) Value() string {
+	return sv(op.Seq)
 }
 
 func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -213,76 +231,49 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 	if fctx.receiver == `b` {
 		maxRowsArg = ``
 	}
-	fmt.Fprintf(w, `%s.%s(ctx, %s, %s%s)`, fctx.receiver, methodName, roachpb.Key(op.Key), roachpb.Key(op.EndKey), maxRowsArg)
-	switch op.Result.Type {
-	case ResultType_Error:
-		err := errors.DecodeError(context.TODO(), *op.Result.Err)
-		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
-	case ResultType_Values:
-		var kvs strings.Builder
-		for i, kv := range op.Result.Values {
-			if i > 0 {
-				kvs.WriteString(`, `)
-			}
-			kvs.WriteByte('"')
-			kvs.WriteString(string(kv.Key))
-			kvs.WriteString(`":"`)
-			kvs.WriteString(mustGetStringValue(kv.Value))
-			kvs.WriteByte('"')
-		}
-		fmt.Fprintf(w, ` // ([%s], nil)`, kvs.String())
-	}
+	fmt.Fprintf(w, `%s.%s(%s%s, %s%s)`, fctx.receiver, methodName, fctx.maybeCtx(), fmtKey(op.Key), fmtKey(op.EndKey), maxRowsArg)
+	op.Result.format(w)
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Del(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.Del(%s%s /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
 func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
-	switch op.Result.Type {
-	case ResultType_Error:
-		err := errors.DecodeError(context.TODO(), *op.Result.Err)
-		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
-	case ResultType_Keys:
-		var keysW strings.Builder
-		for i, key := range op.Result.Keys {
-			if i > 0 {
-				keysW.WriteString(`, `)
-			}
-			keysW.WriteByte('"')
-			keysW.WriteString(string(key))
-			keysW.WriteString(`"`)
-		}
-		fmt.Fprintf(w, ` // ([%s], nil)`, keysW.String())
-	}
+	fmt.Fprintf(w, `%s.DelRange(%s%s, %s, true /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), fmtKey(op.EndKey), op.Seq)
+	op.Result.format(w)
+}
+
+func (op DeleteRangeUsingTombstoneOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.DelRangeUsingTombstone(ctx, %s, %s /* @%s */)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey), op.Seq)
+	op.Result.format(w)
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s)`, fctx.receiver, fmtKey(op.Key))
 	op.Result.format(w)
 }
 
 func (op MergeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminMerge(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.AdminMerge(ctx, %s)`, fctx.receiver, fmtKey(op.Key))
 	op.Result.format(w)
 }
 
 func (op BatchOperation) format(w *strings.Builder, fctx formatCtx) {
 	w.WriteString("\n")
 	w.WriteString(fctx.indent)
-	w.WriteString(`b := &Batch{}`)
+	w.WriteString(`b := &kv.Batch{}`)
 	formatOps(w, fctx, op.Ops)
 }
 
 func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Changes)
+	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), op.Changes)
 	op.Result.format(w)
 }
 
 func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, roachpb.Key(op.Key), op.Target)
+	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, fmtKey(op.Key), op.Target)
 	op.Result.format(w)
 }
 
@@ -292,11 +283,55 @@ func (op ChangeZoneOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (r Result) format(w *strings.Builder) {
+	if r.Type == ResultType_Unknown {
+		return
+	}
+	fmt.Fprintf(w, ` //`)
+	if r.OptionalTimestamp.IsSet() {
+		fmt.Fprintf(w, ` @%s`, r.OptionalTimestamp)
+	}
+
+	var sl []string
+	errString := "<nil>"
 	switch r.Type {
 	case ResultType_NoError:
-		fmt.Fprintf(w, ` // nil`)
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *r.Err)
-		fmt.Fprintf(w, ` // %s`, err.Error())
+		errString = fmt.Sprint(err)
+	case ResultType_Keys:
+		for _, k := range r.Keys {
+			sl = append(sl, roachpb.Key(k).String())
+		}
+	case ResultType_Value:
+		sl = append(sl, mustGetStringValue(r.Value))
+	case ResultType_Values:
+		for _, kv := range r.Values {
+			sl = append(sl, fmt.Sprintf(`%s:%s`, roachpb.Key(kv.Key), mustGetStringValue(kv.Value)))
+		}
+	default:
+		panic("unhandled ResultType")
 	}
+
+	w.WriteString(" ")
+
+	sl = append(sl, errString)
+	if len(sl) > 1 {
+		w.WriteString("(")
+	}
+	w.WriteString(strings.Join(sl, ", "))
+	if len(sl) > 1 {
+		w.WriteString(")")
+	}
+
+}
+
+// Error decodes and returns the r.Err if it is set.
+func (r Result) Error() error {
+	if r.Err == nil {
+		return nil
+	}
+	if !r.Err.IsSet() {
+		return nil
+	}
+	return errors.DecodeError(context.Background(), *r.Err)
 }

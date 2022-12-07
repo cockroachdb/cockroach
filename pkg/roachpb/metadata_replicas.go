@@ -508,7 +508,11 @@ func (c ReplicaChangeType) IsRemoval() bool {
 }
 
 var errReplicaNotFound = errors.Errorf(`replica not found in RangeDescriptor`)
-var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
+
+// ErrReplicaCannotHoldLease can be returned from CheckCanReceiveLease.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/93163
+var ErrReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
@@ -546,7 +550,7 @@ func CheckCanReceiveLease(
 		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
 		// In this case, when exiting the joint config, we will transfer the lease to the incoming
 		// voter.
-		return errReplicaCannotHoldLease
+		return ErrReplicaCannotHoldLease
 	}
 	return nil
 }
