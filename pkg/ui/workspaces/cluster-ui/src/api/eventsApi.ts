@@ -98,10 +98,14 @@ export function getNonRedactedEvents(
     timeout,
   ).then(result => {
     if (sqlResultsAreEmpty(result)) {
-      return formatApiResult([], result.error, "retrieving events information");
+      return formatApiResult<EventColumns[]>(
+        [],
+        result.error,
+        "retrieving events information",
+      );
     }
 
-    return formatApiResult(
+    return formatApiResult<EventColumns[]>(
       result.execution.txn_results[0].rows,
       result.error,
       "retrieving events information",

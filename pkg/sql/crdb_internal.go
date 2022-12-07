@@ -3961,6 +3961,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			if hasAdmin {
 				return true, nil
 			}
+			viewActOrViewActRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+			if viewActOrViewActRedact || err != nil {
+				return viewActOrViewActRedact, err
+			}
 			return p.HasPrivilege(ctx, desc, privilege.ZONECONFIG, p.User())
 		}
 
