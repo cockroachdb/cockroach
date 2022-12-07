@@ -665,7 +665,11 @@ func (b *builderState) ResolveSchema(
 			"%s permission denied for schema %q", p.RequiredPrivilege.String(), name))
 	case catalog.SchemaUserDefined:
 		b.ensureDescriptor(sc.GetID())
-		b.mustOwn(sc.GetID())
+		if p.RequireOwnership {
+			b.mustOwn(sc.GetID())
+		} else {
+			b.checkPrivilege(sc.GetID(), p.RequiredPrivilege)
+		}
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
 	}
