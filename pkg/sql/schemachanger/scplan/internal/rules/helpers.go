@@ -390,7 +390,7 @@ func isConstraint(e scpb.Element) bool {
 
 func isConstraintDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.ConstraintName:
+	case *scpb.ConstraintWithoutIndexName:
 		return true
 	case *scpb.ConstraintComment:
 		return true

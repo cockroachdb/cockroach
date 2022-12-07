@@ -239,7 +239,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(IndexID, "IndexID"),
 	),
 	// Constraint elements.
-	rel.EntityMapping(t((*scpb.ConstraintName)(nil)),
+	rel.EntityMapping(t((*scpb.ConstraintWithoutIndexName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(Name, "Name"),

@@ -199,7 +199,7 @@ func init() {
 				(*scpb.ForeignKeyConstraint)(nil),
 			),
 			dep.Type(
-				(*scpb.ConstraintName)(nil),
+				(*scpb.ConstraintWithoutIndexName)(nil),
 			),
 
 			joinOnDescID(relation, constraint, relationID),

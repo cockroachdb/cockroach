@@ -98,7 +98,7 @@ message ElementProto {
   IndexData index_data = 45 [(gogoproto.customname) = "IndexData", (gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex\""];
 
   // Constraint elements.
-  ConstraintName constraint_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
+  ConstraintWithoutIndexName constraint_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
   ConstraintComment constraint_comment = 52 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
 
   // Common elements.
@@ -422,7 +422,7 @@ message IndexName {
   string name = 3;
 }
 
-message ConstraintName {
+message ConstraintWithoutIndexName {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
   string name = 4;
