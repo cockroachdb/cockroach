@@ -375,14 +375,14 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	}
 
 	mKeySize := int64(mvccKey(key).EncodedSize())
-	require.EqualValues(t, mKeySize, 2)
+	require.EqualValues(t, 2, mKeySize)
 
 	mVal1Size := int64((&enginepb.MVCCMetadata{
 		Timestamp: ts1.ToLegacyTimestamp(),
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, mVal1Size, 46)
+	require.EqualValues(t, 46, mVal1Size)
 	mVal1Size += 2
 
 	// TODO(sumeer): this is the first put at ts1, so why are we using this m1ValSize
@@ -392,17 +392,17 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, m1ValSize, 46)
+	require.EqualValues(t, 46, m1ValSize)
 	m1ValSize += 2
 
 	vKeySize := MVCCVersionTimestampSize
-	require.EqualValues(t, vKeySize, 12)
+	require.EqualValues(t, 12, vKeySize)
 
 	vValSize := int64(len(value.RawBytes))
-	require.EqualValues(t, vValSize, 10)
+	require.EqualValues(t, 10, vValSize)
 	if disableSimpleValueEncoding {
 		vValSize += emptyMVCCValueHeaderSize
-		require.EqualValues(t, vValSize, 17)
+		require.EqualValues(t, 17, vValSize)
 	}
 
 	expMS := enginepb.MVCCStats{
@@ -443,7 +443,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	if disableSimpleValueEncoding {
 		expM2ValSize = 71
 	}
-	require.EqualValues(t, m2ValSize, expM2ValSize)
+	require.EqualValues(t, expM2ValSize, m2ValSize)
 
 	if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 		t.Fatal(err)
@@ -562,7 +562,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	if disableSimpleValueEncoding {
 		expMVal2Size = 61
 	}
-	require.EqualValues(t, mVal2Size, expMVal2Size)
+	require.EqualValues(t, expMVal2Size, mVal2Size)
 
 	value := roachpb.MakeValueFromString("value")
 
@@ -892,7 +892,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		require.EqualValues(t, vVal2Size, 14)
 		if disableSimpleValueEncoding {
 			vVal2Size += emptyMVCCValueHeaderSize
-			require.EqualValues(t, vVal2Size, 21)
+			require.EqualValues(t, 21, vVal2Size)
 		}
 
 		txn.WriteTimestamp.Forward(ts3)
@@ -915,7 +915,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		if disableSimpleValueEncoding {
 			expMVal2Size = 61
 		}
-		require.EqualValues(t, mVal2SizeWithHistory, expMVal2Size)
+		require.EqualValues(t, expMVal2Size, mVal2SizeWithHistory)
 
 		expAggMS := enginepb.MVCCStats{
 			LastUpdateNanos:      3e9,
@@ -1263,7 +1263,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	require.EqualValues(t, vVal2Size, 14)
 	if disableSimpleValueEncoding {
 		vVal2Size += emptyMVCCValueHeaderSize
-		require.EqualValues(t, vVal2Size, 21)
+		require.EqualValues(t, 21, vVal2Size)
 	}
 
 	expMS := enginepb.MVCCStats{
@@ -1294,7 +1294,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	if disableSimpleValueEncoding {
 		expMVal2Size = 71
 	}
-	require.EqualValues(t, mVal2Size, expMVal2Size)
+	require.EqualValues(t, expMVal2Size, mVal2Size)
 
 	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
 		t.Fatal(err)
@@ -1363,7 +1363,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 	require.EqualValues(t, vVal2Size, 14)
 	if disableSimpleValueEncoding {
 		vVal2Size += emptyMVCCValueHeaderSize
-		require.EqualValues(t, vVal2Size, 21)
+		require.EqualValues(t, 21, vVal2Size)
 	}
 
 	expMS := enginepb.MVCCStats{
@@ -1429,7 +1429,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 	require.EqualValues(t, vVal2Size, 14)
 	if disableSimpleValueEncoding {
 		vVal2Size += emptyMVCCValueHeaderSize
-		require.EqualValues(t, vVal2Size, 21)
+		require.EqualValues(t, 21, vVal2Size)
 	}
 
 	expMS := enginepb.MVCCStats{

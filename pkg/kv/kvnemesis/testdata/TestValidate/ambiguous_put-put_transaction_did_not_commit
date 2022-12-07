@@ -1,0 +1,7 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Put(ctx, tk(1), sv(1)) // <nil>
+  txn.Put(ctx, tk(2), sv(2)) // <nil>
+  return nil
+}) // result is ambiguous: boom

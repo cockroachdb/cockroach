@@ -23,16 +23,25 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Logger is the log sink used by kvnemesis.
+type Logger interface {
+	Helper()
+	Logf(string, ...interface{})
+	WriteFile(basename string, contents string) string
+}
+
 // Env manipulates the environment (cluster settings, zone configurations) that
 // the Applier operates in.
 type Env struct {
-	sqlDBs []*gosql.DB
+	SQLDBs  []*gosql.DB
+	Tracker *SeqTracker
+	L       Logger
 }
 
 func (e *Env) anyNode() *gosql.DB {
 	// NOTE: There is currently no need to round-robin through the sql gateways,
 	// so we always just return the first DB.
-	return e.sqlDBs[0]
+	return e.SQLDBs[0]
 }
 
 // CheckConsistency runs a consistency check on all ranges in the given span,
@@ -59,8 +68,12 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 			return []error{err}
 		}
 		switch status {
+		case roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE.String():
+			// Can't do anything, so let it slide.
 		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT.String():
+			// Good.
 		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED.String():
+			// Ok.
 		default:
 			failures = append(failures, errors.Errorf("range %d (%s) %s: %s", rangeID, key, status, detail))
 		}

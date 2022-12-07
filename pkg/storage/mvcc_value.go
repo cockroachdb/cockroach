@@ -253,14 +253,12 @@ func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
 	if len(buf) < int(headerSize) {
 		return MVCCValue{}, errMVCCValueMissingHeader
 	}
-	var header enginepb.MVCCValueHeader
+	var v MVCCValue
 	// NOTE: we don't use protoutil to avoid passing header through an interface,
 	// which would cause a heap allocation and incur the cost of dynamic dispatch.
-	if err := header.Unmarshal(buf[extendedPreludeSize:headerSize]); err != nil {
+	if err := v.MVCCValueHeader.Unmarshal(buf[extendedPreludeSize:headerSize]); err != nil {
 		return MVCCValue{}, errors.Wrapf(err, "unmarshaling MVCCValueHeader")
 	}
-	var v MVCCValue
-	v.LocalTimestamp = header.LocalTimestamp
 	v.Value.RawBytes = buf[headerSize:]
 	return v, nil
 }

@@ -1,0 +1,10 @@
+echo
+----
+{
+  b := &kv.Batch{}
+  b.Put(tk(2), sv(2)) // context canceled
+  b.GetForUpdate(tk(1)) // context canceled
+  b.ScanForUpdate(tk(1), tk(3)) // context canceled
+  b.ReverseScan(tk(1), tk(3)) // context canceled
+  db0.Run(ctx, b) // context canceled
+}

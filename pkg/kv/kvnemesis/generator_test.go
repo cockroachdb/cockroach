@@ -12,10 +12,17 @@ package kvnemesis
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -136,9 +143,13 @@ func TestRandStep(t *testing.T) {
 				}
 			case *DeleteRangeOperation:
 				client.DeleteRange++
+			case *DeleteRangeUsingTombstoneOperation:
+				client.DeleteRangeUsingTombstone++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
+			default:
+				t.Fatalf("%T", o)
 			}
 		}
 	}
@@ -152,7 +163,8 @@ func TestRandStep(t *testing.T) {
 			*ScanOperation,
 			*BatchOperation,
 			*DeleteOperation,
-			*DeleteRangeOperation:
+			*DeleteRangeOperation,
+			*DeleteRangeUsingTombstoneOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
@@ -201,6 +213,8 @@ func TestRandStep(t *testing.T) {
 			case ChangeZoneType_ToggleGlobalReads:
 				counts.ChangeZone.ToggleGlobalReads++
 			}
+		default:
+			t.Fatalf("%T", o)
 		}
 		updateKeys(step.Op)
 
@@ -210,4 +224,128 @@ func TestRandStep(t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestRandKeyDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for i := 0; i < 10; i++ {
+		rng := rand.New(rand.NewSource(int64(i)))
+		k := randKey(rng)
+		n := fk(k)
+		require.Equal(t, k, tk(n))
+	}
+}
+
+func TestRandDelRangeUsingTombstone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var seq kvnemesisutil.Seq
+	nextSeq := func() kvnemesisutil.Seq {
+		seq++
+		return seq
+	}
+
+	// We'll add temporary elements below. The linters prevent shadowing so we
+	// need to pick a name that makes it clear which is which.
+	//
+	// Keep this sorted.
+	goldenSplitKeys := []uint64{
+		5000, 10000, 15000, 20000, 25000, 30000, math.MaxUint64 / 2,
+	}
+
+	splitPointMap := map[string]struct{}{}
+	splitPointCountMap := map[string]int{}
+	var splitSpans []roachpb.Span
+	{
+		// Temporarily put 0 and MaxUint64 into the slice to
+		// help generate the leftmost and rightmost range.
+		splitKeys := append([]uint64{0}, goldenSplitKeys...)
+		splitKeys = append(splitKeys, math.MaxUint64)
+		for i := range splitKeys {
+			if i == 0 {
+				continue
+			}
+			k := tk(splitKeys[i-1])
+			ek := tk(splitKeys[i])
+			splitSpans = append(splitSpans, roachpb.Span{
+				Key:    roachpb.Key(k),
+				EndKey: roachpb.Key(ek),
+			})
+			splitPointCountMap[ek] = 0
+			if splitKeys[i] == math.MaxUint64 {
+				// Don't put MaxUint64 into splitPointMap to make sure we're always
+				// generating useful ranges. There's no room to the right of this split
+				// point.
+				continue
+			}
+			splitPointMap[ek] = struct{}{}
+		}
+	}
+
+	rng := rand.New(rand.NewSource(1)) // deterministic
+	const num = 1000
+
+	// keysMap plays no role in this test but we need to pass one.
+	// We could also check that we're hitting the keys in this map
+	// randomly, etc, but don't currently.
+	keysMap := map[string]struct{}{
+		tk(5): {},
+	}
+
+	var numSingleRange, numCrossRange, numPoint int
+	for i := 0; i < num; i++ {
+		dr := randDelRangeUsingTombstoneImpl(splitPointMap, keysMap, nextSeq, rng).DeleteRangeUsingTombstone
+		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
+		nk, nek := fk(string(dr.Key)), fk(string(dr.EndKey))
+		s := fmt.Sprintf("[%d,%d)", nk, nek)
+		if fk(string(dr.Key))+1 == fk(string(dr.EndKey)) {
+			if numPoint == 0 {
+				t.Logf("first point request: %s", s)
+			}
+			numPoint++
+			continue
+		}
+		var contained bool
+		for _, splitSp := range splitSpans {
+			if splitSp.Contains(sp) {
+				// `sp` does not contain a split point, i.e. this would likely end up
+				// being a single-range request.
+				if numSingleRange == 0 {
+					t.Logf("first single-range request: %s", s)
+				}
+				numSingleRange++
+				contained = true
+				splitPointCountMap[string(splitSp.EndKey)]++
+				break
+			}
+		}
+		if !contained {
+			if numCrossRange == 0 {
+				t.Logf("first cross-range request: %s", s)
+			}
+			numCrossRange++
+		}
+	}
+
+	fracSingleRange := float64(numSingleRange) / float64(num)
+	fracCrossRange := float64(numCrossRange) / float64(num)
+	fracPoint := float64(numPoint) / float64(num)
+
+	var buf strings.Builder
+
+	fmt.Fprintf(&buf, "point:        %.3f n=%d\n", fracPoint, numPoint)
+	fmt.Fprintf(&buf, "cross-range:  %.3f n=%d\n", fracCrossRange, numCrossRange)
+
+	fmt.Fprintf(&buf, "single-range: %.3f n=%d\n", fracSingleRange, numSingleRange)
+
+	for _, splitSp := range splitSpans {
+		frac := float64(splitPointCountMap[string(splitSp.EndKey)]) / float64(numSingleRange)
+		fmt.Fprintf(&buf, "              ^---- %.3f [%d,%d)\n",
+			frac, fk(string(splitSp.Key)), fk(string(splitSp.EndKey)))
+	}
+
+	fmt.Fprintf(&buf, "------------------\ntotal         %.3f", fracSingleRange+fracPoint+fracCrossRange)
+
+	echotest.Require(t, buf.String(), testutils.TestDataPath(t, t.Name()+".txt"))
 }

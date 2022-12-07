@@ -64,7 +64,7 @@ type FilterArgs struct {
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
 type ProposalFilterArgs struct {
 	Ctx        context.Context
-	Cmd        kvserverpb.RaftCommand
+	Cmd        *kvserverpb.RaftCommand
 	QuotaAlloc *quotapool.IntAlloc
 	CmdID      CmdIDKey
 	Req        roachpb.BatchRequest

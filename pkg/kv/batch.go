@@ -78,6 +78,11 @@ func (b *Batch) ApproximateMutationBytes() int {
 	return b.approxMutationReqBytes
 }
 
+// Requests exposes the requests stashed in the batch thus far.
+func (b *Batch) Requests() []roachpb.RequestUnion {
+	return b.reqs
+}
+
 // RawResponse returns the BatchResponse which was the result of a successful
 // execution of the batch, and nil otherwise.
 func (b *Batch) RawResponse() *roachpb.BatchResponse {
