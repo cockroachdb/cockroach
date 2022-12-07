@@ -199,3 +199,82 @@ func (pq *rrPriorityQueue) Pop() interface{} {
 	pq.entries = old[0 : n-1]
 	return item
 }
+
+// ReplicaRankingMap maintains top-k orderings of the replicas per tenant in a store by QPS.
+type ReplicaRankingMap struct {
+	mu struct {
+		syncutil.Mutex
+		items RRAccumulatorByTenant
+	}
+}
+
+// NewReplicaRankingsMap returns a new ReplicaRankingMap struct.
+func NewReplicaRankingsMap() *ReplicaRankingMap {
+	return &ReplicaRankingMap{}
+}
+
+// NewAccumulator returns a new rrAccumulator.
+func (rr *ReplicaRankingMap) NewAccumulator() *RRAccumulatorByTenant {
+	return &RRAccumulatorByTenant{}
+}
+
+// Update sets the accumulator for replica tracking to be the passed in value.
+func (rr *ReplicaRankingMap) Update(acc *RRAccumulatorByTenant) {
+	rr.mu.Lock()
+	rr.mu.items = *acc
+	rr.mu.Unlock()
+}
+
+// TopQPS returns the highest QPS CandidateReplicas that are tracked.
+func (rr *ReplicaRankingMap) TopQPS(tenantID roachpb.TenantID) []CandidateReplica {
+	rr.mu.Lock()
+	defer rr.mu.Unlock()
+	r, ok := rr.mu.items[tenantID]
+	if !ok {
+		return []CandidateReplica{}
+	}
+	if r.Len() > 0 {
+		r.entries = consumeAccumulator(&r)
+		rr.mu.items[tenantID] = r
+	}
+	return r.entries
+}
+
+// RRAccumulatorByTenant accumulates replicas per tenant to update the replicas tracked by ReplicaRankingMap.
+// It should be used in the same way as RRAccumulator (see doc string).
+type RRAccumulatorByTenant map[roachpb.TenantID]rrPriorityQueue
+
+// AddReplica adds a replica to the replica accumulator.
+func (a RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
+	// Do not consider ranges as hot when they are accessed once or less times.
+	if repl.QPS() <= 1 {
+		return
+	}
+
+	tID, ok := repl.Repl().TenantID()
+	if !ok {
+		return
+	}
+
+	r, ok := a[tID]
+	if !ok {
+		q := rrPriorityQueue{
+			val: func(r CandidateReplica) float64 { return r.QPS() },
+		}
+		heap.Push(&q, repl)
+		a[tID] = q
+		return
+	}
+
+	if r.Len() < numTopReplicasToTrack {
+		heap.Push(&r, repl)
+		a[tID] = r
+		return
+	}
+
+	if repl.QPS() > r.entries[0].QPS() {
+		heap.Pop(&r)
+		heap.Push(&r, repl)
+		a[tID] = r
+	}
+}

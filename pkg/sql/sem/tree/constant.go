@@ -64,6 +64,11 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
+func isPlaceholder(expr Expr) bool {
+	_, isPlaceholder := StripParens(expr).(*Placeholder)
+	return isPlaceholder
+}
+
 func typeCheckConstant(
 	ctx context.Context, semaCtx *SemaContext, c Constant, desired *types.T,
 ) (ret TypedExpr, err error) {

@@ -484,3 +484,73 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		})
 	}
 }
+
+func TestNewReplicaRankingsMap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rr := NewReplicaRankingsMap()
+
+	type testCase struct {
+		tenantID uint64
+		qps      float64
+	}
+
+	testCases := [][]testCase{
+		{},
+		{{1, 1}, {1, 2}, {1, 3}, {1, 4}},
+		{{1, 1}, {1, 2}, {2, 0}, {3, 0}},
+		{{1, 1}, {1, 2}, {1, 3}, {1, 4},
+			{2, 1}, {2, 2}, {2, 3}, {2, 4},
+			{3, 1}, {3, 2}, {3, 3}, {3, 4}},
+	}
+
+	for _, tc := range testCases {
+		acc := rr.NewAccumulator()
+
+		// Randomize the order of the inputs each time the test is run.
+		rand.Shuffle(len(tc), func(i, j int) {
+			tc[i], tc[j] = tc[j], tc[i]
+		})
+
+		expectedReplicasPerTenant := make(map[uint64]int)
+
+		for i, c := range tc {
+			cr := candidateReplica{
+				Replica: &Replica{RangeID: roachpb.RangeID(i)},
+				qps:     c.qps,
+			}
+			cr.mu.tenantID = roachpb.MustMakeTenantID(c.tenantID)
+			acc.AddReplica(cr)
+
+			if c.qps <= 1 {
+				continue
+			}
+
+			if l, ok := expectedReplicasPerTenant[c.tenantID]; ok {
+				expectedReplicasPerTenant[c.tenantID] = l + 1
+			} else {
+				expectedReplicasPerTenant[c.tenantID] = 1
+			}
+		}
+		rr.Update(acc)
+
+		for tID, count := range expectedReplicasPerTenant {
+			repls := rr.TopQPS(roachpb.MustMakeTenantID(tID))
+			if len(repls) != count {
+				t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, tc)
+				continue
+			}
+			for i := 0; i < len(repls)-1; i++ {
+				if repls[i].QPS() < repls[i+1].QPS() {
+					t.Errorf("got %f for %d'th element; it's smaller than QPS of the next element %f", repls[i].QPS(), i, repls[i+1].QPS())
+					break
+				}
+			}
+			replsCopy := rr.TopQPS(roachpb.MustMakeTenantID(tID))
+			if !reflect.DeepEqual(repls, replsCopy) {
+				t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
+			}
+		}
+	}
+}

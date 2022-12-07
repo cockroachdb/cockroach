@@ -217,9 +217,9 @@ type RecordedStmtStats struct {
 	StartTime            time.Time
 	EndTime              time.Time
 	FullScan             bool
-	SessionData          *sessiondata.SessionData
 	ExecStats            *execstats.QueryLevelStats
 	Indexes              []string
+	Database             string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
@@ -227,9 +227,12 @@ type RecordedTxnStats struct {
 	SessionID               clusterunique.ID
 	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
+	StartTime               time.Time
+	EndTime                 time.Time
 	Committed               bool
 	ImplicitTxn             bool
 	RetryCount              int64
+	AutoRetryReason         error
 	StatementFingerprintIDs []roachpb.StmtFingerprintID
 	ServiceLatency          time.Duration
 	RetryLatency            time.Duration
@@ -242,4 +245,5 @@ type RecordedTxnStats struct {
 	RowsWritten             int64
 	BytesRead               int64
 	Priority                roachpb.UserPriority
+	SessionData             *sessiondata.SessionData
 }

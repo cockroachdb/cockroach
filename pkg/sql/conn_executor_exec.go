@@ -2421,9 +2421,12 @@ func (ex *connExecutor) recordTransactionFinish(
 		SessionID:               ex.sessionID,
 		TransactionID:           ev.txnID,
 		TransactionTimeSec:      txnTime.Seconds(),
+		StartTime:               txnStart,
+		EndTime:                 txnEnd,
 		Committed:               ev.eventType == txnCommit,
 		ImplicitTxn:             implicit,
 		RetryCount:              int64(ex.state.mu.autoRetryCounter),
+		AutoRetryReason:         ex.state.mu.autoRetryReason,
 		StatementFingerprintIDs: ex.extraTxnState.transactionStatementFingerprintIDs,
 		ServiceLatency:          txnServiceLat,
 		RetryLatency:            txnRetryLat,
@@ -2436,6 +2439,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
 		Priority:                ex.state.priority,
+		SessionData:             ex.sessionData(),
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {

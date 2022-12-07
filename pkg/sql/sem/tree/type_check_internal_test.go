@@ -314,6 +314,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
 	tupleLenErr := `expected tuple .* to have a length of .*`
 	placeholderErr := `could not determine data type of placeholder .*`
+	placeholderAlreadyAssignedErr := `placeholder .* already has type (decimal|int), cannot assign (decimal|int)`
 
 	testData := []struct {
 		ptypes  tree.PlaceholderTypes
@@ -325,7 +326,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		// Single type mismatches.
 		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
 		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
-		{ptypesInt, nil, exprs(decConst("1.1"), placeholder(0)), decimalIntMismatchErr},
+		{ptypesInt, nil, exprs(decConst("1.1"), placeholder(0)), placeholderAlreadyAssignedErr},
 		// Tuple type mismatches.
 		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},

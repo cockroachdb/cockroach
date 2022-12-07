@@ -194,9 +194,6 @@ func (s *Container) RecordStatement(
 		StartTime:            value.StartTime,
 		EndTime:              value.EndTime,
 		FullScan:             value.FullScan,
-		User:                 value.SessionData.User().Normalized(),
-		ApplicationName:      value.SessionData.ApplicationName,
-		Database:             value.SessionData.Database,
 		PlanGist:             value.PlanGist,
 		Retries:              int64(value.AutoRetryCount),
 		AutoRetryReason:      autoRetryReason,
@@ -206,6 +203,7 @@ func (s *Container) RecordStatement(
 		Contention:           contention,
 		ContentionEvents:     contentionEvents,
 		IndexRecommendations: value.IndexRecommendations,
+		Database:             value.Database,
 	})
 
 	return stats.ID, nil
@@ -318,12 +316,26 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 	}
 
-	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
-		ID:            value.TransactionID,
-		FingerprintID: key,
-		UserPriority:  value.Priority.String(),
-		ImplicitTxn:   value.ImplicitTxn})
+	var retryReason string
+	if value.AutoRetryReason != nil {
+		retryReason = value.AutoRetryReason.Error()
+	}
 
+	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
+		ID:              value.TransactionID,
+		FingerprintID:   key,
+		UserPriority:    value.Priority.String(),
+		ImplicitTxn:     value.ImplicitTxn,
+		Contention:      &value.ExecStats.ContentionTime,
+		StartTime:       value.StartTime,
+		EndTime:         value.EndTime,
+		User:            value.SessionData.User().Normalized(),
+		ApplicationName: value.SessionData.ApplicationName,
+		RowsRead:        value.RowsRead,
+		RowsWritten:     value.RowsWritten,
+		RetryCount:      value.RetryCount,
+		AutoRetryReason: retryReason,
+	})
 	return nil
 }
 
