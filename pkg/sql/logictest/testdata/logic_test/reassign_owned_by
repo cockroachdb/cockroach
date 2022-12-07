@@ -351,5 +351,55 @@ statement ok
 DROP SCHEMA db1.sc1 CASCADE;
 
 statement ok
+USE db1;
+REASSIGN OWNED BY testuser TO testuser2;
+
+user root
+statement ok
+USE test;
+DROP DATABASE db1 CASCADE;
+
+# Also validate the reverse, where the REASSIGN OWNED BY job
+# is created, but paused before a DROP DATABASE occurs. The job
+# should be re-slient in this scenario.
+user root
+statement ok
+CREATE DATABASE db1;
+ALTER DATABASE db1 OWNER TO testuser;
+CREATE SCHEMA db1.sc1;
+ALTER SCHEMA db1.sc1 OWNER TO testuser;
+CREATE TABLE db1.sc1.table(n int);
+ALTER TABLE db1.sc1.table OWNER TO testuser;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "schemachanger.before.exec" hit
 use db1;
 REASSIGN OWNED BY testuser TO testuser2;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
+
+user root
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+DROP DATABASE db1 CASCADE;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+
+# There will be 3 jobs for the schema, database and table
+skipif config local-legacy-schema-changer
+statement ok
+USE test;
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'REASSIGN OWNED BY%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'REASSIGN OWNED BY%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'REASSIGN OWNED BY%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+# Next allow the post commit phase of the declarative schema changer to resume.
+skipif config local-legacy-schema-changer
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE  'DROP DATABASE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
