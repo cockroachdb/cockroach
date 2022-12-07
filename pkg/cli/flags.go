@@ -831,8 +831,15 @@ func init() {
 		// so we use the regular flag set.
 		f := demoCmd.Flags()
 		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.UseEmptyDatabase)
-		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-example-database")
+
+		// --no-example-database was defined as candidate replacement to --empty
+		// between v21.1 up to and including v22.2, but it never stuck: --empty
+		// is just more convenient and easy to remember.
+		// That said, even though we've come to reinstante --empty, we
+		// can't just drop support for --no-example-database since _some_
+		// people might use it.
 		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.NoExampleDatabase)
+		_ = f.MarkHidden(cliflags.NoExampleDatabase.Name)
 	}
 
 	// statement-diag command.
