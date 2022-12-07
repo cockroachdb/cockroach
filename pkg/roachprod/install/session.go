@@ -63,19 +63,19 @@ func newRemoteSession(l *logger.Logger, command remoteCommand) *remoteSession {
 		command.debugName = GenFilenameFromArgs(strings.Fields(command.cmd)...)
 	}
 
-	logfile := fmt.Sprintf(
+	cl, err := l.ChildLogger(filepath.Join("ssh", fmt.Sprintf(
 		"ssh_%s_n%v_%s",
 		timeutil.Now().Format(`150405.000000000`),
 		command.node,
 		command.debugName,
-	)
-
-	cl, err := l.ChildLogger(filepath.Join("ssh", logfile))
+	)))
 
 	// Running roachprod from the cli will result in a fileless logger
+	logfile := ""
 	if err == nil && l.File != nil {
+		logfile = cl.File.Name()
 		loggingArgs = []string{
-			"-vvv", "-E", cl.File.Name(),
+			"-vvv", "-E", logfile,
 		}
 		cl.Close()
 	} else {
