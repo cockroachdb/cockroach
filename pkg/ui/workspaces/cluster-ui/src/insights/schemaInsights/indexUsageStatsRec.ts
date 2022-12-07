@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { ClusterIndexUsageStatistic } from "../../api/schemaInsightsApi";
 import moment from "moment";
 
 export const indexNeverUsedReason =
@@ -21,14 +20,20 @@ type dropIndexRecommendation = {
   reason: string;
 };
 
+export interface IndexUsageStatistic {
+  created_at?: string;
+  last_read?: string;
+  unused_threshold: string;
+}
+
 export function recommendDropUnusedIndex(
-  clusterIndexUsageStat: ClusterIndexUsageStatistic,
+  indexUsageStat: IndexUsageStatistic,
 ): dropIndexRecommendation {
-  const createdAt = clusterIndexUsageStat.created_at
-    ? moment.utc(clusterIndexUsageStat.created_at)
+  const createdAt = indexUsageStat.created_at
+    ? moment.utc(indexUsageStat.created_at)
     : minDate;
-  const lastRead = clusterIndexUsageStat.last_read
-    ? moment.utc(clusterIndexUsageStat.last_read)
+  const lastRead = indexUsageStat.last_read
+    ? moment.utc(indexUsageStat.last_read)
     : minDate;
   let lastActive = createdAt;
   if (lastActive.isSame(minDate) && !lastRead.isSame(minDate)) {
@@ -41,7 +46,7 @@ export function recommendDropUnusedIndex(
 
   const duration = moment.duration(moment().diff(lastActive));
   const unusedThreshold = moment.duration(
-    "PT" + clusterIndexUsageStat.unused_threshold.toUpperCase(),
+    "PT" + indexUsageStat.unused_threshold.toUpperCase(),
   );
   if (duration >= unusedThreshold) {
     return {
