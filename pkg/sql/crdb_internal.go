@@ -124,6 +124,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterContentionEventsTableID:     crdbInternalClusterContentionEventsTable,
 		catconstants.CrdbInternalClusterDistSQLFlowsTableID:         crdbInternalClusterDistSQLFlowsTable,
 		catconstants.CrdbInternalClusterExecutionInsightsTableID:    crdbInternalClusterExecutionInsightsTable,
+		catconstants.CrdbInternalClusterTxnExecutionInsightsTableID: crdbInternalClusterTxnExecutionInsightsTable,
 		catconstants.CrdbInternalClusterLocksTableID:                crdbInternalClusterLocksTable,
 		catconstants.CrdbInternalClusterQueriesTableID:              crdbInternalClusterQueriesTable,
 		catconstants.CrdbInternalClusterTransactionsTableID:         crdbInternalClusterTxnsTable,
@@ -161,6 +162,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalMetricsTableID:                crdbInternalLocalMetricsTable,
 		catconstants.CrdbInternalNodeExecutionInsightsTableID:       crdbInternalNodeExecutionInsightsTable,
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
+		catconstants.CrdbInternalNodeTxnExecutionInsightsTableID:    crdbInternalNodeTxnExecutionInsightsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
 		catconstants.CrdbInternalRangesNoLeasesTableID:              crdbInternalRangesNoLeasesTable,
@@ -6904,6 +6906,163 @@ func populateClusterLocksWithFilter(
 	return matched, err
 }
 
+// This is the table structure for both {cluster,node}_txn_execution_insights.
+const txnExecutionInsightsSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
+	txn_id                     UUID NOT NULL,
+	txn_fingerprint_id         BYTES NOT NULL,
+	query                      STRING NOT NULL,
+	implicit_txn               BOOL NOT NULL,
+	session_id                 STRING NOT NULL,
+	start_time                 TIMESTAMP NOT NULL,
+	end_time                   TIMESTAMP NOT NULL,
+	user_name                  STRING NOT NULL,
+	app_name                   STRING NOT NULL,
+	rows_read                  INT8 NOT NULL,
+	rows_written               INT8 NOT NULL,
+	priority                   STRING NOT NULL,
+	retries                    INT8 NOT NULL,
+	last_retry_reason          STRING,
+	contention                 INTERVAL,
+	problems                   STRING[] NOT NULL,
+	causes                     STRING[] NOT NULL,
+  stmt_execution_ids         STRING[] NOT NULL
+)`
+
+var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
+	schema:  fmt.Sprintf(txnExecutionInsightsSchemaPattern, "cluster_txn_execution_insights"),
+	comment: `Cluster transaction execution insights`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		return populateTxnExecutionInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{})
+	},
+}
+
+var crdbInternalNodeTxnExecutionInsightsTable = virtualSchemaTable{
+	schema:  fmt.Sprintf(txnExecutionInsightsSchemaPattern, "node_txn_execution_insights"),
+	comment: `Node transaction execution insights`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		return populateTxnExecutionInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{NodeID: "local"})
+	},
+}
+
+func populateTxnExecutionInsights(
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	request *serverpb.ListExecutionInsightsRequest,
+) (err error) {
+	hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasRoleOption {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"user %s does not have %s or %s privilege",
+			p.User(),
+			roleoption.VIEWACTIVITY,
+			roleoption.VIEWACTIVITYREDACTED,
+		)
+	}
+
+	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
+	if err != nil {
+		return err
+	}
+
+	query := ""
+	// We should truncate the query if it surpasses some absurd limit.
+	queryMax := 5000
+	for _, insight := range response.Insights {
+		for i := range insight.Statements {
+			// Build query string.
+			remaining := queryMax - len(query)
+			if len(insight.Statements[i].Query) > remaining {
+				if remaining > 0 {
+					query += insight.Statements[i].Query[:remaining] + "..."
+				}
+				break
+			}
+			if i > 0 {
+				query += " ; "
+			}
+			query += insight.Statements[i].Query
+		}
+
+		problems := tree.NewDArray(types.String)
+		for i := range insight.Transaction.Problems {
+			if err = problems.Append(tree.NewDString(insight.Transaction.Problems[i].String())); err != nil {
+				return err
+			}
+		}
+
+		causes := tree.NewDArray(types.String)
+		for i := range insight.Transaction.Causes {
+			if err = causes.Append(tree.NewDString(insight.Transaction.Causes[i].String())); err != nil {
+				return err
+			}
+		}
+
+		var startTimestamp *tree.DTimestamp
+		startTimestamp, err = tree.MakeDTimestamp(insight.Transaction.StartTime, time.Nanosecond)
+		if err != nil {
+			return err
+		}
+
+		var endTimestamp *tree.DTimestamp
+		endTimestamp, err = tree.MakeDTimestamp(insight.Transaction.EndTime, time.Nanosecond)
+		if err != nil {
+			return err
+		}
+
+		autoRetryReason := tree.DNull
+		if insight.Transaction.AutoRetryReason != "" {
+			autoRetryReason = tree.NewDString(insight.Transaction.AutoRetryReason)
+		}
+
+		contentionTime := tree.DNull
+		if insight.Transaction.Contention != nil {
+			contentionTime = tree.NewDInterval(
+				duration.MakeDuration(insight.Transaction.Contention.Nanoseconds(), 0, 0),
+				types.DefaultIntervalTypeMetadata,
+			)
+		}
+
+		stmtIDs := tree.NewDArray(types.String)
+		for _, id := range insight.Transaction.StmtExecutionIDs {
+			if err = stmtIDs.Append(tree.NewDString(hex.EncodeToString(id.GetBytes()))); err != nil {
+				return err
+			}
+		}
+
+		err = errors.CombineErrors(err, addRow(
+			tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
+			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
+			tree.NewDString(query),
+			tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
+			tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
+			startTimestamp,
+			endTimestamp,
+			tree.NewDString(insight.Transaction.User),
+			tree.NewDString(insight.Transaction.ApplicationName),
+			tree.NewDInt(tree.DInt(insight.Transaction.RowsRead)),
+			tree.NewDInt(tree.DInt(insight.Transaction.RowsWritten)),
+			tree.NewDString(insight.Transaction.UserPriority),
+			tree.NewDInt(tree.DInt(insight.Transaction.RetryCount)),
+			autoRetryReason,
+			contentionTime,
+			problems,
+			causes,
+			stmtIDs,
+		))
+
+		if err != nil {
+			return err
+		}
+	}
+	return
+}
+
 // This is the table structure for both cluster_execution_insights and node_execution_insights.
 const executionInsightsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
@@ -6936,14 +7095,16 @@ CREATE TABLE crdb_internal.%s (
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
-	schema: fmt.Sprintf(executionInsightsSchemaPattern, "cluster_execution_insights"),
+	schema:  fmt.Sprintf(executionInsightsSchemaPattern, "cluster_execution_insights"),
+	comment: `Cluster-wide statement execution insights`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return populateExecutionInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{})
 	},
 }
 
 var crdbInternalNodeExecutionInsightsTable = virtualSchemaTable{
-	schema: fmt.Sprintf(executionInsightsSchemaPattern, "node_execution_insights"),
+	schema:  fmt.Sprintf(executionInsightsSchemaPattern, "node_execution_insights"),
+	comment: `Node statement execution insights`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		return populateExecutionInsights(ctx, p, addRow, &serverpb.ListExecutionInsightsRequest{NodeID: "local"})
 	},
