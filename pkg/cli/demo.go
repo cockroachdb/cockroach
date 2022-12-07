@@ -115,13 +115,13 @@ func checkDemoConfiguration(
 	cmd *cobra.Command, gen workload.Generator,
 ) (workload.Generator, error) {
 	f := cliflagcfg.FlagSetForCmd(cmd)
-	if gen == nil && !demoCtx.NoExampleDatabase {
+	if gen == nil && !demoCtx.UseEmptyDatabase {
 		// Use a default dataset unless prevented by --no-example-database.
 		gen = defaultGenerator
 	}
 
 	// Make sure that the user didn't request a workload and an empty database.
-	if demoCtx.RunWorkload && demoCtx.NoExampleDatabase {
+	if demoCtx.RunWorkload && demoCtx.UseEmptyDatabase {
 		return nil, errors.New("cannot run a workload when generation of the example database is disabled")
 	}
 
@@ -151,7 +151,7 @@ func checkDemoConfiguration(
 		}
 
 		// Make sure that the user didn't request to have a topology and disable the example database.
-		if demoCtx.NoExampleDatabase {
+		if demoCtx.UseEmptyDatabase {
 			return nil, errors.New("cannot setup geo-partitioned replicas topology without generating an example database")
 		}
 

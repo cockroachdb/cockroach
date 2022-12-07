@@ -610,7 +610,7 @@ func setDemoContextDefaults() {
 	demoCtx.NumNodes = 1
 	demoCtx.SQLPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.CacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.NoExampleDatabase = false
+	demoCtx.UseEmptyDatabase = false
 	demoCtx.SimulateLatency = false
 	demoCtx.RunWorkload = false
 	demoCtx.Localities = nil

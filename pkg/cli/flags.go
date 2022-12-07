@@ -830,9 +830,11 @@ func init() {
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
 		f := demoCmd.Flags()
-		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.UseEmptyDatabase)
-		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-example-database")
-		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.NoExampleDatabase)
+		cliflagcfg.BoolFlag(f, &demoCtx.UseEmptyDatabase, cliflags.UseEmptyDatabase)
+
+		// --no-example-database is an old name for --empty.
+		cliflagcfg.BoolFlag(f, &demoCtx.UseEmptyDatabase, cliflags.NoExampleDatabase)
+		_ = f.MarkHidden(cliflags.NoExampleDatabase.Name)
 	}
 
 	// statement-diag command.
