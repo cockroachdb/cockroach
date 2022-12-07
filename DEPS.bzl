@@ -8991,20 +8991,20 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "io_etcd_go_etcd_raft_v3",
+        name = "io_etcd_go_raft_v3",
         build_directives = [
             "gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
             "gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
             "gazelle:go_proto_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
             "gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-            "gazelle:proto_import_prefix etcd/raft/v3",
+            "gazelle:proto_import_prefix raft/v3",
         ],
         build_file_proto_mode = "default",
-        importpath = "go.etcd.io/etcd/raft/v3",
-        sha256 = "7adb6472d613832b1817be14f87b171043c3e91f13376f2077aeb710bae976b8",
-        strip_prefix = "go.etcd.io/etcd/raft/v3@v3.6.0-alpha.0.0.20221202061758-8651478ce2bc",
+        importpath = "go.etcd.io/raft/v3",
+        sha256 = "61cb8ce8d354ee2f7f809b74b3f92aab0e1f6fbecdd751239368085a57ee004f",
+        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20221201111702-eaa6808e1f7a",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/raft/v3/io_etcd_go_etcd_raft_v3-v3.6.0-alpha.0.0.20221202061758-8651478ce2bc.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20221201111702-eaa6808e1f7a.zip",
         ],
     )
     go_repository(

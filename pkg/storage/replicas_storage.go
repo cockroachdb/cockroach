@@ -12,7 +12,7 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // TODO(sumeer):
