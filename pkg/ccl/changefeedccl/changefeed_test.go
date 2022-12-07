@@ -3558,7 +3558,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			switch atomic.LoadInt64(&failEmit) {
 			case 1:
-				return errors.New("synthetic retryable error")
+				return changefeedbase.MarkRetryableError(fmt.Errorf("synthetic retryable error"))
 			case 2:
 				return changefeedbase.WithTerminalError(errors.New("synthetic terminal error"))
 			default:
