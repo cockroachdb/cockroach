@@ -81,9 +81,9 @@ export type TxnInsightEvent = UnavailableForTxnContention & {
 
   insights: Insight[]; // De-duplicated list of insights from statement level.
   queries: string[]; // We bubble this up from statementinsights for easy access, since txn contention details dont have stmt insights.
-  startTime?: Moment; // TODO (xinhaoz) not currently available
-  elapsedTimeMillis?: number; // TODO (xinhaoz) not currently available
-  endTime?: Moment; // TODO (xinhaoz) not currently available
+  startTime?: Moment;
+  endTime?: Moment;
+  elapsedTimeMillis?: number;
 };
 
 export type MergedTxnInsightEvent = Omit<

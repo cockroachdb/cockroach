@@ -550,6 +550,8 @@ type ExecutionInsightsResponseRow = {
   problem: string;
   index_recommendations: string[];
   plan_gist: string;
+  txn_start_time: string; // Timestamp
+  txn_end_time: string; // Timestamp
 };
 
 export type FlattenedStmtInsights = FlattenedStmtInsightEvent[];
@@ -575,6 +577,8 @@ function organizeExecutionInsightsResponseIntoTxns(
     let txnInsight: TxnInsightEvent = txnByIDs.get(rowKey);
 
     if (!txnInsight) {
+      const txnStart = moment.utc(row.txn_start_time);
+      const txnEnd = moment.utc(row.txn_end_time);
       txnInsight = {
         transactionExecutionID: row.txn_id,
         transactionFingerprintID: FixFingerprintHexValue(
@@ -591,6 +595,9 @@ function organizeExecutionInsightsResponseIntoTxns(
         statementInsights: [],
         insights: [],
         queries: [],
+        startTime: txnStart,
+        endTime: txnEnd,
+        elapsedTimeMillis: txnEnd.diff(txnStart, "milliseconds"),
       };
       txnByIDs.set(rowKey, txnInsight);
     }
@@ -692,7 +699,9 @@ SELECT
   index_recommendations,
   problem,
   causes,
-  plan_gist
+  plan_gist,
+  txn_start_time,
+  txn_end_time
 FROM
   (
     SELECT
