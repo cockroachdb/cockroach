@@ -167,11 +167,11 @@ export function isMaxSizeError(message: string): boolean {
   return !!message?.includes("max result size exceeded");
 }
 
-export function formatApiResult(
-  results: Array<any>,
+export function formatApiResult<ResultType>(
+  results: ResultType,
   error: SqlExecutionErrorMessage,
   errorMessageContext: string,
-): SqlApiResponse<any> {
+): SqlApiResponse<ResultType> {
   const maxSizeError = isMaxSizeError(error?.message);
 
   if (error && !maxSizeError) {

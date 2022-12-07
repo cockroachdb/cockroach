@@ -212,7 +212,11 @@ export async function getSchemaInsights(): Promise<
 
   const results: InsightRecommendation[] = [];
   if (sqlResultsAreEmpty(result)) {
-    return formatApiResult([], result.error, "retrieving insights information");
+    return formatApiResult<InsightRecommendation[]>(
+      [],
+      result.error,
+      "retrieving insights information",
+    );
   }
   result.execution.txn_results.map(txn_result => {
     // Note: txn_result.statement values begin at 1, not 0.
@@ -222,7 +226,7 @@ export async function getSchemaInsights(): Promise<
       results.push(...insightQuery.toSchemaInsight(txn_result));
     }
   });
-  return formatApiResult(
+  return formatApiResult<InsightRecommendation[]>(
     results,
     result.error,
     "retrieving insights information",

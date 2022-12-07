@@ -81,7 +81,7 @@ WHERE
 
   return executeInternalSql<ClusterLockColumns>(request).then(result => {
     if (sqlResultsAreEmpty(result)) {
-      return formatApiResult(
+      return formatApiResult<ClusterLockState[]>(
         [],
         result.error,
         "retrieving cluster locks information",
@@ -126,7 +126,7 @@ WHERE
       }
     });
 
-    return formatApiResult(
+    return formatApiResult<ClusterLockState[]>(
       Object.values(locks),
       result.error,
       "retrieving luster locks information",
