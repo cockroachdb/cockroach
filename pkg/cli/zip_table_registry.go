@@ -244,6 +244,29 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"num_auto_retries",
 		},
 	},
+	"crdb_internal.cluster_txn_execution_insights": {
+		// `last_retry_reason` column contains error text that may contain
+		// sensitive data.
+		nonSensitiveCols: NonSensitiveColumns{
+			"txn_id",
+			"txn_fingerprint_id",
+			"query",
+			"implicit_txn",
+			"session_id,",
+			"start_time",
+			"end_time",
+			"user_name",
+			"app_name",
+			"rows_read",
+			"rows_written",
+			"priority",
+			"retries",
+			"contention",
+			"problems",
+			"causes",
+			"stmt_execution_ids",
+		},
+	},
 	`"".crdb_internal.create_function_statements`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_id",
@@ -774,6 +797,29 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"num_stmts",
 			"num_retries",
 			"num_auto_retries",
+		},
+	},
+	"crdb_internal.node_txn_execution_insights": {
+		// `last_retry_reason` column contains error text that may contain
+		// sensitive data.
+		nonSensitiveCols: NonSensitiveColumns{
+			"txn_id",
+			"txn_fingerprint_id",
+			"query",
+			"implicit_txn",
+			"session_id,",
+			"start_time",
+			"end_time",
+			"user_name",
+			"app_name",
+			"rows_read",
+			"rows_written",
+			"priority",
+			"retries",
+			"contention",
+			"problems",
+			"causes",
+			"stmt_execution_ids",
 		},
 	},
 	"crdb_internal.node_txn_stats": {

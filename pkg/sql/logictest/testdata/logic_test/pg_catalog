@@ -428,9 +428,9 @@ SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
 4294967295  crdb_internal       NULL        NULL
-4294967216  information_schema  NULL        NULL
-4294967129  pg_catalog          NULL        NULL
-4294966999  pg_extension        NULL        NULL
+4294967214  information_schema  NULL        NULL
+4294967127  pg_catalog          NULL        NULL
+4294966997  pg_extension        NULL        NULL
 105         public              2310524507  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
@@ -447,9 +447,9 @@ SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
 4294967295  crdb_internal       NULL        NULL
-4294967216  information_schema  NULL        NULL
-4294967129  pg_catalog          NULL        NULL
-4294966999  pg_extension        NULL        NULL
+4294967214  information_schema  NULL        NULL
+4294967127  pg_catalog          NULL        NULL
+4294966997  pg_extension        NULL        NULL
 105         public              2310524507  NULL
 
 user root
@@ -1302,7 +1302,7 @@ SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
 oid         collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
-3903121477  en-US     4294967129     NULL       6             NULL         NULL       NULL          NULL         NULL
+3903121477  en-US     4294967127     NULL       6             NULL         NULL       NULL          NULL         NULL
 
 user testuser
 
@@ -1501,16 +1501,16 @@ FROM pg_catalog.pg_depend
 ORDER BY objid, refobjid, refobjsubid
 ----
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
-4294967114  111         0         4294967117  110         14           a
-4294967114  112         0         4294967117  110         15           a
-4294967071  842401391   0         4294967117  110         1            n
-4294967071  842401391   0         4294967117  110         2            n
-4294967071  842401391   0         4294967117  110         3            n
-4294967071  842401391   0         4294967117  110         4            n
-4294967114  1179276562  0         4294967117  3687884464  0            n
-4294967114  3935750373  0         4294967117  3687884465  0            n
-4294967114  4072017905  0         4294967117  0           0            n
-4294967114  4170826110  0         4294967117  0           0            n
+4294967112  111         0         4294967115  110         14           a
+4294967112  112         0         4294967115  110         15           a
+4294967069  842401391   0         4294967115  110         1            n
+4294967069  842401391   0         4294967115  110         2            n
+4294967069  842401391   0         4294967115  110         3            n
+4294967069  842401391   0         4294967115  110         4            n
+4294967112  1179276562  0         4294967115  3687884464  0            n
+4294967112  3935750373  0         4294967115  3687884465  0            n
+4294967112  4072017905  0         4294967115  0           0            n
+4294967112  4170826110  0         4294967115  0           0            n
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table. Other entries are links to pg_class when it is
@@ -1523,8 +1523,8 @@ JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
-4294967071  4294967117  pg_rewrite     pg_class
-4294967114  4294967117  pg_constraint  pg_class
+4294967069  4294967115  pg_rewrite     pg_class
+4294967112  4294967115  pg_constraint  pg_class
 
 # Some entries in pg_depend are foreign key constraints that reference an index
 # in pg_class. Other entries are table-view dependencies
@@ -1623,88 +1623,88 @@ WHERE oid < 4194967002 -- exclude implicit types for virtual tables
 ORDER BY oid
 ----
 oid     typname                typnamespace  typowner    typlen  typbyval  typtype
-16      bool                   4294967129    NULL        1       true      b
-17      bytea                  4294967129    NULL        -1      false     b
-18      char                   4294967129    NULL        1       true      b
-19      name                   4294967129    NULL        -1      false     b
-20      int8                   4294967129    NULL        8       true      b
-21      int2                   4294967129    NULL        2       true      b
-22      int2vector             4294967129    NULL        -1      false     b
-23      int4                   4294967129    NULL        4       true      b
-24      regproc                4294967129    NULL        8       true      b
-25      text                   4294967129    NULL        -1      false     b
-26      oid                    4294967129    NULL        8       true      b
-30      oidvector              4294967129    NULL        -1      false     b
-700     float4                 4294967129    NULL        4       true      b
-701     float8                 4294967129    NULL        8       true      b
-705     unknown                4294967129    NULL        0       true      b
-869     inet                   4294967129    NULL        24      true      b
-1000    _bool                  4294967129    NULL        -1      false     b
-1001    _bytea                 4294967129    NULL        -1      false     b
-1002    _char                  4294967129    NULL        -1      false     b
-1003    _name                  4294967129    NULL        -1      false     b
-1005    _int2                  4294967129    NULL        -1      false     b
-1006    _int2vector            4294967129    NULL        -1      false     b
-1007    _int4                  4294967129    NULL        -1      false     b
-1008    _regproc               4294967129    NULL        -1      false     b
-1009    _text                  4294967129    NULL        -1      false     b
-1013    _oidvector             4294967129    NULL        -1      false     b
-1014    _bpchar                4294967129    NULL        -1      false     b
-1015    _varchar               4294967129    NULL        -1      false     b
-1016    _int8                  4294967129    NULL        -1      false     b
-1021    _float4                4294967129    NULL        -1      false     b
-1022    _float8                4294967129    NULL        -1      false     b
-1028    _oid                   4294967129    NULL        -1      false     b
-1041    _inet                  4294967129    NULL        -1      false     b
-1042    bpchar                 4294967129    NULL        -1      false     b
-1043    varchar                4294967129    NULL        -1      false     b
-1082    date                   4294967129    NULL        16      true      b
-1083    time                   4294967129    NULL        8       true      b
-1114    timestamp              4294967129    NULL        24      true      b
-1115    _timestamp             4294967129    NULL        -1      false     b
-1182    _date                  4294967129    NULL        -1      false     b
-1183    _time                  4294967129    NULL        -1      false     b
-1184    timestamptz            4294967129    NULL        24      true      b
-1185    _timestamptz           4294967129    NULL        -1      false     b
-1186    interval               4294967129    NULL        24      true      b
-1187    _interval              4294967129    NULL        -1      false     b
-1231    _numeric               4294967129    NULL        -1      false     b
-1266    timetz                 4294967129    NULL        16      true      b
-1270    _timetz                4294967129    NULL        -1      false     b
-1560    bit                    4294967129    NULL        -1      false     b
-1561    _bit                   4294967129    NULL        -1      false     b
-1562    varbit                 4294967129    NULL        -1      false     b
-1563    _varbit                4294967129    NULL        -1      false     b
-1700    numeric                4294967129    NULL        -1      false     b
-2202    regprocedure           4294967129    NULL        8       true      b
-2205    regclass               4294967129    NULL        8       true      b
-2206    regtype                4294967129    NULL        8       true      b
-2207    _regprocedure          4294967129    NULL        -1      false     b
-2210    _regclass              4294967129    NULL        -1      false     b
-2211    _regtype               4294967129    NULL        -1      false     b
-2249    record                 4294967129    NULL        0       true      p
-2277    anyarray               4294967129    NULL        -1      false     p
-2278    void                   4294967129    NULL        0       true      p
-2283    anyelement             4294967129    NULL        -1      false     p
-2287    _record                4294967129    NULL        -1      false     b
-2950    uuid                   4294967129    NULL        16      true      b
-2951    _uuid                  4294967129    NULL        -1      false     b
-3614    tsvector               4294967129    NULL        -1      false     b
-3615    tsquery                4294967129    NULL        -1      false     b
-3643    _tsvector              4294967129    NULL        -1      false     b
-3645    _tsquery               4294967129    NULL        -1      false     b
-3802    jsonb                  4294967129    NULL        -1      false     b
-3807    _jsonb                 4294967129    NULL        -1      false     b
-4089    regnamespace           4294967129    NULL        8       true      b
-4090    _regnamespace          4294967129    NULL        -1      false     b
-4096    regrole                4294967129    NULL        8       true      b
-4097    _regrole               4294967129    NULL        -1      false     b
-90000   geometry               4294967129    NULL        -1      false     b
-90001   _geometry              4294967129    NULL        -1      false     b
-90002   geography              4294967129    NULL        -1      false     b
-90003   _geography             4294967129    NULL        -1      false     b
-90004   box2d                  4294967129    NULL        32      true      b
-90005   _box2d                 4294967129    NULL        -1      false     b
+16      bool                   4294967127    NULL        1       true      b
+17      bytea                  4294967127    NULL        -1      false     b
+18      char                   4294967127    NULL        1       true      b
+19      name                   4294967127    NULL        -1      false     b
+20      int8                   4294967127    NULL        8       true      b
+21      int2                   4294967127    NULL        2       true      b
+22      int2vector             4294967127    NULL        -1      false     b
+23      int4                   4294967127    NULL        4       true      b
+24      regproc                4294967127    NULL        8       true      b
+25      text                   4294967127    NULL        -1      false     b
+26      oid                    4294967127    NULL        8       true      b
+30      oidvector              4294967127    NULL        -1      false     b
+700     float4                 4294967127    NULL        4       true      b
+701     float8                 4294967127    NULL        8       true      b
+705     unknown                4294967127    NULL        0       true      b
+869     inet                   4294967127    NULL        24      true      b
+1000    _bool                  4294967127    NULL        -1      false     b
+1001    _bytea                 4294967127    NULL        -1      false     b
+1002    _char                  4294967127    NULL        -1      false     b
+1003    _name                  4294967127    NULL        -1      false     b
+1005    _int2                  4294967127    NULL        -1      false     b
+1006    _int2vector            4294967127    NULL        -1      false     b
+1007    _int4                  4294967127    NULL        -1      false     b
+1008    _regproc               4294967127    NULL        -1      false     b
+1009    _text                  4294967127    NULL        -1      false     b
+1013    _oidvector             4294967127    NULL        -1      false     b
+1014    _bpchar                4294967127    NULL        -1      false     b
+1015    _varchar               4294967127    NULL        -1      false     b
+1016    _int8                  4294967127    NULL        -1      false     b
+1021    _float4                4294967127    NULL        -1      false     b
+1022    _float8                4294967127    NULL        -1      false     b
+1028    _oid                   4294967127    NULL        -1      false     b
+1041    _inet                  4294967127    NULL        -1      false     b
+1042    bpchar                 4294967127    NULL        -1      false     b
+1043    varchar                4294967127    NULL        -1      false     b
+1082    date                   4294967127    NULL        16      true      b
+1083    time                   4294967127    NULL        8       true      b
+1114    timestamp              4294967127    NULL        24      true      b
+1115    _timestamp             4294967127    NULL        -1      false     b
+1182    _date                  4294967127    NULL        -1      false     b
+1183    _time                  4294967127    NULL        -1      false     b
+1184    timestamptz            4294967127    NULL        24      true      b
+1185    _timestamptz           4294967127    NULL        -1      false     b
+1186    interval               4294967127    NULL        24      true      b
+1187    _interval              4294967127    NULL        -1      false     b
+1231    _numeric               4294967127    NULL        -1      false     b
+1266    timetz                 4294967127    NULL        16      true      b
+1270    _timetz                4294967127    NULL        -1      false     b
+1560    bit                    4294967127    NULL        -1      false     b
+1561    _bit                   4294967127    NULL        -1      false     b
+1562    varbit                 4294967127    NULL        -1      false     b
+1563    _varbit                4294967127    NULL        -1      false     b
+1700    numeric                4294967127    NULL        -1      false     b
+2202    regprocedure           4294967127    NULL        8       true      b
+2205    regclass               4294967127    NULL        8       true      b
+2206    regtype                4294967127    NULL        8       true      b
+2207    _regprocedure          4294967127    NULL        -1      false     b
+2210    _regclass              4294967127    NULL        -1      false     b
+2211    _regtype               4294967127    NULL        -1      false     b
+2249    record                 4294967127    NULL        0       true      p
+2277    anyarray               4294967127    NULL        -1      false     p
+2278    void                   4294967127    NULL        0       true      p
+2283    anyelement             4294967127    NULL        -1      false     p
+2287    _record                4294967127    NULL        -1      false     b
+2950    uuid                   4294967127    NULL        16      true      b
+2951    _uuid                  4294967127    NULL        -1      false     b
+3614    tsvector               4294967127    NULL        -1      false     b
+3615    tsquery                4294967127    NULL        -1      false     b
+3643    _tsvector              4294967127    NULL        -1      false     b
+3645    _tsquery               4294967127    NULL        -1      false     b
+3802    jsonb                  4294967127    NULL        -1      false     b
+3807    _jsonb                 4294967127    NULL        -1      false     b
+4089    regnamespace           4294967127    NULL        8       true      b
+4090    _regnamespace          4294967127    NULL        -1      false     b
+4096    regrole                4294967127    NULL        8       true      b
+4097    _regrole               4294967127    NULL        -1      false     b
+90000   geometry               4294967127    NULL        -1      false     b
+90001   _geometry              4294967127    NULL        -1      false     b
+90002   geography              4294967127    NULL        -1      false     b
+90003   _geography             4294967127    NULL        -1      false     b
+90004   box2d                  4294967127    NULL        32      true      b
+90005   _box2d                 4294967127    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2180,7 +2180,7 @@ FROM pg_catalog.pg_type
 WHERE oid = 1000
 ----
 oid   typname  typnamespace  typowner  typlen  typbyval  typtype
-1000  _bool    4294967129    NULL      -1      false     b
+1000  _bool    4294967127    NULL      -1      false     b
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2238,7 +2238,7 @@ FROM pg_catalog.pg_type
 WHERE oid = $vtableSourceId
 ----
 oid         typname  typnamespace  typowner    typlen  typbyval  typtype
-4294967079  pg_proc  4294967129    2310524507  -1      false     c
+4294967077  pg_proc  4294967127    2310524507  -1      false     c
 
 ## pg_catalog.pg_proc
 
@@ -2249,14 +2249,14 @@ JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner  prolang  procost  prorows  provariadic
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967127    pg_catalog  NULL      0        NULL     NULL     0
 
 query TTBBBB colnames
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
@@ -2422,293 +2422,297 @@ SELECT objoid, classoid, objsubid, regexp_replace(description, e'\n.*', '') AS d
   FROM pg_catalog.pg_description
 ----
 objoid      classoid    objsubid  description
-4294966996  4294967117  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
-4294966997  4294967117  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
-4294966998  4294967117  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
-4294967000  4294967117  0         view definitions (incomplete - see also information_schema.views)
-4294967001  4294967117  0         database users
-4294967002  4294967117  0         pg_user_mappings was created for compatibility and is currently unimplemented
-4294967003  4294967117  0         local to remote user mapping (empty - feature does not exist)
-4294967004  4294967117  0         scalar types (incomplete)
-4294967005  4294967117  0         pg_ts_template was created for compatibility and is currently unimplemented
-4294967006  4294967117  0         pg_ts_parser was created for compatibility and is currently unimplemented
-4294967007  4294967117  0         pg_ts_dict was created for compatibility and is currently unimplemented
-4294967008  4294967117  0         pg_ts_config was created for compatibility and is currently unimplemented
-4294967009  4294967117  0         pg_ts_config_map was created for compatibility and is currently unimplemented
-4294967010  4294967117  0         triggers (empty - feature does not exist)
-4294967011  4294967117  0         pg_transform was created for compatibility and is currently unimplemented
-4294967012  4294967117  0         pg_timezone_names lists all the timezones that are supported by SET timezone
-4294967013  4294967117  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
-4294967014  4294967117  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967015  4294967117  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967016  4294967117  0         pg_subscription was created for compatibility and is currently unimplemented
-4294967017  4294967117  0         pg_subscription_rel was created for compatibility and is currently unimplemented
-4294967018  4294967117  0         pg_stats was created for compatibility and is currently unimplemented
-4294967019  4294967117  0         pg_stats_ext was created for compatibility and is currently unimplemented
-4294967020  4294967117  0         pg_statistic was created for compatibility and is currently unimplemented
-4294967021  4294967117  0         pg_statistic_ext has the statistics objects created with CREATE STATISTICS
-4294967022  4294967117  0         pg_statistic_ext_data was created for compatibility and is currently unimplemented
-4294967023  4294967117  0         pg_statio_user_tables was created for compatibility and is currently unimplemented
-4294967024  4294967117  0         pg_statio_user_sequences was created for compatibility and is currently unimplemented
-4294967025  4294967117  0         pg_statio_user_indexes was created for compatibility and is currently unimplemented
-4294967026  4294967117  0         pg_statio_sys_tables was created for compatibility and is currently unimplemented
-4294967027  4294967117  0         pg_statio_sys_sequences was created for compatibility and is currently unimplemented
-4294967028  4294967117  0         pg_statio_sys_indexes was created for compatibility and is currently unimplemented
-4294967029  4294967117  0         pg_statio_all_tables was created for compatibility and is currently unimplemented
-4294967030  4294967117  0         pg_statio_all_sequences was created for compatibility and is currently unimplemented
-4294967031  4294967117  0         pg_statio_all_indexes was created for compatibility and is currently unimplemented
-4294967032  4294967117  0         pg_stat_xact_user_tables was created for compatibility and is currently unimplemented
-4294967033  4294967117  0         pg_stat_xact_user_functions was created for compatibility and is currently unimplemented
-4294967034  4294967117  0         pg_stat_xact_sys_tables was created for compatibility and is currently unimplemented
-4294967035  4294967117  0         pg_stat_xact_all_tables was created for compatibility and is currently unimplemented
-4294967036  4294967117  0         pg_stat_wal_receiver was created for compatibility and is currently unimplemented
-4294967037  4294967117  0         pg_stat_user_tables was created for compatibility and is currently unimplemented
-4294967038  4294967117  0         pg_stat_user_indexes was created for compatibility and is currently unimplemented
-4294967039  4294967117  0         pg_stat_user_functions was created for compatibility and is currently unimplemented
-4294967040  4294967117  0         pg_stat_sys_tables was created for compatibility and is currently unimplemented
-4294967041  4294967117  0         pg_stat_sys_indexes was created for compatibility and is currently unimplemented
-4294967042  4294967117  0         pg_stat_subscription was created for compatibility and is currently unimplemented
-4294967043  4294967117  0         pg_stat_ssl was created for compatibility and is currently unimplemented
-4294967044  4294967117  0         pg_stat_slru was created for compatibility and is currently unimplemented
-4294967045  4294967117  0         pg_stat_replication was created for compatibility and is currently unimplemented
-4294967046  4294967117  0         pg_stat_progress_vacuum was created for compatibility and is currently unimplemented
-4294967047  4294967117  0         pg_stat_progress_create_index was created for compatibility and is currently unimplemented
-4294967048  4294967117  0         pg_stat_progress_cluster was created for compatibility and is currently unimplemented
-4294967049  4294967117  0         pg_stat_progress_basebackup was created for compatibility and is currently unimplemented
-4294967050  4294967117  0         pg_stat_progress_analyze was created for compatibility and is currently unimplemented
-4294967051  4294967117  0         pg_stat_gssapi was created for compatibility and is currently unimplemented
-4294967052  4294967117  0         pg_stat_database was created for compatibility and is currently unimplemented
-4294967053  4294967117  0         pg_stat_database_conflicts was created for compatibility and is currently unimplemented
-4294967054  4294967117  0         pg_stat_bgwriter was created for compatibility and is currently unimplemented
-4294967055  4294967117  0         pg_stat_archiver was created for compatibility and is currently unimplemented
-4294967056  4294967117  0         pg_stat_all_tables was created for compatibility and is currently unimplemented
-4294967057  4294967117  0         pg_stat_all_indexes was created for compatibility and is currently unimplemented
-4294967058  4294967117  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967059  4294967117  0         pg_shmem_allocations was created for compatibility and is currently unimplemented
-4294967060  4294967117  0         Shared Dependencies (Roles depending on objects).
-4294967061  4294967117  0         shared security labels (empty - feature not supported)
-4294967062  4294967117  0         shared object comments
-4294967063  4294967117  0         pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
-4294967064  4294967117  0         session variables (incomplete)
-4294967065  4294967117  0         pg_sequences is very similar as pg_sequence.
-4294967066  4294967117  0         sequences (see also information_schema.sequences)
-4294967067  4294967117  0         security labels (empty - feature does not exist)
-4294967068  4294967117  0         security labels (empty)
-4294967069  4294967117  0         pg_rules was created for compatibility and is currently unimplemented
-4294967070  4294967117  0         database roles
-4294967071  4294967117  0         rewrite rules (only for referencing on pg_depend for table-view dependencies)
-4294967072  4294967117  0         pg_replication_slots was created for compatibility and is currently unimplemented
-4294967073  4294967117  0         pg_replication_origin was created for compatibility and is currently unimplemented
-4294967074  4294967117  0         pg_replication_origin_status was created for compatibility and is currently unimplemented
-4294967075  4294967117  0         range types (empty - feature does not exist)
-4294967076  4294967117  0         pg_publication_tables was created for compatibility and is currently unimplemented
-4294967077  4294967117  0         pg_publication was created for compatibility and is currently unimplemented
-4294967078  4294967117  0         pg_publication_rel was created for compatibility and is currently unimplemented
-4294967079  4294967117  0         built-in functions (incomplete)
-4294967080  4294967117  0         prepared transactions (empty - feature does not exist)
-4294967081  4294967117  0         prepared statements
-4294967082  4294967117  0         pg_policy was created for compatibility and is currently unimplemented
-4294967083  4294967117  0         pg_policies was created for compatibility and is currently unimplemented
-4294967084  4294967117  0         pg_partitioned_table was created for compatibility and is currently unimplemented
-4294967085  4294967117  0         pg_opfamily was created for compatibility and is currently unimplemented
-4294967086  4294967117  0         operators (incomplete)
-4294967087  4294967117  0         opclass (empty - Operator classes not supported yet)
-4294967088  4294967117  0         available namespaces
-4294967089  4294967117  0         available materialized views (empty - feature does not exist)
-4294967090  4294967117  0         locks held by active processes (empty - feature does not exist)
-4294967091  4294967117  0         pg_largeobject was created for compatibility and is currently unimplemented
-4294967092  4294967117  0         pg_largeobject_metadata was created for compatibility and is currently unimplemented
-4294967093  4294967117  0         available languages (empty - feature does not exist)
-4294967094  4294967117  0         pg_init_privs was created for compatibility and is currently unimplemented
-4294967095  4294967117  0         table inheritance hierarchy (empty - feature does not exist)
-4294967096  4294967117  0         index creation statements
-4294967097  4294967117  0         indexes (incomplete)
-4294967098  4294967117  0         pg_hba_file_rules was created for compatibility and is currently unimplemented
-4294967099  4294967117  0         pg_group was created for compatibility and is currently unimplemented
-4294967100  4294967117  0         foreign tables (empty  - feature does not exist)
-4294967101  4294967117  0         foreign servers (empty - feature does not exist)
-4294967102  4294967117  0         foreign data wrappers (empty - feature does not exist)
-4294967103  4294967117  0         pg_file_settings was created for compatibility and is currently unimplemented
-4294967104  4294967117  0         installed extensions (empty - feature does not exist)
-4294967105  4294967117  0         event triggers (empty - feature does not exist)
-4294967106  4294967117  0         enum types and labels (empty - feature does not exist)
-4294967107  4294967117  0         object comments
-4294967108  4294967117  0         dependency relationships (incomplete)
-4294967109  4294967117  0         default ACLs; these are the privileges that will be assigned to newly created objects
-4294967110  4294967117  0         contains the default values that have been configured for session variables
-4294967111  4294967117  0         available databases (incomplete)
-4294967112  4294967117  0         contains currently active SQL cursors created with DECLARE
-4294967113  4294967117  0         encoding conversions (empty - unimplemented)
-4294967114  4294967117  0         table constraints (incomplete - see also information_schema.table_constraints)
-4294967115  4294967117  0         pg_config was created for compatibility and is currently unimplemented
-4294967116  4294967117  0         available collations (incomplete)
-4294967117  4294967117  0         tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
-4294967118  4294967117  0         casts (empty - needs filling out)
-4294967119  4294967117  0         available extensions
-4294967120  4294967117  0         pg_available_extension_versions was created for compatibility and is currently unimplemented
-4294967121  4294967117  0         role membership
-4294967122  4294967117  0         authorization identifiers - differs from postgres as we do not display passwords,
-4294967123  4294967117  0         table columns (incomplete - see also information_schema.columns)
-4294967124  4294967117  0         column default values
-4294967125  4294967117  0         pg_amproc was created for compatibility and is currently unimplemented
-4294967126  4294967117  0         pg_amop was created for compatibility and is currently unimplemented
-4294967127  4294967117  0         index access methods (incomplete)
-4294967128  4294967117  0         aggregated built-in functions (incomplete)
-4294967130  4294967117  0         views (incomplete)
-4294967131  4294967117  0         view_table_usage was created for compatibility and is currently unimplemented
-4294967132  4294967117  0         view_routine_usage was created for compatibility and is currently unimplemented
-4294967133  4294967117  0         view_column_usage was created for compatibility and is currently unimplemented
-4294967134  4294967117  0         grantable privileges (incomplete)
-4294967135  4294967117  0         user_mappings was created for compatibility and is currently unimplemented
-4294967136  4294967117  0         user_mapping_options was created for compatibility and is currently unimplemented
-4294967137  4294967117  0         user_defined_types was created for compatibility and is currently unimplemented
-4294967138  4294967117  0         user_attributes was created for compatibility and is currently unimplemented
-4294967139  4294967117  0         usage_privileges was created for compatibility and is currently unimplemented
-4294967140  4294967117  0         udt_privileges was created for compatibility and is currently unimplemented
-4294967141  4294967117  0         type privileges (incomplete; may contain excess users or roles)
-4294967142  4294967117  0         triggers was created for compatibility and is currently unimplemented
-4294967143  4294967117  0         triggered_update_columns was created for compatibility and is currently unimplemented
-4294967144  4294967117  0         transforms was created for compatibility and is currently unimplemented
-4294967145  4294967117  0         tablespaces was created for compatibility and is currently unimplemented
-4294967146  4294967117  0         tablespaces_extensions was created for compatibility and is currently unimplemented
-4294967147  4294967117  0         tables and views
-4294967148  4294967117  0         tables_extensions was created for compatibility and is currently unimplemented
-4294967149  4294967117  0         privileges granted on table or views (incomplete; may contain excess users or roles)
-4294967150  4294967117  0         table_constraints_extensions was created for compatibility and is currently unimplemented
-4294967151  4294967117  0         table constraints
-4294967152  4294967117  0         index metadata and statistics (incomplete)
-4294967153  4294967117  0         st_units_of_measure was created for compatibility and is currently unimplemented
-4294967154  4294967117  0         st_spatial_reference_systems was created for compatibility and is currently unimplemented
-4294967155  4294967117  0         st_geometry_columns was created for compatibility and is currently unimplemented
-4294967156  4294967117  0         exposes the session variables.
-4294967157  4294967117  0         sequences
-4294967158  4294967117  0         schema privileges (incomplete; may contain excess users or roles)
-4294967159  4294967117  0         database schemas (may contain schemata without permission)
-4294967160  4294967117  0         schemata_extensions was created for compatibility and is currently unimplemented
-4294967161  4294967117  0         sql_sizing was created for compatibility and is currently unimplemented
-4294967162  4294967117  0         sql_parts was created for compatibility and is currently unimplemented
-4294967163  4294967117  0         sql_implementation_info was created for compatibility and is currently unimplemented
-4294967164  4294967117  0         sql_features was created for compatibility and is currently unimplemented
-4294967165  4294967117  0         built-in functions (empty - introspection not yet supported)
-4294967166  4294967117  0         routine_privileges was created for compatibility and is currently unimplemented
-4294967167  4294967117  0         role_usage_grants was created for compatibility and is currently unimplemented
-4294967168  4294967117  0         role_udt_grants was created for compatibility and is currently unimplemented
-4294967169  4294967117  0         privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
-4294967170  4294967117  0         privileges granted on functions (incomplete; only contains privileges of user-defined functions)
-4294967171  4294967117  0         role_column_grants was created for compatibility and is currently unimplemented
-4294967172  4294967117  0         resource_groups was created for compatibility and is currently unimplemented
-4294967173  4294967117  0         foreign key constraints
-4294967174  4294967117  0         profiling was created for compatibility and is currently unimplemented
-4294967175  4294967117  0         processlist was created for compatibility and is currently unimplemented
-4294967176  4294967117  0         plugins was created for compatibility and is currently unimplemented
-4294967177  4294967117  0         partitions was created for compatibility and is currently unimplemented
-4294967178  4294967117  0         built-in function parameters (empty - introspection not yet supported)
-4294967179  4294967117  0         optimizer_trace was created for compatibility and is currently unimplemented
-4294967180  4294967117  0         keywords was created for compatibility and is currently unimplemented
-4294967181  4294967117  0         column usage by indexes and key constraints
-4294967182  4294967117  0         information_schema_catalog_name was created for compatibility and is currently unimplemented
-4294967183  4294967117  0         foreign_tables was created for compatibility and is currently unimplemented
-4294967184  4294967117  0         foreign_table_options was created for compatibility and is currently unimplemented
-4294967185  4294967117  0         foreign_servers was created for compatibility and is currently unimplemented
-4294967186  4294967117  0         foreign_server_options was created for compatibility and is currently unimplemented
-4294967187  4294967117  0         foreign_data_wrappers was created for compatibility and is currently unimplemented
-4294967188  4294967117  0         foreign_data_wrapper_options was created for compatibility and is currently unimplemented
-4294967189  4294967117  0         files was created for compatibility and is currently unimplemented
-4294967190  4294967117  0         events was created for compatibility and is currently unimplemented
-4294967191  4294967117  0         engines was created for compatibility and is currently unimplemented
-4294967192  4294967117  0         roles for the current user
-4294967193  4294967117  0         element_types was created for compatibility and is currently unimplemented
-4294967194  4294967117  0         domains was created for compatibility and is currently unimplemented
-4294967195  4294967117  0         domain_udt_usage was created for compatibility and is currently unimplemented
-4294967196  4294967117  0         domain_constraints was created for compatibility and is currently unimplemented
-4294967197  4294967117  0         data_type_privileges was created for compatibility and is currently unimplemented
-4294967198  4294967117  0         constraint_table_usage was created for compatibility and is currently unimplemented
-4294967199  4294967117  0         columns usage by constraints
-4294967200  4294967117  0         table and view columns (incomplete)
-4294967201  4294967117  0         columns_extensions was created for compatibility and is currently unimplemented
-4294967202  4294967117  0         columns with user defined types
-4294967203  4294967117  0         column_statistics was created for compatibility and is currently unimplemented
-4294967204  4294967117  0         column privilege grants (incomplete)
-4294967205  4294967117  0         column_options was created for compatibility and is currently unimplemented
-4294967206  4294967117  0         column_domain_usage was created for compatibility and is currently unimplemented
-4294967207  4294967117  0         column_column_usage was created for compatibility and is currently unimplemented
-4294967208  4294967117  0         shows the collations available in the current database
-4294967209  4294967117  0         identifies which character set the available collations are
-4294967210  4294967117  0         check constraints
-4294967211  4294967117  0         check_constraint_routine_usage was created for compatibility and is currently unimplemented
-4294967212  4294967117  0         character sets available in the current database
-4294967213  4294967117  0         attributes was created for compatibility and is currently unimplemented
-4294967214  4294967117  0         roles available to the current user
-4294967215  4294967117  0         roles for which the current user has admin option
-4294967217  4294967117  0         list super regions of databases visible to the current user
-4294967218  4294967117  0         which entries of pg_catalog are implemented in this version of CockroachDB
-4294967220  4294967117  0         node-level table listing all currently running range feeds
-4294967221  4294967117  0         virtual table with default privileges
-4294967222  4294967117  0         available regions for the cluster
-4294967223  4294967117  0         traces for in-flight spans across all nodes in the cluster (cluster RPC; expensive!)
-4294967224  4294967117  0         virtual table with table descriptors that still have data
-4294967225  4294967117  0         virtual table with cross db references
-4294967226  4294967117  0         virtual table with database privileges
-4294967227  4294967117  0         virtual table to validate descriptors
-4294967228  4294967117  0         decoded zone configurations from system.zones (KV scan)
-4294967230  4294967117  0         finer-grained transaction statistics. The contents of this table are flushed to the system.transaction_statistics table at the interval set by the cluster setting sql.stats.flush.interval (by default, 10m).
-4294967231  4294967117  0         stats for all tables accessible by current user in current database as of 10s ago
-4294967232  4294967117  0         table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)
-4294967233  4294967117  0         key spans per SQL object
-4294967234  4294967117  0         indexes accessible by current user in current database (KV scan)
-4294967235  4294967117  0         details for all columns accessible by current user in current database (KV scan)
-4294967237  4294967117  0         session variables (RAM)
-4294967238  4294967117  0         session trace accumulated so far (RAM)
-4294967239  4294967117  0         ongoing schema changes, across all descriptors accessible by current user (KV scan; expensive!)
-4294967240  4294967117  0         server parameters, useful to construct connection URLs (RAM, local node only)
-4294967242  4294967117  0         range metadata without leaseholder details (KV join; expensive!)
-4294967243  4294967117  0         defined partitions for all tables/indexes accessible by the current user in the current database (KV scan)
-4294967244  4294967117  0         per-application transaction statistics (in-memory, not durable; local node only). This table is wiped periodically (by default, at least every two hours)
-4294967245  4294967117  0         statement statistics. The contents of this table are flushed to the system.statement_statistics table at the interval set by the cluster setting sql.stats.flush.interval (by default, 10m).
-4294967246  4294967117  0         current values for metrics (RAM; local node only)
-4294967247  4294967117  0         running sessions visible by current user (RAM; local node only)
-4294967248  4294967117  0         running user transactions visible by the current user (RAM; local node only)
-4294967249  4294967117  0         running queries visible by current user (RAM; local node only)
-4294967251  4294967117  0         DistSQL remote flows information (RAM; local node only)
-4294967252  4294967117  0         contention information (RAM; local node only)
-4294967253  4294967117  0         acquired table leases (RAM; local node only)
-4294967254  4294967117  0         store details and status (cluster RPC; expensive!)
-4294967255  4294967117  0         node details across the entire cluster (cluster RPC; expensive!)
-4294967256  4294967117  0         wrapper over system.jobs with row access control (KV scan)
-4294967257  4294967117  0         decoded job metadata from crdb_internal.system_jobs (KV scan)
-4294967258  4294967117  0         in-flight spans (RAM; local node only)
-4294967259  4294967117  0         cluster-wide index usage statistics (in-memory, not durable).Querying this table is an expensive operation since it creates acluster-wide RPC fanout.
-4294967260  4294967117  0         key spans per table index
-4294967261  4294967117  0         index columns for all indexes accessible by current user in current database (KV scan)
-4294967262  4294967117  0         cluster-wide transaction contention events. Querying this table is an
-4294967263  4294967117  0         locally known edges in the gossip network (RAM; local node only)
-4294967264  4294967117  0         locally known gossiped node liveness (RAM; local node only)
-4294967265  4294967117  0         locally known gossiped health alerts (RAM; local node only)
-4294967266  4294967117  0         locally known gossiped node details (RAM; local node only)
-4294967267  4294967117  0         node liveness status, as seen by kv
-4294967268  4294967117  0         forward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
-4294967269  4294967117  0         telemetry counters (RAM; local node only)
-4294967270  4294967117  0         databases accessible by the current user (KV scan)
-4294967271  4294967117  0         CREATE statements for all user defined types accessible by the current user in current database (KV scan)
-4294967272  4294967117  0         CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)
-4294967273  4294967117  0         CREATE statements for all user defined schemas accessible by the current user in current database (KV scan)
-4294967274  4294967117  0         CREATE statements for all user-defined functions
-4294967275  4294967117  0         cluster-wide transaction statistics that have not yet been flushed to system tables. Querying this table is a somewhat expensive operation since it creates a cluster-wide RPC-fanout.
-4294967276  4294967117  0         cluster-wide statement statistics that have not yet been flushed to system tables. Querying this table is a somewhat expensive operation since it creates a cluster-wide RPC-fanout.
-4294967277  4294967117  0         cluster settings (RAM)
-4294967278  4294967117  0         running sessions visible to current user (cluster RPC; expensive!)
-4294967279  4294967117  0         running user transactions visible by the current user (cluster RPC; expensive!)
-4294967280  4294967117  0         running queries visible by current user (cluster RPC; expensive!)
-4294967281  4294967117  0         cluster-wide locks held in lock tables. Querying this table is an
-4294967283  4294967117  0         DistSQL remote flows information (cluster RPC; expensive!)
-4294967284  4294967117  0         contention information (cluster RPC; expensive!)
-4294967288  4294967117  0         like system.zones but overlaid with in-txn in-memory changes
-4294967289  4294967117  0         like system.namespace but overlaid with in-txn in-memory changes
-4294967290  4294967117  0         like system.descriptor but overlaid with in-txn in-memory changes and including virtual objects
-4294967291  4294967117  0         like system.comments but overlaid with in-txn in-memory changes and including virtual objects
-4294967292  4294967117  0         built-in functions (RAM/static)
-4294967293  4294967117  0         detailed identification strings (RAM, local node only)
-4294967294  4294967117  0         backward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
+4294966994  4294967115  0         Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+4294966995  4294967115  0         Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+4294966996  4294967115  0         Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+4294966998  4294967115  0         view definitions (incomplete - see also information_schema.views)
+4294966999  4294967115  0         database users
+4294967000  4294967115  0         pg_user_mappings was created for compatibility and is currently unimplemented
+4294967001  4294967115  0         local to remote user mapping (empty - feature does not exist)
+4294967002  4294967115  0         scalar types (incomplete)
+4294967003  4294967115  0         pg_ts_template was created for compatibility and is currently unimplemented
+4294967004  4294967115  0         pg_ts_parser was created for compatibility and is currently unimplemented
+4294967005  4294967115  0         pg_ts_dict was created for compatibility and is currently unimplemented
+4294967006  4294967115  0         pg_ts_config was created for compatibility and is currently unimplemented
+4294967007  4294967115  0         pg_ts_config_map was created for compatibility and is currently unimplemented
+4294967008  4294967115  0         triggers (empty - feature does not exist)
+4294967009  4294967115  0         pg_transform was created for compatibility and is currently unimplemented
+4294967010  4294967115  0         pg_timezone_names lists all the timezones that are supported by SET timezone
+4294967011  4294967115  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
+4294967012  4294967115  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967013  4294967115  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967014  4294967115  0         pg_subscription was created for compatibility and is currently unimplemented
+4294967015  4294967115  0         pg_subscription_rel was created for compatibility and is currently unimplemented
+4294967016  4294967115  0         pg_stats was created for compatibility and is currently unimplemented
+4294967017  4294967115  0         pg_stats_ext was created for compatibility and is currently unimplemented
+4294967018  4294967115  0         pg_statistic was created for compatibility and is currently unimplemented
+4294967019  4294967115  0         pg_statistic_ext has the statistics objects created with CREATE STATISTICS
+4294967020  4294967115  0         pg_statistic_ext_data was created for compatibility and is currently unimplemented
+4294967021  4294967115  0         pg_statio_user_tables was created for compatibility and is currently unimplemented
+4294967022  4294967115  0         pg_statio_user_sequences was created for compatibility and is currently unimplemented
+4294967023  4294967115  0         pg_statio_user_indexes was created for compatibility and is currently unimplemented
+4294967024  4294967115  0         pg_statio_sys_tables was created for compatibility and is currently unimplemented
+4294967025  4294967115  0         pg_statio_sys_sequences was created for compatibility and is currently unimplemented
+4294967026  4294967115  0         pg_statio_sys_indexes was created for compatibility and is currently unimplemented
+4294967027  4294967115  0         pg_statio_all_tables was created for compatibility and is currently unimplemented
+4294967028  4294967115  0         pg_statio_all_sequences was created for compatibility and is currently unimplemented
+4294967029  4294967115  0         pg_statio_all_indexes was created for compatibility and is currently unimplemented
+4294967030  4294967115  0         pg_stat_xact_user_tables was created for compatibility and is currently unimplemented
+4294967031  4294967115  0         pg_stat_xact_user_functions was created for compatibility and is currently unimplemented
+4294967032  4294967115  0         pg_stat_xact_sys_tables was created for compatibility and is currently unimplemented
+4294967033  4294967115  0         pg_stat_xact_all_tables was created for compatibility and is currently unimplemented
+4294967034  4294967115  0         pg_stat_wal_receiver was created for compatibility and is currently unimplemented
+4294967035  4294967115  0         pg_stat_user_tables was created for compatibility and is currently unimplemented
+4294967036  4294967115  0         pg_stat_user_indexes was created for compatibility and is currently unimplemented
+4294967037  4294967115  0         pg_stat_user_functions was created for compatibility and is currently unimplemented
+4294967038  4294967115  0         pg_stat_sys_tables was created for compatibility and is currently unimplemented
+4294967039  4294967115  0         pg_stat_sys_indexes was created for compatibility and is currently unimplemented
+4294967040  4294967115  0         pg_stat_subscription was created for compatibility and is currently unimplemented
+4294967041  4294967115  0         pg_stat_ssl was created for compatibility and is currently unimplemented
+4294967042  4294967115  0         pg_stat_slru was created for compatibility and is currently unimplemented
+4294967043  4294967115  0         pg_stat_replication was created for compatibility and is currently unimplemented
+4294967044  4294967115  0         pg_stat_progress_vacuum was created for compatibility and is currently unimplemented
+4294967045  4294967115  0         pg_stat_progress_create_index was created for compatibility and is currently unimplemented
+4294967046  4294967115  0         pg_stat_progress_cluster was created for compatibility and is currently unimplemented
+4294967047  4294967115  0         pg_stat_progress_basebackup was created for compatibility and is currently unimplemented
+4294967048  4294967115  0         pg_stat_progress_analyze was created for compatibility and is currently unimplemented
+4294967049  4294967115  0         pg_stat_gssapi was created for compatibility and is currently unimplemented
+4294967050  4294967115  0         pg_stat_database was created for compatibility and is currently unimplemented
+4294967051  4294967115  0         pg_stat_database_conflicts was created for compatibility and is currently unimplemented
+4294967052  4294967115  0         pg_stat_bgwriter was created for compatibility and is currently unimplemented
+4294967053  4294967115  0         pg_stat_archiver was created for compatibility and is currently unimplemented
+4294967054  4294967115  0         pg_stat_all_tables was created for compatibility and is currently unimplemented
+4294967055  4294967115  0         pg_stat_all_indexes was created for compatibility and is currently unimplemented
+4294967056  4294967115  0         backend access statistics (empty - monitoring works differently in CockroachDB)
+4294967057  4294967115  0         pg_shmem_allocations was created for compatibility and is currently unimplemented
+4294967058  4294967115  0         Shared Dependencies (Roles depending on objects).
+4294967059  4294967115  0         shared security labels (empty - feature not supported)
+4294967060  4294967115  0         shared object comments
+4294967061  4294967115  0         pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
+4294967062  4294967115  0         session variables (incomplete)
+4294967063  4294967115  0         pg_sequences is very similar as pg_sequence.
+4294967064  4294967115  0         sequences (see also information_schema.sequences)
+4294967065  4294967115  0         security labels (empty - feature does not exist)
+4294967066  4294967115  0         security labels (empty)
+4294967067  4294967115  0         pg_rules was created for compatibility and is currently unimplemented
+4294967068  4294967115  0         database roles
+4294967069  4294967115  0         rewrite rules (only for referencing on pg_depend for table-view dependencies)
+4294967070  4294967115  0         pg_replication_slots was created for compatibility and is currently unimplemented
+4294967071  4294967115  0         pg_replication_origin was created for compatibility and is currently unimplemented
+4294967072  4294967115  0         pg_replication_origin_status was created for compatibility and is currently unimplemented
+4294967073  4294967115  0         range types (empty - feature does not exist)
+4294967074  4294967115  0         pg_publication_tables was created for compatibility and is currently unimplemented
+4294967075  4294967115  0         pg_publication was created for compatibility and is currently unimplemented
+4294967076  4294967115  0         pg_publication_rel was created for compatibility and is currently unimplemented
+4294967077  4294967115  0         built-in functions (incomplete)
+4294967078  4294967115  0         prepared transactions (empty - feature does not exist)
+4294967079  4294967115  0         prepared statements
+4294967080  4294967115  0         pg_policy was created for compatibility and is currently unimplemented
+4294967081  4294967115  0         pg_policies was created for compatibility and is currently unimplemented
+4294967082  4294967115  0         pg_partitioned_table was created for compatibility and is currently unimplemented
+4294967083  4294967115  0         pg_opfamily was created for compatibility and is currently unimplemented
+4294967084  4294967115  0         operators (incomplete)
+4294967085  4294967115  0         opclass (empty - Operator classes not supported yet)
+4294967086  4294967115  0         available namespaces
+4294967087  4294967115  0         available materialized views (empty - feature does not exist)
+4294967088  4294967115  0         locks held by active processes (empty - feature does not exist)
+4294967089  4294967115  0         pg_largeobject was created for compatibility and is currently unimplemented
+4294967090  4294967115  0         pg_largeobject_metadata was created for compatibility and is currently unimplemented
+4294967091  4294967115  0         available languages (empty - feature does not exist)
+4294967092  4294967115  0         pg_init_privs was created for compatibility and is currently unimplemented
+4294967093  4294967115  0         table inheritance hierarchy (empty - feature does not exist)
+4294967094  4294967115  0         index creation statements
+4294967095  4294967115  0         indexes (incomplete)
+4294967096  4294967115  0         pg_hba_file_rules was created for compatibility and is currently unimplemented
+4294967097  4294967115  0         pg_group was created for compatibility and is currently unimplemented
+4294967098  4294967115  0         foreign tables (empty  - feature does not exist)
+4294967099  4294967115  0         foreign servers (empty - feature does not exist)
+4294967100  4294967115  0         foreign data wrappers (empty - feature does not exist)
+4294967101  4294967115  0         pg_file_settings was created for compatibility and is currently unimplemented
+4294967102  4294967115  0         installed extensions (empty - feature does not exist)
+4294967103  4294967115  0         event triggers (empty - feature does not exist)
+4294967104  4294967115  0         enum types and labels (empty - feature does not exist)
+4294967105  4294967115  0         object comments
+4294967106  4294967115  0         dependency relationships (incomplete)
+4294967107  4294967115  0         default ACLs; these are the privileges that will be assigned to newly created objects
+4294967108  4294967115  0         contains the default values that have been configured for session variables
+4294967109  4294967115  0         available databases (incomplete)
+4294967110  4294967115  0         contains currently active SQL cursors created with DECLARE
+4294967111  4294967115  0         encoding conversions (empty - unimplemented)
+4294967112  4294967115  0         table constraints (incomplete - see also information_schema.table_constraints)
+4294967113  4294967115  0         pg_config was created for compatibility and is currently unimplemented
+4294967114  4294967115  0         available collations (incomplete)
+4294967115  4294967115  0         tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
+4294967116  4294967115  0         casts (empty - needs filling out)
+4294967117  4294967115  0         available extensions
+4294967118  4294967115  0         pg_available_extension_versions was created for compatibility and is currently unimplemented
+4294967119  4294967115  0         role membership
+4294967120  4294967115  0         authorization identifiers - differs from postgres as we do not display passwords,
+4294967121  4294967115  0         table columns (incomplete - see also information_schema.columns)
+4294967122  4294967115  0         column default values
+4294967123  4294967115  0         pg_amproc was created for compatibility and is currently unimplemented
+4294967124  4294967115  0         pg_amop was created for compatibility and is currently unimplemented
+4294967125  4294967115  0         index access methods (incomplete)
+4294967126  4294967115  0         aggregated built-in functions (incomplete)
+4294967128  4294967115  0         views (incomplete)
+4294967129  4294967115  0         view_table_usage was created for compatibility and is currently unimplemented
+4294967130  4294967115  0         view_routine_usage was created for compatibility and is currently unimplemented
+4294967131  4294967115  0         view_column_usage was created for compatibility and is currently unimplemented
+4294967132  4294967115  0         grantable privileges (incomplete)
+4294967133  4294967115  0         user_mappings was created for compatibility and is currently unimplemented
+4294967134  4294967115  0         user_mapping_options was created for compatibility and is currently unimplemented
+4294967135  4294967115  0         user_defined_types was created for compatibility and is currently unimplemented
+4294967136  4294967115  0         user_attributes was created for compatibility and is currently unimplemented
+4294967137  4294967115  0         usage_privileges was created for compatibility and is currently unimplemented
+4294967138  4294967115  0         udt_privileges was created for compatibility and is currently unimplemented
+4294967139  4294967115  0         type privileges (incomplete; may contain excess users or roles)
+4294967140  4294967115  0         triggers was created for compatibility and is currently unimplemented
+4294967141  4294967115  0         triggered_update_columns was created for compatibility and is currently unimplemented
+4294967142  4294967115  0         transforms was created for compatibility and is currently unimplemented
+4294967143  4294967115  0         tablespaces was created for compatibility and is currently unimplemented
+4294967144  4294967115  0         tablespaces_extensions was created for compatibility and is currently unimplemented
+4294967145  4294967115  0         tables and views
+4294967146  4294967115  0         tables_extensions was created for compatibility and is currently unimplemented
+4294967147  4294967115  0         privileges granted on table or views (incomplete; may contain excess users or roles)
+4294967148  4294967115  0         table_constraints_extensions was created for compatibility and is currently unimplemented
+4294967149  4294967115  0         table constraints
+4294967150  4294967115  0         index metadata and statistics (incomplete)
+4294967151  4294967115  0         st_units_of_measure was created for compatibility and is currently unimplemented
+4294967152  4294967115  0         st_spatial_reference_systems was created for compatibility and is currently unimplemented
+4294967153  4294967115  0         st_geometry_columns was created for compatibility and is currently unimplemented
+4294967154  4294967115  0         exposes the session variables.
+4294967155  4294967115  0         sequences
+4294967156  4294967115  0         schema privileges (incomplete; may contain excess users or roles)
+4294967157  4294967115  0         database schemas (may contain schemata without permission)
+4294967158  4294967115  0         schemata_extensions was created for compatibility and is currently unimplemented
+4294967159  4294967115  0         sql_sizing was created for compatibility and is currently unimplemented
+4294967160  4294967115  0         sql_parts was created for compatibility and is currently unimplemented
+4294967161  4294967115  0         sql_implementation_info was created for compatibility and is currently unimplemented
+4294967162  4294967115  0         sql_features was created for compatibility and is currently unimplemented
+4294967163  4294967115  0         built-in functions (empty - introspection not yet supported)
+4294967164  4294967115  0         routine_privileges was created for compatibility and is currently unimplemented
+4294967165  4294967115  0         role_usage_grants was created for compatibility and is currently unimplemented
+4294967166  4294967115  0         role_udt_grants was created for compatibility and is currently unimplemented
+4294967167  4294967115  0         privileges granted on table or views (incomplete; see also information_schema.table_privileges; may contain excess users or roles)
+4294967168  4294967115  0         privileges granted on functions (incomplete; only contains privileges of user-defined functions)
+4294967169  4294967115  0         role_column_grants was created for compatibility and is currently unimplemented
+4294967170  4294967115  0         resource_groups was created for compatibility and is currently unimplemented
+4294967171  4294967115  0         foreign key constraints
+4294967172  4294967115  0         profiling was created for compatibility and is currently unimplemented
+4294967173  4294967115  0         processlist was created for compatibility and is currently unimplemented
+4294967174  4294967115  0         plugins was created for compatibility and is currently unimplemented
+4294967175  4294967115  0         partitions was created for compatibility and is currently unimplemented
+4294967176  4294967115  0         built-in function parameters (empty - introspection not yet supported)
+4294967177  4294967115  0         optimizer_trace was created for compatibility and is currently unimplemented
+4294967178  4294967115  0         keywords was created for compatibility and is currently unimplemented
+4294967179  4294967115  0         column usage by indexes and key constraints
+4294967180  4294967115  0         information_schema_catalog_name was created for compatibility and is currently unimplemented
+4294967181  4294967115  0         foreign_tables was created for compatibility and is currently unimplemented
+4294967182  4294967115  0         foreign_table_options was created for compatibility and is currently unimplemented
+4294967183  4294967115  0         foreign_servers was created for compatibility and is currently unimplemented
+4294967184  4294967115  0         foreign_server_options was created for compatibility and is currently unimplemented
+4294967185  4294967115  0         foreign_data_wrappers was created for compatibility and is currently unimplemented
+4294967186  4294967115  0         foreign_data_wrapper_options was created for compatibility and is currently unimplemented
+4294967187  4294967115  0         files was created for compatibility and is currently unimplemented
+4294967188  4294967115  0         events was created for compatibility and is currently unimplemented
+4294967189  4294967115  0         engines was created for compatibility and is currently unimplemented
+4294967190  4294967115  0         roles for the current user
+4294967191  4294967115  0         element_types was created for compatibility and is currently unimplemented
+4294967192  4294967115  0         domains was created for compatibility and is currently unimplemented
+4294967193  4294967115  0         domain_udt_usage was created for compatibility and is currently unimplemented
+4294967194  4294967115  0         domain_constraints was created for compatibility and is currently unimplemented
+4294967195  4294967115  0         data_type_privileges was created for compatibility and is currently unimplemented
+4294967196  4294967115  0         constraint_table_usage was created for compatibility and is currently unimplemented
+4294967197  4294967115  0         columns usage by constraints
+4294967198  4294967115  0         table and view columns (incomplete)
+4294967199  4294967115  0         columns_extensions was created for compatibility and is currently unimplemented
+4294967200  4294967115  0         columns with user defined types
+4294967201  4294967115  0         column_statistics was created for compatibility and is currently unimplemented
+4294967202  4294967115  0         column privilege grants (incomplete)
+4294967203  4294967115  0         column_options was created for compatibility and is currently unimplemented
+4294967204  4294967115  0         column_domain_usage was created for compatibility and is currently unimplemented
+4294967205  4294967115  0         column_column_usage was created for compatibility and is currently unimplemented
+4294967206  4294967115  0         shows the collations available in the current database
+4294967207  4294967115  0         identifies which character set the available collations are
+4294967208  4294967115  0         check constraints
+4294967209  4294967115  0         check_constraint_routine_usage was created for compatibility and is currently unimplemented
+4294967210  4294967115  0         character sets available in the current database
+4294967211  4294967115  0         attributes was created for compatibility and is currently unimplemented
+4294967212  4294967115  0         roles available to the current user
+4294967213  4294967115  0         roles for which the current user has admin option
+4294967215  4294967115  0         list super regions of databases visible to the current user
+4294967216  4294967115  0         which entries of pg_catalog are implemented in this version of CockroachDB
+4294967218  4294967115  0         node-level table listing all currently running range feeds
+4294967219  4294967115  0         virtual table with default privileges
+4294967220  4294967115  0         available regions for the cluster
+4294967221  4294967115  0         traces for in-flight spans across all nodes in the cluster (cluster RPC; expensive!)
+4294967222  4294967115  0         virtual table with table descriptors that still have data
+4294967223  4294967115  0         virtual table with cross db references
+4294967224  4294967115  0         virtual table with database privileges
+4294967225  4294967115  0         virtual table to validate descriptors
+4294967226  4294967115  0         decoded zone configurations from system.zones (KV scan)
+4294967228  4294967115  0         finer-grained transaction statistics. The contents of this table are flushed to the system.transaction_statistics table at the interval set by the cluster setting sql.stats.flush.interval (by default, 10m).
+4294967229  4294967115  0         stats for all tables accessible by current user in current database as of 10s ago
+4294967230  4294967115  0         table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)
+4294967231  4294967115  0         key spans per SQL object
+4294967232  4294967115  0         indexes accessible by current user in current database (KV scan)
+4294967233  4294967115  0         details for all columns accessible by current user in current database (KV scan)
+4294967235  4294967115  0         session variables (RAM)
+4294967236  4294967115  0         session trace accumulated so far (RAM)
+4294967237  4294967115  0         ongoing schema changes, across all descriptors accessible by current user (KV scan; expensive!)
+4294967238  4294967115  0         server parameters, useful to construct connection URLs (RAM, local node only)
+4294967240  4294967115  0         range metadata without leaseholder details (KV join; expensive!)
+4294967241  4294967115  0         defined partitions for all tables/indexes accessible by the current user in the current database (KV scan)
+4294967242  4294967115  0         per-application transaction statistics (in-memory, not durable; local node only). This table is wiped periodically (by default, at least every two hours)
+4294967243  4294967115  0         statement statistics. The contents of this table are flushed to the system.statement_statistics table at the interval set by the cluster setting sql.stats.flush.interval (by default, 10m).
+4294967244  4294967115  0         current values for metrics (RAM; local node only)
+4294967245  4294967115  0         running sessions visible by current user (RAM; local node only)
+4294967246  4294967115  0         running user transactions visible by the current user (RAM; local node only)
+4294967247  4294967115  0         running queries visible by current user (RAM; local node only)
+4294967248  4294967115  0         Node statement execution insights
+4294967249  4294967115  0         DistSQL remote flows information (RAM; local node only)
+4294967250  4294967115  0         contention information (RAM; local node only)
+4294967251  4294967115  0         acquired table leases (RAM; local node only)
+4294967252  4294967115  0         store details and status (cluster RPC; expensive!)
+4294967253  4294967115  0         node details across the entire cluster (cluster RPC; expensive!)
+4294967254  4294967115  0         wrapper over system.jobs with row access control (KV scan)
+4294967255  4294967115  0         decoded job metadata from crdb_internal.system_jobs (KV scan)
+4294967256  4294967115  0         in-flight spans (RAM; local node only)
+4294967257  4294967115  0         cluster-wide index usage statistics (in-memory, not durable).Querying this table is an expensive operation since it creates acluster-wide RPC fanout.
+4294967258  4294967115  0         key spans per table index
+4294967259  4294967115  0         index columns for all indexes accessible by current user in current database (KV scan)
+4294967260  4294967115  0         cluster-wide transaction contention events. Querying this table is an
+4294967261  4294967115  0         locally known edges in the gossip network (RAM; local node only)
+4294967262  4294967115  0         locally known gossiped node liveness (RAM; local node only)
+4294967263  4294967115  0         locally known gossiped health alerts (RAM; local node only)
+4294967264  4294967115  0         locally known gossiped node details (RAM; local node only)
+4294967265  4294967115  0         node liveness status, as seen by kv
+4294967266  4294967115  0         forward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
+4294967267  4294967115  0         telemetry counters (RAM; local node only)
+4294967268  4294967115  0         databases accessible by the current user (KV scan)
+4294967269  4294967115  0         CREATE statements for all user defined types accessible by the current user in current database (KV scan)
+4294967270  4294967115  0         CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)
+4294967271  4294967115  0         CREATE statements for all user defined schemas accessible by the current user in current database (KV scan)
+4294967272  4294967115  0         CREATE statements for all user-defined functions
+4294967273  4294967115  0         cluster-wide transaction statistics that have not yet been flushed to system tables. Querying this table is a somewhat expensive operation since it creates a cluster-wide RPC-fanout.
+4294967274  4294967115  0         cluster-wide statement statistics that have not yet been flushed to system tables. Querying this table is a somewhat expensive operation since it creates a cluster-wide RPC-fanout.
+4294967275  4294967115  0         cluster settings (RAM)
+4294967276  4294967115  0         running sessions visible to current user (cluster RPC; expensive!)
+4294967277  4294967115  0         running user transactions visible by the current user (cluster RPC; expensive!)
+4294967278  4294967115  0         running queries visible by current user (cluster RPC; expensive!)
+4294967279  4294967115  0         cluster-wide locks held in lock tables. Querying this table is an
+4294967280  4294967115  0         Node transaction execution insights
+4294967281  4294967115  0         Cluster transaction execution insights
+4294967282  4294967115  0         Cluster-wide statement execution insights
+4294967283  4294967115  0         DistSQL remote flows information (cluster RPC; expensive!)
+4294967284  4294967115  0         contention information (cluster RPC; expensive!)
+4294967288  4294967115  0         like system.zones but overlaid with in-txn in-memory changes
+4294967289  4294967115  0         like system.namespace but overlaid with in-txn in-memory changes
+4294967290  4294967115  0         like system.descriptor but overlaid with in-txn in-memory changes and including virtual objects
+4294967291  4294967115  0         like system.comments but overlaid with in-txn in-memory changes and including virtual objects
+4294967292  4294967115  0         built-in functions (RAM/static)
+4294967293  4294967115  0         detailed identification strings (RAM, local node only)
+4294967294  4294967115  0         backward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
 
 ## pg_catalog.pg_shdescription
 
@@ -3240,7 +3244,7 @@ query OTOOTBBOOOOOOOO colnames
 SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
 ----
 oid       oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
-74817020  +        4294967129    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
+74817020  +        4294967127    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
 
 # Verify proper functionality of system information functions.
 
@@ -4086,7 +4090,7 @@ indoption
 query TTI
 SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
 ----
-test  pg_views  4294967000
+test  pg_views  4294966998
 
 # Verify INCLUDED columns appear in pg_index. See issue #59563
 statement ok

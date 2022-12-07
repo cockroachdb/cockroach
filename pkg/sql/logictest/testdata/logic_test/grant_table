@@ -45,6 +45,7 @@ test           crdb_internal       cluster_settings                       public
 test           crdb_internal       cluster_statement_statistics           public   SELECT          false
 test           crdb_internal       cluster_transaction_statistics         public   SELECT          false
 test           crdb_internal       cluster_transactions                   public   SELECT          false
+test           crdb_internal       cluster_txn_execution_insights         public   SELECT          false
 test           crdb_internal       create_function_statements             public   SELECT          false
 test           crdb_internal       create_schema_statements               public   SELECT          false
 test           crdb_internal       create_statements                      public   SELECT          false
@@ -84,6 +85,7 @@ test           crdb_internal       node_sessions                          public
 test           crdb_internal       node_statement_statistics              public   SELECT          false
 test           crdb_internal       node_transaction_statistics            public   SELECT          false
 test           crdb_internal       node_transactions                      public   SELECT          false
+test           crdb_internal       node_txn_execution_insights            public   SELECT          false
 test           crdb_internal       node_txn_stats                         public   SELECT          false
 test           crdb_internal       partitions                             public   SELECT          false
 test           crdb_internal       pg_catalog_table_is_implemented        public   SELECT          false
