@@ -327,29 +327,29 @@ func FindConstraintComment(b ElementStatusIterator) (current Status, target Targ
 	return current, target, element
 }
 
-func (e ConstraintName) element() {}
+func (e ConstraintWithoutIndexName) element() {}
 
-// ForEachConstraintName iterates over elements of type ConstraintName.
-func ForEachConstraintName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintName),
+// ForEachConstraintWithoutIndexName iterates over elements of type ConstraintWithoutIndexName.
+func ForEachConstraintWithoutIndexName(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintWithoutIndexName),
 ) {
   if b == nil {
     return
   }
 	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ConstraintName); ok {
+		if elt, ok := e.(*ConstraintWithoutIndexName); ok {
 			fn(current, target, elt)
 		}
 	})
 }
 
-// FindConstraintName finds the first element of type ConstraintName.
-func FindConstraintName(b ElementStatusIterator) (current Status, target TargetStatus, element *ConstraintName) {
+// FindConstraintWithoutIndexName finds the first element of type ConstraintWithoutIndexName.
+func FindConstraintWithoutIndexName(b ElementStatusIterator) (current Status, target TargetStatus, element *ConstraintWithoutIndexName) {
   if b == nil {
     return current, target, element
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ConstraintName); ok {
+		if elt, ok := e.(*ConstraintWithoutIndexName); ok {
 			element = elt
 			current = c
 			target = t

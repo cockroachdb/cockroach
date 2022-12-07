@@ -111,7 +111,7 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.ColumnName, *scpb.ColumnType, *scpb.ColumnDefaultExpression,
 		*scpb.ColumnOnUpdateExpression, *scpb.SequenceOwner, *scpb.ColumnComment,
 		*scpb.IndexName, *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial,
-		*scpb.IndexComment, *scpb.ConstraintName, *scpb.ConstraintComment,
+		*scpb.IndexComment, *scpb.ConstraintWithoutIndexName, *scpb.ConstraintComment,
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
