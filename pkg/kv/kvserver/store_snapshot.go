@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"

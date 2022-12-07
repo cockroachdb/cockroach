@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // StateMachine represents an instance of a replicated state machine being

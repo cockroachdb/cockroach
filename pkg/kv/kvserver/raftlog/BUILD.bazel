@@ -21,7 +21,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 
@@ -48,7 +48,7 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 
