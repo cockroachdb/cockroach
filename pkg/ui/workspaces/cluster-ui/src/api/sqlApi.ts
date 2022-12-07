@@ -65,6 +65,8 @@ export type SqlApiResponse<ResultType> = {
   results: ResultType;
 };
 
+export type SqlApiQueryResponse<Result> = Result & { error?: Error };
+
 export const SQL_API_PATH = "/api/v2/sql/";
 
 /**
@@ -79,7 +81,7 @@ export function executeSql<RowType>(
   // TODO(maryliag) remove this part of code when cloud is updated with
   // a new CRDB release.
   if (!req.database) {
-    req.database = "system";
+    req.database = FALLBACK_DB;
   }
   return fetchDataJSON<SqlExecutionResponse<RowType>, SqlExecutionRequest>(
     SQL_API_PATH,
@@ -90,6 +92,7 @@ export function executeSql<RowType>(
 export const INTERNAL_SQL_API_APP = "$ internal-console";
 export const LONG_TIMEOUT = "300s";
 export const LARGE_RESULT_SIZE = 50000; // 50 kib
+export const FALLBACK_DB = "system";
 
 /**
  * executeInternalSql executes the provided SQL statements with
@@ -172,11 +175,11 @@ export function isMaxSizeError(message: string): boolean {
   return !!message?.includes("max result size exceeded");
 }
 
-export function formatApiResult(
-  results: Array<any>,
+export function formatApiResult<ResultType>(
+  results: ResultType,
   error: SqlExecutionErrorMessage,
   errorMessageContext: string,
-): SqlApiResponse<any> {
+): SqlApiResponse<ResultType> {
   const maxSizeError = isMaxSizeError(error?.message);
 
   if (error && !maxSizeError) {
