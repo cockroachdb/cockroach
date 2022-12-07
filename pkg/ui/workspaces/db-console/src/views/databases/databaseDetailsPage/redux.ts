@@ -33,7 +33,7 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { getNodesByRegionString } from "../utils";
+import { getNodesByRegionString, normalizePrivileges } from "../utils";
 
 const { DatabaseDetailsRequest, TableDetailsRequest, TableStatsRequest } =
   cockroach.server.serverpb;
@@ -51,24 +51,6 @@ function normalizeRoles(raw: string[]): string[] {
   const alphabetizedRoles = _.sortBy(_.uniq(_.filter(raw)));
 
   return _.sortBy(alphabetizedRoles, role => rolePrecedence[role] || 100);
-}
-
-function normalizePrivileges(raw: string[]): string[] {
-  const privilegePrecedence: Record<string, number> = {
-    ALL: 1,
-    CREATE: 2,
-    DROP: 3,
-    GRANT: 4,
-    SELECT: 5,
-    INSERT: 6,
-    UPDATE: 7,
-    DELETE: 8,
-  };
-
-  return _.sortBy(
-    _.uniq(_.map(_.filter(raw), _.toUpper)),
-    privilege => privilegePrecedence[privilege] || 100,
-  );
 }
 
 const sortSettingTablesLocalSetting = new LocalSetting(

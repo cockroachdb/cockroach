@@ -231,9 +231,8 @@ describe("Database Table Page", function () {
       replicaCount: 5,
       indexNames: ["primary", "another_index"],
       grants: [
-        { user: "admin", privilege: "CREATE" },
-        { user: "admin", privilege: "DROP" },
-        { user: "public", privilege: "SELECT" },
+        { user: "admin", privileges: ["CREATE", "DROP"] },
+        { user: "public", privileges: ["SELECT"] },
       ],
       statsLastUpdated: util.TimestampToMoment(
         makeTimestamp("0001-01-01T00:00:00Z"),
