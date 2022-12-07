@@ -57,7 +57,7 @@ export type SqlExecutionErrorMessage = {
   message: string;
   code: string;
   severity: string;
-  source: { file: string; line: number; function: "string" };
+  source: { file: string; line: number; function: string };
 };
 
 export const SQL_API_PATH = "/api/v2/sql/";
@@ -114,8 +114,10 @@ export function sqlResultsAreEmpty(
 ): boolean {
   return (
     !result.execution?.txn_results?.length ||
-    result.execution.txn_results.every(
-      txn => !txn.rows || txn.rows.length === 0,
-    )
+    result.execution.txn_results.every(txn => txnResultIsEmpty(txn))
   );
+}
+
+export function txnResultIsEmpty(txn_result: SqlTxnResult<unknown>): boolean {
+  return !txn_result.rows || txn_result.rows?.length === 0;
 }
