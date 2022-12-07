@@ -37,20 +37,26 @@ type RemoteFlowRunner struct {
 		syncutil.Mutex
 		// runningFlows keeps track of all flows that are currently running via
 		// this RemoteFlowRunner.
-		runningFlows map[execinfrapb.FlowID]flowWithTimestamp
+		runningFlows map[execinfrapb.FlowID]flowWithInfo
 		acc          *mon.BoundAccount
 	}
 }
 
-type flowWithTimestamp struct {
+var _ stop.Closer = &RemoteFlowRunner{}
+
+type flowWithInfo struct {
 	flow      Flow
 	timestamp time.Time
+	// cleanupLocked must be called while holding the RemoteFlowRunner.mu's lock
+	// and after flow exits. It removes the flowWithInfo object from the
+	// runningFlows map.
+	cleanupLocked func()
 }
 
-const flowWithTimestampOverhead = int64(unsafe.Sizeof(flowWithTimestamp{}))
+const flowWithInfoOverhead = int64(unsafe.Sizeof(flowWithInfo{}))
 
 // NewRemoteFlowRunner creates a new RemoteFlowRunner which must be initialized
-// before use.
+// before use. The runner is added as the stop.Closer to the stopper.
 func NewRemoteFlowRunner(
 	ambient log.AmbientContext, stopper *stop.Stopper, acc *mon.BoundAccount,
 ) *RemoteFlowRunner {
@@ -58,8 +64,9 @@ func NewRemoteFlowRunner(
 		AmbientContext: ambient,
 		stopper:        stopper,
 	}
-	r.mu.runningFlows = make(map[execinfrapb.FlowID]flowWithTimestamp)
+	r.mu.runningFlows = make(map[execinfrapb.FlowID]flowWithInfo)
 	r.mu.acc = acc
+	stopper.AddCloser(r)
 	return r
 }
 
@@ -72,19 +79,28 @@ func (r *RemoteFlowRunner) Init(metrics *execinfra.DistSQLMetrics) {
 func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 	err := r.stopper.RunTaskWithErr(
 		ctx, "flowinfra.RemoteFlowRunner: running flow", func(ctx context.Context) error {
-			log.VEventf(ctx, 1, "flow runner running flow %s", f.GetID())
+			flowID := f.GetID()
+			log.VEventf(ctx, 1, "flow runner running flow %s", flowID)
 			// Add this flow into the runningFlows map after performing the
 			// memory accounting.
-			memUsage := memsize.MapEntryOverhead + flowWithTimestampOverhead + f.MemUsage()
+			memUsage := memsize.MapEntryOverhead + flowWithInfoOverhead + f.MemUsage()
+			var cleanupLocked func()
 			if err := func() error {
 				r.mu.Lock()
 				defer r.mu.Unlock()
 				if err := r.mu.acc.Grow(ctx, memUsage); err != nil {
 					return err
 				}
-				r.mu.runningFlows[f.GetID()] = flowWithTimestamp{
-					flow:      f,
-					timestamp: timeutil.Now(),
+				cleanupLocked = func() {
+					delete(r.mu.runningFlows, flowID)
+					r.mu.acc.Shrink(ctx, memUsage)
+					r.metrics.FlowStop()
+					f.Cleanup(ctx)
+				}
+				r.mu.runningFlows[flowID] = flowWithInfo{
+					flow:          f,
+					timestamp:     timeutil.Now(),
+					cleanupLocked: cleanupLocked,
 				}
 				return nil
 			}(); err != nil {
@@ -96,14 +112,14 @@ func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 			// The flow can be started.
 			r.metrics.FlowStart()
 			cleanup := func() {
-				func() {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					delete(r.mu.runningFlows, f.GetID())
-					r.mu.acc.Shrink(ctx, memUsage)
-				}()
-				r.metrics.FlowStop()
-				f.Cleanup(ctx)
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				if _, ok := r.mu.runningFlows[flowID]; !ok {
+					// If the flow is not found, then it has already been
+					// cleaned up in RemoteFlowRunner.Close.
+					return
+				}
+				cleanupLocked()
 			}
 			if err := f.Start(ctx); err != nil {
 				cleanup()
@@ -120,6 +136,30 @@ func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 		f.Cleanup(ctx)
 	}
 	return err
+}
+
+// Close implements the stop.Closer interface.
+//
+// This function takes the responsibility of cleaning up all the flows that are
+// still running according to the RemoteFlowRunner. Notably, no new flows will
+// be added because the stopper is quiescing, so RunFlow will error out.
+//
+// The reason for having this function is that we want to ensure that all the
+// flows are cleaned up before the temporary file system is closed. The FS is
+// added as the Closer, and we ensure that the RemoteFlowRunner is added as an
+// "earlier" Closer.
+func (r *RemoteFlowRunner) Close() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, info := range r.mu.runningFlows {
+		// The flow must have already been canceled as part of the draining
+		// process in FlowRegistry.Drain, but to be conservative we'll cancel it
+		// here too.
+		info.flow.Cancel()
+		// Make sure that all goroutines of the flow have exited.
+		info.flow.Wait()
+		info.cleanupLocked()
+	}
 }
 
 // NumRunningFlows returns the number of flows that were kicked off via this
