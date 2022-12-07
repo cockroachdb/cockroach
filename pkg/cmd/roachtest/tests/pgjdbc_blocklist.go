@@ -31,8 +31,6 @@ var pgjdbcBlockList = blocklist{
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=POLYGON, oidValue=604]":                                                                                    "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=REF_CURSOR, oidValue=1,790]":                                                                               "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=REF_CURSOR_ARRAY, oidValue=2,201]":                                                                         "unknown",
-	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=TSQUERY, oidValue=3,615]":                                                                                  "unknown",
-	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=TSVECTOR, oidValue=3,614]":                                                                                 "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=XML, oidValue=142]":                                                                                        "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=XML_ARRAY, oidValue=143]":                                                                                  "unknown",
 	"org.postgresql.jdbc.BitFieldTest.TestGetObjectForBitFields":                                                                                                               "unknown",
