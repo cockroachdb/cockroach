@@ -35,7 +35,11 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { getNodesByRegionString, normalizePrivileges } from "../utils";
+import {
+  combineLoadingErrors,
+  getNodesByRegionString,
+  normalizePrivileges,
+} from "../utils";
 
 const { TableDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 
@@ -119,7 +123,11 @@ export const mapStateToProps = createSelector(
     return {
       loading: !!databaseDetails[database]?.inFlight,
       loaded: !!databaseDetails[database]?.valid,
-      lastError: databaseDetails[database]?.lastError,
+      lastError: combineLoadingErrors(
+        databaseDetails[database]?.lastError,
+        databaseDetails[database]?.data?.maxSizeReached,
+        null,
+      ),
       name: database,
       showNodeRegionsColumn,
       viewMode,
@@ -130,9 +138,8 @@ export const mapStateToProps = createSelector(
       nodeRegions: nodeRegions,
       isTenant: isTenant,
       tables: _.map(
-        databaseDetails[database]?.data?.tables_resp.tables,
-        tableRow => {
-          const table = tableRow.table_name;
+        databaseDetails[database]?.data?.results.tables_resp.tables,
+        table => {
           const tableId = generateTableID(database, table);
 
           const details = tableDetails[tableId];

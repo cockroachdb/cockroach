@@ -127,7 +127,7 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
-      lastError: undefined,
+      lastError: null,
       name: "things",
       search: null,
       filters: defaultFilters,
@@ -175,7 +175,7 @@ describe("Database Details Page", function () {
       sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [
         {
-          name: "foo",
+          name: `"public"."foo"`,
           details: {
             loading: false,
             loaded: false,
@@ -202,7 +202,7 @@ describe("Database Details Page", function () {
           },
         },
         {
-          name: "bar",
+          name: `"public"."bar"`,
           details: {
             loading: false,
             loaded: false,
@@ -250,7 +250,7 @@ describe("Database Details Page", function () {
       ],
     );
 
-    fakeApi.stubTableDetails("things", "foo", {
+    fakeApi.stubTableDetails("things", `"public"."foo"`, {
       grants: [
         { user: "admin", privileges: ["CREATE"] },
         { user: "public", privileges: ["SELECT"] },
@@ -310,7 +310,7 @@ describe("Database Details Page", function () {
       data_live_percentage: 2.0,
     });
 
-    fakeApi.stubTableDetails("things", "bar", {
+    fakeApi.stubTableDetails("things", `"public"."bar"`, {
       grants: [
         { user: "root", privileges: ["ALL"] },
         { user: "app", privileges: ["INSERT"] },
@@ -363,10 +363,10 @@ describe("Database Details Page", function () {
     });
 
     await driver.refreshDatabaseDetails();
-    await driver.refreshTableDetails("foo");
-    await driver.refreshTableDetails("bar");
+    await driver.refreshTableDetails(`"public"."foo"`);
+    await driver.refreshTableDetails(`"public"."bar"`);
 
-    driver.assertTableDetails("foo", {
+    driver.assertTableDetails(`"public"."foo"`, {
       loading: false,
       loaded: true,
       lastError: null,
@@ -384,7 +384,7 @@ describe("Database Details Page", function () {
       livePercentage: 2.0,
     });
 
-    driver.assertTableDetails("bar", {
+    driver.assertTableDetails(`"public"."bar"`, {
       loading: false,
       loaded: true,
       lastError: null,
@@ -418,7 +418,7 @@ describe("Database Details Page", function () {
       ],
     );
 
-    fakeApi.stubTableDetails("things", "foo", {
+    fakeApi.stubTableDetails("things", `"public"."foo"`, {
       grants: [
         { user: "bzuckercorn", privileges: ["ALL"] },
         { user: "bloblaw", privileges: ["ALL"] },
@@ -430,9 +430,9 @@ describe("Database Details Page", function () {
     });
 
     await driver.refreshDatabaseDetails();
-    await driver.refreshTableDetails("foo");
+    await driver.refreshTableDetails(`"public"."foo"`);
 
-    driver.assertTableRoles("foo", [
+    driver.assertTableRoles(`"public"."foo"`, [
       "root",
       "admin",
       "public",
@@ -457,7 +457,7 @@ describe("Database Details Page", function () {
       ],
     );
 
-    fakeApi.stubTableDetails("things", "foo", {
+    fakeApi.stubTableDetails("things", `"public"."foo"`, {
       grants: [
         {
           user: "admin",
@@ -471,9 +471,9 @@ describe("Database Details Page", function () {
     });
 
     await driver.refreshDatabaseDetails();
-    await driver.refreshTableDetails("foo");
+    await driver.refreshTableDetails(`"public"."foo"`);
 
-    driver.assertTableGrants("foo", [
+    driver.assertTableGrants(`"public"."foo"`, [
       "ALL",
       "CREATE",
       "DROP",
@@ -503,21 +503,21 @@ describe("Database Details Page", function () {
       ],
     );
 
-    fakeApi.stubTableStats("things", "foo", {
+    fakeApi.stubTableStats("things", `"public"."foo"`, {
       range_count: new Long(4200),
       approximate_disk_bytes: new Long(44040192),
     });
 
-    fakeApi.stubTableStats("things", "bar", {
+    fakeApi.stubTableStats("things", `"public"."bar"`, {
       range_count: new Long(1023),
       approximate_disk_bytes: new Long(8675309),
     });
 
     await driver.refreshDatabaseDetails();
-    await driver.refreshTableStats("foo");
-    await driver.refreshTableStats("bar");
+    await driver.refreshTableStats(`"public"."foo"`);
+    await driver.refreshTableStats(`"public"."bar"`);
 
-    driver.assertTableStats("foo", {
+    driver.assertTableStats(`"public"."foo"`, {
       loading: false,
       loaded: true,
       lastError: null,
@@ -527,7 +527,7 @@ describe("Database Details Page", function () {
       nodesByRegionString: "",
     });
 
-    driver.assertTableStats("bar", {
+    driver.assertTableStats(`"public"."bar"`, {
       loading: false,
       loaded: true,
       lastError: null,
