@@ -1391,7 +1391,7 @@ func (s *crdbSpan) SetRecordingType(to tracingpb.RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.mu.openChildren {
-		child.SetRecordingType(to)
+		child.i.crdb.SetRecordingType(to)
 	}
 }
 
