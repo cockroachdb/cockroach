@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/raft/v3"
 )
 
 const (

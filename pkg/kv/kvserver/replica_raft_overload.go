@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3/tracker"
+	"go.etcd.io/raft/v3/tracker"
 )
 
 // pauseReplicationIOThreshold is the admission.io.overload threshold at which

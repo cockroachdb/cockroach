@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/raft/v3"
 )
 
 type replicaInCircuitBreaker interface {

@@ -60,7 +60,7 @@ go_library(
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_gogo_protobuf//proto",
         "@com_github_golang_mock//gomock",  # keep
-        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_google_grpc//metadata",  # keep
     ],
 )
@@ -117,11 +117,11 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_etcd_raft_v3//:raft",
-        "@io_etcd_go_etcd_raft_v3//confchange",
-        "@io_etcd_go_etcd_raft_v3//quorum",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
-        "@io_etcd_go_etcd_raft_v3//tracker",
+        "@io_etcd_go_raft_v3//:raft",
+        "@io_etcd_go_raft_v3//confchange",
+        "@io_etcd_go_raft_v3//quorum",
+        "@io_etcd_go_raft_v3//raftpb",
+        "@io_etcd_go_raft_v3//tracker",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],

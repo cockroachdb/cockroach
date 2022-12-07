@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3"
-	"go.etcd.io/etcd/raft/v3/confchange"
-	"go.etcd.io/etcd/raft/v3/quorum"
-	"go.etcd.io/etcd/raft/v3/tracker"
+	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/confchange"
+	"go.etcd.io/raft/v3/quorum"
+	"go.etcd.io/raft/v3/tracker"
 )
 
 func rd(typ ReplicaType, id uint64) ReplicaDescriptor {

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/raft/v3"
 )
 
 // ReplicaMetrics contains details on the current status of the replica.

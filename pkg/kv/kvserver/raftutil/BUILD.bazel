@@ -8,8 +8,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "@io_etcd_go_etcd_raft_v3//:raft",
-        "@io_etcd_go_etcd_raft_v3//tracker",
+        "@io_etcd_go_raft_v3//:raft",
+        "@io_etcd_go_raft_v3//tracker",
     ],
 )
 
@@ -20,8 +20,8 @@ go_test(
     embed = [":raftutil"],
     deps = [
         "@com_github_stretchr_testify//require",
-        "@io_etcd_go_etcd_raft_v3//:raft",
-        "@io_etcd_go_etcd_raft_v3//tracker",
+        "@io_etcd_go_raft_v3//:raft",
+        "@io_etcd_go_raft_v3//tracker",
     ],
 )
 
