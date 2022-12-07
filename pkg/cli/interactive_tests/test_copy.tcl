@@ -32,6 +32,22 @@ eexpect "could not parse"
 
 end_test
 
+start_test "check EMPTY copy"
+
+send "COPY t FROM STDIN;\r"
+eexpect ">>"
+send_eof
+eexpect "COPY 0"
+eexpect root@
+
+send "COPY t FROM STDIN;\r"
+eexpect ">>"
+send "\\.\r"
+eexpect "COPY 0"
+eexpect root@
+
+end_test
+
 start_test "multi statement with COPY"
 send "SELECT 1; COPY t FROM STDIN CSV;\r"
 eexpect "COPY together with other statements in a query string is not supported"

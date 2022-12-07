@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -236,12 +236,15 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 				"or the prior histogram has no buckets and a partial statistic cannot be collected",
 			column.GetName())
 	}
-
-	extremesSpans, err := constructUsingExtremesSpans(planCtx, histogram, scan.index)
+	lowerBound, upperBound, err := getUsingExtremesBounds(planCtx, histogram)
 	if err != nil {
 		return nil, err
 	}
-	extremesPredicate := constructUsingExtremesPredicate(extremesSpans, column.GetName(), scan.index)
+	extremesSpans, err := constructUsingExtremesSpans(lowerBound, upperBound, scan.index)
+	if err != nil {
+		return nil, err
+	}
+	extremesPredicate := constructUsingExtremesPredicate(lowerBound, upperBound, column.GetName(), scan.index)
 	// Get roachpb.Spans from constraint.Spans
 	scan.spans, err = sb.SpansFromConstraintSpan(&extremesSpans, span.NoopSplitter())
 	if err != nil {
@@ -505,29 +508,13 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	return resultWriter.Err()
 }
 
-// constructUsingExtremesPredicate returns string of a predicate identifying
-// the upper and lower bounds of the stats collection.
-func constructUsingExtremesPredicate(
-	extremesSpans constraint.Spans, columnName string, index catalog.Index,
-) string {
-	var predicate string
-	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
-		predicate = fmt.Sprintf("%s < %s OR %s > %s OR %s is NULL", columnName, extremesSpans.Get(0).EndKey().Value(0).String(), columnName, extremesSpans.Get(1).StartKey().Value(0).String(), columnName)
-	} else {
-		predicate = fmt.Sprintf("%s < %s OR %s > %s OR %s is NULL", columnName, extremesSpans.Get(1).StartKey().Value(0).String(), columnName, extremesSpans.Get(0).EndKey().Value(0).String(), columnName)
-	}
-	return predicate
-}
-
-// constructExtremesSpans returns a constraint.Spans consisting of a
-// lowerbound and upperbound span covering the extremes of an index.
-func constructUsingExtremesSpans(
-	planCtx *PlanningCtx, histogram []cat.HistogramBucket, index catalog.Index,
-) (constraint.Spans, error) {
-	var lbSpan constraint.Span
-	var ubSpan constraint.Span
+// getUsingExtremesBounds returns a tree.Datum representing the upper and lower
+// bounds of the USING EXTREMES span for partial statistics.
+func getUsingExtremesBounds(
+	planCtx *PlanningCtx, histogram []cat.HistogramBucket,
+) (tree.Datum, tree.Datum, error) {
 	lowerBound := histogram[0].UpperBound
-	upperBound := constraint.MakeKey(histogram[len(histogram)-1].UpperBound)
+	upperBound := histogram[len(histogram)-1].UpperBound
 	// Pick the earliest lowerBound that is not null,
 	// but if none exist, return error
 	for i := range histogram {
@@ -538,18 +525,57 @@ func constructUsingExtremesSpans(
 		}
 	}
 	if lowerBound.Compare(planCtx.EvalContext(), tree.DNull) == 0 {
-		return constraint.Spans{},
+		return tree.DNull, tree.DNull,
 			pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
 				"only NULL values exist in the index, so partial stats cannot be collected")
 	}
+	return lowerBound, upperBound, nil
+}
 
+// constructUsingExtremesPredicate returns string of a predicate identifying
+// the upper and lower bounds of the stats collection.
+func constructUsingExtremesPredicate(
+	lowerBound tree.Datum, upperBound tree.Datum, columnName string, index catalog.Index,
+) string {
+	lbExpr := tree.ComparisonExpr{
+		Operator: treecmp.MakeComparisonOperator(treecmp.LT),
+		Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+		Right:    lowerBound,
+	}
+
+	ubExpr := tree.ComparisonExpr{
+		Operator: treecmp.MakeComparisonOperator(treecmp.GT),
+		Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+		Right:    upperBound,
+	}
+	nullExpr := tree.IsNullExpr{
+		Expr: &tree.ColumnItem{ColumnName: tree.Name(columnName)},
+	}
+
+	pred := tree.OrExpr{
+		Left: &nullExpr,
+		Right: &tree.OrExpr{
+			Left:  &lbExpr,
+			Right: &ubExpr,
+		},
+	}
+	return tree.Serialize(&pred)
+}
+
+// constructExtremesSpans returns a constraint.Spans consisting of a
+// lowerbound and upperbound span covering the extremes of an index.
+func constructUsingExtremesSpans(
+	lowerBound tree.Datum, upperBound tree.Datum, index catalog.Index,
+) (constraint.Spans, error) {
+	var lbSpan constraint.Span
+	var ubSpan constraint.Span
 	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
 		lbSpan.Init(constraint.EmptyKey, constraint.IncludeBoundary, constraint.MakeKey(lowerBound), constraint.ExcludeBoundary)
-		ubSpan.Init(upperBound, constraint.ExcludeBoundary, constraint.EmptyKey, constraint.IncludeBoundary)
+		ubSpan.Init(constraint.MakeKey(upperBound), constraint.ExcludeBoundary, constraint.EmptyKey, constraint.IncludeBoundary)
 	} else {
 		lbSpan.Init(constraint.MakeKey(lowerBound), constraint.ExcludeBoundary, constraint.EmptyKey, constraint.IncludeBoundary)
-		ubSpan.Init(constraint.EmptyKey, constraint.IncludeBoundary, upperBound, constraint.ExcludeBoundary)
+		ubSpan.Init(constraint.EmptyKey, constraint.IncludeBoundary, constraint.MakeKey(upperBound), constraint.ExcludeBoundary)
 	}
 	var extremesSpans constraint.Spans
 	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {

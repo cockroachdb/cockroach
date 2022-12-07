@@ -2044,19 +2044,19 @@ query TT colnames
 SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='abcd_a_partial';
 ----
 name            partialPredicate
-abcd_a_partial  a < 1 OR a > 8 OR a is NULL
+abcd_a_partial  (a IS NULL) OR ((a < 1:::INT8) OR (a > 8:::INT8))
 
 query TT colnames
 SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='abcd_c_partial';
 ----
 name            partialPredicate
-abcd_c_partial  c < 100 OR c > 800 OR c is NULL
+abcd_c_partial  (c IS NULL) OR ((c < 100:::INT8) OR (c > 800:::INT8))
 
 query TT colnames
 SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='xy_x_partial';
 ----
 name          partialPredicate
-xy_x_partial  x < 0 OR x > 3 OR x is NULL
+xy_x_partial  (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))
 
 # Test if requesting a partial stat again uses the previous full stat and not the previous partial stat.
 statement ok
@@ -2065,10 +2065,10 @@ CREATE STATISTICS xy_x_partial_2 ON x FROM xy USING EXTREMES
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE xy];
 ----
-statistics_name  partial_predicate            row_count  null_count
-xy_x             NULL                         4          0
-xy_x_partial     x < 0 OR x > 3 OR x is NULL  4          0
-xy_x_partial_2   x < 0 OR x > 3 OR x is NULL  4          0
+statistics_name  partial_predicate                                  row_count  null_count
+xy_x             NULL                                               4          0
+xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 
 # Test null values.
 statement ok
@@ -2107,9 +2107,9 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE a_null];
 ----
-statistics_name      partial_predicate            row_count  null_count
-a_null_stat          NULL                         3          1
-a_null_stat_partial  a < 1 OR a > 2 OR a is NULL  4          4
+statistics_name      partial_predicate                                  row_count  null_count
+a_null_stat          NULL                                               3          1
+a_null_stat_partial  (a IS NULL) OR ((a < 1:::INT8) OR (a > 2:::INT8))  4          4
 
 # Test descending indexes.
 statement ok
@@ -2150,9 +2150,9 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE d_desc];
 ----
-statistics_name  partial_predicate            row_count  null_count
-sd               NULL                         4          0
-sdp              a < 1 OR a > 4 OR a is NULL  2          0
+statistics_name  partial_predicate                                  row_count  null_count
+sd               NULL                                               4          0
+sdp              (a IS NULL) OR ((a < 1:::INT8) OR (a > 4:::INT8))  2          0
 
 # Test descending index with NULL
 statement ok
@@ -2177,9 +2177,9 @@ CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
 query TTII colnames
 SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE d_desc];
 ----
-statistics_name  partial_predicate            row_count  null_count
-sdn              NULL                         8          2
-sdnp             a < 0 OR a > 5 OR a is NULL  2          2
+statistics_name  partial_predicate                                  row_count  null_count
+sdn              NULL                                               8          2
+sdnp             (a IS NULL) OR ((a < 0:::INT8) OR (a > 5:::INT8))  2          2
 
 # Verify errors.
 statement error pq: cannot process multiple partial statistics at once
