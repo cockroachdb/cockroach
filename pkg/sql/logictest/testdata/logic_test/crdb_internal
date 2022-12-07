@@ -32,6 +32,7 @@ crdb_internal  cluster_settings                 table  admin  NULL  NULL
 crdb_internal  cluster_statement_statistics     table  admin  NULL  NULL
 crdb_internal  cluster_transaction_statistics   table  admin  NULL  NULL
 crdb_internal  cluster_transactions             table  admin  NULL  NULL
+crdb_internal  cluster_txn_execution_insights   table  admin  NULL  NULL
 crdb_internal  create_function_statements       table  admin  NULL  NULL
 crdb_internal  create_schema_statements         table  admin  NULL  NULL
 crdb_internal  create_statements                table  admin  NULL  NULL
@@ -71,6 +72,7 @@ crdb_internal  node_sessions                    table  admin  NULL  NULL
 crdb_internal  node_statement_statistics        table  admin  NULL  NULL
 crdb_internal  node_transaction_statistics      table  admin  NULL  NULL
 crdb_internal  node_transactions                table  admin  NULL  NULL
+crdb_internal  node_txn_execution_insights      table  admin  NULL  NULL
 crdb_internal  node_txn_stats                   table  admin  NULL  NULL
 crdb_internal  partitions                       table  admin  NULL  NULL
 crdb_internal  pg_catalog_table_is_implemented  table  admin  NULL  NULL
@@ -457,6 +459,18 @@ query ITTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
 range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
+
+query TTTBTTTTTIITITTTTT colnames
+SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
+----
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids
+
+
+query TTTBTTTTTIITITTTTT colnames
+SELECT * FROM crdb_internal.node_txn_execution_insights WHERE query = ''
+----
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids
+
 
 statement ok
 CREATE SCHEMA schema; CREATE TABLE schema.bar (y INT PRIMARY KEY)

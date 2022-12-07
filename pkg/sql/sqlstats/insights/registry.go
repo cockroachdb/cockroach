@@ -129,6 +129,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 			insight.Transaction.Problems = addProblem(insight.Transaction.Problems, s.Problem)
 		}
 
+		insight.Transaction.StmtExecutionIDs = append(insight.Transaction.StmtExecutionIDs, s.ID)
 		insight.Statements = append(insight.Statements, s)
 	}
 
