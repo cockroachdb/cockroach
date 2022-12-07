@@ -10,7 +10,7 @@
 
 import {
   generateTableID,
-  databaseRequestToID,
+  databaseRequestPayloadToID,
   tableRequestToID,
 } from "./apiReducers";
 import * as protos from "src/js/protos";
@@ -34,9 +34,7 @@ describe("table id generator", function () {
 describe("request to string functions", function () {
   it("correctly generates a string from a database details request", function () {
     const database = "testDatabase";
-    const databaseRequest =
-      new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database });
-    expect(databaseRequestToID(databaseRequest)).toEqual(database);
+    expect(databaseRequestPayloadToID(database)).toEqual(database);
   });
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";

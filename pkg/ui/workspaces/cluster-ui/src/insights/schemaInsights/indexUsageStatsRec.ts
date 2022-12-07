@@ -21,6 +21,7 @@ type dropIndexRecommendation = {
 };
 
 export interface IndexUsageStatistic {
+  database_name?: string;
   created_at?: string;
   last_read?: string;
   unused_threshold: string;
@@ -29,6 +30,13 @@ export interface IndexUsageStatistic {
 export function recommendDropUnusedIndex(
   indexUsageStat: IndexUsageStatistic,
 ): dropIndexRecommendation {
+  if (
+    indexUsageStat.database_name &&
+    indexUsageStat.database_name === "system"
+  ) {
+    return { recommend: false, reason: "" };
+  }
+
   const createdAt = indexUsageStat.created_at
     ? moment.utc(indexUsageStat.created_at)
     : minDate;
