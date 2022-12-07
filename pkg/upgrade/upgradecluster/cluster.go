@@ -14,6 +14,7 @@ package upgradecluster
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
 )
@@ -41,8 +42,8 @@ type ClusterConfig struct {
 	// Dialer constructs connections to other nodes.
 	Dialer NodeDialer
 
-	// RangeDescIterator iterates through all range descriptors.
-	RangeDescIterator rangedesciter.Iterator
+	// RangeDescScanner paginates through all range descriptors.
+	RangeDescScanner rangedesc.Scanner
 
 	// DB provides access the kv.DB instance backing the cluster.
 	//
@@ -145,5 +146,5 @@ func (c *Cluster) ForEveryNode(
 func (c *Cluster) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	return c.c.RangeDescIterator.Iterate(ctx, blockSize, init, fn)
+	return c.c.RangeDescScanner.Scan(ctx, blockSize, init, keys.EverythingSpan, fn)
 }

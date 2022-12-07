@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -229,6 +230,26 @@ func (e *elasticCPUGranter) hasWaitingRequests() bool {
 	return e.requester.hasWaitingRequests()
 }
 
+// computeUtilizationMetric is part of the elasticCPULimiter interface.
+func (e *elasticCPUGranter) computeUtilizationMetric() {
+	if !e.metrics.everyInterval.ShouldProcess(timeutil.Now()) {
+		return // nothing to do
+	}
+
+	currentCumAcquiredNanos := e.metrics.AcquiredNanos.Count()
+	currentCumReturnedNanos := e.metrics.ReturnedNanos.Count()
+	currentCumUsedNanos := currentCumAcquiredNanos - currentCumReturnedNanos
+
+	if e.metrics.lastCumUsedNanos != 0 {
+		intervalUsedNanos := currentCumUsedNanos - e.metrics.lastCumUsedNanos
+		intervalUsedPercent := float64(intervalUsedNanos) /
+			(float64(e.metrics.MaxAvailableNanos.Count()) * elasticCPUUtilizationMetricInterval.Seconds())
+		e.metrics.Utilization.Update(intervalUsedPercent)
+		e.metrics.lastCumUsedNanos = currentCumUsedNanos
+	}
+	e.metrics.lastCumUsedNanos = currentCumUsedNanos
+}
+
 // TODO(irfansharif): Provide separate enums for different elastic CPU token
 // sizes? (1ms, 10ms, 100ms). Write up something about picking the right value.
 // Can this value be auto-estimated?
@@ -257,9 +278,17 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	// TODO(irfansharif): Surface this metric in the "Overload" dashboard.
+	elasticCPUGranterUtilization = metric.Metadata{
+		Name:        "admission.elastic_cpu.utilization",
+		Help:        "CPU utilization by elastic work",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_PERCENT,
+	}
+
 	elasticCPUGranterUtilizationLimit = metric.Metadata{
 		Name:        "admission.elastic_cpu.utilization_limit",
-		Help:        "Utilization limit set for the elastic CPU workj",
+		Help:        "Utilization limit set for the elastic CPU work",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
 	}
@@ -272,15 +301,24 @@ type elasticCPUGranterMetrics struct {
 	ReturnedNanos     *metric.Counter
 	MaxAvailableNanos *metric.Counter
 	UtilizationLimit  *metric.GaugeFloat64
+
+	Utilization      *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
+	everyInterval    util.EveryN
+	lastCumUsedNanos int64
 }
+
+const elasticCPUUtilizationMetricInterval = 10 * time.Second
 
 func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 	metrics := &elasticCPUGranterMetrics{
 		AcquiredNanos:     metric.NewCounter(elasticCPUAcquiredNanos),
 		ReturnedNanos:     metric.NewCounter(elasticCPUReturnedNanos),
 		MaxAvailableNanos: metric.NewCounter(elasticCPUMaxAvailableNanos),
+		Utilization:       metric.NewGaugeFloat64(elasticCPUGranterUtilization),
 		UtilizationLimit:  metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
+		everyInterval:     util.Every(elasticCPUUtilizationMetricInterval),
 	}
+
 	metrics.MaxAvailableNanos.Inc(int64(runtime.GOMAXPROCS(0)) * time.Second.Nanoseconds())
 	return metrics
 }

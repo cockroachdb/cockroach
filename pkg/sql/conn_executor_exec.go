@@ -16,13 +16,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -914,6 +914,9 @@ func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context)
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, ast tree.Statement, commitFn func(context.Context) error,
 ) (fsm.Event, fsm.EventPayload) {
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
+		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	if err := commitFn(ctx); err != nil {
 		if descs.IsTwoVersionInvariantViolationError(err) {
@@ -1087,9 +1090,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
 
-	if server := ex.server.cfg.DistSQLSrv; server != nil {
-		// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
-		ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
+	if multitenant.TenantRUEstimateEnabled.Get(ex.server.cfg.SV()) {
+		if server := ex.server.cfg.DistSQLSrv; server != nil {
+			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
+			ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
+		}
 	}
 
 	// If adminAuditLogging is enabled, we want to check for HasAdminRole
@@ -1117,8 +1122,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// include gist in error reports
 	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
-
-	if planner.autoCommit {
+	if planner.extendedEvalCtx.TxnImplicit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
 	}
 
@@ -1172,7 +1176,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
-		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
+		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), planner.Descriptors())
 	}
 
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, timeutil.Now())
@@ -1323,7 +1327,7 @@ func populateQueryLevelStatsAndRegions(
 	} else {
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.
-		if cfg.DistSQLSrv != nil {
+		if multitenant.TenantRUEstimateEnabled.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
 			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
 				if costCfg := costController.GetCostConfig(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
@@ -2002,27 +2006,52 @@ func (ex *connExecutor) runShowTransferState(
 func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "COMPLETIONS", Typ: types.String}})
-	offsetVal, ok := n.Offset.AsConstantInt()
-	if !ok {
-		return errors.Newf("invalid offset %v", n.Offset)
+	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
+	log.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
+	ie := ex.server.cfg.InternalExecutor
+	sd := ex.planner.SessionData()
+	override := sessiondata.InternalExecutorOverride{
+		SearchPath: &sd.SearchPath,
+		Database:   sd.Database,
+		User:       sd.User(),
 	}
-	offset, err := strconv.Atoi(offsetVal.String())
-	if err != nil {
-		return err
+	// If a txn is currently open, reuse it. If not,
+	// we will read in a fresh txn.
+	//
+	// TODO(janexing): better bind the internal executor with the txn.
+	var txn *kv.Txn
+	if _, ok := ex.machine.CurState().(stateOpen); ok {
+		txn = func() *kv.Txn {
+			ex.state.mu.RLock()
+			defer ex.state.mu.RUnlock()
+			return ex.state.mu.txn
+		}()
 	}
-	completions, err := delegate.RunShowCompletions(n.Statement.RawString(), offset)
+	queryIterFn := func(ctx context.Context, opName string, stmt string, args ...interface{}) (eval.InternalRows, error) {
+		return ie.QueryIteratorEx(ctx, opName, txn,
+			override,
+			stmt, args...)
+	}
+
+	completions, err := newCompletionsGenerator(queryIterFn, n)
 	if err != nil {
+		log.Warningf(ctx, "COMPLETION GENERATOR FAILED: %v", err)
 		return err
 	}
 
-	for _, completion := range completions {
-		err = res.AddRow(ctx, tree.Datums{tree.NewDString(completion)})
+	var hasNext bool
+	for hasNext, err = completions.Next(ctx); hasNext; hasNext, err = completions.Next(ctx) {
+		row := completions.Values()
+		err = res.AddRow(ctx, row)
 		if err != nil {
+			log.Warningf(ctx, "COMPLETION ADDROW FAILED: %v", err)
 			return err
 		}
 	}
-	return nil
+	if err != nil {
+		log.Warningf(ctx, "COMPLETION GENERATOR NEXT FAILED: %v", err)
+	}
+	return err
 }
 
 // showQueryStatsFns maps column names as requested by the SQL clients
@@ -2286,6 +2315,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
 		// unchanged.
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+		ex.extraTxnState.idleLatency = 0
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
 		ex.extraTxnState.rowsWritten = 0
@@ -2318,6 +2348,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.numRows = 0
 	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
 	ex.extraTxnState.rowsWritten = 0
@@ -2397,6 +2428,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		ServiceLatency:          txnServiceLat,
 		RetryLatency:            txnRetryLat,
 		CommitLatency:           commitLat,
+		IdleLatency:             ex.extraTxnState.idleLatency,
 		RowsAffected:            ex.extraTxnState.numRows,
 		CollectedExecStats:      ex.planner.instrumentation.collectExecStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,

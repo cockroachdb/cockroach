@@ -1863,6 +1863,18 @@ func (d *DJSON) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedE
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DTSQuery) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DTSVector) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DTuple) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
 	return d, nil
 }
@@ -2161,6 +2173,7 @@ func typeCheckComparisonOp(
 	rightTuple, rightIsTuple := foldedRight.(*Tuple)
 
 	_, rightIsSubquery := foldedRight.(SubqueryExpr)
+	handleTupleTypeMismatch := false
 	switch {
 	case foldedOp.Symbol == treecmp.In && rightIsTuple:
 		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
@@ -2238,6 +2251,18 @@ func typeCheckComparisonOp(
 			return nil, nil, nil, false, err
 		}
 		return typedLeft, typedRight, fn, false, nil
+
+	case leftIsTuple || rightIsTuple:
+		// Tuple must compare with a tuple type, as handled above.
+		typedLeft, errLeft := foldedLeft.TypeCheck(ctx, semaCtx, types.Any)
+		typedRight, errRight := foldedRight.TypeCheck(ctx, semaCtx, types.Any)
+		if errLeft == nil && errRight == nil &&
+			((typedLeft.ResolvedType().Family() == types.TupleFamily &&
+				typedRight.ResolvedType().Family() != types.TupleFamily) ||
+				(typedRight.ResolvedType().Family() == types.TupleFamily &&
+					typedLeft.ResolvedType().Family() != types.TupleFamily)) {
+			handleTupleTypeMismatch = true
+		}
 	}
 
 	// For comparisons, we do not stimulate the typing of untyped NULL with the
@@ -2286,7 +2311,7 @@ func typeCheckComparisonOp(
 	genericComparison := leftIsGeneric && rightIsGeneric
 
 	typeMismatch := false
-	if genericComparison && !nullComparison {
+	if (genericComparison || handleTupleTypeMismatch) && !nullComparison {
 		// A generic comparison (one between two generic types, like arrays) is not
 		// well-typed if the two input types are not equivalent, unless one of the
 		// sides is NULL.

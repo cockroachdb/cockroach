@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -238,6 +239,14 @@ func writeTextDatumNotNull(
 
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
+
+	case *tree.DTSQuery:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
+	case *tree.DTSVector:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DTuple:
 		b.textFormatter.FormatNode(v)
@@ -709,6 +718,28 @@ func writeBinaryDatumNotNull(
 	case *tree.DGeometry:
 		b.putInt32(int32(len(v.EWKB())))
 		b.write(v.EWKB())
+
+	case *tree.DTSQuery:
+		initialLen := b.Len()
+		// Reserve bytes for writing length later.
+		b.putInt32(int32(0))
+		ret := tsearch.EncodeTSQueryPGBinary(nil, v.TSQuery)
+		b.write(ret)
+		lengthToWrite := b.Len() - (initialLen + 4)
+		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
+
+	case *tree.DTSVector:
+		initialLen := b.Len()
+		// Reserve bytes for writing length later.
+		b.putInt32(int32(0))
+		ret, err := tsearch.EncodeTSVectorPGBinary(nil, v.TSVector)
+		if err != nil {
+			b.setError(err)
+			return
+		}
+		b.write(ret)
+		lengthToWrite := b.Len() - (initialLen + 4)
+		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
 	case *tree.DArray:
 		if v.ParamTyp.Family() == types.ArrayFamily {

@@ -2,7 +2,7 @@
 # Disabled to run within tenants because version gating infra does not play nice within tenants.
 # More investigation required.
 
-new-server name=s1 beforeVersion=Start22_2 disable-tenant
+new-cluster name=s1 beforeVersion=Start22_2 disable-tenant
 ----
 
 exec-sql
@@ -21,7 +21,7 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with sch
 ----
 pq: cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2
 
-upgrade-server version=Start22_2
+upgrade-cluster version=Start22_2
 ----
 
 exec-sql

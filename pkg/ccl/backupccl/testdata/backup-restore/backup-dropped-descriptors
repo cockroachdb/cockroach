@@ -2,7 +2,7 @@
 # and type descriptors in the DROP state.
 subtest dropped-database-descriptors
 
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
@@ -105,7 +105,7 @@ subtest end
 # Test backup/restore interaction with dropped schema and type in a database.
 subtest dropped-schema-descriptors
 
-new-server name=s2
+new-cluster name=s2
 ----
 
 exec-sql

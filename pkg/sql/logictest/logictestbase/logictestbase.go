@@ -85,6 +85,21 @@ type TestClusterConfig struct {
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
+	// UseCockroachGoTestserver determines if the logictest uses the
+	// cockroach-go/testserver package to run the logic test.
+	// This allows us to do testing on different binary versions or to
+	// restart/upgrade nodes.
+	UseCockroachGoTestserver bool
+
+	// CockroachGoBootstrapVersion defines the version the cockroach-go/testserver
+	// is bootstrapped on for the logictest. It is required if
+	// UseCockroachGoTestserver is true.
+	CockroachGoBootstrapVersion string
+
+	// CockroachGoUpgradeVersion defines the version that the
+	// cockroach-go/testserver is upgraded to during the logictest. If one is not
+	// specified, it uses the local cockroach binary.
+	CockroachGoUpgradeVersion string
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -455,6 +470,21 @@ var LogicTestConfigs = []TestClusterConfig{
 		BinaryVersion:               clusterversion.ByKey(clusterversion.V23_1),
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
+	},
+	{
+		Name:                        "cockroach-go-testserver-22.2-master",
+		UseCockroachGoTestserver:    true,
+		NumNodes:                    3,
+		CockroachGoBootstrapVersion: "v22.2.0-rc.1",
+		BootstrapVersion:            roachpb.Version{Major: 22, Minor: 2},
+	},
+	{
+		Name:                        "cockroach-go-testserver-22.1-22.2",
+		UseCockroachGoTestserver:    true,
+		NumNodes:                    3,
+		CockroachGoBootstrapVersion: "v22.1.6",
+		CockroachGoUpgradeVersion:   "v22.2.0-rc.1",
+		BootstrapVersion:            roachpb.Version{Major: 22, Minor: 1},
 	},
 }
 

@@ -1,0 +1,16 @@
+echo
+----
+db0.Put(ctx, tk(1), sv(1)) // @0.000000001,0 <nil>
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Get(ctx, tk(1)) // (<nil>, <nil>)
+  txn.Del(ctx, tk(1) /* @s2 */) // <nil>
+  txn.Get(ctx, tk(1)) // (<nil>, <nil>)
+  return nil
+}) // @0.000000002,0 <nil>
+db0.Put(ctx, tk(1), sv(3)) // @0.000000003,0 <nil>
+db0.Del(ctx, tk(1) /* @s4 */) // @0.000000004,0 <nil>
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 v1
+/Table/100/"0000000000000001"/0.000000002,0 @ s2 <nil>
+/Table/100/"0000000000000001"/0.000000003,0 @ s3 v3
+/Table/100/"0000000000000001"/0.000000004,0 @ s4 <nil>
+committed txn non-atomic timestamps: [r]/Table/100/"0000000000000001":[<min>, 0.000000001,0),[0.000000004,0, <max>)-><nil> [d]/Table/100/"0000000000000001":0.000000002,0-><nil>@s2 [r]/Table/100/"0000000000000001":[<min>, 0.000000001,0),[0.000000004,0, <max>),[0.000000002,0, 0.000000003,0)-><nil>

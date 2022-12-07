@@ -154,10 +154,9 @@ func (f CloserFn) Close() {
 //   - all the other things mentioned in:
 //     https://github.com/cockroachdb/cockroach/issues/58164
 type Stopper struct {
-	quiescer chan struct{}                      // Closed when quiescing
-	stopped  chan struct{}                      // Closed when stopped completely
-	onPanic  func(context.Context, interface{}) // called with recover() on panic on any goroutine
-	tracer   *tracing.Tracer                    // tracer used to create spans for tasks
+	quiescer chan struct{}   // Closed when quiescing
+	stopped  chan struct{}   // Closed when stopped completely
+	tracer   *tracing.Tracer // tracer used to create spans for tasks
 
 	mu struct {
 		syncutil.RWMutex
@@ -183,23 +182,6 @@ type Stopper struct {
 // An Option can be passed to NewStopper.
 type Option interface {
 	apply(*Stopper)
-}
-
-type optionPanicHandler func(context.Context, interface{})
-
-var _ Option = optionPanicHandler(nil)
-
-func (oph optionPanicHandler) apply(stopper *Stopper) {
-	stopper.onPanic = oph
-}
-
-// OnPanic is an option which lets the Stopper recover from all panics using
-// the provided panic handler.
-//
-// When Stop() is invoked during stack unwinding, OnPanic is also invoked, but
-// Stop() may not have carried out its duties.
-func OnPanic(handler func(context.Context, interface{})) Option {
-	return optionPanicHandler(handler)
 }
 
 type withTracer struct {
@@ -238,12 +220,11 @@ func NewStopper(options ...Option) *Stopper {
 }
 
 // recover reports the current panic, if any, any panics again.
+//
+// Note: this function _must_ be called with `defer s.recover()`, otherwise
+// the panic recovery won't work.
 func (s *Stopper) recover(ctx context.Context) {
 	if r := recover(); r != nil {
-		if s.onPanic != nil {
-			s.onPanic(ctx, r)
-			return
-		}
 		logcrash.ReportPanicWithGlobalSettings(ctx, r, 1)
 		panic(r)
 	}
@@ -518,6 +499,14 @@ func (s *Stopper) NumTasks() int {
 //
 // Stop is idempotent; concurrent calls will block on each other.
 func (s *Stopper) Stop(ctx context.Context) {
+	defer s.recover(ctx)
+
+	// Don't bother doing any cleanup if we're panicking; the process is expected
+	// to terminate.
+	if r := recover(); r != nil {
+		panic(r)
+	}
+
 	s.mu.Lock()
 	stopCalled := s.mu.stopping
 	s.mu.stopping = true
@@ -530,24 +519,9 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	defer func() {
-		s.recover(ctx)
 		unregister(s)
 		close(s.stopped)
 	}()
-
-	// Don't bother doing stuff cleanly if we're panicking, that would likely
-	// block. Instead, best effort only. This cleans up the stack traces,
-	// avoids stalls and helps some tests in `./cli` finish cleanly (where
-	// panics happen on purpose).
-	if r := recover(); r != nil {
-		go s.Quiesce(ctx)
-		s.mu.Lock()
-		for _, c := range s.mu.closers {
-			go c.Close()
-		}
-		s.mu.Unlock()
-		panic(r)
-	}
 
 	s.Quiesce(ctx)
 

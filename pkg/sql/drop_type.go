@@ -268,7 +268,9 @@ func (p *planner) dropTypeImpl(
 
 	// Delete namespace entry for type.
 	b := p.txn.NewBatch()
-	p.dropNamespaceEntry(ctx, b, typeDesc)
+	if err := p.dropNamespaceEntry(ctx, b, typeDesc); err != nil {
+		return err
+	}
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}

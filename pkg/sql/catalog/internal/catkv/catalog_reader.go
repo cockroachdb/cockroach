@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,13 +65,23 @@ type CatalogReader interface {
 	) (nstree.Catalog, error)
 
 	// GetDescriptorEntries gets the descriptors for the desired IDs, but looks in
-	// the system database cache first if there is one.
+	// the system database cache first if there is one. It also reads all metadata
+	// (e.g. comments and zoneconfig) of the descriptors.
 	GetDescriptorEntries(
 		ctx context.Context,
 		txn *kv.Txn,
 		ids []descpb.ID,
 		isRequired bool,
 		expectedType catalog.DescriptorType,
+	) (nstree.Catalog, error)
+
+	// GetZoneConfigs gets zone config information for the desire IDs. Note: this
+	// is barely used for normal descriptors, it's only used to fetch Zone Configs
+	// for RootNameSpace and PseudoTableIDS which might zone configs but not
+	// descriptors. This fact make it not possible to scan zone configs together
+	// with descriptors.
+	GetZoneConfigs(
+		ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
 	) (nstree.Catalog, error)
 
 	// GetNamespaceEntries gets the descriptor IDs for the desired names, but
@@ -133,6 +144,10 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 		b.Scan(descsPrefix, descsPrefix.PrefixEnd())
 		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
+		commentPrefix := catalogkeys.CommentsMetadataPrefix(codec)
+		b.Scan(commentPrefix, commentPrefix.PrefixEnd())
+		zonesPrefix := config.ZonesPrimaryIndexPrefix(codec)
+		b.Scan(zonesPrefix, zonesPrefix.PrefixEnd())
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -160,7 +175,7 @@ func (cr catalogReader) ScanNamespaceForDatabases(
 	ctx context.Context, txn *kv.Txn,
 ) (nstree.Catalog, error) {
 	return cr.scanNamespace(
-		ctx, txn, catalogkeys.MakeDatabaseNameKey(cr.codec, ""),
+		ctx, txn, catalogkeys.EncodeNameKey(cr.codec, &descpb.NameInfo{}),
 	)
 }
 
@@ -169,7 +184,7 @@ func (cr catalogReader) ScanNamespaceForDatabaseSchemas(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
 	return cr.scanNamespace(
-		ctx, txn, catalogkeys.MakeSchemaNameKey(cr.codec, db.GetID(), "" /* name */),
+		ctx, txn, catalogkeys.EncodeNameKey(cr.codec, &descpb.NameInfo{ParentID: db.GetID()}),
 	)
 }
 
@@ -186,9 +201,10 @@ func (cr catalogReader) ScanNamespaceForDatabaseEntries(
 func (cr catalogReader) ScanNamespaceForSchemaObjects(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 ) (nstree.Catalog, error) {
-	return cr.scanNamespace(ctx, txn, catalogkeys.MakeObjectNameKey(
-		cr.codec, db.GetID(), sc.GetID(), "", /* name */
-	))
+	return cr.scanNamespace(ctx, txn, catalogkeys.EncodeNameKey(cr.codec, &descpb.NameInfo{
+		ParentID:       db.GetID(),
+		ParentSchemaID: sc.GetID(),
+	}))
 }
 
 // GetDescriptorEntries is part of the CatalogReader interface.
@@ -225,6 +241,12 @@ func (cr catalogReader) GetDescriptorEntries(
 			for _, id := range ids {
 				if id != descpb.InvalidID && mc.LookupDescriptorEntry(id) == nil {
 					b.Get(catalogkeys.MakeDescMetadataKey(codec, id))
+					// Fetch all the comments on the descriptor in same batch.
+					for _, t := range catalogkeys.AllCommentTypes {
+						cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id)
+						b.Scan(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd())
+					}
+					b.Get(config.MakeZoneKey(codec, id))
 				}
 			}
 		})
@@ -239,6 +261,26 @@ func (cr catalogReader) GetDescriptorEntries(
 			}
 		}
 	}
+	return mc.Catalog, nil
+}
+
+// GetZoneConfigs is part of the CatalogReader interface.
+func (cr catalogReader) GetZoneConfigs(
+	ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	cq := catalogQuery{
+		catalogReader: cr,
+	}
+	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
+		ids.ForEach(func(id descpb.ID) {
+			b.Get(config.MakeZoneKey(codec, id))
+		})
+	})
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+
 	return mc.Catalog, nil
 }
 

@@ -15,11 +15,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/google/shlex"
 	"github.com/spf13/cobra"
 )
@@ -109,6 +111,26 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 }
 
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
+	var tmpDir string
+	if !buildutil.CrdbTestBuild {
+		// tmpDir will contain the build event binary file if produced.
+		var err error
+		tmpDir, err = os.MkdirTemp("", "")
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Interal Error: Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+		if !buildutil.CrdbTestBuild {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
@@ -134,6 +156,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		// recursive directories ending in /...
 		extraRewritablePaths = []struct{ pkg, path string }{
 			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
+			{"pkg/ccl/logictestccl", "pkg/sql/opt/exec/execbuilder"},
 			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
@@ -326,6 +349,12 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
+
+	if buildutil.CrdbTestBuild {
+		args = append(args, "--build_event_binary_file=/tmp/path")
+	} else {
+		args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
+	}
 
 	logCommand("bazel", args...)
 	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)

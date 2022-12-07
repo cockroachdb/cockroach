@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -132,3 +133,13 @@ func ValidateTransition(old, new Liveness) error {
 
 	return nil
 }
+
+// IsLiveMapEntry encapsulates data about current liveness for a
+// node.
+type IsLiveMapEntry struct {
+	Liveness
+	IsLive bool
+}
+
+// IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
+type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry

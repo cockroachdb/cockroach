@@ -4582,6 +4582,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 					BulkAdderFlushesEveryBatch: true,
 				},
 			},
+			SQLMemoryPoolSize: 1 << 30, // 1 GiB
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
@@ -6209,7 +6210,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		// There should be two jobs, the import and a job updating the parent
 		// database descriptor.
-		sqlDB.CheckQueryResults(t, `SELECT job_type, status FROM [SHOW JOBS] ORDER BY job_type`,
+		sqlDB.CheckQueryResults(t, `SELECT job_type, status FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' ORDER BY job_type`,
 			[][]string{{"IMPORT", "succeeded"}, {"SCHEMA CHANGE", "succeeded"}})
 
 		// Attempt to rename one of the imported schema's so as to verify that

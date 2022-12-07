@@ -13,21 +13,18 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnSchemaNode struct {
-	n               *tree.CommentOnSchema
-	schemaDesc      catalog.SchemaDescriptor
-	metadataUpdater scexec.DescriptorMetadataUpdater
+	n          *tree.CommentOnSchema
+	schemaDesc catalog.SchemaDescriptor
 }
 
 // CommentOnSchema add comment on a schema.
@@ -60,7 +57,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 		return nil, err
 	}
 
-	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn,
+	schemaDesc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn,
 		db.GetSchemaID(n.Name.Schema()), tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
@@ -73,30 +70,22 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 	return &commentOnSchemaNode{
 		n:          n,
 		schemaDesc: schemaDesc,
-		metadataUpdater: descmetadata.NewMetadataUpdater(
-			ctx,
-			p.ExecCfg().InternalExecutorFactory,
-			p.Descriptors(),
-			&p.ExecCfg().Settings.SV,
-			p.txn,
-			p.SessionData(),
-		),
 	}, nil
 }
 
 func (n *commentOnSchemaNode) startExec(params runParams) error {
-	if n.n.Comment != nil {
-		err := n.metadataUpdater.UpsertDescriptorComment(
-			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType, *n.n.Comment)
-		if err != nil {
-			return err
-		}
+	var err error
+	if n.n.Comment == nil {
+		err = params.p.deleteComment(
+			params.ctx, n.schemaDesc.GetID(), 0 /* subID */, catalogkeys.SchemaCommentType,
+		)
 	} else {
-		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType)
-		if err != nil {
-			return err
-		}
+		err = params.p.updateComment(
+			params.ctx, n.schemaDesc.GetID(), 0 /* subID */, catalogkeys.SchemaCommentType, *n.n.Comment,
+		)
+	}
+	if err != nil {
+		return err
 	}
 
 	scComment := ""

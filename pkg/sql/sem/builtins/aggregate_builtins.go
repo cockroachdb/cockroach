@@ -309,7 +309,7 @@ var aggregates = map[string]builtinDefinition{
 
 	"count_rows": makeBuiltin(aggProps(),
 		tree.Overload{
-			Types:         tree.ArgTypes{},
+			Types:         tree.ParamTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: eval.AggregateOverload(newCountRowsAggregate),
 			WindowFunc: eval.WindowOverload(func(params []*types.T, evalCtx *eval.Context) eval.WindowFunc {
@@ -689,16 +689,16 @@ func makeAggOverloadWithReturnType(
 	volatility volatility.V,
 	calledOnNullInput bool,
 ) tree.Overload {
-	argTypes := make(tree.ArgTypes, len(in))
+	paramTypes := make(tree.ParamTypes, len(in))
 	for i, typ := range in {
-		argTypes[i].Name = fmt.Sprintf("arg%d", i+1)
-		argTypes[i].Typ = typ
+		paramTypes[i].Name = fmt.Sprintf("arg%d", i+1)
+		paramTypes[i].Typ = typ
 	}
 
 	return tree.Overload{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
-		Types:         argTypes,
+		Types:         paramTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
 		WindowFunc: eval.WindowOverload(func(params []*types.T, evalCtx *eval.Context) eval.WindowFunc {

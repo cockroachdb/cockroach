@@ -21,13 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -135,7 +135,7 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *kvadmission.Pacer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *admission.Pacer,
 ) *roachpb.Error {
 	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer)
 }
@@ -144,7 +144,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	_forStacks roachpb.RangeID,
 	args *roachpb.RangeFeedRequest,
 	stream roachpb.RangeFeedEventSink,
-	pacer *kvadmission.Pacer,
+	pacer *admission.Pacer,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
@@ -226,7 +226,11 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease, pacer)
+			i := rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease, pacer)
+			if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
+				i.OnEmit = f
+			}
+			return i
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
@@ -578,6 +582,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		return
 	}
 
+	vhf := r.store.TestingKnobs().RangefeedValueHeaderFilter
+
 	// When reading straight from the Raft log, some logical ops will not be
 	// fully populated. Read from the Reader to populate all fields.
 	for _, op := range ops.Ops {
@@ -592,9 +598,23 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
-			*enginepb.MVCCAbortTxnOp,
-			*enginepb.MVCCDeleteRangeOp:
+			*enginepb.MVCCAbortTxnOp:
 			// Nothing to do.
+			continue
+		case *enginepb.MVCCDeleteRangeOp:
+			if vhf == nil {
+				continue
+			}
+			valBytes, err := storage.MVCCLookupRangeKeyValue(reader, t.StartKey, t.EndKey, t.Timestamp)
+			if err != nil {
+				panic(err)
+			}
+
+			v, err := storage.DecodeMVCCValue(valBytes)
+			if err != nil {
+				panic(err)
+			}
+			vhf(t.StartKey, t.EndKey, t.Timestamp, v.MVCCValueHeader)
 			continue
 		default:
 			panic(errors.AssertionFailedf("unknown logical op %T", t))
@@ -615,7 +635,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// Read the value directly from the Reader. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		val, _, err := storage.MVCCGet(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
+		val, _, vh, err := storage.MVCCGetWithValueHeader(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
 		if val == nil && err == nil {
 			err = errors.New("value missing in reader")
 		}
@@ -624,6 +644,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
 			))
 			return
+		}
+
+		if vhf != nil {
+			vhf(key, nil, ts, vh)
 		}
 		*valPtr = val.RawBytes
 	}

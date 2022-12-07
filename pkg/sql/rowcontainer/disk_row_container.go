@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -394,8 +395,9 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 }
 
 // keyValToRow decodes a key and a value byte slice stored with AddRow() into
-// a sqlbase.EncDatumRow. The returned EncDatumRow is only valid until the next
-// call to keyValToRow().
+// a rowenc.EncDatumRow. The returned EncDatumRow is only valid until the next
+// call to keyValToRow(). The passed in byte slices are used directly, and it is
+// the caller's responsibility to make sure they don't get modified.
 func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, error) {
 	for i, orderInfo := range d.ordering {
 		// Types with composite key encodings are decoded from the value.
@@ -430,7 +432,7 @@ func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, 
 // diskRowIterator iterates over the rows in a DiskRowContainer.
 type diskRowIterator struct {
 	rowContainer *DiskRowContainer
-	rowBuf       []byte
+	rowBuf       bufalloc.ByteAllocator
 	diskmap.SortedDiskMapIterator
 }
 
@@ -452,7 +454,7 @@ func (d *DiskRowContainer) NewIterator(ctx context.Context) RowIterator {
 	return &i
 }
 
-// Row returns the current row. The returned sqlbase.EncDatumRow is only valid
+// Row returns the current row. The returned rowenc.EncDatumRow is only valid
 // until the next call to Row().
 func (r *diskRowIterator) Row() (rowenc.EncDatumRow, error) {
 	if ok, err := r.Valid(); err != nil {
@@ -463,19 +465,12 @@ func (r *diskRowIterator) Row() (rowenc.EncDatumRow, error) {
 
 	k := r.UnsafeKey()
 	v := r.UnsafeValue()
-	// TODO(asubiotto): the "true ||" should not be necessary. We should be to
-	// reuse rowBuf, yet doing so causes
-	// TestDiskBackedIndexedRowContainer/ReorderingOnDisk, TestHashJoiner, and
-	// TestSorter to fail. Some caller of Row() is presumably not making a copy
-	// of the return value.
-	if true || cap(r.rowBuf) < len(k)+len(v) {
-		r.rowBuf = make([]byte, 0, len(k)+len(v))
-	}
-	r.rowBuf = r.rowBuf[:len(k)+len(v)]
-	copy(r.rowBuf, k)
-	copy(r.rowBuf[len(k):], v)
-	k = r.rowBuf[:len(k)]
-	v = r.rowBuf[len(k):]
+	// keyValToRow will use the encoded key and value bytes as is by shoving
+	// them directly into the EncDatum, so we need to make a copy here. We
+	// cannot reuse the same byte slice across Row() calls because it would lead
+	// to modification of the EncDatums (which is not allowed).
+	r.rowBuf, k = r.rowBuf.Copy(k, len(v))
+	r.rowBuf, v = r.rowBuf.Copy(v, 0 /* extraCap */)
 
 	return r.rowContainer.keyValToRow(k, v)
 }

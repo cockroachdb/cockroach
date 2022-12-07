@@ -1,0 +1,32 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "comprules",
+    srcs = [
+        "method.go",
+        "rules.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/comprules",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/compengine",
+        "//pkg/sql/lexbase",
+        "//pkg/sql/scanner",
+    ],
+)
+
+go_test(
+    name = "comprules_test",
+    srcs = ["rules_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":comprules"],
+    deps = [
+        "//pkg/sql/compengine",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
+
+get_x_data(name = "get_x_data")

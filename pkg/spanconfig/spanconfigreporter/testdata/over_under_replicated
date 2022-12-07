@@ -1,0 +1,120 @@
+# Walk through a few scenarios where a replica is {over,under}-replicated,
+# and/or unavailable.
+
+init
+n1:
+n2:
+n3:
+n4:
+r1: [a,b)
+----
+
+configure
+[a,b): num_replicas=3
+----
+
+allocate
+r1: voters=[n1,n2,n3]
+----
+
+# We want 3 replicas and we have them, report should be ok.
+report
+----
+ok
+
+# -----------------------------------------------------------------------------
+# We have 4 replica when we want 3, we're over replicated.
+allocate
+r1: voters=[n1,n2,n3,n4]
+----
+
+report
+----
+over replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4] applying range default
+
+# -----------------------------------------------------------------------------
+# We have 1 or 2 replicas when we want 3, we're under replicated.
+allocate
+r1: voters=[n1]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1] applying range default
+
+allocate
+r1: voters=[n1,n2]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2] applying range default
+
+# -----------------------------------------------------------------------------
+# We have the desired number of replicas, but one of them is on a dead node so
+# we're under-replicated.
+liveness
+n3: dead
+----
+
+allocate
+r1: voters=[n1,n2,n3]
+----
+
+report
+----
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3] applying range default
+
+# If we've lost quorum we're also unavailable.
+liveness
+n2: dead
+n3: dead
+----
+
+report
+----
+unavailable:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3] applying range default
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3] applying range default
+
+liveness
+n2: live
+n3: live
+----
+
+report
+----
+ok
+
+# -----------------------------------------------------------------------------
+# We can be under-replicated and over-replicated at the same time if it
+# has many replicas but sufficiently many of them are on dead nodes. It can
+# also be unavailable. Set up a triply replicated range where we want two
+# replicas (so over-replicated), except two of the range's replicas are on dead
+# nodes (under-replicated + unavailable).
+allocate
+r1: voters=[n1,n2,n3]
+----
+
+configure
+[a,b): num_replicas=2
+----
+
+liveness
+n1: dead
+n2: dead
+----
+
+report
+----
+unavailable:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3] applying num_replicas=2
+under replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3] applying num_replicas=2
+over replicated:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n3,s3):3] applying num_replicas=2

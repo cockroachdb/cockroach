@@ -70,6 +70,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/Regions":
 		return nil // no restriction to usage of this endpoint by tenants
 
+	case "/cockroach.server.serverpb.Status/NodeLocality":
+		return nil // no restriction to usage of this endpoint by tenants
+
 	case "/cockroach.server.serverpb.Status/Statements":
 		return a.authTenant(tenID)
 
@@ -115,11 +118,17 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 
+	case "/cockroach.roachpb.Internal/SpanConfigConformance":
+		return a.authSpanConfigConformance(tenID, req.(*roachpb.SpanConfigConformanceRequest))
+
 	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply":
 		return a.authGetAllSystemSpanConfigsThatApply(tenID, req.(*roachpb.GetAllSystemSpanConfigsThatApplyRequest))
 
 	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
+
+	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
+		return a.authGetRangeDescriptors(tenID, req.(*roachpb.GetRangeDescriptorsRequest))
 
 	default:
 		return authErrorf("unknown method %q", fullMethod)
@@ -149,6 +158,12 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 	return nil
 }
 
+func (a tenantAuthorizer) authGetRangeDescriptors(
+	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
+) error {
+	return validateSpan(tenID, args.Span)
+}
+
 func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 	switch t := r.(type) {
 	case *roachpb.GetRequest,
@@ -171,7 +186,9 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 		*roachpb.AddSSTableRequest,
 		*roachpb.RefreshRequest,
 		*roachpb.RefreshRangeRequest,
-		*roachpb.IsSpanEmptyRequest:
+		*roachpb.IsSpanEmptyRequest,
+		*roachpb.LeaseInfoRequest,
+		*roachpb.RangeStatsRequest:
 		return true
 	case *roachpb.AdminScatterRequest:
 		return t.Class != roachpb.AdminScatterRequest_ARBITRARY || tenID.IsSystem()
@@ -248,6 +265,7 @@ func (a tenantAuthorizer) authTenant(id roachpb.TenantID) error {
 var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
+	"store:.*",
 	"system-db",
 }
 
@@ -339,6 +357,19 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 	return nil
 }
 
+// authSpanConfigConformance authorizes the provided tenant to invoke the
+// SpanConfigConformance RPC with the provided args.
+func (a tenantAuthorizer) authSpanConfigConformance(
+	tenID roachpb.TenantID, args *roachpb.SpanConfigConformanceRequest,
+) error {
+	for _, sp := range args.Spans {
+		if err := validateSpan(tenID, sp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateSpanConfigTarget validates that the tenant is authorized to interact
 // with the supplied span config target. In particular, span targets must be
 // wholly contained within the tenant keyspace and system span config targets
@@ -371,26 +402,26 @@ func validateSpanConfigTarget(
 		return nil
 	}
 
-	validateSpan := func(sp roachpb.Span) error {
-		tenSpan := tenantPrefix(tenID)
-		rSpan, err := keys.SpanAddr(sp)
-		if err != nil {
-			return authError(err.Error())
-		}
-		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-		}
-		return nil
-	}
-
 	switch spanConfigTarget.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return validateSpan(*spanConfigTarget.GetSpan())
+		return validateSpan(tenID, *spanConfigTarget.GetSpan())
 	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
 		return validateSystemTarget(*spanConfigTarget.GetSystemSpanConfigTarget())
 	default:
 		return errors.AssertionFailedf("unknown span config target type")
 	}
+}
+
+func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
+	tenSpan := tenantPrefix(tenID)
+	rSpan, err := keys.SpanAddr(sp)
+	if err != nil {
+		return authError(err.Error())
+	}
+	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	}
+	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {

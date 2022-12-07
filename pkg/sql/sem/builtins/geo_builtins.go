@@ -150,7 +150,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{"str", types.String}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
@@ -200,7 +200,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDBytes(args[0]))
@@ -579,7 +579,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"settings", types.String}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"settings", types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -625,7 +625,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geography", types.Geography}, {"settings", types.String}},
+			Types:      tree.ParamTypes{{"geography", types.Geography}, {"settings", types.String}},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
@@ -662,7 +662,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geomFromWKTOverload,
 		tree.Overload{
-			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{"str", types.String}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
@@ -700,7 +700,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geomFromWKBOverload,
 		tree.Overload{
-			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
@@ -735,7 +735,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_geomfromgeojson": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"val", types.String}},
+			Types:      tree.ParamTypes{{"val", types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromGeoJSON([]byte(tree.MustBeDString(args[0])))
@@ -774,7 +774,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_makepoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
+			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -789,7 +789,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}},
+			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -805,7 +805,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}, {"m", types.Float}},
+			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}, {"m", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -825,7 +825,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_makepointm": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"m", types.Float}},
+			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}, {"m", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -858,7 +858,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"outer", types.Geometry},
 				{"interior", types.AnyArray},
 			},
@@ -889,7 +889,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_polygon": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"srid", types.Int},
 			},
@@ -959,7 +959,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{"str", types.String}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
@@ -1007,7 +1007,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
@@ -1077,7 +1077,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_point": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
+			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -1095,7 +1095,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_pointfromgeohash": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geohash", types.String},
 				{"precision", types.Int},
 			},
@@ -1115,7 +1115,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geohash", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -1137,7 +1137,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_geomfromgeohash": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geohash", types.String},
 				{"precision", types.Int},
 			},
@@ -1161,7 +1161,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geohash", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -1187,7 +1187,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_box2dfromgeohash": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geohash", types.String},
 				{"precision", types.Int},
 			},
@@ -1219,7 +1219,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geohash", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
@@ -1261,7 +1261,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"max_decimal_digits", types.Int},
 			},
@@ -1289,7 +1289,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"max_decimal_digits", types.Int},
 			},
@@ -1320,7 +1320,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"max_decimal_digits", types.Int},
 			},
@@ -1348,7 +1348,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"max_decimal_digits", types.Int},
 			},
@@ -1386,7 +1386,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"xdr_or_ndr", types.String},
 			},
@@ -1405,7 +1405,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"xdr_or_ndr", types.String},
 			},
@@ -1483,7 +1483,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"xdr_or_ndr", types.String},
 			},
@@ -1516,7 +1516,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"xdr_or_ndr", types.String},
 			},
@@ -1552,7 +1552,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_astwkb": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"precision_xy", types.Int},
 			},
@@ -1577,7 +1577,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"precision_xy", types.Int},
 				{"precision_z", types.Int},
@@ -1604,7 +1604,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"precision_xy", types.Int},
 				{"precision_z", types.Int},
@@ -1671,7 +1671,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"precision", types.Int},
 			},
@@ -1705,7 +1705,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"precision", types.Int},
 			},
@@ -1728,7 +1728,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_asgeojson": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
+			Types:      tree.ParamTypes{{"row", types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
@@ -1749,7 +1749,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"row", types.AnyTuple}, {"geo_column", types.String}},
+			Types:      tree.ParamTypes{{"row", types.AnyTuple}, {"geo_column", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
@@ -1770,7 +1770,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"row", types.AnyTuple},
 				{"geo_column", types.String},
 				{"max_decimal_digits", types.Int},
@@ -1795,7 +1795,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"row", types.AnyTuple},
 				{"geo_column", types.String},
 				{"max_decimal_digits", types.Int},
@@ -1835,7 +1835,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"max_decimal_digits", types.Int},
 			},
@@ -1852,7 +1852,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"max_decimal_digits", types.Int},
 				{"options", types.Int},
@@ -1892,7 +1892,7 @@ Options is a flag that can be bitmasked. The options are:
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"max_decimal_digits", types.Int},
 			},
@@ -1909,7 +1909,7 @@ Options is a flag that can be bitmasked. The options are:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"max_decimal_digits", types.Int},
 				{"options", types.Int},
@@ -1938,7 +1938,7 @@ Options is a flag that can be bitmasked. The options are:
 	"st_project": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"distance", types.Float},
 				{"azimuth", types.Float},
@@ -2140,7 +2140,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 	"st_generatepoints": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
@@ -2162,7 +2162,7 @@ The requested number of points must be not larger than 65336.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
@@ -2291,7 +2291,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_interiorringn": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"n", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2325,7 +2325,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_pointn": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"n", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2359,7 +2359,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_geometryn": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"n", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2546,7 +2546,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2583,7 +2583,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultM", types.Float}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultM", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2620,7 +2620,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2638,7 +2638,7 @@ The requested number of points must be not larger than 65336.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}, {"defaultM", types.Float}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}, {"defaultM", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2810,7 +2810,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -2846,7 +2846,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -2907,7 +2907,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -2943,7 +2943,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -3165,7 +3165,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_addmeasure": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"start", types.Float}, {"end", types.Float}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"start", types.Float}, {"end", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -3201,7 +3201,7 @@ The requested number of points must be not larger than 65336.`,
 Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.`,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"fraction", types.Float},
 				{"repeat", types.Bool},
@@ -3248,7 +3248,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_collectionextract": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"type", types.Int},
 			},
@@ -3505,7 +3505,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography_a", types.Geography},
 				{"geography_b", types.Geography},
 				{"use_spheroid", types.Bool},
@@ -3613,7 +3613,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"densify_frac", types.Float},
@@ -3664,7 +3664,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"densify_frac", types.Float},
@@ -3847,7 +3847,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	"st_dfullywithin": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"distance", types.Float},
@@ -3984,7 +3984,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"pattern", types.String},
@@ -4007,7 +4007,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"bnr", types.Int},
@@ -4034,7 +4034,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	"st_relatematch": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"intersection_matrix", types.String},
 				{"pattern", types.String},
 			},
@@ -4078,7 +4078,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"flags", types.Int},
 			},
@@ -4121,7 +4121,7 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"flags", types.Int},
 			},
@@ -4246,7 +4246,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_clipbybox2d": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"box2d", types.Box2D}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"box2d", types.Box2D}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -4473,7 +4473,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_simplify": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 			},
@@ -4496,7 +4496,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 				{"preserve_collapsed", types.Bool},
@@ -4524,7 +4524,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_simplifypreservetopology": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 			},
@@ -4552,7 +4552,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_setsrid": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"srid", types.Int},
 			},
@@ -4572,7 +4572,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"srid", types.Int},
 			},
@@ -4595,7 +4595,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_transform": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"srid", types.Int},
 			},
@@ -4625,7 +4625,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"to_proj_text", types.String},
 			},
@@ -4656,7 +4656,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"from_proj_text", types.String},
 				{"to_proj_text", types.String},
@@ -4685,7 +4685,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"from_proj_text", types.String},
 				{"srid", types.Int},
@@ -4721,7 +4721,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_translate": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"delta_x", types.Float},
 				{"delta_y", types.Float},
@@ -4745,7 +4745,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"delta_x", types.Float},
 				{"delta_y", types.Float},
@@ -4774,7 +4774,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_affine": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"a", types.Float},
 				{"b", types.Float},
@@ -4812,7 +4812,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"a", types.Float},
 				{"b", types.Float},
@@ -4860,7 +4860,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_scale": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"x_factor", types.Float},
 				{"y_factor", types.Float},
@@ -4884,7 +4884,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"factor", types.Geometry},
 			},
@@ -4920,7 +4920,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"factor", types.Geometry},
 				{"origin", types.Geometry},
@@ -4947,7 +4947,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_rotate": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"angle_radians", types.Float},
 			},
@@ -4969,7 +4969,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"angle_radians", types.Float},
 				{"origin_x", types.Float},
@@ -4993,7 +4993,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"angle_radians", types.Float},
 				{"origin_point", types.Geometry},
@@ -5023,7 +5023,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_rotatex": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"angle_radians", types.Float},
 			},
@@ -5048,7 +5048,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_rotatey": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"angle_radians", types.Float},
 			},
@@ -5073,7 +5073,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_rotatez": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"g", types.Geometry},
 				{"angle_radians", types.Float},
 			},
@@ -5098,7 +5098,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_addpoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"line_string", types.Geometry},
 				{"point", types.Geometry},
 				{"index", types.Int},
@@ -5122,7 +5122,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"line_string", types.Geometry},
 				{"point", types.Geometry},
 			},
@@ -5147,7 +5147,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_setpoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"line_string", types.Geometry},
 				{"index", types.Int},
 				{"point", types.Geometry},
@@ -5174,7 +5174,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_removepoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"line_string", types.Geometry},
 				{"index", types.Int},
 			},
@@ -5199,7 +5199,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_removerepeatedpoints": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 			},
@@ -5221,7 +5221,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -5243,7 +5243,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_reverse": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -5266,7 +5266,7 @@ The matrix transformation will be applied as follows for each coordinate:
 	"st_segmentize": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"max_segment_length_meters", types.Float},
 			},
@@ -5289,7 +5289,7 @@ The calculations are done on a sphere.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"max_segment_length", types.Float},
 			},
@@ -5313,7 +5313,7 @@ The calculations are done on a sphere.`,
 	"st_snaptogrid": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"size", types.Float},
 			},
@@ -5334,7 +5334,7 @@ The calculations are done on a sphere.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"size_x", types.Float},
 				{"size_y", types.Float},
@@ -5356,7 +5356,7 @@ The calculations are done on a sphere.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"origin_x", types.Float},
 				{"origin_y", types.Float},
@@ -5382,7 +5382,7 @@ The calculations are done on a sphere.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"origin", types.Geometry},
 				{"size_x", types.Float},
@@ -5430,7 +5430,7 @@ The calculations are done on a sphere.`,
 	"st_snap": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"input", types.Geometry},
 				{"target", types.Geometry},
 				{"tolerance", types.Float},
@@ -5457,7 +5457,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 	"st_buffer": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"distance", types.Int},
 			},
@@ -5476,7 +5476,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"distance", types.Float},
 			},
@@ -5495,7 +5495,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"distance", types.Decimal},
 			},
@@ -5519,7 +5519,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"distance", types.Float},
 				{"quad_segs", types.Int},
@@ -5544,7 +5544,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"distance", types.Float},
 				{"buffer_style_params", types.String},
@@ -5574,7 +5574,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"distance", types.Float},
 			},
@@ -5599,7 +5599,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"distance", types.Float},
 				{"quad_segs", types.Int},
@@ -5629,7 +5629,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"distance", types.Float},
 				{"buffer_style_params", types.String},
@@ -5686,7 +5686,7 @@ Bottom Left.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -5707,7 +5707,7 @@ Bottom Left.`,
 	"st_makeenvelope": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"xmin", types.Float},
 				{"ymin", types.Float},
 				{"xmax", types.Float},
@@ -5724,7 +5724,7 @@ Bottom Left.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"xmin", types.Float},
 				{"ymin", types.Float},
 				{"xmax", types.Float},
@@ -5743,7 +5743,7 @@ Bottom Left.`,
 	"st_flipcoordinates": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -5766,7 +5766,7 @@ Bottom Left.`,
 	"st_swapordinates": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{
 					Name: "geometry",
 					Typ:  types.Geometry,
@@ -5799,7 +5799,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_angle": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"point1", types.Geometry},
 				{"point2", types.Geometry},
 				{"point3", types.Geometry},
@@ -5827,7 +5827,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"point1", types.Geometry},
 				{"point2", types.Geometry},
 				{"point3", types.Geometry},
@@ -5857,7 +5857,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"line1", types.Geometry},
 				{"line2", types.Geometry},
 			},
@@ -5884,7 +5884,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 
 	"st_asencodedpolyline": makeBuiltin(defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -5904,7 +5904,7 @@ Preserves 5 decimal places.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"precision", types.Int4},
 			},
@@ -5928,7 +5928,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 	),
 	"st_linefromencodedpolyline": makeBuiltin(defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"encoded_polyline", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -5951,7 +5951,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"encoded_polyline", types.String},
 				{"precision", types.Int4},
 			},
@@ -6012,7 +6012,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_subdivide": makeBuiltin(
 		genProps(),
 		makeGeneratorOverload(
-			tree.ArgTypes{
+			tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			types.Geometry,
@@ -6021,7 +6021,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
-			tree.ArgTypes{
+			tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"max_vertices", types.Int4},
 			},
@@ -6078,7 +6078,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_combinebbox": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
+			Types:      tree.ParamTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[1] == tree.DNull {
@@ -6109,7 +6109,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_expand": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"delta", types.Float}},
+			Types:      tree.ParamTypes{{"box2d", types.Box2D}, {"delta", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				bbox := tree.MustBeDBox2D(args[0])
@@ -6126,7 +6126,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"box2d", types.Box2D},
 				{"delta_x", types.Float},
 				{"delta_y", types.Float},
@@ -6148,7 +6148,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"delta", types.Float}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"delta", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -6169,7 +6169,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"delta_x", types.Float},
 				{"delta_y", types.Float},
@@ -6205,7 +6205,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Category: builtinconstants.CategorySpatial,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"schema_name", types.String},
 				{"table_name", types.String},
 				{"geocolumn_name", types.String},
@@ -6224,7 +6224,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"schema_name", types.String},
 				{"table_name", types.String},
 				{"geocolumn_name", types.String},
@@ -6240,7 +6240,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"table_name", types.String},
 				{"geocolumn_name", types.String},
 			},
@@ -6266,7 +6266,7 @@ The parent_only boolean is always ignored.`,
 			Category: builtinconstants.CategorySpatial,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"table_name", types.String},
 				{"column_name", types.String},
 				{"srid", types.Int},
@@ -6307,7 +6307,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"schema_name", types.String},
 				{"table_name", types.String},
 				{"column_name", types.String},
@@ -6349,7 +6349,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"catalog_name", types.String},
 				{"schema_name", types.String},
 				{"table_name", types.String},
@@ -6392,7 +6392,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"table_name", types.String},
 				{"column_name", types.String},
 				{"srid", types.Int},
@@ -6432,7 +6432,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"schema_name", types.String},
 				{"table_name", types.String},
 				{"column_name", types.String},
@@ -6473,7 +6473,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"catalog_name", types.String},
 				{"schema_name", types.String},
 				{"table_name", types.String},
@@ -6519,7 +6519,7 @@ The parent_only boolean is always ignored.`,
 	"st_dfullywithinexclusive": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"distance", types.Float},
@@ -6545,7 +6545,7 @@ The parent_only boolean is always ignored.`,
 	"st_pointinsidecircle": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"x_coord", types.Float},
 				{"y_coord", types.Float},
@@ -6595,7 +6595,7 @@ The parent_only boolean is always ignored.`,
 
 	"st_memsize": makeBuiltin(defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{
 					Name: "geometry",
 					Typ:  types.Geometry,
@@ -6612,7 +6612,7 @@ The parent_only boolean is always ignored.`,
 
 	"st_linelocatepoint": makeBuiltin(defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{
 					Name: "line",
 					Typ:  types.Geometry,
@@ -6641,7 +6641,7 @@ The parent_only boolean is always ignored.`,
 
 	"st_minimumboundingradius": makeBuiltin(genProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
 			Generator:  eval.GeneratorOverload(makeMinimumBoundGenerator),
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
@@ -6664,7 +6664,7 @@ The parent_only boolean is always ignored.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {" num_segs", types.Int}},
+			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {" num_segs", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Info: infoBuilder{
 				info: "Returns the smallest circle polygon that can fully contain a geometry.",
@@ -6693,7 +6693,7 @@ The parent_only boolean is always ignored.`,
 	),
 	"st_transscale": makeBuiltin(defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"delta_x", types.Float},
 				{"delta_y", types.Float},
@@ -6721,7 +6721,7 @@ The parent_only boolean is always ignored.`,
 	"st_voronoipolygons": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -6740,7 +6740,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 			},
@@ -6761,7 +6761,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 				{"extend_to", types.Geometry},
@@ -6786,7 +6786,7 @@ The parent_only boolean is always ignored.`,
 	"st_voronoilines": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -6806,7 +6806,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 			},
@@ -6828,7 +6828,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 				{"tolerance", types.Float},
 				{"extend_to", types.Geometry},
@@ -6854,7 +6854,7 @@ The parent_only boolean is always ignored.`,
 	"st_orientedenvelope": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -6876,7 +6876,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	),
 	"st_linesubstring": makeBuiltin(defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"linestring", types.Geometry},
 				{"start_fraction", types.Float},
 				{"end_fraction", types.Float},
@@ -6898,7 +6898,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			},
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"linestring", types.Geometry},
 				{"start_fraction", types.Decimal},
 				{"end_fraction", types.Decimal},
@@ -6935,7 +6935,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_linecrossingdirection": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"linestring_a", types.Geometry},
 				{"linestring_b", types.Geometry},
 			},
@@ -7011,7 +7011,7 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 	return makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{},
+			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(ret), nil
@@ -7032,7 +7032,7 @@ func geometryOverload1(
 	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
-		Types: tree.ArgTypes{
+		Types: tree.ParamTypes{
 			{"geometry", types.Geometry},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
@@ -7072,7 +7072,7 @@ func geometryOverload2(
 	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
-		Types: tree.ArgTypes{
+		Types: tree.ParamTypes{
 			{"geometry_a", types.Geometry},
 			{"geometry_b", types.Geometry},
 		},
@@ -7114,7 +7114,7 @@ func geographyOverload1(
 	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
-		Types: tree.ArgTypes{
+		Types: tree.ParamTypes{
 			{"geography", types.Geography},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
@@ -7143,7 +7143,7 @@ func geographyOverload1WithUseSpheroid(
 
 	return []tree.Overload{
 		{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 			},
 			ReturnType: tree.FixedReturnType(returnType),
@@ -7155,7 +7155,7 @@ func geographyOverload1WithUseSpheroid(
 			Volatility: volatility,
 		},
 		{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography", types.Geography},
 				{"use_spheroid", types.Bool},
 			},
@@ -7179,7 +7179,7 @@ func geographyOverload2(
 	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
-		Types: tree.ArgTypes{
+		Types: tree.ParamTypes{
 			{"geography_a", types.Geography},
 			{"geography_b", types.Geography},
 		},
@@ -7384,7 +7384,7 @@ func makeTableName(catalogName string, schemaName string, tableName string) tree
 
 func lineInterpolatePointForRepeatOverload(repeat bool, builtinInfo string) tree.Overload {
 	return tree.Overload{
-		Types: tree.ArgTypes{
+		Types: tree.ParamTypes{
 			{"geometry", types.Geometry},
 			{"fraction", types.Float},
 		},
@@ -7419,15 +7419,15 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 		// Define independntly as it is used by a closure below.
 		ov := def.overloads[i]
 
-		argTypes, ok := ov.Types.(tree.ArgTypes)
+		paramTypes, ok := ov.Types.(tree.ParamTypes)
 		if !ok {
 			continue
 		}
 
 		// Find all argument indexes that have the Geometry type.
 		var argsToCast util.FastIntSet
-		for i, argType := range argTypes {
-			if argType.Typ.Equal(types.Geometry) {
+		for i, paramType := range paramTypes {
+			if paramType.Typ.Equal(types.Geometry) {
 				argsToCast.Add(i)
 			}
 		}
@@ -7437,10 +7437,10 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 
 		newOverload := ov
 
-		// Replace them with strings ArgType.
-		newArgTypes := make(tree.ArgTypes, len(argTypes))
-		for i := range argTypes {
-			newArgTypes[i] = argTypes[i]
+		// Replace them with strings ParamType.
+		newArgTypes := make(tree.ParamTypes, len(paramTypes))
+		for i := range paramTypes {
+			newArgTypes[i] = paramTypes[i]
 			if argsToCast.Contains(i) {
 				newArgTypes[i].Name += "_str"
 				newArgTypes[i].Typ = types.String
@@ -7584,7 +7584,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 	return makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geometry_a", types.Geometry},
 				{"geometry_b", types.Geometry},
 				{"distance", types.Float},
@@ -7607,7 +7607,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography_a", types.Geography},
 				{"geography_b", types.Geography},
 				{"distance", types.Float},
@@ -7632,7 +7632,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types: tree.ArgTypes{
+			Types: tree.ParamTypes{
 				{"geography_a", types.Geography},
 				{"geography_b", types.Geography},
 				{"distance", types.Float},

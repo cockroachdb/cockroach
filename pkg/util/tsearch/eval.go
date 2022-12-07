@@ -133,6 +133,8 @@ const (
 // input position sets, and not directly on search terms. Its job is to do set
 // operations on the input sets, depending on emitMode - an intersection or
 // difference depending on the desired outcome by evalWithinFollowedBy.
+// This code tries to follow the Postgres implementation in
+// src/backend/utils/adt/tsvector_op.c.
 func (e *tsEvaluator) evalFollowedBy(
 	lPositions, rPositions tsPositionSet, lOffset, rOffset int, emitMode emitMode,
 ) (tsPositionSet, error) {
@@ -153,7 +155,7 @@ func (e *tsEvaluator) evalFollowedBy(
 		}
 		var lPos, rPos int
 		if !lExhausted {
-			lPos = lPositions.positions[lIdx].position + lOffset
+			lPos = int(lPositions.positions[lIdx].position) + lOffset
 		} else {
 			// Quit unless we're outputting all of the RHS, which we will if we have
 			// a negative match on the LHS.
@@ -163,7 +165,7 @@ func (e *tsEvaluator) evalFollowedBy(
 			lPos = math.MaxInt64
 		}
 		if !rExhausted {
-			rPos = rPositions.positions[rIdx].position + rOffset
+			rPos = int(rPositions.positions[rIdx].position) + rOffset
 		} else {
 			// Quit unless we're outputting all of the LHS, which we will if we have
 			// a negative match on the RHS.
@@ -175,18 +177,18 @@ func (e *tsEvaluator) evalFollowedBy(
 
 		if lPos < rPos {
 			if emitMode&emitLeftUnmatched > 0 {
-				ret.positions = append(ret.positions, tsPosition{position: lPos})
+				ret.positions = append(ret.positions, tsPosition{position: uint16(lPos)})
 			}
 			lIdx++
 		} else if lPos == rPos {
 			if emitMode&emitMatches > 0 {
-				ret.positions = append(ret.positions, tsPosition{position: rPos})
+				ret.positions = append(ret.positions, tsPosition{position: uint16(rPos)})
 			}
 			lIdx++
 			rIdx++
 		} else {
 			if emitMode&emitRightUnmatched > 0 {
-				ret.positions = append(ret.positions, tsPosition{position: rPos})
+				ret.positions = append(ret.positions, tsPosition{position: uint16(rPos)})
 			}
 			rIdx++
 		}
@@ -293,7 +295,7 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 			return tsPositionSet{}, err
 		}
 		if node.op == followedby {
-			lOffset = node.followedN + rPositions.width
+			lOffset = int(node.followedN) + rPositions.width
 			width = lOffset + lPositions.width
 		} else {
 			width = lPositions.width
@@ -346,5 +348,9 @@ func sortAndUniqTSPositions(pos []tsPosition) []tsPosition {
 		}
 	}
 	pos = pos[:lastUniqueIdx+1]
+	if len(pos) > maxTSVectorPositions {
+		// Postgres silently truncates position lists to length 256.
+		pos = pos[:maxTSVectorPositions]
+	}
 	return pos
 }

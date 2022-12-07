@@ -1,0 +1,13 @@
+echo
+----
+db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Put(ctx, tk(5), sv(5)) // @<ts> <nil>
+  {
+    b := &kv.Batch{}
+    b.Put(tk(6), sv(6)) // <nil>
+    b.DelRange(tk(3), tk(5), true /* @s1 */) // <nil>
+    txn.Run(ctx, b) // @<ts> <nil>
+  }
+  return nil
+}) // @<ts> <nil>
+// ^-- txnpb:<txn>

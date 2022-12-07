@@ -1,5 +1,5 @@
 # Test permissions checks for non-admin users running RESTORE.
-new-server name=s1
+new-cluster name=s1
 ----
 
 exec-sql
@@ -27,65 +27,65 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/';
 ----
 
 # Start a new cluster with the same IO dir.
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 ----
 
-exec-sql server=s2
+exec-sql cluster=s2
 CREATE USER testuser
 ----
 
 # Restore into the new cluster.
-exec-sql server=s2 user=testuser
+exec-sql cluster=s2 user=testuser
 RESTORE FROM LATEST IN 'nodelocal://0/test/'
 ----
 pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore
 
-exec-sql server=s2 user=testuser
+exec-sql cluster=s2 user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
 ----
 pq: only users with the CREATEDB privilege can restore databases
 HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
-exec-sql server=s2
+exec-sql cluster=s2
 CREATE DATABASE d
 ----
 
-exec-sql server=s2 user=testuser
+exec-sql cluster=s2 user=testuser
 RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
 ----
 pq: user testuser does not have CREATE privilege on database d
 HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database d.
 
-exec-sql server=s2
+exec-sql cluster=s2
 GRANT CREATE ON DATABASE d TO testuser
 ----
 
-exec-sql server=s2 user=testuser
+exec-sql cluster=s2 user=testuser
 RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
 ----
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases d
 
-query-sql server=s2
+query-sql cluster=s2
 SELECT x FROM d.t ORDER BY x
 ----
 1
 2
 3
 
-exec-sql server=s2
+exec-sql cluster=s2
 DROP DATABASE d
 ----
 
-exec-sql server=s2
+exec-sql cluster=s2
 ALTER USER testuser CREATEDB
 ----
 
-exec-sql server=s2 user=testuser
+exec-sql cluster=s2 user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
 ----
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
-query-sql server=s2
+query-sql cluster=s2
 SELECT x FROM d.t ORDER BY x
 ----
 1
@@ -93,14 +93,14 @@ SELECT x FROM d.t ORDER BY x
 3
 
 # Test that implicit access is disallowed when the testing knob isn't set.
-new-server name=s3 share-io-dir=s1
+new-cluster name=s3 share-io-dir=s1
 ----
 
-exec-sql server=s3
+exec-sql cluster=s3
 CREATE USER testuser
 ----
 
-exec-sql server=s3 user=testuser
+exec-sql cluster=s3 user=testuser
 RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
 ----
 pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI

@@ -1055,10 +1055,10 @@ func TestAdminAPIEvents(t *testing.T) {
 		{"create_database", false, 0, false, 3},
 		{"drop_table", false, 0, false, 2},
 		{"create_table", false, 0, false, 3},
-		{"set_cluster_setting", false, 0, false, 3},
+		{"set_cluster_setting", false, 0, false, 2},
 		// We use limit=true with no limit here because otherwise the
 		// expCount will mess up the expected total count below.
-		{"set_cluster_setting", true, 0, true, 3},
+		{"set_cluster_setting", true, 0, true, 2},
 		{"create_table", true, 0, false, 3},
 		{"create_table", true, -1, false, 3},
 		{"create_table", true, 2, false, 2},
@@ -2416,6 +2416,7 @@ func TestStatsforSpanOnLocalMax(t *testing.T) {
 // `Status` requests.
 func TestEndpointTelemetryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disable the default test tenant for now as this tests fails

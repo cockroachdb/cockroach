@@ -1,4 +1,4 @@
-new-server name=s1 nodes=1 splits=1000
+new-cluster name=s1 nodes=1 splits=1000
 ----
 
 subtest restore-cleanup
@@ -148,7 +148,7 @@ BACKUP INTO 'nodelocal://1/cluster';
 ----
 
 # Start a new cluster with the same IO dir.
-new-server name=s2 share-io-dir=s1
+new-cluster name=s2 share-io-dir=s1
 ----
 
 # We pause the job before publishing descriptors to ensure that we are testing

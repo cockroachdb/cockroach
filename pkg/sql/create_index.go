@@ -118,14 +118,9 @@ func (p *planner) maybeSetupConstraintForShard(
 		return err
 	}
 
-	curConstraintInfos, err := tableDesc.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
-
 	// Avoid creating duplicate check constraints.
-	for _, info := range curConstraintInfos {
-		if info.CheckConstraint != nil && info.CheckConstraint.Expr == ckDesc.Expr {
+	for _, ck := range tableDesc.CheckConstraints() {
+		if ck.GetExpr() == ckDesc.Expr && ck.IsConstraintValidated() {
 			return nil
 		}
 	}
@@ -910,6 +905,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
+			p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 			p.Descriptors(),
 			regionConfig,
 			tableDesc,

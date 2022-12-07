@@ -134,3 +134,7 @@ func (kv keyedVersions) Validate() error {
 
 	return nil
 }
+
+func (kv keyedVersions) LastVersion() roachpb.Version {
+	return kv[len(kv)-1].Version
+}

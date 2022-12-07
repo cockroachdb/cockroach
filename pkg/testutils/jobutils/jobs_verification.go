@@ -62,6 +62,12 @@ func WaitForJobToFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) 
 	waitForJobToHaveStatus(t, db, jobID, jobs.StatusFailed)
 }
 
+// WaitForJobReverting waits for the specified job ID to be in a reverting state.
+func WaitForJobReverting(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusReverting)
+}
+
 func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
 ) {
@@ -251,6 +257,17 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *j
 	ret := &jobspb.Progress{}
 	var buf []byte
 	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
+	if err := protoutil.Unmarshal(buf, ret); err != nil {
+		t.Fatal(err)
+	}
+	return ret
+}
+
+// GetJobPayload loads the Payload message associated with the job.
+func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Payload {
+	ret := &jobspb.Payload{}
+	var buf []byte
+	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
 		t.Fatal(err)
 	}

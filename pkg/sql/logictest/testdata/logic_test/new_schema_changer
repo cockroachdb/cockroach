@@ -879,9 +879,9 @@ tindex      bar          true        1             crdb_internal_idx_expr    ASC
 tindex      bar          true        2             a                         ASC        false    true      true
 tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false     true
 tindex      bar2         true        2             a                         ASC        false    true      true
-tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false     true
+tindex      bar3         false       1             crdb_internal_idx_expr_1  ASC        false    false     true
 tindex      bar3         false       2             a                         ASC        true     true      true
-tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false     true
+tindex      bar4         true        1             crdb_internal_idx_expr_2  ASC        false    false     true
 tindex      bar4         true        2             a                         ASC        false    true      true
 tindex      foo          true        1             b                         ASC        false    false     true
 tindex      foo          true        2             a                         ASC        false    true      true
@@ -906,9 +906,9 @@ tindex      bar          true        1             crdb_internal_idx_expr    ASC
 tindex      bar          true        2             a                         ASC        false    true      true
 tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false     true
 tindex      bar2         true        2             a                         ASC        false    true      true
-tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false     true
+tindex      bar3         false       1             crdb_internal_idx_expr_1  ASC        false    false     true
 tindex      bar3         false       2             a                         ASC        true     true      true
-tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false     true
+tindex      bar4         true        1             crdb_internal_idx_expr_2  ASC        false    false     true
 tindex      bar4         true        2             a                         ASC        false    true      true
 tindex      foo          true        1             b                         ASC        false    false     true
 tindex      foo          true        2             a                         ASC        false    true      true
@@ -955,7 +955,7 @@ CREATE INDEX fail ON foo (b DESC)
 statement ok
 CREATE VIEW vIndx AS SELECT a,b FROM tIndx
 
-statement error pgcode 42809 "vindx" is not an indexable table or a materialized view
+statement error pgcode 42809 "vindx" is not a table or materialized view
 CREATE INDEX failview ON vIndx (b DESC)
 
 statement ok
@@ -963,6 +963,11 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 
 user testuser
 
+skipif config local-legacy-schema-changer
+statement error  must be owner of table privs or have CREATE privilege on table privs
+CREATE INDEX foo ON privs (b)
+
+onlyif config local-legacy-schema-changer
 statement error user testuser does not have CREATE privilege on relation privs
 CREATE INDEX foo ON privs (b)
 

@@ -47,7 +47,8 @@ CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
-## StatementPhase stage 1 of 1 with 6 MutationType ops
+increment telemetry for sql.schema.partial_index
+## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #106
   ...
      id: 106
@@ -69,8 +70,9 @@ upsert descriptor #106
   +      - v
   +      keySuffixColumnIds:
   +      - 1
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: idx1
   +      partitioning: {}
+  +      predicate: (v = 'a')
   +      sharded: {}
   +      storeColumnNames: []
   +      version: 4
@@ -78,6 +80,7 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
+  +      constraintId: 1
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -93,6 +96,7 @@ upsert descriptor #106
   +      - 1
   +      name: crdb_internal_index_3_name_placeholder
   +      partitioning: {}
+  +      predicate: (v = 'a')
   +      sharded: {}
   +      storeColumnNames: []
   +      useDeletePreservingEncoding: true
@@ -229,7 +233,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
 upsert descriptor #106
   ...
            statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
@@ -257,6 +261,7 @@ upsert descriptor #106
   +    - 1
   +    name: idx1
   +    partitioning: {}
+  +    predicate: (v = 'a')
   +    sharded: {}
   +    storeColumnNames: []
   +    version: 4
@@ -266,9 +271,9 @@ upsert descriptor #106
   +  - direction: DROP
        index:
   -      createdAtNanos: "1640998800000000000"
-         createdExplicitly: true
-         foreignKey: {}
-         geoConfig: {}
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
   -      id: 2
   -      interleave: {}
   -      keyColumnDirections:
@@ -279,8 +284,9 @@ upsert descriptor #106
   -      - v
   -      keySuffixColumnIds:
   -      - 1
-  -      name: crdb_internal_index_2_name_placeholder
+  -      name: idx1
   -      partitioning: {}
+  -      predicate: (v = 'a')
   -      sharded: {}
   -      storeColumnNames: []
   -      version: 4
@@ -288,11 +294,14 @@ upsert descriptor #106
   -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-         id: 3
-         interleave: {}
+         constraintId: 1
+         createdExplicitly: true
+  ...
+         name: crdb_internal_index_3_name_placeholder
+         partitioning: {}
+  -      predicate: (v = 'a')
+         sharded: {}
+         storeColumnNames: []
   ...
          version: 4
        mutationId: 1
@@ -305,6 +314,8 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
+write *eventpb.CreateIndex to event log: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
+adding table for stats refresh: 106
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
@@ -335,6 +346,7 @@ upsert descriptor #106
   -  mutations:
   -  - direction: DROP
   -    index:
+  -      constraintId: 1
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

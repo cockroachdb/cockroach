@@ -790,10 +790,18 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	tableScan.index = idx
 	vtableCols := colinfo.ResultColumnsFromColumns(tableDesc.GetID(), tableDesc.PublicColumns())
 	projectedVtableCols := planColumns(&tableScan)
-	outputCols := make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
-	outputCols = append(outputCols, inputCols...)
-	outputCols = append(outputCols, projectedVtableCols...)
-	// joinType is either INNER or LEFT_OUTER.
+	var outputCols colinfo.ResultColumns
+	switch joinType {
+	case descpb.InnerJoin, descpb.LeftOuterJoin:
+		outputCols = make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
+		outputCols = append(outputCols, inputCols...)
+		outputCols = append(outputCols, projectedVtableCols...)
+	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+		outputCols = make(colinfo.ResultColumns, 0, len(inputCols))
+		outputCols = append(outputCols, inputCols...)
+	default:
+		return nil, errors.AssertionFailedf("unexpected join type for virtual lookup join: %s", joinType.String())
+	}
 	pred := makePredicate(joinType, inputCols, projectedVtableCols)
 	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	n := &vTableLookupJoinNode{
@@ -1989,10 +1997,6 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 		return nil, err
 	}
 
-	if !ef.planner.ExecCfg().IsSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
-	}
-
 	return &unsplitAllNode{
 		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).idx,
@@ -2066,6 +2070,13 @@ func (ef *execFactory) ConstructControlSchedules(
 	return &controlSchedulesNode{
 		rows:    input.(planNode),
 		command: command,
+	}, nil
+}
+
+// ConstructShowCompletions is part of the exec.Factory interface.
+func (ef *execFactory) ConstructShowCompletions(command *tree.ShowCompletions) (exec.Node, error) {
+	return &completionsNode{
+		n: command,
 	}, nil
 }
 

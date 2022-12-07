@@ -19,14 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -105,36 +103,26 @@ func (p *planner) getOrCreateTemporarySchema(
 	if sc != nil || err != nil {
 		return sc, err
 	}
-	sKey := catalogkeys.NewNameKeyComponents(db.GetID(), keys.RootNamespaceID, tempSchemaName)
 
 	// The temporary schema has not been created yet.
 	id, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
+	b := &kv.Batch{}
+	if err := p.Descriptors().InsertTempSchemaToBatch(
+		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), db, tempSchemaName, id, b,
+	); err != nil {
+		return nil, err
+	}
+	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
 	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.SetTemporarySchemaName(sKey.GetName())
+		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
 	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlagsRequired())
-}
-
-// CreateSchemaNamespaceEntry creates an entry for the schema in the
-// system.namespace table.
-func (p *planner) CreateSchemaNamespaceEntry(
-	ctx context.Context, schemaNameKey roachpb.Key, schemaID descpb.ID,
-) error {
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", schemaNameKey, schemaID)
-	}
-
-	b := &kv.Batch{}
-	b.CPut(schemaNameKey, schemaID, nil)
-
-	return p.txn.Run(ctx, b)
 }
 
 // temporarySchemaName returns the session specific temporary schema name given
@@ -202,8 +190,14 @@ func cleanupSessionTempObjects(
 				// itself may still exist (eg. a temporary table was created and then
 				// dropped). So we remove the namespace table entry of the temporary
 				// schema.
-				key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
-				if _, err := txn.Del(ctx, key); err != nil {
+				b := txn.NewBatch()
+				const kvTrace = false
+				if err := descsCol.DeleteTempSchemaToBatch(
+					ctx, kvTrace, dbDesc, tempSchemaName, b,
+				); err != nil {
+					return err
+				}
+				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}
 			}
@@ -407,6 +401,12 @@ type TemporaryObjectCleaner struct {
 	metrics                 *temporaryObjectCleanerMetrics
 	collectionFactory       *descs.CollectionFactory
 	internalExecutorFactory sqlutil.InternalExecutorFactory
+
+	// waitForInstances is a function to ensure that the status server will know
+	// about the set of live instances at least as of the time of startup. This
+	// primarily matters during tests of the temp table infrastructure in
+	// secondary tenants.
+	waitForInstances func(ctx context.Context) error
 }
 
 // temporaryObjectCleanerMetrics are the metrics for TemporaryObjectCleaner
@@ -434,6 +434,7 @@ func NewTemporaryObjectCleaner(
 	testingKnobs ExecutorTestingKnobs,
 	ief sqlutil.InternalExecutorFactory,
 	cf *descs.CollectionFactory,
+	waitForInstances func(ctx context.Context) error,
 ) *TemporaryObjectCleaner {
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
@@ -447,6 +448,7 @@ func NewTemporaryObjectCleaner(
 		metrics:                 metrics,
 		internalExecutorFactory: ief,
 		collectionFactory:       cf,
+		waitForInstances:        waitForInstances,
 	}
 }
 
@@ -501,6 +503,16 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		if !isLeaseHolder {
 			log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
 			return nil
+		}
+	}
+	// We need to make sure that we have a somewhat up-to-date view of the
+	// set of live instances. If not, we might delete a relatively new
+	// table. In general this shouldn't be necessary because our wait interval
+	// is extremely conservative at 30 minutes by default, but under tests,
+	// it comes up.
+	if c.waitForInstances != nil {
+		if err := c.waitForInstances(ctx); err != nil {
+			return err
 		}
 	}
 

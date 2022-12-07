@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -147,11 +146,7 @@ func doCreateSequence(
 		return nil, err
 	}
 
-	// makeSequenceTableDesc already validates the table. No call to
-	// desc.ValidateSelf() needed here.
-
-	key := catalogkeys.MakeObjectNameKey(p.ExecCfg().Codec, dbDesc.GetID(), scDesc.GetID(), name.Object())
-	if err = p.createDescriptorWithID(ctx, key, id, desc, jobDesc); err != nil {
+	if err = p.createDescriptor(ctx, desc, jobDesc); err != nil {
 		return nil, err
 	}
 

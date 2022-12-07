@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -397,15 +396,34 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 }
 
-func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
-	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+// IncrementSchemaChangeIndexCounter implements the scbuild.Dependencies interface.
+func (d *buildDeps) IncrementSchemaChangeIndexCounter(counterType string) {
+	telemetry.Inc(sqltelemetry.SchemaChangeIndexCounter(counterType))
+}
+
+func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {
+	return d.descsCollection
 }
 
 func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
-	return descmetadata.NewZoneConfigGetter(d.txn, d.internalExecutor)
+	return &zoneConfigGetter{
+		txn:         d.txn,
+		descriptors: d.descsCollection,
+	}
 }
 
 // ClientNoticeSender implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
+}
+
+type zoneConfigGetter struct {
+	txn         *kv.Txn
+	descriptors *descs.Collection
+}
+
+func (zc *zoneConfigGetter) GetZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (catalog.ZoneConfig, error) {
+	return zc.descriptors.GetZoneConfig(ctx, zc.txn, id)
 }

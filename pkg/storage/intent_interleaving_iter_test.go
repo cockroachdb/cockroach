@@ -149,6 +149,9 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		fmt.Fprintf(b, "output: value: %x != %x\n", v1, v2)
 		return
 	}
+	if len(v1) != iter.ValueLen() {
+		fmt.Fprintf(b, "output: value len: %d != %d\n", len(v1), iter.ValueLen())
+	}
 	if k1.Timestamp.IsEmpty() {
 		var meta enginepb.MVCCMetadata
 		if err := protoutil.Unmarshal(v1, &meta); err != nil {

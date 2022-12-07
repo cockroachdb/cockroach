@@ -1,5 +1,5 @@
 # Make sure that db names are rewritten in a view restored to a new db name.
-new-server name=s
+new-cluster name=s
 ----
 
 exec-sql

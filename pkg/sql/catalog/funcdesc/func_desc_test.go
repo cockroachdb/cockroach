@@ -170,7 +170,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 					},
@@ -188,7 +188,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -209,7 +209,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -233,7 +233,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -258,7 +258,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -284,7 +284,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -310,7 +310,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -336,7 +336,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -362,7 +362,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -388,7 +388,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -414,7 +414,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -440,7 +440,7 @@ func TestValidateFuncDesc(t *testing.T) {
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type: types.Int,
 				},
-				Args: []descpb.FunctionDescriptor_Argument{
+				Params: []descpb.FunctionDescriptor_Parameter{
 					{
 						Name: "arg1",
 						Type: types.Int,
@@ -479,7 +479,7 @@ func TestToOverload(t *testing.T) {
 			// Test all fields are properly valued.
 			desc: descpb.FunctionDescriptor{
 				ID:                1,
-				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				Params:            []descpb.FunctionDescriptor_Parameter{{Name: "arg1", Type: types.Int}},
 				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
 				LeakProof:         true,
 				Volatility:        catpb.Function_IMMUTABLE,
@@ -488,7 +488,7 @@ func TestToOverload(t *testing.T) {
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
-				Types: tree.ArgTypes{
+				Types: tree.ParamTypes{
 					{Name: "arg1", Typ: types.Int},
 				},
 				ReturnType: tree.FixedReturnType(types.Int),
@@ -502,7 +502,7 @@ func TestToOverload(t *testing.T) {
 			// Test ReturnSet matters.
 			desc: descpb.FunctionDescriptor{
 				ID:                1,
-				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				Params:            []descpb.FunctionDescriptor_Parameter{{Name: "arg1", Type: types.Int}},
 				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: false},
 				LeakProof:         true,
 				Volatility:        catpb.Function_IMMUTABLE,
@@ -511,7 +511,7 @@ func TestToOverload(t *testing.T) {
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
-				Types: tree.ArgTypes{
+				Types: tree.ParamTypes{
 					{Name: "arg1", Typ: types.Int},
 				},
 				ReturnType: tree.FixedReturnType(types.Int),
@@ -525,7 +525,7 @@ func TestToOverload(t *testing.T) {
 			// Test Volatility matters.
 			desc: descpb.FunctionDescriptor{
 				ID:                1,
-				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				Params:            []descpb.FunctionDescriptor_Parameter{{Name: "arg1", Type: types.Int}},
 				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
 				LeakProof:         false,
 				Volatility:        catpb.Function_STABLE,
@@ -534,7 +534,7 @@ func TestToOverload(t *testing.T) {
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
-				Types: tree.ArgTypes{
+				Types: tree.ParamTypes{
 					{Name: "arg1", Typ: types.Int},
 				},
 				ReturnType: tree.FixedReturnType(types.Int),
@@ -548,7 +548,7 @@ func TestToOverload(t *testing.T) {
 			// Test CalledOnNullInput matters.
 			desc: descpb.FunctionDescriptor{
 				ID:                1,
-				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				Params:            []descpb.FunctionDescriptor_Parameter{{Name: "arg1", Type: types.Int}},
 				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
 				LeakProof:         true,
 				Volatility:        catpb.Function_IMMUTABLE,
@@ -557,7 +557,7 @@ func TestToOverload(t *testing.T) {
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
-				Types: tree.ArgTypes{
+				Types: tree.ParamTypes{
 					{Name: "arg1", Typ: types.Int},
 				},
 				ReturnType:        tree.FixedReturnType(types.Int),
@@ -572,7 +572,7 @@ func TestToOverload(t *testing.T) {
 			// Test failure on non-immutable but leakproof function.
 			desc: descpb.FunctionDescriptor{
 				ID:                1,
-				Args:              []descpb.FunctionDescriptor_Argument{{Name: "arg1", Type: types.Int}},
+				Params:            []descpb.FunctionDescriptor_Parameter{{Name: "arg1", Type: types.Int}},
 				ReturnType:        descpb.FunctionDescriptor_ReturnType{Type: types.Int, ReturnSet: true},
 				LeakProof:         true,
 				Volatility:        catpb.Function_STABLE,
@@ -581,7 +581,7 @@ func TestToOverload(t *testing.T) {
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
-				Types: tree.ArgTypes{
+				Types: tree.ParamTypes{
 					{Name: "arg1", Typ: types.Int},
 				},
 				ReturnType: tree.FixedReturnType(types.Int),

@@ -69,7 +69,8 @@ func executeValidateCheckConstraint(
 	if err != nil {
 		return err
 	}
-	if constraint.AsCheck() == nil {
+	check := constraint.AsCheck()
+	if check == nil {
 		return errors.Newf("constraint ID %v does not identify a check constraint in table %v.",
 			op.ConstraintID, op.TableID)
 	}
@@ -78,7 +79,7 @@ func executeValidateCheckConstraint(
 	execOverride := sessiondata.InternalExecutorOverride{
 		User: username.RootUserName(),
 	}
-	err = deps.Validator().ValidateCheckConstraint(ctx, table, constraint, execOverride)
+	err = deps.Validator().ValidateCheckConstraint(ctx, table, check, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
 	}
@@ -98,11 +99,17 @@ func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (er
 	switch op := op.(type) {
 	case *scop.ValidateIndex:
 		if err = executeValidateUniqueIndex(ctx, deps, op); err != nil {
-			return errors.Wrapf(err, "%T: %v", op, op)
+			if !scerrors.HasSchemaChangerUserError(err) {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
+			return err
 		}
 	case *scop.ValidateCheckConstraint:
 		if err = executeValidateCheckConstraint(ctx, deps, op); err != nil {
-			return errors.Wrapf(err, "%T: %v", op, op)
+			if !scerrors.HasSchemaChangerUserError(err) {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
+			return err
 		}
 	default:
 		panic("unimplemented")

@@ -783,7 +783,7 @@ t1                 j                         -1         NULL      NULL        NU
 t1                 k                         14         NULL      NULL        NULL      false       false      ·            ·
 t1                 l                         -1         NULL      NULL        NULL      false       false      ·            v
 t1                 m                         -1         NULL      NULL        NULL      true        true       a            ·
-t1                 n                         -1         NULL      NULL        NULL      true        true       b            ·
+t1                 n                         -1         NULL      NULL        NULL      true        true       d            ·
 t1_pkey            p                         -1         NULL      NULL        NULL      true        false      ·            ·
 t1_a_key           a                         -1         NULL      NULL        NULL      false       false      ·            ·
 index_key          b                         -1         NULL      NULL        NULL      false       false      ·            ·
@@ -1137,6 +1137,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
 2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5              0                          0            2            NULL      NULL                                                                                                                          1
+2055313241  53        3         true         true          false           true          false           true        false         false       true       false           1 2 3          0 0 0                      0 0 0        2 2 1        NULL      NULL                                                                                                                          3
 2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
 2268653844  40        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4        0 0 0 0                    0 0 0 0      2 2 2 2      NULL      NULL                                                                                                                          4
@@ -1221,6 +1222,9 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1841972634  0                           1
 2008917577  0                           1
 2008917578  0                           1
+2055313241  0                           1
+2055313241  0                           2
+2055313241  0                           3
 2101708905  0                           1
 2148104569  0                           1
 2148104569  0                           2
@@ -1312,27 +1316,27 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 conname        connamespace  contype  condef
+t1_pkey        109           p        PRIMARY_KEY_(p_ASC)
+t1_a_key       109           u        UNIQUE_(a_ASC)
+index_key      109           u        UNIQUE_(b_ASC,_c_ASC)
+primary        109           p        PRIMARY_KEY_(value_ASC)
+primary        109           p        PRIMARY_KEY_(value_ASC)
+t2_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+fk             109           f        FOREIGN_KEY_(t1_id)_REFERENCES_t1(a)
+t3_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
 check_b        109           c        CHECK_((b_>_11))
+check_c        109           c        CHECK_((c_!=_''::STRING))
+fk             109           f        FOREIGN_KEY_(a,_b)_REFERENCES_t1(b,_c)
+t4_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+unique_a       109           u        UNIQUE_WITHOUT_INDEX_(a)
 uwi_b_c        109           u        UNIQUE_WITHOUT_INDEX_(b,_c)
+uwi_b_partial  109           u        UNIQUE_WITHOUT_INDEX_(b)_WHERE_(c_=_'foo'::STRING)
 t5_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
 fk_b_c         109           f        FOREIGN_KEY_(b,_c)_REFERENCES_t4(b,_c)_MATCH_FULL_ON_UPDATE_RESTRICT
-check_c        109           c        CHECK_((c_!=_''::STRING))
-t6_expr_key    109           u        UNIQUE_(lower(c)_ASC)
-uwi_b_partial  109           u        UNIQUE_WITHOUT_INDEX_(b)_WHERE_(c_=_'foo'::STRING)
-t2_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
-t3_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
-index_key      109           u        UNIQUE_(b_ASC,_c_ASC)
-t1_a_key       109           u        UNIQUE_(a_ASC)
-unique_a       109           u        UNIQUE_WITHOUT_INDEX_(a)
-t6_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
-fk             109           f        FOREIGN_KEY_(a,_b)_REFERENCES_t1(b,_c)
-t1_pkey        109           p        PRIMARY_KEY_(p_ASC)
-t4_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
-mv1_pkey       109           p        PRIMARY_KEY_(rowid_ASC)
 t5_a_fkey      109           f        FOREIGN_KEY_(a)_REFERENCES_t4(a)_ON_DELETE_CASCADE
-fk             109           f        FOREIGN_KEY_(t1_id)_REFERENCES_t1(a)
-primary        109           p        PRIMARY_KEY_(value_ASC)
-primary        109           p        PRIMARY_KEY_(value_ASC)
+t6_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+t6_expr_key    109           u        UNIQUE_(lower(c)_ASC)
+mv1_pkey       109           p        PRIMARY_KEY_(rowid_ASC)
 
 query TTBBBOOO colnames,rowsort
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
@@ -1341,27 +1345,27 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
-check_b        c        false          false        true          114       0         0
-uwi_b_c        u        false          false        true          116       0         0
-t5_pkey        p        false          false        true          117       0         1869730585
-fk_b_c         f        false          false        true          117       0         0
-check_c        c        false          false        true          114       0         0
-t6_expr_key    u        false          false        true          120       0         2129466848
-uwi_b_partial  u        false          false        true          116       0         0
-t2_pkey        p        false          false        true          113       0         2955071325
-t3_pkey        p        false          false        true          114       0         2695335054
-index_key      u        false          false        true          110       0         3687884464
-t1_a_key       u        false          false        true          110       0         3687884465
-unique_a       u        false          false        true          116       0         0
-t6_pkey        p        false          false        true          120       0         2129466852
-fk             f        false          false        true          114       0         3687884464
 t1_pkey        p        false          false        true          110       0         3687884466
-t4_pkey        p        false          false        true          116       0         3214807592
-mv1_pkey       p        false          false        true          121       0         784389845
-t5_a_fkey      f        false          false        true          117       0         0
-fk             f        false          false        true          113       0         3687884465
+t1_a_key       u        false          false        true          110       0         3687884465
+index_key      u        false          false        true          110       0         3687884464
 primary        p        false          false        true          111       0         2342807459
 primary        p        false          false        true          112       0         5181036
+t2_pkey        p        false          false        true          113       0         2955071325
+fk             f        false          false        true          113       0         3687884465
+t3_pkey        p        false          false        true          114       0         2695335054
+check_b        c        false          false        true          114       0         0
+check_c        c        false          false        true          114       0         0
+fk             f        false          false        true          114       0         3687884464
+t4_pkey        p        false          false        true          116       0         3214807592
+unique_a       u        false          false        true          116       0         0
+uwi_b_c        u        false          false        true          116       0         0
+uwi_b_partial  u        false          false        true          116       0         0
+t5_pkey        p        false          false        true          117       0         1869730585
+fk_b_c         f        false          false        true          117       0         0
+t5_a_fkey      f        false          false        true          117       0         0
+t6_pkey        p        false          false        true          120       0         2129466852
+t6_expr_key    u        false          false        true          120       0         2129466848
+mv1_pkey       p        false          false        true          121       0         784389845
 
 query T
 SELECT conname
@@ -1378,23 +1382,23 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ----
 conname        confrelid  confupdtype  confdeltype  confmatchtype
-check_b        0          NULL         NULL         NULL
-uwi_b_c        0          NULL         NULL         NULL
-t5_pkey        0          NULL         NULL         NULL
-check_c        0          NULL         NULL         NULL
-t6_expr_key    0          NULL         NULL         NULL
-uwi_b_partial  0          NULL         NULL         NULL
+t1_pkey        0          NULL         NULL         NULL
+t1_a_key       0          NULL         NULL         NULL
+index_key      0          NULL         NULL         NULL
+primary        0          NULL         NULL         NULL
+primary        0          NULL         NULL         NULL
 t2_pkey        0          NULL         NULL         NULL
 t3_pkey        0          NULL         NULL         NULL
-index_key      0          NULL         NULL         NULL
-t1_a_key       0          NULL         NULL         NULL
-unique_a       0          NULL         NULL         NULL
-t6_pkey        0          NULL         NULL         NULL
-t1_pkey        0          NULL         NULL         NULL
+check_b        0          NULL         NULL         NULL
+check_c        0          NULL         NULL         NULL
 t4_pkey        0          NULL         NULL         NULL
+unique_a       0          NULL         NULL         NULL
+uwi_b_c        0          NULL         NULL         NULL
+uwi_b_partial  0          NULL         NULL         NULL
+t5_pkey        0          NULL         NULL         NULL
+t6_pkey        0          NULL         NULL         NULL
+t6_expr_key    0          NULL         NULL         NULL
 mv1_pkey       0          NULL         NULL         NULL
-primary        0          NULL         NULL         NULL
-primary        0          NULL         NULL         NULL
 
 query TOTTT colnames,rowsort
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
@@ -1416,27 +1420,27 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 conname        conislocal  coninhcount  connoinherit  conkey
+t1_pkey        true        0            true          {1}
+t1_a_key       true        0            true          {2}
+index_key      true        0            true          {3,4}
+primary        true        0            true          {1}
+primary        true        0            true          {1}
+t2_pkey        true        0            true          {2}
+fk             true        0            true          {1}
+t3_pkey        true        0            true          {4}
 check_b        true        0            true          {2}
+check_c        true        0            true          {3}
+fk             true        0            true          {1,2}
+t4_pkey        true        0            true          {4}
+unique_a       true        0            true          NULL
 uwi_b_c        true        0            true          NULL
+uwi_b_partial  true        0            true          NULL
 t5_pkey        true        0            true          {4}
 fk_b_c         true        0            true          {2,3}
-check_c        true        0            true          {3}
-t6_expr_key    true        0            true          {7}
-uwi_b_partial  true        0            true          NULL
-t2_pkey        true        0            true          {2}
-t3_pkey        true        0            true          {4}
-index_key      true        0            true          {3,4}
-t1_a_key       true        0            true          {2}
-unique_a       true        0            true          NULL
-t6_pkey        true        0            true          {6}
-fk             true        0            true          {1,2}
-t1_pkey        true        0            true          {1}
-t4_pkey        true        0            true          {4}
-mv1_pkey       true        0            true          {2}
 t5_a_fkey      true        0            true          {1}
-fk             true        0            true          {1}
-primary        true        0            true          {1}
-primary        true        0            true          {1}
+t6_pkey        true        0            true          {6}
+t6_expr_key    true        0            true          {7}
+mv1_pkey       true        0            true          {2}
 
 query TTTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, pg_get_constraintdef(con.oid) as condef
@@ -1673,6 +1677,10 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 2287    _record                4294967135    NULL        -1      false     b
 2950    uuid                   4294967135    NULL        16      true      b
 2951    _uuid                  4294967135    NULL        -1      false     b
+3614    tsvector               4294967135    NULL        -1      false     b
+3615    tsquery                4294967135    NULL        -1      false     b
+3643    _tsvector              4294967135    NULL        -1      false     b
+3645    _tsquery               4294967135    NULL        -1      false     b
 3802    jsonb                  4294967135    NULL        -1      false     b
 3807    _jsonb                 4294967135    NULL        -1      false     b
 4089    regnamespace           4294967135    NULL        8       true      b
@@ -1778,6 +1786,10 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 2287    _record                A            false           true          ,         0         2249     0
 2950    uuid                   U            false           true          ,         0         0        2951
 2951    _uuid                  A            false           true          ,         0         2950     0
+3614    tsvector               U            false           true          ,         0         0        3643
+3615    tsquery                U            false           true          ,         0         0        3645
+3643    _tsvector              A            false           true          ,         0         3614     0
+3645    _tsquery               A            false           true          ,         0         3615     0
 3802    jsonb                  U            false           true          ,         0         0        3807
 3807    _jsonb                 A            false           true          ,         0         3802     0
 4089    regnamespace           N            false           true          ,         0         0        4090
@@ -1883,6 +1895,10 @@ oid     typname                typinput        typoutput        typreceive      
 2287    _record                array_in        array_out        array_recv        array_send        0         0          0
 2950    uuid                   uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
 2951    _uuid                  array_in        array_out        array_recv        array_send        0         0          0
+3614    tsvector               tsvectorin      tsvectorout      tsvectorrecv      tsvectorsend      0         0          0
+3615    tsquery                tsqueryin       tsqueryout       tsqueryrecv       tsquerysend       0         0          0
+3643    _tsvector              array_in        array_out        array_recv        array_send        0         0          0
+3645    _tsquery               array_in        array_out        array_recv        array_send        0         0          0
 3802    jsonb                  jsonb_in        jsonb_out        jsonb_recv        jsonb_send        0         0          0
 3807    _jsonb                 array_in        array_out        array_recv        array_send        0         0          0
 4089    regnamespace           regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
@@ -1988,6 +2004,10 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 2287    _record                NULL      NULL        false       0            -1
 2950    uuid                   NULL      NULL        false       0            -1
 2951    _uuid                  NULL      NULL        false       0            -1
+3614    tsvector               NULL      NULL        false       0            -1
+3615    tsquery                NULL      NULL        false       0            -1
+3643    _tsvector              NULL      NULL        false       0            -1
+3645    _tsquery               NULL      NULL        false       0            -1
 3802    jsonb                  NULL      NULL        false       0            -1
 3807    _jsonb                 NULL      NULL        false       0            -1
 4089    regnamespace           NULL      NULL        false       0            -1
@@ -2093,6 +2113,10 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 2287    _record                0         0             NULL           NULL        NULL
 2950    uuid                   0         0             NULL           NULL        NULL
 2951    _uuid                  0         0             NULL           NULL        NULL
+3614    tsvector               0         0             NULL           NULL        NULL
+3615    tsquery                0         0             NULL           NULL        NULL
+3643    _tsvector              0         0             NULL           NULL        NULL
+3645    _tsquery               0         0             NULL           NULL        NULL
 3802    jsonb                  0         0             NULL           NULL        NULL
 3807    _jsonb                 0         0             NULL           NULL        NULL
 4089    regnamespace           0         0             NULL           NULL        NULL
@@ -4670,3 +4694,65 @@ order by attnum;
 attnum  attname
 1       x
 2       y
+
+# Regression test for not projecting away looked up columns by the left semi
+# virtual lookup join (#91012).
+statement ok
+CREATE TABLE t91012 (id INT, a_id INT);
+
+query I
+SELECT
+    count(*)
+FROM
+    pg_class AS t INNER JOIN pg_attribute AS a ON t.oid = a.attrelid
+WHERE
+    a.attnotnull = 'f'
+    AND a.attname = 'a_id'
+    AND t.relname = 't91012'
+    AND a.atttypid IN (SELECT oid FROM pg_type WHERE typname = ANY (ARRAY['int8']));
+----
+1
+
+# Same query, but with left anti join instead.
+query I
+SELECT
+    count(*)
+FROM
+    pg_class AS t INNER JOIN pg_attribute AS a ON t.oid = a.attrelid
+WHERE
+    a.attnotnull = 'f'
+    AND a.attname = 'a_id'
+    AND t.relname = 't91012'
+    AND NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = ANY (ARRAY['typefoo']) AND a.atttypid = oid);
+----
+1
+
+# Regression test for incorrectly handling left anti virtual lookup joins
+# (#88096).
+statement ok
+CREATE TYPE mytype AS enum('hello')
+
+query I
+SELECT
+    count(*)
+FROM
+    pg_type AS t
+WHERE
+    t.typrelid = 0
+    AND NOT EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+    AND t.typname LIKE 'myt%';
+----
+1
+
+# Same query, but with left semi join instead.
+query I
+SELECT
+    count(*)
+FROM
+    pg_type AS t
+WHERE
+    t.typrelid = 0
+    AND EXISTS(SELECT 1 FROM pg_type AS el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+    AND t.typname LIKE 'myt%';
+----
+0

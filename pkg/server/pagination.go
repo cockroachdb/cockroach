@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -297,7 +298,7 @@ type rpcNodePaginator struct {
 	errorCtx     string
 	pagState     paginationState
 	responseChan chan paginatedNodeResponse
-	nodeStatuses map[roachpb.NodeID]nodeStatusWithLiveness
+	nodeStatuses map[serverID]livenesspb.NodeLivenessStatus
 
 	dialFn     func(ctx context.Context, id roachpb.NodeID) (client interface{}, err error)
 	nodeFn     func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (res interface{}, err error)
@@ -367,13 +368,13 @@ func (r *rpcNodePaginator) queryNode(ctx context.Context, nodeID roachpb.NodeID,
 		r.mu.currentIdx++
 		r.mu.turnCond.Broadcast()
 	}
-	if err := contextutil.RunWithTimeout(ctx, "dial node", base.NetworkTimeout, func(ctx context.Context) error {
+	if err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
 		var err error
 		client, err = r.dialFn(ctx, nodeID)
 		return err
 	}); err != nil {
 		err = errors.Wrapf(err, "failed to dial into node %d (%s)",
-			nodeID, r.nodeStatuses[nodeID].livenessStatus)
+			nodeID, r.nodeStatuses[serverID(nodeID)])
 		addNodeResp(paginatedNodeResponse{nodeID: nodeID, err: err})
 		return
 	}
@@ -381,7 +382,7 @@ func (r *rpcNodePaginator) queryNode(ctx context.Context, nodeID roachpb.NodeID,
 	res, err := r.nodeFn(ctx, client, nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
-			r.errorCtx, nodeID, r.nodeStatuses[nodeID].livenessStatus)
+			r.errorCtx, nodeID, r.nodeStatuses[serverID(nodeID)])
 	}
 	length := 0
 	value := reflect.ValueOf(res)

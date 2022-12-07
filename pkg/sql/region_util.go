@@ -17,7 +17,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,7 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -770,19 +775,21 @@ func prepareZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	regionConfig multiregion.RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) (*zoneConfigUpdate, error) {
 	tableID := table.GetID()
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableID)
+	currentZoneConfigWithRaw, err := descriptors.GetZoneConfig(ctx, txn, tableID)
 	if err != nil {
 		return nil, err
 	}
-	newZoneConfig := *zonepb.NewZoneConfig()
-	if currentZoneConfig != nil {
-		newZoneConfig = *currentZoneConfig
+	if currentZoneConfigWithRaw == nil {
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
+	newZoneConfig := *zonepb.NewZoneConfig()
+	newZoneConfig = *currentZoneConfigWithRaw.ZoneConfigProto()
 
 	var hasNewSubzones bool
 	for _, opt := range opts {
@@ -825,7 +832,7 @@ func prepareZoneConfigForMultiRegionTable(
 
 	// Determine if we're rewriting or deleting the zone configuration.
 	newZoneConfigIsEmpty := newZoneConfig.Equal(zonepb.NewZoneConfig())
-	currentZoneConfigIsEmpty := currentZoneConfig.Equal(zonepb.NewZoneConfig())
+	currentZoneConfigIsEmpty := currentZoneConfigWithRaw.ZoneConfigProto().Equal(zonepb.NewZoneConfig())
 	rewriteZoneConfig := !newZoneConfigIsEmpty
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
 
@@ -851,7 +858,7 @@ func prepareZoneConfigForMultiRegionTable(
 		)
 	}
 	return prepareZoneConfigWrites(
-		ctx, execCfg, tableID, table, &newZoneConfig, hasNewSubzones,
+		ctx, execCfg, tableID, table, &newZoneConfig, currentZoneConfigWithRaw.GetRawBytesInStorage(), hasNewSubzones,
 	)
 }
 
@@ -861,16 +868,17 @@ func ApplyZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	kvTrace bool,
 	descriptors *descs.Collection,
 	regionConfig multiregion.RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
-	update, err := prepareZoneConfigForMultiRegionTable(ctx, txn, execCfg, regionConfig, table, opts...)
+	update, err := prepareZoneConfigForMultiRegionTable(ctx, txn, execCfg, descriptors, regionConfig, table, opts...)
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
+	_, err = writeZoneConfigUpdate(ctx, txn, kvTrace, descriptors, update)
 	return err
 }
 
@@ -913,6 +921,7 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 	descriptors *descs.Collection,
+	kvTrace bool,
 ) error {
 	// Build a zone config based on the RegionConfig information.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, execConfig, regionConfig)
@@ -927,6 +936,7 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 		txn,
 		execConfig,
 		descriptors,
+		kvTrace,
 	)
 }
 
@@ -938,6 +948,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 	descriptors *descs.Collection,
+	kvTrace bool,
 ) error {
 	// Merge with an empty zone config.
 	return applyZoneConfigForMultiRegionDatabase(
@@ -947,6 +958,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 		txn,
 		execConfig,
 		descriptors,
+		kvTrace,
 	)
 }
 
@@ -957,27 +969,29 @@ func applyZoneConfigForMultiRegionDatabase(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 	descriptors *descs.Collection,
+	kvTrace bool,
 ) error {
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, execConfig.Settings, dbID)
+	currentZoneConfigWithRaw, err := descriptors.GetZoneConfig(ctx, txn, dbID)
 	if err != nil {
 		return err
 	}
-	newZoneConfig := *zonepb.NewZoneConfig()
-	if currentZoneConfig != nil {
-		newZoneConfig = *currentZoneConfig
+	if currentZoneConfigWithRaw == nil {
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
+	newZoneConfig := *zonepb.NewZoneConfig()
+	newZoneConfig = *currentZoneConfigWithRaw.ZoneConfigProto()
 	newZoneConfig.CopyFromZone(
 		mergeZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
 	// If the new zone config is the same as a blank zone config, delete it.
 	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
-		_, err = execConfig.InternalExecutor.Exec(
+		_, err = writeZoneConfigUpdate(
 			ctx,
-			"delete-zone-multiregion-database",
 			txn,
-			"DELETE FROM system.zones WHERE id = $1",
-			dbID,
+			kvTrace,
+			descriptors,
+			&zoneConfigUpdate{id: dbID, zoneConfig: nil},
 		)
 		return err
 	}
@@ -987,9 +1001,11 @@ func applyZoneConfigForMultiRegionDatabase(
 		dbID,
 		nil, /* table */
 		&newZoneConfig,
+		currentZoneConfigWithRaw.GetRawBytesInStorage(),
 		execConfig,
 		descriptors,
 		false, /* hasNewSubzones */
+		kvTrace,
 	); err != nil {
 		return err
 	}
@@ -1028,6 +1044,7 @@ func (p *planner) refreshZoneConfigsForTables(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 					p.Descriptors(),
 					regionConfig,
 					tbDesc,
@@ -1070,6 +1087,7 @@ func (p *planner) refreshZoneConfigsForTablesWithValidation(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.Descriptors(),
 					regionConfig,
 					tbDesc,
 					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -1089,7 +1107,7 @@ func (p *planner) refreshZoneConfigsForTablesWithValidation(
 	// TODO(janexing): if any write failed, do we roll back? Same question to the
 	// original p.forEachMutableTableInDatabase().
 	for _, update := range zoneConfigUpdates {
-		_, err = writeZoneConfigUpdate(ctx, p.Txn(), p.ExecCfg(), p.Descriptors(), update)
+		_, err = writeZoneConfigUpdate(ctx, p.Txn(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(), p.Descriptors(), update)
 		if err != nil {
 			return err
 		}
@@ -1152,7 +1170,9 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		*regionConfig,
 		p.txn,
 		p.execCfg,
-		p.Descriptors()); err != nil {
+		p.Descriptors(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	); err != nil {
 		return err
 	}
 
@@ -1247,6 +1267,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 		ctx,
 		p.txn,
 		p.ExecCfg(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		p.Descriptors(),
 		regionConfig,
 		desc,
@@ -1293,6 +1314,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 		p.txn,
 		p.execCfg,
 		p.Descriptors(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1317,20 +1339,18 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	}
 	ids = append(ids, dbDesc.GetID())
 
-	zoneConfigs, err := getZoneConfigRawBatch(
-		ctx,
-		p.txn,
-		p.ExecCfg().Codec,
-		p.ExecCfg().Settings,
-		ids,
-	)
+	zoneConfigs, err := p.Descriptors().GetZoneConfigs(ctx, p.Txn(), ids...)
 	if err != nil {
 		return err
 	}
 
+	var dbZoneConfig *zonepb.ZoneConfig
+	if zc := zoneConfigs[dbDesc.GetID()]; zc != nil {
+		dbZoneConfig = zc.ZoneConfigProto()
+	}
 	if err := p.validateZoneConfigForMultiRegionDatabase(
 		dbDesc,
-		zoneConfigs[dbDesc.GetID()],
+		dbZoneConfig,
 		zoneConfigForMultiRegionValidator,
 	); err != nil {
 		return err
@@ -1340,10 +1360,14 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			var tbZoneConfig *zonepb.ZoneConfig
+			if zc := zoneConfigs[tbDesc.GetID()]; zc != nil {
+				tbZoneConfig = zc.ZoneConfigProto()
+			}
 			return p.validateZoneConfigForMultiRegionTable(
 				dbDesc,
 				tbDesc,
-				zoneConfigs[tbDesc.GetID()],
+				tbZoneConfig,
 				zoneConfigForMultiRegionValidator,
 			)
 		},
@@ -1410,9 +1434,9 @@ var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *
 	o.useCache = true
 }
 
-// errNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
+// ErrNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
 // requested database is not a multi-region database.
-var errNotMultiRegionDatabase = errors.New(
+var ErrNotMultiRegionDatabase = errors.New(
 	"database is not a multi-region database",
 )
 
@@ -1435,60 +1459,41 @@ func SynthesizeRegionConfig(
 		opt(&o)
 	}
 
-	regionConfig := multiregion.RegionConfig{}
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidLeased:    !o.useCache,
-		Required:       true,
-		IncludeOffline: o.includeOffline,
-	})
-	if err != nil {
-		return multiregion.RegionConfig{}, err
-	}
-	if !dbDesc.IsMultiRegion() {
-		return multiregion.RegionConfig{}, errNotMultiRegionDatabase
-	}
-
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	regionEnum, err := descsCol.GetImmutableTypeByID(
-		ctx,
-		txn,
-		regionEnumID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    !o.useCache,
-				IncludeOffline: o.includeOffline,
-			},
-		},
+	dbDesc, regionEnumDesc, err := getDBAndRegionEnumDescs(
+		ctx, txn, dbID, descsCol, o.useCache, o.includeOffline,
 	)
 	if err != nil {
 		return multiregion.RegionConfig{}, err
 	}
 
+	regionConfig := multiregion.RegionConfig{}
+
 	var regionNames catpb.RegionNames
 	if o.forValidation {
-		regionNames, err = regionEnum.RegionNamesForValidation()
+		regionNames, err = regionEnumDesc.RegionNamesForValidation()
 	} else {
-		regionNames, err = regionEnum.RegionNames()
+		regionNames, err = regionEnumDesc.RegionNames()
 	}
 	if err != nil {
 		return regionConfig, err
 	}
 
-	zoneCfgExtensions, err := regionEnum.ZoneConfigExtensions()
+	zoneCfgExtensions, err := regionEnumDesc.ZoneConfigExtensions()
 	if err != nil {
 		return regionConfig, err
 	}
 
-	transitioningRegionNames, err := regionEnum.TransitioningRegionNames()
+	transitioningRegionNames, err := regionEnumDesc.TransitioningRegionNames()
 	if err != nil {
 		return regionConfig, err
 	}
 
-	superRegions, err := regionEnum.SuperRegions()
+	superRegions, err := regionEnumDesc.SuperRegions()
+	if err != nil {
+		return regionConfig, err
+	}
+
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
 	if err != nil {
 		return regionConfig, err
 	}
@@ -1510,6 +1515,115 @@ func SynthesizeRegionConfig(
 	}
 
 	return regionConfig, nil
+}
+
+// GetLocalityRegionEnumPhysicalRepresentation returns the physical
+// representation of the given locality stored in the multi-region enum type
+// associated with dbID. If the given locality isn't found, the physical
+// representation of the primary region in dbID will be returned instead.
+// This returns an ErrNotMultiRegionDatabase error if the database isn't
+// multi-region.
+func GetLocalityRegionEnumPhysicalRepresentation(
+	ctx context.Context,
+	internalExecutorFactory descs.TxnManager,
+	kvDB *kv.DB,
+	dbID descpb.ID,
+	locality roachpb.Locality,
+) ([]byte, error) {
+	var enumReps map[catpb.RegionName][]byte
+	var primaryRegion catpb.RegionName
+	if err := internalExecutorFactory.DescsTxn(ctx, kvDB, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		enumReps, primaryRegion = nil, "" // reset for retry
+		var err error
+		enumReps, primaryRegion, err = GetRegionEnumRepresentations(ctx, txn, dbID, descsCol)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	// The primary region will be used if no region was provided through the
+	// locality flag.
+	currentRegion, _ := locality.Find("region")
+	if enumValue, ok := enumReps[catpb.RegionName(currentRegion)]; ok {
+		return enumValue, nil
+	}
+	if enumValue, ok := enumReps[primaryRegion]; ok {
+		return enumValue, nil
+	}
+	// This shouldn't be the case since if a primary region is defined for the
+	// database, there should exist a corresponding enum member value.
+	return nil, errors.AssertionFailedf("primary region not found")
+}
+
+// GetRegionEnumRepresentations returns representations stored in the
+// multi-region enum type associated with dbID, and the primary region of it.
+// An ErrNotMultiRegionDatabase error will be returned if the database isn't
+// multi-region.
+func GetRegionEnumRepresentations(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
+) (enumReps map[catpb.RegionName][]byte, primaryRegion catpb.RegionName, err error) {
+	dbDesc, regionEnumDesc, err := getDBAndRegionEnumDescs(
+		ctx, txn, dbID, descsCol, false /* useCache */, false /* includeOffline */)
+	if err != nil {
+		return nil, "", err
+	}
+
+	enumReps = make(map[catpb.RegionName][]byte)
+	for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
+		if regionEnumDesc.IsMemberReadOnly(ord) {
+			continue
+		}
+		enumReps[catpb.RegionName(
+			regionEnumDesc.GetMemberLogicalRepresentation(ord),
+		)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)
+	}
+	return enumReps, dbDesc.GetRegionConfig().PrimaryRegion, nil
+}
+
+// getDBAndRegionEnumDescs returns descriptors for both the database and
+// multi-region enum type. If the database isn't multi-region, an
+// ErrNotMultiRegionDatabase error will be returned.
+func getDBAndRegionEnumDescs(
+	ctx context.Context,
+	txn *kv.Txn,
+	dbID descpb.ID,
+	descsCol *descs.Collection,
+	useCache bool,
+	includeOffline bool,
+) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidLeased:    !useCache,
+		Required:       true,
+		IncludeOffline: includeOffline,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if !dbDesc.IsMultiRegion() {
+		return nil, nil, ErrNotMultiRegionDatabase
+	}
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return nil, nil, err
+	}
+	regionEnumDesc, err = descsCol.GetImmutableTypeByID(
+		ctx,
+		txn,
+		regionEnumID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased:    !useCache,
+				Required:       true,
+				IncludeOffline: includeOffline,
+			},
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return dbDesc, regionEnumDesc, nil
 }
 
 // blockDiscardOfZoneConfigForMultiRegionObject determines if discarding the
@@ -1904,10 +2018,14 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionDatabaseZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, dbDesc.GetID())
+	currentZoneConfig, err := p.Descriptors().GetZoneConfig(ctx, p.Txn(), dbDesc.GetID())
 	if err != nil {
 		return err
 	}
+	if currentZoneConfig == nil {
+		currentZoneConfig = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
+	}
+
 	regionConfig, err := SynthesizeRegionConfig(
 		ctx,
 		p.txn,
@@ -1920,7 +2038,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	}
 	return p.validateZoneConfigForMultiRegionDatabase(
 		dbDesc,
-		currentZoneConfig,
+		currentZoneConfig.ZoneConfigProto(),
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
 			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
 				regionConfig: regionConfig,
@@ -1977,10 +2095,14 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, desc.GetID())
+	currentZoneConfig, err := p.Descriptors().GetZoneConfig(ctx, p.Txn(), desc.GetID())
 	if err != nil {
 		return err
 	}
+	if currentZoneConfig == nil {
+		currentZoneConfig = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
+	}
+
 	regionConfig, err := SynthesizeRegionConfig(
 		ctx,
 		p.txn,
@@ -1995,7 +2117,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	return p.validateZoneConfigForMultiRegionTable(
 		dbDesc,
 		desc,
-		currentZoneConfig,
+		currentZoneConfig.ZoneConfigProto(),
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
 			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
 				regionConfig: regionConfig,
@@ -2326,4 +2448,173 @@ func (p *planner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
+}
+
+// OptimizeSystemDatabase is part of the eval.RegionOperator interface.
+func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
+	globalTables := []string{
+		"users",
+		"zones",
+		"privileges",
+		"comments",
+		"role_options",
+		"role_members",
+		"database_role_settings",
+		"settings",
+		"descriptor",
+		"namespace",
+		"table_statistics",
+		"web_sessions",
+	}
+
+	rbrTables := []string{
+		"sqlliveness",
+		"sql_instances",
+	}
+
+	if !systemschema.TestSupportMultiRegion() {
+		return errors.New("multi region system database is not supported")
+	}
+
+	// Retrieve the system database descriptor and ensure it supports
+	// multi-region
+	options := tree.CommonLookupFlags{
+		AvoidLeased: true,
+		Required:    true,
+	}
+	_, systemDB, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, keys.SystemDatabaseID, options)
+	if err != nil {
+		return err
+	}
+	regionEnumID, err := systemDB.MultiRegionEnumID()
+	if err != nil {
+		return errors.Wrap(err, "system database is not multi-region")
+	}
+	enumTypeDesc, err := p.Descriptors().GetMutableTypeByID(ctx, p.txn, regionEnumID, tree.ObjectLookupFlags{
+		CommonLookupFlags: options,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Convert the enum descriptor into a type
+	enumName := tree.MakeQualifiedTypeName(systemDB.GetName(), "public", enumTypeDesc.GetName())
+	enumType, err := enumTypeDesc.MakeTypesT(ctx, &enumName, nil)
+	if err != nil {
+		return err
+	}
+
+	getDescriptor := func(name string) (*tabledesc.Mutable, error) {
+		tableName := tree.MakeTableNameWithSchema(tree.Name("system"), tree.Name("public"), tree.Name(name))
+		required := true
+		_, desc, err := resolver.ResolveMutableExistingTableObject(
+			ctx, p, &tableName, required, tree.ResolveRequireTableDesc)
+		return desc, err
+	}
+
+	applyLocalityChange := func(desc *tabledesc.Mutable, locality string) error {
+		if err := p.ResetMultiRegionZoneConfigsForTable(ctx, int64(desc.GetID())); err != nil {
+			return err
+		}
+
+		jobName := fmt.Sprintf("convert system.%s to %s locality", desc.GetName(), locality)
+		return p.writeSchemaChange(ctx, desc, descpb.InvalidMutationID, jobName)
+	}
+
+	getMutableColumn := func(table *tabledesc.Mutable, name string) (*descpb.ColumnDescriptor, error) {
+		for i := range table.Columns {
+			if table.Columns[i].Name == name {
+				return &table.Columns[i], nil
+			}
+		}
+		return nil, errors.Newf("%s column not found", name)
+	}
+
+	partitionByRegion := func(table *tabledesc.Mutable) error {
+		regionConfig, err := SynthesizeRegionConfig(
+			ctx, p.txn, table.GetParentID(), p.Descriptors(),
+		)
+		if err != nil {
+			return err
+		}
+		partitionAllBy := partitionByForRegionalByRow(
+			regionConfig,
+			"crdb_region",
+		)
+
+		unexpectedColumns, partitioning, err := CreatePartitioning(
+			ctx,
+			p.ExecCfg().Settings,
+			p.EvalContext(),
+			table,
+			table.PrimaryIndex,
+			partitionAllBy,
+			nil, /*do not allow implicit columns, the existing crdb_region column must be used*/
+			true /*allow implicit partitioning */)
+		if err != nil {
+			return err
+		}
+		if 0 < len(unexpectedColumns) {
+			return errors.AssertionFailedf("unexpected implicit partitioning columns for table %s", table.GetName())
+		}
+		tabledesc.UpdateIndexPartitioning(&table.PrimaryIndex, true, nil, partitioning)
+		table.PartitionAllBy = true
+		return nil
+	}
+
+	// Configure global system tables
+	for _, tableName := range globalTables {
+		descriptor, err := getDescriptor(tableName)
+		if err != nil {
+			return err
+		}
+
+		descriptor.SetTableLocalityGlobal()
+
+		if err := applyLocalityChange(descriptor, "global"); err != nil {
+			return err
+		}
+	}
+
+	// Configure regional by row system tables
+	for _, tableName := range rbrTables {
+		descriptor, err := getDescriptor(tableName)
+		if err != nil {
+			return err
+		}
+
+		// Change crdb_region type to the multi-region enum
+		column, err := getMutableColumn(descriptor, "crdb_region")
+		if err != nil {
+			return err
+		}
+		column.Type = enumType
+
+		// Add a back reference to the table
+		backReferenceJob := fmt.Sprintf("add back ref on mr-enum for system table %s", tableName)
+		if err = p.addTypeBackReference(ctx, regionEnumID, descriptor.GetID(), backReferenceJob); err != nil {
+			return err
+		}
+
+		descriptor.SetTableLocalityRegionalByRow(tree.Name(column.Name))
+		if err := partitionByRegion(descriptor); err != nil {
+			return err
+		}
+
+		if err := applyLocalityChange(descriptor, "regional by row"); err != nil {
+			return err
+		}
+
+		// Delete statistics for the table because the statistics materialize
+		// the column type for `crdb_region` and the column type is changing
+		// from bytes to an enum.
+		if _, err := p.ExecCfg().InternalExecutor.Exec(ctx, "delete-stats", p.txn,
+			`DELETE FROM system.table_statistics WHERE "tableID" = $1;`,
+			descriptor.GetID(),
+		); err != nil {
+			return errors.Wrap(err, "unable to delete statistics")
+		}
+	}
+
+	return nil
 }

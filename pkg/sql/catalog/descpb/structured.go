@@ -338,34 +338,6 @@ func (DescriptorState) SafeValue() {}
 // SafeValue implements the redact.SafeValue interface.
 func (ConstraintType) SafeValue() {}
 
-// UniqueConstraint is an interface for a unique constraint. It allows
-// both UNIQUE indexes and UNIQUE WITHOUT INDEX constraints to serve as
-// the referenced side of a foreign key constraint.
-type UniqueConstraint interface {
-	// IsValidReferencedUniqueConstraint returns whether the unique constraint can
-	// serve as a referenced unique constraint for a foreign key constraint with the
-	// provided set of referencedColumnIDs.
-	IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool
-
-	// GetName returns the constraint name.
-	GetName() string
-}
-
-var _ UniqueConstraint = &UniqueWithoutIndexConstraint{}
-var _ UniqueConstraint = &IndexDescriptor{}
-
-// IsValidReferencedUniqueConstraint is part of the UniqueConstraint interface.
-func (u *UniqueWithoutIndexConstraint) IsValidReferencedUniqueConstraint(
-	referencedColIDs ColumnIDs,
-) bool {
-	return !u.IsPartial() && ColumnIDs(u.ColumnIDs).PermutationOf(referencedColIDs)
-}
-
-// GetName is part of the UniqueConstraint interface.
-func (u *UniqueWithoutIndexConstraint) GetName() string {
-	return u.Name
-}
-
 // IsPartial returns true if the constraint is a partial unique constraint.
 func (u *UniqueWithoutIndexConstraint) IsPartial() bool {
 	return u.Predicate != ""

@@ -1,4 +1,4 @@
-new-server name=m1
+new-cluster name=m1
 ----
 
 exec-sql

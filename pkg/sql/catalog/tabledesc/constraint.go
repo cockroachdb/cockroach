@@ -11,215 +11,465 @@
 package tabledesc
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// constraintCache contains precomputed slices of constraints, categorized by kind and validity.
-// A constraint is considered
-// - active if its validity is VALIDATED;
-// - inactive if its validity is VALIDATING or UNVALIDATED;
-// - dropping if its validity is DROPPING;
+type constraintBase struct {
+	maybeMutation
+}
+
+// AsCheck implements the catalog.ConstraintProvider interface.
+func (c constraintBase) AsCheck() catalog.CheckConstraint {
+	return nil
+}
+
+// AsForeignKey implements the catalog.ConstraintProvider interface.
+func (c constraintBase) AsForeignKey() catalog.ForeignKeyConstraint {
+	return nil
+}
+
+// AsUniqueWithoutIndex implements the catalog.ConstraintProvider interface.
+func (c constraintBase) AsUniqueWithoutIndex() catalog.UniqueWithoutIndexConstraint {
+	return nil
+}
+
+// AsUniqueWithIndex implements the catalog.ConstraintProvider interface.
+func (c constraintBase) AsUniqueWithIndex() catalog.UniqueWithIndexConstraint {
+	return nil
+}
+
+type checkConstraint struct {
+	constraintBase
+	desc *descpb.TableDescriptor_CheckConstraint
+}
+
+var _ catalog.CheckConstraint = (*checkConstraint)(nil)
+
+// CheckDesc implements the catalog.CheckConstraint interface.
+func (c checkConstraint) CheckDesc() *descpb.TableDescriptor_CheckConstraint {
+	return c.desc
+}
+
+// Expr implements the catalog.CheckConstraint interface.
+func (c checkConstraint) GetExpr() string {
+	return c.desc.Expr
+}
+
+// NumReferencedColumns implements the catalog.CheckConstraint interface.
+func (c checkConstraint) NumReferencedColumns() int {
+	return len(c.desc.ColumnIDs)
+}
+
+// GetReferencedColumnID implements the catalog.CheckConstraint
+// interface.
+func (c checkConstraint) GetReferencedColumnID(columnOrdinal int) descpb.ColumnID {
+	return c.desc.ColumnIDs[columnOrdinal]
+}
+
+// CollectReferencedColumnIDs implements the catalog.CheckConstraint
+// interface.
+func (c checkConstraint) CollectReferencedColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(c.desc.ColumnIDs...)
+}
+
+// IsNotNullColumnConstraint implements the catalog.CheckConstraint interface.
+func (c checkConstraint) IsNotNullColumnConstraint() bool {
+	return c.desc.IsNonNullConstraint
+}
+
+// IsHashShardingConstraint implements the catalog.CheckConstraint interface.
+func (c checkConstraint) IsHashShardingConstraint() bool {
+	return c.desc.FromHashShardedColumn
+}
+
+// GetConstraintID implements the catalog.Constraint interface.
+func (c checkConstraint) GetConstraintID() descpb.ConstraintID {
+	return c.desc.ConstraintID
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
+func (c checkConstraint) GetConstraintValidity() descpb.ConstraintValidity {
+	return c.desc.Validity
+}
+
+// IsConstraintValidated implements the catalog.Constraint interface.
+func (c checkConstraint) IsConstraintValidated() bool {
+	return c.desc.Validity == descpb.ConstraintValidity_Validated
+}
+
+// IsConstraintUnvalidated implements the catalog.Constraint interface.
+func (c checkConstraint) IsConstraintUnvalidated() bool {
+	return c.desc.Validity == descpb.ConstraintValidity_Unvalidated
+}
+
+// GetName implements the catalog.Constraint interface.
+func (c checkConstraint) GetName() string {
+	return c.desc.Name
+}
+
+// AsCheck implements the catalog.ConstraintProvider interface.
+func (c checkConstraint) AsCheck() catalog.CheckConstraint {
+	return &c
+}
+
+// String implements the catalog.Constraint interface.
+func (c checkConstraint) String() string {
+	return fmt.Sprintf("%+v", c.desc)
+}
+
+// IsEnforced implements the catalog.Constraint interface.
+func (c checkConstraint) IsEnforced() bool {
+	return !c.IsMutation() || c.WriteAndDeleteOnly()
+}
+
+type uniqueWithoutIndexConstraint struct {
+	constraintBase
+	desc *descpb.UniqueWithoutIndexConstraint
+}
+
+var _ catalog.UniqueWithoutIndexConstraint = (*uniqueWithoutIndexConstraint)(nil)
+
+// UniqueWithoutIndexDesc implements the catalog.UniqueWithoutIndexConstraint
+// interface.
+func (c uniqueWithoutIndexConstraint) UniqueWithoutIndexDesc() *descpb.UniqueWithoutIndexConstraint {
+	return c.desc
+}
+
+// ParentTableID implements the catalog.UniqueWithoutIndexConstraint
+// interface.
+func (c uniqueWithoutIndexConstraint) ParentTableID() descpb.ID {
+	return c.desc.TableID
+}
+
+// IsValidReferencedUniqueConstraint implements the catalog.UniqueConstraint
+// interface.
+func (c uniqueWithoutIndexConstraint) IsValidReferencedUniqueConstraint(
+	fk catalog.ForeignKeyConstraint,
+) bool {
+	return !c.IsPartial() && descpb.ColumnIDs(c.desc.ColumnIDs).PermutationOf(fk.ForeignKeyDesc().ReferencedColumnIDs)
+}
+
+// NumKeyColumns implements the catalog.UniqueConstraint interface.
+func (c uniqueWithoutIndexConstraint) NumKeyColumns() int {
+	return len(c.desc.ColumnIDs)
+}
+
+// GetKeyColumnID implements the catalog.UniqueConstraint interface.
+func (c uniqueWithoutIndexConstraint) GetKeyColumnID(columnOrdinal int) descpb.ColumnID {
+	return c.desc.ColumnIDs[columnOrdinal]
+}
+
+// CollectKeyColumnIDs implements the catalog.UniqueConstraint
+// interface.
+func (c uniqueWithoutIndexConstraint) CollectKeyColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(c.desc.ColumnIDs...)
+}
+
+// IsPartial implements the catalog.UniqueConstraint interface.
+func (c uniqueWithoutIndexConstraint) IsPartial() bool {
+	return c.desc.Predicate != ""
+}
+
+// GetPredicate implements the catalog.UniqueConstraint interface.
+func (c uniqueWithoutIndexConstraint) GetPredicate() string {
+	return c.desc.Predicate
+}
+
+// GetConstraintID implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetConstraintID() descpb.ConstraintID {
+	return c.desc.ConstraintID
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetConstraintValidity() descpb.ConstraintValidity {
+	return c.desc.Validity
+}
+
+// IsConstraintValidated implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) IsConstraintValidated() bool {
+	return c.desc.Validity == descpb.ConstraintValidity_Validated
+}
+
+// IsConstraintUnvalidated implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) IsConstraintUnvalidated() bool {
+	return c.desc.Validity == descpb.ConstraintValidity_Unvalidated
+}
+
+// GetName implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetName() string {
+	return c.desc.Name
+}
+
+// AsUniqueWithoutIndex implements the catalog.ConstraintProvider interface.
+func (c uniqueWithoutIndexConstraint) AsUniqueWithoutIndex() catalog.UniqueWithoutIndexConstraint {
+	return &c
+}
+
+// String implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) String() string {
+	return fmt.Sprintf("%+v", c.desc)
+}
+
+// IsEnforced implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) IsEnforced() bool {
+	return !c.IsMutation() || c.WriteAndDeleteOnly()
+}
+
+type foreignKeyConstraint struct {
+	constraintBase
+	desc *descpb.ForeignKeyConstraint
+}
+
+var _ catalog.ForeignKeyConstraint = (*foreignKeyConstraint)(nil)
+
+// ForeignKeyDesc implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) ForeignKeyDesc() *descpb.ForeignKeyConstraint {
+	return c.desc
+}
+
+// GetOriginTableID implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) GetOriginTableID() descpb.ID {
+	return c.desc.OriginTableID
+}
+
+// NumOriginColumns implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) NumOriginColumns() int {
+	return len(c.desc.OriginColumnIDs)
+}
+
+// GetOriginColumnID implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) GetOriginColumnID(columnOrdinal int) descpb.ColumnID {
+	return c.desc.OriginColumnIDs[columnOrdinal]
+}
+
+// CollectOriginColumnIDs implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) CollectOriginColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(c.desc.OriginColumnIDs...)
+}
+
+// GetReferencedTableID implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) GetReferencedTableID() descpb.ID {
+	return c.desc.ReferencedTableID
+}
+
+// NumReferencedColumns implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) NumReferencedColumns() int {
+	return len(c.desc.ReferencedColumnIDs)
+}
+
+// GetReferencedColumnID implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) GetReferencedColumnID(columnOrdinal int) descpb.ColumnID {
+	return c.desc.ReferencedColumnIDs[columnOrdinal]
+}
+
+// CollectReferencedColumnIDs implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) CollectReferencedColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(c.desc.ReferencedColumnIDs...)
+}
+
+// OnDelete implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) OnDelete() catpb.ForeignKeyAction {
+	return c.desc.OnDelete
+}
+
+// OnUpdate implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) OnUpdate() catpb.ForeignKeyAction {
+	return c.desc.OnUpdate
+}
+
+// Match implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) Match() descpb.ForeignKeyReference_Match {
+	return c.desc.Match
+}
+
+// GetConstraintID implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetConstraintID() descpb.ConstraintID {
+	return c.desc.ConstraintID
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetConstraintValidity() descpb.ConstraintValidity {
+	return c.desc.Validity
+}
+
+// IsConstraintValidated implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) IsConstraintValidated() bool {
+	return c.desc.Validity == descpb.ConstraintValidity_Validated
+}
+
+// IsConstraintUnvalidated implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) IsConstraintUnvalidated() bool {
+	return c.desc.Validity == descpb.ConstraintValidity_Unvalidated
+}
+
+// GetName implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetName() string {
+	return c.desc.Name
+}
+
+// AsForeignKey implements the catalog.ConstraintProvider interface.
+func (c foreignKeyConstraint) AsForeignKey() catalog.ForeignKeyConstraint {
+	return &c
+}
+
+// String implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) String() string {
+	return fmt.Sprintf("%+v", c.desc)
+}
+
+// IsEnforced implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) IsEnforced() bool {
+	return !c.IsMutation() || c.WriteAndDeleteOnly()
+}
+
+// constraintCache contains precomputed slices of constraints, categorized by:
+//   - constraint subtype: checks, fks, etc.
+//   - enforcement status: whether a constraint is enforced for data written to
+//     the table, regardless of whether the constraint is valid for table data
+//     which existed prior to the constraint being added to the table.
 type constraintCache struct {
-	all                  []catalog.Constraint
-	allActiveAndInactive []catalog.Constraint
-	allActive            []catalog.Constraint
-
-	allChecks                  []catalog.Constraint
-	allActiveAndInactiveChecks []catalog.Constraint
-	allActiveChecks            []catalog.Constraint
-
-	allNotNulls                  []catalog.Constraint
-	allActiveAndInactiveNotNulls []catalog.Constraint
-	allActiveNotNulls            []catalog.Constraint
-
-	allFKs                  []catalog.Constraint
-	allActiveAndInactiveFKs []catalog.Constraint
-	allActiveFKs            []catalog.Constraint
-
-	allUniqueWithoutIndexes                  []catalog.Constraint
-	allActiveAndInactiveUniqueWithoutIndexes []catalog.Constraint
-	allActiveUniqueWithoutIndexes            []catalog.Constraint
+	all, allEnforced       []catalog.Constraint
+	checks, checksEnforced []catalog.CheckConstraint
+	fks, fksEnforced       []catalog.ForeignKeyConstraint
+	uwis, uwisEnforced     []catalog.UniqueWithIndexConstraint
+	uwois, uwoisEnforced   []catalog.UniqueWithoutIndexConstraint
+	fkBackRefs             []catalog.ForeignKeyConstraint
 }
 
 // newConstraintCache returns a fresh fully-populated constraintCache struct for the
 // TableDescriptor.
-func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) *constraintCache {
-	c := constraintCache{}
-
-	// addIfNotExists is a function that adds constraint `c` to slice `dest` if this
-	// constraint is not already in it (as determined by using a set of already added
-	// constraint IDs `constraintIDsInDest`).
-	// If `constraintIDsInDest` is nil, blindly append `c` to `dest`.
-	addIfNotExists := func(
-		c catalog.Constraint,
-		dest []catalog.Constraint,
-		constraintIDsInDest map[descpb.ConstraintID]bool,
-	) []catalog.Constraint {
-		if constraintIDsInDest == nil {
-			dest = append(dest, c)
-			return dest
-		}
-
-		if _, exist := constraintIDsInDest[c.GetConstraintID()]; exist {
-			return dest
-		}
-		dest = append(dest, c)
-		constraintIDsInDest[c.GetConstraintID()] = true
-		return dest
+func newConstraintCache(
+	desc *descpb.TableDescriptor, indexes *indexCache, mutations *mutationCache,
+) *constraintCache {
+	capUWIs := len(indexes.all)
+	numEnforcedChecks := len(desc.Checks)
+	capChecks := numEnforcedChecks + len(mutations.checks)
+	numEnforcedFKs := len(desc.OutboundFKs)
+	capFKs := numEnforcedFKs + len(mutations.fks)
+	numEnforcedUWOIs := len(desc.UniqueWithoutIndexConstraints)
+	capUWOIs := numEnforcedUWOIs + len(mutations.uniqueWithoutIndexes)
+	capAll := capChecks + capFKs + capUWOIs + capUWIs
+	// Pre-allocate slices which are known not to be empty:
+	// physical tables always have at least one index-backed unique constraint
+	// in the form of the primary key.
+	c := constraintCache{
+		all:          make([]catalog.Constraint, 0, capAll),
+		allEnforced:  make([]catalog.Constraint, 0, capAll),
+		uwis:         make([]catalog.UniqueWithIndexConstraint, 0, capUWIs),
+		uwisEnforced: make([]catalog.UniqueWithIndexConstraint, 0, capUWIs),
 	}
-
-	// addConstraintToSetsByValidity is a function that adds constraint `c` to various slice
-	// categorized by validity.
-	addConstraintToSetsByValidity := func(
-		c catalog.Constraint,
-		all, allActiveAndInactive, allActive []catalog.Constraint,
-	) (
-		updatedAll []catalog.Constraint,
-		updatedAllActiveAndInactive []catalog.Constraint,
-		updatedAllActive []catalog.Constraint,
-	) {
-		cstValidity := c.GetConstraintValidity()
-		all = addIfNotExists(c, all, nil)
-
-		if cstValidity == descpb.ConstraintValidity_Validated ||
-			cstValidity == descpb.ConstraintValidity_Validating ||
-			cstValidity == descpb.ConstraintValidity_Unvalidated {
-			allActiveAndInactive = addIfNotExists(c, allActiveAndInactive, nil)
-		}
-		if cstValidity == descpb.ConstraintValidity_Validated {
-			allActive = addIfNotExists(c, allActive, nil)
-		}
-		return all, allActiveAndInactive, allActive
-	}
-
-	// Glean all constraints from `desc` and `mutations`.
-	var allConstraints []catalog.Constraint
-	constraintIDs := make(map[descpb.ConstraintID]bool)
-	for _, cst := range []descpb.IndexDescriptor{desc.PrimaryIndex} {
-		backingStruct := index{
-			desc:                 &cst,
-			validityIfConstraint: descpb.ConstraintValidity_Validated,
-		}
-		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-	}
-	for _, cst := range desc.Indexes {
-		if cst.Unique {
-			backingStruct := index{
-				desc:                 &cst,
-				validityIfConstraint: descpb.ConstraintValidity_Validated,
-			}
-			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-		}
-	}
-	for _, cst := range desc.Checks {
-		backingStruct := constraint{
-			desc: &descpb.ConstraintToUpdate{
-				ConstraintType: descpb.ConstraintToUpdate_CHECK,
-				Name:           cst.Name,
-				Check:          *cst,
-			},
-		}
-		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-	}
-	for _, cst := range append(desc.OutboundFKs, desc.InboundFKs...) {
-		backingStruct := constraint{
-			desc: &descpb.ConstraintToUpdate{
-				ConstraintType: descpb.ConstraintToUpdate_FOREIGN_KEY,
-				Name:           cst.Name,
-				ForeignKey:     cst,
-			},
-		}
-		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-	}
-	for _, cst := range desc.UniqueWithoutIndexConstraints {
-		backingStruct := constraint{
-			desc: &descpb.ConstraintToUpdate{
-				ConstraintType:               descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX,
-				Name:                         cst.Name,
-				UniqueWithoutIndexConstraint: cst,
-			},
-		}
-		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-	}
-	for _, cstMutation := range mutations.all {
-		if cst := cstMutation.AsConstraint(); cst != nil {
-			backingStruct := constraint{
-				maybeMutation: maybeMutation{
-					mutationID:         cstMutation.MutationID(),
-					mutationDirection:  mutationDirection(cstMutation),
-					mutationState:      mutationState(cstMutation),
-					mutationIsRollback: cstMutation.IsRollback(),
-				},
-			}
-			if cc, ok := cst.(*constraint); ok {
-				backingStruct.desc = cc.desc
-			}
-			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-		}
-		if cst := cstMutation.AsIndex(); cst != nil {
-			validity := descpb.ConstraintValidity_Validating
-			if !cstMutation.Adding() {
-				validity = descpb.ConstraintValidity_Dropping
-			}
-			switch cst.GetEncodingType() {
-			case descpb.PrimaryIndexEncoding:
-				backingStruct := index{
-					desc:                 cst.IndexDesc(),
-					validityIfConstraint: validity,
-				}
-				allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-			case descpb.SecondaryIndexEncoding:
-				if cst.IsUnique() {
-					backingStruct := index{
-						desc:                 cst.IndexDesc(),
-						validityIfConstraint: validity,
-					}
-					allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-				}
-			default:
-				panic("unknown index encoding type")
+	// Populate with index-backed unique constraints.
+	for _, idx := range indexes.all {
+		if uwi := idx.AsUniqueWithIndex(); uwi != nil && uwi.NumKeyColumns() > 0 {
+			c.all = append(c.all, uwi)
+			c.uwis = append(c.uwis, uwi)
+			if uwi.IsEnforced() {
+				c.allEnforced = append(c.allEnforced, uwi)
+				c.uwisEnforced = append(c.uwisEnforced, uwi)
 			}
 		}
 	}
-
-	// Populate constraintCache `c`.
-	for _, cst := range allConstraints {
-		c.all, c.allActiveAndInactive, c.allActive =
-			addConstraintToSetsByValidity(cst, c.all, c.allActiveAndInactive, c.allActive)
-		c.allChecks, c.allActiveAndInactiveChecks, c.allActiveChecks =
-			addConstraintToSetsByValidity(cst, c.allChecks, c.allActiveAndInactiveChecks, c.allActiveChecks)
-		c.allNotNulls, c.allActiveAndInactiveNotNulls, c.allActiveNotNulls =
-			addConstraintToSetsByValidity(cst, c.allNotNulls, c.allActiveAndInactiveNotNulls, c.allActiveNotNulls)
-		c.allFKs, c.allActiveAndInactiveFKs, c.allActiveFKs =
-			addConstraintToSetsByValidity(cst, c.allFKs, c.allActiveAndInactiveFKs, c.allActiveFKs)
-		c.allUniqueWithoutIndexes, c.allActiveAndInactiveUniqueWithoutIndexes, c.allActiveUniqueWithoutIndexes =
-			addConstraintToSetsByValidity(cst, c.allUniqueWithoutIndexes, c.allActiveAndInactiveUniqueWithoutIndexes, c.allActiveUniqueWithoutIndexes)
+	// Populate with check constraints.
+	if capChecks > 0 {
+		c.checks = make([]catalog.CheckConstraint, 0, capChecks)
+		var byID util.FastIntMap
+		var checkBackingStructs []checkConstraint
+		if numEnforcedChecks > 0 {
+			checkBackingStructs = make([]checkConstraint, numEnforcedChecks)
+			for i, ckDesc := range desc.Checks {
+				checkBackingStructs[i].desc = ckDesc
+				ck := &checkBackingStructs[i]
+				byID.Set(int(ck.desc.ConstraintID), i)
+				c.all = append(c.all, ck)
+				c.allEnforced = append(c.allEnforced, ck)
+				c.checks = append(c.checks, ck)
+				c.checksEnforced = append(c.checksEnforced, ck)
+			}
+		}
+		for _, m := range mutations.checks {
+			ck := m.AsCheck()
+			if ordinal, found := byID.Get(int(ck.GetConstraintID())); found {
+				checkBackingStructs[ordinal].maybeMutation = ck.(*checkConstraint).maybeMutation
+			} else {
+				c.all = append(c.all, ck)
+				c.checks = append(c.checks, ck)
+			}
+		}
 	}
-
+	// Populate with foreign key constraints.
+	if capFKs > 0 {
+		c.fks = make([]catalog.ForeignKeyConstraint, 0, capFKs)
+		var byID util.FastIntMap
+		var fkBackingStructs []foreignKeyConstraint
+		if numEnforcedFKs > 0 {
+			fkBackingStructs = make([]foreignKeyConstraint, numEnforcedFKs)
+			for i := range desc.OutboundFKs {
+				fkBackingStructs[i].desc = &desc.OutboundFKs[i]
+				fk := &fkBackingStructs[i]
+				byID.Set(int(fk.desc.ConstraintID), i)
+				c.all = append(c.all, fk)
+				c.allEnforced = append(c.allEnforced, fk)
+				c.fks = append(c.fks, fk)
+				c.fksEnforced = append(c.fksEnforced, fk)
+			}
+		}
+		for _, m := range mutations.fks {
+			fk := m.AsForeignKey()
+			if ordinal, found := byID.Get(int(fk.GetConstraintID())); found {
+				fkBackingStructs[ordinal].maybeMutation = fk.(*foreignKeyConstraint).maybeMutation
+			} else {
+				c.all = append(c.all, fk)
+				c.fks = append(c.fks, fk)
+			}
+		}
+	}
+	// Populate with non-index-backed unique constraints.
+	if capUWOIs > 0 {
+		c.uwois = make([]catalog.UniqueWithoutIndexConstraint, 0, capUWOIs)
+		var byID util.FastIntMap
+		var uwoisBackingStructs []uniqueWithoutIndexConstraint
+		if numEnforcedUWOIs > 0 {
+			uwoisBackingStructs = make([]uniqueWithoutIndexConstraint, numEnforcedUWOIs)
+			for i := range desc.UniqueWithoutIndexConstraints {
+				uwoisBackingStructs[i].desc = &desc.UniqueWithoutIndexConstraints[i]
+				uwoi := &uwoisBackingStructs[i]
+				byID.Set(int(uwoi.desc.ConstraintID), i)
+				c.all = append(c.all, uwoi)
+				c.allEnforced = append(c.allEnforced, uwoi)
+				c.uwois = append(c.uwois, uwoi)
+				c.uwoisEnforced = append(c.uwoisEnforced, uwoi)
+			}
+		}
+		for _, m := range mutations.uniqueWithoutIndexes {
+			uwoi := m.AsUniqueWithoutIndex()
+			if ordinal, found := byID.Get(int(uwoi.GetConstraintID())); found {
+				uwoisBackingStructs[ordinal].maybeMutation = uwoi.(*uniqueWithoutIndexConstraint).maybeMutation
+			} else {
+				c.all = append(c.all, uwoi)
+				c.uwois = append(c.uwois, uwoi)
+			}
+		}
+	}
+	// Populate foreign key back-reference slice.
+	// These are not constraints on this table, but having them wrapped in the
+	// catalog.ForeignKeyConstraint interface is useful.
+	if numInboundFKS := len(desc.InboundFKs); numInboundFKS > 0 {
+		fkBackRefBackingStructs := make([]foreignKeyConstraint, numInboundFKS)
+		c.fkBackRefs = make([]catalog.ForeignKeyConstraint, numInboundFKS)
+		for i := range desc.InboundFKs {
+			fkBackRefBackingStructs[i].desc = &desc.InboundFKs[i]
+			c.fkBackRefs[i] = &fkBackRefBackingStructs[i]
+		}
+	}
 	return &c
-}
-
-func mutationState(mutation catalog.Mutation) (ret descpb.DescriptorMutation_State) {
-	if mutation.DeleteOnly() {
-		ret = descpb.DescriptorMutation_DELETE_ONLY
-	} else if mutation.WriteAndDeleteOnly() {
-		ret = descpb.DescriptorMutation_WRITE_ONLY
-	} else if mutation.Backfilling() {
-		ret = descpb.DescriptorMutation_BACKFILLING
-	} else if mutation.Merging() {
-		ret = descpb.DescriptorMutation_MERGING
-	} else {
-		panic(errors.AssertionFailedf("unknown mutation state"))
-	}
-	return ret
-}
-
-func mutationDirection(mutation catalog.Mutation) descpb.DescriptorMutation_Direction {
-	if mutation.Adding() {
-		return descpb.DescriptorMutation_ADD
-	} else {
-		return descpb.DescriptorMutation_DROP
-	}
 }

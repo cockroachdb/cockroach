@@ -162,50 +162,25 @@ func SimulatorStoreRebalancer(
 	getRaftStatusFn func(replica CandidateReplica) *raft.Status,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
+		AmbientContext:  log.MakeTestingAmbientCtxWithNewTracer(),
 		metrics:         makeStoreRebalancerMetrics(),
 		st:              &cluster.Settings{},
 		storeID:         storeID,
 		allocator:       alocator,
 		getRaftStatusFn: getRaftStatusFn,
 	}
-
 	return sr
 }
 
 // RebalanceContext maintains the current state for calls to rebalanceStore. It
 // should be discarded and a new one created on each call.
 type RebalanceContext struct {
-	LocalDesc                          *roachpb.StoreDescriptor
+	LocalDesc                          roachpb.StoreDescriptor
 	QPSMaxThreshold                    float64
 	options                            *allocatorimpl.QPSScorerOptions
 	mode                               LBRebalancingMode
-	storeMap                           map[roachpb.StoreID]*roachpb.StoreDescriptor
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
-}
-
-// NewRebalanceContext returns a new RebalanceContext struct, using the given
-// fields. This method is exported to init this struct outside of this package,
-// currently only the asim pkg.
-func NewRebalanceContext(
-	localDesc *roachpb.StoreDescriptor,
-	options *allocatorimpl.QPSScorerOptions,
-	mode LBRebalancingMode,
-	qpsMaxThreshold float64,
-	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
-	allStoresList storepool.StoreList,
-	hottestRanges, rebalanceCandidates []CandidateReplica,
-) *RebalanceContext {
-	return &RebalanceContext{
-		LocalDesc:           localDesc,
-		options:             options,
-		mode:                mode,
-		QPSMaxThreshold:     qpsMaxThreshold,
-		storeMap:            storeMap,
-		allStoresList:       allStoresList,
-		hottestRanges:       hottestRanges,
-		rebalanceCandidates: rebalanceCandidates,
-	}
 }
 
 // Start runs an infinite loop in a goroutine which regularly checks whether
@@ -244,7 +219,12 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			rctx := sr.makeRebalanceContext(ctx)
+			options := sr.scorerOptions(ctx)
+			hottestRanges := sr.replicaRankings.TopQPS()
+			rctx := sr.NewRebalanceContext(
+				ctx, options, hottestRanges,
+				LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+			)
 			sr.rebalanceStore(ctx, rctx)
 		}
 	})
@@ -264,19 +244,18 @@ func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *allocatorimpl.QPS
 	}
 }
 
-func (sr *StoreRebalancer) makeRebalanceContext(ctx context.Context) *RebalanceContext {
+// NewRebalanceContext creates a RebalanceContext using the storepool
+// associated with the store rebalancer and scorer options given.
+func (sr *StoreRebalancer) NewRebalanceContext(
+	ctx context.Context,
+	options *allocatorimpl.QPSScorerOptions,
+	hottestRanges []CandidateReplica,
+	rebalancingMode LBRebalancingMode,
+) *RebalanceContext {
 	allStoresList, _, _ := sr.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
-
 	// Find the store descriptor for the local store.
-	var localDesc *roachpb.StoreDescriptor
-	for i := range allStoresList.Stores {
-		if allStoresList.Stores[i].StoreID == sr.storeID {
-			localDesc = &allStoresList.Stores[i]
-			break
-		}
-	}
-
-	if localDesc == nil {
+	localDesc, ok := allStoresList.FindStoreByID(sr.storeID)
+	if !ok {
 		log.KvDistribution.Warningf(
 			ctx,
 			"StorePool missing descriptor for local store with ID %d, store list %v",
@@ -286,16 +265,14 @@ func (sr *StoreRebalancer) makeRebalanceContext(ctx context.Context) *RebalanceC
 		return nil
 	}
 
-	options := sr.scorerOptions(ctx)
-
 	return &RebalanceContext{
-		LocalDesc:           localDesc,
-		options:             options,
-		mode:                LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
-		QPSMaxThreshold:     allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean),
-		storeMap:            allStoresList.ToMap(),
+		LocalDesc: localDesc,
+		options:   options,
+		mode:      rebalancingMode,
+		QPSMaxThreshold: allocatorimpl.OverfullQPSThreshold(
+			options, allStoresList.CandidateQueriesPerSecond.Mean),
 		allStoresList:       allStoresList,
-		hottestRanges:       sr.replicaRankings.TopQPS(),
+		hottestRanges:       hottestRanges,
 		rebalanceCandidates: []CandidateReplica{},
 	}
 }
@@ -339,7 +316,7 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, rctx *RebalanceCo
 			break
 		}
 		if ok := sr.applyLeaseRebalance(ctx, candidateReplica, target); ok {
-			sr.PostLeaseRebalance(rctx, candidateReplica, target)
+			sr.PostLeaseRebalance(ctx, rctx, candidateReplica, target)
 		}
 	}
 
@@ -364,8 +341,10 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, rctx *RebalanceCo
 		if outcome == NoRebalanceTarget {
 			break
 		}
+		oldVoters := candidateReplica.Desc().Replicas().VoterDescriptors()
+		oldNonVoters := candidateReplica.Desc().Replicas().NonVoterDescriptors()
 		if ok := sr.applyRangeRebalance(ctx, candidateReplica, voterTargets, nonVoterTargets); ok {
-			sr.PostRangeRebalance(rctx, candidateReplica, voterTargets)
+			sr.PostRangeRebalance(ctx, rctx, candidateReplica, voterTargets, nonVoterTargets, oldVoters, oldNonVoters)
 		}
 	}
 	// Log the range rebalancing outcome, we ignore whether we were succesful
@@ -455,22 +434,54 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 	return true
 }
 
+// RefreshRebalanceContext updates the local rebalance loop context to use the
+// latest storepool information. After a rebalance or lease transfer the
+// storepool is updated.
+func (sr *StoreRebalancer) RefreshRebalanceContext(ctx context.Context, rctx *RebalanceContext) {
+	allStoresList, _, _ := sr.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+
+	// Find the local descriptor in the all store list. If the store descriptor
+	// doesn't exist, then log an error rather than just a warning.
+	// RefreshRebalanceContext is only called following the execution of
+	// actions which would indicate that the local store was very recently in
+	// this list. It is possible for some reason that it was unable to gossip
+	// to itself in which case it would filter itself out as suspect. This is
+	// however unlikely to occur.
+	localDesc, ok := allStoresList.FindStoreByID(sr.storeID)
+	if !ok {
+		log.KvDistribution.Errorf(
+			ctx,
+			"StorePool missing descriptor for local store with ID %d, store list %v",
+			sr.storeID,
+			allStoresList,
+		)
+		return
+	}
+
+	// Update the overfull threshold to reflect the refreshed mean values for
+	// the store list.
+	rctx.QPSMaxThreshold = allocatorimpl.OverfullQPSThreshold(
+		rctx.options,
+		allStoresList.CandidateQueriesPerSecond.Mean,
+	)
+
+	rctx.allStoresList = allStoresList
+	rctx.LocalDesc = localDesc
+}
+
 // PostLeaseRebalance applies housekeeping to the store rebalancer state,
 // updating metrics the local store descriptor capacity and the capacity of
-// target stores.
+// target stores. This method mutates the rebalance context.
 func (sr *StoreRebalancer) PostLeaseRebalance(
-	rctx *RebalanceContext, candidateReplica CandidateReplica, target roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	rctx *RebalanceContext,
+	candidateReplica CandidateReplica,
+	target roachpb.ReplicaDescriptor,
 ) {
+	// NB: Lease transfers are handled by the replicate queue for updating the
+	// local storepool, just refresh our context with the updated state.
 	sr.metrics.LeaseTransferCount.Inc(1)
-	// Finally, update our local copies of the descriptors so that if
-	// additional transfers are needed we'll be making the decisions with more
-	// up-to-date info. The StorePool copies are updated by transferLease.
-	rctx.LocalDesc.Capacity.LeaseCount--
-	rctx.LocalDesc.Capacity.QueriesPerSecond -= candidateReplica.QPS()
-	if otherDesc := rctx.storeMap[target.StoreID]; otherDesc != nil {
-		otherDesc.Capacity.LeaseCount++
-		otherDesc.Capacity.QueriesPerSecond += candidateReplica.QPS()
-	}
+	sr.RefreshRebalanceContext(ctx, rctx)
 }
 
 // TransferToRebalanceRanges determines whether the store rebalancer should
@@ -512,6 +523,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 		log.KvDistribution.Infof(ctx,
 			"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
 			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold)
+		return
 	}
 
 	// We successfully rebalanced below or equal to the max threshold,
@@ -543,9 +555,6 @@ func (sr *StoreRebalancer) RebalanceRanges(
 	)
 
 	if candidateReplica == nil {
-		log.KvDistribution.Infof(ctx,
-			"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
-			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold)
 		return NoRebalanceTarget, candidateReplica, voterTargets, nonVoterTargets
 	}
 
@@ -589,27 +598,26 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 
 // PostRangeRebalance applies housekeeping to the store rebalancer state,
 // updating metrics the local store descriptor capacity and the capacity of
-// target stores.
+// target stores. This method mutates the rebalance context.
 func (sr *StoreRebalancer) PostRangeRebalance(
+	ctx context.Context,
 	rctx *RebalanceContext,
 	candidateReplica CandidateReplica,
-	voterTargets []roachpb.ReplicationTarget,
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
 ) {
 	sr.metrics.RangeRebalanceCount.Inc(1)
+
 	// Finally, update our local copies of the descriptors so that if
 	// additional transfers are needed we'll be making the decisions with more
 	// up-to-date info.
-	rctx.LocalDesc.Capacity.LeaseCount--
-	rctx.LocalDesc.Capacity.QueriesPerSecond -= candidateReplica.QPS()
-	for i := range voterTargets {
-		if storeDesc := rctx.storeMap[voterTargets[i].StoreID]; storeDesc != nil {
-			storeDesc.Capacity.RangeCount++
-			if i == 0 {
-				storeDesc.Capacity.LeaseCount++
-				storeDesc.Capacity.QueriesPerSecond += candidateReplica.QPS()
-			}
-		}
-	}
+	sr.allocator.StorePool.UpdateLocalStoreAfterRelocate(
+		voterTargets, nonVoterTargets,
+		oldVoters, oldNonVoters,
+		rctx.LocalDesc.StoreID,
+		candidateReplica.QPS(),
+	)
+	sr.RefreshRebalanceContext(ctx, rctx)
 }
 
 func (sr *StoreRebalancer) chooseLeaseToTransfer(
@@ -687,7 +695,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		if sr.allocator.FollowTheWorkloadPrefersLocal(
 			ctx,
 			filteredStoreList,
-			*rctx.LocalDesc,
+			rctx.LocalDesc,
 			candidate.StoreID,
 			candidates,
 			candidateReplica.Stats(),
@@ -699,7 +707,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			considerForRebalance = append(considerForRebalance, candidateReplica)
 			continue
 		}
-		if targetStore, ok := rctx.storeMap[candidate.StoreID]; ok {
+		if targetStore, ok := rctx.allStoresList.FindStoreByID(candidate.StoreID); ok {
 			log.KvDistribution.VEventf(
 				ctx,
 				1,

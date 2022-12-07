@@ -14,9 +14,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -405,4 +408,21 @@ func TestFlagCombinations(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRequestHeaderRoundTrip(t *testing.T) {
+	var seq kvnemesisutil.Container
+	seq.Set(123)
+	exp := seq.Get()
+	if buildutil.CrdbTestBuild {
+		require.EqualValues(t, 123, exp)
+	}
+	rh := RequestHeader{KVNemesisSeq: seq}
+	sl, err := protoutil.Marshal(&rh)
+	require.NoError(t, err)
+
+	rh.Reset()
+	require.NoError(t, protoutil.Unmarshal(sl, &rh))
+
+	require.Equal(t, exp, rh.KVNemesisSeq.Get())
 }

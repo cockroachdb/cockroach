@@ -1,5 +1,5 @@
 # Test backing up and restoring a database with user defined functions.
-new-server name=s
+new-cluster name=s
 ----
 
 exec-sql
@@ -144,10 +144,10 @@ DROP TYPE sc1.enum1
 pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1]) still depend on it
 
 # Test backing up and restoring a full cluster with user defined function.
-new-server name=s1
+new-cluster name=s1
 ----
 
-exec-sql server=s1
+exec-sql cluster=s1
 CREATE DATABASE db1;
 USE db1;
 CREATE SCHEMA sc1;
@@ -219,11 +219,11 @@ SELECT sc1.f1('Good'::sc1.enum1)
 1
 
 # Start a new cluster with the same IO dir.
-new-server name=s2 share-io-dir=s1
+new-cluster name=s2 share-io-dir=s1
 ----
 
 # Restore into the new cluster.
-exec-sql server=s2
+exec-sql cluster=s2
 RESTORE FROM LATEST IN 'nodelocal://0/test/'
 ----
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -47,6 +48,10 @@ type comment struct {
 
 // selectComment retrieves all the comments pertaining to a table (comments on the table
 // itself but also column and index comments.)
+// TODO(chengxiong): consider plumbing the collection through here so that we
+// can just fetch comments from collection cache instead of firing extra query.
+// An alternative approach would be to leverage a virtual table which internally
+// uses the collection.
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 
@@ -59,10 +64,10 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
-			commentType := keys.CommentType(tree.MustBeDInt(row[0]))
+			commentType := catalogkeys.CommentType(tree.MustBeDInt(row[0]))
 			switch commentType {
-			case keys.TableCommentType, keys.ColumnCommentType,
-				keys.IndexCommentType, keys.ConstraintCommentType:
+			case catalogkeys.TableCommentType, catalogkeys.ColumnCommentType,
+				catalogkeys.IndexCommentType, catalogkeys.ConstraintCommentType:
 				subID := int(tree.MustBeDInt(row[2]))
 				cmt := string(tree.MustBeDString(row[3]))
 
@@ -71,13 +76,13 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 				}
 
 				switch commentType {
-				case keys.TableCommentType:
+				case catalogkeys.TableCommentType:
 					tc.comment = &cmt
-				case keys.ColumnCommentType:
+				case catalogkeys.ColumnCommentType:
 					tc.columns = append(tc.columns, comment{subID, cmt})
-				case keys.IndexCommentType:
+				case catalogkeys.IndexCommentType:
 					tc.indexes = append(tc.indexes, comment{subID, cmt})
-				case keys.ConstraintCommentType:
+				case catalogkeys.ConstraintCommentType:
 					tc.constraints = append(tc.constraints, comment{subID, cmt})
 				}
 			}
@@ -402,20 +407,14 @@ func showComments(
 		})
 	}
 
-	// Get all the constraints for the table and create a map by ID.
-	constraints, err := table.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
-	constraintIDToConstraint := make(map[descpb.ConstraintID]string)
-	for constraintName, constraint := range constraints {
-		constraintIDToConstraint[constraint.ConstraintID] = constraintName
-	}
 	for _, constraintComment := range tc.constraints {
 		f.WriteString(";\n")
-		constraintName := constraintIDToConstraint[descpb.ConstraintID(constraintComment.subID)]
+		c, err := table.FindConstraintWithID(descpb.ConstraintID(constraintComment.subID))
+		if err != nil {
+			return err
+		}
 		f.FormatNode(&tree.CommentOnConstraint{
-			Constraint: tree.Name(constraintName),
+			Constraint: tree.Name(c.GetName()),
 			Table:      tn.ToUnresolvedObjectName(),
 			Comment:    &constraintComment.comment,
 		})
@@ -696,36 +695,36 @@ func showConstraintClause(
 	sessionData *sessiondata.SessionData,
 	f *tree.FmtCtx,
 ) error {
-	for _, e := range desc.AllActiveAndInactiveChecks() {
-		if e.FromHashShardedColumn && e.Validity != descpb.ConstraintValidity_Unvalidated {
+	for _, e := range desc.CheckConstraints() {
+		if e.IsHashShardingConstraint() && !e.IsConstraintUnvalidated() {
 			continue
 		}
 		f.WriteString(",\n\t")
-		if len(e.Name) > 0 {
+		if len(e.GetName()) > 0 {
 			f.WriteString("CONSTRAINT ")
-			formatQuoteNames(&f.Buffer, e.Name)
+			formatQuoteNames(&f.Buffer, e.GetName())
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.Expr, semaCtx, sessionData, tree.FmtParsable)
+		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.GetExpr(), semaCtx, sessionData, tree.FmtParsable)
 		if err != nil {
 			return err
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
-		if e.Validity != descpb.ConstraintValidity_Validated {
+		if !e.IsConstraintValidated() {
 			f.WriteString(" NOT VALID")
 		}
 	}
-	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+	for _, c := range desc.UniqueConstraintsWithoutIndex() {
 		f.WriteString(",\n\t")
-		if len(c.Name) > 0 {
+		if len(c.GetName()) > 0 {
 			f.WriteString("CONSTRAINT ")
-			formatQuoteNames(&f.Buffer, c.Name)
+			formatQuoteNames(&f.Buffer, c.GetName())
 			f.WriteString(" ")
 		}
 		f.WriteString("UNIQUE WITHOUT INDEX (")
-		colNames, err := desc.NamesForColumnIDs(c.ColumnIDs)
+		colNames, err := desc.NamesForColumnIDs(c.CollectKeyColumnIDs().Ordered())
 		if err != nil {
 			return err
 		}
@@ -733,13 +732,13 @@ func showConstraintClause(
 		f.WriteString(")")
 		if c.IsPartial() {
 			f.WriteString(" WHERE ")
-			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.Predicate, semaCtx, sessionData, tree.FmtParsable)
+			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.GetPredicate(), semaCtx, sessionData, tree.FmtParsable)
 			if err != nil {
 				return err
 			}
 			f.WriteString(pred)
 		}
-		if c.Validity != descpb.ConstraintValidity_Validated {
+		if !c.IsConstraintValidated() {
 			f.WriteString(" NOT VALID")
 		}
 	}

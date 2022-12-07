@@ -8,23 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
-import { DATE_FORMAT, Duration } from "src/util";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
 import {
   BlockedStatementContentionDetails,
   ContentionEvent,
   InsightExecEnum,
 } from "../types";
-import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";
+import {
+  insightsTableTitles,
+  QueriesCell,
+  TransactionDetailsLink,
+} from "../workloadInsights/util";
+import { TimeScale } from "../../timeScaleDropdown";
 
 interface InsightDetailsTableProps {
   data: ContentionEvent[];
   execType: InsightExecEnum;
+  setTimeScale?: (tw: TimeScale) => void;
 }
 
 export function makeInsightDetailsColumns(
   execType: InsightExecEnum,
+  setTimeScale: (tw: TimeScale) => void,
 ): ColumnDescriptor<ContentionEvent>[] {
   return [
     {
@@ -36,7 +43,12 @@ export function makeInsightDetailsColumns(
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: ContentionEvent) => String(item.fingerprintID),
+      cell: (item: ContentionEvent) =>
+        TransactionDetailsLink(
+          item.fingerprintID,
+          item.startTime,
+          setTimeScale,
+        ),
       sort: (item: ContentionEvent) => item.fingerprintID,
     },
     {
@@ -48,7 +60,8 @@ export function makeInsightDetailsColumns(
     {
       name: "contentionStartTime",
       title: insightsTableTitles.contentionStartTime(execType),
-      cell: (item: ContentionEvent) => item.startTime.format(DATE_FORMAT),
+      cell: (item: ContentionEvent) =>
+        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
       sort: (item: ContentionEvent) => item.startTime.unix(),
     },
     {
@@ -87,9 +100,19 @@ export function makeInsightDetailsColumns(
 export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
-  const columns = makeInsightDetailsColumns(props.execType);
+  const columns = makeInsightDetailsColumns(props.execType, props.setTimeScale);
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "contention",
+  });
   return (
-    <SortedTable className="statements-table" columns={columns} {...props} />
+    <SortedTable
+      className="statements-table"
+      columns={columns}
+      sortSetting={sortSetting}
+      onChangeSortSetting={setSortSetting}
+      {...props}
+    />
   );
 };
 

@@ -664,7 +664,7 @@ CREATE TABLE system.sql_instances (
     addr         STRING,
     session_id   BYTES,
     locality     JSONB,
-	crdb_region  BYTES NOT NULL,
+    crdb_region  BYTES NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
     FAMILY "primary" (crdb_region, id, addr, session_id, locality)
 )`
@@ -726,6 +726,22 @@ CREATE TABLE system.external_connections (
 	owner STRING NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (connection_name),
 	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details, owner)
+);`
+
+	SystemJobInfoTableSchema = `
+CREATE TABLE system.job_info (
+	job_id INT8 NOT NULL,
+	info_key BYTES NOT NULL,
+	-- written is in the PK for this table to give it mvcc-over-sql semantics, so
+	-- that revisions to the value for the logical job/key pair are separate SQL
+	-- rows. This is done because we do not allow KV ranges to split between the
+	-- revisions of a single row, and these job info KVs may be both large
+	-- and revised frequently; if we did not store revisions to them in separate
+	-- SQL rows, we could easily cause over-sized ranges that cannot split.
+	written TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	value BYTES,
+	CONSTRAINT "primary" PRIMARY KEY (job_id, info_key, written DESC),
+	FAMILY "primary" (job_id, info_key, written, value)
 );`
 )
 
@@ -1623,11 +1639,11 @@ var (
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
-				{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+				{Name: "fam_4_comment", ID: keys.CommentsTableCommentColFamID, ColumnNames: []string{"comment"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
 			},
 			descpb.IndexDescriptor{
 				Name:                "primary",
-				ID:                  1,
+				ID:                  keys.CommentsTablePrimaryKeyIndexID,
 				Unique:              true,
 				KeyColumnNames:      []string{"type", "object_id", "sub_id"},
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
@@ -2719,6 +2735,37 @@ var (
 				KeyColumnNames:      []string{"connection_name"},
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        singleID1,
+			},
+		),
+	)
+
+	SystemJobInfoTable = makeSystemTable(
+		SystemJobInfoTableSchema,
+		systemTable(
+			catconstants.SystemJobInfoTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "info_key", ID: 2, Type: types.Bytes},
+				{Name: "written", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "value", ID: 4, Type: types.Bytes, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "info_key", "written", "value"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "info_key", "written"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			},
 		),
 	)

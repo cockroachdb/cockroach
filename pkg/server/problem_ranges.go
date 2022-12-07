@@ -14,14 +14,14 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func (s *statusServer) ProblemRanges(
+func (s *systemStatusServer) ProblemRanges(
 	ctx context.Context, req *serverpb.ProblemRangesRequest,
 ) (*serverpb.ProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
@@ -31,7 +31,7 @@ func (s *statusServer) ProblemRanges(
 	}
 
 	response := &serverpb.ProblemRangesResponse{
-		NodeID:           s.gossip.NodeID.Get(),
+		NodeID:           roachpb.NodeID(s.serverIterator.getID()),
 		ProblemsByNodeID: make(map[roachpb.NodeID]serverpb.ProblemRangesResponse_NodeProblems),
 	}
 
@@ -43,8 +43,8 @@ func (s *statusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = liveness.IsLiveMap{
-			requestedNodeID: liveness.IsLiveMapEntry{IsLive: true},
+		isLiveMap = livenesspb.IsLiveMap{
+			requestedNodeID: livenesspb.IsLiveMapEntry{IsLive: true},
 		}
 	}
 

@@ -17,13 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -131,6 +131,11 @@ func (s *TestState) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 // IncrementDropOwnedByCounter implements the scbuild.Dependencies interface.
 func (s *TestState) IncrementDropOwnedByCounter() {
 	s.LogSideEffectf("increment telemetry for sql.drop_owned_by")
+}
+
+// IncrementSchemaChangeIndexCounter implements the scbuild.Dependencies interface.
+func (s *TestState) IncrementSchemaChangeIndexCounter(counterType string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.%s_index", counterType)
 }
 
 var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
@@ -723,6 +728,28 @@ func (b *testCatalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id desc
 	return nil
 }
 
+// UpdateComment implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) UpdateComment(
+	ctx context.Context, key catalogkeys.CommentKey, cmt string,
+) error {
+	b.s.LogSideEffectf("upsert comment (objID: %d, subID %d, cmtType: %d, cmt: %s)", key.ObjectID, key.SubID, key.CommentType, cmt)
+	return nil
+}
+
+// DeleteComment implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) DeleteComment(
+	ctx context.Context, key catalogkeys.CommentKey,
+) error {
+	b.s.LogSideEffectf("delete all comments for (objID: %d, subID %d, cmtType: %d)", key.ObjectID, key.SubID, key.CommentType)
+	return nil
+}
+
+// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
+	b.s.LogSideEffectf("delete all comments for table descriptor %v", tblID)
+	return nil
+}
+
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	names := make([]descpb.NameInfo, 0, len(b.namesToDelete))
@@ -986,7 +1013,7 @@ func (s *TestState) Validator() scexec.Validator {
 func (s *TestState) ValidateCheckConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.Constraint,
+	constraint catalog.CheckConstraint,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	s.LogSideEffectf("validate check constraint %v in table #%d", constraint.GetName(), tbl.GetID())
@@ -1012,64 +1039,9 @@ func (s *TestState) EventLogger() scexec.EventLogger {
 	return s
 }
 
-// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) UpsertDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType, comment string,
-) error {
-	s.LogSideEffectf("upsert %s comment for descriptor #%d of type %s",
-		comment, id, commentType)
-	return nil
-}
-
-// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error {
-	s.LogSideEffectf("delete all comments for table descriptors %v", ids.Ordered())
-	return nil
-}
-
-// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) DeleteDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType,
-) error {
-	s.LogSideEffectf("delete comment for descriptor #%d of type %s",
-		id, commentType)
-	return nil
-}
-
-// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) UpsertConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
-) error {
-	s.LogSideEffectf("upsert comment %s for constraint on #%d, constraint id: %d"+
-		comment, tableID, constraintID)
-	return nil
-}
-
-// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) DeleteConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID,
-) error {
-	s.LogSideEffectf("delete comment for constraint on #%d, constraint id: %d",
-		tableID, constraintID)
-	return nil
-}
-
 // DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID) error {
 	s.LogSideEffectf("delete role settings for database on #%d", dbID)
-	return nil
-}
-
-// SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) SwapDescriptorSubComment(
-	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
-) error {
-	s.LogSideEffectf("swapping sub comments on descriptor %d from "+
-		"%d to %d of type %s",
-		id,
-		oldSubID,
-		newSubID,
-		commentType)
 	return nil
 }
 
@@ -1077,25 +1049,6 @@ func (s *TestState) SwapDescriptorSubComment(
 func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 	s.LogSideEffectf("delete scheduleId: %d", id)
 	return nil
-}
-
-// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) DeleteZoneConfig(
-	ctx context.Context, id descpb.ID,
-) (numAffectedRows int, err error) {
-	if _, ok := s.zoneConfigs[id]; !ok {
-		return 0, nil
-	}
-	delete(s.zoneConfigs, id)
-	return 1, nil
-}
-
-// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) UpsertZoneConfig(
-	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
-) (numAffected int, err error) {
-	s.zoneConfigs[id] = zone
-	return 1, nil
 }
 
 // DescriptorMetadataUpdater implement scexec.Dependencies.
@@ -1182,6 +1135,6 @@ func (s *TestState) ZoneConfigGetter() scbuild.ZoneConfigGetter {
 }
 
 // GetZoneConfig implements scexec.Dependencies.
-func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
+func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error) {
 	return s.zoneConfigs[id], nil
 }

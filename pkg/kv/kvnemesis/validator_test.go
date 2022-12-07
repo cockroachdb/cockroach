@@ -12,16 +12,23 @@ package kvnemesis
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,18 +52,23 @@ func withResult(op Operation) Operation {
 	return withResultErr(op, nil /* err */)
 }
 
+func withAmbResult(op Operation) Operation {
+	err := roachpb.NewAmbiguousResultErrorf("boom")
+	op = withResultErr(op, err)
+	return op
+}
+
 func withResultErr(op Operation, err error) Operation {
 	*op.Result() = resultInit(context.Background(), err)
-	// Most operations in tests use timestamp 1, so use that and any test cases
-	// that differ from that can use withTimestamp().
-	if op.Result().OptionalTimestamp.IsEmpty() {
-		op.Result().OptionalTimestamp = hlc.Timestamp{WallTime: 1}
-	}
 	return op
 }
 
 func withReadResult(op Operation, value string) Operation {
-	op = withResult(op)
+	return withReadResultTS(op, value, 0)
+}
+
+func withReadResultTS(op Operation, value string, ts int) Operation {
+	op = withResultTS(op, ts)
 	get := op.GetValue().(*GetOperation)
 	get.Result.Type = ResultType_Value
 	if value != `` {
@@ -65,45 +77,107 @@ func withReadResult(op Operation, value string) Operation {
 	return op
 }
 
-func withScanResult(op Operation, kvs ...KeyValue) Operation {
-	op = withResult(op)
+func withScanResultTS(op Operation, ts int, kvs ...KeyValue) Operation {
+	op = withTimestamp(withResult(op), ts)
 	scan := op.GetValue().(*ScanOperation)
 	scan.Result.Type = ResultType_Values
 	scan.Result.Values = kvs
 	return op
 }
 
-func withDeleteRangeResult(op Operation, keys ...[]byte) Operation {
-	op = withResult(op)
+func withDeleteRangeResult(op Operation, ts int, keys ...[]byte) Operation {
+	op = withTimestamp(withResult(op), ts)
 	delRange := op.GetValue().(*DeleteRangeOperation)
 	delRange.Result.Type = ResultType_Keys
 	delRange.Result.Keys = keys
 	return op
 }
 
+type seqKV struct {
+	key, endKey roachpb.Key
+	val         []byte // contains seq
+	ts          hlc.Timestamp
+}
+
+func (kv *seqKV) seq() kvnemesisutil.Seq {
+	mvccV, err := storage.DecodeMVCCValue(kv.val)
+	if err != nil {
+		panic(err)
+	}
+	return mvccV.KVNemesisSeq.Get()
+}
+
 func TestValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kv := func(key string, ts int, value string) storage.MVCCKeyValue {
-		return storage.MVCCKeyValue{
-			Key: storage.MVCCKey{
-				Key:       []byte(key),
-				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
-			},
-			Value: roachpb.MakeValueFromString(value).RawBytes,
+	if !buildutil.CrdbTestBuild {
+		// `roachpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
+		// that is zero-sized outside test builds. We could revisit that should
+		// a need arise to run kvnemesis against production binaries.
+		skip.IgnoreLint(t, "kvnemesis must be run with the crdb_test build tag")
+	}
+
+	const (
+		s1 = kvnemesisutil.Seq(1 + iota)
+		s2
+		s3
+		s4
+		s5
+		s6
+	)
+
+	const (
+		noTS = iota
+		t1
+		t2
+		t3
+		t4
+		t5
+	)
+
+	vi := func(s kvnemesisutil.Seq) string {
+		return PutOperation{Seq: s}.Value()
+	}
+	var (
+		v1 = vi(s1)
+		v2 = vi(s2)
+		v3 = vi(s3)
+	)
+
+	valWithSeq := func(seq kvnemesisutil.Seq, v roachpb.Value) []byte {
+		var vh enginepb.MVCCValueHeader
+		vh.KVNemesisSeq.Set(seq)
+		sl, err := storage.EncodeMVCCValue(storage.MVCCValue{
+			MVCCValueHeader: vh,
+			Value:           v,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return sl
+	}
+	kv := func(key string, ts int, seq kvnemesisutil.Seq) seqKV {
+		return seqKV{
+			key: roachpb.Key(key),
+			ts:  hlc.Timestamp{WallTime: int64(ts)},
+			val: valWithSeq(seq, roachpb.MakeValueFromString(PutOperation{Seq: seq}.Value())),
 		}
 	}
-	tombstone := func(key string, ts int) storage.MVCCKeyValue {
-		return storage.MVCCKeyValue{
-			Key: storage.MVCCKey{
-				Key:       []byte(key),
-				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
-			},
-			Value: nil,
+	tombstone := func(key string, ts int, seq kvnemesisutil.Seq) seqKV {
+		r := kv(key, ts, seq)
+		r.val = valWithSeq(seq, roachpb.Value{})
+		return r
+	}
+	rd := func(key, endKey string, ts int, seq kvnemesisutil.Seq) seqKV {
+		return seqKV{
+			key:    roachpb.Key(key),
+			endKey: roachpb.Key(endKey),
+			ts:     hlc.Timestamp{WallTime: int64(ts)},
+			val:    valWithSeq(seq, roachpb.Value{}),
 		}
 	}
-	kvs := func(kvs ...storage.MVCCKeyValue) []storage.MVCCKeyValue {
+	kvs := func(kvs ...seqKV) []seqKV {
 		return kvs
 	}
 	scanKV := func(key, value string) KeyValue {
@@ -114,1792 +188,1673 @@ func TestValidate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		steps    []Step
-		kvs      []storage.MVCCKeyValue
-		expected []string
+		name  string
+		steps []Step
+		kvs   []seqKV
 	}{
 		{
-			name:     "no ops and no kvs",
-			steps:    nil,
-			kvs:      nil,
-			expected: nil,
+			name:  "no ops and no kvs",
+			steps: nil,
+			kvs:   nil,
 		},
 		{
-			name:     "no ops with unexpected write",
-			steps:    nil,
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: []string{`extra writes: [w]"a":0.000000001,0->v1`},
+			name:  "no ops with unexpected write",
+			steps: nil,
+			kvs:   kvs(kv(k1, t1, s1)),
 		},
 		{
-			name:     "no ops with unexpected delete",
-			steps:    nil,
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			name:  "no ops with unexpected delete",
+			steps: nil,
+			kvs:   kvs(tombstone(k1, t1, s1)),
 		},
 		{
-			name:     "one put with expected write",
-			steps:    []Step{step(withResult(put(`a`, `v1`)))},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			name:  "one put with expected write",
+			steps: []Step{step(withResultTS(put(k1, s1), t1))},
+			kvs:   kvs(kv(k1, t1, s1)),
 		},
 		{
-			name:     "one delete with expected write",
-			steps:    []Step{step(withResult(del(`a`)))},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			name:  "one delete with expected write",
+			steps: []Step{step(withResultTS(del(k1, s1), t1))},
+			kvs:   kvs(tombstone(k1, t1, s1)),
 		},
 		{
-			name:     "one put with missing write",
-			steps:    []Step{step(withResult(put(`a`, `v1`)))},
-			kvs:      nil,
-			expected: []string{`committed put missing write: [w]"a":missing->v1`},
+			name:  "one put with missing write",
+			steps: []Step{step(withResultTS(put(k1, s1), t1))},
+			kvs:   nil,
 		},
 		{
-			name:     "one delete with missing write",
-			steps:    []Step{step(withResult(del(`a`)))},
-			kvs:      nil,
-			expected: []string{`committed delete missing write: [d]"a":missing-><nil>`},
+			name:  "one delete with missing write",
+			steps: []Step{step(withResultTS(del(k1, s1), t1))},
+			kvs:   nil,
 		},
 		{
-			name:     "one ambiguous put with successful write",
-			steps:    []Step{step(withResultErr(put(`a`, `v1`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			name:  "one ambiguous put with successful write",
+			steps: []Step{step(withAmbResult(put(k1, s1)))},
+			kvs:   kvs(kv(k1, t1, s1)),
 		},
 		{
-			name:     "one ambiguous delete with successful write",
-			steps:    []Step{step(withResultErr(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`},
+			name:  "one ambiguous delete with successful write",
+			steps: []Step{step(withAmbResult(del(k1, s1)))},
+			kvs:   kvs(tombstone(k1, t1, s1)),
+		},
+
+		{
+			name:  "one ambiguous put with failed write",
+			steps: []Step{step(withAmbResult(put(k1, s1)))},
+			kvs:   nil,
 		},
 		{
-			name:     "one ambiguous put with failed write",
-			steps:    []Step{step(withResultErr(put(`a`, `v1`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
-			kvs:      nil,
-			expected: nil,
-		},
-		{
-			name:     "one ambiguous delete with failed write",
-			steps:    []Step{step(withResultErr(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
-			kvs:      nil,
-			expected: nil,
+			name:  "one ambiguous delete with failed write",
+			steps: []Step{step(withAmbResult(del(k1, s1)))},
+			kvs:   nil,
 		},
 		{
 			name: "one ambiguous delete with failed write before a later committed delete",
 			steps: []Step{
-				step(withResultErr(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom")))),
-				step(withResultTS(del(`a`), 2)),
+				step(withAmbResult(del(k1, s1))),
+				step(withResultTS(del(k1, s2), t2)),
 			},
-			kvs: kvs(tombstone(`a`, 2)),
-			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`,
-			},
+			kvs: kvs(tombstone(k1, t2, s2)),
 		},
 		{
-			name:     "one retryable put with write (correctly) missing",
-			steps:    []Step{step(withResultErr(put(`a`, `v1`), retryableError))},
-			kvs:      nil,
-			expected: nil,
+			name:  "one retryable put with write (correctly) missing",
+			steps: []Step{step(withResultErr(put(k1, s1), retryableError))},
+			kvs:   nil,
 		},
 		{
-			name:     "one retryable delete with write (correctly) missing",
-			steps:    []Step{step(withResultErr(del(`a`), retryableError))},
-			kvs:      nil,
-			expected: nil,
+			name:  "one retryable delete with write (correctly) missing",
+			steps: []Step{step(withResultErr(del(k1, s1), retryableError))},
+			kvs:   nil,
 		},
 		{
-			name:     "one retryable put with write (incorrectly) present",
-			steps:    []Step{step(withResultErr(put(`a`, `v1`), retryableError))},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: []string{`uncommitted put had writes: [w]"a":0.000000001,0->v1`},
+			name:  "one retryable put with write (incorrectly) present",
+			steps: []Step{step(withTimestamp(withResultErr(put(k1, s1), retryableError), t1))},
+			kvs:   kvs(kv(k1, t1, s1)),
 		},
 		{
 			name:  "one retryable delete with write (incorrectly) present",
-			steps: []Step{step(withResultErr(del(`a`), retryableError))},
-			kvs:   kvs(tombstone(`a`, 1)),
+			steps: []Step{step(withResultErr(del(k1, s1), retryableError))},
+			kvs:   kvs(tombstone(k1, t1, s1)),
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+
 		},
 		{
 			name: "one delete with expected write after write transaction with shadowed delete",
 			steps: []Step{
-				step(withResultTS(del(`a`), 1)),
-				step(withResultTS(put(`a`, `v1`), 2)),
+				step(withResultTS(del(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResultOK(put(`a`, `v2`)),
-					withResultOK(del(`a`)),
-					withResultOK(put(`a`, `v3`)),
-				), 3)),
-				step(withResultTS(del(`a`), 4)),
+					withResultOK(put(k1, s3)),
+					withResultOK(del(k1, s4)),
+					withResultOK(put(k1, s5)),
+				), t3)),
+				step(withResultTS(del(k1, s6), t4)),
 			},
 			kvs: kvs(
-				tombstone(`a`, 1),
-				kv(`a`, 2, `v1`),
-				kv(`a`, 3, `v3`),
-				tombstone(`a`, 4)),
-			expected: nil,
+				tombstone(k1, t1, s1),
+				kv(k1, t2, s2),
+				kv(k1, t3, s5),
+				tombstone(k1, t4, s6)),
 		},
 		{
-			name:     "one batch put with successful write",
-			steps:    []Step{step(withResult(batch(withResult(put(`a`, `v1`)))))},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			name:  "one batch put with successful write",
+			steps: []Step{step(withResultTS(batch(withResult(put(k1, s1))), t1))},
+			kvs:   kvs(kv(k1, t1, s1)),
 		},
 		{
-			name:     "one batch delete with successful write",
-			steps:    []Step{step(withResult(batch(withResult(del(`a`)))))},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			name:  "one batch delete with successful write",
+			steps: []Step{step(withResultTS(batch(withResult(del(k1, s1))), t1))},
+			kvs:   kvs(tombstone(k1, t1, s1)),
 		},
 		{
-			name:     "one batch put with missing write",
-			steps:    []Step{step(withResult(batch(withResult(put(`a`, `v1`)))))},
-			kvs:      nil,
-			expected: []string{`committed batch missing write: [w]"a":missing->v1`},
+			name:  "one batch put with missing write",
+			steps: []Step{step(withResultTS(batch(withResult(put(k1, s1))), t1))},
+			kvs:   nil,
 		},
 		{
-			name:     "one batch delete with missing write",
-			steps:    []Step{step(withResult(batch(withResult(del(`a`)))))},
-			kvs:      nil,
-			expected: []string{`committed batch missing write: [d]"a":missing-><nil>`},
+			name:  "one batch delete with missing write",
+			steps: []Step{step(withResultTS(batch(withResult(del(k1, s1))), t1))},
+			kvs:   nil,
 		},
 		{
 			name: "one transactionally committed put with the correct writes",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1)),
 		},
+
 		{
 			name: "one transactionally committed delete with the correct writes",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+				), t1)),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s1)),
 		},
 		{
 			name: "one transactionally committed put with first write missing",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`b`, 1, `v2`)),
-			expected: []string{`committed txn missing write: [w]"a":missing->v1 [w]"b":0.000000001,0->v2`},
+			kvs: kvs(kv(k2, t1, s2)),
 		},
 		{
 			name: "one transactionally committed delete with first write missing",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(del(`b`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k2, s2)),
+				), t1)),
 			},
-			kvs:      kvs(tombstone(`b`, 1)),
-			expected: []string{`committed txn missing write: [d]"a":missing-><nil> [d]"b":0.000000001,0-><nil>`},
+			kvs: kvs(tombstone(k2, t1, s2)),
 		},
 		{
 			name: "one transactionally committed put with second write missing",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: []string{`committed txn missing write: [w]"a":0.000000001,0->v1 [w]"b":missing->v2`},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one transactionally committed delete with second write missing",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(del(`b`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k2, s2)),
+				), t1)),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`},
+			kvs: kvs(tombstone(k1, t1, s1)),
 		},
 		{
 			name: "one transactionally committed put with write timestamp disagreement",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [w]"b":0.000000002,0->v2`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one transactionally committed delete with write timestamp disagreement",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(del(`b`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k2, s2)),
+				), t1)),
 			},
-			kvs: kvs(tombstone(`a`, 1), tombstone(`b`, 2)),
+			kvs: kvs(tombstone(k1, t1, s1), tombstone(k2, t2, s2)),
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
-			expected: []string{
-				`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`,
-			},
 		},
 		{
 			name: "one transactionally rolled back put with write (correctly) missing",
 			steps: []Step{
 				step(withResultErr(closureTxn(ClosureTxnType_Rollback,
-					withResult(put(`a`, `v1`)),
+					withResult(put(k1, s1)),
 				), errors.New(`rollback`))),
 			},
-			kvs:      nil,
-			expected: nil,
+			kvs: nil,
 		},
 		{
 			name: "one transactionally rolled back delete with write (correctly) missing",
 			steps: []Step{
 				step(withResultErr(closureTxn(ClosureTxnType_Rollback,
-					withResult(del(`a`)),
+					withResult(del(k1, s1)),
 				), errors.New(`rollback`))),
 			},
-			kvs:      nil,
-			expected: nil,
+			kvs: nil,
 		},
 		{
 			name: "one transactionally rolled back put with write (incorrectly) present",
 			steps: []Step{
 				step(withResultErr(closureTxn(ClosureTxnType_Rollback,
-					withResult(put(`a`, `v1`)),
+					withResult(put(k1, s1)),
 				), errors.New(`rollback`))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: []string{`uncommitted txn had writes: [w]"a":0.000000001,0->v1`},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one transactionally rolled back delete with write (incorrectly) present",
 			steps: []Step{
 				step(withResultErr(closureTxn(ClosureTxnType_Rollback,
-					withResult(del(`a`)),
+					withResult(del(k1, s1)),
 				), errors.New(`rollback`))),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			kvs: kvs(tombstone(k1, t1, s1)),
 		},
 		{
 			name: "one transactionally rolled back batch put with write (correctly) missing",
 			steps: []Step{
 				step(withResultErr(closureTxn(ClosureTxnType_Rollback,
 					withResult(batch(
-						withResult(put(`a`, `v1`)),
+						withResult(put(k1, s1)),
 					)),
 				), errors.New(`rollback`))),
 			},
-			kvs:      nil,
-			expected: nil,
+			kvs: nil,
 		},
 		{
 			name: "one transactionally rolled back batch delete with write (correctly) missing",
 			steps: []Step{
 				step(withResultErr(closureTxn(ClosureTxnType_Rollback,
 					withResult(batch(
-						withResult(del(`a`)),
+						withResult(del(k1, s1)),
 					)),
 				), errors.New(`rollback`))),
 			},
-			kvs:      nil,
-			expected: nil,
+			kvs: nil,
 		},
 		{
 			name: "two transactionally committed puts of the same key",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`a`, `v2`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k1, s2)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s2)),
+		},
+		{
+			// NB: this can't happen in practice since KV would throw a WriteTooOldError.
+			// But transactionally this works, see below.
+			name: "batch with two deletes of same key",
+			steps: []Step{
+				step(withResultTS(batch(
+					withResult(del(k1, s1)),
+					withResult(del(k1, s2)),
+				), t1)),
+			},
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed deletes of the same key",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(del(`a`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k1, s2)),
+				), t1)),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed writes (put, delete) of the same key",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(del(`a`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(del(k1, s2)),
+				), t1)),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed writes (delete, put) of the same key",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(put(`a`, `v2`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(put(k1, s2)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed puts of the same key with extra write",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`a`, `v2`)),
-				), 2))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k1, s2)),
+				), t2)),
 			},
-			// HACK: These should be the same timestamp. See the TODO in
-			// watcher.processEvents.
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`)),
-			expected: []string{
-				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [w]"a":0.000000002,0->v2`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2)),
 		},
 		{
 			name: "two transactionally committed deletes of the same key with extra write",
 			steps: []Step{
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(del(`a`)),
-				), 1))),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k1, s2)),
+				), t1)),
 			},
-			// HACK: These should be the same timestamp. See the TODO in
-			// watcher.processEvents.
-			kvs:      kvs(tombstone(`a`, 1), tombstone(`a`, 2)),
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			kvs: kvs(tombstone(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "two transactionally committed writes (put, delete) of the same key with extra write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResultOK(put(`a`, `v1`)),
-					withResultOK(del(`a`)),
-				), 1)),
+					withResultOK(put(k1, s1)),
+					withResultOK(del(k1, s2)),
+				), t1)),
 			},
-			// HACK: These should be the same timestamp. See the TODO in
-			// watcher.processEvents.
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: []string{
-				// NB: the deletion is marked as "missing" because we are using timestamp 1 for the
-				// txn and the tombstone is at 2; so it isn't marked as materialized in the verifier.
-				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [d]"a":missing-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
-			name: "ambiguous transaction committed",
+			name: "ambiguous put-put transaction committed",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 1, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t1, s2)),
 		},
 		{
-			name: "ambiguous transaction with delete committed",
+			name: "ambiguous put-del transaction committed",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(del(`b`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(del(k2, s2)),
+				))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 1)),
-			// TODO(sarkesian): If able to determine the tombstone resulting from a
-			// delete in an ambiguous txn, this should pass without error.
-			// For now we fail validation on all ambiguous transactions with deletes.
-			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k2, t1, s2)),
 		},
 		{
-			name: "ambiguous transaction did not commit",
+			// NB: this case is a tough nut to crack if we rely on timestamps since we
+			// don't have a single timestamp result here and no unique values. But we
+			// use sequence numbers so no problem! We learn the commit timestamp from
+			// them if any of the writes show up.
+			name: "ambiguous del-del transaction committed",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k1, s2)),
+				))),
 			},
-			kvs:      nil,
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
-			name: "ambiguous transaction with delete did not commit",
+			name: "ambiguous del-del transaction committed but wrong seq",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(del(`b`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(del(k1, s1)),
+					withResult(del(k1, s2)),
+				))),
 			},
-			kvs:      nil,
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s1)),
 		},
 		{
-			name: "ambiguous transaction committed but has validation error",
+			name: "ambiguous put-put transaction did not commit",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [w]"b":0.000000002,0->v2`,
-			},
+			kvs: nil,
 		},
 		{
-			name: "ambiguous transaction with delete committed but has validation error",
+			name: "ambiguous put-del transaction did not commit",
 			steps: []Step{
-				step(withResultErr(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(del(`b`)),
-				), 2), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(del(k2, s2)),
+				))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 2)),
-			// TODO(sarkesian): If able to determine the tombstone resulting from a
-			// delete in an ambiguous txn, we should get the following error:
-			// `ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [w]"b":0.000000002,0->v2`
-			// For now we fail validation on all ambiguous transactions with deletes.
-			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
+			kvs: nil,
+		},
+		{
+			name: "ambiguous put-put transaction committed but has validation error",
+			steps: []Step{
+				step(withAmbResult(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				))),
 			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "ambiguous put-del transaction committed but has validation error",
+			steps: []Step{
+				step(withAmbResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
+					withResult(put(k1, s1)),
+					withResult(del(k2, s2)),
+				), t2))),
+			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k2, t2, s2)),
 		},
 		{
 			name: "one read before write",
 			steps: []Step{
-				step(withReadResult(get(`a`), ``)),
-				step(withResult(put(`a`, `v1`))),
+				step(withReadResultTS(get(k1), ``, t1)),
+				step(withResultTS(put(k1, s1), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t2, s1)),
 		},
 		{
 			name: "one read before delete",
 			steps: []Step{
-				step(withReadResult(get(`a`), ``)),
-				step(withResult(del(`a`))),
+				step(withReadResultTS(get(k1), ``, t1)),
+				step(withResultTS(del(k1, s1), t2)),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			kvs: kvs(tombstone(k1, t2, s1)),
 		},
 		{
 			name: "one read before write and delete",
 			steps: []Step{
-				step(withReadResult(get(`a`), ``)),
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(del(`a`), 2)),
+				step(withReadResultTS(get(k1), ``, t1)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(del(k1, s2), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "one read before write returning wrong value",
 			steps: []Step{
-				step(withReadResult(get(`a`), `v2`)),
-				step(withResult(put(`a`, `v1`))),
+				step(withReadResultTS(get(k1), v1, t1)),
+				step(withResultTS(put(k1, s1), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed get non-atomic timestamps: [r]"a":[0,0, 0,0)->v2`,
-			},
+			kvs: kvs(kv(k1, t2, s1)),
 		},
 		{
 			name: "one read after write",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
-				step(withReadResult(get(`a`), `v1`)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(get(k1), v1, t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one read after write and delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(withTimestamp(del(`a`), 2), 2)),
-				step(withResultTS(withReadResult(get(`a`), `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(withTimestamp(del(k1, s2), t2), t2)),
+				step(withReadResultTS(get(k1), v1, t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "one read after write and delete returning tombstone",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(del(`a`), 2)),
-				step(withReadResult(get(`a`), ``)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(del(k1, s2), t2)),
+				step(withReadResultTS(get(k1), ``, t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "one read after write returning wrong value",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
-				step(withReadResult(get(`a`), `v2`)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(get(k1), v2, t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed get non-atomic timestamps: [r]"a":[0,0, 0,0)->v2`,
-			},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one read in between writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withReadResult(get(`a`), `v1`)),
-				step(withResultTS(put(`a`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(get(k1), v1, t2)),
+				step(withResultTS(put(k1, s2), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2)),
 		},
 		{
 			name: "one read in between write and delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withReadResult(get(`a`), `v1`)),
-				step(withResultTS(del(`a`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(get(k1), v1, t2)),
+				step(withResultTS(del(k1, s2), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t3, s2)),
 		},
 		{
 			name: "batch of reads after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResult(batch(
-					withReadResult(get(`a`), `v1`),
-					withReadResult(get(`b`), `v2`),
-					withReadResult(get(`c`), ``),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), v1),
+					withReadResult(get(k2), v2),
+					withReadResult(get(k3), ``),
+				), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "batch of reads after writes and deletes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 3)),
-				step(withResultTS(del(`b`), 4)),
-				step(withResult(batch(
-					withReadResult(get(`a`), `v1`),
-					withReadResult(get(`b`), `v2`),
-					withReadResult(get(`c`), ``),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t3)),
+				step(withResultTS(del(k2, s4), t4)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), v1),
+					withReadResult(get(k2), v2),
+					withReadResult(get(k3), ``),
+				), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), tombstone(k2, t4, s4)),
 		},
 		{
 			name: "batch of reads after writes and deletes returning tombstones",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 3)),
-				step(withResultTS(del(`b`), 4)),
-				step(withResult(batch(
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), ``),
-					withReadResult(get(`c`), ``),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t3)),
+				step(withResultTS(del(k2, s3), t4)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), ``),
+					withReadResult(get(k3), ``),
+				), t5)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), tombstone(k2, t4, s4)),
 		},
 		{
 			name: "batch of reads after writes returning wrong values",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResult(batch(
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), `v1`),
-					withReadResult(get(`c`), `v2`),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), v1),
+					withReadResult(get(k3), v2),
+				), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed batch non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0)-><nil> [r]"b":[0,0, 0,0)->v1 [r]"c":[0,0, 0,0)->v2`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "batch of reads after writes and deletes returning wrong values",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 3)),
-				step(withResultTS(del(`b`), 4)),
-				step(withResult(batch(
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), `v1`),
-					withReadResult(get(`c`), `v2`),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t3)),
+				step(withResultTS(del(k2, s4), t4)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), v1),
+					withReadResult(get(k3), v2),
+				), t5)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
-			expected: []string{
-				`committed batch non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0),[0.000000003,0, <max>)-><nil> [r]"b":[0,0, 0,0)->v1 [r]"c":[0,0, 0,0)->v2`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), tombstone(k2, t4, s4)),
 		},
 		{
-			name: "batch of reads after writes with non-empty time overlap",
+			name: "batch of reads after writes with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResult(batch(
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), `v2`),
-					withReadResult(get(`c`), ``),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), v2),
+					withReadResult(get(k3), ``),
+				), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed batch non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0)-><nil> [r]"b":[0.000000002,0, <max>)->v2 [r]"c":[<min>, <max>)-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "batch of reads after writes and deletes with valid time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 3)),
-				step(withResultTS(del(`b`), 4)),
-				step(withResult(batch(
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), `v2`),
-					withReadResult(get(`c`), ``),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t3)),
+				step(withResultTS(del(k2, s4), t4)),
+				step(withResultTS(batch(
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), v2),
+					withReadResult(get(k3), ``),
+				), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), tombstone(k2, t4, s4)),
 		},
 		{
 			name: "transactional reads with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 3)),
-				step(withResultTS(put(`b`, `v3`), 2)),
-				step(withResultTS(put(`b`, `v4`), 3)),
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withReadResult(get(`b`), `v3`),
-				), 3))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t3)),
+				step(withResultTS(put(k2, s3), t2)),
+				step(withResultTS(put(k2, s4), t3)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withReadResult(get(k1), v1),
+					withReadResult(get(k2), v3),
+				), t3)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid from 2-3: overlap 2-3
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2), kv(k2, t2, s3), kv(k2, t3, s4)),
 		},
 		{
 			name: "transactional reads after writes and deletes with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 3)),
-				step(withResultTS(del(`b`), 4)),
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), `v2`),
-					withReadResult(get(`c`), ``),
-				), 4))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t3)),
+				step(withResultTS(del(k2, s4), t4)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), v2),
+					withReadResult(get(k3), ``),
+				), t4)),
 			},
 			// Reading (a, <nil>) is valid from min-1 or 3-max, and (b, v2) is valid from 2-4: overlap 3-4
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), tombstone(k2, t4, s4)),
 		},
 		{
 			name: "transactional reads with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 2)),
-				step(withResultTS(put(`b`, `v4`), 3)),
-				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withReadResult(get(`b`), `v3`),
-				), 3))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t2)),
+				step(withResultTS(put(k2, s4), t3)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withReadResult(get(k1), v1),
+					withReadResult(get(k2), v3),
+				), t3)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 2-3: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0, 0.000000002,0)->v1 [r]"b":[0.000000002,0, 0.000000003,0)->v3`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t2, s3), kv(k2, t3, s4)),
 		},
 		{
 			name: "transactional reads after writes and deletes with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResultOK(del(`a`)),
-					withResultOK(del(`b`)),
-				), 3)),
+					withResultOK(del(k1, s3)),
+					withResultOK(del(k2, s4)),
+				), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withReadResult(get(`b`), `v2`),
-					withReadResult(get(`c`), ``),
-				), 4)),
+					withReadResult(get(k1), ``),
+					withReadResult(get(k2), v2),
+					withReadResult(get(k3), ``),
+				), t4)),
 			},
 			// Reading (a, <nil>) is valid from min-1 or 3-max, and (b, v2) is valid from 2-3: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 3)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0),[0.000000003,0, <max>)-><nil> [r]"b":[0.000000002,0, 0.000000003,0)->v2 [r]"c":[<min>, <max>)-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), tombstone(k2, t3, s4)),
 		},
 		{
 			name: "transactional reads and deletes after write with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withResult(del(`a`)),
-					withReadResult(get(`a`), ``),
-				), 2)),
-				step(withResultTS(put(`a`, `v2`), 3)),
-				step(withResultTS(del(`a`), 4)),
+					withReadResult(get(k1), v1),
+					withResult(del(k1, s2)),
+					withReadResult(get(k1), ``),
+				), t2)),
+				step(withResultTS(put(k1, s3), t3)),
+				step(withResultTS(del(k1, s4), t4)),
 			},
 			// Reading (a, v1) is valid from 1-2, reading (a, <nil>) is valid from min-1, 2-3, or 4-max: overlap in txn view at 2
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`a`, 3, `v2`), tombstone(`a`, 4)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2), kv(k1, t3, s3), tombstone(k1, t4, s4)),
 		},
 		{
 			name: "transactional reads and deletes after write with empty time overlap",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(del(`a`)),
-					withReadResult(get(`a`), ``),
-				), 2)),
-				step(withResultTS(put(`a`, `v2`), 3)),
-				step(withResultTS(del(`a`), 4)),
+					withReadResult(get(k1), ``),
+					withResult(del(k1, s2)),
+					withReadResult(get(k1), ``),
+				), t2)),
+				step(withResultTS(put(k1, s3), t3)),
+				step(withResultTS(del(k1, s4), t4)),
 			},
 			// First read of (a, <nil>) is valid from min-1 or 4-max, delete is valid at 2: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`a`, 3, `v2`), tombstone(`a`, 4)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>)-><nil> [d]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000004,0, <max>),[0.000000002,0, 0.000000003,0)-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2), kv(k1, t3, s3), tombstone(k1, t4, s4)),
 		},
 		{
 			name: "transactional reads one missing with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withReadResult(get(`b`), ``),
-				), 1)),
+					withReadResult(get(k1), v1),
+					withReadResult(get(k2), ``),
+				), t1)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-2: overlap 1-2
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "transactional reads one missing with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withReadResult(get(`b`), ``),
-				), 1)),
+					withReadResult(get(k1), v1),
+					withReadResult(get(k2), ``),
+				), t1)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-1: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0, 0.000000002,0)->v1 [r]"b":[<min>, 0.000000001,0)-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3)),
 		},
 		{
 			name: "transactional read and write with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withResult(put(`b`, `v3`)),
-				), 2)),
+					withReadResult(get(k1), v1),
+					withResult(put(k2, s3)),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid at 2: overlap @2
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "transactional read and write with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withResultOK(put(`b`, `v3`)),
-				), 2)),
+					withReadResult(get(k1), v1),
+					withResultOK(put(k2, s3)),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid at 2: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0, 0.000000002,0)->v1 [w]"b":0.000000002,0->v3`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "transaction with read before and after write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(put(`a`, `v1`)),
-					withReadResult(get(`a`), `v1`),
-				), 1)),
+					withReadResult(get(k1), ``),
+					withResult(put(k1, s1)),
+					withReadResult(get(k1), v1),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "transaction with read before and after delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withResult(del(`a`)),
-					withReadResult(get(`a`), ``),
-				), 2)),
+					withReadResult(get(k1), v1),
+					withResult(del(k1, s2)),
+					withReadResult(get(k1), ``),
+				), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "transaction with incorrect read before write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withResult(put(`a`, `v1`)),
-					withReadResult(get(`a`), `v1`),
-				), 1)),
+					withReadResult(get(k1), v1),
+					withResult(put(k1, s1)),
+					withReadResult(get(k1), v1),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0,0, 0,0)->v1 [w]"a":0.000000001,0->v1 [r]"a":[0.000000001,0, <max>)->v1`,
-			},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "transaction with incorrect read before delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(del(`a`)),
-					withReadResult(get(`a`), ``),
-				), 2)),
+					withReadResult(get(k1), ``),
+					withResult(del(k1, s2)),
+					withReadResult(get(k1), ``),
+				), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, 0.000000001,0)-><nil> [d]"a":0.000000002,0-><nil> [r]"a":[<min>, 0.000000001,0),[0.000000002,0, <max>)-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "transaction with incorrect read after write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(put(`a`, `v1`)),
-					withReadResult(get(`a`), ``),
-				), 1)),
+					withReadResult(get(k1), ``),
+					withResult(put(k1, s1)),
+					withReadResult(get(k1), ``),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, <max>)-><nil> [w]"a":0.000000001,0->v1 [r]"a":[<min>, 0.000000001,0)-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "transaction with incorrect read after delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`),
-					withResultOK(del(`a`)),
-					withReadResult(get(`a`), `v1`),
-				), 2)),
+					withReadResult(get(k1), v1),
+					withResultOK(del(k1, s2)),
+					withReadResult(get(k1), v1),
+				), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0, <max>)->v1 [d]"a":0.000000002,0-><nil> [r]"a":[0.000000001,0, 0.000000002,0)->v1`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "two transactionally committed puts of the same key with reads",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(put(`a`, `v1`)),
-					withReadResult(get(`a`), `v1`),
-					withResult(put(`a`, `v2`)),
-					withReadResult(get(`a`), `v2`),
-				), 1)),
+					withReadResult(get(k1), ``),
+					withResult(put(k1, s1)),
+					withReadResult(get(k1), v1),
+					withResult(put(k1, s2)),
+					withReadResult(get(k1), v2),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed put/delete ops of the same key with reads",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(put(`a`, `v1`)),
-					withReadResult(get(`a`), `v1`),
-					withResult(del(`a`)),
-					withReadResult(get(`a`), ``),
-				), 1)),
+					withReadResult(get(k1), ``),
+					withResult(put(k1, s1)),
+					withReadResult(get(k1), v1),
+					withResult(del(k1, s2)),
+					withReadResult(get(k1), ``),
+				), t1)),
 			},
-			kvs:      kvs(tombstone(`a`, 1)),
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
 			name: "two transactionally committed put/delete ops of the same key with incorrect read",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``),
-					withResult(put(`a`, `v1`)),
-					withReadResult(get(`a`), `v1`),
-					withResult(del(`a`)),
-					withReadResult(get(`a`), `v1`),
-				), 1)),
+					withReadResult(get(k1), ``),
+					withResult(put(k1, s1)),
+					withReadResult(get(k1), v1),
+					withResult(del(k1, s2)),
+					withReadResult(get(k1), v1),
+				), t1)),
 			},
-			kvs: kvs(tombstone(`a`, 1)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>, <max>)-><nil> [w]"a":missing->v1 [r]"a":[0.000000001,0, <max>)->v1 [d]"a":0.000000001,0-><nil> [r]"a":[0,0, 0,0)->v1`,
-			},
+			kvs: kvs(tombstone(k1, t1, s2)),
 		},
 		{
 			name: "one transactional put with correct commit time",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-				), 1)),
+					withResult(put(k1, s1)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one transactional put with incorrect commit time",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-				), 1)),
+					withResult(put(k1, s1)),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 2, `v1`)),
-			expected: []string{
-				`mismatched write timestamp 0.000000001,0: [w]"a":0.000000002,0->v1`,
-			},
+			kvs: kvs(kv(k1, t2, s1)),
 		},
 		{
 			name: "one transactional delete with write on another key after delete",
 			steps: []Step{
 				// NB: this Delete comes first in operation order, but the write is delayed.
-				step(withResultTS(del(`a`), 3)),
+				step(withResultTS(del(k1, s1), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`b`, `v1`)),
-					withResult(del(`a`)),
-				), 2)),
+					withResult(put(k2, s2)),
+					withResult(del(k1, s3)),
+				), t2)),
 			},
-			kvs: kvs(tombstone(`a`, 2), tombstone(`a`, 3), kv(`b`, 2, `v1`)),
-			// This should fail validation if we match delete operations to tombstones by operation order,
-			// and should pass if we correctly use the transaction timestamp. While the first delete is
-			// an earlier operation, the transactional delete actually commits first.
-			expected: nil,
+			kvs: kvs(tombstone(k1, t2, s3), tombstone(k1, t3, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "two transactional deletes with out of order commit times",
 			steps: []Step{
-				step(withResultTS(del(`a`), 2)),
-				step(withResultTS(del(`b`), 3)),
+				step(withResultTS(del(k1, s1), t2)),
+				step(withResultTS(del(k2, s2), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(del(`a`)),
-					withResult(del(`b`)),
-				), 1)),
+					withResult(del(k1, s3)),
+					withResult(del(k2, s4)),
+				), t1)),
 			},
-			kvs: kvs(tombstone(`a`, 1), tombstone(`a`, 2), tombstone(`b`, 1), tombstone(`b`, 3)),
-			// This should fail validation if we match delete operations to tombstones by operation order,
-			// and should pass if we correctly use the transaction timestamp. While the first two deletes are
-			// earlier operations, the transactional deletes actually commits first.
-			expected: nil,
+			kvs: kvs(tombstone(k1, t1, s3), tombstone(k1, t2, s1), tombstone(k2, t1, s4), tombstone(k2, t3, s2)),
 		},
 		{
 			name: "one transactional scan followed by delete within time range",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withResult(del(`a`)),
-				), 2)),
-				step(withResultTS(put(`b`, `v2`), 3)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withResult(del(k1, s2)),
+				), t2)),
+				step(withResultTS(put(k2, s3), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 3, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2), kv(k2, t3, s3)),
 		},
 		{
 			name: "one transactional scan followed by delete outside time range",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withResult(del(`a`)),
-				), 4)),
-				step(withResultTS(put(`b`, `v2`), 3)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withResult(del(k1, s2)),
+				), t4)),
+				step(withResultTS(put(k2, s3), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 4), kv(`b`, 3, `v2`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000003,0)}->["a":v1] [d]"a":0.000000004,0-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t4, s2), kv(k2, t3, s3)),
 		},
 		{
 			name: "one scan before write",
 			steps: []Step{
-				step(withScanResult(scan(`a`, `c`))),
-				step(withResult(put(`a`, `v1`))),
+				step(withScanResultTS(scan(k1, k3), t1)),
+				step(withResultTS(put(k1, s1), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t2, s1)),
 		},
 		{
 			name: "one scan before write returning wrong value",
 			steps: []Step{
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`))),
-				step(withResult(put(`a`, `v1`))),
+				step(withScanResultTS(scan(k1, k3), t1, scanKV(k1, v2))),
+				step(withResultTS(put(k1, s1), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed scan non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v2]`,
-			},
+			kvs: kvs(kv(k1, t2, s1)),
 		},
 		{
 			name: "one scan after write",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withScanResultTS(scan(k1, k3), t2, scanKV(k1, v1))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one scan after write returning wrong value",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withScanResultTS(scan(k1, k3), t2, scanKV(k1, v2))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed scan non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "one scan after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scan(k1, k3), t3, scanKV(k1, v1), scanKV(k2, v2))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one reverse scan after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(reverseScan(`a`, `c`), scanKV(`b`, `v2`), scanKV(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScan(k1, k3), t3, scanKV(k2, v2), scanKV(k1, v1))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one scan after writes and delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 3)),
-				step(withResultTS(put(`a`, `v3`), 4)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t3)),
+				step(withResultTS(put(k1, s4), t4)),
+				step(withScanResultTS(scan(k1, k3), t5, scanKV(k2, v2))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), kv(`a`, 4, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s3), kv(k1, t4, s4)),
 		},
 		{
 			name: "one scan after write returning extra key",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`a2`, `v3`), scanKV(`b`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k3, s2), t2)),
+				step(withScanResultTS(scan(k1, k4), t3, scanKV(k1, v1), scanKV(k2, v3), scanKV(k2, v2))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed scan non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, 0,0), 2:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a":v1, "a2":v3, "b":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k3, t2, s2)),
 		},
 		{
 			name: "one tranactional scan after write and delete returning extra key",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`b`, `v2`)),
-					withResult(del(`a`)),
-				), 2)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`))),
+					withResult(put(k2, s2)),
+					withResult(del(k1, s3)),
+				), t2)),
+				step(withScanResultTS(scan(k1, k3), t3, scanKV(k1, v1), scanKV(k2, v2))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed scan non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a":v1, "b":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s3), kv(k2, t2, s2)),
 		},
 		{
 			name: "one reverse scan after write returning extra key",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(reverseScan(`a`, `c`), scanKV(`b`, `v2`), scanKV(`a2`, `v3`), scanKV(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k3, s2), t2)),
+				step(withScanResultTS(reverseScan(k1, k4), t3,
+					scanKV(k3, v2),
+					scanKV(k2, v3),
+					scanKV(k1, v1),
+				)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed reverse scan non-atomic timestamps: ` +
-					`[rs]{a-c}:{0:[0.000000002,0, <max>), 1:[0,0, 0,0), 2:[0.000000001,0, <max>), gap:[<min>, <max>)}->["b":v2, "a2":v3, "a":v1]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k3, t2, s2)),
 		},
 		{
 			name: "one scan after write returning missing key",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scan(k1, k3), t3, scanKV(k2, v2))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed scan non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000002,0, <max>), gap:[<min>, 0.000000001,0)}->["b":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one scan after writes and delete returning missing key",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`a`, `v1`)),
-					withResult(put(`b`, `v2`)),
-				), 1)),
+					withResult(put(k1, s1)),
+					withResult(put(k2, s2)),
+				), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`)),
-					withResult(del(`a`)),
-				), 2)),
-				step(withResultTS(put(`a`, `v3`), 3)),
-				step(withResultTS(del(`a`), 4)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k2, v2)),
+					withResult(del(k1, s3)),
+				), t2)),
+				step(withResultTS(put(k1, s4), t3)),
+				step(withResultTS(del(k1, s5), t4)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 1, `v2`), tombstone(`a`, 2), kv(`a`, 3, `v3`), tombstone(`a`, 4)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, 0.000000001,0),[0.000000004,0, <max>)}->["b":v2] [d]"a":0.000000002,0-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t1, s2), tombstone(k1, t2, s3), kv(k1, t3, s4), tombstone(k1, t4, s5)),
 		},
 		{
 			name: "one reverse scan after write returning missing key",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(reverseScan(`a`, `c`), scanKV(`b`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScan(k1, k3), t3, scanKV(k2, v2))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed reverse scan non-atomic timestamps: ` +
-					`[rs]{a-c}:{0:[0.000000002,0, <max>), gap:[<min>, 0.000000001,0)}->["b":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one scan after writes returning results in wrong order",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`), scanKV(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scan(k1, k3), t3, scanKV(k2, v2), scanKV(k1, v1))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`scan result not ordered correctly: ` +
-					`[s]{a-c}:{0:[0.000000002,0, <max>), 1:[0.000000001,0, <max>), gap:[<min>, <max>)}->["b":v2, "a":v1]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one reverse scan after writes returning results in wrong order",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withScanResult(reverseScan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScan(k1, k3), t3, scanKV(k1, v1), scanKV(k2, v2))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`scan result not ordered correctly: ` +
-					`[rs]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a":v1, "b":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "one scan after writes returning results outside scan boundary",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(put(`c`, `v3`), 3)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`), scanKV(`c`, `v3`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(put(k3, s3), t3)),
+				step(withScanResultTS(scan(k1, k3), t4, scanKV(k1, v1), scanKV(k2, v2), scanKV(k3, v3))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`)),
-			expected: []string{
-				`key "c" outside scan bounds: ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), 2:[0.000000003,0, <max>), gap:[<min>, <max>)}->["a":v1, "b":v2, "c":v3]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), kv(k3, t3, s3)),
 		},
 		{
 			name: "one reverse scan after writes returning results outside scan boundary",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(put(`c`, `v3`), 3)),
-				step(withScanResult(reverseScan(`a`, `c`), scanKV(`c`, `v3`), scanKV(`b`, `v2`), scanKV(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(put(k3, s3), t3)),
+				step(withScanResultTS(reverseScan(k1, k3), t4, scanKV(k3, v3), scanKV(k2, v2), scanKV(k1, v1))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`)),
-			expected: []string{
-				`key "c" outside scan bounds: ` +
-					`[rs]{a-c}:{0:[0.000000003,0, <max>), 1:[0.000000002,0, <max>), 2:[0.000000001,0, <max>), gap:[<min>, <max>)}->["c":v3, "b":v2, "a":v1]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), kv(k3, t3, s3)),
 		},
 		{
 			name: "one scan in between writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`))),
-				step(withResultTS(put(`a`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withScanResultTS(scan(k1, k3), t2, scanKV(k1, v1))),
+				step(withResultTS(put(k1, s2), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2)),
 		},
 		{
 			name: "batch of scans after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResult(batch(
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`)),
-					withScanResult(scan(`b`, `d`), scanKV(`b`, `v2`)),
-					withScanResult(scan(`c`, `e`)),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(batch(
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1), scanKV(k2, v2)),
+					withScanResultTS(scan(k2, k4), noTS, scanKV(k2, v2)),
+					withScanResultTS(scan(k3, k5), noTS),
+				), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "batch of scans after writes returning wrong values",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResult(batch(
-					withScanResult(scan(`a`, `c`)),
-					withScanResult(scan(`b`, `d`), scanKV(`b`, `v1`)),
-					withScanResult(scan(`c`, `e`), scanKV(`c`, `v2`)),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(batch(
+					withScanResultTS(scan(k1, k3), noTS),
+					withScanResultTS(scan(k2, k4), noTS, scanKV(k2, v1)),
+					withScanResultTS(scan(k3, k5), noTS, scanKV(k3, v2)),
+				), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed batch non-atomic timestamps: ` +
-					`[s]{a-c}:{gap:[<min>, 0.000000001,0)}->[] ` +
-					`[s]{b-d}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["b":v1] ` +
-					`[s]{c-e}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["c":v2]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "batch of scans after writes with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResult(batch(
-					withScanResult(scan(`a`, `c`), scanKV(`b`, `v1`)),
-					withScanResult(scan(`b`, `d`), scanKV(`b`, `v1`)),
-					withScanResult(scan(`c`, `e`)),
-				))),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(batch(
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k2, v1)),
+					withScanResultTS(scan(k2, k4), noTS, scanKV(k2, v1)),
+					withScanResultTS(scan(k3, k5), noTS),
+				), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
-			expected: []string{
-				`committed batch non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, 0.000000001,0)}->["b":v1] ` +
-					`[s]{b-d}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["b":v1] ` +
-					`[s]{c-e}:{gap:[<min>, <max>)}->[]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
 		},
 		{
 			name: "transactional scans with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 3)),
-				step(withResultTS(put(`b`, `v3`), 2)),
-				step(withResultTS(put(`b`, `v4`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t3)),
+				step(withResultTS(put(k2, s3), t2)),
+				step(withResultTS(put(k2, s4), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v3`)),
-					withScanResult(scan(`b`, `d`), scanKV(`b`, `v3`)),
-				), 2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1), scanKV(k2, v3)),
+					withScanResultTS(scan(k2, k4), noTS, scanKV(k2, v3)),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid from 2-3: overlap 2-3
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2), kv(k2, t2, s3), kv(k2, t3, s4)),
 		},
 		{
 			name: "transactional scans after delete with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 3)),
-				step(withResultTS(put(`b`, `v3`), 1)),
-				step(withResultTS(del(`b`), 2)),
-				step(withResultTS(put(`b`, `v4`), 4)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t3)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(del(k2, s4), t2)),
+				step(withResultTS(put(k2, s5), t4)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withScanResult(scan(`b`, `d`)),
-				), 2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withScanResultTS(scan(k2, k4), noTS),
+				), t2)),
 			},
-			// Reading v1 is valid from 1-3 and <nil> for `b` is valid <min>-1 and 2-4: overlap 2-3
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 1, `v3`), tombstone(`b`, 2), kv(`b`, 4, `v4`)),
-			expected: nil,
+			// Reading v1 is valid from 1-3 and <nil> for k2 is valid <min>-1 and 2-4: overlap 2-3
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2), kv(k2, t1, s3), tombstone(k2, t2, s4), kv(k2, t4, s5)),
 		},
 		{
 			name: "transactional scans with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 2)),
-				step(withResultTS(put(`b`, `v4`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t2)),
+				step(withResultTS(put(k2, s4), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v3`)),
-					withScanResult(scan(`b`, `d`), scanKV(`b`, `v3`)),
-				), 2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1), scanKV(k2, v3)),
+					withScanResultTS(scan(k2, k4), noTS, scanKV(k2, v3)),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 2-3: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), 1:[0.000000002,0, 0.000000003,0), gap:[<min>, <max>)}->["a":v1, "b":v3] ` +
-					`[s]{b-d}:{0:[0.000000002,0, 0.000000003,0), gap:[<min>, <max>)}->["b":v3]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t2, s3), kv(k2, t3, s4)),
 		},
 		{
 			name: "transactional scans after delete with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 1)),
-				step(withResultTS(del(`b`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(del(k2, s4), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withScanResult(scan(`b`, `d`)),
-				), 3)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withScanResultTS(scan(k2, k4), noTS),
+				), t3)),
 			},
-			// Reading v1 is valid from 1-2 and <nil> for `b` is valid from <min>-1, 3-<max>: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`), tombstone(`b`, 3)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), gap:[<min>, 0.000000001,0),[0.000000003,0, <max>)}->["a":v1] ` +
-					`[s]{b-d}:{gap:[<min>, 0.000000001,0),[0.000000003,0, <max>)}->[]`,
-			},
+			// Reading v1 is valid from 1-2 and <nil> for k2 is valid from <min>-1, 3-<max>: no overlap
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3), tombstone(k2, t3, s4)),
 		},
 		{
 			name: "transactional scans one missing with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withScanResult(scan(`b`, `d`)),
-				), 2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withScanResultTS(scan(k2, k4), noTS),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-2: overlap 1-2
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "transactional scans one missing with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
-				step(withResultTS(put(`b`, `v3`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withScanResult(scan(`b`, `d`)),
-				), 1)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withScanResultTS(scan(k2, k4), noTS),
+				), t1)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-1: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), gap:[<min>, 0.000000001,0)}->["a":v1] ` +
-					`[s]{b-d}:{gap:[<min>, 0.000000001,0)}->[]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3)),
 		},
 		{
 			name: "transactional scan and write with non-empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withResult(put(`b`, `v3`)),
-				), 2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withResult(put(k2, s3)),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid at 2: overlap @2
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "transactional scan and write with empty time overlap",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`a`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withResult(put(`b`, `v3`)),
-				), 2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withResult(put(k2, s3)),
+				), t2)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid at 2: no overlap
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), gap:[<min>, <max>)}->["a":v1] [w]"b":0.000000002,0->v3`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "transaction with scan before and after write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`)),
-					withResult(put(`a`, `v1`)),
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-				), 1)),
+					withScanResultTS(scan(k1, k3), noTS),
+					withResult(put(k1, s1)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "transaction with incorrect scan before write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withResult(put(`a`, `v1`)),
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-				), 1)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withResult(put(k1, s1)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v1] ` +
-					`[w]"a":0.000000001,0->v1 ` +
-					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a":v1]`,
-			},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "transaction with incorrect scan after write",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`)),
-					withResult(put(`a`, `v1`)),
-					withScanResult(scan(`a`, `c`)),
-				), 1)),
+					withScanResultTS(scan(k1, k3), noTS),
+					withResult(put(k1, s1)),
+					withScanResultTS(scan(k1, k3), noTS),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[s]{a-c}:{gap:[<min>, <max>)}->[] [w]"a":0.000000001,0->v1 [s]{a-c}:{gap:[<min>, 0.000000001,0)}->[]`,
-			},
+			kvs: kvs(kv(k1, t1, s1)),
 		},
 		{
 			name: "two transactionally committed puts of the same key with scans",
 			steps: []Step{
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withScanResult(scan(`a`, `c`)),
-					withResult(put(`a`, `v1`)),
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-					withResult(put(`a`, `v2`)),
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`)),
-					withResult(put(`b`, `v3`)),
-					withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`), scanKV(`b`, `v3`)),
-				), 1)),
+					withScanResultTS(scan(k1, k3), noTS),
+					withResult(put(k1, s1)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v1)),
+					withResult(put(k1, s2)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v2)),
+					withResult(put(k2, s3)),
+					withScanResultTS(scan(k1, k3), noTS, scanKV(k1, v2), scanKV(k2, v3)),
+				), t1)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v2`), kv(`b`, 1, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s2), kv(k2, t1, s3)),
 		},
 		{
 			name: "one deleterange before write",
 			steps: []Step{
-				step(withDeleteRangeResult(delRange(`a`, `c`))),
-				step(withResult(put(`a`, `v1`))),
+				step(withDeleteRangeResult(delRange(k1, k3, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t2, s2)),
 		},
 		{
 			name: "one deleterange before write returning wrong value",
 			steps: []Step{
-				step(withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`))),
-				step(withResult(put(`a`, `v1`))),
+				step(withDeleteRangeResult(delRange(k1, k3, s1), t1, roachpb.Key(k1))),
+				step(withResultTS(put(k1, s2), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed deleteRange missing write: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
-					`[dr.d]"a":missing-><nil>`,
-			},
+			kvs: kvs(kv(k1, t2, s2)),
 		},
 		{
 			name: "one deleterange after write",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
-				), 2)),
+					withDeleteRangeResult(delRange(k1, k3, s2), noTS, roachpb.Key(k1)),
+				), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "one deleterange after write returning wrong value",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`)),
-				), 2)),
+					withDeleteRangeResult(delRange(k1, k3, s2), t2),
+				), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: []string{
-				`extra writes: [d]"a":uncertain-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
 		},
 		{
 			name: "one deleterange after write missing write",
 			steps: []Step{
-				step(withResult(put(`a`, `v1`))),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
-				), 1)),
+					withDeleteRangeResult(delRange(k1, k3, s2), t2, roachpb.Key(k1)),
+				), t1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`)),
-			expected: []string{
-				`committed txn missing write: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
-					`[dr.d]"a":missing-><nil>`,
+			kvs: kvs(kv(k1, t1, s1)),
+		},
+		{
+			name: "one deleterange after write extra deletion",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t2)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(k1, k3, s2), t2, roachpb.Key(k1), roachpb.Key(k2)),
+				), t2)),
 			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
+		},
+		{
+			name: "one deleterange after write with spurious deletion",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit,
+					withDeleteRangeResult(delRange(k1, k3, s2), t2, roachpb.Key(k1), roachpb.Key(k2)),
+				), t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2), tombstone(k2, t2, s2)),
 		},
 		{
 			name: "one deleterange after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(put(`c`, `v3`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(put(k3, s3), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
-				), 4)),
-				step(withScanResult(scan(`a`, `d`), scanKV(`c`, `v3`))),
+					withDeleteRangeResult(delRange(k1, k3, s4), noTS, roachpb.Key(k1), roachpb.Key(k2)),
+				), t4)),
+				step(withScanResultTS(scan(k1, k4), t4, scanKV(k3, v3))),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`), tombstone(`a`, 4), tombstone(`b`, 4)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), kv(k3, t3, s3), tombstone(k1, t4, s4), tombstone(k2, t4, s4)),
 		},
 		{
 			name: "one deleterange after writes with write timestamp disagreement",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(put(`c`, `v3`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(put(k3, s3), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
-				), 4)),
-				step(withScanResult(scan(`a`, `d`), scanKV(`c`, `v3`))),
+					withDeleteRangeResult(delRange(k1, k3, s4), noTS, roachpb.Key(k1), roachpb.Key(k2), roachpb.Key(k3)),
+				), t4)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`), tombstone(`a`, 4), tombstone(`b`, 5)),
-			expected: []string{
-				`committed txn missing write: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, 0.000000005,0), gap:[<min>, <max>)}->["a", "b"] ` +
-					`[dr.d]"a":0.000000004,0-><nil> [dr.d]"b":missing-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), kv(k3, t3, s3), tombstone(k1, t3, s4), tombstone(k2, t4, s4), tombstone(k3, t4, s4)),
 		},
 		{
 			name: "one deleterange after writes with missing write",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(put(`c`, `v3`), 3)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(put(k3, s3), t3)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
-				), 4)),
-				step(withScanResult(scan(`a`, `d`), scanKV(`c`, `v3`))),
+					withDeleteRangeResult(delRange(k1, k3, s4), noTS, roachpb.Key(k1), roachpb.Key(k2)),
+				), t4)),
+				step(withScanResultTS(scan(k1, k4), t5, scanKV(k3, v3))),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), kv(`c`, 3, `v3`), tombstone(`a`, 4)),
-			expected: []string{
-				`committed txn missing write: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a", "b"] ` +
-					`[dr.d]"a":0.000000004,0-><nil> [dr.d]"b":missing-><nil>`,
-				`committed scan non-atomic timestamps: [s]{a-d}:{0:[0.000000003,0, <max>), gap:[<min>, 0.000000001,0)}->["c":v3]`,
-			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), kv(k3, t3, s3), tombstone(k1, t4, s4)),
 		},
 		{
 			name: "one deleterange after writes and delete",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`b`, `v2`), 2)),
-				step(withResultTS(del(`a`), 4)),
-				step(withResultTS(put(`a`, `v3`), 5)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(del(k1, s3), t4)),
+				step(withResultTS(put(k1, s4), t5)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
-				), 3)),
+					withDeleteRangeResult(delRange(k1, k3, s5), noTS, roachpb.Key(k1), roachpb.Key(k2)),
+				), t3)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 3), tombstone(`a`, 4), kv(`a`, 5, `v3`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2), tombstone(k1, t3, s5), tombstone(k2, t3, s5), tombstone(k1, t4, s3), kv(k2, t5, s4)),
 		},
 		{
 			name: "one transactional deleterange followed by put after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
-					withResult(put(`b`, `v2`)),
-				), 2)),
+					withDeleteRangeResult(delRange(k1, k3, s2), noTS, roachpb.Key(k1)),
+					withResult(put(k2, s3)),
+				), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 2, `v2`)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2), kv(k2, t2, s3)),
 		},
 		{
 			name: "one transactional deleterange followed by put after writes with write timestamp disagreement",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`)),
-					withResult(put(`b`, `v2`)),
-				), 2)),
+					withDeleteRangeResult(delRange(k1, k3, s2), noTS, roachpb.Key(k1)),
+					withResult(put(k2, s3)),
+				), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), kv(`b`, 3, `v2`)),
-			expected: []string{
-				`committed txn non-atomic timestamps: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
-					`[dr.d]"a":0.000000002,0-><nil> [w]"b":0.000000003,0->v2`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2), kv(k2, t3, s3)),
 		},
 		{
 			name: "one transactional put shadowed by deleterange after writes",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`b`, `v2`)),
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
-				), 2)),
+					withResult(put(k2, s2)),
+					withDeleteRangeResult(delRange(k1, k3, s3), noTS, roachpb.Key(k1), roachpb.Key(k2)),
+				), t2)),
 			},
-			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), tombstone(`b`, 2)),
-			expected: nil,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s3), tombstone(k2, t2, s3)),
 		},
 		{
 			name: "one transactional put shadowed by deleterange after writes with write timestamp disagreement",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
+				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withResult(put(`b`, `v2`)),
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`b`)),
-				), 2)),
+					withResult(put(k2, s2)),
+					withDeleteRangeResult(delRange(k1, k3, s3), noTS, roachpb.Key(k1), roachpb.Key(k2)),
+				), t2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2), tombstone(`b`, 3)),
-			expected: []string{
-				`committed txn missing write: ` +
-					`[w]"b":missing->v2 ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, <max>), gap:[<min>, <max>)}->["a", "b"] ` +
-					`[dr.d]"a":0.000000002,0-><nil> [dr.d]"b":missing-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s3), tombstone(k2, t3, s3)),
 		},
 		{
 			name: "one deleterange after writes returning keys outside span boundary",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`d`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k4, s2), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`d`)),
-				), 3)),
+					withDeleteRangeResult(delRange(k1, k3, s3), noTS, roachpb.Key(k1), roachpb.Key(k4)),
+				), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 3), kv(`d`, 2, `v2`)),
-			expected: []string{
-				`key "d" outside delete range bounds: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a", "d"] ` +
-					`[dr.d]"a":0.000000003,0-><nil> [dr.d]"d":missing-><nil>`,
-			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t3, s3), kv(k4, t2, s2)),
 		},
 		{
 			name: "one deleterange after writes incorrectly deleting keys outside span boundary",
 			steps: []Step{
-				step(withResultTS(put(`a`, `v1`), 1)),
-				step(withResultTS(put(`d`, `v2`), 2)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k4, s2), t2)),
 				step(withResultTS(closureTxn(ClosureTxnType_Commit,
-					withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`), roachpb.Key(`d`)),
-				), 3)),
+					withDeleteRangeResult(delRange(k1, k3, s3), noTS, roachpb.Key(k1), roachpb.Key(k4)),
+				), t3)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 3), kv(`d`, 2, `v2`), tombstone(`d`, 3)),
-			expected: []string{
-				`key "d" outside delete range bounds: ` +
-					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a", "d"] ` +
-					`[dr.d]"a":0.000000003,0-><nil> [dr.d]"d":0.000000003,0-><nil>`,
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t3, s3), kv(k4, t2, s2), tombstone(k4, t3, s3)),
+		},
+		{
+			name: "single mvcc rangedel",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(k1, k2, s1), t1)),
 			},
+			kvs: kvs(rd(k1, k2, t1, s1)),
+		},
+		{
+			name: "single mvcc rangedel after put",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(k1, k2, s2), t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1), rd(k1, k2, t2, s2)),
+		},
+		{
+			name: "single mvcc rangedel before put",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(k1, k2, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+			},
+			kvs: kvs(rd(k1, k2, t1, s1), kv(k1, t2, s2)),
+		},
+		{
+			name: "two overlapping rangedels",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(k1, k3, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(k2, k4, s2), t2)),
+			},
+			// Note: you see rangedel fragmentation in action here, which has to
+			// happen. Even if we decided to hand pebble overlapping rangedels, it
+			// would fragment them for us, and we'd get what you see below back when
+			// we read.
+			kvs: kvs(
+				rd(k1, k2, t1, s1),
+				rd(k2, k3, t1, s1),
+				rd(k2, k3, t2, s2),
+				rd(k3, k4, t2, s2),
+			),
+		},
+		{
+			name: "batch of touching rangedels",
+			steps: []Step{step(withResultTS(batch(
+				withResult(delRangeUsingTombstone(k1, k2, s1)),
+				withResult(delRangeUsingTombstone(k2, k4, s2)),
+			), t1)),
+			},
+			// Note that the tombstones aren't merged. In fact, our use of sequence numbers
+			// embedded in MVCCValueHeader implies that pebble can never merge adjacent
+			// tombstones from the same batch/txn.
+			kvs: kvs(
+				rd(k1, k2, t1, s1),
+				rd(k2, k4, t1, s2),
+			),
+		},
+		{
+			// Note also that self-overlapping batches or rangedels in txns aren't
+			// allowed today, so this particular example exists in this unit test but
+			// not in real CRDB. But we can have "touching" rangedels today, see
+			// above.
+			name: "batch of two overlapping rangedels",
+			steps: []Step{step(withResultTS(batch(
+				withResult(delRangeUsingTombstone(k1, k3, s1)),
+				withResult(delRangeUsingTombstone(k2, k4, s2)),
+			), t1)),
+			},
+			// Note that the tombstones aren't merged. In fact, our use of sequence numbers
+			// embedded in MVCCValueHeader implies that pebble can never merge adjacent
+			// tombstones from the same batch/txn.
+			// Note also that self-overlapping batches or rangedels in txns aren't
+			// allowed today, so this particular example exists in this unit test but
+			// not in real CRDB. But we can have "touching" rangedels today.
+			kvs: kvs(
+				rd(k1, k2, t1, s1),
+				rd(k2, k4, t1, s2),
+			),
+		},
+		{
+			name: "read before rangedel",
+			steps: []Step{
+				step(withResultTS(put(k2, s1), t1)),
+				step(withReadResultTS(get(k2), v1, t2)),
+				step(withResultTS(delRangeUsingTombstone(k1, k3, s3), t3)),
+			},
+			kvs: kvs(
+				kv(k2, t1, s1),
+				rd(k1, k3, t3, s3),
+			),
+		},
+		{
+			// MVCC range deletions are executed individually when the range is split,
+			// and if this happens kvnemesis will report a failure since the writes
+			// will in all likelihood have non-atomic timestamps.
+			// In an actual run we avoid this by adding a test hook to DistSender to
+			// avoid splitting MVCC rangedels across ranges, instead failing with a
+			// hard error, and the generator attempts - imperfectly - to respect the
+			// split points.
+			name: "rangedel with range split",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(k1, k3, s1), t2)),
+			},
+			kvs: kvs(
+				rd(k1, k2, t2, s1),
+				rd(k2, k3, t1, s1),
+			),
+		},
+		{
+			name: "rangedel shadowing scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(k1, k2, s2), t2)),
+				step(withScanResultTS(scan(k1, k2), t3)), // no rows returned
+			},
+			kvs: kvs(
+				kv(k1, t1, s1),
+				rd(k1, k2, t2, s2),
+			),
 		},
 	}
 
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(test.name, w.Run(t, test.name, func(t *testing.T) string {
 			e, err := MakeEngine()
 			require.NoError(t, err)
 			defer e.Close()
-			for _, kv := range test.kvs {
-				e.Put(kv.Key, kv.Value)
+
+			var buf strings.Builder
+			for _, step := range test.steps {
+				fmt.Fprintln(&buf, strings.TrimSpace(step.String()))
 			}
-			var actual []string
-			if failures := Validate(test.steps, e); len(failures) > 0 {
-				actual = make([]string, len(failures))
-				for i := range failures {
-					actual[i] = failures[i].Error()
+
+			tr := &SeqTracker{}
+			for _, kv := range test.kvs {
+				seq := kv.seq()
+				tr.Add(kv.key, kv.endKey, kv.ts, seq)
+				// NB: we go a little beyond what is truly necessary by embedding the
+				// sequence numbers (inside kv.val) unconditionally, as they would be in
+				// a real run. But we *do* need to embed them in `e.DeleteRange`, for
+				// otherwise pebble might start merging adjacent MVCC range dels (since
+				// they could have the same timestamp and empty value, where the seqno
+				// would really produce unique values).
+				if len(kv.endKey) == 0 {
+					k := storage.MVCCKey{
+						Key:       kv.key,
+						Timestamp: kv.ts,
+					}
+					e.Put(k, kv.val)
+					fmt.Fprintln(&buf, k, "@", seq, mustGetStringValue(kv.val))
+				} else {
+					k := storage.MVCCRangeKey{
+						StartKey:  kv.key,
+						EndKey:    kv.endKey,
+						Timestamp: kv.ts,
+					}
+					e.DeleteRange(kv.key, kv.endKey, kv.ts, kv.val)
+					fmt.Fprintln(&buf, k, "@", seq, mustGetStringValue(kv.val))
 				}
 			}
-			assert.Equal(t, test.expected, actual)
-		})
+
+			if failures := Validate(test.steps, e, tr); len(failures) > 0 {
+				for i := range failures {
+					fmt.Fprintln(&buf, failures[i])
+				}
+			}
+			return buf.String()
+		}))
 	}
 }

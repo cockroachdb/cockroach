@@ -36,8 +36,8 @@ const readerOverflowProtection = 1000000000000000 /* 10^15 */
 func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) (limitHint int64) {
 	// We prioritize the post process's limit since ProcOutputHelper
 	// will tell us to stop once we emit enough rows.
-	if post.Limit != 0 && post.Limit <= readerOverflowProtection {
-		limitHint = int64(post.Limit)
+	if post.Limit != 0 && post.Limit+post.Offset <= readerOverflowProtection && post.Limit+post.Offset > 0 {
+		limitHint = int64(post.Limit + post.Offset)
 	} else if specLimitHint != 0 && specLimitHint <= readerOverflowProtection {
 		limitHint = specLimitHint
 	}

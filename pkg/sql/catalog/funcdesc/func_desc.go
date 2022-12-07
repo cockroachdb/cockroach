@@ -64,7 +64,7 @@ func NewMutableFunctionDescriptor(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-	args []descpb.FunctionDescriptor_Argument,
+	params []descpb.FunctionDescriptor_Parameter,
 	returnType *types.T,
 	returnSet bool,
 	privs *catpb.PrivilegeDescriptor,
@@ -76,7 +76,7 @@ func NewMutableFunctionDescriptor(
 				ID:             id,
 				ParentID:       parentID,
 				ParentSchemaID: parentSchemaID,
-				Args:           args,
+				Params:         params,
 				ReturnType: descpb.FunctionDescriptor_ReturnType{
 					Type:      returnType,
 					ReturnSet: returnSet,
@@ -201,8 +201,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.ReturnType.Type == nil {
 		vea.Report(errors.AssertionFailedf("return type not set"))
 	}
-	for i, arg := range desc.Args {
-		if arg.Type == nil {
+	for i, param := range desc.Params {
+		if param.Type == nil {
 			vea.Report(errors.AssertionFailedf("type not set for arg %d", i))
 		}
 	}
@@ -457,9 +457,9 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 	desc.DeclarativeSchemaChangerState = state
 }
 
-// AddArguments adds function arguments to argument list.
-func (desc *Mutable) AddArguments(args ...descpb.FunctionDescriptor_Argument) {
-	desc.Args = append(desc.Args, args...)
+// AddParams adds function parameters to the parameter list.
+func (desc *Mutable) AddParams(params ...descpb.FunctionDescriptor_Parameter) {
+	desc.Params = append(desc.Params, params...)
 }
 
 // SetVolatility sets the volatility attribute.
@@ -501,11 +501,11 @@ func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
 func (desc *immutable) ToFuncObj() tree.FuncObj {
 	ret := tree.FuncObj{
 		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
-		Args:     make(tree.FuncArgs, len(desc.Args)),
+		Params:   make(tree.FuncParams, len(desc.Params)),
 	}
-	for i := range desc.Args {
-		ret.Args[i] = tree.FuncArg{
-			Type: desc.Args[i].Type,
+	for i := range desc.Params {
+		ret.Params[i] = tree.FuncParam{
+			Type: desc.Params[i].Type,
 		}
 	}
 	return ret
@@ -535,8 +535,8 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 
 // ContainsUserDefinedTypes implements the catalog.HydratableDescriptor interface.
 func (desc *immutable) ContainsUserDefinedTypes() bool {
-	for i := range desc.Args {
-		if desc.Args[i].Type.UserDefined() {
+	for i := range desc.Params {
+		if desc.Params[i].Type.UserDefined() {
 			return true
 		}
 	}
@@ -552,11 +552,11 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		IsUDF:      true,
 	}
 
-	argTypes := make(tree.ArgTypes, 0, len(desc.Args))
-	for _, arg := range desc.Args {
+	argTypes := make(tree.ParamTypes, 0, len(desc.Params))
+	for _, param := range desc.Params {
 		argTypes = append(
 			argTypes,
-			tree.ArgType{Name: arg.Name, Typ: arg.Type},
+			tree.ParamType{Name: param.Name, Typ: param.Type},
 		)
 	}
 	ret.Types = argTypes
@@ -616,15 +616,15 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateFunction, err error) {
 			IsSet: desc.ReturnType.ReturnSet,
 		},
 	}
-	ret.Args = make(tree.FuncArgs, len(desc.Args))
-	for i := range desc.Args {
-		ret.Args[i] = tree.FuncArg{
-			Name:  tree.Name(desc.Args[i].Name),
-			Type:  desc.Args[i].Type,
-			Class: toTreeNodeArgClass(desc.Args[i].Class),
+	ret.Params = make(tree.FuncParams, len(desc.Params))
+	for i := range desc.Params {
+		ret.Params[i] = tree.FuncParam{
+			Name:  tree.Name(desc.Params[i].Name),
+			Type:  desc.Params[i].Type,
+			Class: toTreeNodeParamClass(desc.Params[i].Class),
 		}
-		if desc.Args[i].DefaultExpr != nil {
-			ret.Args[i].DefaultVal, err = parser.ParseExpr(*desc.Args[i].DefaultExpr)
+		if desc.Params[i].DefaultExpr != nil {
+			ret.Params[i].DefaultVal, err = parser.ParseExpr(*desc.Params[i].DefaultExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -673,16 +673,16 @@ func (desc *immutable) getCreateExprNullInputBehavior() tree.FunctionNullInputBe
 	return 0
 }
 
-func toTreeNodeArgClass(class catpb.Function_Arg_Class) tree.FuncArgClass {
+func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.FuncParamClass {
 	switch class {
-	case catpb.Function_Arg_IN:
-		return tree.FunctionArgIn
-	case catpb.Function_Arg_OUT:
-		return tree.FunctionArgOut
-	case catpb.Function_Arg_IN_OUT:
-		return tree.FunctionArgInOut
-	case catpb.Function_Arg_VARIADIC:
-		return tree.FunctionArgVariadic
+	case catpb.Function_Param_IN:
+		return tree.FunctionParamIn
+	case catpb.Function_Param_OUT:
+		return tree.FunctionParamOut
+	case catpb.Function_Param_IN_OUT:
+		return tree.FunctionParamInOut
+	case catpb.Function_Param_VARIADIC:
+		return tree.FunctionParamVariadic
 	}
 	return 0
 }

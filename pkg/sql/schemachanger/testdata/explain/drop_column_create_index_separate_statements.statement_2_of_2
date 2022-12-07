@@ -57,36 +57,38 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    └── 1 Validation operation
  │    │         └── ValidateIndex {"IndexID":3,"TableID":104}
  │    ├── Stage 8 of 15 in PostCommitPhase
- │    │    ├── 8 elements transitioning toward PUBLIC
+ │    │    ├── 7 elements transitioning toward PUBLIC
  │    │    │    ├── VALIDATED → PUBLIC        PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
  │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+ │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
- │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
  │    │    │    ├── ABSENT    → PUBLIC        IndexData:{DescID: 104, IndexID: 5}
+ │    │    │    └── ABSENT    → PUBLIC        IndexName:{DescID: 104, Name: idx, IndexID: 5}
+ │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── ABSENT    → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 5, SourceIndexID: 3}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
  │    │    │    └── ABSENT    → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
- │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── ABSENT    → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
  │    │    ├── 2 elements transitioning toward ABSENT
  │    │    │    ├── PUBLIC    → VALIDATED     PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
  │    │    │    └── PUBLIC    → ABSENT        IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
- │    │    └── 12 Mutation operations
+ │    │    └── 13 Mutation operations
  │    │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │    │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │    │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
  │    │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}
  │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":5,"TableID":104}
+ │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":104}
+ │    │         ├── SetIndexName {"IndexID":5,"Name":"idx","TableID":104}
  │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
  │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":6,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":6,"Kind":1,"TableID":104}
- │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":5,"TableID":104}
- │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 9 of 15 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
- │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+ │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 5, SourceIndexID: 3}
  │    │    │    └── ABSENT      → PUBLIC     IndexData:{DescID: 104, IndexID: 6}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":6,"TableID":104}
@@ -130,14 +132,15 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              └── ValidateIndex {"IndexID":5,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── VALIDATED  → PUBLIC                SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
-      │    │    └── ABSENT     → PUBLIC                IndexName:{DescID: 104, Name: idx, IndexID: 5}
-      │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── VALIDATED  → PUBLIC                SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+      │    ├── 6 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
       │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-      │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+      │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 5, SourceIndexID: 3}
+      │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
+      │    │    └── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
       │    ├── 10 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY → DELETE_ONLY           Column:{DescID: 104, ColumnID: 2}
       │    │    ├── WRITE_ONLY → DELETE_ONLY           Column:{DescID: 104, ColumnID: 4}
@@ -149,22 +152,23 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    └── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-      │    └── 10 Mutation operations
+      │    └── 11 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── SetIndexName {"IndexID":5,"Name":"idx","TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── LogEvent {"TargetStatus":2}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":5,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":5,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 4 elements transitioning toward TRANSIENT_ABSENT
            │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104, IndexID: 4}
            │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 5, SourceIndexID: 3}
            │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104, IndexID: 6}
            ├── 8 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY           → ABSENT           Column:{DescID: 104, ColumnID: 2}

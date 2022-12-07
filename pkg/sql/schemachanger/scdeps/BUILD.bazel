@@ -13,7 +13,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/config",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -29,7 +28,6 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
-        "//pkg/sql/descmetadata",
         "//pkg/sql/oppurpose",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scbuild",
@@ -44,7 +42,6 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
-        "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

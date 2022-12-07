@@ -225,10 +225,10 @@ type Planner interface {
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)
 
-	// EvalRoutineExpr evaluates a routine with the given input datums and
+	// EvalRoutineExpr evaluates a routine with the given argument datums and
 	// returns the resulting datum.
 	EvalRoutineExpr(
-		ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
+		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 	) (tree.Datum, error)
 
 	// UnsafeUpsertDescriptor is used to repair descriptors in dire
@@ -505,6 +505,14 @@ type RegionOperator interface {
 	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
 	// configuration to its multi-region default.
 	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
+
+	// OptimizeSystemDatabase configures some tables in the system data as
+	// global and regional by row. The locality changes reduce how long it
+	// takes a server to start up in a multi-region deployment.
+	//
+	// TODO(jeffswenson): remove OptimizeSystemDatabase after cleaning up the
+	// unsafe_optimize_system_database built in.
+	OptimizeSystemDatabase(ctx context.Context) error
 }
 
 // SequenceOperators is used for various sql related functions that can

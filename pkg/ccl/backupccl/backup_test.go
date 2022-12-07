@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -231,7 +232,16 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	}
 	found := false
 	var mu syncutil.Mutex
-	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication,
+	// backupRestoreTestSetupWithParams() writes some data and then, within
+	// workloadsql.Setup() it splits and scatters the ranges. When using 3 nodes
+	// scatter means we only move leases which is usually enough. During stress or
+	// race we see that the leases may not be scattered because the other 2
+	// replicas are not yet initialized. In those cases the leases all stay on
+	// node 1 and therefore the flows run locally and the test fails (because
+	// 'found' stays false). The simple solution here is to use 4 nodes where
+	// scatter moves replicas in addition to leases.
+	numNodes := 4
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, numNodes, numAccounts, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DisableDefaultTestTenant: true,
@@ -727,7 +737,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	asOf1 := strings.TrimPrefix(matches[1], "/full")
 
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE status != 'failed'",
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND status != 'failed'",
 		[][]string{
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
@@ -5608,7 +5618,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	// TODO (lucy): Update this if/when we decide to change how these jobs queued by
 	// the startup migration are handled.
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND description != 'updating privileges' ORDER BY description",
 		[][]string{
 			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history = true"},
 			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
@@ -7284,8 +7294,6 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 90646)
-
 	allowRequest := make(chan struct{})
 	defer close(allowRequest)
 
@@ -7320,7 +7328,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.Regexp(t,
-		`timeout: operation "ExportRequest for span .*/Table/\d+/.*\" timed out after \S+ \(given timeout 3s\)`,
+		`exporting .*/Table/\d+/.*\: context deadline exceeded`,
 		err.Error())
 }
 
@@ -8397,6 +8405,10 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	//  7. Drop index
 	//  8. Inc 4
 
+	// Disable declarative schema changer for this test, until the knobs are updated.
+	sqlDB.Exec(t, "SET use_declarative_schema_changer='off';")
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';")
+
 	// First take a full backup.
 	fullBackup := localFoo + "/full"
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, fullBackup)
@@ -9325,6 +9337,103 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 			require.Truef(t, afterBackup.Less(thresh), "%v >= %v", afterBackup, thresh)
 			return nil
 		})
+}
+
+// TestProtectRestoreTargets ensures that a protected timestamp is issued before
+// the restore flow begins on the correct target and is released when the restore ends.
+func TestProtectRestoreTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	numAccounts := 100
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		},
+	}
+	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode,
+		numAccounts,
+		InitManualReplication, params)
+	_, emptyDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir,
+		InitManualReplication, params)
+	defer cleanupEmptyCluster()
+	defer cleanupFn()
+
+	ctx := context.Background()
+	if !tc.StartedDefaultTestTenant() {
+		_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.
+			MustMakeTenantID(10)})
+		require.NoError(t, err)
+	}
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+	for _, subtest := range []struct {
+		name        string
+		restoreStmt string
+	}{
+		{
+			name:        "tenant",
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant = '20'`,
+		},
+		{
+			name:        "database",
+			restoreStmt: `RESTORE DATABASE data FROM LATEST IN $1 WITH detached, new_db_name=data2`,
+		},
+		{
+			name:        "table",
+			restoreStmt: `RESTORE TABLE bank FROM LATEST IN $1 WITH detached, into_db='defaultdb'`,
+		},
+		{
+			name:        "cluster",
+			restoreStmt: `RESTORE FROM LATEST IN $1 WITH detached`,
+		},
+	} {
+		if tc.StartedDefaultTestTenant() && subtest.name == "tenant" {
+			// Cannot run a restore of a tenant within a tenant
+			continue
+		}
+		t.Run(subtest.name, func(t *testing.T) {
+			if subtest.name == "cluster" {
+				// Use the empty cluster for cluster restore
+				sqlDB = emptyDB
+				sqlDB.Exec(t, "USE system")
+			}
+			// Begin a Restore and assert that PTS with the correct target was persisted
+			sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'`)
+			var jobId jobspb.JobID
+			sqlDB.QueryRow(t, subtest.restoreStmt, localFoo).Scan(&jobId)
+			jobutils.WaitForJobToPause(t, sqlDB, jobId)
+
+			restoreDetails := jobutils.GetJobPayload(t, sqlDB, jobId).GetRestore()
+			require.NotNil(t, restoreDetails.ProtectedTimestampRecord)
+
+			target := ptutil.GetPTSTarget(t, sqlDB, restoreDetails.ProtectedTimestampRecord)
+			switch subtest.name {
+			case "cluster":
+				// The target cluster object doesn't have any info,
+				// so just assert that the right type was instantiated.
+				require.NotNil(t, target.GetCluster())
+			case "tenant":
+				targetIDs := target.GetTenants()
+				require.Equal(t, roachpb.TenantID{InternalValue: 20}, targetIDs.IDs[0])
+			case "database":
+				targetIDs := target.GetSchemaObjects()
+				require.Equal(t, restoreDetails.DatabaseDescs[0].GetID(), targetIDs.IDs[0])
+			case "table":
+				targetIDs := target.GetSchemaObjects()
+				require.Equal(t, restoreDetails.TableDescs[0].GetID(), targetIDs.IDs[0])
+			}
+			// Finish the restore and ensure the PTS record was removed
+			sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+			sqlDB.Exec(t, `RESUME JOB $1`, jobId)
+			jobutils.WaitForJobToSucceed(t, sqlDB, jobId)
+
+			var count int
+			sqlDB.QueryRow(t, `SELECT count(*) FROM system.protected_ts_records WHERE id = $1`,
+				restoreDetails.ProtectedTimestampRecord).Scan(&count)
+			require.Equal(t, 0, count)
+		})
+	}
 }
 
 // TestBackupRestoreSystemUsers tests RESTORE SYSTEM USERS feature which allows user to
@@ -10283,7 +10392,7 @@ $$;
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100108, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
@@ -10340,7 +10449,7 @@ $$;
 		require.Equal(t, 114, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
 		require.Equal(t, "SELECT a FROM db1_new.sc1.tbl1;\nSELECT nextval(118:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100116, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100116, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{115, 118}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
 
@@ -10430,7 +10539,7 @@ $$;
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100108, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
@@ -10489,7 +10598,7 @@ $$;
 		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100127, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, 100127, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{126, 129}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
 

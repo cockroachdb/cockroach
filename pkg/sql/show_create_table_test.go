@@ -84,9 +84,9 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 			)
 
 			// Change the check constraint from the hash shared index to unvalidated.
-			for _, c := range mut.AllActiveAndInactiveChecks() {
-				if c.Name == "check_crdb_internal_y_shard_16" {
-					c.Validity = descpb.ConstraintValidity_Unvalidated
+			for _, c := range mut.CheckConstraints() {
+				if c.GetName() == "check_crdb_internal_y_shard_16" {
+					c.CheckDesc().Validity = descpb.ConstraintValidity_Unvalidated
 				}
 			}
 

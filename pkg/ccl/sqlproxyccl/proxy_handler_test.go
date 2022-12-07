@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -921,7 +922,7 @@ func TestCancelQuery(t *testing.T) {
 	var cancelFn func()
 	tenantKnobs := base.TestingKnobs{}
 	tenantKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeExecute: func(ctx context.Context, stmt string) {
+		BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 			if strings.Contains(stmt, "cancel_me") {
 				cancelFn()
 			}
@@ -1397,6 +1398,24 @@ func TestConnectionMigration(t *testing.T) {
 			proxy.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 	}
 
+	transferConnWithRetries := func(t *testing.T, f *forwarder) error {
+		t.Helper()
+
+		var nonRetriableErrSeen bool
+		err := testutils.SucceedsSoonError(func() error {
+			err := f.TransferConnection()
+			if err == nil {
+				return nil
+			}
+			if !errors.Is(err, errTransferCannotStart) {
+				nonRetriableErrSeen = true
+			}
+			return err
+		})
+		require.False(t, nonRetriableErrSeen)
+		return err
+	}
+
 	// Test that connection transfers are successful. Note that if one sub-test
 	// fails, the remaining will fail as well since they all use the same
 	// forwarder instance.
@@ -1452,7 +1471,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.NoError(t, err)
 
 			// Show that we get alternating SQL pods when we transfer.
-			require.NoError(t, f.TransferConnection())
+			require.NoError(t, transferConnWithRetries(t, f))
 			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant2.SQLAddr(), queryAddr(tCtx, t, db))
 
@@ -1463,7 +1482,7 @@ func TestConnectionMigration(t *testing.T) {
 			_, err = db.Exec("SET application_name = 'bar'")
 			require.NoError(t, err)
 
-			require.NoError(t, f.TransferConnection())
+			require.NoError(t, transferConnWithRetries(t, f))
 			require.Equal(t, int64(2), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant1.SQLAddr(), queryAddr(tCtx, t, db))
 
@@ -1525,10 +1544,14 @@ func TestConnectionMigration(t *testing.T) {
 
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 				// Run multiple times to ensure that connection isn't closed.
-				for i := 0; i < 5; i++ {
+				for i := 0; i < 5; {
 					err := f.TransferConnection()
 					if err == nil {
 						return errors.New("no error")
+					}
+					// Retry again if the transfer cannot be started.
+					if errors.Is(err, errTransferCannotStart) {
+						continue
 					}
 					if !assert.Regexp(t, "cannot serialize", err.Error()) {
 						return errors.Wrap(err, "non-serialization error")
@@ -1541,6 +1564,7 @@ func TestConnectionMigration(t *testing.T) {
 							addr,
 						)
 					}
+					i++
 				}
 				return nil
 			})
@@ -1554,7 +1578,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			// Once the transaction is closed, transfers should work.
-			require.NoError(t, f.TransferConnection())
+			require.NoError(t, transferConnWithRetries(t, f))
 			require.NotEqual(t, initAddr, queryAddr(tCtx, t, db))
 			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())

@@ -184,6 +184,9 @@ message SampledQuery {
   // query.
   int64 nanos_since_stats_forecasted = 50 [(gogoproto.jsontag) = ",omitempty"];
 
+  // The list of indexes used by this query.
+  repeated string indexes = 51 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
   reserved 12;
 }
 

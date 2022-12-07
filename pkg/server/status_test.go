@@ -757,7 +757,8 @@ func TestStatusLogRedaction(t *testing.T) {
 						}
 
 						// Retrieve the log entries using the Logs() RPC.
-						logsURL := fmt.Sprintf("logs/local?redact=%v", tc.redact)
+						// Set a high `max` value to ensure we get the log line we're searching for.
+						logsURL := fmt.Sprintf("logs/local?redact=%v&max=5000", tc.redact)
 						var wrapper2 serverpb.LogEntriesResponse
 						if err := getStatusJSONProto(ts, logsURL, &wrapper2); err != nil {
 							t.Fatal(err)

@@ -643,7 +643,7 @@ func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
 	for ; s != nil; s = s.parent {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.funcArgReferencedBy(idx) {
+			if col.funcParamReferencedBy(idx) {
 				return col
 			}
 		}

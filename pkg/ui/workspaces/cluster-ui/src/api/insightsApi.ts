@@ -665,6 +665,9 @@ const workloadInsightsQuery: InsightQuery<
   // Note that we don't filter by problem != 'None', so that we can get all
   // stmts in the problematic transaction.
   query: `
+WITH insightsTable as (
+  SELECT * FROM crdb_internal.cluster_execution_insights
+) 
 SELECT
   session_id,
   insights.txn_id as txn_id,
@@ -694,10 +697,10 @@ FROM
   (
     SELECT
      txn_id,
-     row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time  ) as rank
-    FROM crdb_internal.cluster_execution_insights
+     row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time DESC ) as rank
+    FROM insightsTable
   ) as latestTxns
-JOIN crdb_internal.cluster_execution_insights AS insights
+JOIN insightsTable AS insights
 ON latestTxns.txn_id = insights.txn_id
 WHERE latestTxns.rank = 1 AND app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%'
  `,

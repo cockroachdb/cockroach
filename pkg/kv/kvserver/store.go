@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -1097,7 +1098,8 @@ type StoreConfig struct {
 
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
-	// TODO(richardjcai): We can likely remove this.
+	//
+	// TODO(irfansharif): We can remove this.
 	SpanConfigsDisabled bool
 	// Used to subscribe to span configuration changes, keeping up-to-date a
 	// data structure useful for retrieving span configs. Only available if
@@ -2126,6 +2128,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 					s.systemGossipUpdate(sc)
 				}
 			}
+		})
+
+		// We also want to do it when the fallback config setting is changed.
+		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+			s.applyAllFromSpanConfigStore(ctx)
 		})
 	}
 
@@ -3228,7 +3235,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
-	var livenessMap liveness.IsLiveMap
+	var livenessMap livenesspb.IsLiveMap
 	if s.cfg.NodeLiveness != nil {
 		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
 	}

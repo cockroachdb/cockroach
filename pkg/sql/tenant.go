@@ -320,7 +320,7 @@ func (p *planner) CreateTenant(
 	if err := p.RequireAdminRole(ctx, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create"); err != nil {
 		return roachpb.TenantID{}, err
 	}
 
@@ -352,7 +352,7 @@ func (p *planner) CreateTenantWithID(
 		},
 	}
 
-	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.Descriptors())
 	if err != nil {
 		return err
 	}
@@ -824,7 +824,11 @@ WHERE id = $1`, tenantID, tenantName); err != nil {
 func (p *planner) GetTenantInfo(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (*descpb.TenantInfo, error) {
-	if err := p.RequireAdminRole(ctx, "get tenant"); err != nil {
+	if err := p.RequireAdminRole(ctx, "show tenant"); err != nil {
+		return nil, err
+	}
+
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "show"); err != nil {
 		return nil, err
 	}
 

@@ -96,7 +96,7 @@ var (
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [allowEmpty]
+// scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis] [maskBelow=<int>[,<int>]]
@@ -1374,7 +1374,18 @@ func cmdExport(e *evalCtx) error {
 	e.results.buf.Printf("\n")
 
 	if shouldFingerprint {
+		// Fingerprint the rangekeys returned as a pebble SST.
+		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions,
+			[][]byte{sstFile.Bytes()})
+		if err != nil {
+			return err
+		}
+		fingerprint = fingerprint ^ rangekeyFingerprint
 		e.results.buf.Printf("fingerprint: %d\n", fingerprint)
+
+		// Return early, we don't need to print the point and rangekeys if we are
+		// fingerprinting.
+		return nil
 	}
 
 	iter, err := storage.NewMemSSTIterator(sstFile.Bytes(), false /* verify */, storage.IterOptions{
@@ -1471,7 +1482,26 @@ func cmdScan(e *evalCtx) error {
 		opts.AllowEmpty = true
 	}
 	if e.hasArg("wholeRows") {
-		opts.WholeRowsOfSize = 10 // arbitrary, must be greater than largest column family in tests
+		for _, c := range e.td.CmdArgs {
+			if c.Key == "wholeRows" {
+				// If we have a custom value for wholeRows key, then use it,
+				// otherwise, pick an arbitrary value greater than the largest
+				// column family in tests.
+				if len(c.Vals) > 0 {
+					wholeRowsOfSize, err := strconv.ParseInt(c.Vals[0], 10, 64)
+					if err != nil {
+						return err
+					}
+					if wholeRowsOfSize < 2 {
+						return errors.Newf("wholeRowOfSize value must be at least 2, got %d", wholeRowsOfSize)
+					}
+					opts.WholeRowsOfSize = int32(wholeRowsOfSize)
+				} else {
+					opts.WholeRowsOfSize = 10
+				}
+				break
+			}
+		}
 	}
 	return e.withReader(func(r storage.Reader) error {
 		res, err := storage.MVCCScan(e.ctx, r, key, endKey, ts, opts)

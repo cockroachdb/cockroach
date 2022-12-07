@@ -27,7 +27,7 @@ type sqlForeignKeyCheckOperation struct {
 	tableName           *tree.TableName
 	tableDesc           catalog.TableDescriptor
 	referencedTableDesc catalog.TableDescriptor
-	constraint          *descpb.ConstraintDetail
+	constraint          catalog.ForeignKeyConstraint
 	asOf                hlc.Timestamp
 
 	colIDToRowIdx catalog.TableColMap
@@ -46,14 +46,15 @@ type sqlForeignKeyConstraintCheckRun struct {
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
 	tableDesc catalog.TableDescriptor,
-	constraint descpb.ConstraintDetail,
+	constraint catalog.ForeignKeyConstraint,
+	referencedTable catalog.TableDescriptor,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
 	return &sqlForeignKeyCheckOperation{
 		tableName:           tableName,
 		tableDesc:           tableDesc,
-		constraint:          &constraint,
-		referencedTableDesc: tabledesc.NewBuilder(constraint.ReferencedTable).BuildImmutableTable(),
+		constraint:          constraint,
+		referencedTableDesc: referencedTable,
 		asOf:                asOf,
 	}
 }
@@ -66,7 +67,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 
 	checkQuery, _, err := nonMatchingRowQuery(
 		o.tableDesc,
-		o.constraint.FK,
+		o.constraint.ForeignKeyDesc(),
 		o.referencedTableDesc,
 		false, /* limitResults */
 	)
@@ -82,12 +83,12 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 	o.run.rows = rows
 
-	if len(o.constraint.FK.OriginColumnIDs) > 1 && o.constraint.FK.Match == descpb.ForeignKeyReference_FULL {
+	if o.constraint.NumOriginColumns() > 1 && o.constraint.Match() == descpb.ForeignKeyReference_FULL {
 		// Check if there are any disallowed references where some columns are NULL
 		// and some aren't.
 		checkNullsQuery, _, err := matchFullUnacceptableKeyQuery(
 			o.tableDesc,
-			o.constraint.FK,
+			o.constraint.ForeignKeyDesc(),
 			false, /* limitResults */
 		)
 		if err != nil {
@@ -103,18 +104,11 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 
 	// Get primary key columns not included in the FK.
-	var colIDs []descpb.ColumnID
-	colIDs = append(colIDs, o.constraint.FK.OriginColumnIDs...)
+	originColIDs := o.constraint.CollectOriginColumnIDs()
+	colIDs := append(descpb.ColumnIDs(nil), o.constraint.ForeignKeyDesc().OriginColumnIDs...)
 	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
 		pkColID := o.tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
-		found := false
-		for _, id := range o.constraint.FK.OriginColumnIDs {
-			if pkColID == id {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !originColIDs.Contains(pkColID) {
 			colIDs = append(colIDs, pkColID)
 		}
 	}
@@ -135,7 +129,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})
 	details["row_data"] = rowDetails
-	details["constraint_name"] = o.constraint.FK.Name
+	details["constraint_name"] = o.constraint.GetName()
 
 	// Collect the primary index values for generating the primary key
 	// pretty string.
@@ -148,7 +142,8 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 
 	// Collect all of the values fetched from the index to generate a
 	// pretty JSON dictionary for row_data.
-	for _, id := range o.constraint.FK.OriginColumnIDs {
+	for i, n := 0, o.constraint.NumOriginColumns(); i < n; i++ {
+		id := o.constraint.GetOriginColumnID(i)
 		idx := o.colIDToRowIdx.GetDefault(id)
 		col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
 		if err != nil {
@@ -156,16 +151,10 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		}
 		rowDetails[col.GetName()] = row[idx].String()
 	}
+	originColumnIDs := o.constraint.CollectOriginColumnIDs()
 	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
 		id := o.tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
-		found := false
-		for _, fkID := range o.constraint.FK.OriginColumnIDs {
-			if id == fkID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !originColumnIDs.Contains(id) {
 			idx := o.colIDToRowIdx.GetDefault(id)
 			col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
 			if err != nil {

@@ -424,8 +424,7 @@ func getDescriptorAndNamespaceKVForTableID(
 
 	// Generate namespace entry.
 	codec := keys.MakeSQLCodec(config.tenantID)
-	key := catalogkeys.MakePublicObjectNameKey(codec, IngestionDatabaseID, testTable.Name)
-	k := rekey(config.tenantID, key)
+	k := rekey(config.tenantID, catalogkeys.EncodeNameKey(codec, testTable))
 	var value roachpb.Value
 	value.SetInt(int64(testTable.GetID()))
 	value.InitChecksum(k)

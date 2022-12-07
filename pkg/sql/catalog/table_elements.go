@@ -60,9 +60,31 @@ type TableElementMaybeMutation interface {
 	Dropped() bool
 }
 
+// ConstraintProvider is an interface for something which might unwrap
+// a constraint.
+type ConstraintProvider interface {
+
+	// AsCheck returns the corresponding CheckConstraint if there is one,
+	// nil otherwise.
+	AsCheck() CheckConstraint
+
+	// AsForeignKey returns the corresponding ForeignKeyConstraint if
+	// there is one, nil otherwise.
+	AsForeignKey() ForeignKeyConstraint
+
+	// AsUniqueWithIndex returns the corresponding UniqueWithIndexConstraint if
+	// there is one, nil otherwise.
+	AsUniqueWithIndex() UniqueWithIndexConstraint
+
+	// AsUniqueWithoutIndex returns the corresponding
+	// UniqueWithoutIndexConstraint if there is one, nil otherwise.
+	AsUniqueWithoutIndex() UniqueWithoutIndexConstraint
+}
+
 // Mutation is an interface around a table descriptor mutation.
 type Mutation interface {
 	TableElementMaybeMutation
+	ConstraintProvider
 
 	// AsColumn returns the corresponding Column if the mutation is on a column,
 	// nil otherwise.
@@ -72,9 +94,10 @@ type Mutation interface {
 	// nil otherwise.
 	AsIndex() Index
 
-	// AsConstraint returns the corresponding Constraint if the mutation
-	// is on a constraint, nil otherwise.
-	AsConstraint() Constraint
+	// AsConstraintWithoutIndex returns the corresponding WithoutIndexConstraint
+	// if the mutation is on a check constraint or on a foreign key constraint or
+	// on a non-index-backed unique constraint, nil otherwise.
+	AsConstraintWithoutIndex() WithoutIndexConstraint
 
 	// AsPrimaryKeySwap returns the corresponding PrimaryKeySwap if the mutation
 	// is a primary key swap, nil otherwise.
@@ -104,6 +127,7 @@ type Mutation interface {
 // Index is an interface around the index descriptor types.
 type Index interface {
 	TableElementMaybeMutation
+	ConstraintProvider
 
 	// IndexDesc returns the underlying protobuf descriptor.
 	// Ideally, this method should be called as rarely as possible.
@@ -152,9 +176,9 @@ type Index interface {
 	GetSharded() catpb.ShardedDescriptor
 	GetShardColumnName() string
 
-	IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool
-	IsHelpfulOriginIndex(originColIDs descpb.ColumnIDs) bool
-	IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool
+	// IsValidOriginIndex returns whether the index can serve as an origin index
+	// for a foreign key constraint.
+	IsValidOriginIndex(fk ForeignKeyConstraint) bool
 
 	GetPartitioning() Partitioning
 	PartitioningColumnCount() int
@@ -238,7 +262,7 @@ type Index interface {
 	// was issued.
 	CreatedAt() time.Time
 
-	// IsTemporaryIndexForBackfill() returns true iff the index is
+	// IsTemporaryIndexForBackfill returns true iff the index is
 	// an index being used as the temporary index being used by an
 	// in-progress index backfill.
 	IsTemporaryIndexForBackfill() bool
@@ -400,6 +424,7 @@ type Column interface {
 // Constraint is an interface around a constraint.
 type Constraint interface {
 	TableElementMaybeMutation
+	ConstraintProvider
 	fmt.Stringer
 
 	// GetConstraintID returns the ID for the constraint.
@@ -408,30 +433,157 @@ type Constraint interface {
 	// GetConstraintValidity returns the validity of this constraint.
 	GetConstraintValidity() descpb.ConstraintValidity
 
+	// IsEnforced returns true iff the constraint is enforced for all writes to
+	// the parent table.
+	IsEnforced() bool
+
 	// GetName returns the name of this constraint update mutation.
 	GetName() string
 
-	// NotNullColumnID returns the underlying not-null column ID, if there is one.
-	NotNullColumnID() descpb.ColumnID
+	// IsConstraintValidated returns true iff the constraint is enforced for
+	// all writes to the table data and has also been validated on the table's
+	// existing data prior to the addition of the constraint, if there was any.
+	IsConstraintValidated() bool
 
-	// AsCheck returns the underlying check constraint, if there is one.
-	AsCheck() *descpb.TableDescriptor_CheckConstraint
+	// IsConstraintUnvalidated returns true iff the constraint is enforced for
+	// all writes to the table data but which is explicitly NOT to be validated
+	// on any data in the table prior to the addition of the constraint.
+	IsConstraintUnvalidated() bool
+}
 
-	// AsForeignKey returns the underlying foreign key constraint, if there is
-	// one.
-	AsForeignKey() *descpb.ForeignKeyConstraint
+// UniqueConstraint is an interface for a unique constraint.
+// These are either backed by an index, or not, see respectively
+// UniqueWithIndexConstraint and UniqueWithoutIndexConstraint.
+type UniqueConstraint interface {
+	Constraint
 
-	// AsUniqueWithoutIndex returns the underlying unique without index
-	// constraint, if there is one.
-	AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint
+	// IsValidReferencedUniqueConstraint returns whether the unique constraint can
+	// serve as a referenced unique constraint for a foreign key constraint.
+	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint) bool
 
-	// AsPrimaryKey returns the index descriptor backing the PRIMARY KEY
-	// constraint, if there is one.
-	AsPrimaryKey() Index
+	// NumKeyColumns returns the number of columns in this unique constraint.
+	NumKeyColumns() int
 
-	// AsUnique returns the index descriptor backing the UNIQUE constraint,
-	// if there is one.
-	AsUnique() Index
+	// GetKeyColumnID returns the ID of the column in the unique constraint at
+	// ordinal `columnOrdinal`.
+	GetKeyColumnID(columnOrdinal int) descpb.ColumnID
+
+	// CollectKeyColumnIDs returns the columns in the unique constraint in a new
+	// TableColSet.
+	CollectKeyColumnIDs() TableColSet
+
+	// IsPartial returns true iff this is a partial uniqueness constraint.
+	IsPartial() bool
+
+	// GetPredicate returns the partial predicate if there is one, "" otherwise.
+	GetPredicate() string
+}
+
+// UniqueWithIndexConstraint is an interface around a unique constraint
+// which backed by an index.
+type UniqueWithIndexConstraint interface {
+	UniqueConstraint
+	Index
+}
+
+// WithoutIndexConstraint is the supertype of all constraint subtypes which are
+// not backed by an index.
+type WithoutIndexConstraint interface {
+	Constraint
+}
+
+// CheckConstraint is an interface around a check constraint.
+type CheckConstraint interface {
+	WithoutIndexConstraint
+
+	// CheckDesc returns the underlying descriptor protobuf.
+	CheckDesc() *descpb.TableDescriptor_CheckConstraint
+
+	// GetExpr returns the check expression as a string.
+	GetExpr() string
+
+	// NumReferencedColumns returns the number of column references in the check
+	// expression. Note that a column may be referenced multiple times in an
+	// expression; the number returned here is the number of references, not the
+	// number of distinct columns.
+	NumReferencedColumns() int
+
+	// GetReferencedColumnID returns the ID of the column referenced in the check
+	// expression at ordinal `columnOrdinal`.
+	GetReferencedColumnID(columnOrdinal int) descpb.ColumnID
+
+	// CollectReferencedColumnIDs returns the columns referenced in the check
+	// constraint expression in a new TableColSet.
+	CollectReferencedColumnIDs() TableColSet
+
+	// IsNotNullColumnConstraint returns true iff this check constraint is a
+	// NOT NULL on a column.
+	IsNotNullColumnConstraint() bool
+
+	// IsHashShardingConstraint returns true iff this check constraint is
+	// associated with a hash-sharding column in this table.
+	IsHashShardingConstraint() bool
+}
+
+// ForeignKeyConstraint is an interface around a check constraint.
+type ForeignKeyConstraint interface {
+	WithoutIndexConstraint
+
+	// ForeignKeyDesc returns the underlying descriptor protobuf.
+	ForeignKeyDesc() *descpb.ForeignKeyConstraint
+
+	// GetOriginTableID returns the ID of the table at the origin of this foreign
+	// key.
+	GetOriginTableID() descpb.ID
+
+	// NumOriginColumns returns the number of origin columns in the foreign key.
+	NumOriginColumns() int
+
+	// GetOriginColumnID returns the ID of the origin column in the foreign
+	// key at ordinal `columnOrdinal`.
+	GetOriginColumnID(columnOrdinal int) descpb.ColumnID
+
+	// CollectOriginColumnIDs returns the origin columns in the foreign key
+	// in a new TableColSet.
+	CollectOriginColumnIDs() TableColSet
+
+	// GetReferencedTableID returns the ID of the table referenced by this
+	// foreign key.
+	GetReferencedTableID() descpb.ID
+
+	// NumReferencedColumns returns the number of columns referenced by this
+	// foreign key.
+	NumReferencedColumns() int
+
+	// GetReferencedColumnID returns the ID of the column referenced by the
+	// foreign key at ordinal `columnOrdinal`.
+	GetReferencedColumnID(columnOrdinal int) descpb.ColumnID
+
+	// CollectReferencedColumnIDs returns the columns referenced by the foreign
+	// key in a new TableColSet.
+	CollectReferencedColumnIDs() TableColSet
+
+	// OnDelete returns the action to take ON DELETE.
+	OnDelete() catpb.ForeignKeyAction
+
+	// OnUpdate returns the action to take ON UPDATE.
+	OnUpdate() catpb.ForeignKeyAction
+
+	// Match returns the type of algorithm used to match composite keys.
+	Match() descpb.ForeignKeyReference_Match
+}
+
+// UniqueWithoutIndexConstraint is an interface around a unique constraint
+// which is not backed by an index.
+type UniqueWithoutIndexConstraint interface {
+	WithoutIndexConstraint
+	UniqueConstraint
+
+	// UniqueWithoutIndexDesc returns the underlying descriptor protobuf.
+	UniqueWithoutIndexDesc() *descpb.UniqueWithoutIndexConstraint
+
+	// ParentTableID returns the ID of the table this constraint applies to.
+	ParentTableID() descpb.ID
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.

@@ -103,7 +103,12 @@ func (ri *RangeIterator) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPol
 	if !ri.Valid() {
 		panic(ri.Error())
 	}
-	return ri.token.ClosedTimestampPolicy()
+	// TODO(ajwerner): We default the closed timestamp policy here to
+	// LAG_BY_CLUSTER_SETTING, which is pessimistic. When sending batch requests,
+	// we default the policy to LEAD_FOR_GLOBAL_READS. The reasoning for this
+	// difference is not deeply principled. Consider unifying them.
+	const defaultPolicy = roachpb.LAG_BY_CLUSTER_SETTING
+	return ri.token.ClosedTimestampPolicy(defaultPolicy)
 }
 
 // Token returns the eviction token corresponding to the range
@@ -174,7 +179,8 @@ func (ri *RangeIterator) Next(ctx context.Context) {
 
 // Seek positions the iterator at the specified key.
 func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir ScanDirection) {
-	if log.HasSpanOrEvent(ctx) {
+	logEvents := log.HasSpanOrEvent(ctx)
+	if logEvents {
 		rev := ""
 		if scanDir == Descending {
 			rev = " (rev)"
@@ -215,8 +221,8 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			}
 			continue
 		}
-		if log.V(2) {
-			log.Infof(ctx, "key: %s, desc: %s", ri.key, rngInfo.Desc())
+		if logEvents {
+			log.Eventf(ctx, "key: %s, desc: %s", ri.key, rngInfo.Desc())
 		}
 
 		ri.token = rngInfo

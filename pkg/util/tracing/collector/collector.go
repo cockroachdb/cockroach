@@ -28,25 +28,26 @@ import (
 // component that the tracing service relies upon.
 type NodeLiveness interface {
 	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
-	IsLive(roachpb.NodeID) (bool, error)
 }
 
 // TraceCollector can be used to extract recordings from inflight spans for a
 // given traceID, from all nodes of the cluster.
 type TraceCollector struct {
-	tracer       *tracing.Tracer
-	dialer       *nodedialer.Dialer
-	nodeliveness NodeLiveness
+	tracer   *tracing.Tracer
+	getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
+	dialer   *nodedialer.Dialer
 }
 
 // New returns a TraceCollector.
 func New(
-	dialer *nodedialer.Dialer, nodeliveness NodeLiveness, tracer *tracing.Tracer,
+	tracer *tracing.Tracer,
+	getNodes func(ctx context.Context) ([]roachpb.NodeID, error),
+	dialer *nodedialer.Dialer,
 ) *TraceCollector {
 	return &TraceCollector{
-		dialer:       dialer,
-		nodeliveness: nodeliveness,
-		tracer:       tracer,
+		tracer:   tracer,
+		getNodes: getNodes,
+		dialer:   dialer,
 	}
 }
 
@@ -56,15 +57,14 @@ func New(
 type Iterator struct {
 	collector *TraceCollector
 
-	ctx context.Context
-
 	traceID tracingpb.TraceID
 
-	// liveNodes represents all the nodes in the cluster that are considered live,
-	// and will be contacted for inflight trace spans by the iterator.
-	liveNodes []roachpb.NodeID
+	// nodes stores all the nodes in the cluster (either mixed nodes or tenant
+	// servers) that will be contacted for inflight trace spans by the iterator.
+	// When they refer to tenant servers, the NodeIDs are really InstanceIDs.
+	nodes []roachpb.NodeID
 
-	// curNodeIndex maintains the index in liveNodes from which the iterator has
+	// curNodeIndex maintains the index in nodes from which the iterator has
 	// pulled inflight span recordings and buffered them in `recordedSpans` for
 	// consumption via the iterator.
 	curNodeIndex int
@@ -91,9 +91,9 @@ type Iterator struct {
 func (t *TraceCollector) StartIter(
 	ctx context.Context, traceID tracingpb.TraceID,
 ) (*Iterator, error) {
-	tc := &Iterator{ctx: ctx, traceID: traceID, collector: t}
+	tc := &Iterator{traceID: traceID, collector: t}
 	var err error
-	tc.liveNodes, err = nodesFromNodeLiveness(ctx, t.nodeliveness)
+	tc.nodes, err = t.getNodes(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (t *TraceCollector) StartIter(
 	// Calling Next() positions the Iterator in a valid state. It will fetch the
 	// first set of valid (non-nil) inflight span recordings from the list of live
 	// nodes.
-	tc.Next()
+	tc.Next(ctx)
 
 	return tc, nil
 }
@@ -124,7 +124,7 @@ func (i *Iterator) Valid() bool {
 }
 
 // Next sets the Iterator to point to the next value to be returned.
-func (i *Iterator) Next() {
+func (i *Iterator) Next(ctx context.Context) {
 	i.recordingIndex++
 
 	// If recordingIndex is within recordings and there are some buffered
@@ -143,11 +143,11 @@ func (i *Iterator) Next() {
 	// Keep searching for recordings from all live nodes in the cluster.
 	for i.recordings == nil {
 		// No more spans to return from any of the live nodes in the cluster.
-		if !(i.curNodeIndex < len(i.liveNodes)) {
+		if !(i.curNodeIndex < len(i.nodes)) {
 			return
 		}
-		i.curNode = i.liveNodes[i.curNodeIndex]
-		i.recordings, i.iterErr = i.collector.getTraceSpanRecordingsForNode(i.ctx, i.traceID, i.curNode)
+		i.curNode = i.nodes[i.curNodeIndex]
+		i.recordings, i.iterErr = i.collector.getTraceSpanRecordingsForNode(ctx, i.traceID, i.curNode)
 		// TODO(adityamaru): We might want to consider not failing if a single node
 		// fails to return span recordings.
 		if i.iterErr != nil {

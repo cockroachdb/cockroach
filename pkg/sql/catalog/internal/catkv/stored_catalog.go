@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -40,8 +41,17 @@ type StoredCatalog struct {
 	// This map does not store descriptors by name.
 	cache nstree.IDMap
 
+	// comments mirrors the comments in storage.
+	comments map[catalogkeys.CommentKey]string
+
+	// zoneConfigs mirrors the zone configurations in storage.
+	zoneConfigs storedZoneConfigs
+
 	// nameIndex is a subset of cache which allows lookups by name.
 	nameIndex nstree.NameMap
+
+	// drainedNames is a set of keys which can't be looked up in nameIndex.
+	drainedNames map[descpb.NameInfo]struct{}
 
 	// validationLevels persists the levels to which each descriptor in cache
 	// has already been validated.
@@ -83,7 +93,12 @@ type DescriptorValidationModeProvider interface {
 func MakeStoredCatalog(
 	cr CatalogReader, dvmp DescriptorValidationModeProvider, monitor *mon.BytesMonitor,
 ) StoredCatalog {
-	sc := StoredCatalog{CatalogReader: cr, DescriptorValidationModeProvider: dvmp}
+	sc := StoredCatalog{
+		CatalogReader:                    cr,
+		DescriptorValidationModeProvider: dvmp,
+		comments:                         make(map[catalogkeys.CommentKey]string),
+		zoneConfigs:                      makeStoredZoneConfigs(),
+	}
 	if monitor != nil {
 		memAcc := monitor.MakeBoundAccount()
 		sc.memAcc = &memAcc
@@ -105,23 +120,99 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 		cache:                            old.cache,
 		nameIndex:                        old.nameIndex,
 		memAcc:                           old.memAcc,
+		comments:                         make(map[catalogkeys.CommentKey]string),
+		zoneConfigs:                      makeStoredZoneConfigs(),
 	}
 }
 
-// ensure adds a descriptor to the StoredCatalog layer.
-// This should not cause any information loss.
-func (sc *StoredCatalog) ensure(ctx context.Context, desc catalog.Descriptor) error {
-	if _, isMutable := desc.(catalog.MutableDescriptor); isMutable {
-		return errors.AssertionFailedf("attempted to add mutable descriptor to StoredCatalog")
+func (sc *StoredCatalog) ensureAll(ctx context.Context, c nstree.Catalog) error {
+	if err := sc.ensure(ctx, c); err != nil {
+		return err
 	}
-	if sc.UpdateValidationLevel(desc, catalog.NoValidation) && sc.memAcc != nil {
-		if err := sc.memAcc.Grow(ctx, desc.ByteSize()); err != nil {
+
+	if err := sc.ensureComment(ctx, c); err != nil {
+		return err
+	}
+
+	return sc.ensureZoneConfig(ctx, c)
+}
+
+// ensure adds descriptors and namespace entries to the StoredCatalog layer.
+// This should not cause any information loss.
+func (sc *StoredCatalog) ensure(ctx context.Context, c nstree.Catalog) error {
+	if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		if _, isMutable := desc.(catalog.MutableDescriptor); isMutable {
+			return errors.AssertionFailedf("attempted to add mutable descriptor to StoredCatalog")
+		}
+		if sc.UpdateValidationLevel(desc, catalog.NoValidation) && sc.memAcc != nil {
+			if err := sc.memAcc.Grow(ctx, desc.ByteSize()); err != nil {
+				return err
+			}
+		}
+		sc.cache.Upsert(desc)
+		skipNamespace := desc.Dropped() || desc.SkipNamespace()
+		sc.nameIndex.Upsert(desc, skipNamespace)
+		if !skipNamespace {
+			delete(sc.drainedNames, descpb.NameInfo{
+				ParentID:       desc.GetParentID(),
+				ParentSchemaID: desc.GetParentSchemaID(),
+				Name:           desc.GetName(),
+			})
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		if sc.nameIndex.GetByID(e.GetID()) == nil &&
+			sc.nameIndex.GetByName(e.GetParentID(), e.GetParentSchemaID(), e.GetName()) == nil {
+			sc.nameIndex.Upsert(e, false /* skipNameMap */)
+		}
+		delete(sc.drainedNames, descpb.NameInfo{
+			ParentID:       e.GetParentID(),
+			ParentSchemaID: e.GetParentSchemaID(),
+			Name:           e.GetName(),
+		})
+		return nil
+	})
+}
+
+func (sc *StoredCatalog) ensureComment(ctx context.Context, c nstree.Catalog) error {
+	return c.ForEachCommentUnordered(func(key catalogkeys.CommentKey, cmt string) error {
+		if existing, ok := sc.comments[key]; ok {
+			sc.memAcc.Shrink(ctx, int64(len(existing)))
+		}
+		sc.comments[key] = cmt
+		if err := sc.memAcc.Grow(ctx, int64(len(cmt))); err != nil {
 			return err
 		}
+		return nil
+	})
+}
+
+func (sc *StoredCatalog) markZoneConfigInfoSeen(id descpb.ID) {
+	sc.zoneConfigs.markSeen(id)
+}
+
+// ensureZoneConfig see upserts all zone configs into the StoredCatalog.
+func (sc *StoredCatalog) ensureZoneConfig(ctx context.Context, c nstree.Catalog) error {
+	// Zone config should have been loaded together with descriptors in one batch.
+	if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		sc.markZoneConfigInfoSeen(desc.GetID())
+		return nil
+	}); err != nil {
+		return err
 	}
-	sc.cache.Upsert(desc)
-	sc.nameIndex.Upsert(desc, desc.Dropped() || desc.SkipNamespace())
-	return nil
+	return c.ForEachZoneConfigUnordered(func(id descpb.ID, zc catalog.ZoneConfig) error {
+		if existing, _ := sc.zoneConfigs.get(id); existing != nil {
+			sc.memAcc.Shrink(ctx, int64(existing.Size()))
+		}
+		sc.zoneConfigs.upsert(id, zc)
+		if err := sc.memAcc.Grow(ctx, int64(zc.Size())); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // GetCachedByID looks up a descriptor by ID.
@@ -135,35 +226,55 @@ func (sc *StoredCatalog) GetCachedByID(id descpb.ID) catalog.Descriptor {
 	return nil
 }
 
-// getCachedIDByName looks up a descriptor ID by name in the cache.
+// GetCachedComment returns the comment corresponding to the key and information
+// regarding the object's status in the cache. If the object is cached, the
+// returned cached boolean will be true, and the other return values will either
+// have the corresponding comment, or report that it does not exist. If the
+// object is not cached, the other return values will be zero.
+func (sc *StoredCatalog) GetCachedComment(
+	key catalogkeys.CommentKey,
+) (cmt string, hasCmt bool, cached bool) {
+	if sc.cache.Get(descpb.ID(key.ObjectID)) == nil {
+		return "", false, false
+	}
+	if cmt, ok := sc.comments[key]; ok {
+		return cmt, ok, true
+	}
+	return "", false, true
+}
+
+// GetCachedZoneConfig returns the zone config corresponding to the object ID
+// and information regarding the object's status in the cache. If the object is
+// cached, the returned cached boolean will be true, and the returned zone
+// config will either be nil if a config does not exist or non-nil if it exists.
+// If the object is not cached, the returned zone config will be always nil.
+func (sc *StoredCatalog) GetCachedZoneConfig(id descpb.ID) (zc catalog.ZoneConfig, cached bool) {
+	return sc.zoneConfigs.get(id)
+}
+
+// GetCachedIDByName looks up a descriptor ID by name in the cache.
 // Dropped descriptors are not added to the name index, so their IDs can't be
 // looked up by name in the cache.
-func (sc *StoredCatalog) getCachedIDByName(key descpb.NameInfo) descpb.ID {
-	if e := sc.nameIndex.GetByName(key.ParentID, key.ParentSchemaID, key.Name); e != nil {
+func (sc *StoredCatalog) GetCachedIDByName(key catalog.NameKey) descpb.ID {
+	if _, found := sc.drainedNames[descpb.NameInfo{
+		ParentID:       key.GetParentID(),
+		ParentSchemaID: key.GetParentSchemaID(),
+		Name:           key.GetName(),
+	}]; found {
+		return descpb.InvalidID
+	}
+	if e := sc.nameIndex.GetByName(key.GetParentID(), key.GetParentSchemaID(), key.GetName()); e != nil {
 		return e.GetID()
 	}
 	// If we're looking up a schema name, find it in the database if we have it.
-	if key.ParentID != descpb.InvalidID && key.ParentSchemaID == descpb.InvalidID {
-		if parentDesc := sc.GetCachedByID(key.ParentID); parentDesc != nil {
+	if key.GetParentID() != descpb.InvalidID && key.GetParentSchemaID() == descpb.InvalidID {
+		if parentDesc := sc.GetCachedByID(key.GetParentID()); parentDesc != nil {
 			if db, ok := parentDesc.(catalog.DatabaseDescriptor); ok {
-				return db.GetSchemaID(key.Name)
+				return db.GetSchemaID(key.GetName())
 			}
 		}
 	}
 	return descpb.InvalidID
-}
-
-// GetCachedByName is the by-name equivalent of GetCachedByID.
-func (sc *StoredCatalog) GetCachedByName(
-	dbID descpb.ID, schemaID descpb.ID, name string,
-) catalog.Descriptor {
-	key := descpb.NameInfo{ParentID: dbID, ParentSchemaID: schemaID, Name: name}
-	if id := sc.getCachedIDByName(key); id != descpb.InvalidID {
-		if desc := sc.GetCachedByID(id); desc != nil && desc.GetName() == name {
-			return desc
-		}
-	}
-	return nil
 }
 
 // EnsureAllDescriptors ensures that all stored descriptors are cached.
@@ -175,9 +286,15 @@ func (sc *StoredCatalog) EnsureAllDescriptors(ctx context.Context, txn *kv.Txn) 
 	if err != nil {
 		return err
 	}
-	if err = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-		return sc.ensure(ctx, desc)
-	}); err != nil {
+
+	// These ids don't have corresponding descriptors but some of them may have
+	// zone configs. So need to explicitly mark them as seen.
+	sc.markZoneConfigInfoSeen(keys.RootNamespaceID)
+	for _, id := range keys.PseudoTableIDs {
+		sc.markZoneConfigInfoSeen(descpb.ID(id))
+	}
+
+	if err := sc.ensureAll(ctx, c); err != nil {
 		return err
 	}
 	sc.hasAllDescriptors = true
@@ -192,6 +309,9 @@ func (sc *StoredCatalog) EnsureAllDatabaseDescriptors(ctx context.Context, txn *
 	}
 	c, err := sc.ScanNamespaceForDatabases(ctx, txn)
 	if err != nil {
+		return err
+	}
+	if err = sc.ensure(ctx, c); err != nil {
 		return err
 	}
 	var readIDs catalog.DescriptorIDSet
@@ -224,6 +344,9 @@ func (sc *StoredCatalog) GetAllDescriptorNamesForDatabase(
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
+		if err = sc.ensure(ctx, c); err != nil {
+			return nstree.Catalog{}, err
+		}
 		sc.allDescriptorsForDatabase[db.GetID()] = c
 	}
 	return c, nil
@@ -240,6 +363,9 @@ func (sc *StoredCatalog) ensureAllSchemaIDsAndNamesForDatabase(
 	}
 	c, err := sc.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
 	if err != nil {
+		return err
+	}
+	if err = sc.ensure(ctx, c); err != nil {
 		return err
 	}
 	m := make(map[descpb.ID]string)
@@ -294,12 +420,15 @@ func (sc *StoredCatalog) LookupDescriptorID(
 ) (descpb.ID, error) {
 	// Look for the descriptor ID in memory first.
 	key := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
-	if id := sc.getCachedIDByName(key); id != descpb.InvalidID {
+	if id := sc.GetCachedIDByName(&key); id != descpb.InvalidID {
 		return id, nil
 	}
 	// Fall back to querying the namespace table.
 	c, err := sc.GetNamespaceEntries(ctx, txn, []descpb.NameInfo{key})
 	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if err = sc.ensure(ctx, c); err != nil {
 		return descpb.InvalidID, err
 	}
 	if ne := c.LookupNamespaceEntry(key); ne != nil {
@@ -308,9 +437,10 @@ func (sc *StoredCatalog) LookupDescriptorID(
 	return descpb.InvalidID, nil
 }
 
-// EnsureFromStorageByIDs actually reads a batch of descriptors from storage
-// and adds them to the cache. It assumes (without checking) that they are not
-// already present in the cache.
+// EnsureFromStorageByIDs actually reads a batch of descriptors from storage and
+// adds them to the cache. It assumes (without checking) that they are not
+// already present in the cache. It also caches descriptor metadata (e.g.
+// comment and zone config) which is read together within a same kv batch.
 func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -324,9 +454,36 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	if err != nil {
 		return err
 	}
-	return c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-		return sc.ensure(ctx, desc)
+
+	if err := sc.ensureAll(ctx, c); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// EnsureZoneConfigFromStorage makes sure that zone config information is loaded
+// into storage layer cache. It's ok to load zone configs without descriptors,
+// and it's ok that loading descriptors can overwrite existing loaded zone
+// configs.
+func (sc *StoredCatalog) EnsureZoneConfigFromStorage(
+	ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
+) error {
+	if ids.Empty() {
+		return nil
+	}
+
+	c, err := sc.GetZoneConfigs(ctx, txn, ids)
+	if err != nil {
+		return err
+	}
+	ids.ForEach(func(id descpb.ID) {
+		sc.markZoneConfigInfoSeen(id)
 	})
+	if err := sc.ensureZoneConfig(ctx, c); err != nil {
+		return err
+	}
+	return nil
 }
 
 // IterateCachedByID applies fn to all known descriptors in the cache in
@@ -343,7 +500,11 @@ func (sc *StoredCatalog) IterateDatabasesByName(
 	fn func(desc catalog.DatabaseDescriptor) error,
 ) error {
 	return sc.nameIndex.IterateDatabasesByName(func(entry catalog.NameEntry) error {
-		db, err := catalog.AsDatabaseDescriptor(entry.(catalog.Descriptor))
+		id := sc.GetCachedIDByName(entry)
+		if id == descpb.InvalidID {
+			return nil
+		}
+		db, err := catalog.AsDatabaseDescriptor(sc.GetCachedByID(id))
 		if err != nil {
 			return err
 		}
@@ -376,11 +537,22 @@ func (sc *StoredCatalog) UpdateValidationLevel(
 	return false
 }
 
-// RemoveFromNameIndex removes a descriptor from the name index.
-// This needs to be done if the descriptor is to be promoted to the uncommitted
+// RemoveFromNameIndex removes an entry from the name index.
+// This needs to be done if a descriptor is to be promoted to the uncommitted
 // layer which shadows this one in the descs.Collection.
-func (sc *StoredCatalog) RemoveFromNameIndex(desc catalog.Descriptor) {
-	sc.nameIndex.Remove(desc.GetID())
+func (sc *StoredCatalog) RemoveFromNameIndex(id catid.DescID) {
+	e := sc.nameIndex.GetByID(id)
+	if e == nil {
+		return
+	}
+	if sc.drainedNames == nil {
+		sc.drainedNames = make(map[descpb.NameInfo]struct{})
+	}
+	sc.drainedNames[descpb.NameInfo{
+		ParentID:       e.GetParentID(),
+		ParentSchemaID: e.GetParentSchemaID(),
+		Name:           e.GetName(),
+	}] = struct{}{}
 }
 
 // NewValidationDereferencer returns this StoredCatalog object wrapped in a
@@ -429,13 +601,11 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 		if err != nil {
 			return nil, err
 		}
-		// Add all descriptors to the cache BEFORE validating them.
-		err = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-			return c.sc.ensure(ctx, desc)
-		})
-		if err != nil {
+
+		if err := c.sc.ensureAll(ctx, read); err != nil {
 			return nil, err
 		}
+
 		for j, id := range fallbackReqs {
 			desc := read.LookupDescriptorEntry(id)
 			if desc == nil {
@@ -463,6 +633,9 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptorIDs(
 	if err != nil {
 		return nil, err
 	}
+	if err = c.sc.ensure(ctx, read); err != nil {
+		return nil, err
+	}
 	ret := make([]descpb.ID, len(reqs))
 	for i, nameInfo := range reqs {
 		if ne := read.LookupNamespaceEntry(nameInfo); ne != nil {
@@ -470,4 +643,42 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptorIDs(
 		}
 	}
 	return ret, nil
+}
+
+type storedZoneConfigs struct {
+	zcs     map[descpb.ID]catalog.ZoneConfig
+	seenIDs catalog.DescriptorIDSet
+}
+
+func makeStoredZoneConfigs() storedZoneConfigs {
+	return storedZoneConfigs{
+		zcs: make(map[descpb.ID]catalog.ZoneConfig),
+	}
+}
+
+// upsert needs to be called after an id has been marked as seen with
+// storedZoneConfigs.markSeen, otherwise the upsert would be a no-op. It's
+// possible that a table is dropped, but its zone config stays in system.zones
+// before it's gc'ed. In this case, we should just ignore the zone config since
+// we won't see the descriptor anyway. Maybe it's fine to put the zone config in
+// cache anyway, but it's good to keep data sane.
+func (szc *storedZoneConfigs) upsert(id descpb.ID, zc catalog.ZoneConfig) {
+	if szc.seenIDs.Contains(id) {
+		szc.zcs[id] = zc
+	}
+}
+
+// markSeen should be called before upsert is called to put a zone config in
+// cache.
+func (szc *storedZoneConfigs) markSeen(id descpb.ID) {
+	szc.seenIDs.Add(id)
+}
+
+// get returns a boolean indicating the zone config information is cached or
+// not, together with a zone config (which can be nil) when it's cached.
+func (szc *storedZoneConfigs) get(id descpb.ID) (zc catalog.ZoneConfig, cached bool) {
+	if szc.seenIDs.Contains(id) {
+		return szc.zcs[id], true
+	}
+	return nil, false
 }

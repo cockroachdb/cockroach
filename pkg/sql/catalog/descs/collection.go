@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
@@ -28,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -72,6 +76,10 @@ type Collection struct {
 	// These descriptors are local to this Collection and their state is thus
 	// not visible to other transactions.
 	uncommitted uncommittedDescriptors
+
+	uncommittedComments uncommittedComments
+
+	uncommittedZoneConfigs uncommittedZoneConfigs
 
 	// A collection of descriptors which mirrors the descriptors committed to
 	// storage. This acts as a cache by accumulating every descriptor ever read
@@ -163,6 +171,8 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommitted.reset(ctx)
+	tc.uncommittedComments.reset()
+	tc.uncommittedZoneConfigs.reset()
 	tc.stored.Reset(ctx)
 	tc.ResetSyntheticDescriptors()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
@@ -229,7 +239,7 @@ func (tc *Collection) AddUncommittedDescriptor(
 			"cannot add uncommitted %s %q (%d) when a synthetic descriptor with the same name exists",
 			desc.DescriptorType(), desc.GetName(), desc.GetID())
 	}
-	tc.stored.RemoveFromNameIndex(desc)
+	tc.stored.RemoveFromNameIndex(desc.GetID())
 	return tc.uncommitted.upsert(ctx, desc)
 }
 
@@ -238,6 +248,9 @@ func (tc *Collection) AddUncommittedDescriptor(
 func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
+	if desc.GetID() == descpb.InvalidID {
+		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
+	}
 	desc.MaybeIncrementVersion()
 	if !tc.skipValidationOnWrite && tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
@@ -264,9 +277,224 @@ func (tc *Collection) WriteDescToBatch(
 	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), desc.GetID())
 	proto := desc.DescriptorProto()
 	if kvTrace {
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
+		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, proto)
 	}
 	b.CPut(descKey, proto, expected)
+	return nil
+}
+
+// DeleteDescToBatch adds a delete from system.descriptor to the batch.
+func (tc *Collection) DeleteDescToBatch(
+	ctx context.Context, kvTrace bool, id descpb.ID, b *kv.Batch,
+) error {
+	if id == descpb.InvalidID {
+		return errors.AssertionFailedf("cannot delete descriptor with an empty ID: %v", id)
+	}
+	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), id)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Del %s", descKey)
+	}
+	b.Del(descKey)
+	tc.NotifyOfDeletedDescriptor(id)
+	return nil
+}
+
+// InsertNamespaceEntryToBatch adds an insertion into system.namespace to the
+// batch.
+func (tc *Collection) InsertNamespaceEntryToBatch(
+	ctx context.Context, kvTrace bool, e catalog.NameEntry, b *kv.Batch,
+) error {
+	if cachedID := tc.stored.GetCachedIDByName(e); cachedID != descpb.InvalidID {
+		tc.stored.RemoveFromNameIndex(cachedID)
+	}
+	tc.stored.RemoveFromNameIndex(e.GetID())
+	if e.GetName() == "" || e.GetID() == descpb.InvalidID {
+		return errors.AssertionFailedf(
+			"cannot insert namespace entry (%d, %d, %q) -> %d with an empty name or ID",
+			e.GetParentID(), e.GetParentSchemaID(), e.GetName(), e.GetID(),
+		)
+	}
+	nameKey := catalogkeys.EncodeNameKey(tc.codec(), e)
+	if kvTrace {
+		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, e.GetID())
+	}
+	b.CPut(nameKey, e.GetID(), nil /* expValue */)
+	return nil
+}
+
+// UpsertNamespaceEntryToBatch adds an upsert into system.namespace to the
+// batch.
+func (tc *Collection) UpsertNamespaceEntryToBatch(
+	ctx context.Context, kvTrace bool, e catalog.NameEntry, b *kv.Batch,
+) error {
+	if cachedID := tc.stored.GetCachedIDByName(e); cachedID != descpb.InvalidID {
+		tc.stored.RemoveFromNameIndex(cachedID)
+	}
+	tc.stored.RemoveFromNameIndex(e.GetID())
+	if e.GetName() == "" || e.GetID() == descpb.InvalidID {
+		return errors.AssertionFailedf(
+			"cannot upsert namespace entry (%d, %d, %q) -> %d with an empty name or ID",
+			e.GetParentID(), e.GetParentSchemaID(), e.GetName(), e.GetID(),
+		)
+	}
+	nameKey := catalogkeys.EncodeNameKey(tc.codec(), e)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %d", nameKey, e.GetID())
+	}
+	b.Put(nameKey, e.GetID())
+	return nil
+}
+
+// DeleteNamespaceEntryToBatch adds a deletion from system.namespace to the
+// batch.
+func (tc *Collection) DeleteNamespaceEntryToBatch(
+	ctx context.Context, kvTrace bool, k catalog.NameKey, b *kv.Batch,
+) error {
+	if cachedID := tc.stored.GetCachedIDByName(k); cachedID != descpb.InvalidID {
+		tc.stored.RemoveFromNameIndex(cachedID)
+	}
+	nameKey := catalogkeys.EncodeNameKey(tc.codec(), k)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Del %s", nameKey)
+	}
+	b.Del(nameKey)
+	return nil
+}
+
+// WriteCommentToBatch adds the comment changes to uncommitted layer and writes
+// to the kv batch.
+func (tc *Collection) WriteCommentToBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, key catalogkeys.CommentKey, cmt string,
+) error {
+	cmtWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.CommentsTable)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(key.CommentType)),
+		tree.NewDInt(tree.DInt(key.ObjectID)),
+		tree.NewDInt(tree.DInt(key.SubID)),
+		tree.NewDString(cmt),
+	}
+
+	var expValues []tree.Datum
+	if oldCmt, found := tc.GetComment(key); found {
+		expValues = []tree.Datum{
+			tree.NewDInt(tree.DInt(key.CommentType)),
+			tree.NewDInt(tree.DInt(key.ObjectID)),
+			tree.NewDInt(tree.DInt(key.SubID)),
+			tree.NewDString(oldCmt),
+		}
+	}
+
+	var err error
+	if expValues == nil {
+		err = cmtWriter.Insert(ctx, b, kvTrace, values...)
+	} else {
+		err = cmtWriter.Update(ctx, b, kvTrace, values, expValues)
+	}
+	if err != nil {
+		return err
+	}
+
+	tc.AddUncommittedComment(key, cmt)
+	return nil
+}
+
+// DeleteCommentInBatch deletes a comment with the given (objID, subID, cmtType) key in
+// the same batch and marks it as deleted
+func (tc *Collection) DeleteCommentInBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, key catalogkeys.CommentKey,
+) error {
+	cmtWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.CommentsTable)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(key.CommentType)),
+		tree.NewDInt(tree.DInt(key.ObjectID)),
+		tree.NewDInt(tree.DInt(key.SubID)),
+		// kv delete only care about keys, so it's fine to just use an empty string
+		// for comment here since it's not part of any index.
+		tree.NewDString(""),
+	}
+
+	if err := cmtWriter.Delete(ctx, b, kvTrace, values...); err != nil {
+		return err
+	}
+
+	tc.MarkUncommittedCommentDeleted(key)
+	return nil
+}
+
+// DeleteTableComments deletes all comment on a table.
+func (tc *Collection) DeleteTableComments(
+	ctx context.Context, kvTrace bool, b *kv.Batch, tblID descpb.ID,
+) error {
+	for _, t := range catalogkeys.AllTableCommentTypes {
+		cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(tc.codec(), t, tblID)
+		b.DelRange(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		if kvTrace {
+			log.VEventf(ctx, 2, "DelRange %s", cmtKeyPrefix)
+		}
+	}
+	tc.MarkUncommittedCommentDeletedForTable(tblID)
+	return nil
+}
+
+// WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
+// writes to the kv batch.
+func (tc *Collection) WriteZoneConfigToBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, descID descpb.ID, zc catalog.ZoneConfig,
+) error {
+	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable, 0 /* SkippedColumnFamilyIDs*/)
+	var val roachpb.Value
+	if err := val.SetProto(zc.ZoneConfigProto()); err != nil {
+		return err
+	}
+	valBytes, err := val.GetBytes()
+	if err != nil {
+		return err
+	}
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(descID)),
+		tree.NewDBytes(tree.DBytes(valBytes)),
+	}
+
+	var expValues []tree.Datum
+	if zc.GetRawBytesInStorage() != nil {
+		expValues = []tree.Datum{
+			tree.NewDInt(tree.DInt(descID)),
+			tree.NewDBytes(tree.DBytes(zc.GetRawBytesInStorage())),
+		}
+	}
+
+	if expValues == nil {
+		err = zcWriter.Insert(ctx, b, kvTrace, values...)
+	} else {
+		err = zcWriter.Update(ctx, b, kvTrace, values, expValues)
+	}
+	if err != nil {
+		return err
+	}
+
+	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
+		return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfigProto())
+	}
+	return nil
+}
+
+// DeleteZoneConfigInBatch deletes zone config of the table.
+func (tc *Collection) DeleteZoneConfigInBatch(
+	ctx context.Context, kvTrace bool, b *kv.Batch, descID descpb.ID,
+) error {
+	// Check if it's actually deleting something.
+	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(descID)),
+		tree.NewDBytes(""),
+	}
+	if err := zcWriter.Delete(ctx, b, kvTrace, values...); err != nil {
+		return err
+	}
+
+	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
+		tc.MarkUncommittedZoneConfigDeleted(descID)
+	}
 	return nil
 }
 
@@ -279,6 +507,119 @@ func (tc *Collection) WriteDesc(
 		return err
 	}
 	return txn.Run(ctx, b)
+}
+
+// LookupDatabaseID returns the descriptor ID assigned to a database name.
+func (tc *Collection) LookupDatabaseID(
+	ctx context.Context, txn *kv.Txn, dbName string,
+) (descpb.ID, error) {
+	// First look up in-memory descriptors in collection,
+	// except for leased descriptors.
+	dbInMemory, err := func() (catalog.Descriptor, error) {
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidStorage:   true,
+			IncludeOffline: true,
+		}
+		return tc.getDescriptorByName(
+			ctx, txn, nil /* db */, nil /* sc */, dbName, flags, catalog.Database,
+		)
+	}()
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
+		// Swallow these errors to fall back to storage lookup.
+		err = nil
+	}
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if dbInMemory != nil {
+		return dbInMemory.GetID(), nil
+	}
+	// Look up database ID in storage if nothing was found in memory.
+	return tc.stored.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
+}
+
+// LookupSchemaID returns the descriptor ID assigned to a schema name.
+func (tc *Collection) LookupSchemaID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
+) (descpb.ID, error) {
+	// First look up in-memory descriptors in collection,
+	// except for leased descriptors.
+	scInMemory, err := func() (catalog.Descriptor, error) {
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidStorage:   true,
+			IncludeOffline: true,
+		}
+		var parentDescs [1]catalog.Descriptor
+		if err := getDescriptorsByID(ctx, tc, txn, flags, parentDescs[:], dbID); err != nil {
+			return nil, err
+		}
+		db, err := catalog.AsDatabaseDescriptor(parentDescs[0])
+		if err != nil {
+			return nil, err
+		}
+		return tc.getDescriptorByName(
+			ctx, txn, db, nil /* sc */, schemaName, flags, catalog.Schema,
+		)
+	}()
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
+		// Swallow these errors to fall back to storage lookup.
+		err = nil
+	}
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if scInMemory != nil {
+		return scInMemory.GetID(), nil
+	}
+	// Look up schema ID in storage if nothing was found in memory.
+	return tc.stored.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schemaName)
+}
+
+// LookupObjectID returns the descriptor ID assigned to an object name.
+func (tc *Collection) LookupObjectID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaID descpb.ID, objectName string,
+) (descpb.ID, error) {
+	// First look up in-memory descriptors in collection,
+	// except for leased descriptors.
+	objInMemory, err := func() (catalog.Descriptor, error) {
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			AvoidStorage:   true,
+			IncludeOffline: true,
+		}
+		var parentDescs [2]catalog.Descriptor
+		if err := getDescriptorsByID(ctx, tc, txn, flags, parentDescs[:], dbID, schemaID); err != nil {
+			return nil, err
+		}
+		db, err := catalog.AsDatabaseDescriptor(parentDescs[0])
+		if err != nil {
+			return nil, err
+		}
+		sc, err := catalog.AsSchemaDescriptor(parentDescs[1])
+		if err != nil {
+			return nil, err
+		}
+		return tc.getDescriptorByName(
+			ctx, txn, db, sc, objectName, flags, catalog.Any,
+		)
+	}()
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
+		// Swallow these errors to fall back to storage lookup.
+		err = nil
+	}
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if objInMemory != nil {
+		return objInMemory.GetID(), nil
+	}
+	// Look up ID in storage if nothing was found in memory.
+	return tc.stored.LookupDescriptorID(ctx, txn, dbID, schemaID, objectName)
 }
 
 // GetOriginalPreviousIDVersionsForUncommitted returns all the IDVersion
@@ -641,6 +982,42 @@ func (tc *Collection) SetDescriptorSessionDataProvider(dsdp DescriptorSessionDat
 	tc.stored.DescriptorValidationModeProvider = dsdp
 	tc.temporarySchemaProvider = dsdp
 	tc.validationModeProvider = dsdp
+}
+
+// GetDatabaseComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetDatabaseComment(dbID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(dbID), 0, catalogkeys.DatabaseCommentType))
+}
+
+// GetSchemaComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetSchemaComment(schemaID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(schemaID), 0, catalogkeys.SchemaCommentType))
+}
+
+// GetTableComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetTableComment(tableID descpb.ID) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), 0, catalogkeys.TableCommentType))
+}
+
+// GetColumnComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetColumnComment(
+	tableID descpb.ID, pgAttrNum catid.PGAttributeNum,
+) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(pgAttrNum), catalogkeys.ColumnCommentType))
+}
+
+// GetIndexComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetIndexComment(
+	tableID descpb.ID, indexID catid.IndexID,
+) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(indexID), catalogkeys.IndexCommentType))
+}
+
+// GetConstraintComment implements the scdecomp.CommentGetter interface.
+func (tc *Collection) GetConstraintComment(
+	tableID descpb.ID, constraintID catid.ConstraintID,
+) (comment string, ok bool) {
+	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(constraintID), catalogkeys.ConstraintCommentType))
 }
 
 // Direct exports the catkv.Direct interface.

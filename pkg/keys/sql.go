@@ -121,6 +121,12 @@ func (e sqlEncoder) TenantPrefix() roachpb.Key {
 	return *e.buf
 }
 
+// TenantPrefix returns the key prefix used for the tenants's data.
+func (e sqlEncoder) TenantSpan() roachpb.Span {
+	key := *e.buf
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+}
+
 // TablePrefix returns the key prefix used for the table's data.
 func (e sqlEncoder) TablePrefix(tableID uint32) roachpb.Key {
 	k := e.TenantPrefix()
@@ -167,12 +173,6 @@ func (e sqlEncoder) SequenceKey(tableID uint32) roachpb.Key {
 // migration details.
 func (e sqlEncoder) StartupMigrationKeyPrefix() roachpb.Key {
 	return append(e.TenantPrefix(), StartupMigrationPrefix...)
-}
-
-// StartupMigrationLeaseKey returns the key that nodes must take a lease on in
-// order to run startup migration upgrades on the cluster.
-func (e sqlEncoder) StartupMigrationLeaseKey() roachpb.Key {
-	return append(e.TenantPrefix(), StartupMigrationLease...)
 }
 
 // unexpected to avoid colliding with sqlEncoder.tenantPrefix.
@@ -259,6 +259,22 @@ func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, e
 		return roachpb.TenantID{}, err
 	}
 	return roachpb.MustMakeTenantID(id), nil
+}
+
+// DecodeZoneConfigMetadataID decodes a descriptor id from zones key.
+func (d sqlDecoder) DecodeZoneConfigMetadataID(key roachpb.Key) ([]byte, uint32, error) {
+	remaining, tableID, indexID, err := d.DecodeIndexPrefix(key)
+	if err != nil {
+		return nil, 0, err
+	}
+	if tableID != ZonesTableID || indexID != ZonesTablePrimaryIndexID {
+		return nil, 0, errors.Errorf("key is not a zones table entry: %v", key)
+	}
+	remaining, id, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return nil, 0, err
+	}
+	return remaining, uint32(id), nil
 }
 
 // RewriteSpanToTenantPrefix updates the passed Span, potentially in-place, to

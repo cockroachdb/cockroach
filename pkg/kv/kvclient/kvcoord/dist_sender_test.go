@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -255,6 +256,8 @@ func TestSendRPCOrder(t *testing.T) {
 		5: {roachpb.Tier{Key: "country", Value: "us"}, roachpb.Tier{Key: "region", Value: "east"}, roachpb.Tier{Key: "city", Value: "mia"}},
 	}
 
+	type replicaTypeMap = map[roachpb.NodeID]roachpb.ReplicaType
+
 	// Gets filled below to identify the replica by its address.
 	makeVerifier := func(expNodes []roachpb.NodeID) func(SendOptions, []roachpb.ReplicaDescriptor) error {
 		return func(o SendOptions, replicas []roachpb.ReplicaDescriptor) error {
@@ -282,6 +285,9 @@ func TestSendRPCOrder(t *testing.T) {
 		tiers         []roachpb.Tier
 		leaseHolder   int32            // 0 for not caching a lease holder.
 		expReplica    []roachpb.NodeID // 0 elements ignored
+
+		// replicaTypes, if populated, overrides the types of replicas.
+		replicaTypes replicaTypeMap
 	}{
 		{
 			name:          "route to leaseholder, without matching attributes",
@@ -304,6 +310,18 @@ func TestSendRPCOrder(t *testing.T) {
 			leaseHolder:   2,
 			// Order leaseholder first.
 			expReplica: []roachpb.NodeID{2, 0, 0, 0, 0},
+		},
+		{
+			name:          "route to leaseholder, without matching attributes, non-voters",
+			routingPolicy: roachpb.RoutingPolicy_LEASEHOLDER,
+			tiers:         []roachpb.Tier{},
+			leaseHolder:   2,
+			// Order leaseholder first, omits the non-voters.
+			expReplica: []roachpb.NodeID{2, 0, 0},
+			replicaTypes: replicaTypeMap{
+				4: roachpb.NON_VOTER,
+				5: roachpb.NON_VOTER,
+			},
 		},
 		{
 			name:          "route to leaseholder, with matching attributes, known leaseholder",
@@ -343,6 +361,33 @@ func TestSendRPCOrder(t *testing.T) {
 			// Order nearest first.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
+		{
+			name:          "route to leaseholder, no known leaseholder, uses non-voters",
+			routingPolicy: roachpb.RoutingPolicy_LEASEHOLDER,
+			tiers:         nodeTiers[5],
+			// Order nearest first, includes the non-voter despite the leaseholder
+			// routing policy.
+			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
+			replicaTypes: replicaTypeMap{
+				5: roachpb.NON_VOTER,
+			},
+		},
+	}
+
+	// We want to test logic that relies on behavior of CanSendToFollower.
+	// Given we don't want to link that code here, we inject behavior that
+	// says that we can send to a follower if the closed timestamp policy
+	// is LEAD_FOR_GLOBAL_READS.
+	old := CanSendToFollower
+	defer func() { CanSendToFollower = old }()
+	CanSendToFollower = func(
+		_ uuid.UUID,
+		_ *cluster.Settings,
+		_ *hlc.Clock,
+		p roachpb.RangeClosedTimestampPolicy,
+		ba *roachpb.BatchRequest,
+	) bool {
+		return !ba.IsLocking() && p == roachpb.LEAD_FOR_GLOBAL_READS
 	}
 
 	descriptor := roachpb.RangeDescriptor{
@@ -382,6 +427,21 @@ func TestSendRPCOrder(t *testing.T) {
 			})(opts, dialer, replicas)
 	}
 
+	// applyReplicaTypeMap will remap the type of replicas according to m.
+	applyReplicaTypeMap := func(desc roachpb.RangeDescriptor, m replicaTypeMap) roachpb.RangeDescriptor {
+		if len(m) == 0 {
+			return desc
+		}
+		desc = *protoutil.Clone(&desc).(*roachpb.RangeDescriptor)
+		for i := range desc.InternalReplicas {
+			ir := &desc.InternalReplicas[i]
+			if typ, ok := m[ir.NodeID]; ok {
+				ir.Type = typ
+			}
+		}
+		return desc
+	}
+
 	cfg := DistSenderConfig{
 		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
@@ -410,10 +470,15 @@ func TestSendRPCOrder(t *testing.T) {
 			if tc.leaseHolder != 0 {
 				lease.Replica = descriptor.InternalReplicas[tc.leaseHolder-1]
 			}
-			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
-				Desc:  descriptor,
+
+			ri := roachpb.RangeInfo{
+				Desc:  applyReplicaTypeMap(descriptor, tc.replicaTypes),
 				Lease: lease,
-			})
+			}
+			if tc.leaseHolder == 0 {
+				ri.ClosedTimestampPolicy = rangecache.UnknownClosedTimestampPolicy
+			}
+			ds.rangeCache.Insert(ctx, ri)
 
 			// Issue the request.
 			header := roachpb.Header{
@@ -4286,9 +4351,27 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sendErrors := int32(0)
-	var queriedMetaKeys sync.Map
+	// makeBarrier will make a function which will return once N goroutines
+	// have called it simultaneously. The first time these goroutines call
+	// this function, it will return false. After it has returned false,
+	// subsequent calls will return true.
+	makeBarrier := func(n int) func() (previouslyJoined bool) {
+		wg, done := sync.WaitGroup{}, atomic.Bool{}
+		wg.Add(n)
+		return func() bool {
+			if done.Load() {
+				return true
+			}
+			wg.Done()
+			wg.Wait()
+			done.Store(true)
+			return false
+		}
+	}
 
+	waitForInitialPuts := makeBarrier(2)
+	waitForInitialMeta2Scans := makeBarrier(2)
+	var queriedMetaKeys sync.Map
 	var ds *DistSender
 	testFn := func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
@@ -4300,7 +4383,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		if !kv.TestingIsRangeLookup(ba) {
 			// Return a sendError so DistSender retries the first range lookup in the
 			// user key-space for both batches.
-			if atomic.AddInt32(&sendErrors, 1) <= 2 {
+			if previouslyWaited := waitForInitialPuts(); !previouslyWaited {
 				return nil, newSendError("boom")
 			}
 			return br, nil
@@ -4319,6 +4402,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			br.Add(r)
 			return br, nil
 		}
+		waitForInitialMeta2Scans()
 		// Querying meta2 range.
 		br = &roachpb.BatchResponse{}
 		r := &roachpb.ScanResponse{}

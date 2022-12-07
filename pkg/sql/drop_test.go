@@ -234,7 +234,7 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	dKey := catalogkeys.MakeDatabaseNameKey(keys.SystemSQLCodec, "t")
+	dKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, descpb.NameInfo{Name: "t"})
 	r, err := kvDB.Get(ctx, dKey)
 	if err != nil {
 		t.Fatal(err)
@@ -598,7 +598,11 @@ func TestDropTable(t *testing.T) {
 	parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, "kv")
+	nameKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{
+		ParentID:       parentDatabaseID,
+		ParentSchemaID: parentSchemaID,
+		Name:           "kv",
+	})
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -642,7 +646,7 @@ func TestDropTable(t *testing.T) {
 
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1,
 		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:      username.RootUserName(),
 			Description:   `DROP TABLE t.public.kv`,
@@ -702,7 +706,11 @@ func TestDropTableDeleteData(t *testing.T) {
 		parentDatabaseID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
 		parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 
-		nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, tableName)
+		nameKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{
+			ParentID:       parentDatabaseID,
+			ParentSchemaID: parentSchemaID,
+			Name:           tableName,
+		})
 		gr, err := kvDB.Get(ctx, nameKey)
 		if err != nil {
 			t.Fatal(err)
@@ -1035,8 +1043,13 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 					TestingRequestFilter: rf.filter,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					BeforeExecute: func(ctx context.Context, stmt string) {
+					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 						if strings.Contains(stmt, "DROP INDEX") {
+							// Force release all cached descriptors to force a kv fetch with
+							// the table ID so that we can guarantee the DynamicRequestFilter
+							// would see such relevant request and inject the error we want at
+							// the right time.
+							descriptors.ReleaseAll(ctx)
 							close(dropIndexPlanningDoneCh)
 						}
 					},

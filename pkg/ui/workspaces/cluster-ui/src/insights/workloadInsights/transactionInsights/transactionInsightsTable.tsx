@@ -15,7 +15,7 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import { DATE_FORMAT, Duration } from "src/util";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
 import { InsightExecEnum, MergedTxnInsightEvent } from "src/insights";
 import {
   InsightCell,
@@ -79,7 +79,9 @@ export function makeTransactionInsightsColumns(
     {
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
-      cell: item => item.startTime?.format(DATE_FORMAT) ?? "N/A",
+      cell: item =>
+        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT) ??
+        "N/A",
       sort: item => item.startTime?.unix() || 0,
     },
     {

@@ -346,6 +346,8 @@ type DistSender struct {
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
 
+	onRangeSpanningNonTxnalBatch func(ba *roachpb.BatchRequest) *roachpb.Error
+
 	// locality is the description of the topography of the server on which the
 	// DistSender is running. It is used to estimate the latency to other nodes
 	// in the absence of a latency function.
@@ -499,6 +501,11 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	} else {
 		ds.latencyFunc = ds.rpcContext.RemoteClocks.Latency
 	}
+
+	if cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch != nil {
+		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
+	}
+
 	return ds
 }
 
@@ -1256,8 +1263,23 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
 	// a transaction for consistency. The case where we don't need to re-run is
 	// if the read consistency is not required.
-	if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
-		return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+	if ba.Txn == nil {
+		if ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
+			// NB: this check isn't quite right. We enter this if there's *any* transactional
+			// request here, but there could be a mix (for example a DeleteRangeUsingTombstone
+			// and a Put). DeleteRangeUsingTombstone gets split non-transactionally across
+			// batches, so that is probably what we would want for the mixed batch as well.
+			//
+			// Revisit if this ever becomes something we actually want to do, for now such
+			// batches will fail (re-wrapped in txn and then fail because some requests
+			// don't support txns).
+			return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+		}
+		if fn := ds.onRangeSpanningNonTxnalBatch; fn != nil {
+			if pErr := fn(ba); pErr != nil {
+				return nil, pErr
+			}
+		}
 	}
 	// If the batch contains a non-parallel commit EndTxn and spans ranges then
 	// we want the caller to come again with the EndTxn in a separate
@@ -1382,7 +1404,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		responseChs = append(responseChs, responseCh)
 
 		// Truncate the request to range descriptor.
-		curRangeRS, err := rs.Intersect(ri.Token().Desc())
+		curRangeRS, err := rs.Intersect(ri.Token().Desc().RSpan())
 		if err != nil {
 			responseCh <- response{pErr: roachpb.NewError(err)}
 			return
@@ -1632,7 +1654,7 @@ func (ds *DistSender) sendPartialBatch(
 			// batch, so that we know that the response to it matches the positions
 			// into our batch (using the full batch here would give a potentially
 			// larger response slice with unknown mapping to our truncated reply).
-			intersection, err := rs.Intersect(routingTok.Desc())
+			intersection, err := rs.Intersect(routingTok.Desc().RSpan())
 			if err != nil {
 				return response{pErr: roachpb.NewError(err)}
 			}
@@ -1929,6 +1951,13 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	return newSendError(fmt.Sprintf("sending to all replicas failed; last error: %s", lastAttemptErr))
 }
 
+// defaultSendClosedTimestampPolicy is used when the closed timestamp policy
+// is not known by the range cache. This choice prevents sending batch requests
+// to only voters when a perfectly good non-voter may exist in the local
+// region. It's defined as a constant here to ensure that we use the same
+// value when populating the batch header.
+const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
+
 // sendToReplicas sends a batch to the replicas of a range. Replicas are tried one
 // at a time (generally the leaseholder first). The result of this call is
 // either a BatchResponse or an error. In the former case, the BatchResponse
@@ -1958,14 +1987,20 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *roachpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
+
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
+	// If we don't know the closed timestamp policy, we ought to optimistically
+	// assume that it's LEAD_FOR_GLOBAL_READS, because if it is, and we assumed
+	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == roachpb.RoutingPolicy_LEASEHOLDER &&
-		CanSendToFollower(ds.logicalClusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba) {
+		CanSendToFollower(
+			ds.logicalClusterID.Get(), ds.st, ds.clock,
+			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
+		) {
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
-
 	// Filter the replicas to only those that are relevant to the routing policy.
 	// NB: When changing leaseholder policy constraint_status_report should be
 	// updated appropriately.
@@ -2092,14 +2127,16 @@ func (ds *DistSender) sendToReplicas(
 			// is correct, we want the serve to return an update, at which point
 			// the cached entry will no longer be "speculative".
 			DescriptorGeneration: routing.Desc().Generation,
-			// The LeaseSequence will be 0 if the cache doen't have lease info,
+			// The LeaseSequence will be 0 if the cache doesn't have lease info,
 			// or has a speculative lease. Like above, this asks the server to
 			// return an update.
 			LeaseSequence: routing.LeaseSeq(),
 			// The ClosedTimestampPolicy will be the default if the cache
 			// doesn't have info. Like above, this asks the server to return an
 			// update.
-			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(),
+			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(
+				defaultSendClosedTimestampPolicy,
+			),
 
 			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested,
 		}

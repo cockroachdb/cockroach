@@ -482,6 +482,10 @@ func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 	return nil, errors.Errorf("unable to look up descriptor for n%d", id)
 }
 
+func (s mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
+	return nil, errors.Errorf("unable to look up descriptor for store ID %d", id)
+}
+
 // TestOracle tests the Oracle exposed by this package.
 func TestOracle(t *testing.T) {
 	defer leaktest.AfterTest(t)()

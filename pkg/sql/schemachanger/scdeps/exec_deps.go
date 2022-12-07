@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -35,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -111,7 +109,6 @@ type txnDeps struct {
 	statsRefresher      scexec.StatsRefresher
 	tableStatsToRefresh []descpb.ID
 	eventLogger         scexec.EventLogger
-	deletedDescriptors  catalog.DescriptorIDSet
 	schemaChangerJobID  jobspb.JobID
 	schemaChangerJob    *jobs.Job
 	kvTrace             bool
@@ -236,34 +233,17 @@ func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
 func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
-	marshalledKey := catalogkeys.EncodeNameKey(b.codec, nameInfo)
-	if b.kvTrace {
-		log.VEventf(ctx, 2, "Del %s", marshalledKey)
-	}
-	b.batch.Del(marshalledKey)
-	return nil
+	return b.descsCollection.DeleteNamespaceEntryToBatch(ctx, b.kvTrace, &nameInfo, b.batch)
 }
 
 // DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	marshalledKey := catalogkeys.MakeDescMetadataKey(b.codec, id)
-	b.batch.Del(marshalledKey)
-	if b.kvTrace {
-		log.VEventf(ctx, 2, "Del %s", marshalledKey)
-	}
-	b.deletedDescriptors.Add(id)
-	b.descsCollection.NotifyOfDeletedDescriptor(id)
-	return nil
+	return b.descsCollection.DeleteDescToBatch(ctx, b.kvTrace, id, b.batch)
 }
 
 // DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(b.codec, id)
-	if b.kvTrace {
-		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-	}
-	b.batch.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-	return nil
+	return b.descsCollection.DeleteZoneConfigInBatch(ctx, b.kvTrace, b.batch, id)
 }
 
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
@@ -275,6 +255,25 @@ func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		return errors.Wrap(err, "writing descriptors")
 	}
 	return nil
+}
+
+// UpdateComment implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) UpdateComment(
+	ctx context.Context, key catalogkeys.CommentKey, cmt string,
+) error {
+	return b.descsCollection.WriteCommentToBatch(ctx, b.kvTrace, b.batch, key, cmt)
+}
+
+// DeleteComment implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteComment(
+	ctx context.Context, key catalogkeys.CommentKey,
+) error {
+	return b.descsCollection.DeleteCommentInBatch(ctx, b.kvTrace, b.batch, key)
+}
+
+// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
+	return b.descsCollection.DeleteTableComments(ctx, b.kvTrace, b.batch, tblID)
 }
 
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)

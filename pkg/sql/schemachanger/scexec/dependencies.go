@@ -13,15 +13,15 @@ package scexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -112,6 +112,19 @@ type CatalogChangeBatcher interface {
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
+
+	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
+	UpdateComment(
+		ctx context.Context, key catalogkeys.CommentKey, cmt string,
+	) error
+
+	// DeleteComment deletes a comment with (objID, subID, cmtType) key.
+	DeleteComment(
+		ctx context.Context, key catalogkeys.CommentKey,
+	) error
+
+	// DeleteTableComments deletes all comments created on the table.
+	DeleteTableComments(ctx context.Context, tblID descpb.ID) error
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.
@@ -224,7 +237,7 @@ type Validator interface {
 	ValidateCheckConstraint(
 		ctx context.Context,
 		tbl catalog.TableDescriptor,
-		constraint catalog.Constraint,
+		constraint catalog.CheckConstraint,
 		override sessiondata.InternalExecutorOverride,
 	) error
 }
@@ -349,39 +362,11 @@ type BackfillerProgressFlusher interface {
 // DescriptorMetadataUpdater is used to update metadata associated with schema objects,
 // for example comments associated with a schema.
 type DescriptorMetadataUpdater interface {
-	// UpsertDescriptorComment updates a comment associated with a schema object.
-	UpsertDescriptorComment(id int64, subID int64, commentType keys.CommentType, comment string) error
-
-	// DeleteDescriptorComment deletes a comment for schema object.
-	DeleteDescriptorComment(id int64, subID int64, commentType keys.CommentType) error
-
-	//UpsertConstraintComment upserts a comment associated with a constraint.
-	UpsertConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID, comment string) error
-
-	//DeleteConstraintComment deletes a comment associated with a constraint.
-	DeleteConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID) error
-
 	// DeleteDatabaseRoleSettings deletes role settings associated with a database.
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
-	// SwapDescriptorSubComment moves a comment from one sub ID to another.
-	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error
-
-	// DeleteAllCommentsForTables deletes all table-bound comments for the tables
-	// with the specified IDs.
-	DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error
-
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
-
-	// UpsertZoneConfig sets the zone config for a given descriptor. If necessary,
-	// the subzone spans will be recomputed as part of this call.
-	UpsertZoneConfig(
-		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
-	) (numAffected int, err error)
-
-	// DeleteZoneConfig deletes a zone config for a given descriptor.
-	DeleteZoneConfig(ctx context.Context, id descpb.ID) (numAffected int, err error)
 }
 
 // StatsRefreshQueue queues table for stats refreshes.
@@ -401,15 +386,30 @@ type StatsRefresher interface {
 // the GC interval is encountered.
 type ProtectedTimestampManager interface {
 	// TryToProtectBeforeGC adds a protected timestamp record for a historical
-	// transaction for a specific table, once a certain percentage of the GC time has
-	// elapsed. This is done on a best effort bases using a timer relative to
-	// the GC TTL, and should be done fairy early in the transaction.
+	// transaction for a specific table, once a certain percentage of the GC time
+	// has elapsed. This is done on a best effort bases using a timer relative to
+	// the GC TTL, and should be done fairy early in the transaction. Note, the
+	// function assumes the in-memory job is up to date with the persisted job
+	// record.
 	TryToProtectBeforeGC(
-		ctx context.Context, jobID jobspb.JobID, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+		ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
 	) jobsprotectedts.Cleaner
 
-	// Unprotect unprotects just based on a job ID, mainly for last resort cleanup.
-	// Note: This should only be used for job cleanup if its not currently,
-	// executing.
-	Unprotect(ctx context.Context, jobID jobspb.JobID) error
+	// Protect adds a protected timestamp record for a historical transaction for
+	// a specific target immediately. If an existing record is found, it will be
+	// updated with a new timestamp. Returns a Cleaner function to remove the
+	// protected timestamp, if one was installed. Note, the function assumes the
+	// in-memory job is up to date with the persisted job record.
+	Protect(
+		ctx context.Context,
+		job *jobs.Job,
+		target *ptpb.Target,
+		readAsOf hlc.Timestamp,
+	) (jobsprotectedts.Cleaner, error)
+
+	// Unprotect unprotects the spans associated with the job, mainly for last
+	// resort cleanup. The function assumes the in-memory job is up to date with
+	// the persisted job record. Note: This should only be used for job cleanup if
+	// its not currently, executing.
+	Unprotect(ctx context.Context, job *jobs.Job) error
 }

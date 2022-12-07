@@ -21,9 +21,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -416,7 +416,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				if column.IsGeneratedAlwaysAsIdentity() {
 					generatedAsIdentityType = "a"
 				} else if column.IsGeneratedByDefaultAsIdentity() {
-					generatedAsIdentityType = "b"
+					generatedAsIdentityType = "d"
 				} else {
 					return errors.AssertionFailedf(
 						"column %s is of wrong generated as identity type (neither ALWAYS nor BY DEFAULT)",
@@ -700,8 +700,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence,  // relpersistence
 			tree.MakeDBool(tree.DBool(table.IsTemporary())), // relistemp
 			relKind, // relkind
-			tree.NewDInt(tree.DInt(len(table.AccessibleColumns()))), // relnatts
-			tree.NewDInt(tree.DInt(len(table.GetChecks()))),         // relchecks
+			tree.NewDInt(tree.DInt(len(table.AccessibleColumns()))),        // relnatts
+			tree.NewDInt(tree.DInt(len(table.EnforcedCheckConstraints()))), // relchecks
 			tree.DBoolFalse, // relhasoids
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
 			tree.DBoolFalse, // relhasrules
@@ -870,13 +870,9 @@ func populateTableConstraints(
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
 ) error {
-	conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-	if err != nil {
-		return err
-	}
 	namespaceOid := schemaOid(sc.GetID())
 	tblOid := tableOid(table.GetID())
-	for conName, con := range conInfo {
+	for _, c := range table.AllConstraints() {
 		conoid := tree.DNull
 		contype := tree.DNull
 		conindid := oidZero
@@ -892,159 +888,141 @@ func populateTableConstraints(
 
 		// Determine constraint kind-specific fields.
 		var err error
-		switch con.Kind {
-		case descpb.ConstraintTypePK:
-			if !p.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns {
-				colHiddenMap := make(map[descpb.ColumnID]bool, len(table.AllColumns()))
-				for i := range table.AllColumns() {
-					col := table.AllColumns()[i]
-					colHiddenMap[col.GetID()] = col.IsHidden()
-				}
-				allHidden := true
-				for _, colIdx := range con.Index.KeyColumnIDs {
-					if !colHiddenMap[colIdx] {
-						allHidden = false
-						break
-					}
-				}
-				if allHidden {
-					continue
-				}
-			}
-			conoid = h.PrimaryKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.Index)
-			contype = conTypePKey
-			conindid = h.IndexOid(table.GetID(), con.Index.ID)
-
+		if uwi := c.AsUniqueWithIndex(); uwi != nil {
+			conindid = h.IndexOid(table.GetID(), uwi.GetID())
 			var err error
-			if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
+			if conkey, err = colIDArrayToDatum(uwi.IndexDesc().KeyColumnIDs); err != nil {
 				return err
 			}
-			condef = tree.NewDString(tabledesc.PrimaryKeyString(table))
-
-		case descpb.ConstraintTypeFK:
-			conoid = h.ForeignKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.FK)
+			if uwi.Primary() {
+				if !p.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns {
+					allHidden := true
+					for _, col := range table.IndexKeyColumns(uwi) {
+						if !col.IsHidden() {
+							allHidden = false
+							break
+						}
+					}
+					if allHidden {
+						continue
+					}
+				}
+				conoid = h.PrimaryKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), uwi)
+				contype = conTypePKey
+				condef = tree.NewDString(tabledesc.PrimaryKeyString(table))
+			} else {
+				f := tree.NewFmtCtx(tree.FmtSimple)
+				conoid = h.UniqueConstraintOid(db.GetID(), sc.GetID(), table.GetID(), uwi)
+				contype = conTypeUnique
+				f.WriteString("UNIQUE (")
+				if err := catformat.FormatIndexElements(
+					ctx, table, uwi.IndexDesc(), f, p.SemaCtx(), p.SessionData(),
+				); err != nil {
+					return err
+				}
+				f.WriteByte(')')
+				if uwi.IsPartial() {
+					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, uwi.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
+					if err != nil {
+						return err
+					}
+					f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
+				}
+				condef = tree.NewDString(f.CloseAndGetString())
+			}
+		} else if fk := c.AsForeignKey(); fk != nil {
+			conoid = h.ForeignKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), fk)
 			contype = conTypeFK
 			// Foreign keys don't have a single linked index. Pick the first one
 			// that matches on the referenced table.
-			referencedTable, err := tableLookup.getTableByID(con.FK.ReferencedTableID)
+			referencedTable, err := tableLookup.getTableByID(fk.GetReferencedTableID())
 			if err != nil {
 				return err
 			}
-			if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
-				referencedTable, con.FK.ReferencedColumnIDs,
-			); err != nil {
+			if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 				// We couldn't find a unique constraint that matched. This shouldn't
 				// happen.
 				log.Warningf(ctx, "broken fk reference: %v", err)
-			} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
-				conindid = h.IndexOid(con.ReferencedTable.ID, idx.ID)
+			} else if idx := refConstraint.AsUniqueWithIndex(); idx != nil {
+				conindid = h.IndexOid(referencedTable.GetID(), idx.GetID())
 			}
-			confrelid = tableOid(con.ReferencedTable.ID)
-			if r, ok := fkActionMap[con.FK.OnUpdate]; ok {
+			confrelid = tableOid(referencedTable.GetID())
+			if r, ok := fkActionMap[fk.OnUpdate()]; ok {
 				confupdtype = r
 			}
-			if r, ok := fkActionMap[con.FK.OnDelete]; ok {
+			if r, ok := fkActionMap[fk.OnDelete()]; ok {
 				confdeltype = r
 			}
-			if r, ok := fkMatchMap[con.FK.Match]; ok {
+			if r, ok := fkMatchMap[fk.Match()]; ok {
 				confmatchtype = r
 			}
-			if conkey, err = colIDArrayToDatum(con.FK.OriginColumnIDs); err != nil {
+			if conkey, err = colIDArrayToDatum(fk.ForeignKeyDesc().OriginColumnIDs); err != nil {
 				return err
 			}
-			if confkey, err = colIDArrayToDatum(con.FK.ReferencedColumnIDs); err != nil {
+			if confkey, err = colIDArrayToDatum(fk.ForeignKeyDesc().ReferencedColumnIDs); err != nil {
 				return err
 			}
 			var buf bytes.Buffer
 			if err := showForeignKeyConstraint(
 				&buf, db.GetName(),
-				table, con.FK,
+				table, fk.ForeignKeyDesc(),
 				tableLookup,
 				p.extendedEvalCtx.SessionData().SearchPath,
 			); err != nil {
 				return err
 			}
 			condef = tree.NewDString(buf.String())
-
-		case descpb.ConstraintTypeUnique:
+		} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
 			contype = conTypeUnique
 			f := tree.NewFmtCtx(tree.FmtSimple)
-			if con.Index != nil {
-				conoid = h.UniqueConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.Index.ID)
-				conindid = h.IndexOid(table.GetID(), con.Index.ID)
-				var err error
-				if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
-					return err
-				}
-				f.WriteString("UNIQUE (")
-				if err := catformat.FormatIndexElements(
-					ctx, table, con.Index, f, p.SemaCtx(), p.SessionData(),
-				); err != nil {
-					return err
-				}
-				f.WriteByte(')')
-				if con.Index.IsPartial() {
-					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
-					if err != nil {
-						return err
-					}
-					f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
-				}
-			} else if con.UniqueWithoutIndexConstraint != nil {
-				conoid = h.UniqueWithoutIndexConstraintOid(
-					db.GetID(), sc.GetID(), table.GetID(), con.UniqueWithoutIndexConstraint,
-				)
-				f.WriteString("UNIQUE WITHOUT INDEX (")
-				colNames, err := table.NamesForColumnIDs(con.UniqueWithoutIndexConstraint.ColumnIDs)
+			conoid = h.UniqueWithoutIndexConstraintOid(
+				db.GetID(), sc.GetID(), table.GetID(), uwoi,
+			)
+			f.WriteString("UNIQUE WITHOUT INDEX (")
+			colNames, err := table.NamesForColumnIDs(uwoi.UniqueWithoutIndexDesc().ColumnIDs)
+			if err != nil {
+				return err
+			}
+			f.WriteString(strings.Join(colNames, ", "))
+			f.WriteByte(')')
+			if !uwoi.IsConstraintValidated() {
+				f.WriteString(" NOT VALID")
+			}
+			if uwoi.GetPredicate() != "" {
+				pred, err := schemaexpr.FormatExprForDisplay(ctx, table, uwoi.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
 				if err != nil {
 					return err
 				}
-				f.WriteString(strings.Join(colNames, ", "))
-				f.WriteByte(')')
-				if con.UniqueWithoutIndexConstraint.Validity != descpb.ConstraintValidity_Validated {
-					f.WriteString(" NOT VALID")
-				}
-				if con.UniqueWithoutIndexConstraint.Predicate != "" {
-					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.UniqueWithoutIndexConstraint.Predicate, p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
-					if err != nil {
-						return err
-					}
-					f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
-				}
-			} else {
-				return errors.AssertionFailedf(
-					"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
-				)
+				f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
 			}
 			condef = tree.NewDString(f.CloseAndGetString())
-
-		case descpb.ConstraintTypeCheck:
-			conoid = h.CheckConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.CheckConstraint)
+		} else if ck := c.AsCheck(); ck != nil {
+			conoid = h.CheckConstraintOid(db.GetID(), sc.GetID(), table.GetID(), ck)
 			contype = conTypeCheck
-			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
+			if conkey, err = colIDArrayToDatum(ck.CheckDesc().ColumnIDs); err != nil {
 				return err
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Details, &p.semaCtx, p.SessionData(), tree.FmtPGCatalog)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, ck.GetExpr(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
 			consrc = tree.NewDString(fmt.Sprintf("(%s)", displayExpr))
 			conbin = consrc
 			validity := ""
-			if con.CheckConstraint.Validity != descpb.ConstraintValidity_Validated {
+			if !ck.IsConstraintValidated() {
 				validity = " NOT VALID"
 			}
 			condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))%s", displayExpr, validity))
 		}
 
 		if err := addRow(
-			conoid,               // oid
-			dNameOrNull(conName), // conname
-			namespaceOid,         // connamespace
-			contype,              // contype
-			tree.DBoolFalse,      // condeferrable
-			tree.DBoolFalse,      // condeferred
-			tree.MakeDBool(tree.DBool(!con.Unvalidated)), // convalidated
+			conoid,                   // oid
+			dNameOrNull(c.GetName()), // conname
+			namespaceOid,             // connamespace
+			contype,                  // contype
+			tree.DBoolFalse,          // condeferrable
+			tree.DBoolFalse,          // condeferred
+			tree.MakeDBool(tree.DBool(!c.IsConstraintUnvalidated())), // convalidated
 			tblOid,         // conrelid
 			oidZero,        // contypid
 			conindid,       // conindid
@@ -1518,32 +1496,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				}
 			}
 
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
-			for _, con := range conInfo {
-				if con.Kind != descpb.ConstraintTypeFK {
-					continue
-				}
-
+			for _, fk := range table.OutboundForeignKeys() {
 				// Foreign keys don't have a single linked index. Pick the first one
 				// that matches on the referenced table.
-				referencedTable, err := tableLookup.getTableByID(con.FK.ReferencedTableID)
+				referencedTable, err := tableLookup.getTableByID(fk.GetReferencedTableID())
 				if err != nil {
 					return err
 				}
 				refObjID := oidZero
-				if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
-					referencedTable, con.FK.ReferencedColumnIDs,
-				); err != nil {
+				if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 					// We couldn't find a unique constraint that matched. This shouldn't
 					// happen.
 					log.Warningf(ctx, "broken fk reference: %v", err)
-				} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
-					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
+				} else if idx := refConstraint.AsUniqueWithIndex(); idx != nil {
+					refObjID = h.IndexOid(referencedTable.GetID(), idx.GetID())
 				}
-				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.FK)
+				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), fk)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
@@ -1600,27 +1568,27 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			objID := comment[0]
 			objSubID := comment[1]
 			description := comment[2]
-			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
+			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
 
 			classOid := oidZero
 
 			switch commentType {
-			case keys.DatabaseCommentType:
+			case catalogkeys.DatabaseCommentType:
 				// Database comments are exported in pg_shdescription.
 				continue
-			case keys.SchemaCommentType:
+			case catalogkeys.SchemaCommentType:
 				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
 				// for this, but it's not ideal. The backing column for objId should be
 				// changed to use the OID type.
 				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
-			case keys.ColumnCommentType, keys.TableCommentType:
+			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
 				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
 				// for this, but it's not ideal. The backing column for objId should be
 				// changed to use the OID type.
 				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
-			case keys.ConstraintCommentType:
+			case catalogkeys.ConstraintCommentType:
 				tableDesc, err := p.Descriptors().GetImmutableTableByID(
 					ctx,
 					p.txn,
@@ -1639,21 +1607,14 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				if err != nil {
 					return err
 				}
-				constraints, err := tableDesc.GetConstraintInfo()
+				c, err := tableDesc.FindConstraintWithID(descpb.ConstraintID(tree.MustBeDInt(objSubID)))
 				if err != nil {
 					return err
 				}
-				var constraint descpb.ConstraintDetail
-				for _, constraintToCheck := range constraints {
-					if constraintToCheck.ConstraintID == descpb.ConstraintID(tree.MustBeDInt(objSubID)) {
-						constraint = constraintToCheck
-						break
-					}
-				}
-				objID = getOIDFromConstraint(constraint, dbContext.GetID(), schema.GetID(), tableDesc)
+				objID = getOIDFromConstraint(c, dbContext.GetID(), schema.GetID(), tableDesc)
 				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
-			case keys.IndexCommentType:
+			case catalogkeys.IndexCommentType:
 				objID = makeOidHasher().IndexOid(
 					descpb.ID(tree.MustBeDInt(objID)),
 					descpb.IndexID(tree.MustBeDInt(objSubID)))
@@ -1673,48 +1634,46 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 }
 
 func getOIDFromConstraint(
-	constraint descpb.ConstraintDetail,
-	dbID descpb.ID,
-	scID descpb.ID,
-	tableDesc catalog.TableDescriptor,
+	constraint catalog.Constraint, dbID descpb.ID, scID descpb.ID, tableDesc catalog.TableDescriptor,
 ) *tree.DOid {
 	hasher := makeOidHasher()
 	tableID := tableDesc.GetID()
 	var oid *tree.DOid
-	if constraint.CheckConstraint != nil {
+	if ck := constraint.AsCheck(); ck != nil {
 		oid = hasher.CheckConstraintOid(
 			dbID,
 			scID,
 			tableID,
-			constraint.CheckConstraint)
-	} else if constraint.FK != nil {
+			ck,
+		)
+	} else if fk := constraint.AsForeignKey(); fk != nil {
 		oid = hasher.ForeignKeyConstraintOid(
 			dbID,
 			scID,
 			tableID,
-			constraint.FK,
+			fk,
 		)
-	} else if constraint.UniqueWithoutIndexConstraint != nil {
+	} else if uc := constraint.AsUniqueWithoutIndex(); uc != nil {
 		oid = hasher.UniqueWithoutIndexConstraintOid(
 			dbID,
 			scID,
 			tableID,
-			constraint.UniqueWithoutIndexConstraint,
+			uc,
 		)
-	} else if constraint.Index != nil {
-		if constraint.Index.ID == tableDesc.GetPrimaryIndexID() {
+	} else if ic := constraint.AsUniqueWithIndex(); ic != nil {
+		if ic.GetID() == tableDesc.GetPrimaryIndexID() {
 			oid = hasher.PrimaryKeyConstraintOid(
 				dbID,
 				scID,
 				tableID,
-				constraint.Index,
+				ic,
 			)
 		} else {
 			oid = hasher.UniqueConstraintOid(
 				dbID,
 				scID,
 				tableID,
-				constraint.Index.ID,
+				ic,
 			)
 		}
 	}
@@ -1732,8 +1691,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 			return err
 		}
 		for _, comment := range comments {
-			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
-			if commentType != keys.DatabaseCommentType {
+			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
+			if commentType != catalogkeys.DatabaseCommentType {
 				// Only database comments are exported in this table.
 				continue
 			}
@@ -2466,18 +2425,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						var argNames tree.Datum
 						argNamesArray := tree.NewDArray(types.String)
 						foundAnyArgNames := false
-						for _, arg := range fnDesc.GetArgs() {
-							if err := argTypes.Append(tree.NewDOid(arg.Type.Oid())); err != nil {
+						for _, param := range fnDesc.GetParams() {
+							if err := argTypes.Append(tree.NewDOid(param.Type.Oid())); err != nil {
 								return err
 							}
 							// We only support IN arguments at the moment.
 							if err := argModes.Append(tree.NewDString("i")); err != nil {
 								return err
 							}
-							if len(arg.Name) > 0 {
+							if len(param.Name) > 0 {
 								foundAnyArgNames = true
 							}
-							if err := argNamesArray.Append(tree.NewDString(arg.Name)); err != nil {
+							if err := argNamesArray.Append(tree.NewDString(param.Name)); err != nil {
 								return err
 							}
 						}
@@ -2506,19 +2465,19 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							tree.MakeDBool(tree.DBool(fnDesc.GetReturnType().ReturnSet)), // proretset
 							tree.NewDString(funcVolatility(fnDesc.GetVolatility())),      // provolatile
 							tree.DNull, // proparallel
-							tree.NewDInt(tree.DInt(len(fnDesc.GetArgs()))),  // pronargs
-							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
-							tree.NewDOid(fnDesc.GetReturnType().Type.Oid()), // prorettype
-							tree.NewDOidVectorFromDArray(argTypes),          // proargtypes
-							tree.DNull,                                      // proallargtypes
-							argModes,                                        // proargmodes
-							argNames,                                        // proargnames
-							tree.DNull,                                      // proargdefaults
-							tree.DNull,                                      // protrftypes
-							tree.NewDString(fnDesc.GetFunctionBody()),       // prosrc
-							tree.DNull,                                      // probin
-							tree.DNull,                                      // proconfig
-							tree.DNull,                                      // proacl
+							tree.NewDInt(tree.DInt(len(fnDesc.GetParams()))), // pronargs
+							tree.NewDInt(tree.DInt(0)),                       // pronargdefaults
+							tree.NewDOid(fnDesc.GetReturnType().Type.Oid()),  // prorettype
+							tree.NewDOidVectorFromDArray(argTypes),           // proargtypes
+							tree.DNull,                                       // proallargtypes
+							argModes,                                         // proargmodes
+							argNames,                                         // proargnames
+							tree.DNull,                                       // proargdefaults
+							tree.DNull,                                       // protrftypes
+							tree.NewDString(fnDesc.GetFunctionBody()),        // prosrc
+							tree.DNull,                                       // probin
+							tree.DNull,                                       // proconfig
+							tree.DNull,                                       // proacl
 							// These columns were automatically created by pg_catalog_test's missing column generator.
 							tree.DNull, // prokind
 							tree.DNull, // prosupport
@@ -4221,7 +4180,7 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 	return oidZero
 }
 
-// This mapping should be kept sync with PG's categorization.
+// This mapping should be kept in sync with PG's categorization.
 var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.AnyFamily:         typCategoryPseudo,
 	types.BitFamily:         typCategoryBitString,
@@ -4242,6 +4201,8 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.StringFamily:      typCategoryString,
 	types.TimestampFamily:   typCategoryDateTime,
 	types.TimestampTZFamily: typCategoryDateTime,
+	types.TSQueryFamily:     typCategoryUserDefined,
+	types.TSVectorFamily:    typCategoryUserDefined,
 	types.ArrayFamily:       typCategoryArray,
 	types.TupleFamily:       typCategoryPseudo,
 	types.OidFamily:         typCategoryNumeric,
@@ -4495,19 +4456,19 @@ func (h oidHasher) writeIndex(indexID descpb.IndexID) {
 	h.writeUInt32(uint32(indexID))
 }
 
-func (h oidHasher) writeUniqueConstraint(uc *descpb.UniqueWithoutIndexConstraint) {
-	h.writeUInt32(uint32(uc.TableID))
-	h.writeStr(uc.Name)
+func (h oidHasher) writeUniqueConstraint(uc catalog.UniqueWithoutIndexConstraint) {
+	h.writeUInt32(uint32(uc.ParentTableID()))
+	h.writeStr(uc.GetName())
 }
 
-func (h oidHasher) writeCheckConstraint(check *descpb.TableDescriptor_CheckConstraint) {
-	h.writeStr(check.Name)
-	h.writeStr(check.Expr)
+func (h oidHasher) writeCheckConstraint(check catalog.CheckConstraint) {
+	h.writeStr(check.GetName())
+	h.writeStr(check.GetExpr())
 }
 
-func (h oidHasher) writeForeignKeyConstraint(fk *descpb.ForeignKeyConstraint) {
-	h.writeUInt32(uint32(fk.ReferencedTableID))
-	h.writeStr(fk.Name)
+func (h oidHasher) writeForeignKeyConstraint(fk catalog.ForeignKeyConstraint) {
+	h.writeUInt32(uint32(fk.GetReferencedTableID()))
+	h.writeStr(fk.GetName())
 }
 
 func (h oidHasher) IndexOid(tableID descpb.ID, indexID descpb.IndexID) *tree.DOid {
@@ -4525,7 +4486,7 @@ func (h oidHasher) ColumnOid(tableID descpb.ID, columnID descpb.ColumnID) *tree.
 }
 
 func (h oidHasher) CheckConstraintOid(
-	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, check *descpb.TableDescriptor_CheckConstraint,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, check catalog.CheckConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(checkConstraintTypeTag)
 	h.writeDB(dbID)
@@ -4536,18 +4497,18 @@ func (h oidHasher) CheckConstraintOid(
 }
 
 func (h oidHasher) PrimaryKeyConstraintOid(
-	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, pkey *descpb.IndexDescriptor,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, pkey catalog.UniqueWithIndexConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(pKeyConstraintTypeTag)
 	h.writeDB(dbID)
 	h.writeSchema(scID)
 	h.writeTable(tableID)
-	h.writeIndex(pkey.ID)
+	h.writeIndex(pkey.GetID())
 	return h.getOid()
 }
 
 func (h oidHasher) ForeignKeyConstraintOid(
-	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, fk *descpb.ForeignKeyConstraint,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, fk catalog.ForeignKeyConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(dbID)
@@ -4558,7 +4519,7 @@ func (h oidHasher) ForeignKeyConstraintOid(
 }
 
 func (h oidHasher) UniqueWithoutIndexConstraintOid(
-	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, uc *descpb.UniqueWithoutIndexConstraint,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, uc catalog.UniqueWithoutIndexConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(dbID)
@@ -4569,13 +4530,13 @@ func (h oidHasher) UniqueWithoutIndexConstraintOid(
 }
 
 func (h oidHasher) UniqueConstraintOid(
-	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, indexID descpb.IndexID,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, uwi catalog.UniqueWithIndexConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(dbID)
 	h.writeSchema(scID)
 	h.writeTable(tableID)
-	h.writeIndex(indexID)
+	h.writeIndex(uwi.GetID())
 	return h.getOid()
 }
 

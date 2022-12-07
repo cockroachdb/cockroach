@@ -173,6 +173,14 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			add(keys.LegacyDescIDGenerator, legacyValue)
 		}
 	}
+	// Generate initial values for the system database's public schema, which
+	// doesn't have a descriptor.
+	{
+		publicSchemaValue := roachpb.Value{}
+		publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
+		nameInfo := descpb.NameInfo{ParentID: keys.SystemDatabaseID, Name: tree.PublicSchema}
+		add(catalogkeys.EncodeNameKey(ms.codec, &nameInfo), publicSchemaValue)
+	}
 
 	// Generate initial values for system databases and tables, which have
 	// static descriptors that were generated elsewhere.
@@ -180,16 +188,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Create name metadata key.
 		nameValue := roachpb.Value{}
 		nameValue.SetInt(int64(desc.GetID()))
-		if desc.GetParentID() != keys.RootNamespaceID {
-			add(catalogkeys.MakePublicObjectNameKey(ms.codec, desc.GetParentID(), desc.GetName()), nameValue)
-		} else {
-			// Initializing a database. Databases must be initialized with
-			// the public schema, as all tables are scoped under the public schema.
-			add(catalogkeys.MakeDatabaseNameKey(ms.codec, desc.GetName()), nameValue)
-			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
-			add(catalogkeys.MakeSchemaNameKey(ms.codec, desc.GetID(), tree.PublicSchema), publicSchemaValue)
-		}
+		add(catalogkeys.EncodeNameKey(ms.codec, desc), nameValue)
 
 		// Set initial sequence values.
 		if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
@@ -358,6 +357,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SystemExternalConnectionsTable)
 	target.AddDescriptor(systemschema.RoleIDSequence)
 
+	// Tables introduced in 23.1.
+	target.AddDescriptor(systemschema.SystemJobInfoTable)
+
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please
@@ -368,7 +370,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 41
+const NumSystemTablesForSystemTenant = 42
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.

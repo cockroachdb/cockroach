@@ -26,8 +26,8 @@ BAZEL_BIN=$(bazel info bazel-bin --config ci)
 # to set the arguments appropriately.
 test_args=$(echo $@ | python3 -c "import sys; print(' '.join(['--test_arg=' +word.strip() for word in sys.stdin.read().split(' ')]))")
 
-# Add the verbosity flag.
-test_args="--test_arg=-test.v $test_args"
+# Add the verbosity and artifacts flags.
+test_args="--test_arg=-artifacts --test_arg ${ARTIFACTS_DIR} --test_arg=-test.v $test_args"
 
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- \
                                       test @com_github_cockroachdb_pebble//internal/metamorphic/crossversion:crossversion_test \

@@ -1398,6 +1398,11 @@ type connExecutor struct {
 		shouldCollectTxnExecutionStats bool
 		// accumulatedStats are the accumulated stats of all statements.
 		accumulatedStats execstats.QueryLevelStats
+
+		// idleLatency is the cumulative amount of time spent waiting for the
+		// client to send statements while holding the transaction open.
+		idleLatency time.Duration
+
 		// rowsRead and bytesRead are separate from QueryLevelStats because they are
 		// accumulated independently since they are always collected, as opposed to
 		// QueryLevelStats which are sampled.

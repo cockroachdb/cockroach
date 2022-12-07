@@ -219,6 +219,7 @@ type RecordedStmtStats struct {
 	FullScan             bool
 	SessionData          *sessiondata.SessionData
 	ExecStats            *execstats.QueryLevelStats
+	Indexes              []string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
@@ -233,6 +234,7 @@ type RecordedTxnStats struct {
 	ServiceLatency          time.Duration
 	RetryLatency            time.Duration
 	CommitLatency           time.Duration
+	IdleLatency             time.Duration
 	RowsAffected            int
 	CollectedExecStats      bool
 	ExecStats               execstats.QueryLevelStats

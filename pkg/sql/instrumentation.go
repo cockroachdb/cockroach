@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -191,6 +192,9 @@ type instrumentationHelper struct {
 
 	// scanCounts records the number of times scans were used in the query.
 	scanCounts [exec.NumScanCountTypes]int
+
+	// indexesUsed list the indexes used in the query with format tableID@indexID.
+	indexesUsed []string
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -251,7 +255,8 @@ func (ih *instrumentationHelper) Setup(
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
-	ih.isTenant = cfg.DistSQLSrv != nil && cfg.DistSQLSrv.TenantCostController != nil
+	ih.isTenant = multitenant.TenantRUEstimateEnabled.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
+		cfg.DistSQLSrv.TenantCostController != nil
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
@@ -747,9 +752,9 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 	) {
 		f := opc.optimizer.Factory()
 		evalCtx := opc.p.EvalContext()
-		f.Init(ctx, evalCtx, &opc.catalog)
+		f.Init(ctx, evalCtx, opc.catalog)
 		f.FoldingControl().AllowStableFolds()
-		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, &opc.catalog, f, opc.p.stmt.AST)
+		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
 		err := bld.Build()
 		if err != nil {
 			log.Warningf(ctx, "unable to build memo: %s", err)

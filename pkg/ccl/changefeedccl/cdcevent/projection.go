@@ -9,25 +9,22 @@
 package cdcevent
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 // Projection is a helper to facilitate construction of "projection" rows.
-// Projection is constructed given the underlying event descriptor.  Only the key
-// columns from the descriptor are initialized upon construction.  All other
-// value columns returned by projection need to be configured separated via AddValueColumn,
-// and the value for that column must later be set via SetValueDatumAt.
-// All columns added to this projection are in the ordinal order.
+// Projection is constructed given the underlying event descriptor.  Only the
+// key columns from the descriptor are initialized upon construction.  All other
+// value columns returned by projection need to be configured separately via
+// AddValueColumn, and the value for that column must later be set via
+// SetValueDatumAt. All columns added to this projection are in the ordinal
+// order.
 type Projection Row
 
 // MakeProjection returns Projection builder given underlying descriptor.
@@ -56,6 +53,7 @@ func (p *Projection) addColumn(name string, typ *types.T, sqlString string, colI
 	})
 
 	p.datums = append(p.datums, rowenc.EncDatum{})
+	p.allCols = append(p.allCols, ord)
 	*colIdxSlice = append(*colIdxSlice, ord)
 	if typ.UserDefined() {
 		p.udtCols = append(p.udtCols, ord)
@@ -68,36 +66,39 @@ func (p *Projection) AddValueColumn(name string, typ *types.T) {
 }
 
 // SetValueDatumAt sets value datum at specified position.
-func (p *Projection) SetValueDatumAt(
-	ctx context.Context, evalCtx *eval.Context, pos int, d tree.Datum,
-) error {
+func (p *Projection) SetValueDatumAt(pos int, d tree.Datum) error {
 	pos += len(p.keyCols)
 	if pos >= len(p.datums) {
 		return errors.AssertionFailedf("%d out of bounds", pos)
 	}
 
 	col := p.cols[pos]
-	if !col.Typ.Equal(d.ResolvedType()) {
-		if !cast.ValidCast(d.ResolvedType(), col.Typ, cast.ContextImplicit) {
-			return pgerror.Newf(pgcode.DatatypeMismatch,
-				"expected type %s for column %s@%d, found %s", col.Typ, col.Name, pos, d.ResolvedType())
-		}
-		cd, err := eval.PerformCast(ctx, evalCtx, d, col.Typ)
-		if err != nil {
-			return errors.Wrapf(err, "expected type %s for column %s@%d, found %s",
-				col.Typ, col.Name, pos, d.ResolvedType())
-		}
-		d = cd
+
+	// The resolved type of the datum may be different from
+	// column type. When expression was planned, we receive the
+	// list of result columns (and types).  However, when we evaluate
+	// we may receive a different, but equivalent type.
+	// The reasons for this is described in a comment on T.Family() method,
+	// and is duplicated below:
+	// Execution operators and functions are permissive in terms of input (allow
+	// any type within a given family), and typically return only values having
+	// canonical types as output. For example, the IntFamily Plus operator allows
+	// values having any IntFamily type as input. But then it will always convert
+	// those values to 64-bit integers, and return a final 64-bit integer value
+	// (types.Int). Doing this vastly reduces the required number of operator
+	// overloads.
+	if d == tree.DNull || col.Typ.Equivalent(d.ResolvedType()) {
+		p.datums[pos].Datum = d
+		return nil
 	}
 
-	p.datums[pos].Datum = d
-	return nil
+	return pgerror.Newf(pgcode.DatatypeMismatch,
+		"expected type %s for column %s@%d, found %s", col.Typ, col.Name, pos, d.ResolvedType())
 }
 
 // Project returns row projection.
 func (p *Projection) Project(r Row) (Row, error) {
 	p.deleted = r.IsDeleted()
-
 	// Copy key datums.
 	idx := 0
 	if err := r.ForEachKeyColumn().Datum(func(d tree.Datum, col ResultColumn) error {

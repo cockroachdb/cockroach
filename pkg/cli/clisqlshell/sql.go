@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/knz/bubbline/editline"
 )
 
 const (
@@ -281,6 +282,7 @@ func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
 	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
 }
 
+// inCopy implements the sqlShell interface (to support the editor).
 func (c *cliState) inCopy() bool {
 	return c.copyFromState != nil
 }
@@ -404,6 +406,54 @@ var options = map[string]struct {
 		set:                       func(c *cliState, _ string) error { c.iCtx.checkSyntax = true; return nil },
 		reset:                     func(c *cliState) error { c.iCtx.checkSyntax = false; return nil },
 		display:                   func(c *cliState) string { return strconv.FormatBool(c.iCtx.checkSyntax) },
+	},
+	`reflow_max_width`: {
+		description: "maximum output width when reflowing input statements",
+		set: func(c *cliState, v string) error {
+			i, err := strconv.Atoi(v)
+			if err != nil {
+				return err
+			}
+			if i <= 0 {
+				return errors.New("maximum width must be positive")
+			}
+			c.iCtx.reflowMaxWidth = i
+			return nil
+		},
+		reset:   func(c *cliState) error { c.iCtx.reflowMaxWidth = defaultReflowMaxWidth; return nil },
+		display: func(c *cliState) string { return strconv.Itoa(c.iCtx.reflowMaxWidth) },
+	},
+	`reflow_align_mode`: {
+		description: "how to reflow SQL syntax (0 = no, 1 = partial, 2 = full, 3 = extra)",
+		set: func(c *cliState, v string) error {
+			i, err := strconv.Atoi(v)
+			if err != nil {
+				return err
+			}
+			if i < 0 || i > 3 {
+				return errors.New("possible values: 0 = no, 1 = partial, 2 = full, 3 = extra")
+			}
+			c.iCtx.reflowAlignMode = i
+			return nil
+		},
+		reset:   func(c *cliState) error { c.iCtx.reflowAlignMode = defaultReflowAlignMode; return nil },
+		display: func(c *cliState) string { return strconv.Itoa(c.iCtx.reflowAlignMode) },
+	},
+	`reflow_case_mode`: {
+		description: "how to change case during reflow (0 = lowercase, 1 = uppercase)",
+		set: func(c *cliState, v string) error {
+			i, err := strconv.Atoi(v)
+			if err != nil {
+				return err
+			}
+			if i < 0 || i > 1 {
+				return errors.New("value must be 0 (lowercase) or 1 (uppercase)")
+			}
+			c.iCtx.reflowCaseMode = i
+			return nil
+		},
+		reset:   func(c *cliState) error { c.iCtx.reflowCaseMode = defaultReflowCaseMode; return nil },
+		display: func(c *cliState) string { return strconv.Itoa(c.iCtx.reflowCaseMode) },
 	},
 	`show_times`: {
 		description:               "display the execution time after each query",
@@ -938,6 +988,7 @@ func (c *cliState) refreshDatabaseName() string {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
+// runShowCompletions implements the sqlShell interface (to support the editor).
 func (c *cliState) runShowCompletions(sql string, offset int) (rows [][]string, err error) {
 	query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, offset, lexbase.EscapeSQLString(sql))
 	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
@@ -990,6 +1041,8 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
+	// TODO(knz): Re-load the previous lines of input, so the user
+	// gets a chance to modify them.
 	l, err := c.ins.getLine()
 
 	switch {
@@ -1196,16 +1249,28 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.runOpen(cmd[1:], loopState, errState)
 
 	case `\p`:
+		if c.ins.multilineEdit() {
+			fmt.Fprintln(c.iCtx.stderr, `warning: \p is ineffective with this editor`)
+			break
+		}
 		// This is analogous to \show but does not need a special case.
 		// Implemented for compatibility with psql.
 		fmt.Fprintln(c.iCtx.stdout, strings.Join(c.partialLines, "\n"))
 
 	case `\r`:
+		if c.ins.multilineEdit() {
+			fmt.Fprintln(c.iCtx.stderr, `warning: \r is ineffective with this editor`)
+			break
+		}
 		// Reset the input buffer so far. This is useful when e.g. a user
 		// got confused with string delimiters and multi-line input.
 		return cliStartLine
 
 	case `\show`:
+		if c.ins.multilineEdit() {
+			fmt.Fprintln(c.iCtx.stderr, `warning: \show is ineffective with this editor`)
+			break
+		}
 		fmt.Fprintln(c.iCtx.stderr, `warning: \show is deprecated. Use \p.`)
 		if len(c.partialLines) == 0 {
 			fmt.Fprintf(c.iCtx.stderr, "No input so far. Did you mean SHOW?\n")
@@ -1720,6 +1785,51 @@ func (c *cliState) doPrepareStatementLine(
 	return checkState
 }
 
+// reflow implements the sqlShell interface (to support the editor).
+func (c *cliState) reflow(
+	allText bool, currentText string, targetWidth int,
+) (changed bool, newText string, info string) {
+	if targetWidth > c.iCtx.reflowMaxWidth {
+		targetWidth = c.iCtx.reflowMaxWidth
+	}
+
+	var rows [][]string
+	err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+		var err error
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
+			clisqlclient.MakeQuery(
+				`SELECT prettify_statement($1, $2, $3, $4)`,
+				currentText, targetWidth,
+				c.iCtx.reflowAlignMode,
+				c.iCtx.reflowCaseMode,
+			), true /* showMoreChars */)
+		return err
+	})
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.Syntax {
+			// SQL not recognized. That's all right. Just reflow using
+			// a simple algorithm.
+			return editline.DefaultReflow(allText, currentText, targetWidth)
+		}
+		// Some other error. Display it.
+		var buf strings.Builder
+		clierror.OutputError(&buf, err, true /*showSeverity*/, false /*verbose*/)
+		return false, currentText, buf.String()
+	}
+	if len(rows) < 1 || len(rows[0]) < 1 {
+		return false, currentText, "incomplete result from prettify_statement"
+	}
+	newText = rows[0][0]
+	// NB: prettify uses tabs. The editor doesn't like them.
+	// https://github.com/knz/bubbline/issues/5
+	newText = strings.ReplaceAll(newText, "\t", strings.Repeat(" ", c.iCtx.reflowTabWidth))
+	// Strip final spaces.
+	newText = strings.TrimRight(newText, " \n")
+	// NB: prettify removes the final semicolon. Re-add it.
+	newText += ";"
+	return true, newText, ""
+}
+
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
 	// If we are in COPY, we have no valid SQL, so skip directly to the next state.
 	if c.inCopy() {
@@ -2013,6 +2123,11 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn, cmdOut, cmdErr *os.File
 	return c.exitErr
 }
 
+const defaultReflowMaxWidth = 60
+const defaultReflowAlignMode = 3
+const defaultReflowCaseMode = 1
+const defaultReflowTabWidth = 4 // the value used internally by prettify_statement
+
 // configurePreShellDefaults should be called after command-line flags
 // have been loaded into the cliCtx/sqlCtx and .isInteractive /
 // .terminalOutput have been initialized, but before the SQL shell or
@@ -2027,6 +2142,10 @@ func (c *cliState) configurePreShellDefaults(
 	c.iCtx.queryOutputFile = cmdOut
 	c.iCtx.queryOutput = cmdOut
 	c.iCtx.stderr = cmdErr
+	c.iCtx.reflowMaxWidth = defaultReflowMaxWidth
+	c.iCtx.reflowAlignMode = defaultReflowAlignMode
+	c.iCtx.reflowCaseMode = defaultReflowCaseMode
+	c.iCtx.reflowTabWidth = defaultReflowTabWidth
 
 	if c.sqlExecCtx.TerminalOutput {
 		// If results are shown on a terminal also enable printing of
@@ -2158,7 +2277,13 @@ func (c *cliState) runStatements(stmts []string) error {
 	return c.exitErr
 }
 
-// serverSideParse uses the SHOW SYNTAX statement to analyze the given string.
+// enableDebug implements the sqlShell interface (to support the editor).
+func (c *cliState) enableDebug() bool {
+	return c.sqlConnCtx.DebugMode
+}
+
+// serverSideParse implements the sqlShell interface (to support the editor).
+// It uses the SHOW SYNTAX statement to analyze the given string.
 // If the syntax is correct, the function returns the statement
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.

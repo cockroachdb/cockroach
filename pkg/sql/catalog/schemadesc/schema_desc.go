@@ -509,14 +509,14 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			IsUDF:                    true,
 			UDFContainsOnlySignature: true,
 		}
-		argTypes := make(tree.ArgTypes, 0, len(funcDescPb.Overloads[i].ArgTypes))
-		for _, argType := range funcDescPb.Overloads[i].ArgTypes {
-			argTypes = append(
-				argTypes,
-				tree.ArgType{Typ: argType},
+		paramTypes := make(tree.ParamTypes, 0, len(funcDescPb.Overloads[i].ArgTypes))
+		for _, paramType := range funcDescPb.Overloads[i].ArgTypes {
+			paramTypes = append(
+				paramTypes,
+				tree.ParamType{Typ: paramType},
 			)
 		}
-		overload.Types = argTypes
+		overload.Types = paramTypes
 		prefixedOverload := tree.MakeQualifiedOverload(desc.GetName(), overload)
 		funcDef.Overloads = append(funcDef.Overloads, prefixedOverload)
 	}

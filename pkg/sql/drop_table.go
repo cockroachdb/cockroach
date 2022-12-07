@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,10 +74,9 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 
 	for _, toDel := range td {
 		droppedDesc := toDel.desc
-		for i := range droppedDesc.InboundFKs {
-			ref := &droppedDesc.InboundFKs[i]
-			if _, ok := td[ref.OriginTableID]; !ok {
-				if err := p.canRemoveFKBackreference(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
+		for _, fk := range droppedDesc.InboundForeignKeys() {
+			if _, ok := td[fk.GetOriginTableID()]; !ok {
+				if err := p.canRemoveFKBackreference(ctx, droppedDesc.Name, fk, n.DropBehavior); err != nil {
 					return nil, err
 				}
 			}
@@ -203,9 +201,9 @@ func (p *planner) canDropTable(
 // canRemoveFKBackReference returns an error if the input backreference isn't
 // allowed to be removed.
 func (p *planner) canRemoveFKBackreference(
-	ctx context.Context, from string, ref *descpb.ForeignKeyConstraint, behavior tree.DropBehavior,
+	ctx context.Context, from string, ref catalog.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.GetOriginTableID(), p.txn)
 	if err != nil {
 		return err
 	}
@@ -245,9 +243,7 @@ func (p *planner) dropTableImpl(
 	// Remove foreign key forward references from tables that have foreign keys
 	// to this table.
 	// Copy out the set of inbound fks as it may be overwritten in the loop.
-	inboundFKs := append([]descpb.ForeignKeyConstraint(nil), tableDesc.InboundFKs...)
-	for i := range inboundFKs {
-		ref := &tableDesc.InboundFKs[i]
+	for _, ref := range tableDesc.InboundForeignKeys() {
 		if err := p.removeFKForBackReference(ctx, tableDesc, ref); err != nil {
 			return droppedViews, err
 		}
@@ -305,8 +301,13 @@ func (p *planner) dropTableImpl(
 		}
 	}
 
-	err := p.removeTableComments(ctx, tableDesc)
-	if err != nil {
+	b := p.Txn().NewBatch()
+	if err := p.descCollection.DeleteTableComments(
+		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), b, tableDesc.GetID(),
+	); err != nil {
+		return droppedViews, err
+	}
+	if err := p.Txn().Run(ctx, b); err != nil {
 		return droppedViews, err
 	}
 
@@ -326,7 +327,7 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	err = p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc)
+	err := p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc)
 	return droppedViews, err
 }
 
@@ -359,7 +360,9 @@ func (p *planner) initiateDropTable(
 
 	// Delete namespace entry for table.
 	b := p.txn.NewBatch()
-	p.dropNamespaceEntry(ctx, b, tableDesc)
+	if err := p.dropNamespaceEntry(ctx, b, tableDesc); err != nil {
+		return err
+	}
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
@@ -449,16 +452,16 @@ func (p *planner) markTableMutationJobsSuccessful(
 }
 
 func (p *planner) removeFKForBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, ref *descpb.ForeignKeyConstraint,
+	ctx context.Context, tableDesc *tabledesc.Mutable, ref catalog.ForeignKeyConstraint,
 ) error {
 	var originTableDesc *tabledesc.Mutable
 	// We don't want to lookup/edit a second copy of the same table.
-	if tableDesc.ID == ref.OriginTableID {
+	if tableDesc.ID == ref.GetOriginTableID() {
 		originTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
+		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.GetOriginTableID(), p.txn)
 		if err != nil {
-			return errors.Wrapf(err, "error resolving origin table ID %d", ref.OriginTableID)
+			return errors.Wrapf(err, "error resolving origin table ID %d", ref.GetOriginTableID())
 		}
 		originTableDesc = lookup
 	}
@@ -475,7 +478,8 @@ func (p *planner) removeFKForBackReference(
 	if err != nil {
 		return err
 	}
-	jobDesc := fmt.Sprintf("updating table %q after removing constraint %q from table %q", originTableDesc.GetName(), ref.Name, name.FQString())
+	jobDesc := fmt.Sprintf("updating table %q after removing constraint %q from table %q",
+		originTableDesc.GetName(), ref.GetName(), name.FQString())
 	return p.writeSchemaChange(ctx, originTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
@@ -484,12 +488,12 @@ func (p *planner) removeFKForBackReference(
 // backreference, which is a member of the supplied referencedTableDesc.
 func removeFKForBackReferenceFromTable(
 	originTableDesc *tabledesc.Mutable,
-	backref *descpb.ForeignKeyConstraint,
+	backref catalog.ForeignKeyConstraint,
 	referencedTableDesc catalog.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, fk := range originTableDesc.OutboundFKs {
-		if fk.ReferencedTableID == referencedTableDesc.GetID() && fk.Name == backref.Name {
+		if fk.ReferencedTableID == referencedTableDesc.GetID() && fk.Name == backref.GetName() {
 			// We found a match! We want to delete it from the list now.
 			matchIdx = i
 			break
@@ -582,15 +586,4 @@ func removeMatchingReferences(
 		}
 	}
 	return updatedRefs
-}
-
-func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	return descmetadata.NewMetadataUpdater(
-		ctx,
-		p.ExecCfg().InternalExecutorFactory,
-		p.Descriptors(),
-		&p.ExecCfg().Settings.SV,
-		p.txn,
-		p.SessionData(),
-	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
 }

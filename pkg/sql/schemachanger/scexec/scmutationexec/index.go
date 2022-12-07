@@ -97,6 +97,9 @@ func addNewIndexMutation(
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
 	}
+	if opIndex.GeoConfig != nil {
+		idx.GeoConfig = *opIndex.GeoConfig
+	}
 	return enqueueAddIndexMutation(tbl, idx, state)
 }
 
@@ -452,6 +455,9 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 			idx.KeyColumnNames = idx.KeyColumnNames[:i]
 			idx.KeyColumnIDs = idx.KeyColumnIDs[:i]
 			idx.KeyColumnDirections = idx.KeyColumnDirections[:i]
+			if idx.Type == descpb.IndexDescriptor_INVERTED && i == len(idx.KeyColumnIDs)-1 {
+				idx.InvertedColumnKinds = nil
+			}
 		}
 	case scpb.IndexColumn_KEY_SUFFIX:
 		removeFromColumnIDs(&idx.KeySuffixColumnIDs)

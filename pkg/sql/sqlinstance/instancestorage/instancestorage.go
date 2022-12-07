@@ -26,8 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -139,17 +142,17 @@ func (s *Storage) CreateInstance(
 	sessionExpiration hlc.Timestamp,
 	addr string,
 	locality roachpb.Locality,
-) (instanceID base.SQLInstanceID, _ error) {
+) (instance sqlinstance.InstanceInfo, _ error) {
 	if len(addr) == 0 {
-		return base.SQLInstanceID(0), errors.New("no address information for instance")
+		return sqlinstance.InstanceInfo{}, errors.New("no address information for instance")
 	}
 	if len(sessionID) == 0 {
-		return base.SQLInstanceID(0), errors.New("no session information for instance")
+		return sqlinstance.InstanceInfo{}, errors.New("no session information for instance")
 	}
 
 	region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
 	if err != nil {
-		return base.SQLInstanceID(0), errors.Wrap(err, "unable to determine region for sql_instance")
+		return sqlinstance.InstanceInfo{}, errors.Wrap(err, "unable to determine region for sql_instance")
 	}
 
 	// TODO(jeffswenson): advance session expiration. This can get stuck in a
@@ -206,10 +209,16 @@ func (s *Storage) CreateInstance(
 		instanceID, err := assignInstance()
 		// Instance was successfully assigned an ID.
 		if err == nil {
-			return instanceID, err
+			return sqlinstance.InstanceInfo{
+				Region:       region,
+				InstanceID:   instanceID,
+				InstanceAddr: addr,
+				SessionID:    sessionID,
+				Locality:     locality,
+			}, err
 		}
 		if !errors.Is(err, errNoPreallocatedRows) {
-			return base.SQLInstanceID(0), err
+			return sqlinstance.InstanceInfo{}, err
 		}
 		// If assignInstance failed because there are no available rows,
 		// allocate new instance IDs for the local region.
@@ -229,15 +238,12 @@ func (s *Storage) CreateInstance(
 	}
 
 	// If we exit here, it has to be the case where the context has expired.
-	return base.SQLInstanceID(0), ctx.Err()
+	return sqlinstance.InstanceInfo{}, ctx.Err()
 }
 
 // getAvailableInstanceIDForRegion retrieves an available instance ID for the
 // current region associated with Storage s, and returns errNoPreallocatedRows
 // if there are no available rows.
-//
-// TODO(jaylim-crl): Store current region enum in s once we implement regional
-// by row for the sql_instances table.
 func (s *Storage) getAvailableInstanceIDForRegion(
 	ctx context.Context, region []byte, txn *kv.Txn,
 ) (base.SQLInstanceID, error) {
@@ -387,10 +393,35 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	ts timeutil.TimeSource,
+	internalExecutorFactory descs.TxnManager,
 	sessionExpirationFn func() hlc.Timestamp,
 ) error {
-	// TODO(jeffswenson): load regions from the system database enum.
-	regions := [][]byte{enum.One}
+	loadRegions := func() ([][]byte, error) {
+		// Load regions from the system DB.
+		var regions [][]byte
+		if err := internalExecutorFactory.DescsTxn(ctx, s.db, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			enumReps, _, err := sql.GetRegionEnumRepresentations(ctx, txn, keys.SystemDatabaseID, descsCol)
+			if err != nil {
+				if errors.Is(err, sql.ErrNotMultiRegionDatabase) {
+					return nil
+				}
+				return err
+			}
+			for _, r := range enumReps {
+				regions = append(regions, r)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		// The system database isn't multi-region.
+		if len(regions) == 0 {
+			regions = [][]byte{enum.One}
+		}
+		return regions, nil
+	}
 
 	return stopper.RunAsyncTask(ctx, "instance-id-reclaim-loop", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
@@ -410,6 +441,14 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				return
 			case <-timer.Ch():
 				timer.MarkRead()
+
+				// Load the regions each time we attempt to generate rows since
+				// regions can be added/removed to/from the system DB.
+				regions, err := loadRegions()
+				if err != nil {
+					log.Warningf(ctx, "failed to load regions from the system DB: %v", err)
+					continue
+				}
 
 				// Mark instances that belong to expired sessions as available
 				// and delete surplus IDs. Cleaning up surplus IDs is necessary
@@ -432,13 +471,6 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 // generateAvailableInstanceRows allocates available instance IDs, and store
 // them in the sql_instances table. When instance IDs are pre-allocated, all
 // other fields in that row will be NULL.
-//
-// TODO(jaylim-crl): Handle multiple regions in this logic. encodeRow has to be
-// updated with crdb_region. When we handle multiple regions, we have to figure
-// out where to get the list of regions, and ensure that we don't do a global
-// read for each region assuming that the number of pre-allocated entries is
-// insufficient. One global KV read and write would be sufficient for **all**
-// regions.
 func (s *Storage) generateAvailableInstanceRows(
 	ctx context.Context, regions [][]byte, sessionExpiration hlc.Timestamp,
 ) error {

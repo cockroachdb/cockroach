@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
@@ -19,7 +20,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/quotapool",
-        "//pkg/util/rangedesciter",
+        "//pkg/util/rangedesc",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@org_golang_google_grpc//:go_default_library",

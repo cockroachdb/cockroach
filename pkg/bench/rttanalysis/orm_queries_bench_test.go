@@ -287,8 +287,9 @@ ORDER BY relname DESC, input`,
 		},
 
 		{
-			Name:  "hasura column descriptions",
-			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
+			Name:      "hasura column descriptions",
+			SkipIssue: 88885,
+			Setup:     "CREATE TABLE t(a INT PRIMARY KEY)",
 			Stmt: `WITH
   "tabletable" as ( SELECT "table".oid,
            "table".relkind,

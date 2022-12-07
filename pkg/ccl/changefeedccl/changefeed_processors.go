@@ -282,8 +282,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
-		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
+		ctx, ca.flowCtx.Cfg, ca.spec, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ca.sink, ca.metrics, ca.knobs)
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -608,6 +608,7 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 		rowenc.EncDatum{Datum: tree.DNull}, // key
 		rowenc.EncDatum{Datum: tree.DNull}, // value
 	})
+	ca.metrics.ResolvedMessages.Inc(1)
 
 	ca.recentKVCount = 0
 	return nil
@@ -617,10 +618,6 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
-}
-
-func (ca *changeAggregator) isSinkless() bool {
-	return ca.spec.JobID == 0
 }
 
 const (

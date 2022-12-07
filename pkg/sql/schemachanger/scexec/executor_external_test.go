@@ -15,10 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -488,7 +486,7 @@ func (noopValidator) ValidateInvertedIndexes(
 func (noopValidator) ValidateCheckConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.Constraint,
+	constraint catalog.CheckConstraint,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil
@@ -517,68 +515,14 @@ type noopMetadataUpdater struct{}
 
 var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
 
-// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) UpsertDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType, comment string,
-) error {
-	return nil
-}
-
-// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType,
-) error {
-	return nil
-}
-
-// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error {
-	return nil
-}
-
-// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) UpsertConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
-) error {
-	return nil
-}
-
-// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID,
-) error {
-	return nil
-}
-
 // DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	return nil
-}
-
-// SwapDescriptorSubComment implements  scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) SwapDescriptorSubComment(
-	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
-) error {
 	return nil
 }
 
 // DeleteScheduleID implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
 	return nil
-}
-
-// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater
-func (noopMetadataUpdater) DeleteZoneConfig(
-	ctx context.Context, id descpb.ID,
-) (numAffectedRows int, err error) {
-	return 0, nil
-}
-
-// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater
-func (noopMetadataUpdater) UpsertZoneConfig(
-	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
-) (numAffectedRows int, err error) {
-	return 0, nil
 }
 
 var _ scexec.Backfiller = noopBackfiller{}

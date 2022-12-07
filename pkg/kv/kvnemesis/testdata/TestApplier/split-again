@@ -1,0 +1,3 @@
+echo
+----
+db1.AdminSplit(ctx, tk(2)) // context canceled

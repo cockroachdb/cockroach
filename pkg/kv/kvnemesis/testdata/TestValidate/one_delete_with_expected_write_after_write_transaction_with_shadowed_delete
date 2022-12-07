@@ -1,0 +1,15 @@
+echo
+----
+db0.Del(ctx, tk(1) /* @s1 */) // @0.000000001,0 <nil>
+db0.Put(ctx, tk(1), sv(2)) // @0.000000002,0 <nil>
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Put(ctx, tk(1), sv(3)) // <nil>
+  txn.Del(ctx, tk(1) /* @s4 */) // <nil>
+  txn.Put(ctx, tk(1), sv(5)) // <nil>
+  return nil
+}) // @0.000000003,0 <nil>
+db0.Del(ctx, tk(1) /* @s6 */) // @0.000000004,0 <nil>
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 <nil>
+/Table/100/"0000000000000001"/0.000000002,0 @ s2 v2
+/Table/100/"0000000000000001"/0.000000003,0 @ s5 v5
+/Table/100/"0000000000000001"/0.000000004,0 @ s6 <nil>

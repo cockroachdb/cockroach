@@ -288,7 +288,7 @@ func allocateDescriptorRewrites(
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			dbID, err := col.Direct().LookupDatabaseID(ctx, txn, name)
+			dbID, err := col.LookupDatabaseID(ctx, txn, name)
 			if err != nil {
 				return err
 			}
@@ -365,7 +365,7 @@ func allocateDescriptorRewrites(
 			} else {
 				var parentID descpb.ID
 				{
-					newParentID, err := col.Direct().LookupDatabaseID(ctx, txn, targetDB)
+					newParentID, err := col.LookupDatabaseID(ctx, txn, targetDB)
 					if err != nil {
 						return err
 					}
@@ -440,7 +440,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// Look up the parent database's ID.
-				parentID, err := col.Direct().LookupDatabaseID(ctx, txn, targetDB)
+				parentID, err := col.LookupDatabaseID(ctx, txn, targetDB)
 				if err != nil {
 					return err
 				}
@@ -688,7 +688,7 @@ func allocateDescriptorRewrites(
 func getDatabaseIDAndDesc(
 	ctx context.Context, txn *kv.Txn, col *descs.Collection, targetDB string,
 ) (dbID descpb.ID, dbDesc catalog.DatabaseDescriptor, err error) {
-	dbID, err = col.Direct().LookupDatabaseID(ctx, txn, targetDB)
+	dbID, err = col.LookupDatabaseID(ctx, txn, targetDB)
 	if err != nil {
 		return 0, nil, err
 	}

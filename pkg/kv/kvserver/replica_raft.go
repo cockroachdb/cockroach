@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -275,7 +275,7 @@ func (r *Replica) evalAndPropose(
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := kvserverbase.ProposalFilterArgs{
 			Ctx:        ctx,
-			Cmd:        *proposal.command,
+			Cmd:        proposal.command,
 			QuotaAlloc: proposal.quotaAlloc,
 			CmdID:      idKey,
 			Req:        *ba,
@@ -923,10 +923,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	// TODO(pavelkalinnikov): construct and store this in Replica.
+	// TODO(pavelkalinnikov): fields like raftEntryCache are the same across all
+	// ranges, so can be passed to LogStore methods instead of being stored in it.
 	s := logstore.LogStore{
+		RangeID:     r.RangeID,
 		Engine:      r.store.engine,
 		Sideload:    r.raftMu.sideloaded,
-		StateLoader: r.raftMu.stateLoader,
+		StateLoader: r.raftMu.stateLoader.StateLoader,
+		EntryCache:  r.store.raftEntryCache,
 		Settings:    r.store.cfg.Settings,
 		Metrics: logstore.Metrics{
 			RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
@@ -959,9 +963,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
-	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
 	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs, nil /* blocked */)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
@@ -1093,7 +1094,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 // tick the Raft group, returning true if the raft group exists and should
 // be queued for Ready processing; false otherwise.
 func (r *Replica) tick(
-	ctx context.Context, livenessMap liveness.IsLiveMap, ioThresholdMap *ioThresholdMap,
+	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
 ) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
@@ -1804,7 +1805,7 @@ func shouldCampaignOnWake(
 	leaseStatus kvserverpb.LeaseStatus,
 	storeID roachpb.StoreID,
 	raftStatus raft.BasicStatus,
-	livenessMap liveness.IsLiveMap,
+	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	requiresExpiringLease bool,
 ) bool {
@@ -1863,7 +1864,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
-	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpiringLeaseRLocked()) {
 		r.campaignLocked(ctx)
 	}
@@ -1887,7 +1888,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 // become leader and can proceed with a future attempt to acquire the lease.
 func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
-	livenessMap liveness.IsLiveMap,
+	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	requiresExpiringLease bool,
 	now hlc.Timestamp,

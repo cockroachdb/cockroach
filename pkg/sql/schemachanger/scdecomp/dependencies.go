@@ -13,7 +13,7 @@ package scdecomp
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -23,34 +23,34 @@ import (
 type CommentGetter interface {
 	// GetDatabaseComment returns comment for a database. `ok` returned indicates
 	// if the comment actually exists or not.
-	GetDatabaseComment(ctx context.Context, dbID catid.DescID) (comment string, ok bool, err error)
+	GetDatabaseComment(dbID catid.DescID) (comment string, ok bool)
 
 	// GetSchemaComment returns comment for a schema. `ok` returned indicates if
 	// the comment actually exists or not.
-	GetSchemaComment(ctx context.Context, schemaID catid.DescID) (comment string, ok bool, err error)
+	GetSchemaComment(schemaID catid.DescID) (comment string, ok bool)
 
 	// GetTableComment returns comment for a table. `ok` returned indicates if the
 	// comment actually exists or not.
-	GetTableComment(ctx context.Context, tableID catid.DescID) (comment string, ok bool, err error)
+	GetTableComment(tableID catid.DescID) (comment string, ok bool)
 
 	// GetColumnComment returns comment for a column. `ok` returned indicates if
 	// the comment actually exists or not.
-	GetColumnComment(ctx context.Context, tableID catid.DescID, pgAttrNum catid.PGAttributeNum) (comment string, ok bool, err error)
+	GetColumnComment(tableID catid.DescID, pgAttrNum catid.PGAttributeNum) (comment string, ok bool)
 
 	// GetIndexComment returns comment for an index. `ok` returned indicates if
 	// the comment actually exists or not.
-	GetIndexComment(ctx context.Context, tableID catid.DescID, indexID catid.IndexID) (comment string, ok bool, err error)
+	GetIndexComment(tableID catid.DescID, indexID catid.IndexID) (comment string, ok bool)
 
 	// GetConstraintComment returns comment for a constraint. `ok` returned
 	// indicates if the comment actually exists or not.
-	GetConstraintComment(ctx context.Context, tableID catid.DescID, constraintID catid.ConstraintID) (comment string, ok bool, err error)
+	GetConstraintComment(tableID catid.DescID, constraintID catid.ConstraintID) (comment string, ok bool)
 }
 
 // ZoneConfigGetter supports reading raw zone config information
 // from storage.
 type ZoneConfigGetter interface {
 	// GetZoneConfig reads the raw zone config from storage.
-	GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error)
+	GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error)
 }
 
 // ElementVisitor is the type of the visitor callback function used by

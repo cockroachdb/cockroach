@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -76,6 +77,37 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 	return a.dbs[dbIdx], int32(dbIdx)
 }
 
+// Sentinel errors.
+var (
+	errOmitted                                      = errors.New("omitted")
+	errClosureTxnRollback                           = errors.New("rollback")
+	errDelRangeUsingTombstoneStraddlesRangeBoundary = errors.New("DeleteRangeUsingTombstone can not straddle range boundary")
+)
+
+func exceptOmitted(err error) bool { // true if errOmitted
+	return errors.Is(err, errOmitted)
+}
+
+func exceptRollback(err error) bool { // true if intentional txn rollback
+	return errors.Is(err, errClosureTxnRollback)
+}
+
+func exceptRetry(err error) bool { // true if retry error
+	return errors.HasInterface(err, (*roachpb.ClientVisibleRetryError)(nil))
+}
+
+func exceptUnhandledRetry(err error) bool {
+	return errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil))
+}
+
+func exceptAmbiguous(err error) bool { // true if ambiguous result
+	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
+}
+
+func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
+	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
+}
+
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
@@ -83,8 +115,9 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*ScanOperation,
 		*BatchOperation,
 		*DeleteOperation,
-		*DeleteRangeOperation:
-		applyClientOp(ctx, db, op, false /* inTxn */)
+		*DeleteRangeOperation,
+		*DeleteRangeUsingTombstoneOperation:
+		applyClientOp(ctx, db, op, false)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION)
 		o.Result = resultInit(ctx, err)
@@ -94,7 +127,6 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *ChangeReplicasOperation:
 		desc := getRangeDesc(ctx, o.Key, db)
 		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
-		// TODO(dan): Save returned desc?
 		o.Result = resultInit(ctx, err)
 	case *TransferLeaseOperation:
 		err := db.AdminTransferLease(ctx, o.Key, o.Target)
@@ -117,18 +149,32 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 				retryOnAbort.Next()
 			}
 			savedTxn = txn
-			for i := range o.Ops {
-				op := &o.Ops[i]
-				op.Result().Reset() // in case we're a retry
-				applyClientOp(ctx, txn, op, true /* inTxn */)
-				// The KV api disallows use of a txn after an operation on it errors.
-				if r := op.Result(); r.Type == ResultType_Error {
-					return errors.DecodeError(ctx, *r.Err)
+			{
+				var err error
+				for i := range o.Ops {
+					op := &o.Ops[i]
+					op.Result().Reset() // in case we're a retry
+					if err != nil {
+						// If a previous op failed, mark this op as never invoked. We need
+						// to do this because we want, as an invariant, to have marked all
+						// operations as either failed or succeeded.
+						*op.Result() = resultInit(ctx, errOmitted)
+						continue
+					}
+
+					applyClientOp(ctx, txn, op, true)
+					// The KV api disallows use of a txn after an operation on it errors.
+					if r := op.Result(); r.Type == ResultType_Error {
+						err = errors.DecodeError(ctx, *r.Err)
+					}
+				}
+				if err != nil {
+					return err
 				}
 			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()
-				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch, true)
+				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := o.CommitInBatch.Result; r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -138,7 +184,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			case ClosureTxnType_Commit:
 				return nil
 			case ClosureTxnType_Rollback:
-				return errors.New("rollback")
+				return errClosureTxnRollback
 			default:
 				panic(errors.AssertionFailedf(`unknown closure txn type: %s`, o.Type))
 			}
@@ -221,7 +267,8 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		}
 	case *PutOperation:
 		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			b.Put(o.Key, o.Value)
+			b.Put(o.Key, o.Value())
+			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -250,13 +297,14 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		o.Result.Values = make([]KeyValue, len(kvs))
 		for i, kv := range kvs {
 			o.Result.Values[i] = KeyValue{
-				Key:   []byte(kv.Key),
+				Key:   kv.Key,
 				Value: kv.Value.RawBytes,
 			}
 		}
 	case *DeleteOperation:
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			b.Del(o.Key)
+			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -270,11 +318,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			o.Result.Keys[i] = deletedKey
 		}
 	case *DeleteRangeOperation:
-		if !inTxn {
-			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			b.DelRange(o.Key, o.EndKey, true /* returnKeys */)
+			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -287,20 +333,34 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		for i, deletedKey := range deletedKeys {
 			o.Result.Keys[i] = deletedKey
 		}
+	case *DeleteRangeUsingTombstoneOperation:
+		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			b.DelRangeUsingTombstone(o.Key, o.EndKey)
+			setLastReqSeq(b, o.Seq)
+		})
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+		o.Result.OptionalTimestamp = ts
 	case *BatchOperation:
 		b := &kv.Batch{}
-		applyBatchOp(ctx, b, db.Run, o, inTxn)
+		applyBatchOp(ctx, b, db.Run, o)
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
 	}
 }
 
+func setLastReqSeq(b *kv.Batch, seq kvnemesisutil.Seq) {
+	sl := b.Requests()
+	req := sl[len(sl)-1].GetInner()
+	h := req.Header()
+	h.KVNemesisSeq.Set(seq)
+	req.SetHeader(h)
+}
+
 func applyBatchOp(
-	ctx context.Context,
-	b *kv.Batch,
-	run func(context.Context, *kv.Batch) error,
-	o *BatchOperation,
-	inTxn bool,
+	ctx context.Context, b *kv.Batch, run func(context.Context, *kv.Batch) error, o *BatchOperation,
 ) {
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
@@ -311,7 +371,8 @@ func applyBatchOp(
 				b.Get(subO.Key)
 			}
 		case *PutOperation:
-			b.Put(subO.Key, subO.Value)
+			b.Put(subO.Key, subO.Value())
+			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
 			if subO.Reverse && subO.ForUpdate {
 				b.ReverseScanForUpdate(subO.Key, subO.EndKey)
@@ -324,11 +385,13 @@ func applyBatchOp(
 			}
 		case *DeleteOperation:
 			b.Del(subO.Key)
+			setLastReqSeq(b, subO.Seq)
 		case *DeleteRangeOperation:
-			if !inTxn {
-				panic(errors.AssertionFailedf(`non-transactional batch DelRange operations currently unsupported`))
-			}
 			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
+			setLastReqSeq(b, subO.Seq)
+		case *DeleteRangeUsingTombstoneOperation:
+			b.DelRangeUsingTombstone(subO.Key, subO.EndKey)
+			setLastReqSeq(b, subO.Seq)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -384,6 +447,8 @@ func applyBatchOp(
 					subO.Result.Keys[j] = key
 				}
 			}
+		case *DeleteRangeUsingTombstoneOperation:
+			subO.Result = resultInit(ctx, err)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

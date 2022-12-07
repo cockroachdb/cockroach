@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,14 +39,9 @@ type relocateNode struct {
 // relocateNode during local execution.
 type relocateRun struct {
 	lastRangeStartKey []byte
-
-	// storeMap caches information about stores seen in relocation strings (to
-	// avoid looking them up for every row).
-	storeMap map[roachpb.StoreID]roachpb.NodeID
 }
 
 func (n *relocateNode) startExec(runParams) error {
-	n.run.storeMap = make(map[roachpb.StoreID]roachpb.NodeID)
 	return nil
 }
 
@@ -65,6 +59,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	var relocationTargets []roachpb.ReplicationTarget
 	var leaseStoreID roachpb.StoreID
+	execCfg := params.ExecCfg()
 	if n.subjectReplicas == tree.RelocateLease {
 		if !data[0].ResolvedType().Equivalent(types.Int) {
 			return false, errors.Errorf(
@@ -96,17 +91,11 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 				return false, errors.Errorf("NULL value in relocation array for EXPERIMENTAL_RELOCATE")
 			}
 			storeID := roachpb.StoreID(*d.(*tree.DInt))
-			nodeID, ok := n.run.storeMap[storeID]
-			if !ok {
-				// Lookup the store in gossip.
-				storeDesc, err := lookupStoreDesc(storeID, params)
-				if err != nil {
-					return false, err
-				}
-				nodeID = storeDesc.Node.NodeID
-				n.run.storeMap[storeID] = nodeID
+			storeDesc, err := execCfg.NodeDescs.GetStoreDescriptor(storeID)
+			if err != nil {
+				return false, err
 			}
-			relocationTargets[i] = roachpb.ReplicationTarget{NodeID: nodeID, StoreID: storeID}
+			relocationTargets[i] = roachpb.ReplicationTarget{NodeID: storeDesc.Node.NodeID, StoreID: storeID}
 		}
 	}
 
@@ -116,13 +105,13 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	// TODO(a-robinson): Get the lastRangeStartKey via the ReturnRangeInfo option
 	// on the BatchRequest Header. We can't do this until v2.2 because admin
 	// requests don't respect the option on versions earlier than v2.1.
-	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, data[1:])
+	rowKey, err := getRowKey(execCfg.Codec, n.tableDesc, n.index, data[1:])
 	if err != nil {
 		return false, err
 	}
 	rowKey = keys.MakeFamilyKey(rowKey, 0)
 
-	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.extendedEvalCtx.ExecCfg.DB, rowKey)
+	rangeDesc, err := lookupRangeDescriptor(params.ctx, execCfg.DB, rowKey)
 	if err != nil {
 		return false, errors.Wrapf(err, "error looking up range descriptor")
 	}
@@ -132,11 +121,11 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 	switch n.subjectReplicas {
 	case tree.RelocateLease:
-		if err = params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
+		if err = execCfg.DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
 			return false, err
 		}
 	case tree.RelocateNonVoters:
-		err = params.p.ExecCfg().DB.AdminRelocateRange(
+		err = execCfg.DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
 			existingVoters,
@@ -144,7 +133,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			true, /* transferLeaseToFirstVoter */
 		)
 	case tree.RelocateVoters:
-		err = params.p.ExecCfg().DB.AdminRelocateRange(
+		err = execCfg.DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
 			relocationTargets,
@@ -173,21 +162,6 @@ func (n *relocateNode) Values() tree.Datums {
 
 func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
-}
-
-func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
-	var storeDesc roachpb.StoreDescriptor
-	gossipStoreKey := gossip.MakeStoreDescKey(storeID)
-	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
-	if err != nil {
-		return nil, err
-	}
-	if err := g.GetInfoProto(
-		gossipStoreKey, &storeDesc,
-	); err != nil {
-		return nil, errors.Wrapf(err, "error looking up store %d", storeID)
-	}
-	return &storeDesc, nil
 }
 
 func lookupRangeDescriptor(

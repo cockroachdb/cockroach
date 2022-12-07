@@ -3656,8 +3656,9 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Elastic CPU Utilization Limit",
+				Title: "Elastic CPU Utilization",
 				Metrics: []string{
+					"admission.elastic_cpu.utilization",
 					"admission.elastic_cpu.utilization_limit",
 				},
 			},

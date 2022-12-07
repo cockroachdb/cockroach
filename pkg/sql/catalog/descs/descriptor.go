@@ -14,9 +14,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -77,6 +79,145 @@ func (tc *Collection) GetImmutableDescriptorByID(
 	return tc.getDescriptorByID(ctx, txn, flags, id)
 }
 
+// MaybeGetTable implements the catalog.ZoneConfigHydrationHelper interface.
+func (tc *Collection) MaybeGetTable(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (catalog.TableDescriptor, error) {
+	// Ignore ids without a descriptor.
+	if id == keys.RootNamespaceID || keys.IsPseudoTableID(uint32(id)) {
+		return nil, nil
+	}
+	desc, err := tc.GetImmutableDescriptorByID(
+		ctx,
+		txn,
+		id,
+		tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if desc.DescriptorType() == catalog.Table {
+		return desc.(catalog.TableDescriptor), nil
+	}
+	return nil, nil
+}
+
+// GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
+func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
+	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {
+		return cmt, hasCmt
+	}
+	if cmt, hasCmt, cached := tc.stored.GetCachedComment(key); cached {
+		return cmt, hasCmt
+	}
+	// TODO(chengxiong): we need to ensure descriptor if it's not in either cache
+	// and it's not a pseudo descriptor.
+	return "", false
+}
+
+// AddUncommittedComment adds a comment to uncommitted cache.
+func (tc *Collection) AddUncommittedComment(key catalogkeys.CommentKey, cmt string) {
+	tc.uncommittedComments.upsert(key, cmt)
+}
+
+// GetZoneConfig is similar to GetZoneConfigs but only
+// fetches for one id.
+func (tc *Collection) GetZoneConfig(
+	ctx context.Context, txn *kv.Txn, descID descpb.ID,
+) (catalog.ZoneConfig, error) {
+	ret, err := tc.GetZoneConfigs(ctx, txn, descID)
+	if err != nil {
+		return nil, err
+	}
+	return ret[descID], nil
+}
+
+// GetZoneConfigs first tries to get zone config from uncommitted and
+// stored layer cache. Zone configs are ensured from storage if there are ids not
+// seen in caches.
+func (tc *Collection) GetZoneConfigs(
+	ctx context.Context, txn *kv.Txn, descIDs ...descpb.ID,
+) (map[descpb.ID]catalog.ZoneConfig, error) {
+	ret := make(map[descpb.ID]catalog.ZoneConfig)
+	var idsForStorageRead catalog.DescriptorIDSet
+	for _, id := range descIDs {
+		if zc, cached := tc.uncommittedZoneConfigs.getUncommitted(id); cached {
+			if zc != nil {
+				ret[id] = zc.Clone()
+			}
+			continue
+		}
+		if zc, cached := tc.stored.GetCachedZoneConfig(id); cached {
+			if zc != nil {
+				ret[id] = zc.Clone()
+			}
+			continue
+		}
+		idsForStorageRead.Add(id)
+	}
+
+	// If zone config is not seen in cache, it's a good chance that the id doesn't
+	// have a corresponding descriptor so the zone config wasn't loaded with the
+	// descriptor. Or a descriptor is not resolved for schema change purpose yet.
+	if err := tc.stored.EnsureZoneConfigFromStorage(ctx, txn, idsForStorageRead); err != nil {
+		return nil, err
+	}
+
+	var remainingIDs catalog.DescriptorIDSet
+	idsForStorageRead.ForEach(func(id descpb.ID) {
+		if zc, cached := tc.stored.GetCachedZoneConfig(id); cached {
+			if zc != nil {
+				ret[id] = zc.Clone()
+			}
+			return
+		}
+		remainingIDs.Add(id)
+	})
+
+	if !remainingIDs.Empty() {
+		// This should never happen since we tried hard to load zone configs from storage.
+		return nil, errors.Errorf("Failed to fetch zone config for IDs: %v", idsForStorageRead.Ordered())
+	}
+	return ret, nil
+}
+
+// MaybeGetZoneConfig implements the catalog.ZoneConfigHydrationHelper
+// interface.
+func (tc *Collection) MaybeGetZoneConfig(
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
+) (catalog.ZoneConfig, error) {
+	return tc.GetZoneConfig(ctx, txn, id)
+}
+
+// AddUncommittedZoneConfig adds a zone config to the uncommitted cache.
+func (tc *Collection) AddUncommittedZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig) error {
+	return tc.uncommittedZoneConfigs.upsert(id, zc)
+}
+
+// MarkUncommittedZoneConfigDeleted adds the descriptor id to the uncommitted zone config layer, but indicates
+// that the zone config has been dropped or does not exist for this descriptor id.
+func (tc *Collection) MarkUncommittedZoneConfigDeleted(id descpb.ID) {
+	tc.uncommittedZoneConfigs.markNoZoneConfig(id)
+}
+
+// MarkUncommittedCommentDeleted adds the key to uncommitted cache, but indicates
+// that the comment has been dropped, therefore the cached information is that
+// "there is no comment for this key".
+func (tc *Collection) MarkUncommittedCommentDeleted(key catalogkeys.CommentKey) {
+	tc.uncommittedComments.markNoComment(key)
+}
+
+// MarkUncommittedCommentDeletedForTable is similar to
+// MarkUncommittedCommentDeleted, but it marks all comments on the table as
+// deleted.
+func (tc *Collection) MarkUncommittedCommentDeletedForTable(tblID descpb.ID) {
+	tc.uncommittedComments.markTableDeleted(tblID)
+}
+
 // getDescriptorsByID returns a descriptor by ID according to the provided
 // lookup flags.
 //
@@ -132,13 +273,17 @@ func getDescriptorsByID(
 	}
 
 	// We want to avoid the allocation in the case that there is exactly one
-	// descriptor to resolve. This is the common case. The array stays on the
-	// stack.
+	// or two descriptors to resolve. These are the common cases.
+	// The array stays on the stack.
 	var vls []catalog.ValidationLevel
 	switch len(ids) {
 	case 1:
 		//gcassert:noescape
 		var arr [1]catalog.ValidationLevel
+		vls = arr[:]
+	case 2:
+		//gcassert:noescape
+		var arr [2]catalog.ValidationLevel
 		vls = arr[:]
 	default:
 		vls = make([]catalog.ValidationLevel, len(ids))
@@ -188,6 +333,11 @@ func getDescriptorsByID(
 		}
 	}
 	if !readIDs.Empty() {
+		if flags.AvoidStorage {
+			// Some descriptors are still missing and there's nowhere left to get
+			// them from.
+			return catalog.ErrDescriptorNotFound
+		}
 		if err = tc.stored.EnsureFromStorageByIDs(ctx, txn, readIDs, catalog.Any); err != nil {
 			return err
 		}
@@ -331,34 +481,24 @@ func (tc *Collection) getDescriptorByName(
 	// When looking up descriptors by name, then descriptors in the adding state
 	// must be uncommitted to be visible (among other things).
 	flags.AvoidCommittedAdding = true
-
 	desc, err := tc.getDescriptorByID(ctx, txn, flags, id)
-	if err != nil {
-		// Swallow error if the descriptor is dropped.
-		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			return nil, nil
-		}
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			// Special case for temporary schemas, which can't always be resolved by
-			// ID alone.
-			if db != nil && sc == nil && isTemporarySchema(name) {
-				return schemadesc.NewTemporarySchema(name, id, db.GetID()), nil
-			}
-			// In all other cases, having an ID should imply having a descriptor.
-			return nil, errors.WithAssertionFailure(err)
-		}
-		return nil, err
+	if err == nil {
+		return desc, nil
 	}
-	if desc.GetName() != name && !(desc.DescriptorType() == catalog.Schema && isTemporarySchema(name)) {
-		// TODO(postamar): make Collection aware of name ops
-		//
-		// We're prevented from removing this check until the Collection mediates
-		// name changes in the system.namespace table similarly to how it mediates
-		// descriptor changes in system.descriptor via the uncommitted descriptors
-		// layer and the WriteDescsToBatch method.
+	// Swallow error if the descriptor is dropped.
+	if errors.Is(err, catalog.ErrDescriptorDropped) {
 		return nil, nil
 	}
-	return desc, nil
+	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		// Special case for temporary schemas, which can't always be resolved by
+		// ID alone.
+		if db != nil && sc == nil && isTemporarySchema(name) {
+			return schemadesc.NewTemporarySchema(name, id, db.GetID()), nil
+		}
+		// In all other cases, having an ID should imply having a descriptor.
+		return nil, errors.WithAssertionFailure(err)
+	}
+	return nil, err
 }
 
 type continueOrHalt bool
@@ -385,11 +525,13 @@ func (tc *Collection) getVirtualDescriptorByName(
 		},
 	}
 	switch requestedType {
+	case catalog.Database, catalog.Function:
+		return continueLookups, nil, nil
 	case catalog.Schema:
 		if vs := tc.virtual.getSchemaByName(name); vs != nil {
 			return haltLookups, vs, nil
 		}
-	case catalog.Type:
+	case catalog.Type, catalog.Any:
 		objFlags.DesiredObjectKind = tree.TypeObject
 		fallthrough
 	case catalog.Table:
@@ -480,8 +622,12 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
-		if cd := tc.stored.GetCachedByName(parentID, parentSchemaID, name); cd != nil {
-			return haltLookups, cd.GetID(), nil
+		if id := tc.stored.GetCachedIDByName(&descpb.NameInfo{
+			ParentID:       parentID,
+			ParentSchemaID: parentSchemaID,
+			Name:           name,
+		}); id != descpb.InvalidID {
+			return haltLookups, id, nil
 		}
 		return continueLookups, descpb.InvalidID, nil
 	}
@@ -504,6 +650,9 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return haltLookups, ld.GetID(), nil
 	}
 	lookupStoredID := func() (continueOrHalt, descpb.ID, error) {
+		if flags.AvoidStorage {
+			return haltLookups, descpb.InvalidID, nil
+		}
 		id, err := tc.stored.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return haltLookups, id, err
 	}

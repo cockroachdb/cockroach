@@ -1,7 +1,7 @@
 # disabled to probabilistically run within a tenant because the test always runs from the host
 # tenant
 
-new-server name=s1 disable-tenant
+new-cluster name=s1 disable-tenant
 ----
 
 # Create a few tenants.
@@ -38,7 +38,7 @@ exec-sql
 BACKUP TENANT 6 INTO 'nodelocal://1/tenant6'
 ----
 
-new-server name=s2 share-io-dir=s1 disable-tenant
+new-cluster name=s2 share-io-dir=s1 disable-tenant
 ----
 
 exec-sql

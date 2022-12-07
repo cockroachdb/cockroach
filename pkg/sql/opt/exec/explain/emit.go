@@ -319,6 +319,7 @@ var nodeNames = [...]string{
 	hashSetOpOp:            "", // This node does not have a fixed name.
 	streamingSetOpOp:       "", // This node does not have a fixed name.
 	unionAllOp:             "union all",
+	showCompletionsOp:      "show completions",
 	showTraceOp:            "show trace",
 	simpleProjectOp:        "project",
 	serializingProjectOp:   "project",
@@ -901,6 +902,13 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 		e.emitSpans("spans", a.Table, a.Table.Index(cat.PrimaryIndex), params)
 
+	case showCompletionsOp:
+		a := n.args.(*showCompletionsArgs)
+		if a.Command != nil {
+			ob.Attrf("offset", "%s", a.Command.Offset.OrigString())
+			ob.Attrf("syntax", "%q", shorten(a.Command.Statement.RawString()))
+		}
+
 	case alterTableSplitOp:
 		a := n.args.(*alterTableSplitArgs)
 		ob.Attrf("index", "%s@%s", a.Index.Table().Name(), a.Index.Name())
@@ -1137,4 +1145,11 @@ func printColumnSet(inputCols colinfo.ResultColumns, cols exec.NodeColumnOrdinal
 		buf.WriteString(inputCols[col].Name)
 	})
 	return buf.String()
+}
+
+func shorten(s string) string {
+	if len(s) > 20 {
+		return s[:20] + "…"
+	}
+	return s
 }

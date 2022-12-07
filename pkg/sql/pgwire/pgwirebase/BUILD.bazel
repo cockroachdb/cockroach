@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/ipaddr",
         "//pkg/util/timeofday",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tsearch",
         "//pkg/util/uint128",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",

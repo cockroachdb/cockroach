@@ -454,7 +454,7 @@ func newTestContext(
 ) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
-	cfg.RPCHeartbeatIntervalAndHalfTimeout = 100 * time.Millisecond
+	cfg.RPCHeartbeatIntervalAndTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID:  roachpb.SystemTenantID,
@@ -621,8 +621,20 @@ func (*internalServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
+func (s *internalServer) SpanConfigConformance(
+	context.Context, *roachpb.SpanConfigConformanceRequest,
+) (*roachpb.SpanConfigConformanceResponse, error) {
+	panic("unimplemented")
+}
+
 func (*internalServer) TenantSettings(
 	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) GetRangeDescriptors(
+	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
 ) error {
 	panic("unimplemented")
 }

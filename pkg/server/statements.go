@@ -39,7 +39,7 @@ func (s *statusServer) Statements(
 		return nil, err
 	}
 
-	if s.gossip.NodeID.Get() == 0 {
+	if s.serverIterator.getID() == 0 {
 		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
 	}
 
@@ -62,8 +62,8 @@ func (s *statusServer) Statements(
 		if local {
 			return statementsLocal(
 				ctx,
-				s.gossip.NodeID.Get(),
-				s.admin.server.sqlServer,
+				roachpb.NodeID(s.serverIterator.getID()),
+				s.sqlServer,
 				req.FetchMode)
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)

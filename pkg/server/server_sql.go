@@ -71,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -99,10 +98,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrademanager"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -114,7 +113,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -179,9 +178,6 @@ type SQLServer struct {
 
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
-	// connManager is the connection manager to use to set up additional
-	// SQL listeners in AcceptClients().
-	connManager netutil.Server
 
 	// isReady is the health status of the node. When true, the node is healthy;
 	// load balancers and connection management tools treat the node as "ready".
@@ -195,6 +191,10 @@ type SQLServer struct {
 	// Server is closed. Every InternalExecutor created via the factory
 	// uses this memory monitor.
 	internalExecutorFactoryMemMonitor *mon.BytesMonitor
+
+	// upgradeManager deals with cluster version upgrades on bootstrap and on
+	// `set cluster setting version = <v>`.
+	upgradeManager *upgrademanager.Manager
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -337,9 +337,6 @@ type sqlServerArgs struct {
 	// Used to watch settings and descriptor changes.
 	rangeFeedFactory *rangefeed.Factory
 
-	// Used to query valid regions on the server.
-	regionsServer serverpb.RegionsServer
-
 	// Used to query status information useful for debugging on the server.
 	tenantStatusServer serverpb.TenantStatusServer
 
@@ -365,6 +362,14 @@ type sqlServerArgs struct {
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
+
+	// admissionPacerFactory is used for elastic CPU control when performing
+	// CPU intensive operations, such as CDC event encoding/decoding.
+	admissionPacerFactory admission.PacerFactory
+
+	// rangeDescIteratorFactory is used to construct iterators over range
+	// descriptors.
+	rangeDescIteratorFactory rangedesc.IteratorFactory
 }
 
 type monitorAndMetrics struct {
@@ -743,6 +748,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ExternalIORecorder:       cfg.costController,
 		TenantCostController:     cfg.costController,
 		RangeStatsFetcher:        rangeStatsFetcher,
+		AdmissionPacerFactory:    cfg.admissionPacerFactory,
+		ExecutorConfig:           execCfg,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
@@ -808,10 +815,39 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// all nodes in the cluster.
 	// The collector requires nodeliveness to get a list of all the nodes in the
 	// cluster.
-	var traceCollector *collector.TraceCollector
-	if hasNodeLiveness {
-		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Tracer)
+	var getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
+	var nodeDialer *nodedialer.Dialer
+	if !isSQLPod {
+		nodeDialer = cfg.nodeDialer
+		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
+			var ns []roachpb.NodeID
+			ls, err := nodeLiveness.GetLivenessesFromKV(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, l := range ls {
+				if l.Membership.Decommissioned() {
+					continue
+				}
+				ns = append(ns, l.NodeID)
+			}
+			return ns, nil
+		}
+	} else {
+		nodeDialer = cfg.podNodeDialer
+		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
+			instances, err := cfg.sqlInstanceReader.GetAllInstances(ctx)
+			if err != nil {
+				return nil, err
+			}
+			instanceIDs := make([]roachpb.NodeID, len(instances))
+			for i, instance := range instances {
+				instanceIDs[i] = roachpb.NodeID(instance.InstanceID)
+			}
+			return instanceIDs, err
+		}
 	}
+	traceCollector := collector.New(cfg.Tracer, getNodes, nodeDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 
@@ -844,7 +880,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DistSQLSrv:                distSQLServer,
 		NodesStatusServer:         cfg.nodesStatusServer,
 		SQLStatusServer:           cfg.sqlStatusServer,
-		RegionsServer:             cfg.regionsServer,
 		SessionRegistry:           cfg.sessionRegistry,
 		ClosedSessionCache:        cfg.closedSessionCache,
 		ContentionRegistry:        contentionRegistry,
@@ -862,6 +897,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
+		RangeDescIteratorFactory:  cfg.rangeDescIteratorFactory,
 		SyntheticPrivilegeCache: cacheutil.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
 
@@ -906,6 +942,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DescIDGenerator:            descidgen.NewGenerator(cfg.Settings, codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
 		EventsExporter:             cfg.eventsServer,
+		NodeDescs:                  cfg.nodeDescs,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1076,6 +1113,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
+	var upgradeMgr *upgrademanager.Manager
 	{
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
@@ -1084,32 +1122,34 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		var systemDeps upgrade.SystemDeps
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
-				NodeLiveness:      nodeLiveness,
-				Dialer:            cfg.nodeDialer,
-				RangeDescIterator: rangedesciter.New(cfg.db),
-				DB:                cfg.db,
+				NodeLiveness:     nodeLiveness,
+				Dialer:           cfg.nodeDialer,
+				RangeDescScanner: rangedesc.NewScanner(cfg.db),
+				DB:               cfg.db,
 			})
 			systemDeps = upgrade.SystemDeps{
-				Cluster:    c,
-				DB:         cfg.db,
-				DistSender: cfg.distSender,
-				Stopper:    cfg.stopper,
+				Cluster:          c,
+				DB:               cfg.db,
+				InternalExecutor: cfg.circularInternalExecutor,
+				DistSender:       cfg.distSender,
+				Stopper:          cfg.stopper,
 			}
 		} else {
 			c = upgradecluster.NewTenantCluster(cfg.db)
 			systemDeps = upgrade.SystemDeps{
-				Cluster: c,
-				DB:      cfg.db,
+				Cluster:          c,
+				DB:               cfg.db,
+				InternalExecutor: cfg.circularInternalExecutor,
 			}
 		}
 
-		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgrade.TestingKnobs)
-		migrationMgr := upgrademanager.NewManager(
+		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
+		upgradeMgr = upgrademanager.NewManager(
 			systemDeps, leaseMgr, cfg.circularInternalExecutor, cfg.internalExecutorFactory, jobRegistry, codec,
-			cfg.Settings, knobs,
+			cfg.Settings, clusterIDForSQL.Get(), knobs,
 		)
-		execCfg.UpgradeJobDeps = migrationMgr
-		execCfg.VersionUpgradeHook = migrationMgr.Migrate
+		execCfg.UpgradeJobDeps = upgradeMgr
+		execCfg.VersionUpgradeHook = upgradeMgr.Migrate
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
@@ -1156,6 +1196,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
 
+	var waitForInstanceReaderStarted func(context.Context) error
+	if cfg.sqlInstanceReader != nil {
+		waitForInstanceReaderStarted = cfg.sqlInstanceReader.WaitForStarted
+	}
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
@@ -1166,6 +1210,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs,
 		ieFactory,
 		collectionFactory,
+		waitForInstanceReaderStarted,
 	)
 
 	reporter := &diagnostics.Reporter{
@@ -1253,29 +1298,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		isMeta1Leaseholder:                cfg.isMeta1Leaseholder,
 		cfg:                               cfg.BaseConfig,
 		internalExecutorFactoryMemMonitor: ieFactoryMonitor,
+		upgradeManager:                    upgradeMgr,
 	}, nil
-}
-
-// Checks if tenant exists. This function does a very superficial check to see if the system db
-// has been bootstrapped for the tenant. This is not a complete check and is only sufficient
-// to be used in the dev environment.
-func checkTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB) error {
-	if codec.ForSystemTenant() {
-		return errors.AssertionFailedf("asked to check for tenant but system codec specified")
-	}
-
-	key := catalogkeys.MakeDatabaseNameKey(codec, systemschema.SystemDatabaseName)
-	result, err := db.Get(ctx, key)
-	if err != nil {
-		return err
-	}
-	if result.Value == nil || result.ValueInt() != keys.SystemDatabaseID {
-		return errors.New("system DB uninitialized, check if tenant is non existent")
-	}
-	// Tenant has been confirmed to be bootstrapped successfully
-	// as the system database, which is a part of the bootstrap data for
-	// a tenant keyspace, exists in the namespace table.
-	return nil
 }
 
 func (s *SQLServer) setInstanceID(
@@ -1293,11 +1317,9 @@ func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
-	connManager netutil.Server,
 	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
 	// until a connection is established to the cluster and its ID has been
@@ -1306,17 +1328,19 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
-		// Confirm tenant exists prior to initialization. This is a sanity
-		// check for the dev environment to ensure that a tenant has been
-		// successfully created before attempting to initialize a SQL
-		// server for it.
-		if err := checkTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
-			return err
-		}
+	}
+
+	// Load the multi-region enum by reading the system database's descriptor.
+	// This also serves as a simple check to see if a tenant exist (i.e. by
+	// checking whether the system db has been bootstrapped).
+	regionPhysicalRep, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
+		ctx, s.internalExecutorFactory, s.execCfg.DB, keys.SystemDatabaseID, s.distSQLServer.Locality)
+	if err != nil && !errors.Is(err, sql.ErrNotMultiRegionDatabase) {
+		return err
 	}
 
 	// Start the sql liveness subsystem. We'll need it to get a session.
-	s.sqlLivenessProvider.Start(ctx)
+	s.sqlLivenessProvider.Start(ctx, regionPhysicalRep)
 
 	_, isMixedSQLAndKVNode := s.sqlIDContainer.OptionalNodeID()
 	isTenant := !isMixedSQLAndKVNode
@@ -1328,12 +1352,12 @@ func (s *SQLServer) preStart(
 		}
 		// Start instance ID reclaim loop.
 		if err := s.sqlInstanceStorage.RunInstanceIDReclaimLoop(
-			ctx, stopper, timeutil.DefaultTimeSource{}, session.Expiration,
+			ctx, stopper, timeutil.DefaultTimeSource{}, s.internalExecutorFactory, session.Expiration,
 		); err != nil {
 			return err
 		}
-		// Acquire our instance ID.
-		instanceID, err := s.sqlInstanceStorage.CreateInstance(
+		// Acquire our instance row.
+		instance, err := s.sqlInstanceStorage.CreateInstance(
 			ctx, session.ID(), session.Expiration(), s.cfg.AdvertiseAddr, s.distSQLServer.Locality)
 		if err != nil {
 			return err
@@ -1347,19 +1371,18 @@ func (s *SQLServer) preStart(
 		// Hand the instance ID to everybody who needs it, unless the sqlIDContainer
 		// has already been initialized with a node ID. IN that case we don't need to
 		// initialize a SQL instance ID in this case as this is not a SQL pod server.
-		if err := s.setInstanceID(ctx, instanceID, session.ID()); err != nil {
+		log.Infof(ctx, "bound sqlinstance: %v", instance)
+		if err := s.setInstanceID(ctx, instance.InstanceID, session.ID()); err != nil {
 			return err
 		}
 		// Start the instance provider. This needs to come after we've allocated our
 		// instance ID because the instances reader needs to see our own instance;
-		// we might be the only SQL server available, and if the reader doesn't see
+		// we might be the only SQL server available, especially when we have not
+		// received data from the rangefeed yet, and if the reader doesn't see
 		// it, we'd be unable to plan any queries.
-		if err := s.sqlInstanceReader.Start(ctx); err != nil {
-			return err
-		}
+		s.sqlInstanceReader.Start(ctx, instance)
 	}
 
-	s.connManager = connManager
 	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
@@ -1371,15 +1394,6 @@ func (s *SQLServer) preStart(
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
 		return err
-	}
-
-	// Before serving SQL requests, we have to make sure the database is
-	// in an acceptable form for this version of the software.
-	// We have to do this after actually starting up the server to be able to
-	// seamlessly use the kv client against other nodes in the cluster.
-	var mmKnobs startupmigrations.MigrationManagerTestingKnobs
-	if migrationManagerTestingKnobs := knobs.StartupMigrationManager; migrationManagerTestingKnobs != nil {
-		mmKnobs = *migrationManagerTestingKnobs.(*startupmigrations.MigrationManagerTestingKnobs)
 	}
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
@@ -1402,17 +1416,6 @@ func (s *SQLServer) preStart(
 				DistSQLMode: sessiondatapb.DistSQLOff,
 			},
 		})
-	startupMigrationsMgr := startupmigrations.NewManager(
-		stopper,
-		s.execCfg.DB,
-		s.execCfg.Codec,
-		&migrationsExecutor,
-		s.execCfg.Clock,
-		mmKnobs,
-		s.execCfg.NodeInfo.NodeID.SQLInstanceID().String(),
-		s.execCfg.Settings,
-		s.jobRegistry,
-	)
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
@@ -1457,9 +1460,22 @@ func (s *SQLServer) preStart(
 		return errors.Wrap(err, "initializing settings")
 	}
 
-	// Run startup upgrades (note: these depend on jobs subsystem running).
-	if err := startupMigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-		return errors.Wrap(err, "ensuring SQL migrations")
+	// Run all the "permanent" upgrades that haven't already run in this cluster,
+	// until the currently active version. Upgrades for higher versions, if any,
+	// will be run in response to `SET CLUSTER SETTING version = <v>`, just like
+	// non-permanent upgrade.
+	//
+	// NOTE: We're going to run the permanent upgrades up to the active version.
+	// For mixed kv/sql nodes, I think we could use bootstrapVersion here instead.
+	// If the active version has diverged from bootstrap version, then all
+	// upgrades in between the two must have run when the cluster version
+	// advanced. But for sql-only servers the bootstrap version is not
+	// well-defined, so we use the active version.
+	if err := s.upgradeManager.RunPermanentUpgrades(
+		ctx,
+		s.cfg.Settings.Version.ActiveVersion(ctx).Version, /* upToVersion */
+	); err != nil {
+		return err
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
@@ -1526,11 +1542,7 @@ func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
 // startServeSQL starts accepting incoming SQL connections over TCP.
 // It also starts listening on the Unix socket, if that was configured.
 func (s *SQLServer) startServeSQL(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	connManager netutil.Server,
-	pgL net.Listener,
-	socketFileCfg *string,
+	ctx context.Context, stopper *stop.Stopper, pgL net.Listener, socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
@@ -1538,10 +1550,14 @@ func (s *SQLServer) startServeSQL(
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := makeTCPKeepAliveManager()
 
+	// The connManager is responsible for tearing down the net.Conn
+	// objects when the stopper tells us to shut down.
+	connManager := netutil.MakeTCPServer(ctx, stopper)
+
 	_ = stopper.RunAsyncTaskEx(pgCtx,
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {
-			err := connManager.ServeWith(ctx, stopper, pgL, func(ctx context.Context, conn net.Conn) {
+			err := connManager.ServeWith(ctx, pgL, func(ctx context.Context, conn net.Conn) {
 				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 				tcpKeepAlive.configure(connCtx, conn)
 
@@ -1593,7 +1609,7 @@ func (s *SQLServer) startServeSQL(
 		if err := stopper.RunAsyncTaskEx(pgCtx,
 			stop.TaskOpts{TaskName: "unix-listener", SpanOpt: stop.SterileRootSpan},
 			func(ctx context.Context) {
-				err := connManager.ServeWith(ctx, stopper, unixLn, func(ctx context.Context, conn net.Conn) {
+				err := connManager.ServeWith(ctx, unixLn, func(ctx context.Context, conn net.Conn) {
 					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 					if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 						log.Ops.Errorf(connCtx, "%v", err)

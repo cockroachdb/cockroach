@@ -1,2 +1,2 @@
 alter_func_rename_stmt ::=
-	'ALTER' 'FUNCTION' function_with_argtypes 'RENAME' 'TO' name
+	'ALTER' 'FUNCTION' function_with_paramtypes 'RENAME' 'TO' name

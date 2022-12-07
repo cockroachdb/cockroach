@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -2005,6 +2006,8 @@ type ParseTimeContext interface {
 	GetIntervalStyle() duration.IntervalStyle
 	// GetDateStyle returns the date style in the session.
 	GetDateStyle() pgdate.DateStyle
+	// GetParseHelper returns a helper to optmize date parsing.
+	GetDateHelper() *pgdate.ParseHelper
 }
 
 var _ ParseTimeContext = &simpleParseTimeContext{}
@@ -2037,6 +2040,7 @@ type simpleParseTimeContext struct {
 	RelativeParseTime time.Time
 	DateStyle         pgdate.DateStyle
 	IntervalStyle     duration.IntervalStyle
+	dateHelper        pgdate.ParseHelper
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
@@ -2052,6 +2056,11 @@ func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
 // GetDateStyle implements ParseTimeContext.
 func (ctx simpleParseTimeContext) GetDateStyle() pgdate.DateStyle {
 	return ctx.DateStyle
+}
+
+// GetDateHelper implements ParseTimeContext.
+func (ctx simpleParseTimeContext) GetDateHelper() *pgdate.ParseHelper {
+	return &ctx.dateHelper
 }
 
 // relativeParseTime chooses a reasonable "now" value for
@@ -2077,6 +2086,13 @@ func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
 	return ctx.GetIntervalStyle()
 }
 
+func dateParseHelper(ctx ParseTimeContext) *pgdate.ParseHelper {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.GetDateHelper()
+}
+
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 //
@@ -2084,7 +2100,7 @@ func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
 // ParseTimeContext (either for the time or the local timezone).
 func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	return NewDDate(t), dependsOnContext, err
 }
 
@@ -3696,7 +3712,8 @@ func AsJSON(
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
-	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D:
+	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
+		*DTSVector, *DTSQuery:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc))), nil
 	case *DGeometry:
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
@@ -3805,6 +3822,268 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 // TODO(justin): is this a frequently-called method? Should we be caching the computed size?
 func (d *DJSON) Size() uintptr {
 	return unsafe.Sizeof(*d) + d.JSON.Size()
+}
+
+// DTSQuery is the tsquery Datum.
+type DTSQuery struct {
+	tsearch.TSQuery
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DTSQuery) Format(ctx *FmtCtx) {
+	bareStrings := ctx.HasFlags(FmtFlags(lexbase.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	str := d.TSQuery.String()
+	if !bareStrings {
+		str = strings.ReplaceAll(str, `'`, `''`)
+	}
+	ctx.WriteString(str)
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DTSQuery) ResolvedType() *types.T {
+	return types.TSQuery
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (d *DTSQuery) AmbiguousFormat() bool { return true }
+
+// Compare implements the Datum interface.
+func (d *DTSQuery) Compare(ctx CompareContext, other Datum) int {
+	res, err := d.CompareError(ctx, other)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+
+// CompareError implements the Datum interface.
+func (d *DTSQuery) CompareError(ctx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := ctx.UnwrapDatum(other).(*DTSQuery)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	l, r := d.String(), v.String()
+	if l < r {
+		return -1, nil
+	} else if l > r {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+// Prev implements the Datum interface.
+func (d *DTSQuery) Prev(_ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DTSQuery) Next(_ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMin implements the Datum interface.
+func (d *DTSQuery) IsMin(_ CompareContext) bool {
+	return len(d.String()) == 0
+}
+
+// IsMax implements the Datum interface.
+func (d *DTSQuery) IsMax(ctx CompareContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DTSQuery) Max(ctx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DTSQuery) Min(ctx CompareContext) (Datum, bool) {
+	return &DTSQuery{}, false
+}
+
+// Size implements the Datum interface.
+func (d *DTSQuery) Size() uintptr {
+	return uintptr(len(d.TSQuery.String()))
+}
+
+// AsDTSQuery attempts to retrieve a DTSQuery from an Expr, returning a
+// DTSQuery and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DTSQuery wrapped by a *DOidWrapper is possible.
+func AsDTSQuery(e Expr) (*DTSQuery, bool) {
+	switch t := e.(type) {
+	case *DTSQuery:
+		return t, true
+	case *DOidWrapper:
+		return AsDTSQuery(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDTSQuery attempts to retrieve a DTSQuery from an Expr, panicking if the
+// assertion fails.
+func MustBeDTSQuery(e Expr) *DTSQuery {
+	v, ok := AsDTSQuery(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DTSQuery, found %T", e))
+	}
+	return v
+}
+
+// NewDTSQuery is a helper routine to create a DTSQuery initialized from its
+// argument.
+func NewDTSQuery(q tsearch.TSQuery) *DTSQuery {
+	return &DTSQuery{TSQuery: q}
+}
+
+// ParseDTSQuery takes a string of TSQuery and returns a DTSQuery value.
+func ParseDTSQuery(s string) (Datum, error) {
+	v, err := tsearch.ParseTSQuery(s)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse tsquery")
+	}
+	return NewDTSQuery(v), nil
+}
+
+// DTSVector is the tsvector Datum.
+type DTSVector struct {
+	tsearch.TSVector
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DTSVector) Format(ctx *FmtCtx) {
+	bareStrings := ctx.HasFlags(FmtFlags(lexbase.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	str := d.TSVector.String()
+	if !bareStrings {
+		str = strings.ReplaceAll(str, `'`, `''`)
+	}
+	ctx.WriteString(str)
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DTSVector) ResolvedType() *types.T {
+	return types.TSVector
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (d *DTSVector) AmbiguousFormat() bool { return true }
+
+// Compare implements the Datum interface.
+func (d *DTSVector) Compare(ctx CompareContext, other Datum) int {
+	res, err := d.CompareError(ctx, other)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+
+// CompareError implements the Datum interface.
+func (d *DTSVector) CompareError(ctx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := ctx.UnwrapDatum(other).(*DTSVector)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	l, r := d.String(), v.String()
+	if l < r {
+		return -1, nil
+	} else if l > r {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+// Prev implements the Datum interface.
+func (d *DTSVector) Prev(_ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DTSVector) Next(_ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMin implements the Datum interface.
+func (d *DTSVector) IsMin(_ CompareContext) bool {
+	return len(d.String()) == 0
+}
+
+// IsMax implements the Datum interface.
+func (d *DTSVector) IsMax(_ CompareContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DTSVector) Max(_ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DTSVector) Min(_ CompareContext) (Datum, bool) {
+	return &DTSVector{}, false
+}
+
+// Size implements the Datum interface.
+func (d *DTSVector) Size() uintptr {
+	return uintptr(len(d.TSVector.String()))
+}
+
+// AsDTSVector attempts to retrieve a DTSVector from an Expr, returning a
+// DTSVector and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DTSVector wrapped by a *DOidWrapper is possible.
+func AsDTSVector(e Expr) (*DTSVector, bool) {
+	switch t := e.(type) {
+	case *DTSVector:
+		return t, true
+	case *DOidWrapper:
+		return AsDTSVector(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDTSVector attempts to retrieve a DTSVector from an Expr, panicking if the
+// assertion fails.
+func MustBeDTSVector(e Expr) *DTSVector {
+	v, ok := AsDTSVector(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DTSVector, found %T", e))
+	}
+	return v
+}
+
+// NewDTSVector is a helper routine to create a DTSVector initialized from its
+// argument.
+func NewDTSVector(v tsearch.TSVector) *DTSVector {
+	return &DTSVector{TSVector: v}
+}
+
+// ParseDTSVector takes a string of TSVector and returns a DTSVector value.
+func ParseDTSVector(s string) (Datum, error) {
+	v, err := tsearch.ParseTSVector(s)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse tsvector")
+	}
+	return NewDTSVector(v), nil
 }
 
 // DTuple is the tuple Datum.
@@ -5467,6 +5746,8 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TimestampTZFamily:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
+	types.TSQueryFamily:        {unsafe.Sizeof(DTSQuery{}), variableSize},
+	types.TSVectorFamily:       {unsafe.Sizeof(DTSVector{}), variableSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},

@@ -13,12 +13,10 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -60,33 +58,17 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		return err
 	}
 
-	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-column-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
-			n.tableDesc.GetID(),
-			col.GetPGAttributeNum(),
-			*n.n.Comment)
-		if err != nil {
-			return err
-		}
+	if n.n.Comment == nil {
+		err = params.p.deleteComment(
+			params.ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), catalogkeys.ColumnCommentType,
+		)
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"delete-column-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-			keys.ColumnCommentType,
-			n.tableDesc.GetID(),
-			col.GetPGAttributeNum())
-		if err != nil {
-			return err
-		}
+		err = params.p.updateComment(
+			params.ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), catalogkeys.ColumnCommentType, *n.n.Comment,
+		)
+	}
+	if err != nil {
+		return err
 	}
 
 	comment := ""

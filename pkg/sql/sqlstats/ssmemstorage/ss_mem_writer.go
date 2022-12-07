@@ -137,6 +137,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.Nodes = util.CombineUniqueInt64(stats.mu.data.Nodes, value.Nodes)
 	stats.mu.data.PlanGists = util.CombineUniqueString(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
+	stats.mu.data.Indexes = util.CombineUniqueString(stats.mu.data.Indexes, value.Indexes)
 
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
@@ -300,6 +301,7 @@ func (s *Container) RecordTransaction(
 	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatency.Seconds())
 	stats.mu.data.RetryLat.Record(stats.mu.data.Count, value.RetryLatency.Seconds())
 	stats.mu.data.CommitLat.Record(stats.mu.data.Count, value.CommitLatency.Seconds())
+	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatency.Seconds())
 	if value.RetryCount > stats.mu.data.MaxRetries {
 		stats.mu.data.MaxRetries = value.RetryCount
 	}

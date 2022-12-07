@@ -76,12 +76,12 @@ func (n *relocateRange) startExec(params runParams) error {
 	}
 	// Lookup all the store descriptors upfront, so we dont have to do it for each
 	// range we are working with.
-	n.run.toStoreDesc, err = lookupStoreDesc(roachpb.StoreID(toStoreID), params)
+	n.run.toStoreDesc, err = params.ExecCfg().NodeDescs.GetStoreDescriptor(roachpb.StoreID(toStoreID))
 	if err != nil {
 		return err
 	}
 	if n.subjectReplicas != tree.RelocateLease {
-		n.run.fromStoreDesc, err = lookupStoreDesc(roachpb.StoreID(fromStoreID), params)
+		n.run.fromStoreDesc, err = params.ExecCfg().NodeDescs.GetStoreDescriptor(roachpb.StoreID(fromStoreID))
 		if err != nil {
 			return err
 		}

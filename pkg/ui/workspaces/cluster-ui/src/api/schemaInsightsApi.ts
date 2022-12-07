@@ -35,6 +35,7 @@ export type ClusterIndexUsageStatistic = {
   database_id: number;
   database_name: string;
   unused_threshold: string;
+  schema_name: string;
 };
 
 type CreateIndexRecommendationsResponse = {
@@ -68,12 +69,13 @@ function clusterIndexUsageStatsToSchemaInsight(
         results[key] = {
           type: "DropIndex",
           database: row.database_name,
-          query: `DROP INDEX ${row.table_name}@${row.index_name};`,
+          query: `DROP INDEX ${row.schema_name}.${row.table_name}@${row.index_name};`,
           indexDetails: {
             table: row.table_name,
             indexID: row.index_id,
             indexName: row.index_name,
             lastUsed: result.reason,
+            schema: row.schema_name,
           },
         };
       }
@@ -136,6 +138,7 @@ const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
             t.name as table_name,
             t.parent_id as database_id,
             t.database_name,
+            t.schema_name,
             (SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'sql.index_recommendation.drop_unused_duration') AS unused_threshold
           FROM "".crdb_internal.index_usage_statistics AS us
                  JOIN "".crdb_internal.table_indexes as ti ON us.index_id = ti.index_id AND us.table_id = ti.descriptor_id

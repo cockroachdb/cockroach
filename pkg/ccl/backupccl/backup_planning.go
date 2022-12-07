@@ -861,7 +861,7 @@ func logAndSanitizeBackupDestinations(ctx context.Context, backupDestinations ..
 
 func collectTelemetry(
 	ctx context.Context,
-	backupManifest backuppb.BackupManifest,
+	backupManifest *backuppb.BackupManifest,
 	initialDetails, backupDetails jobspb.BackupDetails,
 	licensed bool,
 	jobID jobspb.JobID,
@@ -1156,7 +1156,7 @@ func getReintroducedSpans(
 	return tableSpans, nil
 }
 
-func getProtectedTimestampTargetForBackup(backupManifest backuppb.BackupManifest) *ptpb.Target {
+func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifest) *ptpb.Target {
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		return ptpb.MakeClusterTarget()
 	}
@@ -1195,7 +1195,7 @@ func protectTimestampForBackup(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	jobID jobspb.JobID,
-	backupManifest backuppb.BackupManifest,
+	backupManifest *backuppb.BackupManifest,
 	backupDetails jobspb.BackupDetails,
 ) error {
 	tsToProtect := backupManifest.EndTime

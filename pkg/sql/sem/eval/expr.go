@@ -619,20 +619,20 @@ func (e *evaluator) EvalRoutineExpr(
 	ctx context.Context, routine *tree.RoutineExpr,
 ) (tree.Datum, error) {
 	var err error
-	var input tree.Datums
-	if len(routine.Input) > 0 {
-		// Evaluate each input expression.
+	var args tree.Datums
+	if len(routine.Args) > 0 {
+		// Evaluate each argument expression.
 		// TODO(mgartner): Use a scratch tree.Datums to avoid allocation on
 		// every invocation.
-		input = make(tree.Datums, len(routine.Input))
-		for i := range routine.Input {
-			input[i], err = routine.Input[i].Eval(ctx, e)
+		args = make(tree.Datums, len(routine.Args))
+		for i := range routine.Args {
+			args[i], err = routine.Args[i].Eval(ctx, e)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
-	return e.Planner.EvalRoutineExpr(ctx, routine, input)
+	return e.Planner.EvalRoutineExpr(ctx, routine, args)
 }
 
 func (e *evaluator) EvalTuple(ctx context.Context, t *tree.Tuple) (tree.Datum, error) {

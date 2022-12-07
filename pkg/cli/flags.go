@@ -537,6 +537,11 @@ func init() {
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+
+		// TODO(knz): Remove this port offset mechanism once we implement
+		// a shared listener. See: https://github.com/cockroachdb/cockroach/issues/84585
+		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortOffset, cliflags.SecondaryTenantPortOffset)
+		_ = f.MarkHidden(cliflags.SecondaryTenantPortOffset.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
@@ -1138,6 +1143,9 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	}
 	serverCfg.LocalityAddresses = localityAdvertiseHosts
 
+	// Ensure that diagnostic reporting is enabled for server startup commands.
+	serverCfg.StartDiagnosticsReporting = true
+
 	return nil
 }
 
@@ -1192,6 +1200,18 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		// initialized when start is executed and temp dirs inherit path from first store.
 		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
 		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
+	}
+
+	// In standalone SQL servers, we do not generate a ballast file,
+	// unless a ballast size was specified explicitly by the user.
+	for i := range serverCfg.Stores.Specs {
+		spec := &serverCfg.Stores.Specs[i]
+		if spec.BallastSize == nil {
+			// Only override if there was no ballast size specified to start
+			// with.
+			zero := base.SizeSpec{InBytes: 0, Percent: 0}
+			spec.BallastSize = &zero
+		}
 	}
 	return nil
 }

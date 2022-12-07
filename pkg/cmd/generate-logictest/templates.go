@@ -96,6 +96,9 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		MaxSQLMemoryLimit: 512 << 20, // 512 MiB
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
 		DisableSmallEngineBlocks:                     true,
+		// Some sqlite tests with very low bytes limit value are too slow, so
+		// ensure 3 KiB lower bound.
+		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }
@@ -256,7 +259,8 @@ go_test(
     args = ["-test.timeout=3595s"],{{ end }}
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
-        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CclLogicTest }}
+        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
+        "//pkg/cmd/cockroach-short",  # keep{{ end }}{{ if .CclLogicTest }}
         "//pkg/ccl/logictestccl:testdata",  # keep{{ end }}{{ if .LogicTest }}
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}

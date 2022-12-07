@@ -3,7 +3,7 @@
 
 # disabled to run within tenant because multiregion primitives are not supported within tenant
 
-new-server name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
 ----
 
 exec-sql
@@ -28,7 +28,7 @@ BACKUP INTO 'nodelocal://1/full_cluster_backup/';
 ----
 
 # A new cluster with the same locality settings.
-new-server name=s2 share-io-dir=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
 ----
 
 exec-sql
@@ -53,7 +53,7 @@ postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
 # A new cluster with different localities settings.
-new-server name=s3 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
+new-cluster name=s3 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
 ----
 
 exec-sql
@@ -97,8 +97,7 @@ exec-sql
 DROP DATABASE no_region_db_2;
 ----
 
-exec-sql ignore-notice
-SET CLUSTER SETTING sql.defaults.primary_region = 'non-existent-region';
+set-cluster-setting setting=sql.defaults.primary_region value=non-existent-region
 ----
 
 exec-sql
@@ -109,8 +108,7 @@ HINT: valid regions: eu-central-1, eu-north-1
 --
 set the default PRIMARY REGION to a region that exists (see SHOW REGIONS FROM CLUSTER) then using SET CLUSTER SETTING sql.defaults.primary_region = 'region'
 
-exec-sql ignore-notice
-SET CLUSTER SETTING sql.defaults.primary_region = 'eu-central-1';
+set-cluster-setting setting=sql.defaults.primary_region value=eu-central-1
 ----
 
 exec-sql
@@ -145,11 +143,10 @@ BACKUP DATABASE eu_central_db INTO 'nodelocal://1/eu_central_database_backup/';
 ----
 
 # New cluster for a cluster backup.
-new-server name=s4 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
+new-cluster name=s4 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
 ----
 
-exec-sql ignore-notice
-SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
+set-cluster-setting setting=sql.defaults.primary_region value=eu-north-1
 ----
 
 exec-sql

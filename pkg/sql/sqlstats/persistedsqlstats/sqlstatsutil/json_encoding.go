@@ -84,6 +84,12 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	      },
 //	      "required": ["mean", "sqDiff"]
 //	    },
+//	    "indexes": {
+//	      "type": "array",
+//	      "items": {
+//	        "type": "string",
+//	      },
+//	    },
 //	    "node_ids": {
 //	      "type": "array",
 //	      "items": {
@@ -103,10 +109,11 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
 //	        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
 //	        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
-//	        "rowsRead":          { "$ref": "#/definitions/numeric_stats" }
+//	        "rowsRead":          { "$ref": "#/definitions/numeric_stats" },
 //	        "firstExecAt":       { "type": "string" },
 //	        "lastExecAt":        { "type": "string" },
 //	        "nodes":             { "type": "node_ids" },
+//	        "indexes":           { "type": "indexes" },
 //	      },
 //	      "required": [
 //	        "firstAttemptCnt",
@@ -120,7 +127,8 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	        "ovhLat",
 //	        "bytesRead",
 //	        "rowsRead",
-//	        "nodes"
+//	        "nodes",
+//	        "indexes
 //	      ]
 //	    },
 //	    "execution_statistics": {
@@ -210,6 +218,7 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 //	        "svcLat":     { "$ref": "#/definitions/numeric_stats" },
 //	        "retryLat":   { "$ref": "#/definitions/numeric_stats" },
 //	        "commitLat":  { "$ref": "#/definitions/numeric_stats" },
+//	        "idleLat":    { "$ref": "#/definitions/numeric_stats" },
 //	        "bytesRead":  { "$ref": "#/definitions/numeric_stats" },
 //	        "rowsRead":   { "$ref": "#/definitions/numeric_stats" }
 //	      },
@@ -219,6 +228,7 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 //	        "svcLat",
 //	        "retryLat",
 //	        "commitLat",
+//	        "idleLat",
 //	        "bytesRead",
 //	        "rowsRead",
 //	      ]

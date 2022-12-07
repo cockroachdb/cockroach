@@ -170,12 +170,16 @@ export const DurationFitScale =
   };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
+export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT =
+  "MMM DD, YYYY [at] H:mm:ss:ms";
 
 /**
- * Alternate 24 hour UTC format
+ * Alternate 24 hour UTC formats
  */
 export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
 export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
+export const DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC =
+  "MMM DD, YYYY [at] H:mm:ss:ms UTC";
 
 export function RenderCount(yesCount: Long, totalCount: Long): string {
   if (longToInt(yesCount) == 0) {

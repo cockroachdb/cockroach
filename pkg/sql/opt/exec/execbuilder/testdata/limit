@@ -573,3 +573,23 @@ vectorized: true
         │ estimated row count: 10
         │
         └── • emptyrow
+
+# Regression test for not incorporating the OFFSET value into the limit hint.
+statement ok
+CREATE TABLE t_offset (k INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t_offset SELECT generate_series(1, 10)
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t_offset LIMIT 1 OFFSET 3; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%'
+ ORDER BY message, ordinality ASC
+----
+fetched: /t_offset/t_offset_pkey/1 -> <undecoded>
+fetched: /t_offset/t_offset_pkey/2 -> <undecoded>
+fetched: /t_offset/t_offset_pkey/3 -> <undecoded>
+fetched: /t_offset/t_offset_pkey/4 -> <undecoded>

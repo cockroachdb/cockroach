@@ -220,6 +220,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
@@ -527,7 +528,8 @@ func TestUniqueViolationsAreCaught(t *testing.T) {
 	server, sqlDB, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
-	_, err := sqlDB.Exec(`CREATE DATABASE t;
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer='off';
+CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 INSERT INTO t.test VALUES (1,1), (2,2), (3,3)
 `)
@@ -1276,8 +1278,8 @@ CREATE TABLE t.test (
 
 	// Read table descriptor.
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.GetChecks()) != 3 {
-		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.GetChecks()))
+	if len(tableDesc.EnforcedCheckConstraints()) != 3 {
+		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.EnforcedCheckConstraints()))
 	}
 
 	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP v"); err != nil {
@@ -1287,16 +1289,16 @@ CREATE TABLE t.test (
 	// Re-read table descriptor.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	// Only check_ab should remain
-	if len(tableDesc.GetChecks()) != 1 {
+	if len(tableDesc.EnforcedCheckConstraints()) != 1 {
 		checkExprs := make([]string, 0)
-		for i := range tableDesc.GetChecks() {
-			checkExprs = append(checkExprs, tableDesc.GetChecks()[i].Expr)
+		for i := range tableDesc.EnforcedCheckConstraints() {
+			checkExprs = append(checkExprs, tableDesc.EnforcedCheckConstraints()[i].GetExpr())
 		}
-		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.GetChecks()), strings.Join(checkExprs, ", "))
+		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.EnforcedCheckConstraints()), strings.Join(checkExprs, ", "))
 	}
 
-	if tableDesc.GetChecks()[0].Name != "check_ab" {
-		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.GetChecks()[0].Name)
+	if tableDesc.EnforcedCheckConstraints()[0].GetName() != "check_ab" {
+		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.EnforcedCheckConstraints()[0].GetName())
 	}
 
 	// Test that a constraint being added prevents the column from being dropped.
@@ -1479,6 +1481,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	}()
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
@@ -1780,7 +1783,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Check that constraints are cleaned up on the latest version of the
 	// descriptor.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
+	if checks := tableDesc.CheckConstraints(); len(checks) > 0 {
 		t.Fatalf("found checks %+v", checks)
 	}
 }
@@ -2413,7 +2416,10 @@ func TestOldRevertedDropIndexesAreIgnored(t *testing.T) {
 	server, sqlDB, kvDB = serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
-	_, err := sqlDB.Exec("CREATE DATABASE test; CREATE TABLE test.t (pk INT PRIMARY KEY, b int)")
+	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec("CREATE DATABASE test; CREATE TABLE test.t (pk INT PRIMARY KEY, b int)")
 	require.NoError(t, err)
 
 	// This create index is mutated above to look like it was the
@@ -3483,6 +3489,7 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
+SET use_declarative_schema_changer='off';
 CREATE USER foo;
 CREATE DATABASE t;
 CREATE TABLE t.test (
@@ -4562,6 +4569,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
@@ -4973,7 +4981,7 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	// Check that constraints are cleaned up.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) != 1 {
+	if checks := tableDesc.CheckConstraints(); len(checks) != 1 {
 		t.Fatalf("expected 1 check, found %+v", checks)
 	}
 }
@@ -5073,6 +5081,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
+	SET use_declarative_schema_changer='off';
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	`)
@@ -5202,6 +5211,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
+	  SET use_declarative_schema_changer='off';
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	`)
@@ -5280,6 +5290,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
@@ -5347,6 +5358,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 `); err != nil {
@@ -5898,6 +5910,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 	backfillProgressing = make(chan struct{})
 
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
@@ -6355,6 +6368,7 @@ func TestRetryOnAllErrorsWhenReverting(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 INSERT INTO t.test VALUES (1, 2), (2, 2);
@@ -6556,6 +6570,10 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	}
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer='off';`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';`)
+	require.NoError(t, err)
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -6628,6 +6646,11 @@ func TestCancelMultipleQueued(t *testing.T) {
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer='off'`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'`)
+	require.NoError(t, err)
+
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -7997,6 +8020,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 		{
 			name: "create index",
 			setupSQL: `
+SET use_declarative_schema_changer='off';
 CREATE TABLE t (pk INT PRIMARY KEY, b INT);
 INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
 `,
@@ -8128,7 +8152,8 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
 		},
 		{
 			name: "update during add index with multiple column families",
-			setupSQL: `CREATE DATABASE t;
+			setupSQL: `SET use_declarative_schema_changer = off;
+CREATE DATABASE t;
 CREATE TABLE t.test (
     pk INT PRIMARY KEY,
     a INT,
@@ -8154,7 +8179,9 @@ INSERT INTO t.test (pk, a, b, c) VALUES (1, 1, 1, 1), (2, 2, 2, 2);
 		},
 		{
 			name: "truncate",
-			setupSQL: `CREATE DATABASE t;
+			setupSQL: `
+SET use_declarative_schema_changer = off;
+CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 `,
 			schemaChangeSQL: `CREATE INDEX ON t.test(v)`,

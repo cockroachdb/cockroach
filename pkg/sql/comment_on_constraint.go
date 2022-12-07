@@ -14,19 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnConstraintNode struct {
-	n               *tree.CommentOnConstraint
-	tableDesc       catalog.TableDescriptor
-	metadataUpdater scexec.DescriptorMetadataUpdater
+	n         *tree.CommentOnConstraint
+	tableDesc catalog.TableDescriptor
 }
 
 // CommentOnConstraint add comment on a constraint
@@ -54,49 +52,30 @@ func (p *planner) CommentOnConstraint(
 	return &commentOnConstraintNode{
 		n:         n,
 		tableDesc: tableDesc,
-		metadataUpdater: descmetadata.NewMetadataUpdater(
-			ctx,
-			p.ExecCfg().InternalExecutorFactory,
-			p.Descriptors(),
-			&p.ExecCfg().Settings.SV,
-			p.txn,
-			p.SessionData(),
-		),
 	}, nil
 
 }
 
 func (n *commentOnConstraintNode) startExec(params runParams) error {
-	info, err := n.tableDesc.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
-
 	constraintName := string(n.n.Constraint)
-	constraint, ok := info[constraintName]
-	if !ok {
+	constraint, _ := n.tableDesc.FindConstraintWithName(constraintName)
+	if constraint == nil {
 		return pgerror.Newf(pgcode.UndefinedObject,
 			"constraint %q of relation %q does not exist", constraintName, n.tableDesc.GetName())
 	}
-	// Setting the comment to NULL is the
-	// equivalent of deleting the comment.
-	if n.n.Comment != nil {
-		err := n.metadataUpdater.UpsertConstraintComment(
-			n.tableDesc.GetID(),
-			constraint.ConstraintID,
-			*n.n.Comment,
+
+	var err error
+	if n.n.Comment == nil {
+		err = params.p.deleteComment(
+			params.ctx, n.tableDesc.GetID(), uint32(constraint.GetConstraintID()), catalogkeys.ConstraintCommentType,
 		)
-		if err != nil {
-			return err
-		}
 	} else {
-		err := n.metadataUpdater.DeleteConstraintComment(
-			n.tableDesc.GetID(),
-			constraint.ConstraintID,
+		err = params.p.updateComment(
+			params.ctx, n.tableDesc.GetID(), uint32(constraint.GetConstraintID()), catalogkeys.ConstraintCommentType, *n.n.Comment,
 		)
-		if err != nil {
-			return err
-		}
+	}
+	if err != nil {
+		return err
 	}
 
 	comment := ""

@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 )
 
@@ -269,6 +269,10 @@ func evaluateBatch(
 
 		reply := br.Responses[index].GetInner()
 
+		if seq := args.Header().KVNemesisSeq.Get(); seq != 0 {
+			ctx = kvnemesisutil.WithSeq(ctx, seq)
+		}
+
 		// Note that `reply` is populated even when an error is returned: it
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
@@ -404,17 +408,13 @@ func evaluateBatch(
 		// the batch, but with limit-aware operations returning no data.
 		h := reply.Header()
 		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit != 0 && retResults > 0 {
-			if retResults > limit {
-				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
-				return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
-					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
-					retResults, limit, ba.Header.MaxSpanRequestKeys,
-					redact.Safe(ba.Summary()), index))
-			} else if retResults < limit {
+			if retResults < limit {
 				baHeader.MaxSpanRequestKeys -= retResults
 			} else {
-				// They were equal, so drop to -1 instead of zero (which would
-				// mean "no limit").
+				// The limit was either exceeded (which is allowed in some cases
+				// like when WholeRowsOfSize is set and AllowEmpty is false) or
+				// was exactly used up, so drop to -1 instead of zero (which
+				// would mean "no limit").
 				baHeader.MaxSpanRequestKeys = -1
 			}
 		}

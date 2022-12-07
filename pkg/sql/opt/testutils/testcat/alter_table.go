@@ -78,7 +78,7 @@ func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	}
 	tt.Stats = make([]*TableStat, len(stats))
 	for i := range stats {
-		tt.Stats[i] = &TableStat{js: stats[i], tt: tt}
+		tt.Stats[i] = &TableStat{js: stats[i], tt: tt, evalCtx: &evalCtx}
 	}
 	// Call ColumnOrdinal on all possible columns to assert that
 	// the column names are valid.

@@ -1,0 +1,20 @@
+echo
+----
+# 	      a     b     c     d
+# t=4000  [-----v1----)
+# t=2000  [-v2-)[-----v3----)
+#
+# ac-valid-full
+lookup(["a","c") @ 4000) = v1
+# ac-valid-partial
+lookup(["a\x00","b") @ 4000) = v1
+# ac-incompatible-fragments
+lookup(["a","c") @ 2000) = value change at "b" in expected range deletion ["a","c")
+# ac-ts-too-early
+lookup(["a","b") @ 2000) = v2
+# ac-invalid-pre
+lookup([/Min,"c") @ 4000) = gap [/Min,"a") in expected range deletion [/Min,"c")
+# ac-invalid-post
+lookup(["a","d") @ 4000) = gap ["c",...) in expected range deletion ["a","d")
+# cd-invalid-post
+lookup(["c","f") @ 2000) = gap ["d",...) in expected range deletion ["c","f")

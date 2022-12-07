@@ -178,7 +178,7 @@ func (p *planner) getAndValidateTypedClusterSetting(
 			var dummyHelper tree.IndexedVarHelper
 
 			switch setting.(type) {
-			case *settings.StringSetting, *settings.VersionSetting, *settings.ByteSizeSetting:
+			case *settings.StringSetting, *settings.VersionSetting, *settings.ByteSizeSetting, *settings.ProtobufSetting:
 				requiredType = types.String
 			case *settings.BoolSetting:
 				requiredType = types.Bool
@@ -662,6 +662,18 @@ func toSettingString(
 			return string(*s), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
+	case *settings.ProtobufSetting:
+		if s, ok := d.(*tree.DString); ok {
+			msg, err := setting.UnmarshalFromJSON(string(*s))
+			if err != nil {
+				return "", err
+			}
+			if err := setting.Validate(&st.SV, msg); err != nil {
+				return "", err
+			}
+			return settings.EncodeProtobuf(msg), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for protobuf setting", d.ResolvedType(), d)
 	case *settings.VersionSetting:
 		if s, ok := d.(*tree.DString); ok {
 			newRawVal, err := clusterversion.EncodingFromVersionStr(string(*s))

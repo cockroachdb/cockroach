@@ -15,9 +15,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
+
+func init() {
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
+}
 
 func TestMain(m *testing.M) {
 	// CLI tests are sensitive to the server version, but test binaries don't have

@@ -107,7 +107,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	_, err := db.Exec("SHOW RANGES FROM TABLE system.descriptor")
 	if err != nil {
 		if strings.Contains(err.Error(), "not fully contained in tenant") ||
-			strings.Contains(err.Error(), "operation is unsupported in multi-tenancy mode") {
+			strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
 			log.Infof(ctx, `skipping workload splits; can't split on tenants'`)
 			//nolint:returnerrcheck
 			return nil
@@ -118,6 +118,18 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	if table.Splits.NumBatches <= 0 {
 		return nil
 	}
+
+	// Test that we can actually perform a scatter.
+	if _, err := db.Exec("ALTER TABLE system.jobs SCATTER"); err != nil {
+		if strings.Contains(err.Error(), "not fully contained in tenant") ||
+			strings.Contains(err.Error(), "request [1 AdmScatter] not permitted") {
+			log.Infof(ctx, `skipping workload splits; can't scatter on tenants'`)
+			//nolint:returnerrcheck
+			return nil
+		}
+		return err
+	}
+
 	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
 	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
 		splitPoints = append(splitPoints, table.Splits.BatchRows(splitIdx)...)
@@ -159,8 +171,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					// not) help you.
 					stmt := buf.String()
 					if _, err := db.Exec(stmt); err != nil {
-						mtErr := errorutil.UnsupportedWithMultiTenancy(0)
-						if strings.Contains(err.Error(), mtErr.Error()) {
+						if strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
 							// We don't care about split errors if we're running a workload
 							// in multi-tenancy mode; we can't do them so we'll just continue
 							break

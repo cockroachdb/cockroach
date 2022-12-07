@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -77,6 +78,7 @@ type Connector struct {
 		syncutil.RWMutex
 		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
+		storeDescs           map[roachpb.StoreID]*roachpb.StoreDescriptor
 		systemConfig         *config.SystemConfig
 		systemConfigChannels map[chan<- struct{}]struct{}
 	}
@@ -116,11 +118,6 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 // network.
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
-// Connector is capable of find the region of every node in the cluster.
-// This is necessary for region validation for zone configurations and
-// multi-region primitives.
-var _ serverpb.RegionsServer = (*Connector)(nil)
-
 // Connector is capable of finding debug information about the current
 // tenant within the cluster. This is necessary for things such as
 // debug zip and range reports.
@@ -128,6 +125,10 @@ var _ serverpb.TenantStatusServer = (*Connector)(nil)
 
 // Connector is capable of accessing span configurations for secondary tenants.
 var _ spanconfig.KVAccessor = (*Connector)(nil)
+
+// Reporter is capable of generating span configuration conformance reports for
+// secondary tenants.
+var _ spanconfig.Reporter = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
 // NOTE: Calling Start will set cfg.RPCContext.ClusterID.
@@ -146,6 +147,7 @@ func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	c.mu.storeDescs = make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
@@ -259,6 +261,8 @@ var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, ro
 	gossip.KeyClusterID: (*Connector).updateClusterID,
 	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix): (*Connector).updateNodeAddress,
+	// Subscribe to all *StoreDescriptor updates.
+	gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix): (*Connector).updateStoreMap,
 	// Subscribe to a filtered view of *SystemConfig updates.
 	gossip.KeyDeprecatedSystemConfig: (*Connector).updateSystemConfig,
 }
@@ -308,6 +312,22 @@ func (c *Connector) updateNodeAddress(ctx context.Context, key string, content r
 	c.mu.nodeDescs[desc.NodeID] = desc
 }
 
+// updateStoreMap handles updates to "store" gossip keys, performing the
+// corresponding update to the Connector's cached StoreDescriptor set.
+func (c *Connector) updateStoreMap(ctx context.Context, key string, content roachpb.Value) {
+	desc := new(roachpb.StoreDescriptor)
+	if err := content.GetProto(desc); err != nil {
+		log.Errorf(ctx, "could not unmarshal store descriptor: %v", err)
+		return
+	}
+
+	// TODO(nvanbenschoten): this doesn't handle StoreDescriptor removal from the
+	// gossip network. See comment in updateNodeAddress.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.storeDescs[desc.StoreID] = desc
+}
+
 // GetNodeDescriptor implements the kvcoord.NodeDescStore interface.
 func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	c.mu.RLock()
@@ -315,6 +335,17 @@ func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
 		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+	}
+	return desc, nil
+}
+
+// GetStoreDescriptor implements the kvcoord.NodeDescStore interface.
+func (c *Connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	desc, ok := c.mu.storeDescs[storeID]
+	if !ok {
+		return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
 	}
 	return desc, nil
 }
@@ -411,39 +442,76 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
-// Regions implements the serverpb.RegionsServer interface.
+// Regions implements the serverpb.TenantStatusServer interface
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
-) (resp *serverpb.RegionsResponse, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error
-		resp, err = c.Regions(ctx, req)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+) (resp *serverpb.RegionsResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Regions(ctx, req)
+		return
+	})
+	return
 }
 
 // TenantRanges implements the serverpb.TenantStatusServer interface
 func (c *Connector) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
-) (resp *serverpb.TenantRangesResponse, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error
-		resp, err = c.TenantRanges(ctx, req)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+) (resp *serverpb.TenantRangesResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.TenantRanges(ctx, req)
+		return
+	})
+	return
 }
 
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
 func (c *Connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
+}
+
+// NewIterator implements the rangedesc.IteratorFactory interface.
+func (c *Connector) NewIterator(
+	ctx context.Context, span roachpb.Span,
+) (rangedesc.Iterator, error) {
+	var rangeDescriptors []roachpb.RangeDescriptor
+	for ctx.Err() == nil {
+		rangeDescriptors = rangeDescriptors[:0] // clear out.
+		client, err := c.getClient(ctx)
+		if err != nil {
+			continue
+		}
+		stream, err := client.GetRangeDescriptors(ctx, &roachpb.GetRangeDescriptorsRequest{
+			Span: span,
+		})
+		if err != nil {
+			// TODO(arul): We probably don't want to treat all errors here as "soft".
+			// for example, it doesn't make much sense to retry the request if it fails
+			// the keybounds check.
+			// Soft RPC error. Drop client and retry.
+			log.Warningf(ctx, "error issuing GetRangeDescriptors RPC: %v", err)
+			c.tryForgetClient(ctx, client)
+			continue
+		}
+
+		for ctx.Err() == nil {
+			e, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return &rangeDescIterator{
+						rangeDescs: rangeDescriptors,
+						curIdx:     0,
+					}, nil
+				}
+				// TODO(arul): We probably don't want to treat all errors here as "soft".
+				// Soft RPC error. Drop client and retry.
+				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
+				c.tryForgetClient(ctx, client)
+				break
+			}
+			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
+		}
+	}
+	return nil, ctx.Err()
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
@@ -524,6 +592,27 @@ func (c *Connector) UpdateSpanConfigRecords(
 		}
 		return nil
 	})
+}
+
+// SpanConfigConformance implements the spanconfig.Reporter interface.
+func (c *Connector) SpanConfigConformance(
+	ctx context.Context, spans []roachpb.Span,
+) (roachpb.SpanConfigConformanceReport, error) {
+	var report roachpb.SpanConfigConformanceReport
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		resp, err := c.SpanConfigConformance(ctx, &roachpb.SpanConfigConformanceRequest{
+			Spans: spans,
+		})
+		if err != nil {
+			return err
+		}
+
+		report = resp.Report
+		return nil
+	}); err != nil {
+		return roachpb.SpanConfigConformanceReport{}, err
+	}
+	return report, nil
 }
 
 // GetAllSystemSpanConfigsThatApply implements the spanconfig.KVAccessor

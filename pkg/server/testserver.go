@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -155,6 +157,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
+	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -524,16 +527,17 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
-		TenantID:            serverutils.TestTenantID(),
-		MemoryPoolSize:      ts.params.SQLMemoryPoolSize,
-		TempStorageConfig:   &tempStorageConfig,
-		Locality:            ts.params.Locality,
-		ExternalIODir:       ts.params.ExternalIODir,
-		ExternalIODirConfig: ts.params.ExternalIODirConfig,
-		ForceInsecure:       ts.Insecure(),
-		UseDatabase:         ts.params.UseDatabase,
-		SSLCertsDir:         ts.params.SSLCertsDir,
-		TestingKnobs:        ts.params.Knobs,
+		TenantID:                  serverutils.TestTenantID(),
+		MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:         &tempStorageConfig,
+		Locality:                  ts.params.Locality,
+		ExternalIODir:             ts.params.ExternalIODir,
+		ExternalIODirConfig:       ts.params.ExternalIODirConfig,
+		ForceInsecure:             ts.Insecure(),
+		UseDatabase:               ts.params.UseDatabase,
+		SSLCertsDir:               ts.params.SSLCertsDir,
+		TestingKnobs:              ts.params.Knobs,
+		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
 	}
 
 	// Since we're creating a tenant, it doesn't make sense to pass through the
@@ -723,6 +727,11 @@ func (t *TestTenant) SpanConfigKVAccessor() interface{} {
 	return t.SQLServer.tenantConnect
 }
 
+// SpanConfigReporter is part TestTenantInterface.
+func (t *TestTenant) SpanConfigReporter() interface{} {
+	return t.SQLServer.tenantConnect
+}
+
 // SpanConfigReconciler is part TestTenantInterface.
 func (t *TestTenant) SpanConfigReconciler() interface{} {
 	return t.SQLServer.spanconfigMgr.Reconciler
@@ -753,9 +762,19 @@ func (t *TestTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
 }
 
+// RangeDescIteratorFactory implements the TestTenantInterface.
+func (t *TestTenant) RangeDescIteratorFactory() interface{} {
+	return t.SQLServer.execCfg.RangeDescIteratorFactory
+}
+
 // Codec is part of the TestTenantInterface.
 func (t *TestTenant) Codec() keys.SQLCodec {
 	return t.execCfg.Codec
+}
+
+// Tracer is part of the TestTenantInterface.
+func (t *TestTenant) Tracer() *tracing.Tracer {
+	return t.SQLServer.ambientCtx.Tracer
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
@@ -863,6 +882,7 @@ func (ts *TestServer) StartTenant(
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
+	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
 	// in test servers.
@@ -1157,6 +1177,11 @@ func (ts *TestServer) MigrationServer() interface{} {
 // SpanConfigKVAccessor is part of TestServerInterface.
 func (ts *TestServer) SpanConfigKVAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
+}
+
+// SpanConfigReporter is part of TestServerInterface.
+func (ts *TestServer) SpanConfigReporter() interface{} {
+	return ts.Server.node.spanConfigReporter
 }
 
 // SpanConfigReconciler is part of TestServerInterface.
@@ -1526,6 +1551,11 @@ func (ts *TestServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
 }
 
+// RangeDescIteratorFactory is part of the TestServerInterface.
+func (ts *TestServer) RangeDescIteratorFactory() interface{} {
+	return ts.sqlServer.execCfg.RangeDescIteratorFactory
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
@@ -1533,6 +1563,14 @@ var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error) {
+	if params.Knobs.JobsTestingKnobs != nil {
+		if params.Knobs.JobsTestingKnobs.(*jobs.TestingKnobs).DisableAdoptions {
+			if params.Knobs.UpgradeManager == nil || !params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).DontUseJobs {
+				return nil, errors.AssertionFailedf("DontUseJobs needs to be set when DisableAdoptions is set")
+			}
+		}
+	}
+
 	cfg := makeTestConfigFromParams(params)
 	ts := &TestServer{Cfg: &cfg, params: params}
 

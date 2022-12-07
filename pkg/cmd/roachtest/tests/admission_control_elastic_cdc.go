@@ -114,21 +114,23 @@ func registerElasticControlForCDC(r registry.Registry) {
 							time.Sleep(stopFeedsDuration) // buffer for cancellations to take effect/show up in metrics
 
 							t.Status(fmt.Sprintf("during: round %d: creating %d changefeeds (<%s)", i, changefeeds, time.Minute))
+
 							for j := 0; j < changefeeds; j++ {
-								stmtWithCursor := fmt.Sprintf(`
+								var createChangefeedStmt string
+								if i%2 == 0 {
+									createChangefeedStmt = fmt.Sprintf(`
 									CREATE CHANGEFEED FOR tpcc.order_line, tpcc.stock, tpcc.customer
 									INTO 'null://' WITH cursor = '-%ds'
 								`, int64(float64(i+1)*padDuration.Seconds())) // scanning as far back as possible (~ when the workload started)
-								if _, err := db.ExecContext(ctx, stmtWithCursor); err != nil {
+								} else {
+									createChangefeedStmt = "CREATE CHANGEFEED FOR tpcc.order_line, tpcc.stock, tpcc.customer " +
+										"INTO 'null://' WITH initial_scan = 'only'"
+								}
+
+								if _, err := db.ExecContext(ctx, createChangefeedStmt); err != nil {
 									return err
 								}
 							}
-
-							// TODO(irfansharif): Add a version of this test
-							// with initial_scan = 'only' to demonstrate the
-							// need+efficacy of using elastic CPU control in
-							// changefeed workers. That too has a severe effect
-							// on scheduling latencies.
 						}
 						return nil
 					})

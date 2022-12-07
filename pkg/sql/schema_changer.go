@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -732,9 +731,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		} else {
 			// We've dropped a non-physical table, no need for a GC job, let's delete
 			// its descriptor and zone config immediately.
-			if err := DeleteTableDescAndZoneConfig(
-				ctx, sc.db, sc.settings, sc.execCfg.Codec, tableDesc,
-			); err != nil {
+			if err := DeleteTableDescAndZoneConfig(ctx, sc.execCfg, tableDesc); err != nil {
 				return err
 			}
 		}
@@ -813,7 +810,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 ) error {
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
-	if err := sc.execCfg.ProtectedTimestampManager.Unprotect(ctx, sc.job.ID()); err != nil {
+	if err := sc.execCfg.ProtectedTimestampManager.Unprotect(ctx, sc.job); err != nil {
 		log.Warningf(ctx, "unexpected error cleaning up protected timestamp %v", err)
 	}
 	// Ensure that this is a table descriptor and that the mutation is first in
@@ -1055,10 +1052,13 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		}
 		scTable.SetDropped()
 		scTable.DropTime = timeutil.Now().UnixNano()
-		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
+		const kvTrace = false
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
 			return err
 		}
-		b.Del(catalogkeys.EncodeNameKey(sc.execCfg.Codec, scTable))
+		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, scTable, b); err != nil {
+			return err
+		}
 
 		// Queue a GC job.
 		jobRecord := CreateGCJobRecord(
@@ -1334,13 +1334,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	type commentToDelete struct {
 		id          int64
 		subID       int64
-		commentType keys.CommentType
+		commentType catalogkeys.CommentType
 	}
 	type commentToSwap struct {
 		id          int64
 		oldSubID    int64
 		newSubID    int64
-		commentType keys.CommentType
+		commentType catalogkeys.CommentType
 	}
 	var commentsToDelete []commentToDelete
 	var commentsToSwap []commentToSwap
@@ -1428,18 +1428,17 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				}
 			}
-			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
-				if fk := constraint.AsForeignKey(); fk != nil && fk.Validity == descpb.ConstraintValidity_Unvalidated {
-					// Add backreference on the referenced table (which could be the same table)
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
-					if err != nil {
+			if fk := m.AsForeignKey(); fk != nil && fk.Adding() &&
+				fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
+				// Add backreference on the referenced table (which could be the same table)
+				backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
+				if err != nil {
+					return err
+				}
+				backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk.ForeignKeyDesc())
+				if backrefTable != scTable {
+					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
 						return err
-					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk)
-					if backrefTable != scTable {
-						if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
-							return err
-						}
 					}
 				}
 			}
@@ -1500,7 +1499,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					commentToDelete{
 						id:          int64(scTable.GetID()),
 						subID:       int64(id),
-						commentType: keys.IndexCommentType,
+						commentType: catalogkeys.IndexCommentType,
 					})
 				for i := range pkSwap.PrimaryKeySwapDesc().OldIndexes {
 					// Skip the primary index.
@@ -1513,7 +1512,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							id:          int64(scTable.GetID()),
 							oldSubID:    int64(pkSwap.PrimaryKeySwapDesc().OldIndexes[i]),
 							newSubID:    int64(pkSwap.PrimaryKeySwapDesc().NewIndexes[i]),
-							commentType: keys.IndexCommentType,
+							commentType: catalogkeys.IndexCommentType,
 						},
 					)
 				}
@@ -1758,29 +1757,27 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 		// Clean up any comments related to the mutations, specifically if we need
 		// to drop them.
-		metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
-			sc.ieFactory,
-			descsCol,
-			&sc.settings.SV,
-			txn,
-			NewFakeSessionData(&sc.settings.SV))
 		for _, comment := range commentsToDelete {
-			err := metaDataUpdater.DeleteDescriptorComment(
-				comment.id,
-				comment.subID,
-				comment.commentType)
-			if err != nil {
+			if err := descsCol.DeleteCommentInBatch(
+				ctx, false /* kvTrace */, b, catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.subID), comment.commentType),
+			); err != nil {
 				return err
 			}
 		}
+
 		for _, comment := range commentsToSwap {
-			err := metaDataUpdater.SwapDescriptorSubComment(
-				comment.id,
-				comment.oldSubID,
-				comment.newSubID,
-				comment.commentType,
-			)
-			if err != nil {
+			cmt, found := descsCol.GetComment(catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.oldSubID), comment.commentType))
+			if !found {
+				continue
+			}
+			if err := descsCol.DeleteCommentInBatch(
+				ctx, false /* kvTrace */, b, catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.oldSubID), comment.commentType),
+			); err != nil {
+				return err
+			}
+			if err := descsCol.WriteCommentToBatch(
+				ctx, false /* kvTrace */, b, catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.newSubID), comment.commentType), cmt,
+			); err != nil {
 				return err
 			}
 		}
@@ -1831,17 +1828,18 @@ func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	kvTrace bool,
 	descriptors *descs.Collection,
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, table.ID)
+	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn, table.GetID())
 	if err != nil {
 		return err
 	}
 
 	// If this table doesn't have a zone attached to it, don't do anything.
-	if zone == nil {
+	if zoneWithRaw == nil {
 		return nil
 	}
 
@@ -1860,21 +1858,23 @@ func maybeUpdateZoneConfigsForPKChange(
 	}
 
 	for oldIdx, newIdx := range oldIdxToNewIdx {
-		for i := range zone.Subzones {
-			subzone := &zone.Subzones[i]
+		for i := range zoneWithRaw.ZoneConfigProto().Subzones {
+			subzone := &zoneWithRaw.ZoneConfigProto().Subzones[i]
 			if subzone.IndexID == uint32(oldIdx) {
 				// If we find a subzone matching an old index, copy its subzone
 				// into a new subzone with the new index's ID.
 				subzoneCopy := *subzone
 				subzoneCopy.IndexID = uint32(newIdx)
-				zone.SetSubzone(subzoneCopy)
+				zoneWithRaw.ZoneConfigProto().SetSubzone(subzoneCopy)
 			}
 		}
 	}
 
 	// Write the zone back. This call regenerates the index spans that apply
 	// to each partition in the index.
-	_, err = writeZoneConfig(ctx, txn, table.ID, table, zone, execCfg, descriptors, false)
+	_, err = writeZoneConfig(
+		ctx, txn, table.ID, table, zoneWithRaw.ZoneConfigProto(), zoneWithRaw.GetRawBytesInStorage(), execCfg, descriptors, false, kvTrace,
+	)
 	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 		return err
 	}
@@ -2002,14 +2002,14 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed.
-			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
+			if constraint := m.AsConstraintWithoutIndex(); constraint != nil && constraint.Adding() {
 				log.Warningf(ctx, "dropping constraint %s", constraint)
 				if err := sc.maybeDropValidatingConstraint(ctx, scTable, constraint); err != nil {
 					return err
 				}
 				// Get the foreign key backreferences to remove.
 				if fk := constraint.AsForeignKey(); fk != nil {
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
 					if err != nil {
 						return err
 					}
@@ -3000,6 +3000,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				ctx,
 				txn,
 				sc.execCfg,
+				false, /* kvTrace */
 				descsCol,
 				regionConfig,
 				tableDesc,
@@ -3013,7 +3014,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 		// Note this is done even for isDone = true, though not strictly
 		// necessary.
 		return maybeUpdateZoneConfigsForPKChange(
-			ctx, txn, sc.execCfg, descsCol, tableDesc, pkSwap.PrimaryKeySwapDesc(),
+			ctx, txn, sc.execCfg, false /* kvTrace */, descsCol, tableDesc, pkSwap.PrimaryKeySwapDesc(),
 		)
 	}
 	return nil
@@ -3021,21 +3022,18 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 
 // DeleteTableDescAndZoneConfig removes a table's descriptor and zone config from the KV database.
 func DeleteTableDescAndZoneConfig(
-	ctx context.Context,
-	db *kv.DB,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	tableDesc catalog.TableDescriptor,
+	ctx context.Context, execCfg *ExecutorConfig, tableDesc catalog.TableDescriptor,
 ) error {
 	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := &kv.Batch{}
-
+	const kvTrace = false
+	return DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		b := txn.NewBatch()
 		// Delete the descriptor.
-		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID())
-		b.Del(descKey)
-		// Delete the zone config entry for this table, if necessary.
-		if codec.ForSystemTenant() {
+		if err := col.DeleteDescToBatch(ctx, kvTrace, tableDesc.GetID(), b); err != nil {
+			return err
+		}
+		if codec := execCfg.Codec; codec.ForSystemTenant() {
+			// Delete the zone config entry for this table, if necessary.
 			zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
 			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		}
@@ -3222,11 +3220,9 @@ func isCurrentMutationDiscarded(
 	colToCheck := make([]descpb.ColumnID, 0, 1)
 	// Both NOT NULL related updates and check constraint updates
 	// involving this column will get canceled out by a drop column.
-	if constraint := currentMutation.AsConstraint(); constraint != nil {
-		if colID := constraint.NotNullColumnID(); colID != 0 {
-			colToCheck = append(colToCheck, colID)
-		} else if ck := constraint.AsCheck(); ck != nil {
-			colToCheck = ck.ColumnIDs
+	if ck := currentMutation.AsCheck(); ck != nil {
+		for i, n := 0, ck.NumReferencedColumns(); i < n; i++ {
+			colToCheck = append(colToCheck, ck.GetReferencedColumnID(i))
 		}
 	}
 

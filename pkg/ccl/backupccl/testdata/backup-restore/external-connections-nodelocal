@@ -1,4 +1,4 @@
-new-server name=s1
+new-cluster name=s1
 ----
 
 subtest basic-backup-nodelocal
@@ -99,7 +99,7 @@ subtest end
 
 subtest basic-restore-nodelocal
 
-new-server name=s2 share-io-dir=s1
+new-cluster name=s2 share-io-dir=s1
 ----
 
 # Cluster restore.
@@ -157,7 +157,7 @@ subtest end
 
 subtest incremental-location-backup-restore-nodelocal
 
-switch-server name=s1
+switch-cluster name=s1
 ----
 
 exec-sql

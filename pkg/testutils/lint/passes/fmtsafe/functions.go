@@ -151,6 +151,9 @@ var requireConstFmt = map[string]bool{
 	"(github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase.stdlogger).Fatalf": true,
 	"(github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase.stdlogger).Logf":   true,
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.l":                 true,
+	"(*github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.logLogger).Logf": true,
+
 	// Error things are populated in the init() message.
 }
 
