@@ -295,7 +295,14 @@ func (c *SyncedCluster) newSession(
 	if c.IsLocal() {
 		return newLocalSession(cmd)
 	}
-	return newRemoteSession(l, c.user(node), c.Host(node), cmd, cmdDebugName)
+	command := remoteCommand{
+		node:      node,
+		user:      c.user(node),
+		host:      c.Host(node),
+		cmd:       cmd,
+		debugName: cmdDebugName,
+	}
+	return newRemoteSession(l, command)
 }
 
 // Stop is used to stop cockroach on all nodes in the cluster.
@@ -2416,34 +2423,30 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 
 // GenFilenameFromArgs given a list of cmd args, returns a string up to
 // `maxLen` in length. It is alphanumeric with hyphen delimiters.
-// e.g. [/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg-dmesgtxt
+// e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg-dmesgtxt
 func GenFilenameFromArgs(args ...string) string {
 	var sb strings.Builder
-	length := 0
-	wasHyphen := true
+	lastCharSpace := true
 
 	writeByte := func(b byte) {
-		if b == '-' && wasHyphen {
-			return
+		if b == ' ' {
+			if lastCharSpace {
+				return
+			}
+			sb.WriteByte('-')
+		} else if ('a' <= b && b <= 'z') ||
+			('A' <= b && b <= 'Z') ||
+			('0' <= b && b <= '9') {
+			sb.WriteByte(b)
 		}
-		sb.WriteByte(b)
-		wasHyphen = b == '-'
-		length++
+		lastCharSpace = b == ' '
 	}
 
 	for _, s := range args {
-		writeByte('-')
+		writeByte(' ')
 		for i := 0; i < len(s); i++ {
-			b := s[i]
-			if b == ' ' {
-				writeByte('-')
-			} else if ('a' <= b && b <= 'z') ||
-				('A' <= b && b <= 'Z') ||
-				('0' <= b && b <= '9') {
-				writeByte(b)
-			}
-
-			if length == 50 {
+			writeByte(s[i])
+			if sb.Len() == 25 {
 				return sb.String()
 			}
 		}

@@ -48,23 +48,29 @@ type remoteSession struct {
 	logfile string // captures ssh -vvv
 }
 
-func newRemoteSession(
-	l *logger.Logger, user, host string, cmd string, cmdDebugName string,
-) *remoteSession {
+type remoteCommand struct {
+	node      Node
+	user      string
+	host      string
+	cmd       string
+	debugName string
+}
+
+func newRemoteSession(l *logger.Logger, command remoteCommand) *remoteSession {
 	var loggingArgs []string
 
-	if cmdDebugName == "" {
-		cmdDebugName = GenFilenameFromArgs(strings.Fields(cmd)...)
+	if command.debugName == "" {
+		command.debugName = GenFilenameFromArgs(strings.Fields(command.cmd)...)
 	}
 
 	logfile := fmt.Sprintf(
-		"ssh_%s_%s_%s",
+		"ssh_%s_n%v_%s",
 		timeutil.Now().Format(`150405.000000000`),
-		host,
-		cmdDebugName,
+		command.node,
+		command.debugName,
 	)
 
-	cl, err := l.ChildLogger(logfile)
+	cl, err := l.ChildLogger(filepath.Join("ssh", logfile))
 
 	// Running roachprod from the cli will result in a fileless logger
 	if err == nil && l.File != nil {
@@ -78,7 +84,7 @@ func newRemoteSession(
 	}
 	//const logfile = ""
 	args := []string{
-		user + "@" + host,
+		command.user + "@" + command.host,
 
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
@@ -94,7 +100,7 @@ func newRemoteSession(
 	}
 	args = append(args, loggingArgs...)
 	args = append(args, sshAuthArgs()...)
-	args = append(args, cmd)
+	args = append(args, command.cmd)
 	ctx, cancel := context.WithCancel(context.Background())
 	fullCmd := exec.CommandContext(ctx, "ssh", args...)
 	return &remoteSession{fullCmd, cancel, logfile}
