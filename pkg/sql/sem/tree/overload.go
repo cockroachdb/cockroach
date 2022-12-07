@@ -677,9 +677,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	} else {
 		s.typedExprs = make([]TypedExpr, len(s.exprs))
 	}
-	s.constIdxs, s.placeholderIdxs, s.resolvableIdxs = typeCheckSplitExprs(
-		semaCtx, s.exprs,
-	)
+	s.constIdxs, s.placeholderIdxs, s.resolvableIdxs = typeCheckSplitExprs(s.exprs)
 
 	// If no overloads are provided, just type check parameters and return.
 	if numOverloads == 0 {
@@ -724,8 +722,18 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// out impossible candidates based on identical parameters. For instance,
 	// f(int, float) is not a possible candidate for the expression f($1, $1).
 
-	// Filter out overloads on resolved types.
+	// Filter out overloads on resolved types. This includes resolved placeholders
+	// and any other resolvable exprs.
+	var typeableIdxs = util.FastIntSet{}
 	for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
+		typeableIdxs.Add(i)
+	}
+	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
+		if !semaCtx.isUnresolvedPlaceholder(s.exprs[i]) {
+			typeableIdxs.Add(i)
+		}
+	}
+	for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
 		paramDesired := types.Any
 
 		// If all remaining candidates require the same type for this parameter,
@@ -787,10 +795,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	}
 
 	var homogeneousTyp *types.T
-	if !s.resolvableIdxs.Empty() {
-		idx, _ := s.resolvableIdxs.Next(0)
+	if !typeableIdxs.Empty() {
+		idx, _ := typeableIdxs.Next(0)
 		homogeneousTyp = s.typedExprs[idx].ResolvedType()
-		for i, ok := s.resolvableIdxs.Next(idx); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
+		for i, ok := typeableIdxs.Next(idx); ok; i, ok = typeableIdxs.Next(i + 1) {
 			if !homogeneousTyp.Equivalent(s.typedExprs[i].ResolvedType()) {
 				homogeneousTyp = nil
 				break
@@ -1194,8 +1202,9 @@ func defaultTypeCheck(
 	}
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
 		if errorOnPlaceholders {
-			_, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
-			return err
+			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any); err != nil {
+				return err
+			}
 		}
 		// If we dont want to error on args, avoid type checking them without a desired type.
 		s.typedExprs[i] = StripParens(s.exprs[i]).(*Placeholder)
@@ -1265,6 +1274,9 @@ func checkReturnPlaceholdersAtIdx(
 				return false, nil
 			}
 			return false, err
+		}
+		if typ.ResolvedType().IsAmbiguous() {
+			return false, nil
 		}
 		s.typedExprs[i] = typ
 	}

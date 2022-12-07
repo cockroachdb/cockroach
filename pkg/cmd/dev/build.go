@@ -167,13 +167,13 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	args = append(args, additionalBazelArgs...)
-	if buildutil.CrdbTestBuild {
-		args = append(args, "--build_event_binary_file=/tmp/path")
-	} else {
-		args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
-	}
 
 	if cross == "" {
+		if buildutil.CrdbTestBuild {
+			args = append(args, "--build_event_binary_file=/tmp/path")
+		} else {
+			args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
+		}
 		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err

@@ -208,9 +208,9 @@ func (ex *connExecutor) recordStatementSummary(
 		StartTime:            phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt),
 		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).Add(svcLatRaw),
 		FullScan:             fullScan,
-		SessionData:          planner.SessionData(),
 		ExecStats:            queryLevelStats,
 		Indexes:              planner.instrumentation.indexesUsed,
+		Database:             planner.SessionData().Database,
 	}
 
 	stmtFingerprintID, err :=
