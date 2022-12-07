@@ -653,6 +653,17 @@ export function alertDataSync(store: Store<AdminUIState>) {
     // Always refresh health.
     dispatch(refreshHealth());
 
+    // We should not send out requests to the endpoints below if
+    // the user has not successfully logged in since the requests
+    // will always return with a 401 error.
+    if (
+      !state.login ||
+      !state.login.loggedInUser ||
+      state.login.loggedInUser == ``
+    ) {
+      return;
+    }
+
     // Load persistent settings which have not yet been loaded.
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
