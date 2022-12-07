@@ -534,8 +534,7 @@ and thus do not require admin privileges for access.
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 	schema: vtable.PGCatalogAuthID,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
+		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, _ tree.Datum, userID *tree.DOid) error {
 			isRoot := tree.DBool(userName.IsRootUser() || userName.IsAdminRole())
 			// Currently, all users and roles inherit the privileges of roles they are
 			// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
@@ -564,7 +563,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			}
 
 			return addRow(
-				h.UserOid(userName),                  // oid
+				userID,                               // oid
 				tree.NewDName(userName.Normalized()), // rolname
 				tree.MakeDBool(isRoot || isSuper),    // rolsuper
 				tree.MakeDBool(roleInherits),         // rolinherit
@@ -589,6 +588,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
 		h := makeOidHasher()
 		return forEachRoleMembership(ctx, p.ExecCfg().InternalExecutor, p.Txn(),
 			func(roleName, memberName username.SQLUsername, isAdmin bool) error {
+				// TODO(yang): Remove usages of UserOID after system.role_members table updated
+				// to store role and member IDs.
 				return addRow(
 					h.UserOid(roleName),                 // roleid
 					h.UserOid(memberName),               // member
@@ -615,6 +616,8 @@ func getOwnerOID(ctx context.Context, p eval.Planner, desc catalog.Descriptor) (
 	if err != nil {
 		return nil, err
 	}
+	// TODO(yang): Remove usage of UserOID after PrivilegeDescriptor updated to
+	// store user ID.
 	h := makeOidHasher()
 	return h.UserOid(owner), nil
 }
@@ -1352,6 +1355,8 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				normalizedName := ""
 				roleOid := oidZero
 				if defaultPrivilegesForRole.IsExplicitRole() {
+					// TODO(yang): Remove usage of UserOID after PrivilegeDescriptor
+					// changed to store user ID.
 					roleOid = h.UserOid(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode())
 					normalizedName = defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()
 				}
@@ -2071,7 +2076,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						//
 						// TODO(ajwerner): The public schema effectively carries the privileges
 						// of the database so consider using the database's owner for public.
-						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
+						ownerOID = tree.NewDOid(username.AdminRoleID)
 					}
 					return addRow(
 						schemaOid(sc.GetID()),         // oid
@@ -2445,6 +2450,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							argNames = argNamesArray
 						}
 
+						// TODO(yang): Remove usage of UserOID after PrivilegeDescriptor
+						// changed to store user ID.
 						return addRow(
 							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
 							tree.NewDName(fnDesc.GetName()),                 // proname
@@ -2546,9 +2553,8 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 		// Because Postgres allows access to pg_roles by non-privileged users, we
 		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
 		// include sensitive information such as password hashes.
-		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error {
 				isRoot := tree.DBool(userName.IsRootUser() || userName.IsAdminRole())
 				// Currently, all users and roles inherit the privileges of roles they are
 				// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
@@ -2576,7 +2582,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				}
 
 				return addRow(
-					h.UserOid(userName),                  // oid
+					userID,                               // oid
 					tree.NewDName(userName.Normalized()), // rolname
 					tree.MakeDBool(isRoot || isSuper),    // rolsuper
 					tree.MakeDBool(roleInherits),         // rolinherit
@@ -2746,6 +2752,8 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 				depType = sharedDependencyOwner
 			}
 
+			// TODO(yang): Remove usage of UserOID after PrivilegeDescriptor updated to
+			// store user ID.
 			return addRow(
 				dbID,                             // dbid
 				classID,                          // classid
@@ -2807,6 +2815,8 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 
 		// Pinned roles, as stated above, pinned roles only have rows with zeros.
 		for _, role := range pinnedRoles {
+			// TODO(yang): Remove usage of UserOID after PrivilegeDescriptor updated to
+			// store user ID.
 			if err := addRow(
 				tree.NewDOid(0), // dbid
 				tree.NewDOid(0), // classid
@@ -3220,9 +3230,8 @@ var pgCatalogUserTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 	schema: vtable.PGCatalogUser,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error {
 				if isRole {
 					return nil
 				}
@@ -3242,7 +3251,7 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 
 				return addRow(
 					tree.NewDName(userName.Normalized()), // usename
-					h.UserOid(userName),                  // usesysid
+					userID,                               // usesysid
 					tree.MakeDBool(isRoot || createDB),   // usecreatedb
 					tree.MakeDBool(isRoot || isSuper),    // usesuper
 					tree.DBoolFalse,                      // userepl
@@ -3317,6 +3326,8 @@ https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 			databaseID := tree.MustBeDOid(row[0])
 			roleName := tree.MustBeDString(row[1])
 			roleID := oidZero
+			// TODO(yang): Remove usage of UserOID after system.database_role_settings
+			// updated to store user ID.
 			if roleName != "" {
 				roleID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString(string(roleName)))
 			}
@@ -3338,8 +3349,7 @@ var pgCatalogShadowTable = virtualSchemaTable{
 https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 	schema: vtable.PgCatalogShadow,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error {
 			noLogin, err := options.noLogin()
 			if err != nil {
 				return err
@@ -3364,7 +3374,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 
 			return addRow(
 				tree.NewDName(userName.Normalized()), // usename
-				h.UserOid(userName),                  // usesysid
+				userID,                               // usesysid
 				tree.MakeDBool(isRoot || createDB),   // usecreatedb
 				tree.MakeDBool(isRoot || isSuper),    // usesuper
 				tree.DBoolFalse,                      // userepl
@@ -4551,6 +4561,7 @@ func (h oidHasher) RegProc(name string) tree.Datum {
 	return tree.NewDOid(overloads[0].Oid).AsRegProc(name)
 }
 
+// TODO(yang): Delete this function once all usages of it have been replaced.
 func (h oidHasher) UserOid(userName username.SQLUsername) *tree.DOid {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(userName.Normalized())
