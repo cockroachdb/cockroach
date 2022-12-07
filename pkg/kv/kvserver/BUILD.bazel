@@ -415,6 +415,7 @@ go_test(
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
