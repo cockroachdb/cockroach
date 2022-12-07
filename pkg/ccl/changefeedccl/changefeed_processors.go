@@ -262,8 +262,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.changedRowBuf = &b.buf
 	}
 
-	ca.sink = &errorWrapperSink{wrapped: ca.sink}
-
 	// If the initial scan was disabled the highwater would've already been forwarded
 	needsInitialScan := ca.frontier.Frontier().IsEmpty()
 
@@ -282,7 +280,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-
+	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
 		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
@@ -483,7 +481,6 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 					err = nil
 				}
 			} else {
-
 				select {
 				// If the poller errored first, that's the
 				// interesting one, so overwrite `err`.
@@ -999,9 +996,8 @@ func (cf *changeFrontier) close() {
 			cf.closeMetrics()
 		}
 		if cf.sink != nil {
-			if err := cf.sink.Close(); err != nil {
-				log.Warningf(cf.Ctx(), `error closing sink. goroutines may have leaked: %v`, err)
-			}
+			// Best effort: context is often cancel by now, so we expect to see an error
+			_ = cf.sink.Close()
 		}
 		cf.memAcc.Close(cf.Ctx())
 		cf.MemMonitor.Stop(cf.Ctx())
@@ -1042,7 +1038,12 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 				// Detect whether this boundary should be used to kill or restart the
 				// changefeed.
-				if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
+				if cf.frontier.boundaryType == jobspb.ResolvedSpan_EXIT {
+					err = changefeedbase.WithTerminalError(errors.Wrapf(err,
+						"shut down due to schema change and %s=%q",
+						changefeedbase.OptSchemaChangePolicy,
+						changefeedbase.OptSchemaChangePolicyStop))
+				} else {
 					err = changefeedbase.MarkRetryableError(err)
 				}
 			}
@@ -1288,7 +1289,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(errors.New("cf.knobs.RaiseRetryableError"))
+			return false, changefeedbase.MarkRetryableError(
+				errors.New("cf.knobs.RaiseRetryableError"))
 		}
 	}
 

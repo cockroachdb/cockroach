@@ -505,7 +505,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 		lt := logtags.FromContext(ctx)
 		ctx, cancel := m.stopper.WithCancelOnQuiesce(logtags.AddTags(m.ambientCtx.AnnotateCtx(context.Background()), lt))
 		defer cancel()
-		if m.isDraining() {
+		if m.IsDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
 		}
 		newest := m.findNewest(id)
@@ -548,7 +548,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 
 // releaseLease from store.
 func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
-	if m.isDraining() {
+	if m.IsDraining() {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
 		return
@@ -1014,10 +1014,11 @@ func (m *Manager) Acquire(
 func (m *Manager) removeOnceDereferenced() bool {
 	return m.storage.testingKnobs.RemoveOnceDereferenced ||
 		// Release from the store if the Manager is draining.
-		m.isDraining()
+		m.IsDraining()
 }
 
-func (m *Manager) isDraining() bool {
+// IsDraining returns true if this node's lease manager is draining.
+func (m *Manager) IsDraining() bool {
 	return m.draining.Load().(bool)
 }
 

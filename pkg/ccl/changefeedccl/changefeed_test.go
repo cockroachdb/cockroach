@@ -120,7 +120,6 @@ func TestChangefeedReplanning(t *testing.T) {
 	}
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-
 		ctx := context.Background()
 
 		numNodes := 3
@@ -1024,7 +1023,7 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 		// Check that dropping a watched column still stops the changefeed.
 		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
 		if _, err := cf.Next(); !testutils.IsError(err, `schema change occurred at`) {
-			t.Errorf(`expected "schema change occurred at ..." got: %+v`, err.Error())
+			require.Regexp(t, `expected "schema change occurred at ..." got: %+v`, err)
 		}
 	}
 
@@ -2069,7 +2068,6 @@ func fetchDescVersionModificationTime(
 		RequestHeader: header,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		StartTime:     hlc.Timestamp{},
-		ReturnSST:     true,
 	}
 	clock := hlc.NewClockWithSystemTimeSource(time.Minute /* maxOffset */)
 	hh := roachpb.Header{Timestamp: clock.Now()}
@@ -3429,7 +3427,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 			case 1:
 				return changefeedbase.MarkRetryableError(fmt.Errorf("synthetic retryable error"))
 			case 2:
-				return fmt.Errorf("synthetic terminal error")
+				return changefeedbase.WithTerminalError(errors.New("synthetic terminal error"))
 			default:
 				return nil
 			}
@@ -3499,62 +3497,11 @@ func TestChangefeedRetryableError(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
-func TestChangefeedJobRetryOnNoInboundStream(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRace(t)
-	skip.UnderStress(t)
-
-	cluster, db, cleanup := startTestCluster(t)
-	defer cleanup()
-	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// force fast "no inbound stream" error
-	var oldMaxRunningFlows int
-	var oldTimeout string
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
-	sqlDB.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&oldMaxRunningFlows)
-	sqlDB.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&oldTimeout)
-	serverutils.SetClusterSetting(t, cluster, "sql.distsql.max_running_flows", 0)
-	serverutils.SetClusterSetting(t, cluster, "sql.distsql.flow_stream_timeout", "1s")
-
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-
-	// Connect to a non-leaseholder node so that a DistSQL flow is required
-	var leaseHolder int
-	sqlDB.QueryRow(t, `SELECT lease_holder FROM [SHOW RANGES FROM TABLE foo] LIMIT 1`).Scan(&leaseHolder)
-	feedServerID := ((leaseHolder - 1) + 1) % 3
-	db = cluster.ServerConn(feedServerID)
-	sqlDB = sqlutils.MakeSQLRunner(db)
-	f := makeKafkaFeedFactoryForCluster(cluster, db)
-	foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-	defer closeFeed(t, foo)
-
-	// Verify job progress contains retryable error status.
-	registry := cluster.Server(feedServerID).JobRegistry().(*jobs.Registry)
-	jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
-	testutils.SucceedsSoon(t, func() error {
-		job, err := registry.LoadJob(context.Background(), jobID)
-		require.NoError(t, err)
-		if strings.Contains(job.Progress().RunningStatus, "retryable error") {
-			return nil
-		}
-		return errors.Newf("job status was %s", job.Progress().RunningStatus)
-	})
-
-	// Fix the error. Job should retry successfully.
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=$1", oldMaxRunningFlows)
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_stream_timeout=$1", oldTimeout)
-	assertPayloads(t, foo, []string{
-		`foo: [1]->{"after": {"a": 1}}`,
-	})
-
-}
-
 func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 91548)
 
 	// Set TestingKnobs to return a known session for easier
 	// comparison.
@@ -3703,6 +3650,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		atomic.StoreInt32(&shouldWait, 0)
 		resume <- struct{}{}
 		dataExpiredRows = <-changefeedInit
+		require.NotNil(t, dataExpiredRows)
 
 		// Verify that, at some point, Next() returns a "must
 		// be after replica GC threshold" error. In the common
@@ -4464,7 +4412,7 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		prep(t, sqlDB)
 		// Check that disallowed expressions have a good error message.
 		// Also regression test for https://github.com/cockroachdb/cockroach/issues/90416
-		sqlDB.ExpectErr(t, "syntax is unsupported in CREATE CHANGEFEED",
+		sqlDB.ExpectErr(t, "expression currently unsupported in CREATE CHANGEFEED",
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE EXISTS (SELECT true)`)
 	})
 
@@ -5279,7 +5227,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		require.NoError(t, feedJob.Pause())
 
 		// Make extra sure that the zombie changefeed can't write any more data.
-		beforeEmitRowCh <- changefeedbase.MarkRetryableError(errors.New(`nope don't write it`))
+		beforeEmitRowCh <- errors.New(`nope don't write it`)
 
 		// Insert some data that we should only see out of the changefeed after it
 		// re-runs the backfill.
@@ -5917,7 +5865,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 		knobs.RaiseRetryableError = func() error {
 			emittedCount++
 			if emittedCount%200 == 0 {
-				return changefeedbase.MarkRetryableError(errors.New("test transient error"))
+				return errors.New("test transient error")
 			}
 			return nil
 		}
@@ -6025,9 +5973,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if status != "retryable error: retryable changefeed error: 500 Internal Server Error: " {
-				return errors.Errorf("expected retryable error: retryable changefeed error: 500 Internal Server Error:, got: %v", status)
-			}
+			require.Regexp(t, "500 Internal Server Error", status)
 			return nil
 		})
 
@@ -6058,7 +6004,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error='pause'`)
@@ -6101,7 +6047,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR bar WITH on_error = 'fail'`)
@@ -6121,7 +6067,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR quux`)
@@ -6313,6 +6259,12 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 				sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 5000);`)
 
+				// Most changefeed tests can afford to have a race condition between the initial
+				// inserts and starting the feed because the output looks the same for an initial
+				// scan and an insert. For tests with initial_scan=only, though, we can't start the feed
+				// until it's going to see all the initial inserts in the initial scan.
+				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo`, [][]string{{`5000`}})
+
 				feed := feed(t, f, changefeedStmt)
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (5005), (5007), (5009)")
@@ -6404,6 +6356,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
 				sqlDB.Exec(t, "INSERT INTO bar VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
+				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo,bar`, [][]string{{`9`}})
+
 				feed := feed(t, f, testData.changefeedStmt)
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
@@ -6460,6 +6414,8 @@ func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, name STRING)")
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
+
+				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo`, [][]string{{`3`}})
 
 				feed := feed(t, f, changefeedStmt)
 
@@ -7211,7 +7167,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
-			return errors.Errorf("should fail")
+			return changefeedbase.WithTerminalError(errors.New("should fail"))
 		}
 
 		beforeCreate := timeutil.Now()
