@@ -150,7 +150,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"str", types.String}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.String}, {Name: "srid", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
@@ -200,7 +200,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{Name: "wkb", Typ: types.Bytes}, {Name: "srid", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDBytes(args[0]))
@@ -579,7 +579,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"settings", types.String}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "settings", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -625,7 +625,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geography", types.Geography}, {"settings", types.String}},
+			Types:      tree.ParamTypes{{Name: "geography", Typ: types.Geography}, {Name: "settings", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
@@ -662,7 +662,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geomFromWKTOverload,
 		tree.Overload{
-			Types:      tree.ParamTypes{{"str", types.String}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.String}, {Name: "srid", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
@@ -700,7 +700,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geomFromWKBOverload,
 		tree.Overload{
-			Types:      tree.ParamTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{Name: "bytes", Typ: types.Bytes}, {Name: "srid", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
@@ -735,7 +735,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_geomfromgeojson": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"val", types.String}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromGeoJSON([]byte(tree.MustBeDString(args[0])))
@@ -774,7 +774,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_makepoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}},
+			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -789,7 +789,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}},
+			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}, {Name: "z", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -805,7 +805,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}, {"m", types.Float}},
+			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}, {Name: "z", Typ: types.Float}, {Name: "m", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -825,7 +825,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_makepointm": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}, {"m", types.Float}},
+			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}, {Name: "m", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -859,8 +859,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"outer", types.Geometry},
-				{"interior", types.AnyArray},
+				{Name: "outer", Typ: types.Geometry},
+				{Name: "interior", Typ: types.AnyArray},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -890,8 +890,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"srid", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "srid", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -959,7 +959,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"str", types.String}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.String}, {Name: "srid", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
@@ -1007,7 +1007,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
+			Types:      tree.ParamTypes{{Name: "bytes", Typ: types.Bytes}, {Name: "srid", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
@@ -1077,7 +1077,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_point": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"x", types.Float}, {"y", types.Float}},
+			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
@@ -1096,8 +1096,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geohash", types.String},
-				{"precision", types.Int},
+				{Name: "geohash", Typ: types.String},
+				{Name: "precision", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1116,7 +1116,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geohash", types.String},
+				{Name: "geohash", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1138,8 +1138,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geohash", types.String},
-				{"precision", types.Int},
+				{Name: "geohash", Typ: types.String},
+				{Name: "precision", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1162,7 +1162,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geohash", types.String},
+				{Name: "geohash", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1188,8 +1188,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geohash", types.String},
-				{"precision", types.Int},
+				{Name: "geohash", Typ: types.String},
+				{Name: "precision", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1220,7 +1220,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geohash", types.String},
+				{Name: "geohash", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1262,8 +1262,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"max_decimal_digits", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1290,8 +1290,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"max_decimal_digits", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1321,8 +1321,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"max_decimal_digits", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1349,8 +1349,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"max_decimal_digits", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1387,8 +1387,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"xdr_or_ndr", types.String},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "xdr_or_ndr", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1406,8 +1406,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"xdr_or_ndr", types.String},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "xdr_or_ndr", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1484,8 +1484,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"xdr_or_ndr", types.String},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "xdr_or_ndr", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1517,8 +1517,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"xdr_or_ndr", types.String},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "xdr_or_ndr", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1553,8 +1553,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"precision_xy", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "precision_xy", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1578,9 +1578,9 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"precision_xy", types.Int},
-				{"precision_z", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "precision_xy", Typ: types.Int},
+				{Name: "precision_z", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1605,10 +1605,10 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"precision_xy", types.Int},
-				{"precision_z", types.Int},
-				{"precision_m", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "precision_xy", Typ: types.Int},
+				{Name: "precision_z", Typ: types.Int},
+				{Name: "precision_m", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1672,8 +1672,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"precision", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "precision", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1706,8 +1706,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"precision", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "precision", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1728,7 +1728,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_asgeojson": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"row", types.AnyTuple}},
+			Types:      tree.ParamTypes{{Name: "row", Typ: types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
@@ -1749,7 +1749,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"row", types.AnyTuple}, {"geo_column", types.String}},
+			Types:      tree.ParamTypes{{Name: "row", Typ: types.AnyTuple}, {Name: "geo_column", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
@@ -1771,9 +1771,9 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"row", types.AnyTuple},
-				{"geo_column", types.String},
-				{"max_decimal_digits", types.Int},
+				{Name: "row", Typ: types.AnyTuple},
+				{Name: "geo_column", Typ: types.String},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1796,10 +1796,10 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"row", types.AnyTuple},
-				{"geo_column", types.String},
-				{"max_decimal_digits", types.Int},
-				{"pretty", types.Bool},
+				{Name: "row", Typ: types.AnyTuple},
+				{Name: "geo_column", Typ: types.String},
+				{Name: "max_decimal_digits", Typ: types.Int},
+				{Name: "pretty", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1836,8 +1836,8 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"max_decimal_digits", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1853,9 +1853,9 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"max_decimal_digits", types.Int},
-				{"options", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "max_decimal_digits", Typ: types.Int},
+				{Name: "options", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1893,8 +1893,8 @@ Options is a flag that can be bitmasked. The options are:
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"max_decimal_digits", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "max_decimal_digits", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1910,9 +1910,9 @@ Options is a flag that can be bitmasked. The options are:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"max_decimal_digits", types.Int},
-				{"options", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "max_decimal_digits", Typ: types.Int},
+				{Name: "options", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1939,9 +1939,9 @@ Options is a flag that can be bitmasked. The options are:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"distance", types.Float},
-				{"azimuth", types.Float},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "distance", Typ: types.Float},
+				{Name: "azimuth", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2140,7 +2140,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 	"st_generatepoints": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "npoints", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
@@ -2162,7 +2162,7 @@ The requested number of points must be not larger than 65336.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "npoints", Typ: types.Int4}, {Name: "seed", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
@@ -2291,7 +2291,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_interiorringn": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "n", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2325,7 +2325,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_pointn": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "n", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2359,7 +2359,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_geometryn": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"n", types.Int}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "n", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2546,7 +2546,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "defaultZ", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2583,7 +2583,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultM", types.Float}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "defaultM", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2620,7 +2620,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "defaultZ", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2638,7 +2638,7 @@ The requested number of points must be not larger than 65336.`,
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}, {"defaultM", types.Float}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "defaultZ", Typ: types.Float}, {Name: "defaultM", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -2811,7 +2811,7 @@ The requested number of points must be not larger than 65336.`,
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"box2d", types.Box2D},
+				{Name: "box2d", Typ: types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2847,7 +2847,7 @@ The requested number of points must be not larger than 65336.`,
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"box2d", types.Box2D},
+				{Name: "box2d", Typ: types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2908,7 +2908,7 @@ The requested number of points must be not larger than 65336.`,
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"box2d", types.Box2D},
+				{Name: "box2d", Typ: types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2944,7 +2944,7 @@ The requested number of points must be not larger than 65336.`,
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"box2d", types.Box2D},
+				{Name: "box2d", Typ: types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3165,7 +3165,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_addmeasure": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"start", types.Float}, {"end", types.Float}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "start", Typ: types.Float}, {Name: "end", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -3202,9 +3202,9 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"fraction", types.Float},
-				{"repeat", types.Bool},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "fraction", Typ: types.Float},
+				{Name: "repeat", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3249,8 +3249,8 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"type", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "type", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3506,9 +3506,9 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography_a", types.Geography},
-				{"geography_b", types.Geography},
-				{"use_spheroid", types.Bool},
+				{Name: "geography_a", Typ: types.Geography},
+				{Name: "geography_b", Typ: types.Geography},
+				{Name: "use_spheroid", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3614,9 +3614,9 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"densify_frac", types.Float},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "densify_frac", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3665,9 +3665,9 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"densify_frac", types.Float},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "densify_frac", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3848,9 +3848,9 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"distance", types.Float},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -3985,9 +3985,9 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"pattern", types.String},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "pattern", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4008,9 +4008,9 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"bnr", types.Int},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "bnr", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4035,8 +4035,8 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"intersection_matrix", types.String},
-				{"pattern", types.String},
+				{Name: "intersection_matrix", Typ: types.String},
+				{Name: "pattern", Typ: types.String},
 			},
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				matrix := string(tree.MustBeDString(args[0]))
@@ -4079,8 +4079,8 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"flags", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "flags", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4122,8 +4122,8 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"flags", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "flags", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4246,7 +4246,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_clipbybox2d": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"box2d", types.Box2D}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "box2d", Typ: types.Box2D}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -4474,8 +4474,8 @@ The paths themselves are given in the direction of the first geometry.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4497,9 +4497,9 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
-				{"preserve_collapsed", types.Bool},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
+				{Name: "preserve_collapsed", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4525,8 +4525,8 @@ The paths themselves are given in the direction of the first geometry.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4553,8 +4553,8 @@ The paths themselves are given in the direction of the first geometry.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"srid", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "srid", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4573,8 +4573,8 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"srid", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "srid", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4596,8 +4596,8 @@ The paths themselves are given in the direction of the first geometry.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"srid", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "srid", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4626,8 +4626,8 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"to_proj_text", types.String},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "to_proj_text", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4657,9 +4657,9 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"from_proj_text", types.String},
-				{"to_proj_text", types.String},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "from_proj_text", Typ: types.String},
+				{Name: "to_proj_text", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4686,9 +4686,9 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"from_proj_text", types.String},
-				{"srid", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "from_proj_text", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4722,9 +4722,9 @@ The paths themselves are given in the direction of the first geometry.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"delta_x", types.Float},
-				{"delta_y", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "delta_x", Typ: types.Float},
+				{Name: "delta_y", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4746,10 +4746,10 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"delta_x", types.Float},
-				{"delta_y", types.Float},
-				{"delta_z", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "delta_x", Typ: types.Float},
+				{Name: "delta_y", Typ: types.Float},
+				{Name: "delta_z", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4775,13 +4775,13 @@ The paths themselves are given in the direction of the first geometry.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"a", types.Float},
-				{"b", types.Float},
-				{"d", types.Float},
-				{"e", types.Float},
-				{"x_off", types.Float},
-				{"y_off", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "a", Typ: types.Float},
+				{Name: "b", Typ: types.Float},
+				{Name: "d", Typ: types.Float},
+				{Name: "e", Typ: types.Float},
+				{Name: "x_off", Typ: types.Float},
+				{Name: "y_off", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4813,19 +4813,19 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"a", types.Float},
-				{"b", types.Float},
-				{"c", types.Float},
-				{"d", types.Float},
-				{"e", types.Float},
-				{"f", types.Float},
-				{"g", types.Float},
-				{"h", types.Float},
-				{"i", types.Float},
-				{"x_off", types.Float},
-				{"y_off", types.Float},
-				{"z_off", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "a", Typ: types.Float},
+				{Name: "b", Typ: types.Float},
+				{Name: "c", Typ: types.Float},
+				{Name: "d", Typ: types.Float},
+				{Name: "e", Typ: types.Float},
+				{Name: "f", Typ: types.Float},
+				{Name: "g", Typ: types.Float},
+				{Name: "h", Typ: types.Float},
+				{Name: "i", Typ: types.Float},
+				{Name: "x_off", Typ: types.Float},
+				{Name: "y_off", Typ: types.Float},
+				{Name: "z_off", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4861,9 +4861,9 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"x_factor", types.Float},
-				{"y_factor", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "x_factor", Typ: types.Float},
+				{Name: "y_factor", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4885,8 +4885,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"factor", types.Geometry},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "factor", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4921,9 +4921,9 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"factor", types.Geometry},
-				{"origin", types.Geometry},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "factor", Typ: types.Geometry},
+				{Name: "origin", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4948,8 +4948,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"angle_radians", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "angle_radians", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4970,10 +4970,10 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"angle_radians", types.Float},
-				{"origin_x", types.Float},
-				{"origin_y", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "angle_radians", Typ: types.Float},
+				{Name: "origin_x", Typ: types.Float},
+				{Name: "origin_y", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -4994,9 +4994,9 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"angle_radians", types.Float},
-				{"origin_point", types.Geometry},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "angle_radians", Typ: types.Float},
+				{Name: "origin_point", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5024,8 +5024,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"angle_radians", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "angle_radians", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5049,8 +5049,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"angle_radians", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "angle_radians", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5074,8 +5074,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"g", types.Geometry},
-				{"angle_radians", types.Float},
+				{Name: "g", Typ: types.Geometry},
+				{Name: "angle_radians", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5099,9 +5099,9 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"line_string", types.Geometry},
-				{"point", types.Geometry},
-				{"index", types.Int},
+				{Name: "line_string", Typ: types.Geometry},
+				{Name: "point", Typ: types.Geometry},
+				{Name: "index", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5123,8 +5123,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"line_string", types.Geometry},
-				{"point", types.Geometry},
+				{Name: "line_string", Typ: types.Geometry},
+				{Name: "point", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5148,9 +5148,9 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"line_string", types.Geometry},
-				{"index", types.Int},
-				{"point", types.Geometry},
+				{Name: "line_string", Typ: types.Geometry},
+				{Name: "index", Typ: types.Int},
+				{Name: "point", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5175,8 +5175,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"line_string", types.Geometry},
-				{"index", types.Int},
+				{Name: "line_string", Typ: types.Geometry},
+				{Name: "index", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5200,8 +5200,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5222,7 +5222,7 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5244,7 +5244,7 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5267,8 +5267,8 @@ The matrix transformation will be applied as follows for each coordinate:
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"max_segment_length_meters", types.Float},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "max_segment_length_meters", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5290,8 +5290,8 @@ The calculations are done on a sphere.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"max_segment_length", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "max_segment_length", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5314,8 +5314,8 @@ The calculations are done on a sphere.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"size", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "size", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5335,9 +5335,9 @@ The calculations are done on a sphere.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"size_x", types.Float},
-				{"size_y", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "size_x", Typ: types.Float},
+				{Name: "size_y", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5357,11 +5357,11 @@ The calculations are done on a sphere.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"origin_x", types.Float},
-				{"origin_y", types.Float},
-				{"size_x", types.Float},
-				{"size_y", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "origin_x", Typ: types.Float},
+				{Name: "origin_y", Typ: types.Float},
+				{Name: "size_x", Typ: types.Float},
+				{Name: "size_y", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5383,12 +5383,12 @@ The calculations are done on a sphere.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"origin", types.Geometry},
-				{"size_x", types.Float},
-				{"size_y", types.Float},
-				{"size_z", types.Float},
-				{"size_m", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "origin", Typ: types.Geometry},
+				{Name: "size_x", Typ: types.Float},
+				{Name: "size_y", Typ: types.Float},
+				{Name: "size_z", Typ: types.Float},
+				{Name: "size_m", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5431,9 +5431,9 @@ The calculations are done on a sphere.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"input", types.Geometry},
-				{"target", types.Geometry},
-				{"tolerance", types.Float},
+				{Name: "input", Typ: types.Geometry},
+				{Name: "target", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5458,8 +5458,8 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"distance", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5477,8 +5477,8 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"distance", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5496,8 +5496,8 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"distance", types.Decimal},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Decimal},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5520,9 +5520,9 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"distance", types.Float},
-				{"quad_segs", types.Int},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+				{Name: "quad_segs", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5545,9 +5545,9 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"distance", types.Float},
-				{"buffer_style_params", types.String},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+				{Name: "buffer_style_params", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5575,8 +5575,8 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"distance", types.Float},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "distance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5600,9 +5600,9 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"distance", types.Float},
-				{"quad_segs", types.Int},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "distance", Typ: types.Float},
+				{Name: "quad_segs", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5630,9 +5630,9 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"distance", types.Float},
-				{"buffer_style_params", types.String},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "distance", Typ: types.Float},
+				{Name: "buffer_style_params", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5687,7 +5687,7 @@ Bottom Left.`,
 		),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"box2d", types.Box2D},
+				{Name: "box2d", Typ: types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5708,11 +5708,11 @@ Bottom Left.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"xmin", types.Float},
-				{"ymin", types.Float},
-				{"xmax", types.Float},
-				{"ymax", types.Float},
-				{"srid", types.Int},
+				{Name: "xmin", Typ: types.Float},
+				{Name: "ymin", Typ: types.Float},
+				{Name: "xmax", Typ: types.Float},
+				{Name: "ymax", Typ: types.Float},
+				{Name: "srid", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5725,10 +5725,10 @@ Bottom Left.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"xmin", types.Float},
-				{"ymin", types.Float},
-				{"xmax", types.Float},
-				{"ymax", types.Float},
+				{Name: "xmin", Typ: types.Float},
+				{Name: "ymin", Typ: types.Float},
+				{Name: "xmax", Typ: types.Float},
+				{Name: "ymax", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5744,7 +5744,7 @@ Bottom Left.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5800,10 +5800,10 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"point1", types.Geometry},
-				{"point2", types.Geometry},
-				{"point3", types.Geometry},
-				{"point4", types.Geometry},
+				{Name: "point1", Typ: types.Geometry},
+				{Name: "point2", Typ: types.Geometry},
+				{Name: "point3", Typ: types.Geometry},
+				{Name: "point4", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5828,9 +5828,9 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"point1", types.Geometry},
-				{"point2", types.Geometry},
-				{"point3", types.Geometry},
+				{Name: "point1", Typ: types.Geometry},
+				{Name: "point2", Typ: types.Geometry},
+				{Name: "point3", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5858,8 +5858,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"line1", types.Geometry},
-				{"line2", types.Geometry},
+				{Name: "line1", Typ: types.Geometry},
+				{Name: "line2", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5885,7 +5885,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_asencodedpolyline": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5905,8 +5905,8 @@ Preserves 5 decimal places.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"precision", types.Int4},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "precision", Typ: types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5929,7 +5929,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 	"st_linefromencodedpolyline": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"encoded_polyline", types.String},
+				{Name: "encoded_polyline", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -5952,8 +5952,8 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"encoded_polyline", types.String},
-				{"precision", types.Int4},
+				{Name: "encoded_polyline", Typ: types.String},
+				{Name: "precision", Typ: types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6013,7 +6013,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			types.Geometry,
 			makeSubdividedGeometriesGeneratorFactory(false /* expectMaxVerticesArg */),
@@ -6022,8 +6022,8 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"max_vertices", types.Int4},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "max_vertices", Typ: types.Int4},
 			},
 			types.Geometry,
 			makeSubdividedGeometriesGeneratorFactory(true /* expectMaxVerticesArg */),
@@ -6078,7 +6078,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_combinebbox": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
+			Types:      tree.ParamTypes{{Name: "box2d", Typ: types.Box2D}, {Name: "geometry", Typ: types.Geometry}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[1] == tree.DNull {
@@ -6109,7 +6109,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_expand": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"box2d", types.Box2D}, {"delta", types.Float}},
+			Types:      tree.ParamTypes{{Name: "box2d", Typ: types.Box2D}, {Name: "delta", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				bbox := tree.MustBeDBox2D(args[0])
@@ -6127,9 +6127,9 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"box2d", types.Box2D},
-				{"delta_x", types.Float},
-				{"delta_y", types.Float},
+				{Name: "box2d", Typ: types.Box2D},
+				{Name: "delta_x", Typ: types.Float},
+				{Name: "delta_y", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6148,7 +6148,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {"delta", types.Float}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "delta", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
@@ -6170,9 +6170,9 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"delta_x", types.Float},
-				{"delta_y", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "delta_x", Typ: types.Float},
+				{Name: "delta_y", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6206,10 +6206,10 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"schema_name", types.String},
-				{"table_name", types.String},
-				{"geocolumn_name", types.String},
-				{"parent_only", types.Bool},
+				{Name: "schema_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "geocolumn_name", Typ: types.String},
+				{Name: "parent_only", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6225,9 +6225,9 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"schema_name", types.String},
-				{"table_name", types.String},
-				{"geocolumn_name", types.String},
+				{Name: "schema_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "geocolumn_name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6241,8 +6241,8 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"table_name", types.String},
-				{"geocolumn_name", types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "geocolumn_name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6267,12 +6267,12 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"table_name", types.String},
-				{"column_name", types.String},
-				{"srid", types.Int},
-				{"type", types.String},
-				{"dimension", types.Int},
-				{"use_typmod", types.Bool},
+				{Name: "table_name", Typ: types.String},
+				{Name: "column_name", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
+				{Name: "type", Typ: types.String},
+				{Name: "dimension", Typ: types.Int},
+				{Name: "use_typmod", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			SQLFn: eval.SQLFnOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (string, error) {
@@ -6308,13 +6308,13 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"schema_name", types.String},
-				{"table_name", types.String},
-				{"column_name", types.String},
-				{"srid", types.Int},
-				{"type", types.String},
-				{"dimension", types.Int},
-				{"use_typmod", types.Bool},
+				{Name: "schema_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "column_name", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
+				{Name: "type", Typ: types.String},
+				{Name: "dimension", Typ: types.Int},
+				{Name: "use_typmod", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			SQLFn: eval.SQLFnOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (string, error) {
@@ -6350,14 +6350,14 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"catalog_name", types.String},
-				{"schema_name", types.String},
-				{"table_name", types.String},
-				{"column_name", types.String},
-				{"srid", types.Int},
-				{"type", types.String},
-				{"dimension", types.Int},
-				{"use_typmod", types.Bool},
+				{Name: "catalog_name", Typ: types.String},
+				{Name: "schema_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "column_name", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
+				{Name: "type", Typ: types.String},
+				{Name: "dimension", Typ: types.Int},
+				{Name: "use_typmod", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			SQLFn: eval.SQLFnOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (string, error) {
@@ -6393,11 +6393,11 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"table_name", types.String},
-				{"column_name", types.String},
-				{"srid", types.Int},
-				{"type", types.String},
-				{"dimension", types.Int},
+				{Name: "table_name", Typ: types.String},
+				{Name: "column_name", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
+				{Name: "type", Typ: types.String},
+				{Name: "dimension", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			SQLFn: eval.SQLFnOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (string, error) {
@@ -6433,12 +6433,12 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"schema_name", types.String},
-				{"table_name", types.String},
-				{"column_name", types.String},
-				{"srid", types.Int},
-				{"type", types.String},
-				{"dimension", types.Int},
+				{Name: "schema_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "column_name", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
+				{Name: "type", Typ: types.String},
+				{Name: "dimension", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			SQLFn: eval.SQLFnOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (string, error) {
@@ -6474,13 +6474,13 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"catalog_name", types.String},
-				{"schema_name", types.String},
-				{"table_name", types.String},
-				{"column_name", types.String},
-				{"srid", types.Int},
-				{"type", types.String},
-				{"dimension", types.Int},
+				{Name: "catalog_name", Typ: types.String},
+				{Name: "schema_name", Typ: types.String},
+				{Name: "table_name", Typ: types.String},
+				{Name: "column_name", Typ: types.String},
+				{Name: "srid", Typ: types.Int},
+				{Name: "type", Typ: types.String},
+				{Name: "dimension", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			SQLFn: eval.SQLFnOverload(func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (string, error) {
@@ -6520,9 +6520,9 @@ The parent_only boolean is always ignored.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"distance", types.Float},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6546,10 +6546,10 @@ The parent_only boolean is always ignored.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"x_coord", types.Float},
-				{"y_coord", types.Float},
-				{"radius", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "x_coord", Typ: types.Float},
+				{Name: "y_coord", Typ: types.Float},
+				{Name: "radius", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6641,7 +6641,7 @@ The parent_only boolean is always ignored.`,
 
 	"st_minimumboundingradius": makeBuiltin(genProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
 			Generator:  eval.GeneratorOverload(makeMinimumBoundGenerator),
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
@@ -6664,7 +6664,7 @@ The parent_only boolean is always ignored.`,
 			volatility.Immutable,
 		),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"geometry", types.Geometry}, {" num_segs", types.Int}},
+			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: " num_segs", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Info: infoBuilder{
 				info: "Returns the smallest circle polygon that can fully contain a geometry.",
@@ -6694,11 +6694,11 @@ The parent_only boolean is always ignored.`,
 	"st_transscale": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"delta_x", types.Float},
-				{"delta_y", types.Float},
-				{"x_factor", types.Float},
-				{"y_factor", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "delta_x", Typ: types.Float},
+				{Name: "delta_y", Typ: types.Float},
+				{Name: "x_factor", Typ: types.Float},
+				{Name: "y_factor", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Volatility: volatility.Immutable,
@@ -6722,7 +6722,7 @@ The parent_only boolean is always ignored.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6741,8 +6741,8 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6762,9 +6762,9 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
-				{"extend_to", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
+				{Name: "extend_to", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6787,7 +6787,7 @@ The parent_only boolean is always ignored.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6807,8 +6807,8 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6829,9 +6829,9 @@ The parent_only boolean is always ignored.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
-				{"tolerance", types.Float},
-				{"extend_to", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
+				{Name: "extend_to", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6855,7 +6855,7 @@ The parent_only boolean is always ignored.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry", types.Geometry},
+				{Name: "geometry", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6877,9 +6877,9 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_linesubstring": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"linestring", types.Geometry},
-				{"start_fraction", types.Float},
-				{"end_fraction", types.Float},
+				{Name: "linestring", Typ: types.Geometry},
+				{Name: "start_fraction", Typ: types.Float},
+				{Name: "end_fraction", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Volatility: volatility.Immutable,
@@ -6899,9 +6899,9 @@ May return a Point or LineString in the case of degenerate inputs.`,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"linestring", types.Geometry},
-				{"start_fraction", types.Decimal},
-				{"end_fraction", types.Decimal},
+				{Name: "linestring", Typ: types.Geometry},
+				{Name: "start_fraction", Typ: types.Decimal},
+				{Name: "end_fraction", Typ: types.Decimal},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Volatility: volatility.Immutable,
@@ -6936,8 +6936,8 @@ May return a Point or LineString in the case of degenerate inputs.`,
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"linestring_a", types.Geometry},
-				{"linestring_b", types.Geometry},
+				{Name: "linestring_a", Typ: types.Geometry},
+				{Name: "linestring_b", Typ: types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7033,7 +7033,7 @@ func geometryOverload1(
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ParamTypes{
-			{"geometry", types.Geometry},
+			{Name: "geometry", Typ: types.Geometry},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7073,8 +7073,8 @@ func geometryOverload2(
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ParamTypes{
-			{"geometry_a", types.Geometry},
-			{"geometry_b", types.Geometry},
+			{Name: "geometry_a", Typ: types.Geometry},
+			{Name: "geometry_b", Typ: types.Geometry},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7115,7 +7115,7 @@ func geographyOverload1(
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ParamTypes{
-			{"geography", types.Geography},
+			{Name: "geography", Typ: types.Geography},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7144,7 +7144,7 @@ func geographyOverload1WithUseSpheroid(
 	return []tree.Overload{
 		{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
+				{Name: "geography", Typ: types.Geography},
 			},
 			ReturnType: tree.FixedReturnType(returnType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7156,8 +7156,8 @@ func geographyOverload1WithUseSpheroid(
 		},
 		{
 			Types: tree.ParamTypes{
-				{"geography", types.Geography},
-				{"use_spheroid", types.Bool},
+				{Name: "geography", Typ: types.Geography},
+				{Name: "use_spheroid", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(returnType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7180,8 +7180,8 @@ func geographyOverload2(
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ParamTypes{
-			{"geography_a", types.Geography},
-			{"geography_b", types.Geography},
+			{Name: "geography_a", Typ: types.Geography},
+			{Name: "geography_b", Typ: types.Geography},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7385,8 +7385,8 @@ func makeTableName(catalogName string, schemaName string, tableName string) tree
 func lineInterpolatePointForRepeatOverload(repeat bool, builtinInfo string) tree.Overload {
 	return tree.Overload{
 		Types: tree.ParamTypes{
-			{"geometry", types.Geometry},
-			{"fraction", types.Float},
+			{Name: "geometry", Typ: types.Geometry},
+			{Name: "fraction", Typ: types.Float},
 		},
 		ReturnType: tree.FixedReturnType(types.Geometry),
 		Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7585,9 +7585,9 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"distance", types.Float},
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7608,9 +7608,9 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography_a", types.Geography},
-				{"geography_b", types.Geography},
-				{"distance", types.Float},
+				{Name: "geography_a", Typ: types.Geography},
+				{Name: "geography_b", Typ: types.Geography},
+				{Name: "distance", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7633,10 +7633,10 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"geography_a", types.Geography},
-				{"geography_b", types.Geography},
-				{"distance", types.Float},
-				{"use_spheroid", types.Bool},
+				{Name: "geography_a", Typ: types.Geography},
+				{Name: "geography_b", Typ: types.Geography},
+				{Name: "distance", Typ: types.Float},
+				{Name: "use_spheroid", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
