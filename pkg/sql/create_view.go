@@ -194,7 +194,6 @@ func (n *createViewNode) startExec(params runParams) error {
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Tables,
-		n.dbDesc.GetPrivileges(),
 	)
 
 	var newDesc *tabledesc.Mutable
