@@ -716,7 +716,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
 
-	sess := c.newSession(l, node, nodeCmd, GenFilenameFromArgs(expandedCmd))
+	sess := c.newSession(l, node, nodeCmd, GenFilenameFromArgs(20, expandedCmd))
 	defer sess.Close()
 
 	var res *RunResultDetails
@@ -2421,10 +2421,11 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 	return nil
 }
 
-// GenFilenameFromArgs given a list of cmd args, returns a string up to
-// `maxLen` in length. It is alphanumeric with hyphen delimiters.
-// e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg-dmesgtxt
-func GenFilenameFromArgs(args ...string) string {
+// GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
+// `maxLen` in length with hyphen delimiters, suitable for use in a filename.
+// e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg
+func GenFilenameFromArgs(maxLen int, args ...string) string {
+	cmd := strings.Join(args, " ")
 	var sb strings.Builder
 	lastCharSpace := true
 
@@ -2434,21 +2435,17 @@ func GenFilenameFromArgs(args ...string) string {
 				return
 			}
 			sb.WriteByte('-')
-		} else if ('a' <= b && b <= 'z') ||
-			('A' <= b && b <= 'Z') ||
-			('0' <= b && b <= '9') {
+			lastCharSpace = true
+		} else if ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z') || ('0' <= b && b <= '9') {
 			sb.WriteByte(b)
+			lastCharSpace = false
 		}
-		lastCharSpace = b == ' '
 	}
 
-	for _, s := range args {
-		writeByte(' ')
-		for i := 0; i < len(s); i++ {
-			writeByte(s[i])
-			if sb.Len() == 25 {
-				return sb.String()
-			}
+	for i := 0; i < len(cmd); i++ {
+		writeByte(cmd[i])
+		if sb.Len() == maxLen {
+			return sb.String()
 		}
 	}
 

@@ -2077,7 +2077,7 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 		"run_%s_n%s_%s",
 		t.Format(`150405.000000000`),
 		nodes.String()[1:],
-		install.GenFilenameFromArgs(args...),
+		install.GenFilenameFromArgs(20, args...),
 	)
 	return logFile
 }

@@ -194,3 +194,10 @@ func nilLogger() *logger.Logger {
 	}
 	return l
 }
+
+func TestGenFilenameFromArgs(t *testing.T) {
+	const exp = "mkdir-p-logsredacted"
+	require.Equal(t, exp, GenFilenameFromArgs(20, "mkdir -p logs/redacted && ./cockroach"))
+	require.Equal(t, exp, GenFilenameFromArgs(20, "mkdir", "-p logs/redacted", "&& ./cockroach"))
+	require.Equal(t, exp, GenFilenameFromArgs(20, "mkdir    -p logs/redacted && ./cockroach    "))
+}

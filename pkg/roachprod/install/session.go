@@ -60,7 +60,7 @@ func newRemoteSession(l *logger.Logger, command remoteCommand) *remoteSession {
 	var loggingArgs []string
 
 	if command.debugName == "" {
-		command.debugName = GenFilenameFromArgs(strings.Fields(command.cmd)...)
+		command.debugName = GenFilenameFromArgs(20, strings.Fields(command.cmd)...)
 	}
 
 	cl, err := l.ChildLogger(filepath.Join("ssh", fmt.Sprintf(
@@ -109,8 +109,8 @@ func newRemoteSession(l *logger.Logger, command remoteCommand) *remoteSession {
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil && s.logfile != "" {
 		err = errors.Wrapf(err, "ssh verbose log retained in %s", filepath.Base(s.logfile))
+		s.logfile = "" // prevent removal on close
 	}
-	s.logfile = "" // prevent removal on close
 	return err
 }
 
