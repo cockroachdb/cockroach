@@ -24,6 +24,7 @@ artifacts
 # fuzz tests
 work-Fuzz*
 *-fuzz.zip
+/vendor
 # vendoring by `go mod vendor` may produce this file temporarily
 /.vendor.tmp.*
 # The Observability Service binary.

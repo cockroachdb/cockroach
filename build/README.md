@@ -116,7 +116,7 @@ back to this document and perform these steps:
 * [ ] Run `./dev generate bazel` to refresh `distdir_files.bzl`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
 * [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
-* [ ] Bump the go version in `go.mod`. You may also need to rerun `make vendor_rebuild` if vendoring has changed.
+* [ ] Bump the go version in `go.mod`.
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
 * [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
@@ -151,10 +151,7 @@ The `bazelbuilder` image is used exclusively for performing builds using Bazel. 
 
 #  Dependencies
 
-Dependencies are managed using `go mod`. We use `go mod vendor` so that we can import and use
-non-Go files (e.g. protobuf files) using the [modvendor](https://github.com/goware/modvendor)
-script. Adding or updating a dependecy is a two step process: 1) import the dependency in a go
-file on your local branch, 2) push a commit containing this import to the `vendored` git submodule.
+Dependencies are managed using `go mod`.
 
 ## Working Locally with Dependencies
 
@@ -184,21 +181,15 @@ file on your local branch, 2) push a commit containing this import to the `vendo
 
 4. Import the dependency to a go file in `cockroachdb/cockroach`. You may use an anonymous
    import, e.g. `import _ "golang.org/api/compute/v1"`, if you haven't written any code that
-   references the dependency. This ensures cockroach's make file will properly add the package(s) to the vendor directory. Note that IDEs may bicker that
-   these import's paths don't exist. That's ok!
+   references the dependency. This ensures `go mod tidy` will not delete your dependency.
+   Note that IDEs may bicker that these import's paths don't exist. That's ok!
 5. Run `go mod tidy` to ensure stale dependencies are removed.
-6. Run `make vendor_rebuild` to add the package to the vendor directory. Note this command will only
-   add packages you have imported in the codebase (and any of the package's dependencies), so you
-   may want to add import statements for each package you plan to use (i.e. repeat step 3 a couple times).
-7. Run `cd vendor && git diff && cd ..`  to ensure the vendor directory contains the package(s)
-   you imported
-8. Run `make buildshort` to ensure your code compiles.
-9. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
+6. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
    Note that you need engineer permissions to mirror dependencies; if you want to get the Bazel build
    working locally without mirroring, `./dev generate bazel` will work, but you won't be able to check
    your changes in. (Assuming that you do have engineer permissions, you can run
    `gcloud auth application-default login` to authenticate if you get a credentials error.)
-10. Follow instructions for [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
+7. Run `./dev build short` to ensure your code compiles.
 
 ### Updating a Dependency
 
@@ -223,9 +214,6 @@ Note:
   infrastructure dependencies besides the one you want to install,
   proceed as per "Upgrading important infrastructure dependencies"
   below.
-
-When [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule), you may either checkout a new branch, or create a new commit in the original branch you used to publicize the vendor
-  dependency.
 
 ### Updating important infrastructure dependencies
 
@@ -253,106 +241,4 @@ To achieve this, proceed as follows:
 
 ### Removing a dependency
 
-When a dependency has been removed, run `go mod tidy` and then `make vendor_rebuild`.
-Then follow the [Pushing the Dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule) steps.
-
-## Working With Submodules
-
-To keep the bloat of all the changes in all our dependencies out of our main
-repository, we embed `vendor` as a git submodule, storing its content and
-history in [`vendored`](https://github.com/cockroachdb/vendored) instead.
-
-This split across two repositories however means that changes involving
-changed dependencies require a two step process. After altering dependencies and making related code
-changes, follow the steps below.
-
-### Pushing the Dependency to the `vendored` submodule
-
-- Notice that `git status` in `cockroachdb/cockroach` checkout will
-  report that the `vendor` submodule has `modified/untracked content`.
-
-- `cd` into `vendor`, and ...
-    + Checkout a **new** named branch
-    + Run `git add .`
-    + Commit all changes, with a nice short message. There's no explicit policy related to commit
-      messages in the vendored submodule.
-
-- At this point the `git status` in your `cockroachdb/cockroach`
-  checkout will report `new commits` for `vendor` instead of `modified
-  content`.
-- Back in your `cockroachdb/cockroach` branch, commit your code
-  changes and the new `vendor` submodule ref.
-
-- Before the `cockroachdb/cockroach` commit can be submitted in a pull request, the submodule commit
-  it references must be available on `github.com/cockroachdb/vendored`. So, when you're ready to
-  publicize your vendor changes, push the `vendored` commit to remote:
-
-  + Organization members can push their named branches there directly, via:
-
-    `git push [remote vendor name, probably 'origin'] [your vendor branch] `
-
-  + Non-members should fork the `vendored` repo and submit a pull
-    request to `cockroachdb/vendored`, and need wait for it to merge
-    before they will be able to use it in a `cockroachdb/cockroach`
-    PR.
-
-### `master` Branch Pointer in Vendored Repo
-
-Since the `cockroachdb/cockroach` submodule references individual commit
-hashes in `vendored`, there is little significance to the `master` branch in
-`vendored` -- as outlined above, new commits are always authored with the
-previously referenced commit as their parent, regardless of what `master`
-happens to be.
-
-It is critical that any ref in vendored that is referenced from `cockroachdb/cockroach` remain
-available in vendored in perpetuity. One way to ensure this is to leave the vendored branch that
-you pushed your changes to in place.
-
-If you would like to delete your feature branch in the vendored repository, you must first ensure
-that another branch in vendored contains the commit referenced by `cockroachdb/cockroach`. You can
-update the master branch in vendored to point at the git SHA currently referenced in
-`cockroachdb/cockroach`.
-
-### Conflicting Submodule Changes
-
-If you pull/rebase from `cockroach/cockroachdb` and encounter a conflict in the vendor directory,
-it is often easiest to take the master branch's vendored directory and then recreate your vendor
-changes on top of it. For example:
-
-1. Remove your local changes to `vendored` by resetting your local
-   vendor directory to the commit currently used by `origin/master` on
-   `cockroachdb/cockroach`.
-      + Get reference: `git ls-tree origin/master vendor | awk '{print $3}'`
-      + Reset to it: `cd vendor && git reset --hard REF`
-2. In `cockroach/cockroachdb`, amend the commit that contained the dirty vendor pointer.
-3. Try pulling/rebasing again, and if that works, rebuild your local vendor repo with
-`go mod tidy` and `make vendor_rebuild`
-4. Push the clean vendor changes to the remote vendor submodule, following the [Pushing the Dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
-
-Note: you may also observe conflicts in `go.mod` and `go.sum`. Resolve the conflict like
-any vanilla conflict on `cockroach/cockroachdb`, preferring master's
-version. Then, `make vendor_rebuild` to re-add your local changes to `go.
-mod` and `go.sum`.
-### Recovering from a broken vendor directory
-
-If you happen to run into a broken `vendor` directory which is irrecoverable,
-you can run the following commands which will restore the directory in
-working order:
-
-```
-rm -rf vendor
-git checkout HEAD vendor # you can replace HEAD with any branch/sha
-git submodule update --init --recursive
-```
-
-### Repository Name
-
-We only want the vendor directory used by builds when it is explicitly checked
-out *and managed* as a submodule at `./vendor`.
-
-If a go build fails to find a dependency in `./vendor`, it will continue
-searching anything named "vendor" in parent directories. Thus the vendor
-repository is _not_ named "vendor", to minimize the risk of it ending up
-somewhere in `GOPATH` with the name `vendor` (e.g. if it is manually cloned),
-where it could end up being unintentionally used by builds and causing
-confusion.
+When a dependency has been removed, run `go mod tidy` and `dev generate bazel`.

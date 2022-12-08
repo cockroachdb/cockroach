@@ -172,10 +172,6 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
-# We always want to build from the vendor directory.
-# Avoid reusing GOFLAGS as that is overwritten by various release processes.
-GOMODVENDORFLAGS := -mod=vendor
-
 # Color support.
 red = $(shell { tput setaf 1 || tput AF 1; } 2>/dev/null)
 yellow = $(shell { tput setaf 3 || tput AF 3; } 2>/dev/null)
@@ -243,7 +239,6 @@ export CFLAGS CXXFLAGS LDFLAGS CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS TZ
 # toolchain.
 override LINKFLAGS = -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILDTYPE) -extldflags "$(LDFLAGS)"
 
-GOMODVENDORFLAGS ?= -mod=vendor
 GOFLAGS ?=
 TAR     ?= tar
 
@@ -328,7 +323,7 @@ endif
 
 # Force vendor directory to rebuild.
 .PHONY: vendor_rebuild
-vendor_rebuild: bin/.submodules-initialized
+vendor_rebuild: | fake-protobufs
 	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
 	./build/vendor_rebuild.sh
 
@@ -378,12 +373,13 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	touch $@
 
-vendor/modules.txt: | bin/.submodules-initialized
+vendor/modules.txt: go.mod go.sum | fake-protobufs
+	$(MAKE) -k vendor_rebuild
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
 # These should be synced with `./pkg/cmd/import-tools/main.go`.
-bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
+bin/.bootstrap: $(GITHOOKS) | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
 		github.com/client9/misspell/cmd/misspell \
 		github.com/cockroachdb/crlfmt \
@@ -568,7 +564,7 @@ CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./,$(addsuffix /zcgo_flags_$(native-ta
 BASE_CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 CGO_FLAGS_FILES := $(BASE_CGO_FLAGS_FILES) vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go
 
-$(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialized
+$(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialized vendor/modules.txt
 	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
@@ -581,7 +577,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(JEMALLOC_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(KRB_DIR) $(PROJ_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
-vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
+vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized vendor/modules.txt
 	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
@@ -700,7 +696,7 @@ $(LIBEDIT_DIR)/Makefile: $(C_DEPS_DIR)/libedit-rebuild $(LIBEDIT_SRC_DIR)/config
 # stats the directory tree in parallel, and can make the up-to-date
 # determination in under 20ms.
 
-$(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+$(LIBJEMALLOC): $(JEMALLOC_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD | vendor/modules.txt
 	@uptodate $@ $(JEMALLOC_SRC_DIR) || $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
 
 ifdef is-cross-compile
@@ -794,6 +790,7 @@ SQLPARSER_TARGETS = \
 	pkg/sql/scanner/token_names_test.go
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
+$(PROTOBUF_TARGETS): fake-protobufs
 
 SWAGGER_TARGETS :=
   #docs/generated/swagger/spec.json
@@ -981,7 +978,7 @@ BUILD_TAGGED_RELEASE =
 ## Override for .buildinfo/tag
 BUILDINFO_TAG :=
 
-$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ) $(GENERATED_TARGETS) $(CLEANUP_TARGETS)
+$(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ) $(GENERATED_TARGETS) $(CLEANUP_TARGETS) vendor/modules.txt
 $(go-targets): $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))" \
@@ -1011,7 +1008,7 @@ SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/setti
 .PHONY: go-install
 $(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL) go-install:
 	 $(info $(yellow)[WARNING] Use `dev build $(subst ./pkg/cmd/,,$(BUILDTARGET))` instead.$(term-reset))
-	 $(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	 $(xgo) $(build-mode) -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
 # regenerate SQL diagram BNFs and some other doc pages. Generating these docs
@@ -1057,7 +1054,7 @@ start:
 .PHONY: testbuild
 testbuild:
 	$(xgo) list -tags '$(TAGS)' -f \
-	'$(xgo) test -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
+	'$(xgo) test -v $(GOFLAGS) -mod=vendor -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
 
 testshort: override TESTFLAGS += -short
@@ -1128,7 +1125,7 @@ instrumentcode: instrumentation-prereqs $(instrumentation-deps) .instrumentor_ex
 instrument instrumentshort: instrumentation-prereqs instrumentcode
 	./build/instrumentation/vendor_antithesis.sh $(INSTRUMENTATION_TMP)
 	cd $(INSTRUMENTATION_TMP)/customer && \
-		$(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+		$(xgo) $(build-mode) -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 	cp $(INSTRUMENTATION_TMP)/customer/$@ ./$@
 	ln -sf $@ cockroach-instrumented
 
@@ -1146,15 +1143,15 @@ endif
 test: ## Run tests.
 check test testshort testrace testdeadlock bench benchshort:
 	$(info $(yellow)[WARNING] Use `dev $(if $(BENCHES),bench,test)$(if $(GORACE), --race) $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(BENCHES), --filter $(BENCHES))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")` instead.$(term-reset))
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
 	$(info $(yellow)[WARNING] Use `dev test --stress $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
-	COCKROACH_STRESS=true $(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	COCKROACH_STRESS=true $(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -mod=vendor -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 stressrace: ## Run tests under stress with the race detector enabled.
 	$(info $(yellow)[WARNING] Use `dev test --stress --race $(subst ./,,$(PKG))$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
-	COCKROACH_STRESS=true $(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	COCKROACH_STRESS=true $(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -mod=vendor -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 .PHONY: roachprod-stress roachprod-stressrace
 roachprod-stress roachprod-stressrace: bin/roachprod-stress
@@ -1188,7 +1185,7 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: testslow testraceslow
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow:
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: acceptance
 acceptance: TESTTIMEOUT := $(ACCEPTANCETIMEOUT)
@@ -1219,7 +1216,7 @@ dupl: bin/.bootstrap
 generate: ## Regenerate generated code.
 generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGES) $(SWAGGER_TARGETS) bin/langgen bin/terraformgen
 	$(info $(yellow)[WARNING] Use `dev generate` instead.$(term-reset))
-	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+	$(GO) generate $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(MAKE) execgen
 
 lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
@@ -1233,20 +1230,26 @@ lint: bin/returncheck bin/roachvet bin/optfmt
 	@# Run 'go build -i' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
 	@# https://groups.google.com/forum/#!msg/golang-dev/qfa3mHN4ZPA/X2UzjNV1BAAJ.
-	$(xgo) build -i -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
-	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -timeout $(TESTTIMEOUT) -run 'Lint/$(TESTS)'
+	$(xgo) build -i -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -timeout $(TESTTIMEOUT) -run 'Lint/$(TESTS)'
 
 .PHONY: lintshort
 lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
 lintshort: bin/roachvet bin/optfmt
 	$(info $(yellow)[WARNING] Use `dev lint --short$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
-	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
+	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
 protobuf: $(PROTOBUF_TARGETS)
 protobuf: ## Regenerate generated code for protobuf definitions.
 	$(info $(yellow)[WARNING] Use `dev generate protobuf` instead.$(term-reset))
+
+.PHONY: fake-protobufs
+fake-protobufs:
+	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
+		echo "package $$(basename $$dir)" > $$dir/empty.pb.go; \
+	done
 
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
@@ -1357,7 +1360,7 @@ UI_PROTOS_OSS := $(UI_JS_OSS) $(UI_TS_OSS)
 $(GOGOPROTO_PROTO): bin/.submodules-initialized
 $(ERRORS_PROTO): bin/.submodules-initialized
 
-bin/.go_protobuf_sources: $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap bin/protoc-gen-gogoroach c-deps/proto-rebuild
+bin/.go_protobuf_sources: $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap bin/protoc-gen-gogoroach c-deps/proto-rebuild vendor/modules.txt
 	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) -I$(ERRORS_PATH) --gogoroach_out=$(PROTO_MAPPINGS)plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:./pkg $$dir/*.proto; \
@@ -1365,7 +1368,7 @@ bin/.go_protobuf_sources: $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.b
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 
-bin/.gw_protobuf_sources: $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap c-deps/proto-rebuild
+bin/.gw_protobuf_sources: $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap c-deps/proto-rebuild vendor/modules.txt
 	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -exec rm {} +
 		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_SERVER_PROTOS)
 		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_TS_PROTOS)
@@ -1578,7 +1581,7 @@ pkg/sql/lexbase/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserv
 	gofmt -s -w $@
 
 pkg/sql/lexbase/keywords.go: pkg/sql/parser/sql.y pkg/sql/lexbase/allkeywords/main.go | bin/.bootstrap
-	$(GO) run $(GOMODVENDORFLAGS) -tags all-keywords pkg/sql/lexbase/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
+	$(GO) run -tags all-keywords pkg/sql/lexbase/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
@@ -1653,41 +1656,41 @@ $(EVENTPBGEN_PKG)/log_channels_generated.go: pkg/util/log/logpb/log.proto
 $(EVENTPBGEN_PKG): $(EVENTPBGEN_PKG)/*.go $(EVENTPBGEN_PKG)/log_channels_generated.go
 
 docs/generated/logsinks.md: pkg/util/log/logconfig/gen.go $(LOGSINKDOC_DEP) | bin/.bootstrap
-	$(GO) run $(GOMODVENDORFLAGS) $< <$(LOGSINKDOC_DEP) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $< <$(LOGSINKDOC_DEP) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/eventlog.md: $(EVENTPBGEN_PKG) $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) ./$< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run ./$< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/eventpb/eventlog_channels_generated.go: $(EVENTPBGEN_PKG) $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) ./$< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run ./$< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/eventpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/eventpb $(EVENTPB_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) ./$< --excluded-events CommonEventDetails json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run ./$< --excluded-events CommonEventDetails json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/logpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/logpb/event.proto | bin/.go_protobuf_sources
-	$(GO) run $(GOMODVENDORFLAGS) ./$< --package logpb json_encode_go pkg/util/log/logpb/event.proto >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run ./$< --package logpb json_encode_go pkg/util/log/logpb/event.proto >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
-	$(GO) run $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/swagger/spec.json: pkg/server/api*.go bin/.bootstrap
 
 pkg/util/log/severity/severity_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
-	$(GO) run $(GOMODVENDORFLAGS) $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/channel/channel_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
-	$(GO) run $(GOMODVENDORFLAGS) $^ channel.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $^ channel.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/log_channels_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
-	$(GO) run $(GOMODVENDORFLAGS) $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 .PHONY: execgen
@@ -1762,7 +1765,7 @@ cleanshort:
 clean: ## Like cleanshort, but also includes C++ artifacts, Bazel artifacts, and the go build cache.
 clean: cleanshort clean-c-deps cleaninstrument
 	rm -rf build/defs.mk*
-	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
+	-$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f -name 'zcgo_flags*.go' -exec rm {} +
 	if command -v bazel &> /dev/null; then bazel clean --expunge; fi
 	rm -rf artifacts bin
@@ -1859,23 +1862,26 @@ $(has-build-info): override LINKFLAGS += \
 	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)")
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
-	@echo go install -v $*
-	$(PREREQS) $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
-	mv -f $@.d.tmp $@.d
+	if [[ $@ != *protoc-gen-gogoroach ]]; then \
+		$(PREREQS) $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp; \
+		mv -f $@.d.tmp $@.d; \
+	else \
+		touch $@.d; \
+	fi
 	$(GO_INSTALL) -ldflags '$(LINKFLAGS)' -v $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
 $(xbins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
-	@echo go build -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $*
+	@echo go build -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $*
 	$(PREREQS) $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
-	$(xgo) build -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $(if $($*-package),$($*-package),./pkg/cmd/$*)
+	$(xgo) build -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -o $@ $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
-$(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
+$(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET) vendor/modules.txt
 	$(info $(yellow)[WARNING] Use `dev test $(subst ./,,$($*-package)) $(if $(TESTS), --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))$(if $(TESTFLAGS), --test-args "$(TESTFLAGS)")` instead.$(term-reset))
 	@echo go test -c $($*-package)
 	$(PREREQS) -bin-name=$* -test $($*-package) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
 
 bin/prereqs: ./pkg/cmd/prereqs/*.go | bin/.submodules-initialized
 	@echo go install -v ./pkg/cmd/prereqs
