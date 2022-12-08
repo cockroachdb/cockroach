@@ -128,7 +128,7 @@ func (b *replicaAppBatch) Stage(
 	// result was just cleared and this will be a no-op.
 	//
 	// TODO(tbg): can't this happen in splitPreApply which is called from
-	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
+	// b.runPostAddTriggers and similar for merges? That
 	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
 		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
@@ -145,18 +145,18 @@ func (b *replicaAppBatch) Stage(
 
 	// Run any triggers that should occur before the batch is applied
 	// and before the write batch is staged in the batch.
-	if err := b.runPreApplyTriggersBeforeStagingWriteBatch(ctx, cmd); err != nil {
+	if err := b.runPreAddTriggers(ctx, cmd); err != nil {
 		return nil, err
 	}
 
 	// Stage the command's write batch in the application batch.
-	if err := b.stageWriteBatch(ctx, cmd); err != nil {
+	if err := b.addWriteBatch(ctx, cmd); err != nil {
 		return nil, err
 	}
 
 	// Run any triggers that should occur before the batch is applied
 	// but after the write batch is staged in the batch.
-	if err := b.runPreApplyTriggersAfterStagingWriteBatch(ctx, cmd); err != nil {
+	if err := b.runPostAddTriggers(ctx, cmd); err != nil {
 		return nil, err
 	}
 
@@ -177,9 +177,8 @@ func (b *replicaAppBatch) Stage(
 	return cmd, nil
 }
 
-// stageWriteBatch applies the command's write batch to the application batch's
-// RocksDB batch. This batch is committed to Pebble in replicaAppBatch.commit.
-func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
+// addWriteBatch adds the command's writes to the batch.
+func (b *replicaAppBatch) addWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
 	wb := cmd.Cmd.WriteBatch
 	if wb == nil {
 		return nil
@@ -207,14 +206,12 @@ func changeRemovesStore(
 	return !existsInChange
 }
 
-// runPreApplyTriggersBeforeStagingWriteBatch runs any triggers that must fire
+// runPreAddTriggers runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
 // staged in the replicaAppBatch's write batch. The batch at this point will
 // represent the raft log up to but excluding the command that is currently
 // being applied.
-func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
-	ctx context.Context, cmd *replicatedCmd,
-) error {
+func (b *replicaAppBatch) runPreAddTriggers(ctx context.Context, cmd *replicatedCmd) error {
 	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
 		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	}
@@ -222,14 +219,12 @@ func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 	return nil
 }
 
-// runPreApplyTriggersAfterStagingWriteBatch runs any triggers that must fire
+// runPostAddTriggers runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
 // staged in the replicaAppBatch's write batch.
 //
 // All errors from this method are fatal for this Replica.
-func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
-	ctx context.Context, cmd *replicatedCmd,
-) error {
+func (b *replicaAppBatch) runPostAddTriggers(ctx context.Context, cmd *replicatedCmd) error {
 	res := cmd.ReplicatedResult()
 
 	// NB: we need to do this update early, as some fields are zeroed out below
