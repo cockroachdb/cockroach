@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,13 +43,10 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	numBatchesProcessed      int
-	numEntriesProcessed      int
-	numEntriesProcessedBytes int64
-	stateAssertions          int
-	numEmptyEntries          int
-	numConfChangeEntries     int
-	followerStoreWriteBytes  kvadmission.FollowerStoreWriteBytes
+	appBatchStats
+	numBatchesProcessed  int
+	stateAssertions      int
+	numConfChangeEntries int
 }
 
 // replicaStateMachine implements the apply.StateMachine interface.
