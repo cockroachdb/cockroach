@@ -41,7 +41,7 @@ import (
 // and non-server commands (e.g. 'node ls').
 func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyConfig bool) error {
 	// Compatibility check for command-line usage.
-	if cliCtx.deprecatedLogOverrides.anySet() &&
+	if cliCtx.logOverrides.anySet() &&
 		cliCtx.logConfigInput.isSet {
 		return errors.Newf("--%s is incompatible with legacy discrete logging flags", cliflags.Log.Name)
 	}
@@ -65,17 +65,16 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	defaultLogDir := firstStoreDir
 
 	// Legacy log directory override.
-	// TODO(knz): Deprecated in v21.1. Remove in v21.2.
-	forceDisableLogDir := cliCtx.deprecatedLogOverrides.logDir.isSet &&
-		cliCtx.deprecatedLogOverrides.logDir.s == ""
+	forceDisableLogDir := cliCtx.logOverrides.logDir.isSet &&
+		cliCtx.logOverrides.logDir.s == ""
 	if forceDisableLogDir {
 		defaultLogDir = nil
 	}
-	forceSetLogDir := cliCtx.deprecatedLogOverrides.logDir.isSet &&
-		cliCtx.deprecatedLogOverrides.logDir.s != ""
+	forceSetLogDir := cliCtx.logOverrides.logDir.isSet &&
+		cliCtx.logOverrides.logDir.s != ""
 	if forceSetLogDir {
 		ambiguousLogDirs = false
-		defaultLogDir = &cliCtx.deprecatedLogOverrides.logDir.s
+		defaultLogDir = &cliCtx.logOverrides.logDir.s
 	}
 
 	// Set up a base configuration template.
@@ -115,11 +114,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	// If some overrides were specified via the discrete flags,
 	// apply them.
-	//
-	// NB: this is for backward-compatibility and is deprecated in
-	// v21.1.
-	// TODO(knz): Remove this.
-	cliCtx.deprecatedLogOverrides.propagate(&h.Config, commandSpecificDefaultLegacyStderrOverride)
+	cliCtx.logOverrides.propagate(&h.Config, commandSpecificDefaultLegacyStderrOverride)
 
 	// If a configuration was specified via --log, load it.
 	if cliCtx.logConfigInput.isSet {
@@ -143,7 +138,6 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	// Legacy behavior: if no files were specified by the configuration,
 	// add some pre-defined files in servers.
-	// TODO(knz): Deprecated in v21.1. Remove this.
 	if isServerCmd && len(h.Config.Sinks.FileGroups) == 0 {
 		addPredefinedLogFiles(&h.Config)
 	}
@@ -260,8 +254,6 @@ func getDefaultLogDirFromStores() (dir *string, ambiguousLogDirs bool) {
 // This struct interfaces between the YAML-based configuration
 // mechanism in package 'logconfig', and the logic that initializes
 // the logging system.
-//
-// TODO(knz): Deprecated in v21.1. Remove this.
 type logConfigFlags struct {
 	// Override value of file-defaults:dir.
 	logDir settableString
@@ -292,8 +284,6 @@ type logConfigFlags struct {
 
 // newLogConfigOverrides defines a new logConfigFlags
 // from the default logging configuration.
-//
-// TODO(knz): Deprecated in v21.1. Remove this.
 func newLogConfigOverrides() *logConfigFlags {
 	l := &logConfigFlags{}
 	l.fileMaxSizeVal = humanizeutil.NewBytesValue(&l.fileMaxSize)
@@ -444,14 +434,13 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "programming error: incorrect config"))
 	}
 	*c = h.Config
-	if cliCtx.deprecatedLogOverrides.sqlAuditLogDir.isSet {
-		c.Sinks.FileGroups["sql-audit"].Dir = &cliCtx.deprecatedLogOverrides.sqlAuditLogDir.s
+	if cliCtx.logOverrides.sqlAuditLogDir.isSet {
+		c.Sinks.FileGroups["sql-audit"].Dir = &cliCtx.logOverrides.sqlAuditLogDir.s
 	}
 }
 
 // predefinedLogFiles are the files defined when the --log flag
 // does not otherwise override the file sinks.
-// TODO(knz): add the PRIVILEGES channel.
 const predefinedLogFiles = `
 sinks:
  file-groups:

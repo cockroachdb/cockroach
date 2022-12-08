@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clientflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
@@ -327,41 +326,28 @@ func init() {
 		cliflagcfg.VarFlag(pf, &fileContentsValue{settableString: &cliCtx.logConfigInput, fileName: "<unset>"}, cliflags.LogConfigFile)
 		cliflagcfg.StringSliceFlag(pf, &cliCtx.logConfigVars, cliflags.LogConfigVars)
 
-		// Pre-v21.1 overrides. Deprecated.
-		// TODO(knz): Remove this.
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.stderrThreshold, cliflags.DeprecatedStderrThreshold)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrThreshold.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {filter: ...}}'.")
+		// Discrete convenience overrides.
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.stderrThreshold, cliflags.StderrThresholdOverride)
 		// This flag can also be specified without an explicit argument.
-		pf.Lookup(cliflags.DeprecatedStderrThreshold.Name).NoOptDefVal = "DEFAULT"
+		pf.Lookup(cliflags.StderrThresholdOverride.Name).NoOptDefVal = "DEFAULT"
 
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.stderrNoColor, cliflags.DeprecatedStderrNoColor)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrNoColor.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {no-color: true}}'")
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.stderrNoColor, cliflags.StderrNoColorOverride)
+		_ = pf.MarkHidden(cliflags.StderrNoColorOverride.Name)
+		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.logOverrides.logDir}, cliflags.LogDirOverride)
 
-		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.deprecatedLogOverrides.logDir}, cliflags.DeprecatedLogDir)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedLogDir.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {dir: ...}'")
+		cliflagcfg.VarFlag(pf, cliCtx.logOverrides.fileMaxSizeVal, cliflags.LogFileMaxSizeOverride)
+		_ = pf.MarkHidden(cliflags.LogFileMaxSizeOverride.Name)
 
-		cliflagcfg.VarFlag(pf, cliCtx.deprecatedLogOverrides.fileMaxSizeVal, cliflags.DeprecatedLogFileMaxSize)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedLogFileMaxSize.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {max-file-size: ...}'")
+		cliflagcfg.VarFlag(pf, cliCtx.logOverrides.maxGroupSizeVal, cliflags.LogGroupMaxSizeOverride)
+		_ = pf.MarkHidden(cliflags.LogGroupMaxSizeOverride.Name)
 
-		cliflagcfg.VarFlag(pf, cliCtx.deprecatedLogOverrides.maxGroupSizeVal, cliflags.DeprecatedLogGroupMaxSize)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedLogGroupMaxSize.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {max-group-size: ...}'")
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.fileThreshold, cliflags.FileThresholdOverride)
+		_ = pf.MarkHidden(cliflags.FileThresholdOverride.Name)
 
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.fileThreshold, cliflags.DeprecatedFileThreshold)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedFileThreshold.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {filter: ...}'")
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.redactableLogs, cliflags.RedactableLogsOverride)
 
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.redactableLogs, cliflags.DeprecatedRedactableLogs)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedRedactableLogs.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {redactable: ...}")
-
-		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.deprecatedLogOverrides.sqlAuditLogDir}, cliflags.DeprecatedSQLAuditLogDir)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedSQLAuditLogDir.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}")
+		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.logOverrides.sqlAuditLogDir}, cliflags.SQLAuditLogDirOverride)
+		_ = pf.MarkHidden(cliflags.SQLAuditLogDirOverride.Name)
 	}
 
 	// Remember we are starting in the background as the `start` command will
@@ -800,11 +786,8 @@ func init() {
 		cliflagcfg.BoolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
 		cliflagcfg.VarFlag(f, &demoCtx.demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 		cliflagcfg.VarFlag(f, &demoCtx.demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
-		cliflagcfg.BoolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 		// NB: Insecure for `cockroach demo` is deprecated. See #53404.
-		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name,
-			"to start a test server without any security, run start-single-node --insecure\n"+
-				"For details, see: "+build.MakeIssueURL(53404))
+		cliflagcfg.BoolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.disableEnterpriseFeatures, cliflags.DemoNoLicense)
 		cliflagcfg.BoolFlag(f, &demoCtx.DefaultEnableRangefeeds, cliflags.DemoEnableRangefeeds)
@@ -830,9 +813,11 @@ func init() {
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
 		f := demoCmd.Flags()
-		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.UseEmptyDatabase)
-		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-example-database")
-		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.NoExampleDatabase)
+		cliflagcfg.BoolFlag(f, &demoCtx.UseEmptyDatabase, cliflags.UseEmptyDatabase)
+
+		// --no-example-database is an old name for --empty.
+		cliflagcfg.BoolFlag(f, &demoCtx.UseEmptyDatabase, cliflags.NoExampleDatabase)
+		_ = f.MarkHidden(cliflags.NoExampleDatabase.Name)
 	}
 
 	// statement-diag command.
