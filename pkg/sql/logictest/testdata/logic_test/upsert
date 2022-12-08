@@ -1317,8 +1317,23 @@ INSERT INTO generated_as_id_t (a, b) VALUES (1, 10) ON CONFLICT (a) DO UPDATE SE
 statement ok
 INSERT INTO generated_as_id_t (a, c) VALUES (1, 10) ON CONFLICT DO NOTHING
 
-query III rowsort
-SELECT * FROM generated_as_id_t ORDER BY a
+
+# Do this fancy query to deal with the fact that transaction restarts on the
+# insert may change the sequence values used for columns b and c. This query
+# just ensures that they have the expected offset from each other.
+query III
+  SELECT a,
+         b - b_min + 1 AS b,
+         c - c_min + 1 AS c
+    FROM generated_as_id_t,
+         (
+              SELECT b AS b_min,
+                     c AS c_min
+                FROM generated_as_id_t
+            ORDER BY a ASC
+               LIMIT 1
+         )
+ORDER BY a
 ----
 1  1  1
 2  2  2
