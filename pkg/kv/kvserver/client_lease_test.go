@@ -214,7 +214,7 @@ func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
 	// Make sure n1 has the lease to start with.
 	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
-		scratchStartKey, tc.Target(0).StoreID)
+		scratchStartKey, tc.Target(0).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 	require.NoError(t, err)
 
 	// The test proceeds as follows:
@@ -243,7 +243,7 @@ func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			err := tc.Server(0).DB().AdminTransferLease(context.Background(),
-				scratchStartKey, tc.Target(2).StoreID)
+				scratchStartKey, tc.Target(2).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 			require.Error(t, err)
 			require.Regexp(t,
 				// The error generated during evaluation.
@@ -314,7 +314,7 @@ func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
 	// Make sure n1 has the lease to start with.
 	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
-		scratchStartKey, tc.Target(0).StoreID)
+		scratchStartKey, tc.Target(0).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 	require.NoError(t, err)
 
 	// The test proceeds as follows:
@@ -354,7 +354,7 @@ func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 			// This should fail since the last leaseholder wasn't n3
 			// (wasLastLeaseholder = false in CheckCanReceiveLease).
 			err = tc.Server(0).DB().AdminTransferLease(context.Background(),
-				scratchStartKey, tc.Target(2).StoreID)
+				scratchStartKey, tc.Target(2).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 			require.EqualError(t, err, `replica cannot hold lease`)
 			// Make sure the lease is still on n1.
 			leaseHolder, err = tc.FindRangeLeaseHolder(desc, nil)
@@ -410,7 +410,7 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 	key := tc.ScratchRange(t)
 	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 	// Make sure n1 has the lease to start with.
-	err := tc.Server(0).DB().AdminTransferLease(ctx, key, tc.Target(0).StoreID)
+	err := tc.Server(0).DB().AdminTransferLease(ctx, key, tc.Target(0).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 	require.NoError(t, err)
 	store0, repl0 := getFirstStoreReplica(t, tc.Server(0), key)
 
@@ -517,7 +517,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	desc := tc.AddVotersOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
 	// Make sure n1 has the lease to start with.
 	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
-		scratchStartKey, tc.Target(0).StoreID)
+		scratchStartKey, tc.Target(0).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 	require.NoError(t, err)
 
 	// The next lease transfer should fail.
@@ -545,7 +545,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	if isManual {
 		// Manually transfer the lease to n1 (VOTER_DEMOTING_LEARNER).
 		err = tc.Server(0).DB().AdminTransferLease(context.Background(),
-			scratchStartKey, tc.Target(0).StoreID)
+			scratchStartKey, tc.Target(0).StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 		require.NoError(t, err)
 		// Make sure n1 has the lease
 		leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)

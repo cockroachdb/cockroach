@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -3112,7 +3113,7 @@ func (r *Replica) relocateReplicas(
 		// seems like a good idea to return any errors here to the caller (or
 		// to retry some errors appropriately).
 		if err := r.store.DB().AdminTransferLease(
-			ctx, startKey, target.StoreID,
+			ctx, startKey, target.StoreID, oppurpose.TransferLeaseRelocateReplicas,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %+v", err)
 			if r.store.TestingKnobs().DontIgnoreFailureToTransferLease {

@@ -194,6 +194,8 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 		return t.Class != roachpb.AdminScatterRequest_ARBITRARY || tenID.IsSystem()
 	case *roachpb.AdminSplitRequest:
 		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID.IsSystem()
+	case *roachpb.AdminTransferLeaseRequest:
+		return t.Class != roachpb.AdminTransferLeaseRequest_ARBITRARY || tenID.IsSystem()
 	case *roachpb.AdminUnsplitRequest:
 		return t.Class != roachpb.AdminUnsplitRequest_ARBITRARY || tenID.IsSystem()
 	}

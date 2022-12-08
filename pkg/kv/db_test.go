@@ -689,7 +689,7 @@ func TestDBDecommissionedOperations(t *testing.T) {
 			return db.NewTxn(ctx, "").Put(ctx, key, value)
 		}},
 		{"AdminTransferLease", func() error {
-			return db.AdminTransferLease(ctx, scratchKey, srv.GetFirstStoreID())
+			return db.AdminTransferLease(ctx, scratchKey, srv.GetFirstStoreID(), roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 		}},
 	}
 

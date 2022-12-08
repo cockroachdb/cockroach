@@ -948,6 +948,10 @@ message AdminMergeResponse {
 // holder for a range. The target of the lease transfer needs to be a valid
 // replica of the range.
 message AdminTransferLeaseRequest {
+  enum Class {
+    ARBITRARY = 0;
+    ORGANIZATION = 1;
+  }
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int32 target = 2 [(gogoproto.casttype) = "StoreID"];
   // When set to true, bypass_safety_checks configures the lease transfer to
@@ -958,6 +962,7 @@ message AdminTransferLeaseRequest {
   // alive and caught up on its log (e.g. they just sent it a snapshot) and also
   // can't tolerate rejected lease transfers.
   bool bypass_safety_checks = 3;
+  Class class = 4;
 }
 
 message AdminTransferLeaseResponse {

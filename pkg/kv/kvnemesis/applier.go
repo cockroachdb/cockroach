@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -119,7 +120,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*DeleteRangeUsingTombstoneOperation:
 		applyClientOp(ctx, db, op, false)
 	case *SplitOperation:
-		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION)
+		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp, oppurpose.SplitNemesis)
 		o.Result = resultInit(ctx, err)
 	case *MergeOperation:
 		err := db.AdminMerge(ctx, o.Key)
@@ -129,7 +130,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
 		o.Result = resultInit(ctx, err)
 	case *TransferLeaseOperation:
-		err := db.AdminTransferLease(ctx, o.Key, o.Target)
+		err := db.AdminTransferLease(ctx, o.Key, o.Target, oppurpose.TransferLeaseNemesis)
 		o.Result = resultInit(ctx, err)
 	case *ChangeZoneOperation:
 		err := updateZoneConfigInEnv(ctx, env, o.Type)

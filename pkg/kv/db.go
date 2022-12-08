@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -650,10 +651,13 @@ func (db *DB) AdminUnsplit(
 // lease holder has applied it (so it might not know immediately that it is the
 // new lease holder).
 func (db *DB) AdminTransferLease(
-	ctx context.Context, key interface{}, target roachpb.StoreID,
+	ctx context.Context,
+	key interface{},
+	target roachpb.StoreID,
+	class roachpb.AdminTransferLeaseRequest_Class,
 ) error {
 	b := &Batch{}
-	b.adminTransferLease(key, target, false /* bypassSafetyChecks */)
+	b.adminTransferLease(key, target, false /* bypassSafetyChecks */, class)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
@@ -664,7 +668,7 @@ func (db *DB) AdminTransferLeaseBypassingSafetyChecks(
 	ctx context.Context, key interface{}, target roachpb.StoreID,
 ) error {
 	b := &Batch{}
-	b.adminTransferLease(key, target, true /* bypassSafetyChecks */)
+	b.adminTransferLease(key, target, true /* bypassSafetyChecks */, oppurpose.TransferLeaseBypassChecks)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
