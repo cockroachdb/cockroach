@@ -489,7 +489,8 @@ func (p *planTop) savePlanInfo(ctx context.Context) {
 	} else if p.flags.IsSet(planFlagPartiallyDistributed) {
 		distribution = physicalplan.PartiallyDistributedPlan
 	}
-	p.instrumentation.RecordPlanInfo(distribution, vectorized)
+	containsMutation := p.flags.IsSet(planFlagContainsMutation)
+	p.instrumentation.RecordPlanInfo(distribution, vectorized, containsMutation)
 }
 
 // startExec calls startExec() on each planNode using a depth-first, post-order

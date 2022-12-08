@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -176,6 +178,9 @@ type cFetcherArgs struct {
 	// single set of spans. This allows the cFetcher to close itself eagerly,
 	// once it finishes the first fetch.
 	singleUse bool
+	// collectStats, if true, indicates that cFetcher should collect execution
+	// statistics (e.g. CPU time).
+	collectStats bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -229,6 +234,10 @@ type cFetcher struct {
 	// getBytesRead() and getBatchRequestsIssued() should be used instead.
 	bytesRead           int64
 	batchRequestsIssued int64
+	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
+	// requests *in the current goroutine*. It should only be accessed through
+	// getKVCPUTime().
+	cpuStopWatch *timeutil.CPUStopWatch
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -467,6 +476,9 @@ func (cf *cFetcher) Init(
 		cf.fetcher = kvFetcher
 	}
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
+	if cf.cFetcherArgs.collectStats {
+		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
+	}
 
 	return nil
 }
@@ -636,7 +648,9 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
+			cf.cpuStopWatch.Start()
 			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -786,7 +800,9 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
+			cf.cpuStopWatch.Start()
 			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -1290,6 +1306,12 @@ func (cf *cFetcher) getBytesRead() int64 {
 		return cf.fetcher.GetBytesRead()
 	}
 	return cf.bytesRead
+}
+
+// getKVCPUTime returns the amount of CPU time spent in the current goroutine
+// while fulfilling KV requests.
+func (cf *cFetcher) getKVCPUTime() time.Duration {
+	return cf.cpuStopWatch.Elapsed()
 }
 
 // getBatchRequestsIssued returns the number of BatchRequests issued by the

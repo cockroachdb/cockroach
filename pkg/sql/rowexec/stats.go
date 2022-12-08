@@ -81,6 +81,7 @@ type rowFetcherStatCollector struct {
 	// stats contains the collected stats.
 	stats              execinfrapb.InputStats
 	startScanStallTime time.Duration
+	cpuStopWatch       *timeutil.CPUStopWatch
 }
 
 var _ rowFetcher = &rowFetcherStatCollector{}
@@ -89,6 +90,7 @@ var _ rowFetcher = &rowFetcherStatCollector{}
 func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
 	res := &rowFetcherStatCollector{Fetcher: f}
 	res.stats.NumTuples.Set(0)
+	res.cpuStopWatch = timeutil.NewCPUStopWatch()
 	return res
 }
 
@@ -101,8 +103,10 @@ func (c *rowFetcherStatCollector) StartScan(
 	limitHint rowinfra.RowLimit,
 ) error {
 	start := timeutil.Now()
+	c.cpuStopWatch.Start()
 	err := c.Fetcher.StartScan(ctx, spans, spanIDs, batchBytesLimit, limitHint)
 	c.startScanStallTime += timeutil.Since(start)
+	c.cpuStopWatch.Stop()
 	return err
 }
 
@@ -118,21 +122,25 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	qualityOfService sessiondatapb.QoSLevel,
 ) error {
 	start := timeutil.Now()
+	c.cpuStopWatch.Start()
 	err := c.Fetcher.StartInconsistentScan(
 		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
+	c.cpuStopWatch.Stop()
 	return err
 }
 
 // NextRow is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, int, error) {
 	start := timeutil.Now()
+	c.cpuStopWatch.Start()
 	row, spanID, err := c.Fetcher.NextRow(ctx)
 	if row != nil {
 		c.stats.NumTuples.Add(1)
 	}
 	c.stats.WaitTime.Add(timeutil.Since(start))
+	c.cpuStopWatch.Stop()
 	return row, spanID, err
 }
 
@@ -141,11 +149,13 @@ func (c *rowFetcherStatCollector) NextRowInto(
 	ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
 ) (ok bool, err error) {
 	start := timeutil.Now()
+	c.cpuStopWatch.Start()
 	ok, err = c.Fetcher.NextRowInto(ctx, destination, colIdxMap)
 	if ok {
 		c.stats.NumTuples.Add(1)
 	}
 	c.stats.WaitTime.Add(timeutil.Since(start))
+	c.cpuStopWatch.Stop()
 	return ok, err
 }
 
@@ -160,15 +170,20 @@ func getInputStats(input execinfra.RowSource) (execinfrapb.InputStats, bool) {
 	return isc.stats, true
 }
 
+type rowFetcherStats struct {
+	execinfrapb.InputStats
+	kvCPUTime time.Duration
+}
+
 // getFetcherInputStats is a utility function to check whether the given input
 // is collecting row fetcher stats, returning true and the stats if so. If
 // false is returned, the input is not collecting row fetcher stats.
-func getFetcherInputStats(f rowFetcher) (execinfrapb.InputStats, bool) {
+func getFetcherInputStats(f rowFetcher) (rowFetcherStats, bool) {
 	rfsc, ok := f.(*rowFetcherStatCollector)
 	if !ok {
-		return execinfrapb.InputStats{}, false
+		return rowFetcherStats{}, false
 	}
 	// Add row fetcher start scan stall time to Next() stall time.
 	rfsc.stats.WaitTime.Add(rfsc.startScanStallTime)
-	return rfsc.stats, true
+	return rowFetcherStats{InputStats: rfsc.stats, kvCPUTime: rfsc.cpuStopWatch.Elapsed()}, true
 }

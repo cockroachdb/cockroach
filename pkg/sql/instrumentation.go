@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -131,9 +132,10 @@ type instrumentationHelper struct {
 	// serialized version of the plan will be returned via PlanForStats().
 	savePlanForStats bool
 
-	explainPlan  *explain.Plan
-	distribution physicalplan.PlanDistribution
-	vectorized   bool
+	explainPlan      *explain.Plan
+	distribution     physicalplan.PlanDistribution
+	vectorized       bool
+	containsMutation bool
 
 	traceMetadata execNodeTraceMetadata
 
@@ -502,10 +504,11 @@ func (ih *instrumentationHelper) RecordExplainPlan(explainPlan *explain.Plan) {
 
 // RecordPlanInfo records top-level information about the plan.
 func (ih *instrumentationHelper) RecordPlanInfo(
-	distribution physicalplan.PlanDistribution, vectorized bool,
+	distribution physicalplan.PlanDistribution, vectorized, containsMutation bool,
 ) {
 	ih.distribution = distribution
 	ih.vectorized = vectorized
+	ih.containsMutation = containsMutation
 }
 
 // PlanForStats returns the plan as an ExplainTreePlanNode tree, if it was
@@ -558,11 +561,19 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
-		if ih.isTenant && ih.outputMode != unmodifiedOutput && ih.vectorized {
-			// Only output RU estimate if this is a tenant running EXPLAIN ANALYZE.
-			// Additionally, RUs aren't correctly propagated in all cases for plans
-			// that aren't vectorized - for example, EXPORT statements. For now,
-			// only output RU estimates for vectorized plans.
+		if !ih.containsMutation && ih.vectorized && grunning.Supported() {
+			// Currently we cannot separate SQL CPU time from local KV CPU time for
+			// mutations, since they do not collect statistics. Additionally, CPU time
+			// is only collected for vectorized plans since it is gathered by the
+			// vectorizedStatsCollector operator.
+			// TODO(drewk): lift these restrictions.
+			ob.AddCPUTime(queryStats.CPUTime)
+		}
+		if ih.isTenant && ih.vectorized {
+			// Only output RU estimate if this is a tenant. Additionally, RUs aren't
+			// correctly propagated in all cases for plans that aren't vectorized -
+			// for example, EXPORT statements. For now, only output RU estimates for
+			// vectorized plans.
 			ob.AddRUEstimate(queryStats.RUEstimate)
 		}
 	}
@@ -667,6 +678,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 		}
 	}
 
+	noMutations := !p.curPlan.flags.IsSet(planFlagContainsMutation)
+
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
 		wrapped := n.WrappedNode()
@@ -699,6 +712,16 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
 				nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
 				nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
+				if noMutations && !makeDeterministic {
+					// Currently we cannot separate SQL CPU time from local KV CPU time
+					// for mutations, since they do not collect statistics. Additionally,
+					// some platforms do not support usage of the grunning library, so we
+					// can't show this field when a deterministic output is required.
+					// TODO(drewk): once the grunning library is fully supported we can
+					// unconditionally display the CPU time here and in output.go and
+					// component_stats.go.
+					nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
+				}
 			}
 			// If we didn't get statistics for all processors, we don't show the
 			// incomplete results. In the future, we may consider an incomplete flag

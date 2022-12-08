@@ -177,6 +177,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.Exec.MaxAllocatedDisk.HasValue() {
 		fn("max sql temp disk usage", humanize.IBytes(s.Exec.MaxAllocatedDisk.Value()))
 	}
+	if s.Exec.CPUTime.HasValue() {
+		fn("sql cpu time", humanizeutil.Duration(s.Exec.CPUTime.Value()))
+	}
 
 	// Output stats.
 	if s.Output.NumBatches.HasValue() {
@@ -266,6 +269,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.Exec.ConsumedRU.HasValue() {
 		result.Exec.ConsumedRU = other.Exec.ConsumedRU
+	}
+	if !result.Exec.CPUTime.HasValue() {
+		result.Exec.CPUTime = other.Exec.CPUTime
 	}
 
 	// Output stats.
@@ -360,6 +366,11 @@ func (s *ComponentStats) MakeDeterministic() {
 	resetUint(&s.Exec.MaxAllocatedMem)
 	resetUint(&s.Exec.MaxAllocatedDisk)
 	resetUint(&s.Exec.ConsumedRU)
+	if s.Exec.CPUTime.HasValue() {
+		// The CPU time won't be set on all platforms, so we can't output it when
+		// determinism is required.
+		s.Exec.CPUTime.Clear()
+	}
 
 	// Output.
 	resetUint(&s.Output.NumBatches)

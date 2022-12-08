@@ -361,6 +361,16 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
+// AddCPUTime adds a top-level field for the cumulative cpu time spent by SQL
+// execution. If we're redacting, we leave this out to keep test outputs
+// independent of platform because the grunning library isn't currently
+// supported on all platforms.
+func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
+	if !ob.flags.Redact.Has(RedactVolatile) {
+		ob.AddTopLevelField("sql cpu time", string(humanizeutil.Duration(cpuTime)))
+	}
+}
+
 // AddRUEstimate adds a top-level field for the estimated number of RUs consumed
 // by the query.
 func (ob *OutputBuilder) AddRUEstimate(ru int64) {
