@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -88,6 +89,16 @@ func (b *appBatch) toCheckedCmd(
 		cmd.Cmd.LogicalOpLog = nil
 		cmd.Cmd.ClosedTimestamp = nil
 	} else {
+		// If the command was using the deprecated version of the MVCCStats proto,
+		// migrate it to the new version and clear out the field.
+		res := cmd.ReplicatedResult()
+		if deprecatedDelta := res.DeprecatedDelta; deprecatedDelta != nil {
+			if res.Delta != (enginepb.MVCCStatsDelta{}) {
+				log.Fatalf(ctx, "stats delta not empty but deprecated delta provided: %+v", cmd)
+			}
+			res.Delta = deprecatedDelta.ToStatsDelta()
+			res.DeprecatedDelta = nil
+		}
 		log.Event(ctx, "applying command")
 	}
 }
