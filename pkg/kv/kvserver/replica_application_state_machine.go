@@ -44,13 +44,13 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	batchesProcessed        int
-	entriesProcessed        int
-	entriesProcessedBytes   int64
-	stateAssertions         int
-	numEmptyEntries         int
-	numConfChangeEntries    int
-	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
+	numBatchesProcessed      int
+	numEntriesProcessed      int
+	numEntriesProcessedBytes int64
+	stateAssertions          int
+	numEmptyEntries          int
+	numConfChangeEntries     int
+	followerStoreWriteBytes  kvadmission.FollowerStoreWriteBytes
 }
 
 // replicaStateMachine implements the apply.StateMachine interface.
