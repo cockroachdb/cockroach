@@ -32,7 +32,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -339,10 +338,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 		if sessionUser != reqUser {
 			// Must have CANCELQUERY privilege to cancel other users'
 			// sessions/queries.
-			hasCancelQuery := false
-			if b.privilegeChecker.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-				hasCancelQuery = b.privilegeChecker.checkHasGlobalPrivilege(ctx, reqUser, privilege.CANCELQUERY)
-			}
+			hasCancelQuery := b.privilegeChecker.checkHasGlobalPrivilege(ctx, reqUser, privilege.CANCELQUERY)
 			if !hasCancelQuery {
 				ok, err := b.privilegeChecker.hasRoleOption(ctx, reqUser, roleoption.CANCELQUERY)
 				if err != nil {
