@@ -1642,46 +1642,46 @@ the --log flag.`,
 present in the body of the logging configuration.`,
 	}
 
-	DeprecatedStderrThreshold = FlagInfo{
-		Name:        "logtostderr",
-		Description: `Write log messages beyond the specified severity to stderr.`,
+	StderrThresholdOverride = FlagInfo{
+		Name: "logtostderr",
+		Description: `--logtostderr=XXX is an alias for --log='sinks: {stderr: {filter: XXX}}'.
+If no value is specified, the default value for the command is inferred: INFO for server
+commands, WARNING for client commands.`,
 	}
 
-	DeprecatedFileThreshold = FlagInfo{
+	FileThresholdOverride = FlagInfo{
 		Name:        "log-file-verbosity",
-		Description: `Write log messages beyond the specified severity to files.`,
+		Description: `--log-file-verbosity=XXX is an alias for --log='file-defaults: {filter: XXX}}'.`,
 	}
 
-	DeprecatedStderrNoColor = FlagInfo{
+	StderrNoColorOverride = FlagInfo{
 		Name:        "no-color",
-		Description: `Avoid color in the stderr output.`,
+		Description: `--no-color=XXX is an alias for --log='sinks: {stderr: {no-color: XXX}}'.`,
 	}
 
-	DeprecatedRedactableLogs = FlagInfo{
+	RedactableLogsOverride = FlagInfo{
 		Name:        "redactable-logs",
-		Description: `Request redaction markers.`,
+		Description: `--redactable-logs=XXX is an alias for --log='file-defaults: {redactable: XXX}}'.`,
 	}
 
-	DeprecatedLogFileMaxSize = FlagInfo{
+	LogFileMaxSizeOverride = FlagInfo{
 		Name:        "log-file-max-size",
-		Description: "Maximum size of a log file before switching to a new file.",
+		Description: "--log-file-max-size=XXX is an alias for --log='file-defaults: {max-file-size: XXX}'.",
 	}
 
-	DeprecatedLogGroupMaxSize = FlagInfo{
+	LogGroupMaxSizeOverride = FlagInfo{
 		Name:        "log-group-max-size",
-		Description: `Maximum size of a group of log files before old files are removed.`,
+		Description: `--log-group-max-size=XXX is an alias for --log='file-defaults: {max-group-size: XXX}'.`,
 	}
 
-	DeprecatedLogDir = FlagInfo{
+	LogDirOverride = FlagInfo{
 		Name:        "log-dir",
-		Description: `Override the logging directory.`,
+		Description: `--log-dir=XXX is an alias for --log='file-defaults: {dir: XXX}'.`,
 	}
 
-	DeprecatedSQLAuditLogDir = FlagInfo{
-		Name: "sql-audit-dir",
-		Description: `
-If non-empty, create a SQL audit log in this directory.
-`,
+	SQLAuditLogDirOverride = FlagInfo{
+		Name:        "sql-audit-dir",
+		Description: `--sql-audit-dir=XXX is an alias for --log='sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}'.`,
 	}
 
 	BuildTag = FlagInfo{
