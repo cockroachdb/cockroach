@@ -214,7 +214,12 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 		// We only need the logical op log for rangefeeds, and in standalone
 		// application there are no listening rangefeeds. So we do this only
 		// in Replica application.
-		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
+		p, filter := b.r.getRangefeedProcessorAndFilter()
+		if p != nil {
+			if err := populatePrevValsInLogicalOpLogRaftMuLocked(ctx, filter, ops, b.batch); err != nil {
+				b.r.disconnectRangefeedWithErr(p, roachpb.NewError(err))
+			}
+		}
 	}
 	return nil
 }
