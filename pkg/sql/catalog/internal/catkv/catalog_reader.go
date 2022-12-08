@@ -145,18 +145,29 @@ func (cr catalogReader) IsDescIDKnownToNotExist(_, _ descpb.ID) bool {
 // ScanAll is part of the CatalogReader interface.
 func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
-	log.Eventf(ctx, "fetching all descriptors and namespace entries")
 	cq := catalogQuery{codec: cr.codec}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
 		b.Header.MaxSpanRequestKeys = 0
 		descsPrefix := catalogkeys.MakeAllDescsMetadataKey(codec)
 		b.Scan(descsPrefix, descsPrefix.PrefixEnd())
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "Scan %s", descsPrefix)
+		}
 		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "Scan %s", nsPrefix)
+		}
 		commentPrefix := catalogkeys.CommentsMetadataPrefix(codec)
 		b.Scan(commentPrefix, commentPrefix.PrefixEnd())
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "Scan %s", commentPrefix)
+		}
 		zonesPrefix := config.ZonesPrimaryIndexPrefix(codec)
 		b.Scan(zonesPrefix, zonesPrefix.PrefixEnd())
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "Scan %s", zonesPrefix)
+		}
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -172,6 +183,9 @@ func (cr catalogReader) scanNamespace(
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
 		b.Header.MaxSpanRequestKeys = 0
 		b.Scan(prefix, prefix.PrefixEnd())
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "Scan %s", prefix)
+		}
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -229,9 +243,6 @@ func (cr catalogReader) GetByIDs(
 	if len(ids) == 0 {
 		return nstree.Catalog{}, nil
 	}
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "reading catalog data by ID: %v", ids)
-	}
 	cq := catalogQuery{
 		codec:                cr.codec,
 		isDescriptorRequired: isDescriptorRequired,
@@ -239,12 +250,23 @@ func (cr catalogReader) GetByIDs(
 	}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
 		for _, id := range ids {
-			b.Get(catalogkeys.MakeDescMetadataKey(codec, id))
+			descKey := catalogkeys.MakeDescMetadataKey(codec, id)
+			b.Get(descKey)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.VEventf(ctx, 2, "Get %s", descKey)
+			}
 			for _, t := range catalogkeys.AllCommentTypes {
 				cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id)
 				b.Scan(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd())
+				if log.ExpensiveLogEnabled(ctx, 2) {
+					log.VEventf(ctx, 2, "Scan %s", cmtKeyPrefix)
+				}
 			}
-			b.Get(config.MakeZoneKey(codec, id))
+			zoneKey := config.MakeZoneKey(codec, id)
+			b.Get(zoneKey)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.VEventf(ctx, 2, "Get %s", zoneKey)
+			}
 		}
 	})
 	if err != nil {
@@ -272,7 +294,11 @@ func (cr catalogReader) GetByNames(
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
 		for _, nameInfo := range nameInfos {
 			if nameInfo.Name != "" {
-				b.Get(catalogkeys.EncodeNameKey(codec, nameInfo))
+				nameKey := catalogkeys.EncodeNameKey(codec, nameInfo)
+				b.Get(nameKey)
+				if log.ExpensiveLogEnabled(ctx, 2) {
+					log.VEventf(ctx, 2, "Get %s", nameKey)
+				}
 			}
 		}
 	})
