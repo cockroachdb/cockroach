@@ -823,7 +823,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
 		var traceOutput string
-		traceLoggingNeeded := err != nil || exceededDuration
+		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
 		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
 			// the recording so that we can render the traces to the log without it,

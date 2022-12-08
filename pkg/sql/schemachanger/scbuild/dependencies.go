@@ -158,7 +158,7 @@ type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the current user has `privilege` on
 	// `descriptor`.
 	CheckPrivilege(
-		ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind,
+		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind,
 	) error
 
 	// HasAdminRole verifies if a user has an admin role.
@@ -166,11 +166,11 @@ type AuthorizationAccessor interface {
 
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
-	HasOwnership(ctx context.Context, privilegeObject catalog.PrivilegeObject) (bool, error)
+	HasOwnership(ctx context.Context, privilegeObject privilege.Object) (bool, error)
 
 	// CheckPrivilegeForUser verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind, user username.SQLUsername,
+		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername,
 	) error
 
 	// MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct

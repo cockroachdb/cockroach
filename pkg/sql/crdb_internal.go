@@ -342,7 +342,7 @@ CREATE TABLE crdb_internal.databases (
 						return errors.Newf("unknown survival goal: %d", db.GetRegionConfig().SurvivalGoal)
 					}
 				}
-				owner, err := getOwnerOfPrivilegeObject(ctx, p, db)
+				owner, err := p.getOwnerOfPrivilegeObject(ctx, db)
 				if err != nil {
 					return err
 				}

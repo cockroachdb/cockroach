@@ -11,14 +11,11 @@
 package schemadesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -43,7 +40,7 @@ type public struct {
 }
 
 var _ catalog.SchemaDescriptor = public{}
-var _ catalog.PrivilegeObject = public{}
+var _ privilege.Object = public{}
 
 func (p public) GetParentID() descpb.ID { return descpb.InvalidID }
 func (p public) GetID() descpb.ID       { return keys.PublicSchemaID }
@@ -53,14 +50,7 @@ func (p public) GetPrivileges() *catpb.PrivilegeDescriptor {
 }
 func (p public) GetRawBytesInStorage() []byte { return nil }
 
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (p public) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	return p.GetPrivileges(), nil
-}
-
-// GetObjectType implements the PrivilegeObject interface.
+// GetObjectType implements the Object interface.
 func (p public) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
 }

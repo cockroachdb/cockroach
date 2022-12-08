@@ -133,7 +133,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	for _, oldRole := range n.normalizedOldRoles {
 		// There should only be one database (current).
 		for _, dbID := range lCtx.dbIDs {
-			isOwner, err := IsOwner(params.ctx, params.p, lCtx.dbDescs[dbID], oldRole)
+			isOwner, err := isOwner(params.ctx, params.p, lCtx.dbDescs[dbID], oldRole)
 			if err != nil {
 				return err
 			}
@@ -144,7 +144,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 			}
 		}
 		for _, schemaID := range lCtx.schemaIDs {
-			isOwner, err := IsOwner(params.ctx, params.p, lCtx.schemaDescs[schemaID], oldRole)
+			isOwner, err := isOwner(params.ctx, params.p, lCtx.schemaDescs[schemaID], oldRole)
 			if err != nil {
 				return err
 			}
@@ -162,7 +162,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 
 		for _, tbID := range lCtx.tbIDs {
-			isOwner, err := IsOwner(params.ctx, params.p, lCtx.tbDescs[tbID], oldRole)
+			isOwner, err := isOwner(params.ctx, params.p, lCtx.tbDescs[tbID], oldRole)
 			if err != nil {
 				return err
 			}
@@ -173,7 +173,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 			}
 		}
 		for _, typID := range lCtx.typIDs {
-			isOwner, err := IsOwner(params.ctx, params.p, lCtx.typDescs[typID], oldRole)
+			isOwner, err := isOwner(params.ctx, params.p, lCtx.typDescs[typID], oldRole)
 			if err != nil {
 				return err
 			}
@@ -184,7 +184,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 			}
 		}
 		for _, fnID := range lCtx.fnIDs {
-			isOwner, err := IsOwner(params.ctx, params.p, lCtx.fnDescs[fnID], oldRole)
+			isOwner, err := isOwner(params.ctx, params.p, lCtx.fnDescs[fnID], oldRole)
 			if err != nil {
 				return err
 			}
