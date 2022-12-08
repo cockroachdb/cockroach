@@ -112,17 +112,14 @@ func (s *singleResults) clear() {
 }
 
 func (s *singleResults) put(
-	_ context.Context, key []byte, value []byte, _ *mon.BoundAccount, _ int,
+	ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount, _ int,
 ) error {
+	newSize := int64(len(key) + len(value))
 	s.count++
-	s.bytes += int64(len(key) + len(value))
-	/*
-		s.key = append([]byte{}, key...)
-		s.value = append([]byte{}, value...)
-	*/
+	s.bytes += newSize
 	s.encKey = key
 	s.value = value
-	return nil
+	return memAccount.Grow(ctx, newSize)
 }
 
 func (s *singleResults) numKeys() int64 {

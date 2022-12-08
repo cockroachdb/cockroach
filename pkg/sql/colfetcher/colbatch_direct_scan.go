@@ -104,6 +104,9 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 		// If both ColBatch and BatchResponse are nil, then it was an empty
 		// response for a ScanRequest, and we need to proceed further.
 	}
+	// Update the allocator since we're holding onto the serialized bytes for
+	// now.
+	s.allocator.AdjustMemoryUsageAfterAllocation(int64(len(res.BatchResponse)))
 	s.data = s.data[:0]
 	batchLength, err := s.deser.Deserialize(&s.data, res.BatchResponse)
 	if err != nil {
@@ -111,9 +114,15 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	}
 	// We rely on the cFetcherWrapper to produce reasonably sized batches.
 	s.batch, _ = s.allocator.ResetMaybeReallocateNoMemLimit(s.resultTypes, s.batch, batchLength)
-	if err = s.converter.ArrowToBatch(s.data, batchLength, s.batch); err != nil {
-		colexecerror.InternalError(err)
-	}
+	s.allocator.PerformOperation(s.batch.ColVecs(), func() {
+		if err = s.converter.ArrowToBatch(s.data, batchLength, s.batch); err != nil {
+			colexecerror.InternalError(err)
+		}
+	})
+	// At this point, we have lost all references to the serialized bytes
+	// (because ArrowToBatch nils out elements in s.data once processed), so we
+	// update the allocator accordingly.
+	s.allocator.AdjustMemoryUsage(-int64(len(res.BatchResponse)))
 	return s.batch
 }
 
