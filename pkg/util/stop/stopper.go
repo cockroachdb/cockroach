@@ -240,7 +240,8 @@ func (s *Stopper) refuseRLocked() bool {
 	return s.mu.stopping || s.mu.quiescing
 }
 
-// AddCloser adds an object to close after the stopper has been stopped.
+// AddCloser adds an object to close after the stopper has been stopped. The
+// objects will be stopped in the same order as they are added.
 //
 // WARNING: memory resources acquired by this method will stay around for
 // the lifetime of the Stopper. Use with care to avoid leaking memory.
