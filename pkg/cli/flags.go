@@ -327,41 +327,29 @@ func init() {
 		cliflagcfg.VarFlag(pf, &fileContentsValue{settableString: &cliCtx.logConfigInput, fileName: "<unset>"}, cliflags.LogConfigFile)
 		cliflagcfg.StringSliceFlag(pf, &cliCtx.logConfigVars, cliflags.LogConfigVars)
 
-		// Pre-v21.1 overrides. Deprecated.
-		// TODO(knz): Remove this.
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.stderrThreshold, cliflags.DeprecatedStderrThreshold)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrThreshold.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {filter: ...}}'.")
+		// Pre-v21.1 convenience overrides.
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.stderrThreshold, cliflags.StderrThresholdOverride)
 		// This flag can also be specified without an explicit argument.
-		pf.Lookup(cliflags.DeprecatedStderrThreshold.Name).NoOptDefVal = "DEFAULT"
+		pf.Lookup(cliflags.StderrThresholdOverride.Name).NoOptDefVal = "DEFAULT"
 
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.stderrNoColor, cliflags.DeprecatedStderrNoColor)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrNoColor.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {no-color: true}}'")
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.stderrNoColor, cliflags.StderrNoColorOverride)
+		_ = pf.MarkHidden(cliflags.StderrNoColorOverride.Name)
+		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.logOverrides.logDir}, cliflags.LogDirOverride)
 
-		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.deprecatedLogOverrides.logDir}, cliflags.DeprecatedLogDir)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedLogDir.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {dir: ...}'")
+		cliflagcfg.VarFlag(pf, cliCtx.logOverrides.fileMaxSizeVal, cliflags.LogFileMaxSizeOverride)
+		_ = pf.MarkHidden(cliflags.LogFileMaxSizeOverride.Name)
 
-		cliflagcfg.VarFlag(pf, cliCtx.deprecatedLogOverrides.fileMaxSizeVal, cliflags.DeprecatedLogFileMaxSize)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedLogFileMaxSize.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {max-file-size: ...}'")
+		cliflagcfg.VarFlag(pf, cliCtx.logOverrides.maxGroupSizeVal, cliflags.LogGroupMaxSizeOverride)
+		_ = pf.MarkHidden(cliflags.LogGroupMaxSizeOverride.Name)
 
-		cliflagcfg.VarFlag(pf, cliCtx.deprecatedLogOverrides.maxGroupSizeVal, cliflags.DeprecatedLogGroupMaxSize)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedLogGroupMaxSize.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {max-group-size: ...}'")
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.fileThreshold, cliflags.FileThresholdOverride)
+		_ = pf.MarkHidden(cliflags.FileThresholdOverride.Name)
 
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.fileThreshold, cliflags.DeprecatedFileThreshold)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedFileThreshold.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {filter: ...}'")
+		cliflagcfg.VarFlag(pf, &cliCtx.logOverrides.redactableLogs, cliflags.RedactableLogsOverride)
+		_ = pf.MarkHidden(cliflags.RedactableLogsOverride.Name)
 
-		cliflagcfg.VarFlag(pf, &cliCtx.deprecatedLogOverrides.redactableLogs, cliflags.DeprecatedRedactableLogs)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedRedactableLogs.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {redactable: ...}")
-
-		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.deprecatedLogOverrides.sqlAuditLogDir}, cliflags.DeprecatedSQLAuditLogDir)
-		_ = pf.MarkDeprecated(cliflags.DeprecatedSQLAuditLogDir.Name,
-			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}")
+		cliflagcfg.VarFlag(pf, &stringValue{&cliCtx.logOverrides.sqlAuditLogDir}, cliflags.SQLAuditLogDirOverride)
+		_ = pf.MarkHidden(cliflags.SQLAuditLogDirOverride.Name)
 	}
 
 	// Remember we are starting in the background as the `start` command will
