@@ -71,7 +71,7 @@ func TestNoLinkForbidden(t *testing.T) {
 		// The errors library uses go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
+		"github.com/cockroachdb/errors/withstack",
 	)
 }
 

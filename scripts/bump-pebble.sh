@@ -31,7 +31,6 @@ fi
 
 COCKROACH_DIR="$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
 PEBBLE_DIR="$(go env GOPATH)/src/github.com/cockroachdb/pebble"
-VENDORED_DIR="$COCKROACH_DIR/vendor"
 UPSTREAM="upstream"
 
 # Using count since error code is ignored
@@ -52,7 +51,6 @@ popd
 
 COCKROACH_UPSTREAM_URL="https://github.com/cockroachdb/cockroach.git"
 PEBBLE_UPSTREAM_URL="https://github.com/cockroachdb/pebble.git"
-VENDORED_UPSTREAM_URL="git@github.com:cockroachdb/vendored.git"
 
 # Ensure the local CockroachDB release branch is up-to-date with
 # upstream and grab the current Pebble SHA.
@@ -72,7 +70,6 @@ COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" | grep -v 'Merge 
 echo "$COMMITS"
 popd
 
-VENDORED_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 COCKROACH_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 
 # Pull in the Pebble module at the desired SHA and rebuild the vendor
@@ -80,20 +77,6 @@ COCKROACH_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 pushd "$COCKROACH_DIR"
 go get "github.com/cockroachdb/pebble@${NEW_SHA}"
 go mod tidy
-make -k vendor_rebuild
-popd
-
-# Commit all the pending vendor directory changes to a new
-# github.com/cockroachdb/vendored repository branch, including the
-# commit history.
-pushd "$VENDORED_DIR"
-git branch -D "$VENDORED_BRANCH" || true
-git checkout -b "$VENDORED_BRANCH"
-git add --all
-git commit -m "bump Pebble to ${NEW_SHA:0:12}
-
-$COMMITS"
-git push -u --force "$VENDORED_UPSTREAM_URL" "$VENDORED_BRANCH"
 popd
 
 # Create the branch and commit on the CockroachDB repository.

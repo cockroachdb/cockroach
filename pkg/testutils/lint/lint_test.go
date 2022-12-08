@@ -108,11 +108,18 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // parallelization, and which have reasonable memory consumption
 // should be marked with t.Parallel().
 func TestLint(t *testing.T) {
-	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
-	if err != nil {
-		t.Fatal(err)
+	var crdbDir, pkgDir string
+	{
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for filepath.Base(cwd) != "pkg" {
+			cwd = filepath.Dir(cwd)
+		}
+		pkgDir = cwd
+		crdbDir = filepath.Dir(pkgDir)
 	}
-	pkgDir := filepath.Join(crdb.Dir, "pkg")
 
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 
@@ -139,7 +146,7 @@ func TestLint(t *testing.T) {
 			}
 		}
 
-		cmd, stderr, filter, err := dirCmd(crdb.Dir,
+		cmd, stderr, filter, err := dirCmd(crdbDir,
 			"git", "grep", "-nE", fmt.Sprintf(`[^_a-zA-Z](%s)\(`, strings.Join(names, "|")),
 			"--", "pkg")
 		if err != nil {
@@ -1561,7 +1568,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestForbiddenImportsSQLShell", func(t *testing.T) {
 		t.Parallel()
 
-		cmd, stderr, filter, err := dirCmd(crdb.Dir, "go", "list", "-deps",
+		cmd, stderr, filter, err := dirCmd(crdbDir, "go", "list", "-deps",
 			filepath.Join(cockroachDB, "./pkg/cmd/cockroach-sql"))
 		if err != nil {
 			t.Fatal(err)
@@ -1619,7 +1626,7 @@ func TestLint(t *testing.T) {
 		}
 		// errcheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
-			crdb.Dir,
+			crdbDir,
 			"errcheck",
 			"-exclude",
 			excludesPath,
@@ -1652,7 +1659,7 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "the returncheck tests are run during the bazel build")
 		}
 		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
-		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
+		cmd, stderr, filter, err := dirCmd(crdbDir, "returncheck", pkgScope)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1682,7 +1689,7 @@ func TestLint(t *testing.T) {
 		}
 
 		cmd, stderr, filter, err := dirCmd(
-			crdb.Dir,
+			crdbDir,
 			"staticcheck",
 			pkgScope)
 		if err != nil {
@@ -2178,7 +2185,7 @@ func TestLint(t *testing.T) {
 		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
 		//    Otherwise it may be a Print wrapper.
 		// Note we retrieve the list of printfuncs from nogo_config.json.
-		jsonFile, err := os.ReadFile(filepath.Join(crdb.Dir, "build", "bazelutil", "nogo_config.json"))
+		jsonFile, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
 		if err != nil {
 			t.Error(err)
 		}
@@ -2279,7 +2286,7 @@ func TestLint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to find %s: %s", vetTool, err)
 		}
-		vetCmd(t, crdb.Dir, "go",
+		vetCmd(t, crdbDir, "go",
 			[]string{"vet", "-vettool", vetToolPath, "-all", "-printf.funcs", printfuncs, pkgScope},
 			filters)
 
