@@ -400,6 +400,13 @@ func (s *ColIndexJoin) GetBatchRequestsIssued() int64 {
 	return s.cf.getBatchRequestsIssued()
 }
 
+// GetKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getKVCPUTime()
+}
+
 // GetContentionInfo is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetContentionInfo() (time.Duration, []roachpb.ContentionEvent) {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)

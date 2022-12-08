@@ -108,6 +108,12 @@ type KVBatchFetcher interface {
 	// able to handle a case of uninitialized fetcher.
 	GetBatchRequestsIssued() int64
 
+	// GetKVCPUTime returns the amount of CPU time spent by this fetcher *on the
+	// current goroutine* while serving KV requests. It is safe for concurrent use
+	// and is able to handle a case of uninitialized fetcher. It is used in
+	// calculating SQL CPU time.
+	GetKVCPUTime() time.Duration
+
 	// Close releases the resources of this KVBatchFetcher. Must be called once
 	// the fetcher is no longer in use.
 	Close(ctx context.Context)
@@ -1293,4 +1299,11 @@ func (rf *Fetcher) GetBatchRequestsIssued() int64 {
 		return 0
 	}
 	return rf.kvFetcher.GetBatchRequestsIssued()
+}
+
+func (rf *Fetcher) GetKVCPUTime() time.Duration {
+	if rf == nil || rf.kvFetcher == nil || rf.args.WillUseKVProvider {
+		return 0
+	}
+	return rf.kvFetcher.GetKVCPUTime()
 }

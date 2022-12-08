@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -220,15 +221,18 @@ type cFetcher struct {
 	nextKVer storage.NextKVer
 	// fetcher, if set, is the same object as nextKVer.
 	fetcher *row.KVFetcher
-	// bytesRead and batchRequestsIssued store the total number of bytes read
-	// and of BatchRequests issued, respectively, by this cFetcher throughout
-	// its lifetime in case when the underlying row.KVFetcher has already been
-	// closed and nil-ed out.
-	//
-	// The fields should not be accessed directly by the users of the cFetcher -
-	// getBytesRead() and getBatchRequestsIssued() should be used instead.
-	bytesRead           int64
+	// bytesRead stores the total number of bytes read by this cFetcher throughout
+	// its lifetime after the underlying row.KVFetcher has been closed and nil-ed
+	// out. It should only be accessed through getBytesRead().
+	bytesRead int64
+	// batchRequestsIssued stores the total number of BatchRequests issued by this
+	// cFetcher after the underlying row.KVFetcher has been closed and nil-ed out.
+	// It can only be accessed through getBatchRequestsIssued().
 	batchRequestsIssued int64
+	// kvCPUTime stores the CPU time spent by this cFetcher while fulfilling KV
+	// requests *in the current goroutine* after the underlying row.KVFetcher has
+	// been closed and nil-ed out. It can only be accessed through getKVCPUTime().
+	kvCPUTime time.Duration
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -1292,6 +1296,13 @@ func (cf *cFetcher) getBytesRead() int64 {
 	return cf.bytesRead
 }
 
+func (cf *cFetcher) getKVCPUTime() time.Duration {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetKVCPUTime()
+	}
+	return cf.kvCPUTime
+}
+
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
 // cFetcher throughout its lifetime so far.
 func (cf *cFetcher) getBatchRequestsIssued() int64 {
@@ -1327,6 +1338,7 @@ func (cf *cFetcher) Close(ctx context.Context) {
 		if cf.fetcher != nil {
 			cf.bytesRead = cf.fetcher.GetBytesRead()
 			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
+			cf.kvCPUTime = cf.fetcher.GetKVCPUTime()
 			cf.fetcher.Close(ctx)
 			cf.fetcher = nil
 		}

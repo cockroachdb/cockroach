@@ -361,6 +361,16 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
+// AddCPUTime adds a top-level field for the cumulative cpu time spent by SQL
+// execution.
+func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
+	ob.AddRedactableTopLevelField(
+		RedactVolatile,
+		"sql cpu time",
+		string(humanizeutil.Duration(cpuTime)),
+	)
+}
+
 // AddRUEstimate adds a top-level field for the estimated number of RUs consumed
 // by the query.
 func (ob *OutputBuilder) AddRUEstimate(ru int64) {

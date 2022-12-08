@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -751,6 +752,9 @@ type kvBatchFetcherHelper struct {
 		bytesRead           int64
 		batchRequestsIssued *int64
 	}
+	// cpuStopWatch tracks CPU usage for the current goroutine. It is safe for
+	// concurrent use.
+	cpuStopWatch *timeutil.CPUStopWatch
 }
 
 func (h *kvBatchFetcherHelper) init(
@@ -758,11 +762,14 @@ func (h *kvBatchFetcherHelper) init(
 ) {
 	h.nextBatch = nextBatch
 	h.atomics.batchRequestsIssued = batchRequestsIssued
+	h.cpuStopWatch = timeutil.NewCPUStopWatch()
 }
 
 // NextBatch implements the KVBatchFetcher interface.
 func (h *kvBatchFetcherHelper) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
+	h.cpuStopWatch.Start()
 	resp, err := h.nextBatch(ctx)
+	h.cpuStopWatch.Stop()
 	if !resp.MoreKVs || err != nil {
 		return resp, err
 	}
@@ -789,4 +796,12 @@ func (h *kvBatchFetcherHelper) GetBatchRequestsIssued() int64 {
 		return 0
 	}
 	return atomic.LoadInt64(h.atomics.batchRequestsIssued)
+}
+
+// GetKVCPUTime implements the KVBatchFetcher interface.
+func (h *kvBatchFetcherHelper) GetKVCPUTime() time.Duration {
+	if h == nil {
+		return 0
+	}
+	return h.cpuStopWatch.Elapsed()
 }

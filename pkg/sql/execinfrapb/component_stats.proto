@@ -140,6 +140,13 @@ message KVStats {
 
   // contention_events hit at the statement level.
   repeated cockroach.roachpb.ContentionEvent contention_events = 10 [(gogoproto.nullable) = false];
+
+  // Cumulated CPU time spent fulfilling KV requests on a SQL goroutine. This
+  // would not include CPU time spent on a remote node, but would include time
+  // spent on a Scan's goroutine. This is only used to calculate SQL CPU time
+  // for processors in the row-engine that perform KV requests.
+  optional util.optional.Duration kv_cpu_time = 11 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "KVCPUTime"];
 }
 
 // ExecStats contains statistics about the execution of a component.
@@ -151,7 +158,11 @@ message ExecStats {
   // Maximum scratch disk allocated by the component.
   optional util.optional.Uint max_allocated_disk = 3 [(gogoproto.nullable) = false];
   // Amount of RUs consumed while executing the component.
-  optional util.optional.Uint consumed_r_u = 4 [(gogoproto.nullable) = false];
+  optional util.optional.Uint consumed_ru = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ConsumedRU"];
+  // CPU time spent executing the component.
+  optional util.optional.Duration cpu_time = 5 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "CPUTime"];
 }
 
 // OutputStats contains statistics about the output (results) of a component.
@@ -169,5 +180,6 @@ message FlowStats {
   optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
   // Amount of RUs consumed due to CPU usage while executing the flow. Currently
   // only used for remote flows.
-  optional util.optional.Uint consumed_r_u = 3 [(gogoproto.nullable) = false];
+  optional util.optional.Uint consumed_ru = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ConsumedRU"];
 }

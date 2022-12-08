@@ -318,6 +318,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ContentionTime:      optional.MakeTimeValue(contentionTime),
 			ContentionEvents:    contentionEvents,
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
+			KVCPUTime:           optional.MakeTimeValue(tr.fetcher.GetKVCPUTime()),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}

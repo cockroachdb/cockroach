@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -855,6 +856,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		ContentionTime:      optional.MakeTimeValue(contentionTime),
 		ContentionEvents:    contentionEvents,
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
+		KVCPUTime:           optional.MakeTimeValue(z.getKVCPUTime()),
 	}
 	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
@@ -895,6 +897,14 @@ func (z *zigzagJoiner) getBatchRequestsIssued() int64 {
 		batchRequestsIssued += z.infos[i].fetcher.GetBatchRequestsIssued()
 	}
 	return batchRequestsIssued
+}
+
+func (z *zigzagJoiner) getKVCPUTime() time.Duration {
+	var kvCPUTime time.Duration
+	for i := range z.infos {
+		kvCPUTime += z.infos[i].fetcher.GetKVCPUTime()
+	}
+	return kvCPUTime
 }
 
 func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {

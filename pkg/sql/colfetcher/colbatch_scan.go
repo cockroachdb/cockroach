@@ -175,6 +175,13 @@ func (s *ColBatchScan) GetScanStats() execstats.ScanStats {
 	return execstats.GetScanStats(s.Ctx, nil /* recording */)
 }
 
+// GetKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetKVCPUTime() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getKVCPUTime()
+}
+
 var colBatchScanPool = sync.Pool{
 	New: func() interface{} {
 		return &ColBatchScan{}

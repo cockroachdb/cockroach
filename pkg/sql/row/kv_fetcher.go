@@ -324,5 +324,10 @@ func (f *KVProvider) GetBatchRequestsIssued() int64 {
 	return 0
 }
 
+// GetKVCPUTime implements the KVBatchFetcher interface.
+func (f *KVProvider) GetKVCPUTime() time.Duration {
+	return 0
+}
+
 // Close implements the KVBatchFetcher interface.
 func (f *KVProvider) Close(context.Context) {}
