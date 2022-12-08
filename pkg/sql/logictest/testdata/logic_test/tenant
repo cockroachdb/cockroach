@@ -13,6 +13,22 @@ CREATE TENANT "tenant-one"
 statement ok
 CREATE TENANT "two"
 
+statement error invalid tenant name
+CREATE TENANT "ABC"
+
+statement error invalid tenant name
+CREATE TENANT "-a-"
+
+# More than 100 characters.
+statement error invalid tenant name
+CREATE TENANT "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+
+statement error invalid tenant name
+CREATE TENANT "invalid_name"
+
+statement error invalid tenant name
+CREATE TENANT "invalid.name"
+
 statement ok
 CREATE TENANT three
 
@@ -165,3 +181,9 @@ id  active  name             crdb_internal.pb_to_json
 6   false   NULL             {"droppedName": "five-requiring-quotes", "id": "6", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
 7   false   NULL             {"droppedName": "to-be-reclaimed", "id": "7", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
 8   true    to-be-reclaimed  {"droppedName": "", "id": "8", "name": "to-be-reclaimed", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+
+# More valid tenant names.
+statement ok
+CREATE TENANT "1";
+CREATE TENANT "a-b";
+CREATE TENANT "hello-100"
