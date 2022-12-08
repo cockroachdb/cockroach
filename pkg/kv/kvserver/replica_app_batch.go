@@ -209,7 +209,9 @@ func changeRemovesStore(
 
 // runPreApplyTriggersBeforeStagingWriteBatch runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
-// staged in the replicaAppBatch's write batch. It may modify the command.
+// staged in the replicaAppBatch's write batch. The batch at this point will
+// represent the raft log up to but excluding the command that is currently
+// being applied.
 func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
@@ -223,6 +225,8 @@ func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 // runPreApplyTriggersAfterStagingWriteBatch runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
 // staged in the replicaAppBatch's write batch.
+//
+// All errors from this method are fatal for this Replica.
 func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
