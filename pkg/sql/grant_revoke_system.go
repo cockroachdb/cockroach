@@ -40,9 +40,6 @@ import (
 func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
-	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2SystemPrivilegesTable) {
-		return errors.Newf("system cluster privileges are not supported until upgrade to version %s is finalized", clusterversion.V22_2SystemPrivilegesTable.String())
-	}
 	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
 	}
@@ -296,10 +293,6 @@ func synthesizePrivilegeDescriptor(
 	txn *kv.Txn,
 	spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	if !execCfg.Settings.Version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
-		// Fall back to defaults if the version gate is not active yet.
-		return spo.GetFallbackPrivileges(), nil
-	}
 	_, desc, err := descsCol.GetImmutableTableByName(
 		ctx,
 		txn,

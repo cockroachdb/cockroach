@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -388,12 +387,9 @@ func checkPrivilegesForBackup(
 		requiresBackupSystemPrivilege := backupStmt.Coverage() == tree.AllDescriptors ||
 			(backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet())
 
-		var hasBackupSystemPrivilege bool
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
-				privilege.BACKUP, p.User())
-			hasBackupSystemPrivilege = err == nil
-		}
+		hasBackupSystemPrivilege := p.CheckPrivilegeForUser(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.BACKUP, p.User(),
+		) == nil
 
 		if requiresBackupSystemPrivilege && hasBackupSystemPrivilege {
 			return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)

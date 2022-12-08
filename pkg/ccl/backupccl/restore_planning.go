@@ -1229,12 +1229,9 @@ func checkPrivilegesForRestore(
 		requiresRestoreSystemPrivilege := restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
 			restoreStmt.Targets.TenantID.IsSet()
 
-		var hasRestoreSystemPrivilege bool
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
-				privilege.RESTORE, p.User())
-			hasRestoreSystemPrivilege = err == nil
-		}
+		hasRestoreSystemPrivilege := p.CheckPrivilegeForUser(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User(),
+		) == nil
 
 		if requiresRestoreSystemPrivilege && hasRestoreSystemPrivilege {
 			return checkRestoreDestinationPrivileges(ctx, p, from)
@@ -1253,11 +1250,9 @@ func checkPrivilegesForRestore(
 	// error. In 22.2 we continue to check for old style privileges and role
 	// options.
 	if len(restoreStmt.Targets.Databases) > 0 {
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
-				privilege.RESTORE, p.User())
-			hasRestoreSystemPrivilege = err == nil
-		}
+		hasRestoreSystemPrivilege = p.CheckPrivilegeForUser(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User(),
+		) == nil
 	}
 
 	if hasRestoreSystemPrivilege {
