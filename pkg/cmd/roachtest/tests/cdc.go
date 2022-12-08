@@ -547,7 +547,11 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=changefeed=2",
+	)
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
 	kafka, cleanup := setupKafka(ctx, t, c, kafkaNode)
 	defer cleanup()
