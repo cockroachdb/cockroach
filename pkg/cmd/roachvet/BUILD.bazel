@@ -17,6 +17,7 @@ go_library(
         "//pkg/testutils/lint/passes/loopvarcapture",
         "//pkg/testutils/lint/passes/nilness",
         "//pkg/testutils/lint/passes/nocopy",
+        "//pkg/testutils/lint/passes/redactcheck",
         "//pkg/testutils/lint/passes/returnerrcheck",
         "//pkg/testutils/lint/passes/timer",
         "//pkg/testutils/lint/passes/unconvert",

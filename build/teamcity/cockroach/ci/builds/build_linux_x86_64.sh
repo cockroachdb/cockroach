@@ -55,15 +55,6 @@ do
     fi
 done
 
-# docs/generated/redact_safe.md needs special handling.
-REAL_REDACT_SAFE=$($root/build/bazelutil/generate_redact_safe.sh)
-RESULT=$(diff <(echo "$REAL_REDACT_SAFE") $root/docs/generated/redact_safe.md)
-if [[ ! $? -eq 0 ]]
-then
-    echo "docs/generated/redact_safe.md is not up-to-date. Run './dev generate docs'"
-    FAILED=1
-fi
-
 if [[ ! -z "$FAILED" ]]
 then
     echo 'Generated files do not match! Are the checked-in generated files up-to-date?'
