@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "timeutil",
     srcs = [
+        "cpustopwatch.go",
         "manual_time.go",
         "stopwatch.go",
         "time.go",
@@ -17,6 +18,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/grunning",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
