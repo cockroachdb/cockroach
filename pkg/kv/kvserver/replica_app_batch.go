@@ -523,9 +523,6 @@ func (b *replicaAppBatch) runPostAddTriggers(ctx context.Context, cmd *replicate
 func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
 ) {
-	if cmd.Index() == 0 {
-		log.Fatalf(ctx, "raft entry with index 0")
-	}
 	b.state.RaftAppliedIndex = cmd.Index()
 	b.state.RaftAppliedIndexTerm = cmd.Term
 
