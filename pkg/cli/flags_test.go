@@ -1226,23 +1226,35 @@ Available Commands:
   help              Help about any command
 
 Flags:
-  -h, --help                      help for cockroach
-      --log <string>              
-                                   Logging configuration, expressed using YAML syntax. For example, you can
-                                   change the default logging directory with: --log='file-defaults: {dir: ...}'.
-                                   See the documentation for more options and details.  To preview how the log
-                                   configuration is applied, or preview the default configuration, you can use
-                                   the 'cockroach debug check-log-config' sub-command.
-                                  
-      --log-config-file <file>    
-                                   File name to read the logging configuration from. This has the same effect as
-                                   passing the content of the file via the --log flag.
-                                   (default <unset>)
-      --log-config-vars strings   
-                                   Environment variables that will be expanded if present in the body of the
-                                   logging configuration.
-                                  
-      --version                   version for cockroach
+  -h, --help                               help for cockroach
+      --log <string>                       
+                                            Logging configuration, expressed using YAML syntax. For example, you can
+                                            change the default logging directory with: --log='file-defaults: {dir: ...}'.
+                                            See the documentation for more options and details.  To preview how the log
+                                            configuration is applied, or preview the default configuration, you can use
+                                            the 'cockroach debug check-log-config' sub-command.
+                                           
+      --log-config-file <file>             
+                                            File name to read the logging configuration from. This has the same effect as
+                                            passing the content of the file via the --log flag.
+                                            (default <unset>)
+      --log-config-vars strings            
+                                            Environment variables that will be expanded if present in the body of the
+                                            logging configuration.
+                                           
+      --log-dir <string>                   
+                                            --log-dir=XXX is an alias for --log='file-defaults: {dir: XXX}'.
+                                           
+      --logtostderr <severity>[=DEFAULT]   
+                                            --logtostderr=XXX is an alias for --log='sinks: {stderr: {filter: XXX}}'. If
+                                            no value is specified, the default value for the command is inferred: INFO for
+                                            server commands, WARNING for client commands.
+                                            (default UNKNOWN)
+      --redactable-logs                    
+                                            --redactable-logs=XXX is an alias for --log='file-defaults: {redactable:
+                                            XXX}}'.
+                                           
+      --version                            version for cockroach
 
 Use "cockroach [command] --help" for more information about a command.
 `
@@ -1251,7 +1263,7 @@ Use "cockroach [command] --help" for more information about a command.
 	// (But it does if the test is run a second time.)
 	// Strangely, 'cockroach --help' does, as well as usage error messages.
 	helpExpected1 := commandPrefix + expUsage
-	helpExpected2 := strings.ReplaceAll(helpExpected1, "      --version                   version for cockroach\n", "")
+	helpExpected2 := strings.ReplaceAll(helpExpected1, "      --version                            version for cockroach\n", "")
 	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
 
 	testCases := []struct {
@@ -1313,8 +1325,8 @@ Use "cockroach [command] --help" for more information about a command.
 			if test.expectHelp {
 				if got != helpExpected1 && got != helpExpected2 {
 					diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-						A:        difflib.SplitLines(helpExpected1),
-						B:        difflib.SplitLines(got),
+						A:        difflib.SplitLines(strings.ReplaceAll(helpExpected1, "\n", "$\n")),
+						B:        difflib.SplitLines(strings.ReplaceAll(got, "\n", "$\n")),
 						FromFile: "Expected",
 						ToFile:   "Actual",
 						Context:  1,

@@ -35,9 +35,9 @@ type Context struct {
 	// CacheSize is the size of the storage cache for each KV server.
 	CacheSize int64
 
-	// NoExampleDatabase prevents the auto-creation of a demo database
+	// UseEmptyDatabase prevents the auto-creation of a demo database
 	// from a workload.
-	NoExampleDatabase bool
+	UseEmptyDatabase bool
 
 	// RunWorkload indicates whether to run a workload in the background
 	// after the demo cluster has been initialized.

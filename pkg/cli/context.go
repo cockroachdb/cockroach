@@ -171,10 +171,9 @@ type cliContext struct {
 	// before exiting the process. This may block until all buffered log sinks
 	// are shutdown, if any are enabled, or until a timeout is triggered.
 	logShutdownFn func()
-	// deprecatedLogOverrides is the legacy pre-v21.1 discrete flag
-	// overrides for the logging configuration.
-	// TODO(knz): Deprecated in v21.1. Remove this.
-	deprecatedLogOverrides *logConfigFlags
+	// logOverrides encodes discrete flag overrides for the logging
+	// configuration. They are provided for convenience.
+	logOverrides *logConfigFlags
 	// ambiguousLogDir is populated during setupLogging() to indicate
 	// that no log directory was specified and there were multiple
 	// on-disk stores.
@@ -187,9 +186,8 @@ type cliContext struct {
 // cliCtx captures the command-line parameters common to most CLI utilities.
 // See below for defaults.
 var cliCtx = cliContext{
-	Config: baseCfg,
-	// TODO(knz): Deprecated in v21.1. Remove this.
-	deprecatedLogOverrides: newLogConfigOverrides(),
+	Config:       baseCfg,
+	logOverrides: newLogConfigOverrides(),
 }
 
 // setCliContextDefaults set the default values in cliCtx.  This
@@ -214,8 +212,7 @@ func setCliContextDefaults() {
 	cliCtx.logConfig = logconfig.Config{}
 	cliCtx.logShutdownFn = func() {}
 	cliCtx.ambiguousLogDir = false
-	// TODO(knz): Deprecated in v21.1. Remove this.
-	cliCtx.deprecatedLogOverrides.reset()
+	cliCtx.logOverrides.reset()
 	cliCtx.showVersionUsingOnlyBuildTag = false
 }
 
@@ -610,7 +607,7 @@ func setDemoContextDefaults() {
 	demoCtx.NumNodes = 1
 	demoCtx.SQLPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.CacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.NoExampleDatabase = false
+	demoCtx.UseEmptyDatabase = false
 	demoCtx.SimulateLatency = false
 	demoCtx.RunWorkload = false
 	demoCtx.Localities = nil

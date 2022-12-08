@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -591,6 +593,12 @@ func (c *DummyTenantOperator) RenameTenant(
 func (c *DummyTenantOperator) GetTenantInfo(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (*descpb.TenantInfo, error) {
+	return nil, errors.WithStack(errEvalTenant)
+}
+
+func (p *DummyTenantOperator) GetTenantReplicationInfo(
+	ctx context.Context, replicationJobId jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
 	return nil, errors.WithStack(errEvalTenant)
 }
 
