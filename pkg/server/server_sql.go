@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rangeprober"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -303,6 +304,9 @@ type sqlServerArgs struct {
 	// Used to track the DistSQL flows currently running on this node but
 	// initiated on behalf of other nodes.
 	remoteFlowRunner *flowinfra.RemoteFlowRunner
+
+	// Used to store recent statements.
+	recentStatementsCache *recent.StatementsCache
 
 	// KV depends on the internal executor, so we pass a pointer to an empty
 	// struct in this configuration, which newSQLServer fills.
@@ -882,6 +886,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLStatusServer:           cfg.sqlStatusServer,
 		SessionRegistry:           cfg.sessionRegistry,
 		ClosedSessionCache:        cfg.closedSessionCache,
+		RecentStatementsCache:     cfg.recentStatementsCache,
 		ContentionRegistry:        contentionRegistry,
 		SQLLiveness:               cfg.sqlLivenessProvider,
 		JobRegistry:               jobRegistry,
