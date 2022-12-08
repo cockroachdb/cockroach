@@ -38,8 +38,8 @@ import (
 type replicaAppBatch struct {
 	ab appBatch
 
-	r  *Replica
-	sm *replicaStateMachine
+	r          *Replica
+	applyStats *applyCommittedEntriesStats
 
 	// batch accumulates writes implied by the raft entries in this batch.
 	batch storage.Batch
@@ -654,11 +654,11 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
-	b.sm.stats.entriesProcessed += b.entries
-	b.sm.stats.entriesProcessedBytes += b.entryBytes
-	b.sm.stats.numEmptyEntries += b.emptyEntries
-	b.sm.stats.batchesProcessed++
-	b.sm.stats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+	b.applyStats.entriesProcessed += b.entries
+	b.applyStats.entriesProcessedBytes += b.entryBytes
+	b.applyStats.numEmptyEntries += b.emptyEntries
+	b.applyStats.batchesProcessed++
+	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
