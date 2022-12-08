@@ -149,16 +149,6 @@ func (b *replicaAppBatch) Stage(
 		return nil, err
 	}
 
-	// We do the stats for store write byte sizes here since the code below may
-	// fiddle with these fields e.g. runPreApplyTriggersAfterStagingWriteBatch
-	// nils the AddSSTable field.
-	if !cmd.IsLocal() {
-		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.NumEntries++
-		b.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
-	}
-
 	// Stage the command's write batch in the application batch.
 	if err := b.stageWriteBatch(ctx, cmd); err != nil {
 		return nil, err
@@ -226,16 +216,26 @@ func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
 		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	}
+
 	return nil
 }
 
 // runPreApplyTriggersAfterStagingWriteBatch runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
-// staged in the replicaAppBatch's write batch. It may modify the command.
+// staged in the replicaAppBatch's write batch.
 func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
 	res := cmd.ReplicatedResult()
+
+	// NB: we need to do this update early, as some fields are zeroed out below
+	// (AddSST for example).
+	if !cmd.IsLocal() {
+		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
+		b.followerStoreWriteBytes.NumEntries++
+		b.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
 	// has already been emitted and checkpointed via a rangefeed. Callers are
