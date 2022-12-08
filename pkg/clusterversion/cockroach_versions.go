@@ -605,6 +605,8 @@ const (
 	finalVersion = invalidVersionKey
 )
 
+var allowUpgradeToDev = envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
+
 var versionsSingleton = func() keyedVersions {
 	if developmentBranch {
 		// If this is a dev branch, we offset every version +1M major versions into
@@ -629,7 +631,7 @@ var versionsSingleton = func() keyedVersions {
 		// renumber only 2-4 to be +1M. It would then step from 3 "up" to 1000002 --
 		// which conceptually is actually back down to 2 -- then back to to 1000003,
 		// then on to 1000004, etc.
-		skipFirst := envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
+		skipFirst := allowUpgradeToDev
 		const devOffset = 1000000
 		first := true
 		for i := range rawVersionsSingleton {
