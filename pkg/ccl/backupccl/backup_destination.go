@@ -246,6 +246,7 @@ func resolveDest(
 }
 
 // getBackupManifests fetches the backup manifest from a list of backup URIs.
+// The manifests are loaded from External Storage in parallel.
 func getBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
