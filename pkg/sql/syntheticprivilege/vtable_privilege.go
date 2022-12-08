@@ -13,7 +13,6 @@ package syntheticprivilege
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -35,11 +34,6 @@ var _ Object = &VirtualTablePrivilege{}
 // GetPath implements the Object interface.
 func (p *VirtualTablePrivilege) GetPath() string {
 	return fmt.Sprintf("/vtable/%s/%s", p.SchemaName, p.TableName)
-}
-
-// SystemPrivilegesTableVersionGate implements the Object interface.
-func (p *VirtualTablePrivilege) SystemPrivilegesTableVersionGate() clusterversion.Key {
-	return clusterversion.V22_2SystemPrivilegesTable
 }
 
 // GetFallbackPrivileges implements the Object interface.
