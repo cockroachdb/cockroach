@@ -363,7 +363,6 @@ func CreateEnumTypeDesc(
 		dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Types,
-		dbDesc.GetPrivileges(),
 	)
 
 	enumKind := descpb.TypeDescriptor_ENUM
@@ -438,7 +437,6 @@ func CreateCompositeTypeDesc(
 		dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Types,
-		dbDesc.GetPrivileges(),
 	)
 
 	return typedesc.NewBuilder(&descpb.TypeDescriptor{

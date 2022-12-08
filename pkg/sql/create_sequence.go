@@ -115,7 +115,6 @@ func doCreateSequence(
 		dbDesc.GetID(),
 		sessionData.User(),
 		privilege.Sequences,
-		dbDesc.GetPrivileges(),
 	)
 
 	if persistence.IsTemporary() {
