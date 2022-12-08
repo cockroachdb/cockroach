@@ -456,7 +456,6 @@ func (fr *FlowRegistry) Drain(
 	flowDrainWait time.Duration,
 	minFlowDrainWait time.Duration,
 	reporter func(int, redact.SafeString),
-	cancelStillRunning bool,
 ) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()
@@ -483,16 +482,14 @@ func (fr *FlowRegistry) Drain(
 			time.Sleep(expectedConnectionTime)
 			fr.Lock()
 		}
-		if cancelStillRunning {
-			// Now cancel all still running flows.
-			for _, f := range fr.flows {
-				if f.flow != nil && f.flow.ctxCancel != nil {
-					// f.flow might be nil when ConnectInboundStream() was
-					// called, but the consumer of that inbound stream hasn't
-					// been scheduled yet.
-					// f.flow.ctxCancel might be nil in tests.
-					f.flow.ctxCancel()
-				}
+		// Now cancel all still running flows.
+		for _, f := range fr.flows {
+			if f.flow != nil && f.flow.ctxCancel != nil {
+				// f.flow might be nil when ConnectInboundStream() was
+				// called, but the consumer of that inbound stream hasn't
+				// been scheduled yet.
+				// f.flow.ctxCancel might be nil in tests.
+				f.flow.ctxCancel()
 			}
 		}
 		fr.Unlock()
