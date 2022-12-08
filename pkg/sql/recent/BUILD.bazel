@@ -1,0 +1,35 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "recent",
+    srcs = ["statements_cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/recent",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/clusterunique",
+        "//pkg/util/cache",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "recent_test",
+    size = "small",
+    srcs = ["statements_cache_test.go"],
+    args = ["-test.timeout=55s"],
+    embed = [":recent"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/mon",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
