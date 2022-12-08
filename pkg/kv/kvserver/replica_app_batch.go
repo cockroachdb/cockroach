@@ -143,9 +143,6 @@ func (b *replicaAppBatch) Stage(
 		cmd.splitMergeUnlock = splitMergeUnlock
 	}
 
-	// Normalize the command, accounting for past migrations.
-	b.migrateReplicatedResult(ctx, cmd)
-
 	// Run any triggers that should occur before the batch is applied
 	// and before the write batch is staged in the batch.
 	if err := b.runPreApplyTriggersBeforeStagingWriteBatch(ctx, cmd); err != nil {
@@ -188,21 +185,6 @@ func (b *replicaAppBatch) Stage(
 	// The command was checked by shouldApplyCommand, so it can be returned
 	// as an apply.CheckedCommand.
 	return cmd, nil
-}
-
-// migrateReplicatedResult performs any migrations necessary on the command to
-// normalize it before applying it to the batch. This may modify the command.
-func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *replicatedCmd) {
-	// If the command was using the deprecated version of the MVCCStats proto,
-	// migrate it to the new version and clear out the field.
-	res := cmd.ReplicatedResult()
-	if deprecatedDelta := res.DeprecatedDelta; deprecatedDelta != nil {
-		if res.Delta != (enginepb.MVCCStatsDelta{}) {
-			log.Fatalf(ctx, "stats delta not empty but deprecated delta provided: %+v", cmd)
-		}
-		res.Delta = deprecatedDelta.ToStatsDelta()
-		res.DeprecatedDelta = nil
-	}
 }
 
 // stageWriteBatch applies the command's write batch to the application batch's
