@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -69,6 +70,13 @@ type replicaStateMachine struct {
 	ephemeralBatch ephemeralReplicaAppBatch
 	// stats are updated during command application and reset by moveStats.
 	applyStats applyCommittedEntriesStats
+
+	// stats backs the currently open replicaAppBatch's view of the State field of
+	// kvserverpb.ReplicaState (which is otherwise backed directly by the
+	// Replica's in-memory state). This avoids an allocation per Stage() call as
+	// Stage() is now alloed to update this memory directly, whereas all other
+	// mutations need to copy-on-write.
+	stats enginepb.MVCCStats
 }
 
 // getStateMachine returns the Replica's apply.StateMachine. The Replica's
@@ -135,7 +143,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.batch = r.store.engine.NewBatch()
 	r.mu.RLock()
 	b.state = r.mu.state
-	b.state.Stats = &b.stats
+	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.mu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
