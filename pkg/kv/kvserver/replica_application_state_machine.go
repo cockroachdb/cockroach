@@ -68,7 +68,7 @@ type replicaStateMachine struct {
 	// ephemeralBatch is returned from NewEphemeralBatch.
 	ephemeralBatch ephemeralReplicaAppBatch
 	// stats are updated during command application and reset by moveStats.
-	stats applyCommittedEntriesStats
+	applyStats applyCommittedEntriesStats
 }
 
 // getStateMachine returns the Replica's apply.StateMachine. The Replica's
@@ -131,7 +131,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r := sm.r
 	b := &sm.batch
 	b.r = r
-	b.applyStats = &sm.stats
+	b.applyStats = &sm.applyStats
 	b.batch = r.store.engine.NewBatch()
 	r.mu.RLock()
 	b.state = r.mu.state
@@ -193,7 +193,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.RLock()
 			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.Engine())
 			sm.r.mu.RUnlock()
-			sm.stats.stateAssertions++
+			sm.applyStats.stateAssertions++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
@@ -352,7 +352,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 	if cc == nil {
 		return nil
 	}
-	sm.stats.numConfChangeEntries++
+	sm.applyStats.numConfChangeEntries++
 	if cmd.Rejected() {
 		// The command was rejected. There is no need to report a ConfChange
 		// to raft.
@@ -419,8 +419,8 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 }
 
 func (sm *replicaStateMachine) moveStats() applyCommittedEntriesStats {
-	stats := sm.stats
-	sm.stats = applyCommittedEntriesStats{}
+	stats := sm.applyStats
+	sm.applyStats = applyCommittedEntriesStats{}
 	return stats
 }
 
