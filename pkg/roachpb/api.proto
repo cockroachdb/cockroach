@@ -2629,6 +2629,16 @@ message AdmissionHeader {
   bool no_memory_reserved_at_source = 5;
 }
 
+// A BatchAbsorbedRequest is sent by a receiver of a BatchResponse if it was
+// unable to immediately absorb the BatchRequest. In that case
+message BatchAbsorbedRequest {
+  bytes batch_absorbed_handle = 8 [(gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+}
+
+// A BatchAbsorbedResponse is the response to a BatchAbsorbedRequest.
+message BatchAbsorbedResponse {}
+
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
@@ -2698,6 +2708,15 @@ message BatchResponse {
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
+
+  // batch_absorbed_handle is a UUID sent by a receiver if the server is
+  // saturated and unable absorb the impact of this BatchRequest immediately.
+  // When this field is set, the receiver will send a BatchAbsorbed message back
+  // to the sender once this batch has been fully absorbed. The sender should
+  // assume this request is still holding resources on the server if the
+  // batch_absorbed_handle is set.
+  bytes batch_absorbed_handle = 8 [(gogoproto.nullable) = true,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // RangeLookupRequest is a request to proxy a RangeLookup through a Tenant
@@ -3029,6 +3048,7 @@ message JoinNodeResponse {
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
+  rpc BatchAbsorbed      (BatchAbsorbedRequest)      returns (BatchAbsorbedResponse)          {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   // RangeFeed RPC is deprecated.  Use MuxRangeFeed instead.
   // To be removed at version 23.1
