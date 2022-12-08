@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -334,7 +335,7 @@ func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
-		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+		return nil, errorutil.NewNodeNotFoundError(nodeID)
 	}
 	return desc, nil
 }
@@ -345,7 +346,7 @@ func (c *Connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreD
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.storeDescs[storeID]
 	if !ok {
-		return nil, errors.Errorf("unable to look up descriptor for store ID %d", storeID)
+		return nil, errorutil.NewStoreNotFoundError(storeID)
 	}
 	return desc, nil
 }

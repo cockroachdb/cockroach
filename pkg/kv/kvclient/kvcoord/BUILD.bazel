@@ -192,6 +192,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
+        "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
