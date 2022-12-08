@@ -63,7 +63,7 @@ func optInToDiagnosticsStatReporting(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
-	if cluster.TelemetryOptOut() {
+	if cluster.TelemetryOptOut {
 		return nil
 	}
 

@@ -600,7 +600,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 
 	// If enabled, start reporting diagnostics.
-	if s.sqlServer.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut() {
+	if s.sqlServer.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
 		s.startDiagnostics(workersCtx)
 	}
 
