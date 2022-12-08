@@ -152,6 +152,8 @@ message ExecStats {
   optional util.optional.Uint max_allocated_disk = 3 [(gogoproto.nullable) = false];
   // Amount of RUs consumed while executing the component.
   optional util.optional.Uint consumed_r_u = 4 [(gogoproto.nullable) = false];
+  // CPU time spent executing the component.
+  optional util.optional.Duration c_p_u_time = 5 [(gogoproto.nullable) = false];
 }
 
 // OutputStats contains statistics about the output (results) of a component.

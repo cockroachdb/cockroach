@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -551,6 +552,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+		if grunning.Supported() {
+			ob.AddCPUTime(queryStats.CPUTime)
+		}
 		if ih.isTenant && ih.outputMode != unmodifiedOutput && ih.vectorized {
 			// Only output RU estimate if this is a tenant running EXPLAIN ANALYZE.
 			// Additionally, RUs aren't correctly propagated in all cases for plans
@@ -692,6 +696,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
 				nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
 				nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
+				nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
 			}
 			// If we didn't get statistics for all processors, we don't show the
 			// incomplete results. In the future, we may consider an incomplete flag

@@ -48,6 +48,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/buildutil",
+        "//pkg/util/grunning",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",
