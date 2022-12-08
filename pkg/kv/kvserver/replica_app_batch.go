@@ -150,6 +150,10 @@ func (b *replicaAppBatch) Stage(
 		return nil, err
 	}
 
+	if err := b.runPreAddTriggersReplicaOnly(ctx, cmd); err != nil {
+		return nil, err
+	}
+
 	// Stage the command's write batch in the application batch.
 	if err := b.ab.addWriteBatch(ctx, b.batch, cmd); err != nil {
 		return nil, err
@@ -196,10 +200,22 @@ func changeRemovesStore(
 // represent the raft log up to but excluding the command that is currently
 // being applied.
 func (b *replicaAppBatch) runPreAddTriggers(ctx context.Context, cmd *replicatedCmd) error {
+	// None currently.
+	return nil
+}
+
+// runPreAddTriggersReplicaOnly is like runPreAddTriggers (and is called right after
+// it), except that it must only contain ephemeral side effects that have no influence
+// on durable state. It is not invoked during stand-alone log application.
+func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
+	ctx context.Context, cmd *replicatedCmd,
+) error {
 	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
+		// We only need the logical op log for rangefeeds, and in standalone
+		// application there are no listening rangefeeds. So we do this only
+		// in Replica application.
 		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	}
-
 	return nil
 }
 
