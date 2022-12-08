@@ -112,12 +112,6 @@ var upgrades = []upgradebase.Upgrade{
 		sampledStmtDiagReqsMigration,
 	),
 	upgrade.NewTenantUpgrade(
-		"add the system.privileges table",
-		toCV(clusterversion.V22_2SystemPrivilegesTable),
-		upgrade.NoPrecondition,
-		systemPrivilegesTableMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"add column locality to table system.sql_instances",
 		toCV(clusterversion.V22_2AlterSystemSQLInstancesAddLocality),
 		upgrade.NoPrecondition,
