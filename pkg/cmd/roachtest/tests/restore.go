@@ -451,7 +451,7 @@ func (tpce10TB) runRestore(ctx context.Context, c cluster.Cluster) {
 	// Restore from the first full backup AOST in the last incremental backup in the chain.
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE DATABASE tpce FROM '/2022/11/06-124208.52' IN
-				'gs://cockroach-fixtures/backups/tpc-e/rev-history=true,inc-count=23,cluster/customers=500k/22.1.8?AUTH=implicit'
+				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.1.8/inc-count=11?AUTH=implicit'
 				AS OF SYSTEM TIME '2022-11-06 23:40:22'"`)
 }
 
@@ -461,7 +461,7 @@ func (tpce10TB) runRestoreDetached(
 	// Restore from the first full backup AOST in the last incremental backup in the chain.
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE DATABASE tpce FROM '/2022/11/06-124208.52' IN
-				'gs://cockroach-fixtures/backups/tpc-e/rev-history=true,inc-count=23,cluster/customers=500k/22.1.8?AUTH=implicit'
+				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.1.8/inc-count=11?AUTH=implicit'
 				AS OF SYSTEM TIME '2022-11-06 23:40:22' WITH detached"`)
 	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
 	if err != nil {
