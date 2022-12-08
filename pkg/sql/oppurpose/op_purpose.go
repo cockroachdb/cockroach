@@ -27,6 +27,8 @@ const (
 	SplitManualTest = roachpb.AdminSplitRequest_INGESTION
 	// SplitTruncate is a split caused by a truncate.
 	SplitTruncate = roachpb.AdminSplitRequest_INGESTION
+	// SplitNemesis is a split caused by kvnemesis.
+	SplitNemesis = roachpb.AdminSplitRequest_INGESTION
 
 	// UnsplitManual is a split caused by a manual action.
 	UnsplitManual = roachpb.AdminUnsplitRequest_ARBITRARY
@@ -45,4 +47,13 @@ const (
 	ScatterManual = roachpb.AdminScatterRequest_ARBITRARY
 	// ScatterManualTest is a split caused by a manual action test.
 	ScatterManualTest = roachpb.AdminScatterRequest_INGESTION
+
+	// TransferLeaseManual is a lease transfer caused by a manual action.
+	TransferLeaseManual = roachpb.AdminTransferLeaseRequest_ARBITRARY
+	// TransferLeaseBypassChecks is a lease transfer that bypasses safety checks.
+	TransferLeaseBypassChecks = roachpb.AdminTransferLeaseRequest_ORGANIZATION
+	// TransferLeaseNemesis is a lease transfer caused by kvnemesis.
+	TransferLeaseNemesis = roachpb.AdminTransferLeaseRequest_ORGANIZATION
+	// TransferLeaseRelocateReplicas is a lease transfer caused by relocating replicas.
+	TransferLeaseRelocateReplicas = roachpb.AdminTransferLeaseRequest_ORGANIZATION
 )

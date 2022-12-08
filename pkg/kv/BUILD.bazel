@@ -23,6 +23,7 @@ go_library(
         "//pkg/kv/kvserver/closedts",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/sql/oppurpose",
         "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",

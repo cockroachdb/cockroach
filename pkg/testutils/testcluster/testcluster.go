@@ -1025,7 +1025,7 @@ func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) error {
 	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
-		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
+		rangeDesc.StartKey.AsRawKey(), dest.StoreID, roachpb.AdminTransferLeaseRequest_ORGANIZATION)
 	if err != nil {
 		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
 	}

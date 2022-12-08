@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/oppurpose",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/bufalloc",
