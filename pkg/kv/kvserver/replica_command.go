@@ -658,26 +658,31 @@ func (r *Replica) AdminMerge(
 			return errors.Errorf("ranges not collocated; %s != %s", lReplicas, rReplicas)
 		}
 
-		// Ensure that every current replica of the LHS has been initialized.
-		// Otherwise there is a rare race where the replica GC queue can GC a
-		// replica of the RHS too early. The comment on
-		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
-		if err := waitForReplicasInit(
-			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().Descriptors(),
-		); err != nil {
-			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
-		}
-		// Out of an abundance of caution, also ensure that replicas of the RHS have
-		// all been initialized. If for whatever reason the initial upreplication
-		// snapshot for a NON_VOTER on the RHS fails, it will have to get picked up
-		// by the raft snapshot queue to upreplicate and may be uninitialized at
-		// this point. As such, if we send a subsume request to the RHS in this sort
-		// of state, we will wastefully and unintentionally block all traffic on it
-		// for 5 seconds.
-		if err := waitForReplicasInit(
-			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, rightDesc.Replicas().Descriptors(),
-		); err != nil {
-			return errors.Wrap(err, "waiting for all right-hand replicas to initialize")
+		disableWaitForReplicasInTesting := r.store.TestingKnobs() != nil &&
+			r.store.TestingKnobs().DisableMergeWaitForReplicasInit
+
+		if !disableWaitForReplicasInTesting {
+			// Ensure that every current replica of the LHS has been initialized.
+			// Otherwise there is a rare race where the replica GC queue can GC a
+			// replica of the RHS too early. The comment on
+			// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+			if err := waitForReplicasInit(
+				ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().Descriptors(),
+			); err != nil {
+				return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
+			}
+			// Out of an abundance of caution, also ensure that replicas of the RHS have
+			// all been initialized. If for whatever reason the initial upreplication
+			// snapshot for a NON_VOTER on the RHS fails, it will have to get picked up
+			// by the raft snapshot queue to upreplicate and may be uninitialized at
+			// this point. As such, if we send a subsume request to the RHS in this sort
+			// of state, we will wastefully and unintentionally block all traffic on it
+			// for 5 seconds.
+			if err := waitForReplicasInit(
+				ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, rightDesc.Replicas().Descriptors(),
+			); err != nil {
+				return errors.Wrap(err, "waiting for all right-hand replicas to initialize")
+			}
 		}
 
 		mergeReplicas := lReplicas.Descriptors()
@@ -750,6 +755,9 @@ func (r *Replica) AdminMerge(
 
 		err = contextutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
 			func(ctx context.Context) error {
+				if disableWaitForReplicasInTesting {
+					return nil
+				}
 				return waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
 					rhsSnapshotRes.LeaseAppliedIndex)
 			})
@@ -822,11 +830,6 @@ func waitForApplication(
 	replicas []roachpb.ReplicaDescriptor,
 	leaseIndex uint64,
 ) error {
-	if dialer == nil && len(replicas) == 1 {
-		// This early return supports unit tests (testContext{}) that also
-		// want to perform merges.
-		return nil
-	}
 	g := ctxgroup.WithContext(ctx)
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
@@ -856,11 +859,6 @@ func waitForReplicasInit(
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 ) error {
-	if dialer == nil && len(replicas) == 1 {
-		// This early return supports unit tests (testContext{}) that also
-		// want to perform merges.
-		return nil
-	}
 	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
