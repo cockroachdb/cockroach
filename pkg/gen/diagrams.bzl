@@ -53,7 +53,6 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:alter_table_reset_storage_param.html",
   "//docs/generated/sql/bnf:alter_table_set_schema.html",
   "//docs/generated/sql/bnf:alter_table_set_storage_param.html",
-  "//docs/generated/sql/bnf:alter_tenant_csetting.html",
   "//docs/generated/sql/bnf:alter_type.html",
   "//docs/generated/sql/bnf:alter_view.html",
   "//docs/generated/sql/bnf:alter_view_owner.html",

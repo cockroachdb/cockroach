@@ -66,25 +66,6 @@ func optInToDiagnosticsStatReporting(
 	if cluster.TelemetryOptOut {
 		return nil
 	}
-
-	// Check whether this is a cluster upgraded from a pre-23.1 version and the
-	// old startupmigration dealing with enabling diagnostics has already run. If
-	// it did, there's nothing for us to do - in particular, we don't want to
-	// enable diagnostics if the cluster was created with the TelemetryOptOut()
-	// env var.
-	{
-		codec := deps.Codec
-		oldMigrationName := "enable diagnostics reporting"
-		migrationKey := append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(oldMigrationName)...)
-		kv, err := deps.DB.Get(ctx, migrationKey)
-		if err != nil {
-			return err
-		}
-		if kv.Exists() {
-			return nil
-		}
-	}
-
 	_, err := deps.InternalExecutor.Exec(
 		ctx, "optInToDiagnosticsStatReporting", nil, /* txn */
 		`SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
