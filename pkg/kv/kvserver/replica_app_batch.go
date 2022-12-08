@@ -177,23 +177,6 @@ func (b *replicaAppBatch) Stage(
 	return cmd, nil
 }
 
-// addWriteBatch adds the command's writes to the batch.
-func (b *replicaAppBatch) addWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
-	wb := cmd.Cmd.WriteBatch
-	if wb == nil {
-		return nil
-	}
-	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
-		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
-	} else {
-		b.mutations += mutations
-	}
-	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
-		return errors.Wrapf(err, "unable to apply WriteBatch")
-	}
-	return nil
-}
-
 // changeRemovesStore returns true if any of the removals in this change have storeID.
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,

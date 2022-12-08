@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -101,4 +102,21 @@ func (b *appBatch) toCheckedCmd(
 		}
 		log.Event(ctx, "applying command")
 	}
+}
+
+// addWriteBatch adds the command's writes to the batch.
+func (b *replicaAppBatch) addWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
+	wb := cmd.Cmd.WriteBatch
+	if wb == nil {
+		return nil
+	}
+	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
+		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
+	} else {
+		b.mutations += mutations
+	}
+	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
+		return errors.Wrapf(err, "unable to apply WriteBatch")
+	}
+	return nil
 }
