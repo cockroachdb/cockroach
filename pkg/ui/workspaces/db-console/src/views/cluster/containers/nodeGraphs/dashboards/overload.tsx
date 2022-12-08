@@ -43,6 +43,26 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Goroutine Scheduling Latency: 99th percentile"
+      sources={nodeSources}
+      tooltip={`P99 scheduling latency for goroutines`}
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.go.scheduler_latency-p99"
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Runnable Goroutines per CPU"
       sources={nodeSources}
       tooltip={`The number of Goroutines waiting per CPU.`}
@@ -213,7 +233,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Admission Delay: 75th percentile" sources={nodeSources}>
-      <Axis label="delay for requests that waited (nanos)">
+      <Axis units={AxisUnits.Duration} label="delay for requests that waited">
         {nodeIDs.map(nid => (
           <>
             <Metric
