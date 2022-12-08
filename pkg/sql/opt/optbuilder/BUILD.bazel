@@ -84,7 +84,6 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",
-        "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

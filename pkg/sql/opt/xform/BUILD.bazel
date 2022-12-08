@@ -52,7 +52,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
-        "//pkg/util/errorutil",
         "//pkg/util/log",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",

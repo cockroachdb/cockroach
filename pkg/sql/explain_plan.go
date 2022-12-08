@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -178,19 +178,11 @@ func emitExplain(
 ) (err error) {
 	// Guard against bugs in the explain code.
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal and runtime errors without
-			// having to add error checks everywhere throughout the code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			// Note that we don't catch anything in debug builds, so that failures are
-			// more visible.
-			if ok, e := errorutil.ShouldCatch(r); ok && !buildutil.CrdbTestBuild {
+		// Note that we don't catch anything in debug builds, so that failures are
+		// more visible.
+		if !buildutil.CrdbTestBuild {
+			if e := opt.CatchOptimizerError(); e != nil {
 				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
 			}
 		}
 	}()
