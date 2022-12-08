@@ -641,8 +641,9 @@ func verifySQLLatency(
 		// Ask for 10s intervals.
 		SampleNanos: (10 * time.Second).Nanoseconds(),
 		Queries: []tspb.Query{{
-			Name:    "cr.node.sql.service.latency-p90",
-			Sources: sources,
+			Name:             "cr.node.sql.service.latency-p90",
+			Sources:          sources,
+			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
 	var response tspb.TimeSeriesQueryResponse
