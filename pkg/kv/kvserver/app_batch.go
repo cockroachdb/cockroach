@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -46,7 +47,11 @@ import (
 //
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
-	mutations int
+	mutations               int
+	entries                 int
+	entryBytes              int64
+	emptyEntries            int
+	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - batch

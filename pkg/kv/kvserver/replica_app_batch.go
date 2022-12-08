@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,12 +56,7 @@ type replicaAppBatch struct {
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
 
-	// Statistics.
-	entries                 int
-	entryBytes              int64
-	emptyEntries            int
-	start                   time.Time
-	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
+	start time.Time // time at NewBatch()
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
@@ -152,11 +146,11 @@ func (b *replicaAppBatch) Stage(
 	// non-trivial ReplicatedState updates until later (without ever staging
 	// them in the batch) is sufficient.
 	b.stageTrivialReplicatedEvalResult(ctx, cmd)
-	b.entries++
+	b.ab.entries++
 	size := len(cmd.Data)
-	b.entryBytes += int64(size)
+	b.ab.entryBytes += int64(size)
 	if size == 0 {
-		b.emptyEntries++
+		b.ab.emptyEntries++
 	}
 
 	// The command was checked by shouldApplyCommand, so it can be returned
@@ -238,9 +232,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// (AddSST for example).
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.NumEntries++
-		b.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		b.ab.followerStoreWriteBytes.NumEntries++
+		b.ab.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.ab.followerStoreWriteBytes.IngestedBytes += ingestedBytes
 	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
@@ -546,7 +540,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 // application.
 func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
-		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.entries)
+		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.entries)
 	}
 
 	// Add the replica applied state key to the write batch if this change
@@ -646,11 +640,11 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
-	b.applyStats.entriesProcessed += b.entries
-	b.applyStats.entriesProcessedBytes += b.entryBytes
-	b.applyStats.numEmptyEntries += b.emptyEntries
+	b.applyStats.entriesProcessed += b.ab.entries
+	b.applyStats.entriesProcessedBytes += b.ab.entryBytes
+	b.applyStats.numEmptyEntries += b.ab.emptyEntries
 	b.applyStats.batchesProcessed++
-	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+	b.applyStats.followerStoreWriteBytes.Merge(b.ab.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
@@ -744,7 +738,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
 			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
-			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
+			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.ab.entries,
 			logTail)
 	}
 	return nil
