@@ -13,6 +13,7 @@ package roachpb
 import (
 	"context"
 	"math"
+	"regexp"
 	"strconv"
 
 	"github.com/cockroachdb/errors"
@@ -143,6 +144,20 @@ func (n TenantName) Equal(o TenantName) bool {
 // NB: The system tenant cannot be renamed.
 func IsSystemTenantName(tenantName TenantName) bool {
 	return tenantName == "system"
+}
+
+// We limit tenant names to what is allowed in a DNS hostname, so
+// that we can use SNI to identify tenants and also as a prefix
+// to a database name in connection strings. However there cannot
+// be a hyphen at the end.
+var tenantNameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9---]{0,98}[a-z0-9])?$`)
+
+func (n TenantName) IsValid() error {
+	if !tenantNameRe.MatchString(string(n)) {
+		return errors.WithHint(errors.Newf("invalid tenant name"),
+			"Tenant names must start and end with a lowercase letter or digit, contain only lowercase letters, digits or hyphens, with a maximum of 100 characters.")
+	}
+	return nil
 }
 
 // Silence unused warning.
