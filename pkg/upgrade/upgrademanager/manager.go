@@ -216,16 +216,76 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 		return err
 	}
 	if lastUpgradeCompleted {
+		log.Infof(ctx,
+			"detected the last permanent upgrade (v%s) to have already completed; no permanent upgrades will run",
+			lastVer)
 		return nil
+	} else {
+		// The stale read said that the upgrades had not run. Let's try a consistent read too since
+		log.Infof(ctx,
+			"the last last permanent upgrade (v%s) does not appear to have completed; attempting to run all upgrades",
+			lastVer)
 	}
 
 	for _, u := range permanentUpgrades {
+		// Check whether a 22.2 or older node has ran the old startupmigration
+		// corresponding to this upgrade. If it has, we don't want to run this
+		// upgrade, for two reasons:
+		// 1. Creating a job for this upgrade would be dubious. If the respective
+		//    job were to be adopted by a 22.2 node, that node would fail to find an
+		//    upgrade for the respective version, and would declare the job to be
+		//    successful even though the upgrade didn't run. Even though that would
+		//    technically be OK, since the existence of a 22.2 node running the job
+		//    implies that the startupmigration had been run, it's confusing at the
+		//    very least.
+		// 2. The upgrade can fail if the corresponding startupmigration had already
+		//    run. This is because the upgrade is assuming that the cluster has been
+		//    bootstrapped at the current binary version, with the current schema
+		//    for system tables. See a discussion in upgrade/doc.go about why that
+		//    would be.
+		//
+		// TODO(andrei): Get rid of this once compatibility with 22.2 is not necessary.
+		startupMigrationAlreadyRan, err := checkOldStartupMigrationRan(
+			ctx, u.V22_2StartupMigrationName(), m.deps.DB, m.codec)
+		if err != nil {
+			return err
+		}
+		if startupMigrationAlreadyRan {
+			log.Infof(ctx,
+				"skipping permanent upgrade for v%s because the corresponding startupmigration "+
+					"was already run by a v22.2 or older node",
+				u.Version())
+			// Mark the upgrade as completed so that we can get rid of this logic when
+			// compatibility with 22.2 is no longer necessary.
+			if err := migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version()); err != nil {
+				return err
+			}
+			continue
+		}
+
 		log.Infof(ctx, "running permanent upgrade for version %s", u.Version())
 		if err := m.runMigration(ctx, u, user, u.Version(), !m.knobs.DontUseJobs); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Check whether this is a cluster upgraded from a pre-23.1 version and the
+// old startupmigration with the given name has run. If it did, the
+// corresponding upgrade should not run.
+func checkOldStartupMigrationRan(
+	ctx context.Context, migrationName string, db *kv.DB, codec keys.SQLCodec,
+) (bool, error) {
+	if migrationName == "" {
+		return false, nil
+	}
+	migrationKey := append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(migrationName)...)
+	kv, err := db.Get(ctx, migrationKey)
+	if err != nil {
+		return false, err
+	}
+	return kv.Exists(), nil
 }
 
 // runPermanentMigrationsWithoutJobsForTests runs all permanent migrations up to

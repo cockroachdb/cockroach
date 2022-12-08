@@ -1025,7 +1025,9 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> alter_table_owner_stmt
 
 // ALTER TENANT CLUSTER SETTINGS
+%type <tree.Statement> alter_tenant_stmt
 %type <tree.Statement> alter_tenant_csetting_stmt
+%type <tree.Statement> alter_tenant_replication_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -1572,7 +1574,6 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.NameList> opt_for_roles
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <privilege.TargetObjectType> target_object_type
-%type <tree.TenantID> opt_as_tenant_clause
 
 // User defined function relevant components.
 %type <bool> opt_or_replace opt_return_set opt_no
@@ -1710,7 +1711,7 @@ stmt_without_legacy_transaction:
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
-| alter_tenant_csetting_stmt  // EXTEND WITH HELP: ALTER TENANT
+| alter_tenant_stmt   /* SKIP DOC */
 | alter_unsupported_stmt
 | ALTER error         // SHOW HELP: ALTER
 
@@ -3578,28 +3579,6 @@ list_of_string_or_placeholder_opt_list:
 | list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
   {
     $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
-  }
-
-// Optional AS TENANT clause.
-opt_as_tenant_clause:
-  AS TENANT iconst64
-  {
-    tenID := uint64($3.int64())
-    if tenID == 0 {
-      return setErr(sqllex, errors.New("invalid tenant ID"))
-    }
-    $$.val = tree.TenantID{Specified: true, ID: tenID}
-  }
-| AS TENANT IDENT
-  {
-    if $3 != "_" {
-       return setErr(sqllex, errors.New("invalid syntax"))
-    }
-    $$.val = tree.TenantID{Specified: true}
-  }
-| /* EMPTY */
-  {
-    $$.val = tree.TenantID{Specified: false}
   }
 
 // Optional restore options.
@@ -5995,6 +5974,37 @@ set_csetting_stmt:
 
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
+// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING
+alter_tenant_stmt:
+  alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
+| alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
+| ALTER TENANT error            // SHOW HELP: ALTER TENANT
+
+// %Help: ALTER TENANT REPLICATION - alter tenant replication stream
+// %Category: Group
+// %Text:
+// ALTER TENANT '<tenant_name>' PAUSE REPLICATION
+// ALTER TENANT '<tenant_name>' RESUME REPLICATION
+alter_tenant_replication_stmt:
+  ALTER TENANT d_expr PAUSE REPLICATION
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantName: $3.expr(),
+      Command: tree.PauseJob,
+    }
+  }
+| ALTER TENANT d_expr RESUME REPLICATION
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantName: $3.expr(),
+      Command: tree.ResumeJob,
+    }
+  }
+
+// %Help: ALTER TENANT CLUSTER SETTING - alter tenant cluster settings
+// %Category: Group
 // %Text:
 // ALTER TENANT { <tenant_id> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
 // ALTER TENANT { <tenant_id> | ALL } RESET CLUSTER SETTING <var>
@@ -6002,6 +6012,7 @@ set_csetting_stmt:
 alter_tenant_csetting_stmt:
   ALTER TENANT d_expr set_or_reset_csetting_stmt
   {
+    /* SKIP DOC */
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
       SetClusterSetting: *csettingStmt,
@@ -6010,14 +6021,14 @@ alter_tenant_csetting_stmt:
   }
 | ALTER TENANT_ALL ALL set_or_reset_csetting_stmt
   {
+    /* SKIP DOC */
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
       SetClusterSetting: *csettingStmt,
       TenantAll: true,
     }
   }
-| ALTER TENANT error // SHOW HELP: ALTER TENANT
-| ALTER TENANT_ALL ALL error // SHOW HELP: ALTER TENANT
+| ALTER TENANT_ALL ALL error // SHOW HELP: ALTER TENANT CLUSTER SETTING
 
 set_or_reset_csetting_stmt:
   reset_csetting_stmt

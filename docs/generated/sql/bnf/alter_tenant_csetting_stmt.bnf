@@ -1,3 +1,0 @@
-alter_tenant_csetting_stmt ::=
-	'ALTER' 'TENANT' d_expr set_or_reset_csetting_stmt
-	| 'ALTER' 'TENANT_ALL' 'ALL' set_or_reset_csetting_stmt
