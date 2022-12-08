@@ -10,7 +10,6 @@
 
 import moment from "moment";
 import {
-  mergeTxnContentionAndStmtInsights,
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   filterStatementInsights,
@@ -27,7 +26,6 @@ import {
   failedExecutionInsight,
   FlattenedStmtInsightEvent,
   InsightExecEnum,
-  TxnContentionInsightEvent,
   highContentionInsight,
   slowExecutionInsight,
   planRegressionInsight,
@@ -38,18 +36,6 @@ import {
 } from "./types";
 
 const INTERNAL_APP_PREFIX = "$ internal";
-
-const txnContentionEventMock: TxnContentionInsightEvent = {
-  transactionID: "execution",
-  transactionFingerprintID: "fingerprint",
-  queries: ["select 1"],
-  insights: [highContentionInsight(InsightExecEnum.TRANSACTION)],
-  startTime: moment(),
-  contentionDuration: moment.duration(100, "millisecond"),
-  contentionThreshold: 100,
-  application: "sql_obs_fun_times",
-  execType: InsightExecEnum.TRANSACTION,
-};
 
 const blockedContentionMock: BlockedContentionDetails = {
   collectionTimeStamp: moment(),
@@ -63,12 +49,6 @@ const blockedContentionMock: BlockedContentionDetails = {
   indexName: "index",
   contentionTimeMs: 500,
 };
-
-function mockTxnContentionInsightEvent(
-  fields: Partial<TxnContentionInsightEvent> = {},
-): TxnContentionInsightEvent {
-  return { ...txnContentionEventMock, ...fields };
-}
 
 const statementInsightMock: StatementInsightEvent = {
   statementExecutionID: "execution",
@@ -509,61 +489,6 @@ describe("test workload insights utils", () => {
         expect(txn.retries).toEqual(flattenedStmt.retries);
       });
     });
-  });
-
-  describe("mergeTxnContentionAndStmtInsights", () => {
-    const txnInsights = [
-      mockTxnInsightEvent({
-        transactionExecutionID: "hello",
-        transactionFingerprintID: "world",
-        insights: [...txnContentionEventMock.insights],
-      }),
-      mockTxnInsightEvent({
-        transactionExecutionID: "cockroach",
-        transactionFingerprintID: "labs",
-      }),
-    ];
-
-    const txnContentionInsights = [
-      mockTxnContentionInsightEvent({
-        // This entry should be merged with above.
-        transactionID: "hello",
-        transactionFingerprintID: "world",
-        insights: txnContentionEventMock.insights,
-      }),
-      mockTxnContentionInsightEvent({
-        transactionID: "just",
-        transactionFingerprintID: "by myself",
-      }),
-    ];
-
-    const merged = mergeTxnContentionAndStmtInsights(
-      txnInsights,
-      txnContentionInsights,
-    );
-
-    expect(merged.length).toEqual(3);
-
-    const mergedTxn = merged.find(
-      txn => txn.transactionExecutionID === "hello",
-    );
-
-    expect(mergedTxn.contention.asMilliseconds()).toEqual(
-      txnContentionEventMock.contentionDuration.asMilliseconds(),
-    );
-
-    // These fields are not available on the contention event but are on
-    // the txn insight event from stmts.
-    expect(mergedTxn.sessionID).toEqual(txnInsightEventMock.sessionID);
-    expect(mergedTxn.databaseName).toEqual(txnInsightEventMock.databaseName);
-    expect(mergedTxn.username).toEqual(txnInsightEventMock.username);
-    expect(mergedTxn.priority).toEqual(txnInsightEventMock.priority);
-    expect(mergedTxn.retries).toEqual(txnInsightEventMock.retries);
-    expect(mergedTxn.implicitTxn).toEqual(txnInsightEventMock.implicitTxn);
-    expect(mergedTxn.sessionID).toEqual(txnInsightEventMock.sessionID);
-
-    // Check insights are de-duplicated.
-    expect(mergedTxn.insights.length).toEqual(1);
   });
 
   describe("mergeTxnInsightDetails", () => {

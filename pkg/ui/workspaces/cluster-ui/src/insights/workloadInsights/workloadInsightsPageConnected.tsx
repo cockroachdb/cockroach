@@ -33,7 +33,6 @@ import {
   selectStatementInsightsError,
 } from "src/store/insights/statementInsights";
 import {
-  actions as transactionInsights,
   selectTransactionInsights,
   selectTransactionInsightsError,
   selectFilters,
@@ -89,7 +88,7 @@ const TransactionDispatchProps = (
     );
   },
   refreshTransactionInsights: () => {
-    dispatch(transactionInsights.refresh());
+    dispatch(statementInsights.refresh());
   },
 });
 

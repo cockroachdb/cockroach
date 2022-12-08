@@ -19,22 +19,19 @@ import {
   InsightNameEnum,
   InsightRecommendation,
   InsightType,
-  MergedTxnInsightEvent,
   SchemaInsightEventFilters,
-  StatementInsightEvent,
   TxnContentionInsightDetails,
-  TxnContentionInsightEvent,
   TxnInsightDetails,
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
 
 export const filterTransactionInsights = (
-  transactions: MergedTxnInsightEvent[] | null,
+  transactions: TxnInsightEvent[] | null,
   filters: WorkloadInsightEventFilters,
   internalAppNamePrefix: string,
   search?: string,
-): MergedTxnInsightEvent[] => {
+): TxnInsightEvent[] => {
   if (transactions == null) return [];
 
   let filteredTransactions = transactions;
@@ -72,7 +69,7 @@ export const filterTransactionInsights = (
 };
 
 export function getAppsFromTransactionInsights(
-  transactions: MergedTxnInsightEvent[] | null,
+  transactions: TxnInsightEvent[] | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (transactions == null) return [];
@@ -297,66 +294,6 @@ export function flattenTxnInsightsToStmts(
   return stmtInsights;
 }
 
-/**
- * mergeTxnContentionAndStmtInsights merges a list of txn insights
- * aggregated from stmt insights, and a list of txn contention insights.
- * If a txn exists in both lists, its information will be merged.
- * @param txnInsightsFromStmts txn insights aggregated from stmts
- * @param txnContentionInsights txn contention insights
- * @returns list of merged txn insights
- */
-export function mergeTxnContentionAndStmtInsights(
-  txnInsightsFromStmts: TxnInsightEvent[],
-  txnContentionInsights: TxnContentionInsightEvent[],
-): MergedTxnInsightEvent[] {
-  const eventByTxnFingerprint: Record<string, MergedTxnInsightEvent> = {};
-  txnContentionInsights?.forEach(txn => {
-    const formattedTxn = {
-      transactionExecutionID: txn.transactionID,
-      transactionFingerprintID: txn.transactionFingerprintID,
-      contention: txn.contentionDuration,
-      statementInsights: [] as StatementInsightEvent[],
-      insights: txn.insights,
-      queries: txn.queries,
-      startTime: txn.startTime,
-      application: txn.application,
-    };
-    eventByTxnFingerprint[txn.transactionFingerprintID] = formattedTxn;
-  });
-
-  txnInsightsFromStmts?.forEach(txn => {
-    const existingContentionEvent =
-      eventByTxnFingerprint[txn.transactionFingerprintID];
-    if (existingContentionEvent) {
-      if (
-        existingContentionEvent.transactionExecutionID !==
-        txn.transactionExecutionID
-      ) {
-        // Not the same execution - for now we opt to return the contention event.
-        // TODO (xinhaoz) return the txn that executed more recently once
-        // we have txn start and end in the insights table. For now let's
-        // take the entry from the contention registry.
-        return; // Continue
-      }
-      // Merge the two results.
-      eventByTxnFingerprint[txn.transactionFingerprintID] = {
-        ...txn,
-        contention: existingContentionEvent.contention,
-        startTime: existingContentionEvent.startTime,
-        insights: dedupInsights(
-          txn.insights.concat(existingContentionEvent.insights),
-        ),
-      };
-      return; // Continue
-    }
-
-    // This is a new key.
-    eventByTxnFingerprint[txn.transactionFingerprintID] = txn;
-  });
-
-  return Object.values(eventByTxnFingerprint);
-}
-
 export function mergeTxnInsightDetails(
   txnDetailsFromStmts: TxnInsightEvent | null,
   txnContentionDetails: TxnContentionInsightDetails | null,
@@ -367,24 +304,13 @@ export function mergeTxnInsightDetails(
       : null;
 
   // Merge info from txnDetailsFromStmts, if it exists.
+  console.log(txnDetailsFromStmts);
   return {
+    ...txnDetailsFromStmts,
     transactionExecutionID: txnContentionDetails.transactionExecutionID,
     transactionFingerprintID: txnContentionDetails.transactionFingerprintID,
     application:
       txnContentionDetails.application ?? txnDetailsFromStmts?.application,
-    lastRetryReason: txnDetailsFromStmts?.lastRetryReason,
-    sessionID: txnDetailsFromStmts?.sessionID,
-    retries: txnDetailsFromStmts?.retries,
-    databaseName: txnDetailsFromStmts?.databaseName,
-    implicitTxn: txnDetailsFromStmts?.implicitTxn,
-    username: txnDetailsFromStmts?.username,
-    priority: txnDetailsFromStmts?.priority,
-    statementInsights: txnDetailsFromStmts?.statementInsights,
-    insights: dedupInsights(
-      txnContentionDetails.insights.concat(txnDetailsFromStmts?.insights ?? []),
-    ),
-    queries: txnContentionDetails.queries,
-    startTime: txnContentionDetails.startTime,
     blockingContentionDetails: txnContentionDetails.blockingContentionDetails,
     contentionThreshold: txnContentionDetails.contentionThreshold,
     totalContentionTimeMs: txnContentionDetails.totalContentionTimeMs,

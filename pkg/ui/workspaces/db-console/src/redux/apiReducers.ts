@@ -16,7 +16,6 @@ import {
   api as clusterUiApi,
   util,
   TxnContentionInsightDetails,
-  TxnContentionInsightEvent,
   TxnInsightEvent,
 } from "@cockroachlabs/cluster-ui";
 import {
@@ -410,27 +409,6 @@ export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
   };
 };
 
-const transactionInsightsReducerObj = new CachedDataReducer(
-  clusterUiApi.getTxnInsightEvents,
-  "transactionInsights",
-  null,
-  moment.duration(5, "m"),
-);
-export const refreshTxnContentionInsights =
-  transactionInsightsReducerObj.refresh;
-
-export const refreshTransactionInsights = (): ThunkAction<
-  any,
-  any,
-  any,
-  Action
-> => {
-  return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
-    dispatch(refreshTxnContentionInsights());
-    dispatch(refreshExecutionInsights());
-  };
-};
-
 const executionInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getClusterInsightsApi,
   "executionInsights",
@@ -551,7 +529,6 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
-  transactionInsights: CachedDataReducerState<TxnContentionInsightEvent[]>;
   transactionInsightDetails: KeyedCachedDataReducerState<TxnContentionInsightDetails>;
   executionInsights: CachedDataReducerState<TxnInsightEvent[]>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
@@ -600,8 +577,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
-  [transactionInsightsReducerObj.actionNamespace]:
-    transactionInsightsReducerObj.reducer,
   [transactionInsightDetailsReducerObj.actionNamespace]:
     transactionInsightDetailsReducerObj.reducer,
   [executionInsightsReducerObj.actionNamespace]:

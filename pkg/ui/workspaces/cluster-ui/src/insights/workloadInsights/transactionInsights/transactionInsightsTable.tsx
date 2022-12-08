@@ -16,7 +16,7 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
-import { InsightExecEnum, MergedTxnInsightEvent } from "src/insights";
+import { InsightExecEnum, TxnInsightEvent } from "src/insights";
 import {
   InsightCell,
   insightsTableTitles,
@@ -27,7 +27,7 @@ import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
 
 interface TransactionInsightsTable {
-  data: MergedTxnInsightEvent[];
+  data: TxnInsightEvent[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;
@@ -37,7 +37,7 @@ interface TransactionInsightsTable {
 
 export function makeTransactionInsightsColumns(
   setTimeScale: (ts: TimeScale) => void,
-): ColumnDescriptor<MergedTxnInsightEvent>[] {
+): ColumnDescriptor<TxnInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {

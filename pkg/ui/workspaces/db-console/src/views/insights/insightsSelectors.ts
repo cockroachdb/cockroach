@@ -20,7 +20,6 @@ import {
   selectFlattenedStmtInsightsCombiner,
   selectID,
   selectStatementInsightDetailsCombiner,
-  selectTxnInsightsCombiner,
   TxnContentionInsightDetails,
   selectTxnInsightDetailsCombiner,
 } from "@cockroachlabs/cluster-ui";
@@ -40,11 +39,8 @@ export const sortSettingLocalSetting = new LocalSetting<
   columnTitle: "startTime",
 });
 
-export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
-  (state: AdminUIState) => state.cachedData.transactionInsights?.data,
-  selectTxnInsightsCombiner,
-);
+export const selectTransactionInsights = (state: AdminUIState) =>
+  state.cachedData.executionInsights?.data;
 
 const selectTxnContentionInsightDetails = createSelector(
   [

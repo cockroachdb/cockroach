@@ -14,9 +14,6 @@ import {
   flattenTxnInsightsToStmts,
   FlattenedStmtInsightEvent,
   TxnInsightEvent,
-  TxnContentionInsightEvent,
-  MergedTxnInsightEvent,
-  mergeTxnContentionAndStmtInsights,
   TxnContentionInsightDetails,
   TxnInsightDetails,
 } from "src/insights";
@@ -41,19 +38,6 @@ export const selectStatementInsightDetailsCombiner = (
 
   return statementInsights.find(
     insight => insight.statementExecutionID === executionID,
-  );
-};
-
-export const selectTxnInsightsCombiner = (
-  txnInsightsFromStmts: TxnInsightEvent[],
-  txnContentionInsights: TxnContentionInsightEvent[],
-): MergedTxnInsightEvent[] => {
-  if (!txnInsightsFromStmts && !txnContentionInsights) return [];
-
-  // Merge the two insights lists.
-  return mergeTxnContentionAndStmtInsights(
-    txnInsightsFromStmts,
-    txnContentionInsights,
   );
 };
 

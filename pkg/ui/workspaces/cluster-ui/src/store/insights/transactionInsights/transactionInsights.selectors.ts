@@ -10,20 +10,13 @@
 
 import { createSelector } from "reselect";
 import { AppState } from "src/store/reducers";
-import { selectTxnInsightsCombiner } from "src/selectors/insightsCommon.selectors";
 import { localStorageSelector } from "src/store/utils/selectors";
 
-const selectTransactionInsightsData = (state: AppState) =>
-  state.adminUI.transactionInsights.data;
-
-export const selectTransactionInsights = createSelector(
-  (state: AppState) => state.adminUI.executionInsights.data,
-  selectTransactionInsightsData,
-  selectTxnInsightsCombiner,
-);
+export const selectTransactionInsights = (state: AppState) =>
+  state.adminUI.executionInsights?.data;
 
 export const selectTransactionInsightsError = (state: AppState) =>
-  state.adminUI.transactionInsights?.lastError;
+  state.adminUI.executionInsights?.lastError;
 
 export const selectSortSetting = createSelector(
   localStorageSelector,

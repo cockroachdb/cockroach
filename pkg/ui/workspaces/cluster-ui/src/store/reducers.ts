@@ -27,10 +27,6 @@ import {
   ExecutionInsightsState,
   reducer as executionInsights,
 } from "./insights/statementInsights";
-import {
-  reducer as transactionInsights,
-  TransactionInsightsState,
-} from "./insights/transactionInsights";
 import { JobState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
 import { LivenessState, reducer as liveness } from "./liveness";
@@ -71,7 +67,6 @@ export type AdminUiState = {
   jobs: JobsState;
   job: JobState;
   clusterLocks: ClusterLocksReqState;
-  transactionInsights: TransactionInsightsState;
   transactionInsightDetails: TransactionInsightDetailsCachedState;
   executionInsights: ExecutionInsightsState;
   schemaInsights: SchemaInsightsState;
@@ -87,7 +82,6 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
-  transactionInsights,
   transactionInsightDetails,
   executionInsights,
   terminateQuery,

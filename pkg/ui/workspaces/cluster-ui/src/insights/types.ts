@@ -26,21 +26,6 @@ export enum InsightExecEnum {
   STATEMENT = "statement",
 }
 
-// What we store in redux for txn contention insight events in
-// the overview page.  It is missing information such as the
-// blocking txn information.
-export type TxnContentionInsightEvent = {
-  transactionID: string;
-  transactionFingerprintID: string;
-  queries: string[];
-  insights: Insight[];
-  startTime: Moment;
-  contentionDuration: moment.Duration;
-  contentionThreshold: number;
-  application: string;
-  execType: InsightExecEnum;
-};
-
 // Information about the blocking transaction and schema.
 export type BlockedContentionDetails = {
   collectionTimeStamp: Moment;
@@ -55,19 +40,7 @@ export type BlockedContentionDetails = {
   contentionTimeMs: number;
 };
 
-// TODO (xinhaoz) these fields should be placed into TxnInsightEvent
-// once they are available for contention insights.  MergedTxnInsightEvent,
-// (which marks these fields as optional) can then be deleted.
-type UnavailableForTxnContention = {
-  databaseName: string;
-  username: string;
-  priority: string;
-  retries: number;
-  implicitTxn: boolean;
-  sessionID: string;
-};
-
-export type TxnInsightEvent = UnavailableForTxnContention & {
+export type TxnInsightEvent = {
   transactionExecutionID: string;
   transactionFingerprintID: string;
   application: string;
@@ -79,6 +52,13 @@ export type TxnInsightEvent = UnavailableForTxnContention & {
   // Ordered by startTime.
   statementInsights: StatementInsightEvent[];
 
+  databaseName: string;
+  username: string;
+  priority: string;
+  retries: number;
+  implicitTxn: boolean;
+  sessionID: string;
+
   insights: Insight[]; // De-duplicated list of insights from statement level.
   queries: string[]; // We bubble this up from statementinsights for easy access, since txn contention details dont have stmt insights.
   startTime?: Moment; // TODO (xinhaoz) not currently available
@@ -86,17 +66,9 @@ export type TxnInsightEvent = UnavailableForTxnContention & {
   endTime?: Moment; // TODO (xinhaoz) not currently available
 };
 
-export type MergedTxnInsightEvent = Omit<
-  TxnInsightEvent,
-  keyof UnavailableForTxnContention
-> &
-  Partial<UnavailableForTxnContention>;
-
 export type TxnContentionInsightDetails = {
   transactionExecutionID: string;
-  queries: string[];
   insights: Insight[];
-  startTime: Moment;
   totalContentionTimeMs: number;
   contentionThreshold: number;
   application: string;
@@ -106,7 +78,7 @@ export type TxnContentionInsightDetails = {
   insightName: string;
 };
 
-export type TxnInsightDetails = Omit<MergedTxnInsightEvent, "contention"> & {
+export type TxnInsightDetails = Omit<TxnInsightEvent, "contention"> & {
   totalContentionTimeMs?: number;
   contentionThreshold?: number;
   blockingContentionDetails?: BlockedContentionDetails[];
@@ -181,21 +153,21 @@ export type ContentionEvent = {
 
 export const highContentionInsight = (
   execType: InsightExecEnum,
-  latencyThreshold?: number,
+  latencyThresholdMs?: number,
   contentionDuration?: number,
 ): Insight => {
   let waitDuration: string;
   if (
-    latencyThreshold &&
+    latencyThresholdMs &&
     contentionDuration &&
-    contentionDuration < latencyThreshold
+    contentionDuration < latencyThresholdMs
   ) {
     waitDuration = `${contentionDuration}ms`;
-  } else if (!latencyThreshold) {
+  } else if (!latencyThresholdMs) {
     waitDuration =
       "longer than the value of the 'sql.insights.latency_threshold' cluster setting";
   } else {
-    waitDuration = `longer than ${latencyThreshold}ms`;
+    waitDuration = `longer than ${latencyThresholdMs}ms`;
   }
   const description = `This ${execType} waited on other ${execType}s to execute for ${waitDuration}.`;
   return {

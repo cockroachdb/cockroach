@@ -10,10 +10,7 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import {
-  refreshTransactionInsights,
-  refreshExecutionInsights,
-} from "src/redux/apiReducers";
+import { refreshExecutionInsights } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
   WorkloadInsightEventFilters,
@@ -49,7 +46,7 @@ const transactionMapStateToProps = (
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
-  transactionsError: state.cachedData?.transactionInsights?.lastError,
+  transactionsError: state.cachedData?.executionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
 });
@@ -71,7 +68,7 @@ const TransactionDispatchProps = {
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
   setTimeScale: setGlobalTimeScaleAction,
-  refreshTransactionInsights: refreshTransactionInsights,
+  refreshTransactionInsights: refreshExecutionInsights,
 };
 
 const StatementDispatchProps: StatementInsightsViewDispatchProps = {
