@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -322,10 +321,8 @@ func retrieveAuthInfo(
 		return aInfo, err
 	}
 	if !hasAdmin {
-		if settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			if noSQLLogin := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
-				aInfo.CanLoginSQL = false
-			}
+		if noSQLLogin := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
+			aInfo.CanLoginSQL = false
 		}
 	}
 

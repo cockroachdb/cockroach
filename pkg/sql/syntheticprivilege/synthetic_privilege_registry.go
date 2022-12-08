@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
@@ -29,10 +28,6 @@ type Object interface {
 	// GetPath returns the path used to identify the object in
 	// system.privileges.
 	GetPath() string
-	// SystemPrivilegesTableVersionGate returns the version gate
-	// following which the privilege descriptor should be retrieved
-	// from the system.privileges table.
-	SystemPrivilegesTableVersionGate() clusterversion.Key
 	// GetFallbackPrivileges returns the default privileges for the synthetic
 	// privilege object, if the system.privileges table usage is not yet
 	// allowed by the version gate.
