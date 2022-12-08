@@ -110,6 +110,7 @@ type NodeLevelStats struct {
 	NetworkMessagesGroupedByNode       map[base.SQLInstanceID]int64
 	ContentionTimeGroupedByNode        map[base.SQLInstanceID]time.Duration
 	RUEstimateGroupedByNode            map[base.SQLInstanceID]int64
+	CPUTimeGroupedByNode               map[base.SQLInstanceID]time.Duration
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the
@@ -127,6 +128,7 @@ type QueryLevelStats struct {
 	ContentionTime        time.Duration
 	ContentionEvents      []roachpb.ContentionEvent
 	RUEstimate            int64
+	CPUTime               time.Duration
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -162,6 +164,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.ContentionTime += other.ContentionTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
+	s.CPUTime += other.CPUTime
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -238,6 +241,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		NetworkMessagesGroupedByNode:       make(map[base.SQLInstanceID]int64),
 		ContentionTimeGroupedByNode:        make(map[base.SQLInstanceID]time.Duration),
 		RUEstimateGroupedByNode:            make(map[base.SQLInstanceID]int64),
+		CPUTimeGroupedByNode:               make(map[base.SQLInstanceID]time.Duration),
 	}
 	var errs error
 
@@ -254,6 +258,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
 		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(stats.Exec.ConsumedRU.Value())
+		a.nodeLevelStats.CPUTimeGroupedByNode[instanceID] += stats.Exec.CPUTime.Value()
 		allContentionEvents = append(allContentionEvents, stats.KV.ContentionEvents...)
 	}
 
@@ -372,6 +377,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, estimatedRU := range a.nodeLevelStats.RUEstimateGroupedByNode {
 		a.queryLevelStats.RUEstimate += estimatedRU
+	}
+
+	for _, cpuTime := range a.nodeLevelStats.CPUTimeGroupedByNode {
+		a.queryLevelStats.CPUTime += cpuTime
 	}
 
 	a.queryLevelStats.ContentionEvents = allContentionEvents

@@ -409,7 +409,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
 ) error {
-	inputWatch := timeutil.NewStopWatch()
+	inputWatch := timeutil.NewStopWatchWithCPU()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
 	for _, m := range monitors {
 		if m.Resource() == mon.DiskResource {
