@@ -36,6 +36,8 @@ import (
 // to the current view of ReplicaState and staged in the batch. The batch is
 // committed to the state machine's storage engine atomically.
 type replicaAppBatch struct {
+	ab appBatch
+
 	r  *Replica
 	sm *replicaStateMachine
 
@@ -61,7 +63,6 @@ type replicaAppBatch struct {
 	entries                 int
 	entryBytes              int64
 	emptyEntries            int
-	mutations               int
 	start                   time.Time
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 
@@ -150,7 +151,7 @@ func (b *replicaAppBatch) Stage(
 	}
 
 	// Stage the command's write batch in the application batch.
-	if err := b.addWriteBatch(ctx, cmd); err != nil {
+	if err := b.ab.addWriteBatch(ctx, b.batch, cmd); err != nil {
 		return nil, err
 	}
 
@@ -599,7 +600,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
-	b.r.loadStats.writeKeys.RecordCount(float64(b.mutations), 0)
+	b.r.loadStats.writeKeys.RecordCount(float64(b.ab.mutations), 0)
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {

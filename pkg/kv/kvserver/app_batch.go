@@ -46,6 +46,7 @@ import (
 //
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
+	mutations int
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - batch
@@ -105,7 +106,9 @@ func (b *appBatch) toCheckedCmd(
 }
 
 // addWriteBatch adds the command's writes to the batch.
-func (b *replicaAppBatch) addWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
+func (b *appBatch) addWriteBatch(
+	ctx context.Context, batch storage.Batch, cmd *replicatedCmd,
+) error {
 	wb := cmd.Cmd.WriteBatch
 	if wb == nil {
 		return nil
@@ -115,7 +118,7 @@ func (b *replicaAppBatch) addWriteBatch(ctx context.Context, cmd *replicatedCmd)
 	} else {
 		b.mutations += mutations
 	}
-	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
+	if err := batch.ApplyBatchRepr(wb.Data, false); err != nil {
 		return errors.Wrapf(err, "unable to apply WriteBatch")
 	}
 	return nil
