@@ -1302,6 +1302,15 @@ func setupSpanForIncomingRPC(
 	}
 }
 
+// FollowerAccounting implements the roachpb.InternalServer interface.
+func (n *Node) FollowerAccounting(
+	ctx context.Context,
+	request *roachpb.FollowerAccountingRequest,
+) (*roachpb.FollowerAccountingResponse, error) {
+	// TODO(baptist): Change number of tokens in the pool
+	return new(roachpb.FollowerAccountingResponse), nil
+}
+
 func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
 	// TODO(nvanbenschoten): consider caching this span.
 	prefix := roachpb.RKey(keys.MakeTenantPrefix(tenID))

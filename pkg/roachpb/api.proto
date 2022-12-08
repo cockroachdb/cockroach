@@ -2629,6 +2629,22 @@ message AdmissionHeader {
   bool no_memory_reserved_at_source = 5;
 }
 
+// A FollowerAccountingRequest is sent by a receiver of a message twice per
+// write request. The first message will have a negative number of tokens, and
+// the second will have a positive number. The sender should track tokens and
+// stop sending once the number of tokens is too negative.
+// The receiver will only send these messages once it is in an overloaded
+// scenario to try and throttle senders to it.
+// TODO(baptist): Should this be an array.
+message FollowerAccountingRequest {
+  TenantID tenant_id    = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+  int32    store_id     = 2 [(gogoproto.customname) = "StoreID"];
+  int64    num_tokens   = 3;
+}
+
+// A BatchAbsorbedResponse is the response to a BatchAbsorbedRequest.
+message FollowerAccountingResponse {}
+
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
@@ -3029,6 +3045,7 @@ message JoinNodeResponse {
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
+  rpc FollowerAccounting (FollowerAccountingRequest) returns (FollowerAccountingResponse)     {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   // RangeFeed RPC is deprecated.  Use MuxRangeFeed instead.
   // To be removed at version 23.1
