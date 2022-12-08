@@ -156,6 +156,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.catalog.descs.validate_on_write.enabled": {},
 	"sql.distsql.max_running_flows":               {},
 	"sql.distsql.flow_scheduler_queueing.enabled": {},
+	"sql.distsql.drain.cancel_after_wait.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

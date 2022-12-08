@@ -47,8 +47,7 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 		remoteFlowRunner,
 	)
 	distSQLSrv.flowRegistry.Drain(
-		time.Duration(0) /* flowDrainWait */, time.Duration(0), /* minFlowDrainWait */
-		nil /* reporter */, false, /* cancelStillRunning */
+		time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */, nil, /* reporter */
 	)
 
 	// We create some flow; it doesn't matter what.
