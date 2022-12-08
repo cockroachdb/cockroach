@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clientflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
@@ -787,11 +786,8 @@ func init() {
 		cliflagcfg.BoolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
 		cliflagcfg.VarFlag(f, &demoCtx.demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 		cliflagcfg.VarFlag(f, &demoCtx.demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
-		cliflagcfg.BoolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 		// NB: Insecure for `cockroach demo` is deprecated. See #53404.
-		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name,
-			"to start a test server without any security, run start-single-node --insecure\n"+
-				"For details, see: "+build.MakeIssueURL(53404))
+		cliflagcfg.BoolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.disableEnterpriseFeatures, cliflags.DemoNoLicense)
 		cliflagcfg.BoolFlag(f, &demoCtx.DefaultEnableRangefeeds, cliflags.DemoEnableRangefeeds)
