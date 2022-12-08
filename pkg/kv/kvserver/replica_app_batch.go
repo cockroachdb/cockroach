@@ -46,15 +46,13 @@ type replicaAppBatch struct {
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
+	//
+	// We're allowed to mutate `stats.Stats` directly. Mutations into any
+	// pointer fields need to copy-on-write.
 	state kvserverpb.ReplicaState
 	// closedTimestampSetter maintains historical information about the
 	// advancement of the closed timestamp.
 	closedTimestampSetter closedTimestampSetterInfo
-	// stats is stored on the application batch to avoid an allocation in
-	// tracking the batch's view of replicaState. All pointer fields in
-	// replicaState other than Stats are overwritten completely rather than
-	// updated in-place.
-	stats enginepb.MVCCStats
 	// changeRemovesReplica tracks whether the command in the batch (there must
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
