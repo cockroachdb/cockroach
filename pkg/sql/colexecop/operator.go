@@ -79,6 +79,10 @@ type KVReader interface {
 	// GetScanStats returns statistics about the scan that happened during the
 	// KV reads. It must be safe for concurrent use.
 	GetScanStats() execstats.ScanStats
+	// GetKVCPUTime returns the CPU time consumed *on the current goroutine* by
+	// KV requests. It must be safe for concurrent use. It is used to calculate
+	// the SQL CPU time.
+	GetKVCPUTime() time.Duration
 }
 
 // ZeroInputNode is an execopnode.OpNode with no inputs.

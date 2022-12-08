@@ -411,6 +411,7 @@ type ExecutionStats struct {
 
 	MaxAllocatedMem  optional.Uint
 	MaxAllocatedDisk optional.Uint
+	SQLCPUTime       optional.Duration
 
 	// Nodes on which this operator was executed.
 	Nodes []string
