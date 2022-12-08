@@ -47,11 +47,11 @@ import (
 //
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
-	mutations               int
-	entries                 int
-	entryBytes              int64
-	emptyEntries            int
-	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
+	numMutations             int
+	numEntriesProcessed      int
+	numEntriesProcessedBytes int64
+	numEmptyEntries          int
+	followerStoreWriteBytes  kvadmission.FollowerStoreWriteBytes
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - batch
@@ -129,7 +129,7 @@ func (b *appBatch) addWriteBatch(
 	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
 		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 	} else {
-		b.mutations += mutations
+		b.numMutations += mutations
 	}
 	if err := batch.ApplyBatchRepr(wb.Data, false); err != nil {
 		return errors.Wrapf(err, "unable to apply WriteBatch")
