@@ -1957,14 +1957,11 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	knobs := ef.planner.ExecCfg().TenantTestingKnobs
 	return &splitNode{
 		tableDesc:      index.Table().(*optTable).desc,
 		index:          index.(*optIndex).idx,
 		rows:           input.(planNode),
 		expirationTime: expirationTime,
-		// Tests can override tenant split permissions to allow secondary tenants to split.
-		testAllowSplitAndScatter: knobs != nil && knobs.AllowSplitAndScatter,
 	}, nil
 }
 
@@ -2026,6 +2023,7 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
+
 	if !ef.planner.ExecCfg().IsSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
