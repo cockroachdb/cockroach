@@ -30,12 +30,11 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	tableDesc                catalog.TableDescriptor
-	index                    catalog.Index
-	rows                     planNode
-	run                      splitRun
-	expirationTime           hlc.Timestamp
-	testAllowSplitAndScatter bool
+	tableDesc      catalog.TableDescriptor
+	index          catalog.Index
+	rows           planNode
+	run            splitRun
+	expirationTime hlc.Timestamp
 }
 
 // splitRun contains the run-time state of splitNode during local execution.
@@ -57,16 +56,17 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return ok, err
 	}
 
-	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, n.rows.Values())
+	execCfg := params.ExecCfg()
+	rowKey, err := getRowKey(execCfg.Codec, n.tableDesc, n.index, n.rows.Values())
 	if err != nil {
 		return false, err
 	}
 
 	purpose := oppurpose.SplitManual
-	if n.testAllowSplitAndScatter {
+	if knobs := execCfg.TenantTestingKnobs; knobs != nil && knobs.AllowSplitAndScatter {
 		purpose = oppurpose.SplitManualTest
 	}
-	if err := params.ExecCfg().DB.AdminSplit(params.ctx, rowKey, n.expirationTime, purpose); err != nil {
+	if err := execCfg.DB.AdminSplit(params.ctx, rowKey, n.expirationTime, purpose); err != nil {
 		return false, err
 	}
 

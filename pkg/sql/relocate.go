@@ -14,13 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -111,20 +109,27 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	}
 	rowKey = keys.MakeFamilyKey(rowKey, 0)
 
-	rangeDesc, err := lookupRangeDescriptor(params.ctx, execCfg.DB, rowKey)
-	if err != nil {
-		return false, errors.Wrapf(err, "error looking up range descriptor")
+	rKey := keys.MustAddr(rowKey)
+	span := roachpb.Span{
+		Key:    rKey.AsRawKey(),
+		EndKey: rKey.PrefixEnd().AsRawKey(),
 	}
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(params.ctx, span)
+	if err != nil {
+		return false, err
+	}
+	if !rangeDescIterator.Valid() {
+		return false, errors.Newf("range descriptor not found")
+	}
+	// Use first RangeDescriptor.
+	rangeDesc := rangeDescIterator.CurRangeDescriptor()
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
-	existingVoters := rangeDesc.Replicas().Voters().ReplicationTargets()
-	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 	switch n.subjectReplicas {
 	case tree.RelocateLease:
-		if err = execCfg.DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
-			return false, err
-		}
+		err = execCfg.DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID)
 	case tree.RelocateNonVoters:
+		existingVoters := rangeDesc.Replicas().Voters().ReplicationTargets()
 		err = execCfg.DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
@@ -133,6 +138,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			true, /* transferLeaseToFirstVoter */
 		)
 	case tree.RelocateVoters:
+		existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 		err = execCfg.DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
@@ -141,16 +147,13 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			true, /* transferLeaseToFirstVoter */
 		)
 	default:
-		return false, errors.AssertionFailedf("unknown relocate mode: %v", n.subjectReplicas)
+		err = errors.AssertionFailedf("unknown relocate mode: %v", n.subjectReplicas)
 	}
 	// TODO(aayush): If the `AdminRelocateRange` call failed because it found that
 	// the range was already in the process of being rebalanced, we currently fail
 	// the statement. We should consider instead force-removing these learners
 	// when `AdminRelocateRange` calls are issued by SQL.
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+	return err == nil, err
 }
 
 func (n *relocateNode) Values() tree.Datums {
@@ -162,26 +165,4 @@ func (n *relocateNode) Values() tree.Datums {
 
 func (n *relocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
-}
-
-func lookupRangeDescriptor(
-	ctx context.Context, db *kv.DB, rowKey []byte,
-) (roachpb.RangeDescriptor, error) {
-	startKey := keys.RangeMetaKey(keys.MustAddr(rowKey))
-	endKey := keys.Meta2Prefix.PrefixEnd()
-	kvs, err := db.Scan(ctx, startKey, endKey, 1)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, err
-	}
-	if len(kvs) != 1 {
-		log.Fatalf(ctx, "expected 1 KV, got %v", kvs)
-	}
-	var desc roachpb.RangeDescriptor
-	if err := kvs[0].ValueProto(&desc); err != nil {
-		return roachpb.RangeDescriptor{}, err
-	}
-	if desc.EndKey.Equal(rowKey) {
-		log.Fatalf(ctx, "row key should not be valid range split point: %s", keys.PrettyPrint(nil /* valDirs */, rowKey))
-	}
-	return desc, nil
 }
