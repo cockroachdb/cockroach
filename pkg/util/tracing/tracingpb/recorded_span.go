@@ -196,5 +196,5 @@ func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
 	if m.ContainsUnfinished {
 		s.Printf(", unfinished")
 	}
-	s.Print("}")
+	s.Printf("}")
 }

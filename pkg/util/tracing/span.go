@@ -229,13 +229,14 @@ func (sp *Span) String() string {
 	return sp.OperationName()
 }
 
-// Redactable returns true if this Span's tracer is marked redactable
+// Redactable returns true if this span is redactable or this span's tracer is
+// redactable.
 func (sp *Span) Redactable() bool {
 	if sp == nil || sp.i.isNoop() {
 		return false
 	}
 	sp.detectUseAfterFinish()
-	return sp.Tracer().Redactable()
+	return sp.i.redactable || sp.Tracer().Redactable()
 }
 
 // Finish marks the Span as completed. It is illegal to use a Span after calling
@@ -578,6 +579,7 @@ func (sp *Span) reset(
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
 	sterile bool,
+	redactable bool,
 ) {
 	if sp.i.crdb == nil {
 		// We assume that spans being reset have come from the sync.Pool.
@@ -620,11 +622,12 @@ func (sp *Span) reset(
 
 	c := sp.i.crdb
 	sp.i = spanInner{
-		tracer:   sp.i.tracer,
-		crdb:     c,
-		otelSpan: otelSpan,
-		netTr:    netTr,
-		sterile:  sterile,
+		tracer:     sp.i.tracer,
+		crdb:       c,
+		otelSpan:   otelSpan,
+		netTr:      netTr,
+		sterile:    sterile,
+		redactable: redactable,
 	}
 
 	c.traceID = traceID
@@ -849,6 +852,11 @@ type SpanMeta struct {
 	// any info about the span in order to not have a child be created on the
 	// other side. Similarly, ExtractMetaFrom does not deserialize this field.
 	sterile bool
+
+	// redactable is set if calls to Record and Recordf for this span (and child
+	// spans) should use fine-grained redaction regardless of whether the tracer
+	// is redactable.
+	redactable bool
 }
 
 // Empty returns whether or not the SpanMeta is a zero value.
@@ -874,6 +882,7 @@ func (sm SpanMeta) ToProto() *tracingpb.TraceInfo {
 		TraceID:       sm.traceID,
 		ParentSpanID:  sm.spanID,
 		RecordingMode: sm.recordingType.ToProto(),
+		Redactable:    sm.redactable,
 	}
 	if sm.otelCtx.HasTraceID() {
 		var traceID [16]byte = sm.otelCtx.TraceID()
@@ -899,10 +908,11 @@ func SpanMetaFromProto(info tracingpb.TraceInfo) SpanMeta {
 	}
 
 	sm := SpanMeta{
-		traceID: info.TraceID,
-		spanID:  info.ParentSpanID,
-		otelCtx: otelCtx,
-		sterile: false,
+		traceID:    info.TraceID,
+		spanID:     info.ParentSpanID,
+		otelCtx:    otelCtx,
+		sterile:    false,
+		redactable: info.Redactable,
 	}
 	switch info.RecordingMode {
 	case tracingpb.RecordingMode_OFF:

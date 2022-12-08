@@ -75,6 +75,7 @@ type spanOptions struct {
 	ForceRealSpan                 bool                   // see WithForceRealSpan
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
+	Redactable                    bool                   // see WithRedactable
 	EventListeners                []EventListener        // see WithEventListeners
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
@@ -114,6 +115,14 @@ func (opts *spanOptions) recordingType() tracingpb.RecordingType {
 		recordingType = opts.RemoteParent.recordingType
 	}
 	return recordingType
+}
+
+func (opts *spanOptions) redactable() bool {
+	redactable := opts.Redactable
+	if !opts.Parent.empty() && opts.Parent.i.redactable {
+		redactable = true
+	}
+	return redactable
 }
 
 // otelContext returns information about the OpenTelemetry parent span. If there
@@ -439,6 +448,20 @@ func WithSterile() SpanOption {
 
 func (w withSterileOption) apply(opts spanOptions) spanOptions {
 	opts.Sterile = true
+	return opts
+}
+
+type withRedactableOption struct{}
+
+// WithRedactable configures the span (and its children) to use fine-grained
+// redaction for all calls to Record and Recordf, regardless of whether the
+// span's tracer is redactable.
+func WithRedactable() SpanOption {
+	return withRedactableOption{}
+}
+
+func (w withRedactableOption) apply(opts spanOptions) spanOptions {
+	opts.Redactable = true
 	return opts
 }
 

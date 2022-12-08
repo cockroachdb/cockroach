@@ -140,6 +140,14 @@ type logRecord struct {
 // TODO(andrei): this should be unified with
 // SessionTracing.generateSessionTraceVTable().
 func (r Recording) String() string {
+	return r.format(false /* redact */)
+}
+
+func (r Recording) Redact() redact.RedactableString {
+	return redact.RedactableString(r.format(true /* redact */))
+}
+
+func (r Recording) format(redact bool) string {
 	if len(r) == 0 {
 		return "<empty recording>"
 	}
@@ -152,7 +160,13 @@ func (r Recording) String() string {
 				1000*entry.Timestamp.Sub(start).Seconds(),
 				1000*entry.timeSincePrev.Seconds(),
 				strings.Repeat("    ", entry.depth+1))
-			fmt.Fprint(&buf, entry.Msg.StripMarkers())
+			var msg string
+			if redact {
+				msg = string(entry.Msg.Redact())
+			} else {
+				msg = entry.Msg.StripMarkers()
+			}
+			fmt.Fprint(&buf, msg)
 			buf.WriteByte('\n')
 		}
 	}
@@ -290,7 +304,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	})
 	for _, c := range childrenMetadata {
 		var sb redact.StringBuilder
-		sb.Printf("[%s: %s]", redact.SafeString(c.Operation), c.Metadata.String())
+		sb.Printf("[%s: %v]", redact.SafeString(c.Operation), c.Metadata)
 		ownLogs = append(ownLogs, conv(sb.RedactableString(), sp.StartTime, time.Time{}))
 	}
 

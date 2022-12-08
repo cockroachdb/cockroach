@@ -43,6 +43,11 @@ type spanInner struct {
 	// a root span. This is useful for span corresponding to long-running
 	// operations that don't want to be associated with derived operations.
 	sterile bool
+
+	// redactable is set if calls to Record and Recordf for this span (and child
+	// spans) should use fine-grained redaction regardless of whether the tracer
+	// is redactable.
+	redactable bool
 }
 
 func (s *spanInner) TraceID() tracingpb.TraceID {
@@ -202,7 +207,8 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID == 0 &&
 		!otelCtx.TraceID().IsValid() &&
 		recordingType == 0 &&
-		!sterile {
+		!sterile &&
+		!s.redactable {
 		return SpanMeta{}
 	}
 	return SpanMeta{
@@ -211,6 +217,7 @@ func (s *spanInner) Meta() SpanMeta {
 		otelCtx:       otelCtx,
 		recordingType: recordingType,
 		sterile:       sterile,
+		redactable:    s.redactable,
 	}
 }
 
@@ -284,7 +291,7 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 		return
 	}
 	var str redact.RedactableString
-	if s.Tracer().Redactable() {
+	if s.redactable || s.Tracer().Redactable() {
 		str = redact.Sprintf(format, args...)
 	} else {
 		// `fmt.Sprintf` when called on a logEntry will use the faster

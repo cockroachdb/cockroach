@@ -84,6 +84,7 @@ go_test(
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
         "@io_opentelemetry_go_otel//attribute",

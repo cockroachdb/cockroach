@@ -174,6 +174,14 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 //	    t.Fatal(err)
 //	}
 func CheckRecording(rec tracingpb.Recording, expected string) error {
+	return checkRecording(rec, expected, false /* redact */)
+}
+
+func CheckRedactedRecording(rec tracingpb.Recording, expected string) error {
+	return checkRecording(rec, expected, true /* redact */)
+}
+
+func checkRecording(rec tracingpb.Recording, expected string, redact bool) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
@@ -231,8 +239,14 @@ func CheckRecording(rec tracingpb.Recording, expected string) error {
 		sortChildrenMetadataByName(rec[i].ChildrenMetadata)
 	}
 
+	var got string
+	if redact {
+		got = string(rec.Redact())
+	} else {
+		got = rec.String()
+	}
 	exp := normalize(expected)
-	got := normalize(rec.String())
+	got = normalize(got)
 	if got != exp {
 		diff := difflib.UnifiedDiff{
 			A:        difflib.SplitLines(exp),

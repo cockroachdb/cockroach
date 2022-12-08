@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -260,6 +261,56 @@ func TestSterileSpan(t *testing.T) {
 	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(sp1.Meta(), carrier)
 	require.Len(t, carrier.MD, 0)
+}
+
+func TestRedactableSpan(t *testing.T) {
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+
+	// Check that a span that was not configured to use fine-grained redaction
+	// does not.
+	s1 := tr.StartSpan("non-redactable", WithRecording(tracingpb.RecordingVerbose))
+	require.False(t, s1.Redactable())
+	s1.Recordf("s1: %s %s", redact.Safe("safe"), redact.Unsafe("unsafe"))
+
+	// Check that a span configured to use fine-grained redaction does, and its
+	// children do, too.
+	s2 := tr.StartSpan("redactable", WithParent(s1), WithRedactable())
+	require.True(t, s2.Redactable())
+	s2.Recordf("s2: %s %s", redact.Safe("safe"), redact.Unsafe("unsafe"))
+
+	s3 := tr.StartSpan("redactable-child", WithParent(s2))
+	require.True(t, s3.Redactable())
+	s3.Recordf("s3: %s %s", redact.Safe("safe"), redact.Unsafe("unsafe"))
+
+	// Check that a sterile redactable span does not produce a redactable child.
+	s4 := tr.StartSpan("sterile-redactable-child", WithParent(s3), WithSterile())
+	require.True(t, s4.Redactable())
+	s4.Recordf("s4: %s %s", redact.Safe("safe"), redact.Unsafe("unsafe"))
+
+	s5 := tr.StartSpan("non-redactable-child", WithParent(s4))
+	require.False(t, s5.Redactable())
+	s5.Recordf("s5: %s %s", redact.Safe("safe"), redact.Unsafe("unsafe"))
+
+	s5.Finish()
+	s4.Finish()
+	s3.Finish()
+	s2.Finish()
+	require.NoError(t, CheckRedactedRecording(s1.FinishAndGetRecording(tracingpb.RecordingVerbose), `
+	=== operation:non-redactable _verbose:1
+	[sterile-redactable-child]
+	[redactable-child]
+	[redactable]
+	event:‹×›
+		=== operation:redactable _verbose:1 _redactable:
+		[sterile-redactable-child]
+		[redactable-child]
+		event:s2: safe ‹×›
+			=== operation:redactable-child _verbose:1 _redactable:
+			[sterile-redactable-child]
+			event:s3: safe ‹×›
+				=== operation:sterile-redactable-child _verbose:1 _redactable:
+				event:s4: safe ‹×›
+	`))
 }
 
 func TestTracerInjectExtractNoop(t *testing.T) {
