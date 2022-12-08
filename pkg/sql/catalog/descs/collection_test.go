@@ -1005,7 +1005,7 @@ func TestHydrateCatalog(t *testing.T) {
 					return nil
 				})
 				mutCat := nstree.MutableCatalog{Catalog: cat}
-				mutCat.DeleteDescriptorEntry(descToDelete)
+				mutCat.DeleteByID(descToDelete)
 				return mutCat.Catalog
 			}
 		}

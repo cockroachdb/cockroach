@@ -780,7 +780,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 			}
 		}
 		b.s.LogSideEffectf("delete %s namespace entry %v -> %d", nameType, nameInfo, expectedID)
-		b.s.uncommitted.DeleteNamespaceEntry(nameInfo)
+		b.s.uncommitted.DeleteByName(nameInfo)
 	}
 	for _, desc := range b.descs {
 		mut := desc.NewBuilder().BuildCreatedMutable()
@@ -791,7 +791,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	}
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
 		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
-		b.s.uncommitted.DeleteDescriptorEntry(deletedID)
+		b.s.uncommitted.DeleteByID(deletedID)
 	}
 	for _, deletedID := range b.zoneConfigsToDelete.Ordered() {
 		b.s.LogSideEffectf("deleting zone config for #%d", deletedID)

@@ -744,41 +744,107 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 	return ret.Catalog, nil
 }
 
-// GetAllDescriptors returns all descriptors visible by the transaction,
-func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	read, err := tc.cr.ScanAll(ctx, txn)
+// GetAllCatalog returns all descriptors, namespace entries, comments and
+// zone configs visible by the transaction,
+func (tc *Collection) GetAllCatalog(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+	stored, err := tc.cr.ScanAll(ctx, txn)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	var ids catalog.DescriptorIDSet
-	_ = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-		ids.Add(desc.GetID())
+	var ret nstree.MutableCatalog
+	// Descriptors need to be re-read to ensure proper validation hydration etc.
+	// We collect their IDs for this purpose and we'll re-add them later.
+	var descIDs catalog.DescriptorIDSet
+	_ = stored.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		descIDs.Add(desc.GetID())
 		return nil
 	})
+	// Add stored namespace entries which are not shadowed.
+	_ = stored.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		ni := descpb.NameInfo{
+			ParentID:       e.GetParentID(),
+			ParentSchemaID: e.GetParentSchemaID(),
+			Name:           e.GetName(),
+		}
+		if _, ok := tc.shadowedNames[ni]; !ok {
+			ret.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
+		}
+		return nil
+	})
+	// Add stored comments which are not shadowed.
+	_ = stored.ForEachCommentEntry(func(key catalogkeys.CommentKey, cmt string) error {
+		if _, _, ok := tc.uncommittedComments.getUncommitted(key); !ok {
+			ret.UpsertComment(key, cmt)
+		}
+		return nil
+	})
+	// Add stored zone configs which are not shadowed.
+	_ = stored.ForEachZoneConfigEntry(func(id descpb.ID, zc catalog.ZoneConfig) error {
+		if _, ok := tc.uncommittedZoneConfigs.getUncommitted(id); !ok {
+			ret.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
+		}
+		return nil
+	})
+	// Add uncommitted and synthetic namespace entries from descriptors,
+	// collect descriptor IDs to re-read.
 	for _, iterator := range []func(func(desc catalog.Descriptor) error) error{
 		tc.uncommitted.iterateUncommittedByID,
 		tc.synthetic.iterateSyntheticByID,
 		// TODO(postamar): include temporary descriptors?
 	} {
 		_ = iterator(func(desc catalog.Descriptor) error {
-			ids.Add(desc.GetID())
+			if !desc.Dropped() && !desc.SkipNamespace() {
+				ret.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
+			}
+			descIDs.Add(desc.GetID())
 			return nil
 		})
 	}
+	// Add uncommitted comments and zone configs.
+	tc.uncommittedComments.addAllToCatalog(ret)
+	tc.uncommittedZoneConfigs.addAllToCatalog(ret)
+	// Remove deleted descriptors from consideration, re-read and add the rest.
+	tc.deletedDescs.ForEach(descIDs.Remove)
 	flags := tree.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
-	// getDescriptorsByID must be used to ensure proper validation hydration etc.
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+	allDescs, err := tc.getDescriptorsByID(ctx, txn, flags, descIDs.Ordered()...)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	for _, desc := range allDescs {
+		ret.UpsertDescriptorEntry(desc)
+	}
+	// Add the virtual catalog.
+	tc.virtual.addAllToCatalog(ret)
+	// We're done.
+	return ret.Catalog, nil
+}
+
+// GetAllDescriptors returns all descriptors visible by the transaction,
+// except for virtual descriptors.
+func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+	all, err := tc.GetAllCatalog(ctx, txn)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
 	var ret nstree.MutableCatalog
-	for _, desc := range descs {
+	_ = all.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		switch d := desc.(type) {
+		case catalog.SchemaDescriptor:
+			if d.SchemaKind() == catalog.SchemaVirtual {
+				return nil
+			}
+		case catalog.TableDescriptor:
+			if d.IsVirtualTable() {
+				return nil
+			}
+		}
 		ret.UpsertDescriptorEntry(desc)
-	}
+		return nil
+	})
 	return ret.Catalog, nil
 }
 
@@ -787,7 +853,6 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-
 	read, err := tc.cr.ScanNamespaceForDatabases(ctx, txn)
 	if err != nil {
 		return nil, err

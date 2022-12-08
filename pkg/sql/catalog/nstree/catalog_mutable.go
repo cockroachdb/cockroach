@@ -83,9 +83,9 @@ func (mc *MutableCatalog) UpsertDescriptorEntry(desc catalog.Descriptor) {
 	mc.byteSize += e.ByteSize()
 }
 
-// DeleteDescriptorEntry removes a descriptor from the MutableCatalog.
-func (mc *MutableCatalog) DeleteDescriptorEntry(id descpb.ID) {
-	if id == descpb.InvalidID || !mc.IsInitialized() {
+// DeleteByID removes a by-ID entry from the MutableCatalog.
+func (mc *MutableCatalog) DeleteByID(id descpb.ID) {
+	if !mc.IsInitialized() {
 		return
 	}
 	if removed := mc.byID.delete(id); removed != nil {
@@ -105,8 +105,8 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(
 	e.timestamp = mvccTimestamp
 }
 
-// DeleteNamespaceEntry removes a name -> id mapping from the MutableCatalog.
-func (mc *MutableCatalog) DeleteNamespaceEntry(key catalog.NameKey) {
+// DeleteByName removes a by-name entry from the MutableCatalog.
+func (mc *MutableCatalog) DeleteByName(key catalog.NameKey) {
 	if key == nil || !mc.IsInitialized() {
 		return
 	}

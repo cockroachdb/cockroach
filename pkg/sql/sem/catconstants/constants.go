@@ -96,6 +96,10 @@ const (
 	CrdbInternalBackwardDependenciesTableID
 	CrdbInternalBuildInfoTableID
 	CrdbInternalBuiltinFunctionsTableID
+	CrdbInternalCatalogCommentsTableID
+	CrdbInternalCatalogDescriptorTableID
+	CrdbInternalCatalogNamespaceTableID
+	CrdbInternalCatalogZonesTableID
 	CrdbInternalClusterContendedIndexesViewID
 	CrdbInternalClusterContendedKeysViewID
 	CrdbInternalClusterContendedTablesViewID
@@ -139,7 +143,6 @@ const (
 	CrdbInternalNodeStmtStatsTableID
 	CrdbInternalNodeTxnStatsTableID
 	CrdbInternalPartitionsTableID
-	CrdbInternalPredefinedCommentsTableID
 	CrdbInternalRangesNoLeasesTableID
 	CrdbInternalRangesViewID
 	CrdbInternalRuntimeInfoTableID

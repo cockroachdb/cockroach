@@ -1535,13 +1535,21 @@ func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
 		ctx,
 		"select-comments",
 		p.Txn(),
-		`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
-              COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
-              COALESCE(pc.comment, sc.comment) AS comment,
-              COALESCE(pc.type, sc.type) AS type
-         FROM (SELECT * FROM system.comments) AS sc
-    FULL JOIN (SELECT * FROM crdb_internal.predefined_comments) AS pc
-           ON (pc.object_id = sc.object_id AND pc.sub_id = sc.sub_id AND pc.type = sc.type)`)
+		`SELECT
+	object_id,
+	sub_id,
+	comment,
+	CASE type
+	WHEN 'DatabaseCommentType' THEN 0
+	WHEN 'TableCommentType' THEN 1
+	WHEN 'ColumnCommentType' THEN 2
+	WHEN 'IndexCommentType' THEN 3
+	WHEN 'SchemaCommentType' THEN 4
+	WHEN 'ConstraintCommentType' THEN 5
+	END
+		AS type
+FROM
+	"".crdb_internal.kv_catalog_comments;`)
 }
 
 var pgCatalogDescriptionTable = virtualSchemaTable{
