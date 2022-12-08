@@ -181,10 +181,6 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 		sqlDBs[i] = tc.ServerConn(i)
 	}
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	// TODO(arul): remove this line when #92189 is addressed.
-	//
-	// See: https://github.com/cockroachdb/cockroach/issues/93164.
-	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.transaction.dropping_latches_before_eval.enabled = false`)
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug.enable = true`)

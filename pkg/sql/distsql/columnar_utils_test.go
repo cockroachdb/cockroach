@@ -161,6 +161,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	if err != nil {
 		return err
 	}
+	defer result.TestCleanupNoError(t)
 
 	outColOp := colexec.NewMaterializer(
 		nil, /* allocator */

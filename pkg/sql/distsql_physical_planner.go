@@ -845,12 +845,11 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
 			defer cleanup()
 			getExplain := func(verbose bool) []string {
-				explain, cleanup, err := colflow.ExplainVec(
+				explain, err := colflow.ExplainVec(
 					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
 					planner.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
 					verbose, planner.curPlan.flags.IsDistributed(),
 				)
-				cleanup()
 				if err != nil {
 					// In some edge cases (like when subqueries are present or
 					// when certain component doesn't implement execopnode.OpNode

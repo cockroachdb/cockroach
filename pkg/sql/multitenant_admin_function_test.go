@@ -63,148 +63,238 @@ func createSecondaryTenantDB(
 	return db
 }
 
+func verifyResults(t *testing.T, tenant string, rows *gosql.Rows, expectedResults [][]string) {
+	i := 0
+	columns, err := rows.Columns()
+	require.NoErrorf(t, err, "tenant=%s", tenant)
+	actualNumColumns := len(columns)
+	for ; rows.Next(); i++ {
+		require.Greaterf(t, len(expectedResults), i, "tenant=%s row=%d", tenant, i)
+		expectedRowResult := expectedResults[i]
+		require.Equal(t, len(expectedRowResult), actualNumColumns, "tenant=%s row=%d", tenant, i)
+		actualRowResult := make([]interface{}, actualNumColumns)
+		for i := range actualRowResult {
+			actualRowResult[i] = new(gosql.NullString)
+		}
+		err := rows.Scan(actualRowResult...)
+		require.NoErrorf(t, err, "tenant=%s row=%d", tenant, i)
+		for j := 0; j < actualNumColumns; j++ {
+			actualColResult := actualRowResult[j].(*gosql.NullString).String
+			expectedColResult := expectedRowResult[j]
+			if expectedColResult == "" {
+				require.Emptyf(t, actualColResult, "tenant=%s row=%d col=%d", tenant, i, j)
+			} else {
+				require.Containsf(t, actualColResult, expectedColResult, "tenant=%s row=%d col=%d", tenant, i, j)
+			}
+		}
+	}
+	require.NoErrorf(t, rows.Err(), "tenant=%s", tenant)
+	require.Equalf(t, len(expectedResults), i, "tenant=%s", tenant)
+}
+
 func TestMultiTenantAdminFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	// TODO(ewall): When moving tenant capability check to KV,
 	//  merge test w/ SkipSQLSystemTenantCheck variant into single test case if
-	//  1) test case has expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage
+	//  1) test case has expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage
 	//  and
-	//  2) SkipSQLSystemTenantCheck variant has no error message
+	//  2) SkipSQLSystemTenantCheck variant has no error result AND no error inside "success" result
 	testCases := []struct {
-		desc                     string
-		setup                    string
-		setups                   []string
-		query                    string
-		expectedErrorMessage     string
-		allowSplitAndScatter     bool
+		desc string
+		// Prereq setup statement(s) that must succeed.
+		setup string
+		// Multiple setup statements required because of https://github.com/cockroachdb/cockroach/issues/90535.
+		setups []string
+		// Query being tested.
+		query string
+		// If set, the test query must return these results for the system tenant.
+		expectedSystemResult [][]string
+		// If set, the test query must fail with this error message for the system tenant.
+		expectedSystemErrorMessage string
+		// If set, the test query must return these results for secondary tenants.
+		expectedSecondaryResult [][]string
+		// If set, the test query must fail with this error message for secondary tenants.
+		expectedSecondaryErrorMessage string
+		// Used for tests that have SPLIT AT as a prereq (eg UNSPLIT AT).
+		allowSplitAndScatter bool
+		// Used as a stop-gap to bypass the system tenant check and test incomplete functionality.
 		skipSQLSystemTenantCheck bool
 	}{
 		{
-			desc:                 "ALTER RANGE x RELOCATE LEASE",
-			query:                "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "ALTER RANGE x RELOCATE LEASE",
+			query:                         "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE x RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
+			expectedSystemResult:     [][]string{{"54", "/Table/53", "ok"}},
+			expectedSecondaryResult:  [][]string{{"55", "", rangeErrorMessage}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:                 "ALTER RANGE RELOCATE LEASE",
-			query:                "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "ALTER RANGE RELOCATE LEASE",
+			query:                         "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedSystemResult:     [][]string{{"54", "/Table/53", "ok"}},
+			expectedSecondaryResult:  [][]string{{"55", "", rangeErrorMessage}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:                 "ALTER RANGE x RELOCATE VOTERS",
-			query:                "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM 1 TO 1;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "ALTER RANGE x RELOCATE VOTERS",
+			query:                         "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM 1 TO 1;",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
+		// TODO(ewall): Set up test to avoid "trying to add a voter to a store that already has a VOTER_FULL" error.
 		{
 			desc:                     "ALTER RANGE x RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM 1 TO 1;",
+			expectedSystemResult:     [][]string{{"54", "/Table/53", "trying to add a voter to a store that already has a VOTER_FULL"}},
+			expectedSecondaryResult:  [][]string{{"55", "", rangeErrorMessage}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:                 "ALTER RANGE RELOCATE VOTERS",
-			query:                "ALTER RANGE RELOCATE VOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "ALTER RANGE RELOCATE VOTERS",
+			query:                         "ALTER RANGE RELOCATE VOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
+		// TODO(ewall): Set up test to avoid "trying to add a voter to a store that already has a VOTER_FULL" error.
 		{
 			desc:                     "ALTER RANGE RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE VOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedSystemResult:     [][]string{{"54", "/Table/53", "trying to add a voter to a store that already has a VOTER_FULL"}},
+			expectedSecondaryResult:  [][]string{{"55", "", rangeErrorMessage}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:                 "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
-			query:                "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "ALTER RANGE x RELOCATE NONVOTERS",
+			query:                         "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM 1 TO 1;",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
+		// TODO(ewall): Set up test to avoid "type of replica being removed (VOTER_FULL) does not match expectation for change" error.
 		{
-			desc:                     "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE SkipSQLSystemTenantCheck",
-			query:                    "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
-			expectedErrorMessage:     rangeErrorMessage,
+			desc:                     "ALTER RANGE x RELOCATE NONVOTERS SkipSQLSystemTenantCheck",
+			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM 1 TO 1;",
+			expectedSystemResult:     [][]string{{"54", "/Table/53", "type of replica being removed (VOTER_FULL) does not match expectation for change"}},
+			expectedSecondaryResult:  [][]string{{"55", "", rangeErrorMessage}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:                 "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
-			query:                "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "ALTER RANGE RELOCATE NONVOTERS",
+			query:                         "ALTER RANGE RELOCATE NONVOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
+		// TODO(ewall): Set up test to avoid "type of replica being removed (VOTER_FULL) does not match expectation for change" error.
 		{
-			desc:                     "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS SkipSQLSystemTenantCheck",
-			query:                    "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
-			expectedErrorMessage:     rangeErrorMessage,
+			desc:                     "ALTER RANGE RELOCATE NONVOTERS SkipSQLSystemTenantCheck",
+			query:                    "ALTER RANGE RELOCATE NONVOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedSystemResult:     [][]string{{"54", "/Table/53", "type of replica being removed (VOTER_FULL) does not match expectation for change"}},
+			expectedSecondaryResult:  [][]string{{"55", "", rangeErrorMessage}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:                 "ALTER TABLE x SPLIT AT",
-			query:                "ALTER TABLE t SPLIT AT VALUES (1);",
-			expectedErrorMessage: "request [1 AdmSplit] not permitted",
+			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
+			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
-			desc:                 "ALTER INDEX x SPLIT AT",
-			setup:                "CREATE INDEX idx on t(i);",
-			query:                "ALTER INDEX t@idx SPLIT AT VALUES (1);",
-			expectedErrorMessage: "request [1 AdmSplit] not permitted",
+			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE SkipSQLSystemTenantCheck",
+			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
+			expectedSecondaryErrorMessage: rangeErrorMessage,
+			skipSQLSystemTenantCheck:      true,
 		},
 		{
-			desc:                 "ALTER TABLE x UNSPLIT AT",
-			setup:                "ALTER TABLE t SPLIT AT VALUES (1);",
-			query:                "ALTER TABLE t UNSPLIT AT VALUES (1);",
-			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
-			allowSplitAndScatter: true,
+			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
+			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+		},
+		{
+			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS SkipSQLSystemTenantCheck",
+			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
+			expectedSecondaryErrorMessage: rangeErrorMessage,
+			skipSQLSystemTenantCheck:      true,
+		},
+		// TODO(ewall): Set up test to avoid "list of voter targets overlaps with the list of non-voter targets" error.
+		{
+			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE NONVOTERS",
+			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE NONVOTERS SELECT ARRAY[1], 1;",
+			expectedSystemErrorMessage:    "list of voter targets overlaps with the list of non-voter targets",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+		},
+		// TODO(ewall): Set up test to avoid "list of voter targets overlaps with the list of non-voter targets" error.
+		{
+			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE NONVOTERS SkipSQLSystemTenantCheck",
+			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE NONVOTERS SELECT ARRAY[1], 1;",
+			expectedSystemErrorMessage:    "list of voter targets overlaps with the list of non-voter targets",
+			expectedSecondaryErrorMessage: rangeErrorMessage,
+			skipSQLSystemTenantCheck:      true,
+		},
+		{
+			desc:                          "ALTER TABLE x SPLIT AT",
+			query:                         "ALTER TABLE t SPLIT AT VALUES (1);",
+			expectedSecondaryErrorMessage: "request [1 AdmSplit] not permitted",
+		},
+		{
+			desc:                          "ALTER INDEX x SPLIT AT",
+			setup:                         "CREATE INDEX idx on t(i);",
+			query:                         "ALTER INDEX t@idx SPLIT AT VALUES (1);",
+			expectedSecondaryErrorMessage: "request [1 AdmSplit] not permitted",
+		},
+		{
+			desc:                          "ALTER TABLE x UNSPLIT AT",
+			setup:                         "ALTER TABLE t SPLIT AT VALUES (1);",
+			query:                         "ALTER TABLE t UNSPLIT AT VALUES (1);",
+			expectedSecondaryErrorMessage: "request [1 AdmUnsplit] not permitted",
+			allowSplitAndScatter:          true,
 		},
 		{
 			desc: "ALTER INDEX x UNSPLIT AT",
-			// Multiple setup statements required because of https://github.com/cockroachdb/cockroach/issues/90535.
 			setups: []string{
 				"CREATE INDEX idx on t(i);",
 				"ALTER INDEX t@idx SPLIT AT VALUES (1);",
 			},
-			query:                "ALTER INDEX t@idx UNSPLIT AT VALUES (1);",
-			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
-			allowSplitAndScatter: true,
+			query:                         "ALTER INDEX t@idx UNSPLIT AT VALUES (1);",
+			expectedSecondaryErrorMessage: "request [1 AdmUnsplit] not permitted",
+			allowSplitAndScatter:          true,
 		},
 		{
-			desc:                 "ALTER TABLE x UNSPLIT ALL",
-			setup:                "ALTER TABLE t SPLIT AT VALUES (1);",
-			query:                "ALTER TABLE t UNSPLIT ALL;",
-			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
-			allowSplitAndScatter: true,
+			desc:                          "ALTER TABLE x UNSPLIT ALL",
+			setup:                         "ALTER TABLE t SPLIT AT VALUES (1);",
+			query:                         "ALTER TABLE t UNSPLIT ALL;",
+			expectedSecondaryErrorMessage: "request [1 AdmUnsplit] not permitted",
+			allowSplitAndScatter:          true,
 		},
 		{
 			desc: "ALTER INDEX x UNSPLIT ALL",
-			// Multiple setup statements required because of https://github.com/cockroachdb/cockroach/issues/90535.
 			setups: []string{
 				"CREATE INDEX idx on t(i);",
 				"ALTER INDEX t@idx SPLIT AT VALUES (1);",
 			},
-			query:                "ALTER INDEX t@idx UNSPLIT ALL;",
-			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
-			allowSplitAndScatter: true,
+			query:                         "ALTER INDEX t@idx UNSPLIT ALL;",
+			expectedSecondaryErrorMessage: "request [1 AdmUnsplit] not permitted",
+			allowSplitAndScatter:          true,
 		},
 		{
-			desc:                 "ALTER TABLE x SCATTER",
-			query:                "ALTER TABLE t SCATTER;",
-			expectedErrorMessage: "request [1 AdmScatter] not permitted",
+			desc:                          "ALTER TABLE x SCATTER",
+			query:                         "ALTER TABLE t SCATTER;",
+			expectedSecondaryErrorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
-			desc:                 "ALTER INDEX x SCATTER",
-			setup:                "CREATE INDEX idx on t(i);",
-			query:                "ALTER INDEX t@idx SCATTER;",
-			expectedErrorMessage: "request [1 AdmScatter] not permitted",
+			desc:                          "ALTER INDEX x SCATTER",
+			setup:                         "CREATE INDEX idx on t(i);",
+			query:                         "ALTER INDEX t@idx SCATTER;",
+			expectedSecondaryErrorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
-			desc:                 "CONFIGURE ZONE",
-			query:                "ALTER TABLE t CONFIGURE ZONE DISCARD;",
-			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
+			desc:                          "CONFIGURE ZONE",
+			query:                         "ALTER TABLE t CONFIGURE ZONE DISCARD;",
+			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 	}
 
@@ -213,7 +303,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
-			execQueries := func(db *gosql.DB) error {
+			execQueries := func(db *gosql.DB, tenant string, expectedResults [][]string, expectedErrorMessage string) {
 				setups := tc.setups
 				setup := tc.setup
 				if setup != "" {
@@ -222,10 +312,18 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				setups = append([]string{createTable}, setups...)
 				for _, setup := range setups {
 					_, err := db.ExecContext(ctx, setup)
-					require.NoError(t, err, setup)
+					require.NoErrorf(t, err, setup, "tenant=%s setup=%s", tenant, setup)
 				}
-				_, err := db.ExecContext(ctx, tc.query)
-				return err
+				rows, err := db.QueryContext(ctx, tc.query)
+				if expectedErrorMessage == "" {
+					require.NoErrorf(t, err, "tenant=%s", tenant)
+					if len(expectedResults) > 0 {
+						verifyResults(t, tenant, rows, expectedResults)
+					}
+				} else {
+					require.Errorf(t, err, "tenant=%s", tenant)
+					require.Containsf(t, err.Error(), expectedErrorMessage, "tenant=%s", tenant)
+				}
 			}
 
 			// Test system tenant.
@@ -233,8 +331,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				testServer, cleanup := createTestServer(t)
 				defer cleanup()
 				db := createSystemTenantDB(t, testServer)
-				err := execQueries(db)
-				require.NoError(t, err)
+				execQueries(db, "system", tc.expectedSystemResult, tc.expectedSystemErrorMessage)
 			}()
 
 			// Test secondary tenant.
@@ -242,14 +339,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				testServer, cleanup := createTestServer(t)
 				defer cleanup()
 				db := createSecondaryTenantDB(t, testServer, tc.allowSplitAndScatter, tc.skipSQLSystemTenantCheck)
-				err := execQueries(db)
-				expectedErrorMessage := tc.expectedErrorMessage
-				if expectedErrorMessage == "" {
-					require.NoError(t, err)
-				} else {
-					require.Error(t, err)
-					require.Contains(t, err.Error(), expectedErrorMessage)
-				}
+				execQueries(db, "secondary", tc.expectedSecondaryResult, tc.expectedSecondaryErrorMessage)
 			}()
 		})
 	}
@@ -260,28 +350,16 @@ func TestTruncateTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	execQueries := func(db *gosql.DB, expectedStartKeys []string, expectedEndKeys []string) {
+	execQueries := func(db *gosql.DB, tenant string, expectedResults [][]string) {
 		_, err := db.ExecContext(ctx, createTable)
-		require.NoError(t, err)
+		require.NoErrorf(t, err, "tenant=%s", tenant)
 		_, err = db.ExecContext(ctx, "ALTER TABLE t SPLIT AT VALUES (1);")
-		require.NoError(t, err)
+		require.NoErrorf(t, err, "tenant=%s", tenant)
 		_, err = db.ExecContext(ctx, "TRUNCATE TABLE t;")
-		require.NoError(t, err)
+		require.NoErrorf(t, err, "tenant=%s", tenant)
 		rows, err := db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM TABLE t];")
-		require.NoError(t, err)
-		i := 0
-		for ; rows.Next(); i++ {
-			var startKey, endKey gosql.NullString
-			err := rows.Scan(&startKey, &endKey)
-			require.NoError(t, err, i)
-			require.Less(t, i, len(expectedStartKeys), i)
-			require.Equal(t, startKey.String, expectedStartKeys[i], i)
-			require.Less(t, i, len(expectedEndKeys), i)
-			require.Equal(t, endKey.String, expectedEndKeys[i], i)
-		}
-		require.NoError(t, rows.Err())
-		require.Equal(t, len(expectedStartKeys), i)
-		require.Equal(t, len(expectedEndKeys), i)
+		require.NoErrorf(t, err, "tenant=%s", tenant)
+		verifyResults(t, tenant, rows, expectedResults)
 	}
 
 	// Test system tenant.
@@ -289,7 +367,7 @@ func TestTruncateTable(t *testing.T) {
 		testServer, cleanup := createTestServer(t)
 		defer cleanup()
 		db := createSystemTenantDB(t, testServer)
-		execQueries(db, []string{"", "/1"}, []string{"/1", ""})
+		execQueries(db, "system", [][]string{{"", "/1"}, {"/1", ""}})
 	}()
 
 	// Test secondary tenant.
@@ -303,6 +381,6 @@ func TestTruncateTable(t *testing.T) {
 			false, /* skipSQLSystemTenantCheck */
 		)
 		// TODO(ewall): Retain splits after `TRUNCATE` for secondary tenants.
-		execQueries(db, []string{""}, []string{""})
+		execQueries(db, "secondary", [][]string{{"", ""}})
 	}()
 }

@@ -36,6 +36,13 @@ var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, arg
 
 // OpWithMetaInfo stores a colexecop.Operator together with miscellaneous meta
 // information about the tree rooted in that operator.
+//
+// Note that at some point colexecop.Closers were also included into this
+// struct, but for ease of tracking we pulled them out to the flow-level.
+// Closers are different from the objects tracked here since we have a
+// convenient place to close them from the main goroutine whereas the stats
+// collection as well as metadata draining must happen in the goroutine that
+// "owns" these objects.
 // TODO(yuzefovich): figure out the story about pooling these objects.
 type OpWithMetaInfo struct {
 	Root colexecop.Operator
@@ -47,9 +54,6 @@ type OpWithMetaInfo struct {
 	// tree rooted in Root for which the responsibility of draining hasn't been
 	// claimed yet.
 	MetadataSources colexecop.MetadataSources
-	// ToClose are all colexecop.Closers that are present in the tree rooted in
-	// Root for which the responsibility of closing hasn't been claimed yet.
-	ToClose colexecop.Closers
 }
 
 // NewColOperatorArgs is a helper struct that encompasses all of the input
@@ -106,6 +110,7 @@ type NewColOperatorResult struct {
 	// contract right now of whether or not a particular operator has to make a
 	// copy of the type schema if it needs to use it later.
 	ColumnTypes []*types.T
+	ToClose     colexecop.Closers
 	Releasables []execreleasable.Releasable
 }
 
@@ -155,8 +160,8 @@ func (r *NewColOperatorResult) Release() {
 		OpWithMetaInfo: OpWithMetaInfo{
 			StatsCollectors: r.StatsCollectors[:0],
 			MetadataSources: r.MetadataSources[:0],
-			ToClose:         r.ToClose[:0],
 		},
+		ToClose:     r.ToClose[:0],
 		Releasables: r.Releasables[:0],
 	}
 	newColOperatorResultPool.Put(r)

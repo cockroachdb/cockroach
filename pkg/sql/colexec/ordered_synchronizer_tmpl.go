@@ -263,22 +263,12 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 func (o *OrderedSynchronizer) Close(context.Context) error {
-	// Note that we're using the context of the synchronizer rather than the
-	// argument of Close() because the synchronizer derives its own tracing
-	// span.
-	ctx := o.EnsureCtx()
 	o.accountingHelper.Release()
-	var lastErr error
-	for _, input := range o.inputs {
-		if err := input.ToClose.Close(ctx); err != nil {
-			lastErr = err
-		}
-	}
 	if o.span != nil {
 		o.span.Finish()
 	}
 	*o = OrderedSynchronizer{}
-	return lastErr
+	return nil
 }
 
 func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
