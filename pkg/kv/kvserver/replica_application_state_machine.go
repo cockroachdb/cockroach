@@ -280,6 +280,12 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			sm.r.handleVersionResult(ctx, newVersion)
 			rResult.State.Version = nil
 		}
+
+		if rResult.State.GCHint != nil {
+			sm.r.handleGCHintResult(ctx, rResult.State.GCHint)
+			rResult.State.GCHint = nil
+		}
+
 		if (*rResult.State == kvserverpb.ReplicaState{}) {
 			rResult.State = nil
 		}
