@@ -29,6 +29,7 @@ go_library(
         "raft_truncator_replica.go",
         "range_log.go",
         "replica.go",
+        "replica_app_batch.go",
         "replica_application_cmd.go",
         "replica_application_cmd_buf.go",
         "replica_application_decoder.go",
