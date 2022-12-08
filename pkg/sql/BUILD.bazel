@@ -490,6 +490,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/fsm",
         "//pkg/util/grpcutil",
+        "//pkg/util/grunning",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/interval",
