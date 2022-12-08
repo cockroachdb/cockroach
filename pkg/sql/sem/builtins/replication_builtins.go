@@ -46,8 +46,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"job_id", types.Int},
-				{"cutover_ts", types.TimestampTZ},
+				{Name: "job_id", Typ: types.Int},
+				{Name: "cutover_ts", Typ: types.TimestampTZ},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -85,7 +85,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"job_id", types.Int},
+				{Name: "job_id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -125,7 +125,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"job_id", types.Int},
+				{Name: "job_id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -161,7 +161,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"tenant_name", types.String},
+				{Name: "tenant_name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -191,8 +191,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"stream_id", types.Int},
-				{"frontier_ts", types.String},
+				{Name: "stream_id", Typ: types.Int},
+				{Name: "frontier_ts", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -233,8 +233,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"stream_id", types.Int},
-				{"partition_spec", types.Bytes},
+				{Name: "stream_id", Typ: types.Int},
+				{Name: "partition_spec", Typ: types.Bytes},
 			},
 			types.MakeLabeledTuple(
 				[]*types.T{types.Bytes},
@@ -262,7 +262,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"stream_id", types.Int},
+				{Name: "stream_id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -296,8 +296,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"stream_id", types.Int},
-				{"successful_ingestion", types.Bool},
+				{Name: "stream_id", Typ: types.Int},
+				{Name: "successful_ingestion", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
