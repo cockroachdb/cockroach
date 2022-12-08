@@ -16,7 +16,7 @@ import {
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { capitalize, Duration } from "src/util";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
-import { FlattenedStmtInsightEvent } from "../types";
+import { StatementInsightEvent } from "../types";
 import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
 
@@ -42,7 +42,7 @@ const tableCx = classNames.bind(insightTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 export interface StatementInsightDetailsOverviewTabProps {
-  insightEventDetails: FlattenedStmtInsightEvent;
+  insightEventDetails: StatementInsightEvent;
   setTimeScale: (ts: TimeScale) => void;
 }
 

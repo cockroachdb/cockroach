@@ -10,60 +10,30 @@
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./transactionInsights.reducer";
-import { actions as stmtInsightActions } from "../statementInsights";
+import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
+import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
-import {
-  UpdateTimeScalePayload,
-  actions as sqlStatsActions,
-} from "../../sqlStats";
-import { actions as localStorageActions } from "../../localStorage";
-import { executionInsightsRequestFromTimeScale } from "../../../insights";
-import { getTxnInsightEvents } from "src/api/txnInsightsApi";
-import { TxnContentionReq } from "src/api";
 
 export function* refreshTransactionInsightsSaga(
-  action?: PayloadAction<TxnContentionReq>,
+  action?: PayloadAction<TxnInsightsRequest>,
 ) {
-  yield put(actions.request(action?.payload));
-  yield put(stmtInsightActions.request(action.payload));
+  yield put(txnActions.request(action?.payload));
 }
 
 export function* requestTransactionInsightsSaga(
-  action?: PayloadAction<TxnContentionReq>,
+  action?: PayloadAction<TxnInsightsRequest>,
 ): any {
   try {
-    const result = yield call(getTxnInsightEvents, action?.payload);
-    yield put(actions.received(result));
+    const result = yield call(getTxnInsightsApi, action?.payload);
+    yield put(txnActions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(txnActions.failed(e));
   }
-}
-
-export function* updateSQLStatsTimeScaleSaga(
-  action: PayloadAction<UpdateTimeScalePayload>,
-) {
-  const { ts } = action.payload;
-  yield put(
-    localStorageActions.update({
-      key: "timeScale/SQLActivity",
-      value: ts,
-    }),
-  );
-  const req = executionInsightsRequestFromTimeScale(ts);
-  yield put(actions.invalidated());
-  yield put(stmtInsightActions.invalidated());
-  yield put(sqlStatsActions.invalidated());
-  yield put(actions.refresh(req));
 }
 
 export function* transactionInsightsSaga() {
   yield all([
-    takeLatest(actions.refresh, refreshTransactionInsightsSaga),
-    takeLatest(actions.request, requestTransactionInsightsSaga),
-    takeLatest(
-      [actions.updateTimeScale, stmtInsightActions.updateTimeScale],
-      updateSQLStatsTimeScaleSaga,
-    ),
+    takeLatest(txnActions.refresh, refreshTransactionInsightsSaga),
+    takeLatest(txnActions.request, requestTransactionInsightsSaga),
   ]);
 }

@@ -17,12 +17,10 @@ import {
   insightType,
   SchemaInsightEventFilters,
   SortSetting,
-  selectFlattenedStmtInsightsCombiner,
   selectID,
   selectStatementInsightDetailsCombiner,
-  selectTxnInsightsCombiner,
-  TxnContentionInsightDetails,
   selectTxnInsightDetailsCombiner,
+  TxnInsightDetails,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
@@ -40,71 +38,61 @@ export const sortSettingLocalSetting = new LocalSetting<
   columnTitle: "startTime",
 });
 
-export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => {
-    if (state.cachedData.stmtInsights?.valid) {
-      return state.cachedData.stmtInsights?.data;
-    } else return null;
-  },
-  (state: AdminUIState) => {
-    if (state.cachedData.transactionInsights?.valid) {
-      return state.cachedData.transactionInsights?.data;
-    } else return null;
-  },
-  selectTxnInsightsCombiner,
-);
-
 export const selectTransactionInsightsLoading = (state: AdminUIState) =>
-  !state.cachedData.transactionInsights?.valid &&
-  state.cachedData.transactionInsights?.inFlight;
+  state.cachedData.txnInsights?.inFlight &&
+  (!state.cachedData.txnInsights?.valid || !state.cachedData.txnInsights?.data);
 
-const selectTxnContentionInsightDetails = createSelector(
-  [
-    (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-    selectID,
-  ],
-  (insight, insightId: string): TxnContentionInsightDetails => {
+export const selectTransactionInsights = (state: AdminUIState) =>
+  state.cachedData.txnInsights?.valid
+    ? state.cachedData.txnInsights?.data
+    : null;
+
+const selectCachedTxnInsightDetails = createSelector(
+  [(state: AdminUIState) => state.cachedData.txnInsightDetails, selectID],
+  (insight, insightId): TxnInsightDetails => {
     if (!insight) {
       return null;
     }
-    return insight[insightId]?.data;
+    return insight[insightId]?.data?.result;
   },
 );
 
-const selectTxnInsightFromExecInsight = createSelector(
-  (state: AdminUIState) => state.cachedData.stmtInsights?.data,
+const selectTxnInsight = createSelector(
+  (state: AdminUIState) => state.cachedData.txnInsights?.data,
   selectID,
-  (execInsights, execID) => {
-    return execInsights?.find(txn => txn.transactionExecutionID === execID);
+  (insights, execID) => {
+    return insights?.find(txn => txn.transactionExecutionID === execID);
   },
 );
+
+export const selectStmtInsights = (state: AdminUIState) =>
+  state.cachedData.stmtInsights?.data;
+
+// Data is showed as loading when the request is in flight AND we have
+// no data, (i.e. first request), or the current loaded data is
+// invalid (e.g. time range changed)
+export const selectStmtInsightsLoading = (state: AdminUIState) =>
+  state.cachedData.stmtInsights?.inFlight &&
+  (!state.cachedData.stmtInsights?.data ||
+    !state.cachedData.stmtInsights.valid);
 
 export const selectTxnInsightDetails = createSelector(
-  selectTxnInsightFromExecInsight,
-  selectTxnContentionInsightDetails,
+  selectTxnInsight,
+  selectCachedTxnInsightDetails,
+  selectStmtInsights,
   selectTxnInsightDetailsCombiner,
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
-  (state: AdminUIState) => state.cachedData.transactionInsightDetails,
+  (state: AdminUIState) => state.cachedData.txnInsightDetails,
   selectID,
-  (insight, insightId): Error | null => {
-    if (!insight) {
+  (insights, insightId: string): Error[] | null => {
+    if (!insights) {
       return null;
     }
-    return insight[insightId]?.lastError;
+    return insights[insightId]?.errors;
   },
 );
-
-export const selectStmtInsightsLoading = (state: AdminUIState) =>
-  !state.cachedData.stmtInsights?.valid &&
-  state.cachedData.stmtInsights?.inFlight;
-
-export const selectStmtInsights = createSelector((state: AdminUIState) => {
-  if (state.cachedData?.stmtInsights?.valid) {
-    return state.cachedData?.stmtInsights?.data;
-  } else return null;
-}, selectFlattenedStmtInsightsCombiner);
 
 export const selectStatementInsightDetails = createSelector(
   selectStmtInsights,

@@ -151,7 +151,7 @@ export interface DatabaseDetailsPageDataTableStats {
 }
 
 export interface DatabaseDetailsPageActions {
-  refreshDatabaseDetails: (database: string) => void;
+  selectStatementsDataValidrefreshDatabaseDetails: (database: string) => void;
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (database: string, table: string) => void;
   onFilterChange?: (value: Filters) => void;

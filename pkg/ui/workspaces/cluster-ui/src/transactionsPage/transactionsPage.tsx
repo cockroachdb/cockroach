@@ -117,9 +117,9 @@ export type TransactionsPageProps = TransactionsPageStateProps &
   RouteComponentProps;
 
 function statementsRequestFromProps(
-  props: TransactionsPageProps,
+  ts: TimeScale,
 ): protos.cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(ts);
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
@@ -198,26 +198,29 @@ export class TransactionsPage extends React.Component<
 
   // Schedule the next data request depending on the time
   // range key.
-  resetPolling(key: string): void {
+  resetPolling(ts: TimeScale): void {
     this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
+    if (ts.key !== "Custom") {
       this.refreshDataTimeout = setTimeout(
         this.refreshData,
         300000, // 5 minutes
+        ts,
       );
     }
   }
 
-  refreshData = (): void => {
-    const req = statementsRequestFromProps(this.props);
+  refreshData = (ts?: TimeScale): void => {
+    const time = ts ?? this.props.timeScale;
+    const req = statementsRequestFromProps(time);
     this.props.refreshData(req);
-    this.resetPolling(this.props.timeScale.key);
+
+    this.resetPolling(time);
   };
 
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = statementsRequestFromProps(this.props.timeScale);
     this.props.resetSQLStats(req);
-    this.resetPolling(this.props.timeScale.key);
+    this.resetPolling(this.props.timeScale);
   };
 
   componentDidMount(): void {
@@ -387,7 +390,7 @@ export class TransactionsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
+    this.resetPolling(ts);
   };
 
   render(): React.ReactElement {

@@ -10,13 +10,8 @@
 
 import {
   mergeTxnInsightDetails,
-  flattenTxnInsightsToStmts,
-  FlattenedStmtInsightEvent,
+  StatementInsightEvent,
   TxnInsightEvent,
-  TxnContentionInsightEvent,
-  MergedTxnInsightEvent,
-  mergeTxnContentionAndStmtInsights,
-  TxnContentionInsightDetails,
   TxnInsightDetails,
 } from "src/insights";
 
@@ -24,17 +19,11 @@ import {
 // state in db-console and cluster-ui. This file contains selector functions
 // and combiners that can be reused across both packages.
 
-export const selectFlattenedStmtInsightsCombiner = (
-  executionInsights: TxnInsightEvent[],
-): FlattenedStmtInsightEvent[] => {
-  return flattenTxnInsightsToStmts(executionInsights);
-};
-
 export const selectStatementInsightDetailsCombiner = (
-  statementInsights: FlattenedStmtInsightEvent[],
+  statementInsights: StatementInsightEvent[],
   executionID: string,
-): FlattenedStmtInsightEvent | null => {
-  if (!statementInsights || statementInsights?.length < 1 || !executionID) {
+): StatementInsightEvent | null => {
+  if (!statementInsights || !executionID) {
     return null;
   }
 
@@ -43,22 +32,10 @@ export const selectStatementInsightDetailsCombiner = (
   );
 };
 
-export const selectTxnInsightsCombiner = (
-  txnInsightsFromStmts: TxnInsightEvent[],
-  txnContentionInsights: TxnContentionInsightEvent[],
-): MergedTxnInsightEvent[] => {
-  if (!txnInsightsFromStmts && !txnContentionInsights) return [];
-
-  // Merge the two insights lists.
-  return mergeTxnContentionAndStmtInsights(
-    txnInsightsFromStmts,
-    txnContentionInsights,
-  );
-};
-
 export const selectTxnInsightDetailsCombiner = (
-  txnInsightsFromStmts: TxnInsightEvent,
-  txnContentionInsights: TxnContentionInsightDetails,
+  txnInsights: TxnInsightEvent,
+  txnInsightsDetails: TxnInsightDetails,
+  stmtInsights: StatementInsightEvent[] | null,
 ): TxnInsightDetails => {
-  return mergeTxnInsightDetails(txnInsightsFromStmts, txnContentionInsights);
+  return mergeTxnInsightDetails(txnInsights, stmtInsights, txnInsightsDetails);
 };

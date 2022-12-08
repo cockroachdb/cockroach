@@ -9,31 +9,29 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "src/store/utils";
-import moment, { Moment } from "moment";
-import { TxnContentionInsightEvent } from "src/insights";
-import { UpdateTimeScalePayload } from "../../sqlStats";
-import { StmtInsightsReq } from "src/api/stmtInsightsApi";
+import { DOMAIN_NAME } from "../../utils";
+import { TxnInsightEvent } from "src/insights";
+import { TxnInsightsRequest } from "src/api";
 
-export type TransactionInsightsState = {
-  data: TxnContentionInsightEvent[];
+export type TxnInsightsState = {
+  data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
 };
 
-const initialState: TransactionInsightsState = {
+const initialState: TxnInsightsState = {
   data: null,
   lastError: null,
   valid: false,
   inFlight: false,
 };
 
-const transactionInsightsSlice = createSlice({
-  name: `${DOMAIN_NAME}/transactionInsightsSlice`,
+const txnInsightsSlice = createSlice({
+  name: `${DOMAIN_NAME}/txnInsightsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<TxnContentionInsightEvent[]>) => {
+    received: (state, action: PayloadAction<TxnInsightEvent[]>) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
@@ -47,15 +45,13 @@ const transactionInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, _action: PayloadAction<StmtInsightsReq>) => {},
-    request: (_, _action: PayloadAction<StmtInsightsReq>) => {},
-    updateTimeScale: (
-      state,
-      _action: PayloadAction<UpdateTimeScalePayload>,
-    ) => {
+    refresh: (state, _action: PayloadAction<TxnInsightsRequest>) => {
+      state.inFlight = true;
+    },
+    request: (state, _action: PayloadAction<TxnInsightsRequest>) => {
       state.inFlight = true;
     },
   },
 });
 
-export const { reducer, actions } = transactionInsightsSlice;
+export const { reducer, actions } = txnInsightsSlice;

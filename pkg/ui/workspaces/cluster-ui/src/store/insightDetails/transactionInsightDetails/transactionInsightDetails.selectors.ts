@@ -13,9 +13,10 @@ import { AppState } from "src/store/reducers";
 import { selectID } from "src/selectors/common";
 import { selectTxnInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
 import { TxnInsightEvent } from "src/insights";
+import { selectStmtInsights } from "src/store/insights/statementInsights";
 
 const selectTxnContentionInsightsDetails = createSelector(
-  (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
+  (state: AppState) => state.adminUI.txnInsightDetails.cachedData,
   selectID,
   (cachedTxnInsightDetails, execId) => {
     return cachedTxnInsightDetails[execId];
@@ -23,7 +24,7 @@ const selectTxnContentionInsightsDetails = createSelector(
 );
 
 const selectTxnInsightFromExecInsight = createSelector(
-  (state: AppState) => state.adminUI.stmtInsights?.data,
+  (state: AppState) => state.adminUI.txnInsights?.data,
   selectID,
   (execInsights, execID): TxnInsightEvent => {
     return execInsights?.find(txn => txn.transactionExecutionID === execID);
@@ -33,8 +34,13 @@ const selectTxnInsightFromExecInsight = createSelector(
 export const selectTransactionInsightDetails = createSelector(
   selectTxnInsightFromExecInsight,
   selectTxnContentionInsightsDetails,
-  (txnInsights, txnContentionInsights) =>
-    selectTxnInsightDetailsCombiner(txnInsights, txnContentionInsights?.data),
+  selectStmtInsights,
+  (txnInsights, txnContentionInsights, stmtInsights) =>
+    selectTxnInsightDetailsCombiner(
+      txnInsights,
+      txnContentionInsights?.data,
+      stmtInsights,
+    ),
 );
 
 export const selectTransactionInsightDetailsError = createSelector(

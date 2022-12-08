@@ -12,18 +12,14 @@ import { createSelector } from "reselect";
 import { localStorageSelector } from "src/store/utils/selectors";
 import { AppState } from "src/store/reducers";
 
-import {
-  selectFlattenedStmtInsightsCombiner,
-  selectStatementInsightDetailsCombiner,
-} from "src/selectors/insightsCommon.selectors";
+import { selectStatementInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
 import { selectID } from "src/selectors/common";
+import { StatementInsightEvent } from "src/insights";
 
-export const selectStmtInsights = createSelector(
-  (state: AppState) => state.adminUI.stmtInsights?.data,
-  selectFlattenedStmtInsightsCombiner,
-);
+export const selectStmtInsights = (state: AppState): StatementInsightEvent[] =>
+  state.adminUI.stmtInsights?.data;
 
-export const selectStmtInsightsError = (state: AppState) =>
+export const selectStmtInsightsError = (state: AppState): Error | null =>
   state.adminUI.stmtInsights?.lastError;
 
 export const selectStmtInsightDetails = createSelector(
@@ -40,5 +36,8 @@ export const selectColumns = createSelector(
       : null,
 );
 
-export const selectStmtInsightsLoading = (state: AppState) =>
-  !state.adminUI.stmtInsights?.valid || state.adminUI.stmtInsights?.inFlight;
+// Show the data as 'Loading' when the request is in flight AND the
+// data is invalid or null.
+export const selectStmtInsightsLoading = (state: AppState): boolean =>
+  state.adminUI.stmtInsights?.inFlight &&
+  (!state.adminUI.stmtInsights?.valid || !state.adminUI.stmtInsights?.data);

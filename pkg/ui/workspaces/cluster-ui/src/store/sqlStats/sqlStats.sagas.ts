@@ -52,16 +52,9 @@ export function* updateSQLStatsTimeScaleSaga(
       value: ts,
     }),
   );
-  const [start, end] = toRoundedDateRange(ts);
-  const req = new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
-  });
   yield put(sqlStatsActions.invalidated());
   yield put(stmtInsightActions.invalidated());
   yield put(txnInsightActions.invalidated());
-  yield put(sqlStatsActions.refresh(req));
 }
 
 export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {

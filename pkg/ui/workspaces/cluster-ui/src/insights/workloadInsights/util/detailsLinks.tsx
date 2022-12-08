@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { FlattenedStmtInsightEvent } from "../../types";
+import { StatementInsightEvent } from "../../types";
 import React from "react";
 import { HexStringToInt64String } from "../../../util";
 import { Link } from "react-router-dom";
@@ -40,7 +40,7 @@ export function TransactionDetailsLink(
 }
 
 export function StatementDetailsLink(
-  insightDetails: FlattenedStmtInsightEvent,
+  insightDetails: StatementInsightEvent,
   setTimeScale: (tw: TimeScale) => void,
 ): React.ReactElement {
   const linkProps = {

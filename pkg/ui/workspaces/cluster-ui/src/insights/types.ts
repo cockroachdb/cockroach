@@ -26,19 +26,29 @@ export enum InsightExecEnum {
   STATEMENT = "statement",
 }
 
-// What we store in redux for txn contention insight events in
-// the overview page.  It is missing information such as the
-// blocking txn information.
-export type TxnContentionInsightEvent = {
-  transactionID: string;
+// Common fields for both txn and stmt insights.
+export type InsightEventBase = {
+  transactionExecutionID: string;
   transactionFingerprintID: string;
-  queries: string[];
-  insights: Insight[];
-  startTime: Moment;
-  contentionDuration: moment.Duration;
-  contentionThreshold: number;
+  implicitTxn: boolean;
+  sessionID: string;
+  username: string;
+  lastRetryReason?: string;
+  priority: string;
+  retries: number;
   application: string;
-  execType: InsightExecEnum;
+  rowsRead: number;
+  rowsWritten: number;
+  startTime: Moment;
+  endTime: Moment;
+  elapsedTimeMillis: number;
+  query: string;
+  contentionTime?: moment.Duration;
+  insights: Insight[];
+};
+
+export type TxnInsightEvent = InsightEventBase & {
+  stmtExecutionIDs: string[];
 };
 
 // Information about the blocking transaction and schema.
@@ -55,50 +65,8 @@ export type BlockedContentionDetails = {
   contentionTimeMs: number;
 };
 
-// TODO (xinhaoz) these fields should be placed into TxnInsightEvent
-// once they are available for contention insights.  MergedTxnInsightEvent,
-// (which marks these fields as optional) can then be deleted.
-type UnavailableForTxnContention = {
-  databaseName: string;
-  username: string;
-  priority: string;
-  retries: number;
-  implicitTxn: boolean;
-  sessionID: string;
-};
-
-export type TxnInsightEvent = UnavailableForTxnContention & {
-  transactionExecutionID: string;
-  transactionFingerprintID: string;
-  application: string;
-  lastRetryReason?: string;
-  contention?: moment.Duration;
-
-  // The full list of statements in this txn, with their stmt
-  // level insights (not all stmts in the txn may have one).
-  // Ordered by startTime.
-  statementInsights: StatementInsightEvent[];
-
-  insights: Insight[]; // De-duplicated list of insights from statement level.
-  queries: string[]; // We bubble this up from statementinsights for easy access, since txn contention details dont have stmt insights.
-  startTime?: Moment; // TODO (xinhaoz) not currently available
-  elapsedTimeMillis?: number; // TODO (xinhaoz) not currently available
-  endTime?: Moment; // TODO (xinhaoz) not currently available
-};
-
-export type MergedTxnInsightEvent = Omit<
-  TxnInsightEvent,
-  keyof UnavailableForTxnContention
-> &
-  Partial<UnavailableForTxnContention>;
-
 export type TxnContentionInsightDetails = {
   transactionExecutionID: string;
-  queries: string[];
-  insights: Insight[];
-  startTime: Moment;
-  totalContentionTimeMs: number;
-  contentionThreshold: number;
   application: string;
   transactionFingerprintID: string;
   blockingContentionDetails: BlockedContentionDetails[];
@@ -106,11 +74,15 @@ export type TxnContentionInsightDetails = {
   insightName: string;
 };
 
-export type TxnInsightDetails = Omit<MergedTxnInsightEvent, "contention"> & {
-  totalContentionTimeMs?: number;
-  contentionThreshold?: number;
+export type TxnInsightDetails = {
+  // This is currently segemented into 3 parts so that we can
+  // optimize which parts to fetch on the details page.
+  // This is because querying from virtual tables is expensive,
+  // this type can be flattened when we're working with real tables
+  // via the obs service.
+  txnDetails?: TxnInsightEvent;
   blockingContentionDetails?: BlockedContentionDetails[];
-  execType: InsightExecEnum;
+  statements?: StatementInsightEvent[];
 };
 
 export type BlockedStatementContentionDetails = {
@@ -122,40 +94,14 @@ export type BlockedStatementContentionDetails = {
   indexName: string;
 };
 
-// Does not contain transaction information.
-// This is what is stored at the transaction insight level, shown
-// on the txn insights overview page.
-export type StatementInsightEvent = {
+// What we show in the stmt insights overview and details pages.
+export type StatementInsightEvent = InsightEventBase & {
   statementExecutionID: string;
   statementFingerprintID: string;
-  startTime: Moment;
   isFullScan: boolean;
-  elapsedTimeMillis: number;
-  totalContentionTime?: moment.Duration;
   contentionEvents?: BlockedStatementContentionDetails[];
-  endTime: Moment;
-  rowsRead: number;
-  rowsWritten: number;
-  causes: string[];
-  problem: string;
-  query: string;
-  insights: Insight[];
   indexRecommendations: string[];
   planGist: string;
-};
-
-// StatementInsightEvent with their transaction level information.
-// What we show in the stmt insights overview and details pages.
-export type FlattenedStmtInsightEvent = StatementInsightEvent & {
-  transactionExecutionID: string;
-  transactionFingerprintID: string;
-  implicitTxn: boolean;
-  sessionID: string;
-  username: string;
-  lastRetryReason?: string;
-  priority: string;
-  retries: number;
-  application: string;
   databaseName: string;
 };
 
@@ -181,21 +127,21 @@ export type ContentionEvent = {
 
 export const highContentionInsight = (
   execType: InsightExecEnum,
-  latencyThreshold?: number,
+  latencyThresholdMs?: number,
   contentionDuration?: number,
 ): Insight => {
   let waitDuration: string;
   if (
-    latencyThreshold &&
+    latencyThresholdMs &&
     contentionDuration &&
-    contentionDuration < latencyThreshold
+    contentionDuration < latencyThresholdMs
   ) {
     waitDuration = `${contentionDuration}ms`;
-  } else if (!latencyThreshold) {
+  } else if (!latencyThresholdMs) {
     waitDuration =
       "longer than the value of the 'sql.insights.latency_threshold' cluster setting";
   } else {
-    waitDuration = `longer than ${latencyThreshold}ms`;
+    waitDuration = `longer than ${latencyThresholdMs}ms`;
   }
   const description = `This ${execType} waited on other ${execType}s to execute for ${waitDuration}.`;
   return {

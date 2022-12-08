@@ -81,9 +81,7 @@ import { isSelectedColumn } from "src/columnsSelector/utils";
 import { StatementViewType } from "./statementPageTypes";
 import moment from "moment";
 import {
-  databasesRequest,
   InsertStmtDiagnosticRequest,
-  SqlExecutionRequest,
   StatementDiagnosticsReport,
 } from "../api";
 
@@ -125,6 +123,7 @@ export interface StatementsPageDispatchProps {
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  isDataValid: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   statementsError: Error | null;
@@ -153,9 +152,9 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   RouteComponentProps<unknown>;
 
 function statementsRequestFromProps(
-  props: StatementsPageProps,
+  ts: TimeScale,
 ): cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(ts);
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
@@ -276,7 +275,7 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
+    this.refreshStatements(ts);
     this.setState({
       startRequest: new Date(),
     });
@@ -299,30 +298,32 @@ export class StatementsPage extends React.Component<
     }
   }
 
-  resetPolling(key: string): void {
+  resetPolling(ts: TimeScale): void {
     this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
+    if (ts.key !== "Custom") {
       this.refreshDataTimeout = setTimeout(
         this.refreshStatements,
         300000, // 5 minutes
+        ts,
       );
     }
   }
 
-  refreshStatements = (): void => {
-    const req = statementsRequestFromProps(this.props);
+  refreshStatements = (ts?: TimeScale): void => {
+    const time = ts ?? this.props.timeScale;
+    const req = statementsRequestFromProps(time);
     this.props.refreshStatements(req);
 
-    this.resetPolling(this.props.timeScale.key);
+    this.resetPolling(time);
   };
 
   refreshDatabases = (): void => {
     this.props.refreshDatabases();
-    this.resetPolling(this.props.timeScale.key);
+    this.resetPolling(this.props.timeScale);
   };
 
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = statementsRequestFromProps(this.props.timeScale);
     this.props.resetSQLStats(req);
     this.setState({
       startRequest: new Date(),

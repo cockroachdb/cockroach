@@ -12,6 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
+import { actions as sqlActions } from "src/store/sqlStats";
 import {
   TransactionInsightsViewDispatchProps,
   TransactionInsightsViewStateProps,
@@ -34,7 +35,7 @@ import {
   selectStmtInsightsLoading,
 } from "src/store/insights/statementInsights";
 import {
-  actions as transactionInsights,
+  actions as txnInsights,
   selectTransactionInsights,
   selectTransactionInsightsError,
   selectFilters,
@@ -43,7 +44,7 @@ import {
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
-import { StmtInsightsReq } from "src/api";
+import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 
 const transactionMapStateToProps = (
@@ -90,13 +91,13 @@ const TransactionDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      transactionInsights.updateTimeScale({
+      sqlActions.updateTimeScale({
         ts: ts,
       }),
     );
   },
-  refreshTransactionInsights: (req: StmtInsightsReq) => {
-    dispatch(transactionInsights.refresh(req));
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(txnInsights.refresh(req));
   },
 });
 
@@ -130,7 +131,7 @@ const StatementDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      statementInsights.updateTimeScale({
+      sqlActions.updateTimeScale({
         ts: ts,
       }),
     );

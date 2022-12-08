@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { StatementInsightEvent, TxnInsightDetails } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
+import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
 import {
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
   Duration,
@@ -73,7 +74,7 @@ const stmtColumns: ColumnDescriptor<StatementInsightEvent>[] = [
     name: "waitTime",
     title: "Time Spent Waiting",
     cell: (item: StatementInsightEvent) =>
-      Duration((item.totalContentionTime?.asMilliseconds() ?? 0) * 1e6),
+      Duration((item.contentionTime?.asMilliseconds() ?? 0) * 1e6),
     sort: (item: StatementInsightEvent) => item.elapsedTimeMillis,
   },
 ];
@@ -85,10 +86,5 @@ type Props = {
 export const TransactionInsightsDetailsStmtsTab: React.FC<Props> = ({
   insightDetails,
 }) => {
-  return (
-    <SortedTable
-      columns={stmtColumns}
-      data={insightDetails.statementInsights}
-    />
-  );
+  return <SortedTable columns={stmtColumns} data={insightDetails.statements} />;
 };

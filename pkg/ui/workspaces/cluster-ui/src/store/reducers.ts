@@ -10,7 +10,6 @@
 
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
-import { TxnInsightEvent } from "src/insights";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
@@ -24,16 +23,16 @@ import {
   reducer as indexStats,
 } from "./indexStats/indexStats.reducer";
 import {
-  reducer as transactionInsightDetails,
-  TransactionInsightDetailsCachedState,
+  reducer as txnInsightDetails,
+  TxnInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
 import {
   StmtInsightsState,
   reducer as stmtInsights,
 } from "./insights/statementInsights";
 import {
-  reducer as transactionInsights,
-  TransactionInsightsState,
+  TxnInsightsState,
+  reducer as txnInsights,
 } from "./insights/transactionInsights";
 import { JobState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
@@ -76,9 +75,9 @@ export type AdminUiState = {
   job: JobState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
-  transactionInsights: TransactionInsightsState;
-  transactionInsightDetails: TransactionInsightDetailsCachedState;
+  txnInsightDetails: TxnInsightDetailsCachedState;
   stmtInsights: StmtInsightsState;
+  txnInsights: TxnInsightsState;
   schemaInsights: SchemaInsightsState;
 };
 
@@ -92,9 +91,9 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
-  transactionInsights,
-  transactionInsightDetails,
+  txnInsightDetails,
   stmtInsights,
+  txnInsights,
   terminateQuery,
   uiConfig,
   sqlStats,

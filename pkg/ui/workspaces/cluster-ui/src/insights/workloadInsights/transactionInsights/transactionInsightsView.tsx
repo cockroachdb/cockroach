@@ -33,8 +33,8 @@ import {
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
-  MergedTxnInsightEvent,
-  executionInsightsRequestFromTimeScale,
+  TxnInsightEvent,
+  timeScaleRangeToObject,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
@@ -44,7 +44,7 @@ import {
   defaultTimeScaleOptions,
   TimeScaleDropdown,
 } from "../../../timeScaleDropdown";
-import { StmtInsightsReq } from "src/api";
+import { TxnInsightsRequest } from "src/api";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -54,7 +54,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type TransactionInsightsViewStateProps = {
-  transactions: MergedTxnInsightEvent[];
+  transactions: TxnInsightEvent[];
   transactionsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
@@ -66,7 +66,7 @@ export type TransactionInsightsViewStateProps = {
 export type TransactionInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: (req: StmtInsightsReq) => void;
+  refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
 
@@ -103,9 +103,10 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   );
 
   useEffect(() => {
+    console.log("ok");
+    const req = timeScaleRangeToObject(timeScale);
+    refreshTransactionInsights(req);
     if (timeScale.key !== "Custom") {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshTransactionInsights(req);
       // Refresh every 10 seconds.
       const interval = setInterval(refreshTransactionInsights, 10 * 1000, req);
       return () => {
@@ -116,7 +117,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
 
   useEffect(() => {
     if (transactions === null || transactions.length < 1) {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
+      const req = timeScaleRangeToObject(timeScale);
       refreshTransactionInsights(req);
     }
   }, [transactions, timeScale, refreshTransactionInsights]);
@@ -240,7 +241,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions === null || isLoading}
+          loading={isLoading}
           page="transaction insights"
           error={transactionsError}
           renderError={() => InsightsError()}

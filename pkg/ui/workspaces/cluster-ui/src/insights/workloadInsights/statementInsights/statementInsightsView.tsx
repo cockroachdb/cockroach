@@ -31,9 +31,9 @@ import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
 import {
-  executionInsightsRequestFromTimeScale,
+  timeScaleRangeToObject,
   filterStatementInsights,
-  FlattenedStmtInsightEvent,
+  StatementInsightEvent,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
@@ -58,7 +58,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type StatementInsightsViewStateProps = {
-  statements: FlattenedStmtInsightEvent[];
+  statements: StatementInsightEvent[];
   statementsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
@@ -111,8 +111,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   );
 
   useEffect(() => {
+    const req = timeScaleRangeToObject(timeScale);
     if (timeScale.key !== "Custom") {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
       refreshStatementInsights(req);
       // Refresh every 10 seconds except when on custom timeScale.
       const interval = setInterval(refreshStatementInsights, 10 * 1000, req);
@@ -121,13 +121,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
       };
     }
   }, [timeScale, refreshStatementInsights]);
-
-  useEffect(() => {
-    if (statements === null || statements.length < 1) {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshStatementInsights(req);
-    }
-  }, [statements, timeScale, refreshStatementInsights]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -263,7 +256,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={statements === null || isLoading}
+          loading={statements == null || isLoading}
           page="statement insights"
           error={statementsError}
           renderError={() => InsightsError()}
