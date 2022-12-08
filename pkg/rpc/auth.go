@@ -64,11 +64,9 @@ func (a kvAuth) unaryInterceptor(
 	if err != nil {
 		return nil, err
 	}
-	if tenID != (roachpb.TenantID{}) {
-		ctx = contextWithTenant(ctx, tenID)
-		if err := a.tenant.authorize(tenID, info.FullMethod, req); err != nil {
-			return nil, err
-		}
+	ctx = contextWithTenant(ctx, tenID)
+	if err := a.tenant.authorize(tenID, info.FullMethod, req); err != nil {
+		return nil, err
 	}
 	return handler(ctx, req)
 }
@@ -81,28 +79,26 @@ func (a kvAuth) streamInterceptor(
 	if err != nil {
 		return err
 	}
-	if tenID != (roachpb.TenantID{}) {
-		ctx = contextWithTenant(ctx, tenID)
-		origSS := ss
-		ss = &wrappedServerStream{
-			ServerStream: origSS,
-			ctx:          ctx,
-			recv: func(m interface{}) error {
-				if err := origSS.RecvMsg(m); err != nil {
-					return err
-				}
-				// 'm' is now populated and contains the request from the client.
-				return a.tenant.authorize(tenID, info.FullMethod, m)
-			},
-		}
+	ctx = contextWithTenant(ctx, tenID)
+	origSS := ss
+	ss = &wrappedServerStream{
+		ServerStream: origSS,
+		ctx:          ctx,
+		recv: func(m interface{}) error {
+			if err := origSS.RecvMsg(m); err != nil {
+				return err
+			}
+			// 'm' is now populated and contains the request from the client.
+			return a.tenant.authorize(tenID, info.FullMethod, m)
+		},
 	}
 	return handler(srv, ss)
 }
 
 func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	if grpcutil.IsLocalRequestContext(ctx) {
-		// This is an in-process request. Bypass authentication check.
-		return roachpb.TenantID{}, nil
+		// This is an in-process request that must have come from the system tenant.
+		return roachpb.SystemTenantID, nil
 	}
 
 	p, ok := peer.FromContext(ctx)
@@ -135,7 +131,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 			// Incoming connection originating from a tenant SQL server,
 			// into a KV node. Let through. The other server
 			// is able to use any of this server's RPCs.
-			return roachpb.TenantID{}, nil
+			return roachpb.SystemTenantID, nil
 		}
 	}
 
@@ -168,7 +164,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	}
 
 	// User is node/root user authorized for this tenant, return success.
-	return roachpb.TenantID{}, nil
+	return roachpb.SystemTenantID, nil
 }
 
 // getActiveNodeOrUserScope returns a node user scope if one is present in the set of certificate user scopes. If node

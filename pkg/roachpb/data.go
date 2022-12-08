@@ -68,6 +68,9 @@ var (
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
 
+	// EverythingRSpan is a RSpan that covers everything.
+	EverythingRSpan = RSpan{Key: RKeyMin, EndKey: RKeyMax}
+
 	// LocalPrefix is the prefix for all local keys.
 	LocalPrefix = Key{localPrefixByte}
 	// LocalMax is the end of the local key range. It is itself a global key.

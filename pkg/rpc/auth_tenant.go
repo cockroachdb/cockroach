@@ -55,6 +55,7 @@ func (a tenantAuthorizer) authorize(
 
 	case "/cockroach.roachpb.Internal/RangeFeed", "/cockroach.roachpb.Internal/MuxRangeFeed":
 		return a.authRangeFeed(tenID, req.(*roachpb.RangeFeedRequest))
+
 	case "/cockroach.roachpb.Internal/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
 
@@ -71,6 +72,9 @@ func (a tenantAuthorizer) authorize(
 		return nil // no restriction to usage of this endpoint by tenants
 
 	case "/cockroach.server.serverpb.Status/NodeLocality":
+		return nil // no restriction to usage of this endpoint by tenants
+
+	case "/cockroach.server.serverpb.Status/Nodes":
 		return nil // no restriction to usage of this endpoint by tenants
 
 	case "/cockroach.server.serverpb.Status/Statements":
@@ -151,17 +155,17 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 	if err != nil {
 		return authError(err.Error())
 	}
-	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return validateRSpan(tenID, rSpan)
 }
 
 func (a tenantAuthorizer) authGetRangeDescriptors(
 	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
 ) error {
-	return validateSpan(tenID, args.Span)
+	rSpan, err := keys.SpanAddr(args.Span)
+	if err != nil {
+		return authError(err.Error())
+	}
+	return validateRSpan(tenID, rSpan)
 }
 
 func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
@@ -196,9 +200,9 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID.IsSystem()
 	case *roachpb.AdminUnsplitRequest:
 		return t.Class != roachpb.AdminUnsplitRequest_ARBITRARY || tenID.IsSystem()
+	default:
+		return tenID.IsSystem()
 	}
-
-	return false
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
@@ -206,11 +210,8 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 func (a tenantAuthorizer) authRangeLookup(
 	tenID roachpb.TenantID, args *roachpb.RangeLookupRequest,
 ) error {
-	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKey(args.Key) {
-		return authErrorf("requested key %s not fully contained in tenant keyspace %s", args.Key, tenSpan)
-	}
-	return nil
+	rKey := args.Key
+	return validateRSpan(tenID, roachpb.RSpan{Key: rKey, EndKey: rKey.PrefixEnd()})
 }
 
 // authRangeFeed authorizes the provided tenant to invoke the RangeFeed RPC with
@@ -222,11 +223,7 @@ func (a tenantAuthorizer) authRangeFeed(
 	if err != nil {
 		return authError(err.Error())
 	}
-	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return validateRSpan(tenID, rSpan)
 }
 
 // authGossipSubscription authorizes the provided tenant to invoke the
@@ -363,7 +360,11 @@ func (a tenantAuthorizer) authSpanConfigConformance(
 	tenID roachpb.TenantID, args *roachpb.SpanConfigConformanceRequest,
 ) error {
 	for _, sp := range args.Spans {
-		if err := validateSpan(tenID, sp); err != nil {
+		rSpan, err := keys.SpanAddr(sp)
+		if err != nil {
+			return authError(err.Error())
+		}
+		if err := validateRSpan(tenID, rSpan); err != nil {
 			return err
 		}
 	}
@@ -404,24 +405,16 @@ func validateSpanConfigTarget(
 
 	switch spanConfigTarget.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return validateSpan(tenID, *spanConfigTarget.GetSpan())
+		rSpan, err := keys.SpanAddr(*spanConfigTarget.GetSpan())
+		if err != nil {
+			return authError(err.Error())
+		}
+		return validateRSpan(tenID, rSpan)
 	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
 		return validateSystemTarget(*spanConfigTarget.GetSystemSpanConfigTarget())
 	default:
 		return errors.AssertionFailedf("unknown span config target type")
 	}
-}
-
-func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
-	tenSpan := tenantPrefix(tenID)
-	rSpan, err := keys.SpanAddr(sp)
-	if err != nil {
-		return authError(err.Error())
-	}
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
@@ -430,13 +423,22 @@ func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Cont
 	return ctx
 }
 
-func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
-	// TODO(nvanbenschoten): consider caching this span.
-	prefix := roachpb.RKey(keys.MakeTenantPrefix(tenID))
-	return roachpb.RSpan{
-		Key:    prefix,
-		EndKey: prefix.PrefixEnd(),
+func validateRSpan(tenID roachpb.TenantID, rSpan roachpb.RSpan) error {
+
+	tenRSpan := roachpb.EverythingRSpan
+	if !tenID.IsSystem() {
+		// TODO(nvanbenschoten): consider caching this span.
+		prefix := roachpb.RKey(keys.MakeTenantPrefix(tenID))
+		tenRSpan = roachpb.RSpan{
+			Key:    prefix,
+			EndKey: prefix.PrefixEnd(),
+		}
 	}
+
+	if !tenRSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenRSpan)
+	}
+	return nil
 }
 
 // wrappedServerStream is a thin wrapper around grpc.ServerStream that allows
