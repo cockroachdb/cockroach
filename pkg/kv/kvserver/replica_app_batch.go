@@ -126,7 +126,7 @@ func (b *replicaAppBatch) Stage(
 
 	// Run any triggers that should occur before the batch is applied
 	// and before the write batch is staged in the batch.
-	if err := b.runPreAddTriggers(ctx, cmd); err != nil {
+	if err := b.ab.runPreAddTriggers(ctx, &cmd.ReplicatedCmd); err != nil {
 		return nil, err
 	}
 
@@ -141,7 +141,11 @@ func (b *replicaAppBatch) Stage(
 
 	// Run any triggers that should occur before the batch is applied
 	// but after the write batch is staged in the batch.
-	if err := b.runPostAddTriggers(ctx, cmd); err != nil {
+	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd); err != nil {
+		return nil, err
+	}
+
+	if err := b.runPostAddTriggersReplicaOnly(ctx, cmd); err != nil {
 		return nil, err
 	}
 
@@ -174,19 +178,10 @@ func changeRemovesStore(
 	return !existsInChange
 }
 
-// runPreAddTriggers runs any triggers that must fire
-// before a command is applied to the state machine but after the command is
-// staged in the replicaAppBatch's write batch. The batch at this point will
-// represent the raft log up to but excluding the command that is currently
-// being applied.
-func (b *replicaAppBatch) runPreAddTriggers(ctx context.Context, cmd *replicatedCmd) error {
-	// None currently.
-	return nil
-}
-
-// runPreAddTriggersReplicaOnly is like runPreAddTriggers (and is called right after
-// it), except that it must only contain ephemeral side effects that have no influence
-// on durable state. It is not invoked during stand-alone log application.
+// runPreAddTriggersReplicaOnly is like (appBatch).runPreAddTriggers (and is
+// called right after it), except that it must only contain ephemeral side
+// effects that have no influence on durable state. It is not invoked during
+// stand-alone log application.
 func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
@@ -203,14 +198,16 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 	return nil
 }
 
-// runPostAddTriggers runs any triggers that must fire
+// runPostAddTriggersReplicaOnly runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
 // staged in the replicaAppBatch's write batch.
 //
 // May mutate `cmd`.
 //
 // All errors from this method are fatal for this Replica.
-func (b *replicaAppBatch) runPostAddTriggers(ctx context.Context, cmd *replicatedCmd) error {
+func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
+	ctx context.Context, cmd *replicatedCmd,
+) error {
 	res := cmd.ReplicatedResult()
 
 	// Acquire the split or merge lock, if this is a split or a merge. From this
