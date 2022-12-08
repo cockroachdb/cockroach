@@ -13,6 +13,15 @@ CREATE TENANT "tenant-one"
 statement ok
 CREATE TENANT "two"
 
+statement error invalid tenant name
+CREATE TENANT "ABC"
+
+statement error invalid tenant name
+CREATE TENANT "invalid_name"
+
+statement error invalid tenant name
+CREATE TENANT "invalid.name"
+
 statement ok
 CREATE TENANT three
 
