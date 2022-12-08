@@ -713,6 +713,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.cancelChecker.Reset(ctx)
 
 	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec
+	// Auto-commit is disallowed if we executed any DDL, since we need to
+	// potentially create jobs and do other operations with this txn on commit.
+	if p.autoCommit && ex.extraTxnState.numDDL > 0 {
+		p.autoCommit = false
+	}
 	p.extendedEvalCtx.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
 	ex.extraTxnState.firstStmtExecuted = true
 
