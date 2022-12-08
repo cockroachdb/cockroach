@@ -146,11 +146,11 @@ func (b *replicaAppBatch) Stage(
 	// non-trivial ReplicatedState updates until later (without ever staging
 	// them in the batch) is sufficient.
 	b.stageTrivialReplicatedEvalResult(ctx, cmd)
-	b.ab.entries++
+	b.ab.numEntriesProcessed++
 	size := len(cmd.Data)
-	b.ab.entryBytes += int64(size)
+	b.ab.numEntriesProcessedBytes += int64(size)
 	if size == 0 {
-		b.ab.emptyEntries++
+		b.ab.numEmptyEntries++
 	}
 
 	// The command was checked by shouldApplyCommand, so it can be returned
@@ -540,7 +540,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 // application.
 func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
-		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.entries)
+		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.numEntriesProcessed)
 	}
 
 	// Add the replica applied state key to the write batch if this change
@@ -609,7 +609,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
-	b.r.loadStats.writeKeys.RecordCount(float64(b.ab.mutations), 0)
+	b.r.loadStats.writeKeys.RecordCount(float64(b.ab.numMutations), 0)
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
@@ -640,10 +640,10 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
-	b.applyStats.entriesProcessed += b.ab.entries
-	b.applyStats.entriesProcessedBytes += b.ab.entryBytes
-	b.applyStats.numEmptyEntries += b.ab.emptyEntries
-	b.applyStats.batchesProcessed++
+	b.applyStats.numEntriesProcessed += b.ab.numEntriesProcessed
+	b.applyStats.numEntriesProcessedBytes += b.ab.numEntriesProcessedBytes
+	b.applyStats.numEmptyEntries += b.ab.numEmptyEntries
+	b.applyStats.numBatchesProcessed++
 	b.applyStats.followerStoreWriteBytes.Merge(b.ab.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
@@ -738,7 +738,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
 			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
-			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.ab.entries,
+			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.ab.numEntriesProcessed,
 			logTail)
 	}
 	return nil
