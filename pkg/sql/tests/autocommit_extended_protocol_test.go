@@ -14,15 +14,18 @@ import (
 	"context"
 	gosql "database/sql"
 	"errors"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,6 +75,72 @@ func TestInsertFastPathExtendedProtocol(t *testing.T) {
 	// Verify that the insert committed successfully.
 	var c int
 	err = db.QueryRow("SELECT count(*) FROM fast_path_test").Scan(&c)
+	require.NoError(t, err)
+	require.Equal(t, 1, c, "expected 1 row, got %d", c)
+}
+
+// TestInsertFastPathDisableDDLExtendedProtocol verifies that the 1PC "insert fast path"
+// optimization is disabled when doing a simple INSERT with a prepared statement,
+// executed in the same transaction as a DDL.
+func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var db *gosql.DB
+
+	params, _ := CreateTestServerParams()
+	params.Settings = cluster.MakeTestingClusterSettings()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(ctx)
+	db = tc.ServerConn(0)
+	_, err := db.Exec(`CREATE TABLE fast_path_test(val int, j int);`)
+	require.NoError(t, err)
+
+	// Use pgx so that we can introspect error codes returned from cockroach.
+	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(), "", url.User("root"))
+	defer cleanup()
+	conf, err := pgx.ParseConfig(pgURL.String())
+	require.NoError(t, err)
+	conn, err := pgx.ConnectConfig(ctx, conf)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET tracing = 'on'")
+	require.NoError(t, err)
+	var batch pgx.Batch
+	batch.Queue("CREATE INDEX idx ON fast_path_test(val);")
+	batch.Queue("INSERT INTO fast_path_test VALUES($1, $2);", 1, 2)
+	br := conn.SendBatch(ctx, &batch)
+	_, err = br.Exec()
+	require.NoError(t, err)
+	require.NoError(t, br.Close())
+
+	fastPathEnabled := false
+	rows, err := conn.Query(ctx, "SELECT message, operation FROM [SHOW TRACE FOR SESSION]")
+	require.NoError(t, err)
+	for rows.Next() {
+		var msg, operation string
+		err = rows.Scan(&msg, &operation)
+		require.NoError(t, err)
+		if msg == "autocommit enabled" && operation == "count" {
+			fastPathEnabled = true
+		}
+	}
+	require.NoError(t, rows.Err())
+	require.False(t, fastPathEnabled)
+	_, err = conn.Exec(ctx, "SET tracing = 'off'")
+	require.NoError(t, err)
+	err = conn.Close(ctx)
+	require.NoError(t, err)
+
+	// Verify that the insert committed successfully.
+	var c int
+	err = db.QueryRow("SELECT count(*) FROM fast_path_test").Scan(&c)
+	require.NoError(t, err)
+	require.Equal(t, 1, c, "expected 1 row, got %d", c)
+	// Verify that a job was created for the create index.
+	err = db.QueryRow("SELECT count(*) FROM  [SHOW JOBS] WHERE job_type ='SCHEMA CHANGE' AND description LIKE 'CREATE INDEX idx%' LIMIT 1").Scan(&c)
 	require.NoError(t, err)
 	require.Equal(t, 1, c, "expected 1 row, got %d", c)
 }
