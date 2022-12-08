@@ -105,6 +105,14 @@ func (b *appBatch) toCheckedCmd(
 	}
 }
 
+// runPreAddTriggers runs any triggers that must fire before the command is
+// added to the appBatch's pebble batch. That is, the pebble batch at this point
+// will have materialized the raft log up to but excluding the current command.
+func (b *appBatch) runPreAddTriggers(ctx context.Context, cmd *raftlog.ReplicatedCmd) error {
+	// None currently.
+	return nil
+}
+
 // addWriteBatch adds the command's writes to the batch.
 func (b *appBatch) addWriteBatch(
 	ctx context.Context, batch storage.Batch, cmd *replicatedCmd,
@@ -121,5 +129,11 @@ func (b *appBatch) addWriteBatch(
 	if err := batch.ApplyBatchRepr(wb.Data, false); err != nil {
 		return errors.Wrapf(err, "unable to apply WriteBatch")
 	}
+	return nil
+}
+
+func (b *appBatch) runPostAddTriggers(ctx context.Context, cmd *raftlog.ReplicatedCmd) error {
+	// TODO(sep-raft-log): currently they are commingled in runPostAddTriggersReplicaOnly,
+	// extract them from that method.
 	return nil
 }
