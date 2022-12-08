@@ -124,26 +124,6 @@ func (b *replicaAppBatch) Stage(
 		return nil, err
 	}
 
-	// Acquire the split or merge lock, if necessary. If a split or merge
-	// command was rejected with a below-Raft forced error then its replicated
-	// result was just cleared and this will be a no-op.
-	//
-	// TODO(tbg): can't this happen in splitPreApply which is called from
-	// b.runPostAddTriggers and similar for merges? That
-	// way, it would become less of a one-off.
-	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
-		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
-			err = errors.Wrap(err, "unable to acquire split lock")
-		} else {
-			err = errors.Wrap(err, "unable to acquire merge lock")
-		}
-		return nil, err
-	} else if splitMergeUnlock != nil {
-		// Set the splitMergeUnlock on the replicaAppBatch to be called
-		// after the batch has been applied (see replicaAppBatch.commit).
-		cmd.splitMergeUnlock = splitMergeUnlock
-	}
-
 	// Run any triggers that should occur before the batch is applied
 	// and before the write batch is staged in the batch.
 	if err := b.runPreAddTriggers(ctx, cmd); err != nil {
@@ -227,9 +207,36 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 // before a command is applied to the state machine but after the command is
 // staged in the replicaAppBatch's write batch.
 //
+// May mutate `cmd`.
+//
 // All errors from this method are fatal for this Replica.
 func (b *replicaAppBatch) runPostAddTriggers(ctx context.Context, cmd *replicatedCmd) error {
 	res := cmd.ReplicatedResult()
+
+	// Acquire the split or merge lock, if this is a split or a merge. From this
+	// point on, the right-hand side replica will be locked for raft processing
+	// (splitMergeUnlock) is its `raftMu.Unlock` and so we can act "as" the
+	// right-hand side's raft application goroutine. The command's WriteBatch
+	// (once committed) will carry out the disk portion of the split/merge, and
+	// then there's in-memory book-keeping. From here on down up to the call to
+	// splitMergeUnlock this is essentially a large (infallible, i.e. all errors
+	// are fatal for this Replica) critical section and so we are relatively free
+	// in how things are arranged, but currently we first commit the batch (in
+	// `ApplyToStateMachine`) and then finalize the in- memory portion of the
+	// split/merge in `(stateMachine).ApplySideEffects), following which
+	// splitMergeUnlock is called.
+	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
+		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
+			err = errors.Wrap(err, "unable to acquire split lock")
+		} else {
+			err = errors.Wrap(err, "unable to acquire merge lock")
+		}
+		return err
+	} else if splitMergeUnlock != nil {
+		// Set the splitMergeUnlock on the replicaAppBatch to be called
+		// after the batch has been applied (see replicaAppBatch.commit).
+		cmd.splitMergeUnlock = splitMergeUnlock
+	}
 
 	// NB: we need to do this update early, as some fields are zeroed out below
 	// (AddSST for example).
