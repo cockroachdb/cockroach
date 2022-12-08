@@ -1162,7 +1162,7 @@ func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]
 	var files []string
 	// Look for all files in dest that start with "/ENCRYPTION-INFO"
 	// and return them.
-	err := dest.List(ctx, "", "", func(p string) error {
+	err := dest.List(ctx, "", listingDelimDataSlash, func(p string) error {
 		paths := strings.Split(p, "/")
 		p = paths[len(paths)-1]
 		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
@@ -1321,7 +1321,7 @@ func checkForPreviousBackup(
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
 	// that of our job.
-	if err := defaultStore.List(ctx, "", "", func(s string) error {
+	if err := defaultStore.List(ctx, "", listingDelimDataSlash, func(s string) error {
 		s = strings.TrimPrefix(s, "/")
 		if strings.HasPrefix(s, backupLockFilePrefix) {
 			jobIDSuffix := strings.TrimPrefix(s, backupLockFilePrefix)
