@@ -641,11 +641,8 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
-	b.applyStats.numEntriesProcessed += b.ab.numEntriesProcessed
-	b.applyStats.numEntriesProcessedBytes += b.ab.numEntriesProcessedBytes
-	b.applyStats.numEmptyEntries += b.ab.numEmptyEntries
+	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
-	b.applyStats.followerStoreWriteBytes.Merge(b.ab.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())

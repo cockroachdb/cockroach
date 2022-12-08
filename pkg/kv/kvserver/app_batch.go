@@ -23,6 +23,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type appBatchStats struct {
+	numMutations             int
+	numEntriesProcessed      int
+	numEntriesProcessedBytes int64
+	numEmptyEntries          int
+	followerStoreWriteBytes  kvadmission.FollowerStoreWriteBytes
+	// NB: update `merge` when adding a new field.
+}
+
+func (s *appBatchStats) merge(ss appBatchStats) {
+	s.numMutations += ss.numMutations
+	s.numEntriesProcessed += ss.numEntriesProcessed
+	s.numEntriesProcessedBytes += ss.numEntriesProcessedBytes
+	ss.numEmptyEntries += ss.numEmptyEntries
+	s.followerStoreWriteBytes.Merge(ss.followerStoreWriteBytes)
+}
+
 // appBatch is the in-progress foundation for standalone log entry
 // application[^1], i.e. the act of applying raft log entries to the state
 // machine in a library-style fashion, without a running CockroachDB server.
@@ -47,11 +64,7 @@ import (
 //
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
-	numMutations             int
-	numEntriesProcessed      int
-	numEntriesProcessedBytes int64
-	numEmptyEntries          int
-	followerStoreWriteBytes  kvadmission.FollowerStoreWriteBytes
+	appBatchStats
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - batch
