@@ -979,3 +979,55 @@ func TestRetrySerializableBumpsToNow(t *testing.T) {
 	}))
 	require.Greater(t, attempt, 1, "Transaction is expected to retry once")
 }
+
+// TestTxnRetryWithLatchesDroppedEarly serves as a regression test for
+// https://github.com/cockroachdb/cockroach/issues/92189. It constructs a batch
+// like:
+// b.Scan(a, e)
+// b.Put(b, "value2")
+// which is forced to retry at a higher timestamp. It ensures that the scan
+// request does not see the intent at key b, even when the retry happens.
+func TestTxnRetryWithLatchesDroppedEarly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	keyA := "a"
+	keyB := "b"
+	keyE := "e"
+	keyF := "f"
+
+	err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		s.Manual.Advance(1 * time.Second)
+
+		{
+			// Attempt to write to keyF in another txn.
+			conflictTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			conflictTxn.TestingSetPriority(enginepb.MaxTxnPriority)
+			if err := conflictTxn.Put(ctx, keyF, "valueF"); err != nil {
+				return err
+			}
+			if err := conflictTxn.Commit(ctx); err != nil {
+				return err
+			}
+		}
+
+		b := txn.NewBatch()
+		b.Scan(keyA, keyE)
+		b.Put(keyB, "value2")
+		b.Put(keyF, "value3") // bumps the transaction and causes a server side retry.
+
+		err := txn.Run(ctx, b)
+		if err != nil {
+			return err
+		}
+
+		// Ensure no rows were returned as part of the scan.
+		require.Equal(t, 0, len(b.RawResponse().Responses[0].GetInner().(*roachpb.ScanResponse).Rows))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

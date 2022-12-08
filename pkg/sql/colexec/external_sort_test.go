@@ -94,19 +94,12 @@ func TestExternalSort(t *testing.T) {
 						if tc.k == 0 || tc.k >= uint64(len(tc.tuples)) {
 							semsToCheck = append(semsToCheck, sem)
 						}
-						// TODO(asubiotto): Pass in the testing.T of the caller to this
-						//  function and do substring matching on the test name to
-						//  conditionally explicitly call Close() on the sorter (through
-						//  result.ToClose) in cases where it is know the sorter will not
-						//  be drained.
 						sorter, closers, err := createDiskBackedSorter(
 							ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() {},
 							numForcedRepartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							&monitorRegistry,
 						)
 						// Check that the sort was added as a Closer.
-						// TODO(asubiotto): Explicitly Close when testing.T is passed into
-						//  this constructor and we do a substring match.
 						require.Equal(t, 1, len(closers))
 						return sorter, err
 					})

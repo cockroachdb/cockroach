@@ -1677,21 +1677,31 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 	return nil
 }
 
-// ScanConflictingIntents scans intents using only the separated intents lock
-// table. The result set is added to the given `intents` slice. It ignores
-// intents that do not conflict with `txn`. If it encounters intents that were
-// written by `txn` that are either at a higher sequence number than txn's or at
-// a lower sequence number but at a higher timestamp, `needIntentHistory` is set
-// to true. This flag is used to signal to the caller that a subsequent scan
-// over the MVCC key space (for the batch in question) will need to be performed
-// using an intent interleaving iterator in order to be able to read the correct
-// provisional value.
-func ScanConflictingIntents(
+// ScanConflictingIntentsForDroppingLatchesEarly scans intents using only the
+// separated intents lock table on behalf of a batch request trying to drop its
+// latches early. If found, conflicting intents are added to the supplied
+// `intents` slice, which indicates to the caller that evaluation should not
+// proceed until the intents are resolved. Intents that don't conflict with the
+// transaction referenced by txnID[1] at the supplied `ts` are ignored.
+//
+// The caller must supply the sequence number of the request on behalf of which
+// the intents are being scanned. This is used to determine if the caller needs
+// to consult intent history when performing a scan over the MVCC keyspace
+// (indicated by the `needIntentHistory` return parameter). Intent history is
+// required to read the correct provisional value when scanning if we encounter
+// an intent written by the `txn` at a higher sequence number than the one
+// supplied or at a higher timestamp than the `ts` supplied (regardless of the
+// sequence number of the intent).
+//
+// [1] The supplied txnID may be empty (uuid.Nil) if the request on behalf of
+// which the scan is being performed is non-transactional.
+func ScanConflictingIntentsForDroppingLatchesEarly(
 	ctx context.Context,
 	reader Reader,
-	txn *roachpb.Transaction,
+	txnID uuid.UUID,
 	ts hlc.Timestamp,
 	start, end roachpb.Key,
+	seq enginepb.TxnSeq,
 	intents *[]roachpb.Intent,
 	maxIntents int64,
 ) (needIntentHistory bool, err error) {
@@ -1718,7 +1728,9 @@ func ScanConflictingIntents(
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if maxIntents != 0 && int64(len(*intents)) >= maxIntents {
-			break
+			// Return early if we're done accumulating intents; make no claims about
+			// not needing intent history.
+			return true /* needsIntentHistory */, nil
 		}
 		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
 			return false, err
@@ -1726,14 +1738,14 @@ func ScanConflictingIntents(
 		if meta.Txn == nil {
 			return false, errors.Errorf("intent without transaction")
 		}
-		ownIntent := txn != nil && txn.ID == meta.Txn.ID
+		ownIntent := txnID != uuid.Nil && txnID == meta.Txn.ID
 		if ownIntent {
 			// If we ran into one of our own intents, check whether the intent has a
 			// higher (or equal) sequence number or a higher (or equal) timestamp. If
 			// either of these conditions is true, a corresponding scan over the MVCC
 			// key space will need access to the key's intent history in order to read
 			// the correct provisional value. So we set `needIntentHistory` to true.
-			if txn.Sequence <= meta.Txn.Sequence || ts.LessEq(meta.Timestamp.ToTimestamp()) {
+			if seq <= meta.Txn.Sequence || ts.LessEq(meta.Timestamp.ToTimestamp()) {
 				needIntentHistory = true
 			}
 			continue

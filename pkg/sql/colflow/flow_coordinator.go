@@ -278,13 +278,8 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	// Make sure that we close the coordinator and notify the batch receiver in
 	// all cases.
 	defer func() {
-		if err := f.close(ctx); err != nil && status != execinfra.ConsumerClosed {
-			f.pushError(err)
-		}
+		f.cancelFlow()
 		f.output.ProducerDone()
-		// Note that f.close is only safe to call before finishing the tracing
-		// span because some components might still use the span when they are
-		// being closed.
 		span.Finish()
 	}()
 
@@ -340,19 +335,6 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 			return
 		}
 	}
-}
-
-// close cancels the flow and closes all colexecop.Closers the coordinator is
-// responsible for.
-func (f *BatchFlowCoordinator) close(ctx context.Context) error {
-	f.cancelFlow()
-	var lastErr error
-	for _, toClose := range f.input.ToClose {
-		if err := toClose.Close(ctx); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
 }
 
 // Release implements the execinfra.Releasable interface.
