@@ -1044,3 +1044,13 @@ message WindowerSpec {
   // WindowFns is the specification of all window functions to be computed.
   repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
 }
+
+// IndexReaderSpec reads raw key/value information from a given index.
+ message IndexReaderSpec {
+  // Table is the table that this index belongs to.
+   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+   // IndexID is the ID for the index to scan.
+   optional uint32 index_id = 2 [(gogoproto.nullable) = false];
+   // Spans are the spans to read.
+   repeated roachpb.Span spans = 3 [(gogoproto.nullable) = false];
+ }

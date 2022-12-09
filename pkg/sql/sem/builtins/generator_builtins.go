@@ -557,7 +557,7 @@ The output can be used to recreate a database.'
 				{Name: "IndexID", Typ: types.Int}},
 			types.MakeLabeledTuple(
 				[]*types.T{types.Bytes, types.Bytes},
-				[]string{"Key", "Value"},
+				[]string{"key", "value"},
 			),
 			makeGetIndexTuplesGenerator,
 			"Returns tuples from within an index.",

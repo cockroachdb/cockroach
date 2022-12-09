@@ -370,6 +370,9 @@ func NewProcessor(
 		}
 		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl, outputs[0])
 	}
+	if core.IndexReader != nil {
+		return newIndexScan(ctx, flowCtx, processorID, *core.IndexReader, post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 

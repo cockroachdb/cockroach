@@ -13,6 +13,7 @@ go_library(
         "distinct.go",
         "filterer.go",
         "hashjoiner.go",
+        "index_scan.go",
         "indexbackfiller.go",
         "inverted_expr_evaluator.go",
         "inverted_filterer.go",

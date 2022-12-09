@@ -3235,6 +3235,15 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr></tbody>
 </table>
 
+### TUPLE{BYTES AS KEY, BYTES AS VALUE} functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.get_index_tuples"></a><code>crdb_internal.get_index_tuples(TableID: <a href="int.html">int</a>, IndexID: <a href="int.html">int</a>) &rarr; tuple{bytes AS key, bytes AS value}</code></td><td><span class="funcdesc"><p>Returns tuples from within an index.</p>
+</span></td><td>Volatile</td></tr></tbody>
+</table>
+
 ### Trigrams functions
 
 <table>

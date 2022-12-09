@@ -128,6 +128,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.SequenceSelectColumns)
 	case *exportNode:
 		return n.getColumns(mut, colinfo.ExportColumns)
+	case *indexScanNode:
+		return n.getColumns(mut, colinfo.IndexScanColumns)
 	case *completionsNode:
 		return n.getColumns(mut, colinfo.ShowCompletionsColumns)
 

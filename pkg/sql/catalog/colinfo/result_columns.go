@@ -292,3 +292,9 @@ var TenantColumnsWithReplication = ResultColumns{
 	// cutover to before this time.
 	{Name: "retained_time", Typ: types.Timestamp},
 }
+
+// IndexScanColumns are the results for index scan selects
+var IndexScanColumns = ResultColumns{
+	{Name: "key", Typ: types.Bytes},
+	{Name: "value", Typ: types.Bytes},
+}
