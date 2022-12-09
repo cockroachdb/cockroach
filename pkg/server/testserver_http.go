@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -33,6 +34,7 @@ type httpTestServer struct {
 		// of *Server, which are also embedded in TestServer.
 		authentication *authenticationServer
 		sqlServer      *SQLServer
+		tenantName     roachpb.TenantName
 	}
 
 	// authClient is an http.Client that has been authenticated to access the
@@ -45,6 +47,19 @@ type httpTestServer struct {
 	}
 }
 
+type tenantHeaderDecorator struct {
+	http.RoundTripper
+
+	tenantName roachpb.TenantName
+}
+
+func (t tenantHeaderDecorator) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Add(TenantSelectHeader, string(t.tenantName))
+	return t.RoundTripper.RoundTrip(req)
+}
+
+var _ http.RoundTripper = &tenantHeaderDecorator{}
+
 // AdminURL implements TestServerInterface.
 func (ts *httpTestServer) AdminURL() string {
 	return ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String()
@@ -52,7 +67,15 @@ func (ts *httpTestServer) AdminURL() string {
 
 // GetUnauthenticatedHTTPClient implements TestServerInterface.
 func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
-	return ts.t.sqlServer.execCfg.RPCContext.GetHTTPClient()
+	client, err := ts.t.sqlServer.execCfg.RPCContext.GetHTTPClient()
+	if err != nil {
+		return http.Client{}, err
+	}
+	client.Transport = &tenantHeaderDecorator{
+		RoundTripper: client.Transport,
+		tenantName:   ts.t.tenantName,
+	}
+	return client, nil
 }
 
 // GetAdminHTTPClient implements the TestServerInterface.
@@ -128,9 +151,12 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 			if err != nil {
 				return err
 			}
-			authClient.httpClient.Transport = &v2AuthDecorator{
-				RoundTripper: authClient.httpClient.Transport,
-				session:      base64.StdEncoding.EncodeToString(rawCookieBytes),
+			authClient.httpClient.Transport = &tenantHeaderDecorator{
+				RoundTripper: &v2AuthDecorator{
+					RoundTripper: authClient.httpClient.Transport,
+					session:      base64.StdEncoding.EncodeToString(rawCookieBytes),
+				},
+				tenantName: ts.t.tenantName,
 			}
 			authClient.httpClient.Jar = cookieJar
 			authClient.cookie = rawCookie

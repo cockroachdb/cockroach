@@ -97,6 +97,10 @@ type Context struct {
 	// DefaultEnableRangefeeds is true if rangefeeds should start
 	// out enabled.
 	DefaultEnableRangefeeds bool
+
+	// SimulateSeparateTenantProcess is true if we want to emulate
+	// a separate tenant process.
+	SimulateSeparateTenantProcess bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

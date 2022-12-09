@@ -323,4 +323,9 @@ type TestTenantArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// SimulateSeparateTenantProcess is used to initialize tenants outside the
+	// kv server's `serverController`. This is useful for simulating a separate
+	// process for the tenant.
+	SimulateSeparateTenantProcess bool
 }
