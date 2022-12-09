@@ -66,7 +66,7 @@ type Server struct {
 	spy        logSpy
 }
 
-type serverTickleFn = func(ctx context.Context, name string) error
+type serverTickleFn = func(ctx context.Context, name roachpb.TenantName) error
 
 // NewServer sets up a debug server.
 func NewServer(
@@ -293,7 +293,7 @@ func (h handleTickle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	err := serverTickleFn(h)(ctx, name)
+	err := serverTickleFn(h)(ctx, roachpb.TenantName(name))
 	if err != nil {
 		fmt.Fprint(w, err)
 		return

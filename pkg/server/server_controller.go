@@ -77,7 +77,7 @@ type serverEntry struct {
 // If the specified tenant name is invalid (tenant does not exist or
 // is not active), the returned error will contain the
 // ErrInvalidTenant mark, which can be checked with errors.Is.
-type newServerFn func(ctx context.Context, tenantName string, index int, deregister func()) (onDemandServer, error)
+type newServerFn func(ctx context.Context, tenantName roachpb.TenantName, index int, deregister func()) (onDemandServer, error)
 
 // serverController manages a fleet of multiple servers side-by-side.
 // They are instantiated on demand the first time they are accessed.
@@ -97,7 +97,7 @@ type serverController struct {
 		//
 		// TODO(knz): Detect when the mapping of name to tenant ID has
 		// changed, and invalidate the entry.
-		servers map[string]serverEntry
+		servers map[roachpb.TenantName]serverEntry
 
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
@@ -115,7 +115,7 @@ func newServerController(
 		stopper:     parentStopper,
 		newServerFn: newServerFn,
 	}
-	c.mu.servers = map[string]serverEntry{
+	c.mu.servers = map[roachpb.TenantName]serverEntry{
 		catconstants.SystemTenantName: {
 			server:     systemServer,
 			shouldStop: false,
@@ -129,7 +129,7 @@ func newServerController(
 // the given tenant name, and instantiates the server if none exists
 // yet.
 func (c *serverController) getOrCreateServer(
-	ctx context.Context, tenantName string,
+	ctx context.Context, tenantName roachpb.TenantName,
 ) (onDemandServer, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -207,21 +207,21 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	s.getHTTPHandlerFn()(w, r)
 }
 
-func getTenantNameFromHTTPRequest(r *http.Request) string {
+func getTenantNameFromHTTPRequest(r *http.Request) roachpb.TenantName {
 	// Highest priority is manual override on the URL query parameters.
 	const tenantNameParamInQueryURL = "tenant_name"
 	if tenantName := r.URL.Query().Get(tenantNameParamInQueryURL); tenantName != "" {
-		return tenantName
+		return roachpb.TenantName(tenantName)
 	}
 
 	// If not in parameters, try an explicit header.
 	if tenantName := r.Header.Get(TenantSelectHeader); tenantName != "" {
-		return tenantName
+		return roachpb.TenantName(tenantName)
 	}
 
 	// No parameter, no explicit header. Is there a cookie?
 	if c, _ := r.Cookie(TenantSelectCookieName); c != nil && c.Value != "" {
-		return c.Value
+		return roachpb.TenantName(c.Value)
 	}
 
 	// No luck so far.
@@ -233,7 +233,7 @@ func getTenantNameFromHTTPRequest(r *http.Request) string {
 
 // TestingGetSQLAddrForTenant extracts the SQL address for the target tenant.
 // Used in tests until https://github.com/cockroachdb/cockroach/issues/84585 is resolved.
-func (s *Server) TestingGetSQLAddrForTenant(ctx context.Context, tenant string) string {
+func (s *Server) TestingGetSQLAddrForTenant(ctx context.Context, tenant roachpb.TenantName) string {
 	ts, err := s.serverController.getOrCreateServer(ctx, tenant)
 	if err != nil {
 		panic(err)
@@ -259,7 +259,7 @@ var ErrInvalidTenant error = errInvalidTenantMarker{}
 // is not active), the returned error will contain the
 // ErrInvalidTenant mark, which can be checked with errors.Is.
 func (s *Server) newServerForTenant(
-	ctx context.Context, tenantName string, index int, deregister func(),
+	ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
 ) (onDemandServer, error) {
 	// Look up the ID of the requested tenant.
 	//
