@@ -68,7 +68,7 @@ func TestDiskQueue(t *testing.T) {
 					prefix, diskQueueCacheMode, alwaysCompress, suffix, numBatches), func(t *testing.T) {
 					// Create random input.
 					batches := make([]coldata.Batch, 0, numBatches)
-					op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
+					op, typs := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 						NumBatches: cap(batches),
 						BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 						Nulls:      true,
@@ -77,7 +77,6 @@ func TestDiskQueue(t *testing.T) {
 						},
 					})
 					op.Init(ctx)
-					typs := op.Typs()
 
 					queueCfg.SetCacheMode(diskQueueCacheMode)
 					if !rewindable {

@@ -90,7 +90,7 @@ func TestSpillingBuffer(t *testing.T) {
 		// window into them.
 		var tuples *AppendOnlyBufferedBatch
 		// Create random input.
-		op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
+		op, _ := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 			NumBatches:        numBatches,
 			BatchSize:         inputBatchSize,
 			Nulls:             true,
