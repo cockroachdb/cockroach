@@ -72,9 +72,12 @@ func (i *IOGrantCoordinator) WaitForBurstCapacity(ts TenantStoreTuple, pri admis
 
 // XXX: Hook this up to the StoresTokenGranter/WorkQueue, which should adjust it
 // once (logical) tokens are consumed.
-func (i *IOGrantCoordinator) AdjustBurstCapacity(ts TenantStoreTuple, class workClass, delta int) {
+func (i *IOGrantCoordinator) AdjustBurstCapacity(ts TenantStoreTuple, delta int) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+
+	// FIXME: Do we need this on adjustments, or can we always give in order
+	class := regularWorkClass
 
 	c := i.getWriteBurstCapacityLocked(ts)
 	switch class {

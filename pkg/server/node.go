@@ -1326,7 +1326,10 @@ func (n *Node) FollowerAccounting(
 	ctx context.Context,
 	request *roachpb.FollowerAccountingRequest,
 ) (*roachpb.FollowerAccountingResponse, error) {
-	// TODO(baptist): Change number of tokens in the pool
+	n.storeCfg.KVAdmissionController.AdjustFollowerWorkAccounting(
+		roachpb.StoreID(request.StoreID),
+		request.TenantID,
+		int(request.NumTokens))
 	return new(roachpb.FollowerAccountingResponse), nil
 }
 

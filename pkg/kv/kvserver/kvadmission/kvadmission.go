@@ -118,6 +118,11 @@ type Controller interface {
 	// same proposal will always lead to the same amount of L0 addition
 	// everywhere?
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
+
+	// AdjustFollowerWorkAccounting adjusts the number of tokens for this tenant by
+	// the given amount.
+	AdjustFollowerWorkAccounting(storeId roachpb.StoreID, tenantId roachpb.TenantID, amount int)
+
 	// AdmitRangefeedRequest must be called before serving rangefeed requests.
 	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
 	// catchup scans (typically CPU-intensive and affecting scheduling
@@ -373,6 +378,13 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 			}
 		}
 	}
+}
+
+func (n *controllerImpl) AdjustFollowerWorkAccounting(storeId roachpb.StoreID, tenantId roachpb.TenantID, amount int) {
+	n.ioGrantCoordinator.AdjustBurstCapacity(admission.TenantStoreTuple{
+		StoreID:  storeId,
+		TenantID: tenantId,
+	}, amount)
 }
 
 // AdmitRangefeedRequest implements the Controller interface.
