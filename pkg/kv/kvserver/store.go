@@ -1897,6 +1897,52 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 	return ident, err
 }
 
+// loadAndReconcilesReplicas loads the Replicas present on this
+// store. It reconciles inconsistent state and runs validation checks.
+//
+// TODO(sep-raft-log): also load *uninitialized* Replicas.
+func loadAndReconcileReplicas(
+	ctx context.Context, eng storage.Engine,
+) (map[storage.FullReplicaID]*roachpb.RangeDescriptor, error) {
+	ident, err := ReadStoreIdent(ctx, eng)
+	if err != nil {
+		return nil, err
+	}
+
+	m := map[storage.FullReplicaID]*roachpb.RangeDescriptor{}
+	// INVARIANT: the latest visible committed version of the RangeDescriptor
+	// (which is what IterateRangeDescriptorsFromDisk returns) is the one reflecting
+	// the state of the Replica.
+	// INVARIANT: the descriptor for range [a,z) is located at RangeDescriptorKey(a).
+	// This is checked in IterateRangeDescriptorsFromDisk.
+	if err := IterateRangeDescriptorsFromDisk(
+		ctx, eng, func(desc roachpb.RangeDescriptor) error {
+			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
+			// i.e. a Store is a member of all of its local Replicas.
+			repDesc, found := desc.GetReplicaDescriptor(ident.StoreID)
+			if !found {
+				return errors.AssertionFailedf(
+					"RangeDescriptor does not contain local s%d: %s",
+					ident.StoreID, desc)
+			}
+
+			// INVARIANT: every Replica has a persisted ReplicaID. For initialized
+			// Replicas, it matches that of the descriptor.
+			//
+			// TODO(sep-raft-log): actually load the persisted ReplicaID and validate
+			// the above invariant.
+			m[storage.FullReplicaID{
+				RangeID:   desc.RangeID,
+				ReplicaID: repDesc.ReplicaID,
+			}] = &desc
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
@@ -1997,67 +2043,54 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
-
+	//
+	// Note that we do not create raft groups at this time; they will be created
+	// on-demand the first time they are needed. This helps reduce the amount of
+	// election-related traffic in a cold start.
+	// Raft initialization occurs when we propose a command on this range or
+	// receive a raft message addressed to it.
+	// TODO(bdarnell): Also initialize raft groups when read leases are needed.
+	// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
+	// and initialize those groups.
+	//
 	// TODO(peter): While we have to iterate to find the replica descriptors
 	// serially, we can perform the migrations and replica creation
 	// concurrently. Note that while we can perform this initialization
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	err = IterateRangeDescriptorsFromDisk(ctx, s.engine,
-		func(desc roachpb.RangeDescriptor) error {
-			if !desc.IsInitialized() {
-				return errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
-			}
-			replicaDesc, found := desc.GetReplicaDescriptor(s.StoreID())
-			if !found {
-				// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
-				// i.e. a Store is a member of all of its local Replicas.
-				return errors.AssertionFailedf(
-					"RangeDescriptor does not contain local s%d: %s",
-					s.StoreID(), desc)
-			}
-
-			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
-			if err != nil {
-				return err
-			}
-
-			// We can't lock s.mu across NewReplica due to the lock ordering
-			// constraint (*Replica).raftMu < (*Store).mu. See the comment on
-			// (Store).mu.
-			s.mu.Lock()
-			err = s.addReplicaInternalLocked(rep)
-			s.mu.Unlock()
-			if err != nil {
-				return err
-			}
-
-			// Add this range and its stats to our counter.
-			s.metrics.ReplicaCount.Inc(1)
-			if _, ok := rep.TenantID(); ok {
-				// TODO(tbg): why the check? We're definitely an initialized range so
-				// we have a tenantID.
-				s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
-			} else {
-				return errors.AssertionFailedf("found newly constructed replica"+
-					" for range %d at generation %d with an invalid tenant ID in store %d",
-					redact.Safe(desc.RangeID),
-					redact.Safe(desc.Generation),
-					redact.Safe(s.StoreID()))
-			}
-
-			// Note that we do not create raft groups at this time; they will be created
-			// on-demand the first time they are needed. This helps reduce the amount of
-			// election-related traffic in a cold start.
-			// Raft initialization occurs when we propose a command on this range or
-			// receive a raft message addressed to it.
-			// TODO(bdarnell): Also initialize raft groups when read leases are needed.
-			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
-			// and initialize those groups.
-			return nil
-		})
+	descs, err := loadAndReconcileReplicas(ctx, s.engine)
 	if err != nil {
 		return err
+	}
+	for fullID, desc := range descs {
+		rep, err := newReplica(ctx, desc, s, fullID.ReplicaID)
+		if err != nil {
+			return err
+		}
+
+		// We can't lock s.mu across NewReplica due to the lock ordering
+		// constraint (*Replica).raftMu < (*Store).mu. See the comment on
+		// (Store).mu.
+		s.mu.Lock()
+		err = s.addReplicaInternalLocked(rep)
+		s.mu.Unlock()
+		if err != nil {
+			return err
+		}
+
+		// Add this range and its stats to our counter.
+		s.metrics.ReplicaCount.Inc(1)
+		if _, ok := rep.TenantID(); ok {
+			// TODO(tbg): why the check? We're definitely an initialized range so
+			// we have a tenantID.
+			s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
+		} else {
+			return errors.AssertionFailedf("found newly constructed replica"+
+				" for range %d at generation %d with an invalid tenant ID in store %d",
+				redact.Safe(desc.RangeID),
+				redact.Safe(desc.Generation),
+				redact.Safe(s.StoreID()))
+		}
 	}
 
 	// Start Raft processing goroutines.
