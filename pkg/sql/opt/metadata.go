@@ -100,6 +100,11 @@ type Metadata struct {
 	userDefinedTypes      map[oid.Oid]struct{}
 	userDefinedTypesSlice []*types.T
 
+	// // udfs contains all user defined functions present in expressions in this
+	// // query.
+	// udfs map[oid.Oid]struct{}
+	// udfSlice[]
+
 	// deps stores information about all data source objects depended on by the
 	// query, as well as the privileges required to access them. The objects are
 	// deduplicated: any name/object pair shows up at most once.
@@ -343,6 +348,20 @@ func (md *Metadata) CheckDependencies(
 			return false, nil
 		}
 	}
+
+	// // Check that all user-defined functions present have not changed.
+	// for _, udf := range md.AllUs() {
+	// 	_, toCheck, err := catalog.ResolveFunctionByOID(ctx, udf.Oid())
+	// 	if err != nil {
+	// 		// Handle when the function no longer exists.
+	// 		if pgerror.GetPGCode(err) == pgcode.UndefinedFunction {
+	// 			return false, nil
+	// 		}
+	// 	}
+	// 	if toCheck.
+	// 	if udf.F
+	// }
+
 	return true, nil
 }
 
@@ -376,6 +395,11 @@ func (md *Metadata) AddUserDefinedType(typ *types.T) {
 func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
 }
+
+// // AllUserDefinedTypes returns all user defined types contained in this query.
+// func (md *Metadata) AllUserDefinedFun() []*types.T {
+// 	return md.userDefinedTypesSlice
+// }
 
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g.  in a

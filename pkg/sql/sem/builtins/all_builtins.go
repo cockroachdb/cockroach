@@ -54,22 +54,37 @@ func init() {
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
 
-	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+	builtinsregistry.AddSubscription(func(name string, overloads []tree.Overload) {
 		for i, fn := range overloads {
 			signature := name + fn.Signature(true)
 			overloads[i].Oid = signatureMustHaveHardcodedOID(signature)
 		}
-		fDef := tree.NewFunctionDefinition(name, props, overloads)
+		fDef := tree.NewFunctionDefinition(name, overloads)
 		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, fDef)
 		tree.FunDefs[name] = fDef
-		if !fDef.ShouldDocument() {
-			// Avoid listing help for undocumented functions.
-			return
+		addNameToAllBuiltinNames := false
+		addNameToAggregateBuiltinNames := false
+		addNameToWindowBuiltinNames := false
+		for i := range overloads {
+			o := &overloads[i]
+			if !o.ShouldDocument() {
+				// Avoid listing help for undocumented functions.
+				continue
+			}
+			addNameToAllBuiltinNames = true
+			if o.Class == tree.AggregateClass {
+				addNameToAggregateBuiltinNames = true
+			} else if o.Class == tree.WindowClass {
+				addNameToWindowBuiltinNames = true
+			}
 		}
-		allBuiltinNames.add(name)
-		if props.Class == tree.AggregateClass {
+		if addNameToAllBuiltinNames {
+			allBuiltinNames.add(name)
+		}
+		if addNameToAggregateBuiltinNames {
 			allAggregateBuiltinNames.add(name)
-		} else if props.Class == tree.WindowClass {
+		}
+		if addNameToWindowBuiltinNames {
 			allWindowBuiltinNames.add(name)
 		}
 	})
@@ -89,9 +104,20 @@ func addResolvedFuncDef(
 		return
 	}
 
+	// TODO(mgartner): If one overload is available on the public schema, then
+	// all overloads with the same name are. They should be on the public schema
+	// on per-overload basis.
+	availableOnPublicSchema := false
+	for i := range def.Definition {
+		if def.Definition[i].AvailableOnPublicSchema {
+			availableOnPublicSchema = true
+			break
+		}
+	}
+
 	resolvedName := catconstants.PgCatalogName + "." + def.Name
 	resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PgCatalogName)
-	if def.AvailableOnPublicSchema {
+	if availableOnPublicSchema {
 		resolvedName = catconstants.PublicSchemaName + "." + def.Name
 		resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
 	}
@@ -124,39 +150,17 @@ func registerBuiltin(name string, def builtinDefinition) {
 			))
 		}
 	}
-	if def.props.ShouldDocument() && def.props.Category == "" {
-		def.props.Category = getCategory(def.overloads)
-	}
-	builtinsregistry.Register(name, &def.props, def.overloads)
+	builtinsregistry.Register(name, def.overloads)
 }
 
-func getCategory(b []tree.Overload) string {
-	// If single argument attempt to categorize by the type of the argument.
-	for _, ovl := range b {
-		switch typ := ovl.Types.(type) {
-		case tree.ParamTypes:
-			if len(typ) == 1 {
-				return categorizeType(typ[0].Typ)
-			}
-		}
-		// Fall back to categorizing by return type.
-		if retType := ovl.FixedReturnType(); retType != nil {
-			return categorizeType(retType)
-		}
-	}
-	return ""
-}
-
-func collectOverloads(
-	props tree.FunctionProperties, types []*types.T, gens ...func(*types.T) tree.Overload,
-) builtinDefinition {
+func collectOverloads(types []*types.T, gens ...func(*types.T) tree.Overload) builtinDefinition {
 	r := make([]tree.Overload, 0, len(types)*len(gens))
 	for _, f := range gens {
 		for _, t := range types {
 			r = append(r, f(t))
 		}
 	}
-	return makeBuiltin(props, r...)
+	return makeBuiltin(r...)
 }
 
 // orderedStrings sorts a slice of strings lazily

@@ -58,27 +58,31 @@ func init() {
 	}
 }
 
-func genProps() tree.FunctionProperties {
-	return tree.FunctionProperties{
-		Class:    tree.GeneratorClass,
-		Category: builtinconstants.CategoryGenerator,
+func addJsonGenPropsWithLabels(returnLabels []string, b builtinDefinition) builtinDefinition {
+	for i := range b.overloads {
+		b.overloads[i].Class = tree.GeneratorClass
+		b.overloads[i].Category = builtinconstants.CategoryJSON
+		b.overloads[i].ReturnLabels = returnLabels
 	}
+	return b
 }
 
-func jsonGenPropsWithLabels(returnLabels []string) tree.FunctionProperties {
-	return tree.FunctionProperties{
-		Class:        tree.GeneratorClass,
-		Category:     builtinconstants.CategoryJSON,
-		ReturnLabels: returnLabels,
+func blockDistSQL(b builtinDefinition) builtinDefinition {
+	for i := range b.overloads {
+		b.overloads[i].DistsqlBlocklist = true
 	}
+	return b
 }
 
-func recordGenProps() tree.FunctionProperties {
-	return tree.FunctionProperties{
-		Class:             tree.GeneratorClass,
-		Category:          builtinconstants.CategoryGenerator,
-		ReturnsRecordType: true,
+func recordGenProps(b builtinDefinition) builtinDefinition {
+	for i := range b.overloads {
+		b.overloads[i].FunctionProperties = tree.FunctionProperties{
+			Class:             tree.GeneratorClass,
+			Category:          builtinconstants.CategoryGenerator,
+			ReturnsRecordType: true,
+		}
 	}
+	return b
 }
 
 var aclexplodeGeneratorType = types.MakeLabeledTuple(
@@ -102,7 +106,7 @@ func (aclexplodeGenerator) Values() (tree.Datums, error)             { return ni
 // The properties are reachable via tree.FunctionDefinition.
 var generators = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
-	"aclexplode": makeBuiltin(genProps(),
+	"aclexplode": makeBuiltin(
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "aclitems", Typ: types.StringArray}},
 			aclexplodeGeneratorType,
@@ -114,7 +118,7 @@ var generators = map[string]builtinDefinition{
 			volatility.Stable,
 		),
 	),
-	"crdb_internal.scan": makeBuiltin(genProps(),
+	"crdb_internal.scan": makeBuiltin(
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "start_key", Typ: types.Bytes},
@@ -167,7 +171,7 @@ var generators = map[string]builtinDefinition{
 			volatility.Stable,
 		),
 	),
-	"generate_series": makeBuiltin(genProps(),
+	"generate_series": makeBuiltin(
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "start", Typ: types.Int}, {Name: "end", Typ: types.Int}},
@@ -201,7 +205,7 @@ var generators = map[string]builtinDefinition{
 	// crdb_internal.testing_callback is a generator function intended for internal unit tests.
 	// You give it a name and it calls a callback that had to have been installed
 	// on a TestServer through its eval.TestingKnobs.CallbackGenerators.
-	"crdb_internal.testing_callback": makeBuiltin(genProps(),
+	"crdb_internal.testing_callback": makeBuiltin(
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "name", Typ: types.String}},
 			types.Int,
@@ -224,7 +228,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"pg_get_keywords": makeBuiltin(genProps(),
+	"pg_get_keywords": makeBuiltin(
 		// See https://www.postgresql.org/docs/10/static/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 		makeGeneratorOverload(
 			tree.ParamTypes{},
@@ -235,7 +239,6 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 	`pg_options_to_table`: makeBuiltin(
-		genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "options", Typ: types.MakeArray(types.String)},
@@ -250,7 +253,6 @@ var generators = map[string]builtinDefinition{
 	),
 
 	"regexp_split_to_table": makeBuiltin(
-		genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "string", Typ: types.String},
@@ -274,7 +276,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"unnest": makeBuiltin(genProps(),
+	"unnest": makeBuiltin(
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
@@ -313,7 +315,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"information_schema._pg_expandarray": makeBuiltin(genProps(),
+	"information_schema._pg_expandarray": makeBuiltin(
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
@@ -329,7 +331,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"crdb_internal.unary_table": makeBuiltin(genProps(),
+	"crdb_internal.unary_table": makeBuiltin(
 		makeGeneratorOverload(
 			tree.ParamTypes{},
 			unaryValueGeneratorType,
@@ -340,7 +342,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"generate_subscripts": makeBuiltin(genProps(),
+	"generate_subscripts": makeBuiltin(
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SUBSCRIPTS
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "array", Typ: types.AnyArray}},
@@ -366,38 +368,33 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"json_array_elements":       makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"jsonb_array_elements":      makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsImpl),
-	"json_array_elements_text":  makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"jsonb_array_elements_text": makeBuiltin(jsonGenPropsWithLabels(jsonArrayGeneratorLabels), jsonArrayElementsTextImpl),
-	"json_object_keys":          makeBuiltin(genProps(), jsonObjectKeysImpl),
-	"jsonb_object_keys":         makeBuiltin(genProps(), jsonObjectKeysImpl),
-	"json_each":                 makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
-	"jsonb_each":                makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachImpl),
-	"json_each_text":            makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
-	"jsonb_each_text":           makeBuiltin(jsonGenPropsWithLabels(jsonEachGeneratorLabels), jsonEachTextImpl),
-	"json_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
+	"json_array_elements":       addJsonGenPropsWithLabels(jsonArrayGeneratorLabels, makeBuiltin(jsonArrayElementsImpl)),
+	"jsonb_array_elements":      addJsonGenPropsWithLabels(jsonArrayGeneratorLabels, makeBuiltin(jsonArrayElementsImpl)),
+	"json_array_elements_text":  addJsonGenPropsWithLabels(jsonArrayGeneratorLabels, makeBuiltin(jsonArrayElementsTextImpl)),
+	"jsonb_array_elements_text": addJsonGenPropsWithLabels(jsonArrayGeneratorLabels, makeBuiltin(jsonArrayElementsTextImpl)),
+	"json_object_keys":          makeBuiltin(jsonObjectKeysImpl),
+	"jsonb_object_keys":         makeBuiltin(jsonObjectKeysImpl),
+	"json_each":                 addJsonGenPropsWithLabels(jsonEachGeneratorLabels, makeBuiltin(jsonEachImpl)),
+	"jsonb_each":                addJsonGenPropsWithLabels(jsonEachGeneratorLabels, makeBuiltin(jsonEachImpl)),
+	"json_each_text":            addJsonGenPropsWithLabels(jsonEachGeneratorLabels, makeBuiltin(jsonEachTextImpl)),
+	"jsonb_each_text":           addJsonGenPropsWithLabels(jsonEachGeneratorLabels, makeBuiltin(jsonEachTextImpl)),
+	"json_populate_record": addJSONPopulateProps(makeBuiltin(makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
 		"Expands the object in from_json to a row whose columns match the record type defined by base.",
-	)),
-	"jsonb_populate_record": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
+	))),
+	"jsonb_populate_record": addJSONPopulateProps(makeBuiltin(makeJSONPopulateImpl(makeJSONPopulateRecordGenerator,
 		"Expands the object in from_json to a row whose columns match the record type defined by base.",
-	)),
-	"json_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
-		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
-	"jsonb_populate_recordset": makeBuiltin(jsonPopulateProps, makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
-		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base")),
+	))),
+	"json_populate_recordset": addJSONPopulateProps(makeBuiltin(makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
+		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base"))),
+	"jsonb_populate_recordset": addJSONPopulateProps(makeBuiltin(makeJSONPopulateImpl(makeJSONPopulateRecordSetGenerator,
+		"Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base"))),
 
-	"json_to_record":     makeBuiltin(recordGenProps(), jsonToRecordImpl),
-	"jsonb_to_record":    makeBuiltin(recordGenProps(), jsonToRecordImpl),
-	"json_to_recordset":  makeBuiltin(recordGenProps(), jsonToRecordSetImpl),
-	"jsonb_to_recordset": makeBuiltin(recordGenProps(), jsonToRecordSetImpl),
+	"json_to_record":     recordGenProps(makeBuiltin(jsonToRecordImpl)),
+	"jsonb_to_record":    recordGenProps(makeBuiltin(jsonToRecordImpl)),
+	"json_to_recordset":  recordGenProps(makeBuiltin(jsonToRecordSetImpl)),
+	"jsonb_to_recordset": recordGenProps(makeBuiltin(jsonToRecordSetImpl)),
 
-	"crdb_internal.check_consistency": makeBuiltin(
-		tree.FunctionProperties{
-			Class:            tree.GeneratorClass,
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // see #88222
-		},
+	"crdb_internal.check_consistency": blockDistSQL(makeBuiltin(
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "stats_only", Typ: types.Bool},
@@ -415,14 +412,10 @@ var generators = map[string]builtinDefinition{
 				"Example usage:\n\n"+
 				"`SELECT * FROM crdb_internal.check_consistency(true, b'\\x02', b'\\x04')`",
 			volatility.Volatile,
-		),
+		)),
 	),
 
 	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
-		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
-			Category: builtinconstants.CategorySystemInfo,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "range_id", Typ: types.Int},
@@ -435,10 +428,6 @@ var generators = map[string]builtinDefinition{
 	),
 
 	"crdb_internal.payloads_for_span": makeBuiltin(
-		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
-			Category: builtinconstants.CategorySystemInfo,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "span_id", Typ: types.Int},
@@ -450,10 +439,6 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 	"crdb_internal.payloads_for_trace": makeBuiltin(
-		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
-			Category: builtinconstants.CategorySystemInfo,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "trace_id", Typ: types.Int},
@@ -465,9 +450,6 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 	"crdb_internal.show_create_all_schemas": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -481,9 +463,6 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_tables": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -502,9 +481,6 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_types": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -518,9 +494,6 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_plan_gist": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -630,6 +603,10 @@ func makeGeneratorOverloadWithReturnType(
 		Generator:  g,
 		Info:       info,
 		Volatility: volatility,
+		FunctionProperties: tree.FunctionProperties{
+			Class:    tree.GeneratorClass,
+			Category: builtinconstants.CategoryGenerator,
+		},
 	}
 }
 
@@ -1533,9 +1510,14 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 	return tree.Datums{g.key, g.value}, nil
 }
 
-var jsonPopulateProps = tree.FunctionProperties{
-	Class:    tree.GeneratorClass,
-	Category: builtinconstants.CategoryJSON,
+func addJSONPopulateProps(b builtinDefinition) builtinDefinition {
+	for i := range b.overloads {
+		b.overloads[i].FunctionProperties = tree.FunctionProperties{
+			Class:    tree.GeneratorClass,
+			Category: builtinconstants.CategoryJSON,
+		}
+	}
+	return b
 }
 
 func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree.Overload {

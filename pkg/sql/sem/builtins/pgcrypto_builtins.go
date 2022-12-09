@@ -45,7 +45,6 @@ func init() {
 var pgcryptoBuiltins = map[string]builtinDefinition{
 
 	"crypt": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "password", Typ: types.String}, {Name: "salt", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -58,13 +57,13 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(hash), nil
 			},
-			Info:       "Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.",
-			Volatility: volatility.Volatile,
+			Info:               "Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.",
+			Volatility:         volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 	),
 
 	"digest": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.String}, {Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -82,7 +81,8 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
 				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: volatility.Leakproof,
+			Volatility:         volatility.Leakproof,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.Bytes}, {Name: "type", Typ: types.String}},
@@ -101,14 +101,14 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
 				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: volatility.Immutable,
+			Volatility:         volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 	),
 
 	"gen_random_uuid": generateRandomUUID4Impl(),
 
 	"gen_salt": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -120,8 +120,9 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(salt), nil
 			},
-			Info:       "Generates a salt for input into the `crypt` function using the default number of rounds.",
-			Volatility: volatility.Volatile,
+			Info:               "Generates a salt for input into the `crypt` function using the default number of rounds.",
+			Volatility:         volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "type", Typ: types.String}, {Name: "iter_count", Typ: types.Int}},
@@ -135,13 +136,13 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(salt), nil
 			},
-			Info:       "Generates a salt for input into the `crypt` function using `iter_count` number of rounds.",
-			Volatility: volatility.Volatile,
+			Info:               "Generates a salt for input into the `crypt` function using `iter_count` number of rounds.",
+			Volatility:         volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 	),
 
 	"hmac": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.String}, {Name: "key", Typ: types.String}, {Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -158,8 +159,9 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
 			},
-			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: volatility.Leakproof,
+			Info:               "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
+			Volatility:         volatility.Leakproof,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.Bytes}, {Name: "key", Typ: types.Bytes}, {Name: "type", Typ: types.String}},
@@ -177,8 +179,9 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
 			},
-			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: volatility.Immutable,
+			Info:               "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
+			Volatility:         volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		},
 	),
 }

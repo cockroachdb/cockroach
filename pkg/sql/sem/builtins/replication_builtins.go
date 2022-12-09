@@ -34,16 +34,24 @@ func init() {
 	}
 }
 
+func addStreamingAndVectorize(b builtinDefinition) builtinDefinition {
+	for i := range b.overloads {
+		b.overloads[i].FunctionProperties = tree.FunctionProperties{
+			Category:           builtinconstants.CategoryStreamIngestion,
+			Class:              tree.GeneratorClass,
+			VectorizeStreaming: true,
+		}
+
+	}
+	return b
+}
+
 // replication builtins contains the cluster to cluster replication built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
 var replicationBuiltins = map[string]builtinDefinition{
 	// Stream ingestion functions starts here.
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "job_id", Typ: types.Int},
@@ -74,15 +82,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"This builtin can be used in conjunction with `SHOW JOBS WHEN COMPLETE` to ensure that the " +
 				"job has left the cluster in a consistent state.",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
 	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
-
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "job_id", Typ: types.Int},
@@ -114,15 +121,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Info: "This function can be used on the ingestion side to get a statistics summary " +
 				"of a stream ingestion job in json format.",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
 	"crdb_internal.stream_ingestion_stats_pb": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
-
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "job_id", Typ: types.Int},
@@ -150,15 +156,15 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Info: "This function can be used on the ingestion side to get a statistics summary " +
 				"of a stream ingestion job in protobuf format.",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
 	// Stream production functions starts here.
 	"crdb_internal.start_replication_stream": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
@@ -181,14 +187,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
 				"notify that the replication is still ongoing.",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
 	"crdb_internal.replication_stream_progress": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "stream_id", Typ: types.Int},
@@ -222,15 +228,13 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
 				"that indicates stream status (`ACTIVE`, `PAUSED`, `INACTIVE`, or `STATUS_UNKNOWN_RETRY`).",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
-	"crdb_internal.stream_partition": makeBuiltin(
-		tree.FunctionProperties{
-			Category:           builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist:   false,
-			Class:              tree.GeneratorClass,
-			VectorizeStreaming: true,
-		},
+	"crdb_internal.stream_partition": addStreamingAndVectorize(makeBuiltin(
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "stream_id", Typ: types.Int},
@@ -253,13 +257,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			"Stream partition data",
 			volatility.Volatile,
 		),
-	),
+	)),
 
 	"crdb_internal.replication_stream_spec": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "stream_id", Typ: types.Int},
@@ -286,14 +286,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"for the specified stream. The consumer will later call 'stream_partition' to a partition with " +
 				"the spec to start streaming.",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
 	"crdb_internal.complete_replication_stream": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "stream_id", Typ: types.Int},
@@ -318,6 +318,10 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Info: "This function can be used on the producer side to complete and clean up a replication stream." +
 				"'successful_ingestion' indicates whether the stream ingestion finished successfully.",
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategoryStreamIngestion,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 }

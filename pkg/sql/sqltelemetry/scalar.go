@@ -25,7 +25,7 @@ func BuiltinCounter(name, signature string) telemetry.Counter {
 }
 
 func init() {
-	builtinsregistry.AddSubscription(func(name string, _ *tree.FunctionProperties, os []tree.Overload) {
+	builtinsregistry.AddSubscription(func(name string, os []tree.Overload) {
 		for _, o := range os {
 			c := BuiltinCounter(name, o.Signature(false))
 			*o.OnTypeCheck = func() {

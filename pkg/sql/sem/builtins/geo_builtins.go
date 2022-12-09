@@ -128,7 +128,6 @@ var geomFromWKBOverload = bytesOverload1(
 // geometryFromTextCheckShapeBuiltin is used for the ST_<Shape>FromText builtins.
 func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinition {
 	return makeBuiltin(
-		defProps(),
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
@@ -178,7 +177,6 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 // geometryFromWKBCheckShapeBuiltin is used for the ST_<Shape>FromWKB builtins.
 func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinition {
 	return makeBuiltin(
-		defProps(),
 		bytesOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKB(geopb.EWKB(s))
@@ -475,7 +473,6 @@ var geoBuiltins = map[string]builtinDefinition{
 	// Meta builtins.
 	//
 	"postgis_addbbox": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return g, nil
@@ -488,7 +485,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"postgis_dropbbox": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return g, nil
@@ -501,7 +497,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"postgis_hasbbox": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				if g.Geometry.Empty() {
@@ -520,7 +515,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"postgis_getbbox": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				bbox := g.CartesianBoundingBox()
@@ -559,7 +553,6 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 
 	"st_s2covering": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				cfg, err := geoindex.GeometryIndexConfigForSRID(g.SRID())
@@ -659,7 +652,6 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 
 	"st_geometryfromtext": makeBuiltin(
-		defProps(),
 		geomFromWKTOverload,
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "str", Typ: types.String}, {Name: "srid", Typ: types.Int}},
@@ -680,7 +672,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_geomfromewkt": makeBuiltin(
-		defProps(),
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
@@ -694,10 +685,9 @@ var geoBuiltins = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"st_wkbtosql": makeBuiltin(defProps(), geomFromWKBOverload),
-	"st_wkttosql": makeBuiltin(defProps(), geomFromWKTOverload),
+	"st_wkbtosql": makeBuiltin(geomFromWKBOverload),
+	"st_wkttosql": makeBuiltin(geomFromWKTOverload),
 	"st_geomfromwkb": makeBuiltin(
-		defProps(),
 		geomFromWKBOverload,
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "bytes", Typ: types.Bytes}, {Name: "srid", Typ: types.Int}},
@@ -718,7 +708,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_geomfromewkb": makeBuiltin(
-		defProps(),
 		bytesOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKB([]byte(s))
@@ -733,7 +722,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_geomfromgeojson": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -772,7 +760,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_makepoint": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -823,7 +810,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_makepointm": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}, {Name: "m", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -842,7 +828,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_makepolygon": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, outer *tree.DGeometry) (tree.Datum, error) {
 				g, err := geomfn.MakePolygon(outer.Geometry)
@@ -887,7 +872,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_polygon": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -945,7 +929,6 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 
 	"st_geographyfromtext": makeBuiltin(
-		defProps(),
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
@@ -978,7 +961,6 @@ var geoBuiltins = map[string]builtinDefinition{
 	),
 
 	"st_geogfromewkt": makeBuiltin(
-		defProps(),
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
@@ -993,7 +975,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_geogfromwkb": makeBuiltin(
-		defProps(),
 		bytesOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKB([]byte(s))
@@ -1025,7 +1006,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_geogfromewkb": makeBuiltin(
-		defProps(),
 		bytesOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKB([]byte(s))
@@ -1040,7 +1020,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_geogfromgeojson": makeBuiltin(
-		defProps(),
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromGeoJSON([]byte(s))
@@ -1075,7 +1054,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_point": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "x", Typ: types.Float}, {Name: "y", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -1093,7 +1071,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_pointfromgeohash": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geohash", Typ: types.String},
@@ -1135,7 +1112,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_geomfromgeohash": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geohash", Typ: types.String},
@@ -1185,7 +1161,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_box2dfromgeohash": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geohash", Typ: types.String},
@@ -1248,7 +1223,6 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 
 	"st_astext": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
@@ -1307,7 +1281,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_asewkt": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
@@ -1366,7 +1339,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_asbinary": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				wkb, err := geo.SpatialObjectToWKB(g.Geometry.SpatialObject(), geo.DefaultEWKBEncodingFormat)
@@ -1425,7 +1397,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_asewkb": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDBytes(tree.DBytes(g.EWKB())), nil
@@ -1444,7 +1415,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_ashexwkb": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geometry.SpatialObject())
@@ -1465,7 +1435,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_ashexewkb": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDString(g.Geometry.EWKBHex()), nil
@@ -1550,7 +1519,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_astwkb": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -1634,7 +1602,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_askml": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				kml, err := geo.SpatialObjectToKML(g.Geometry.SpatialObject())
@@ -1655,7 +1622,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 	"st_geohash": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geo.SpatialObjectToGeoHash(g.Geometry.SpatialObject(), geo.GeoHashAutoPrecision)
@@ -1726,7 +1692,6 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 	),
 	"st_asgeojson": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "row", Typ: types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1936,7 +1901,6 @@ Options is a flag that can be bitmasked. The options are:
 		},
 	),
 	"st_project": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geography", Typ: types.Geography},
@@ -1975,7 +1939,6 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 	//
 
 	"st_ndims": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2000,7 +1963,6 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 		),
 	),
 	"st_dimension": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				dim, err := geomfn.Dimension(g.Geometry)
@@ -2017,7 +1979,6 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 		),
 	),
 	"st_startpoint": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2048,7 +2009,6 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 		),
 	),
 	"st_summary": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.AsGeomT()
@@ -2107,7 +2067,6 @@ Flags shown square brackets after the geometry type have the following meaning:
 		),
 	),
 	"st_endpoint": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2138,7 +2097,6 @@ Flags shown square brackets after the geometry type have the following meaning:
 		),
 	),
 	"st_generatepoints": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "npoints", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -2188,7 +2146,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_numpoints": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2209,7 +2166,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_hasarc": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				// We don't support CIRCULARSTRINGs, so always return false.
@@ -2223,7 +2179,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_npoints": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2240,7 +2195,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_points": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				points, err := geomfn.Points(g.Geometry)
@@ -2257,7 +2211,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_exteriorring": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2289,7 +2242,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_interiorringn": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "n", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -2323,7 +2275,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_pointn": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "n", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -2357,7 +2308,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_geometryn": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "n", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -2427,7 +2377,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_minimumclearance": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinimumClearance(g.Geometry)
@@ -2445,7 +2394,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_minimumclearanceline": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinimumClearanceLine(g.Geometry)
@@ -2464,7 +2412,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_numinteriorrings": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2489,7 +2436,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_nrings": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2510,7 +2456,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_force2d": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XY)
@@ -2528,7 +2473,6 @@ The requested number of points must be not larger than 65336.`,
 	),
 	// TODO(ayang): see if it's possible to refactor default args
 	"st_force3dz": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYZ)
@@ -2565,7 +2509,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_force3dm": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYM)
@@ -2602,7 +2545,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_force4d": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYZM)
@@ -2658,7 +2600,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_forcepolygoncw": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForcePolygonOrientation(g.Geometry, geomfn.OrientationCW)
@@ -2675,7 +2616,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_forcepolygonccw": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForcePolygonOrientation(g.Geometry, geomfn.OrientationCCW)
@@ -2692,7 +2632,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_ispolygoncw": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			func(g geo.Geometry) (bool, error) {
 				return geomfn.HasPolygonOrientation(g, geomfn.OrientationCW)
@@ -2703,7 +2642,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_ispolygonccw": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			func(g geo.Geometry) (bool, error) {
 				return geomfn.HasPolygonOrientation(g, geomfn.OrientationCCW)
@@ -2714,7 +2652,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_numgeometries": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2768,7 +2705,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_x": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2793,7 +2729,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_xmin": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				bbox := g.BoundingBoxRef()
@@ -2829,7 +2764,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_xmax": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				bbox := g.BoundingBoxRef()
@@ -2865,7 +2799,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_y": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2890,7 +2823,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_ymin": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				bbox := g.BoundingBoxRef()
@@ -2926,7 +2858,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_ymax": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				bbox := g.BoundingBoxRef()
@@ -2962,7 +2893,6 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_z": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -2987,7 +2917,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_m": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -3012,7 +2941,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_zmflag": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
@@ -3040,7 +2968,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_area": makeBuiltin(
-		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
 				func(_ context.Context, _ *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
@@ -3060,11 +2987,9 @@ The requested number of points must be not larger than 65336.`,
 		)...,
 	),
 	"st_area2d": makeBuiltin(
-		defProps(),
 		areaOverloadGeometry1,
 	),
 	"st_length": makeBuiltin(
-		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
 				func(_ context.Context, _ *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
@@ -3084,11 +3009,9 @@ The requested number of points must be not larger than 65336.`,
 		)...,
 	),
 	"st_length2d": makeBuiltin(
-		defProps(),
 		lengthOverloadGeometry1,
 	),
 	"st_perimeter": makeBuiltin(
-		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
 				func(_ context.Context, _ *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
@@ -3108,11 +3031,9 @@ The requested number of points must be not larger than 65336.`,
 		)...,
 	),
 	"st_perimeter2d": makeBuiltin(
-		defProps(),
 		perimeterOverloadGeometry1,
 	),
 	"st_srid": makeBuiltin(
-		defProps(),
 		geographyOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(g.SRID())), nil
@@ -3135,7 +3056,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"geometrytype": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDString(g.ShapeType2D().String()), nil
@@ -3149,7 +3069,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_geometrytype": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType2D().String())), nil
@@ -3163,7 +3082,6 @@ The requested number of points must be not larger than 65336.`,
 		),
 	),
 	"st_addmeasure": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "start", Typ: types.Float}, {Name: "end", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -3185,14 +3103,12 @@ The requested number of points must be not larger than 65336.`,
 		},
 	),
 	"st_lineinterpolatepoint": makeBuiltin(
-		defProps(),
 		lineInterpolatePointForRepeatOverload(
 			false,
 			`Returns a point along the given LineString which is at given fraction of LineString's total length.`,
 		),
 	),
 	"st_lineinterpolatepoints": makeBuiltin(
-		defProps(),
 		lineInterpolatePointForRepeatOverload(
 			true,
 			`Returns one or more points along the LineString which is at an integral multiples of `+
@@ -3228,7 +3144,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		},
 	),
 	"st_multi": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				multi, err := geomfn.Multi(g.Geometry)
@@ -3246,7 +3161,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_collectionextract": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -3271,7 +3185,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		},
 	),
 	"st_collectionhomogenize": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.CollectionHomogenize(g.Geometry)
@@ -3290,7 +3203,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_forcecollection": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceCollection(g.Geometry)
@@ -3307,7 +3219,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_linefrommultipoint": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				line, err := geomfn.LineStringFromMultiPoint(g.Geometry)
@@ -3324,7 +3235,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_linemerge": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				line, err := geomfn.LineMerge(g.Geometry)
@@ -3344,7 +3254,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_shiftlongitude": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ShiftLongitude(g.Geometry)
@@ -3367,7 +3276,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	// Unary predicates
 	//
 	"st_isclosed": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			geomfn.IsClosed,
 			infoBuilder{
@@ -3378,7 +3286,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_iscollection": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			geomfn.IsCollection,
 			infoBuilder{
@@ -3387,7 +3294,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_isempty": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			geomfn.IsEmpty,
 			infoBuilder{
@@ -3396,7 +3302,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_isring": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			geomfn.IsRing,
 			infoBuilder{
@@ -3407,7 +3312,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		),
 	),
 	"st_issimple": makeBuiltin(
-		defProps(),
 		geometryOverload1UnaryPredicate(
 			geomfn.IsSimple,
 			infoBuilder{
@@ -3422,7 +3326,6 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	// Binary functions
 	//
 	"st_azimuth": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				azimuth, err := geomfn.Azimuth(a.Geometry, b.Geometry)
@@ -3468,7 +3371,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 	),
 	"st_distance": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinDistance(a.Geometry, b.Geometry)
@@ -3533,7 +3435,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		},
 	),
 	"st_distancesphere": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				aGeog, err := a.Geometry.AsGeography()
@@ -3563,7 +3464,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 	),
 	"st_distancespheroid": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				aGeog, err := a.Geometry.AsGeography()
@@ -3593,7 +3493,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 	),
 	"st_frechetdistance": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.FrechetDistance(a.Geometry, b.Geometry)
@@ -3644,7 +3543,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		},
 	),
 	"st_hausdorffdistance": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.HausdorffDistance(a.Geometry, b.Geometry)
@@ -3693,7 +3591,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		},
 	),
 	"st_maxdistance": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MaxDistance(a.Geometry, b.Geometry)
@@ -3714,7 +3611,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		),
 	),
 	"st_longestline": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				longestLineString, err := geomfn.LongestLineString(a.Geometry, b.Geometry)
@@ -3739,7 +3635,6 @@ Note if geometries are the same, it will return the LineString with the maximum 
 		),
 	),
 	"st_shortestline": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				shortestLineString, err := geomfn.ShortestLineString(a.Geometry, b.Geometry)
@@ -3769,7 +3664,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	//
 
 	"st_covers": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Covers,
 			infoBuilder{
@@ -3786,7 +3680,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_coveredby": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.CoveredBy,
 			infoBuilder{
@@ -3804,7 +3697,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_contains": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Contains,
 			infoBuilder{
@@ -3815,7 +3707,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_containsproperly": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.ContainsProperly,
 			infoBuilder{
@@ -3825,7 +3716,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_crosses": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Crosses,
 			infoBuilder{
@@ -3835,7 +3725,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_disjoint": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Disjoint,
 			infoBuilder{
@@ -3845,7 +3734,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_dfullywithin": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry_a", Typ: types.Geometry},
@@ -3872,7 +3760,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	),
 	"st_dwithin": makeSTDWithinBuiltin(geo.FnInclusive),
 	"st_equals": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Equals,
 			infoBuilder{
@@ -3883,7 +3770,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_orderingequals": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.OrderingEquals,
 			infoBuilder{
@@ -3893,7 +3779,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_normalize": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.Normalize(g.Geometry)
@@ -3911,7 +3796,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_intersects": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Intersects,
 			infoBuilder{
@@ -3930,7 +3814,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_overlaps": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Overlaps,
 			infoBuilder{
@@ -3941,7 +3824,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_touches": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Touches,
 			infoBuilder{
@@ -3952,7 +3834,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		),
 	),
 	"st_within": makeBuiltin(
-		defProps(),
 		geometryOverload2BinaryPredicate(
 			geomfn.Within,
 			infoBuilder{
@@ -3967,7 +3848,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	//
 
 	"st_relate": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.Relate(a.Geometry, b.Geometry)
@@ -4032,7 +3912,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		},
 	),
 	"st_relatematch": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "intersection_matrix", Typ: types.String},
@@ -4061,7 +3940,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	//
 
 	"st_isvalid": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.IsValid(g.Geometry)
@@ -4104,7 +3982,6 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 		},
 	),
 	"st_isvalidreason": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.IsValidReason(g.Geometry)
@@ -4150,7 +4027,6 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 		},
 	),
 	"st_isvalidtrajectory": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.IsValidTrajectory(g.Geometry)
@@ -4169,7 +4045,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		),
 	),
 	"st_makevalid": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				validGeom, err := geomfn.MakeValid(g.Geometry)
@@ -4192,7 +4067,6 @@ Note the geometry must be a LineString with M coordinates.`,
 	//
 
 	"st_boundary": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				centroid, err := geomfn.Boundary(g.Geometry)
@@ -4210,7 +4084,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		),
 	),
 	"st_centroid": makeBuiltin(
-		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
 				func(_ context.Context, _ *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
@@ -4244,7 +4117,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		)...,
 	),
 	"st_clipbybox2d": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "box2d", Typ: types.Box2D}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
@@ -4264,7 +4136,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		},
 	),
 	"st_convexhull": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				convexHull, err := geomfn.ConvexHull(g.Geometry)
@@ -4282,7 +4153,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		),
 	),
 	"st_difference": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				diff, err := geomfn.Difference(a.Geometry, b.Geometry)
@@ -4300,7 +4170,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		),
 	),
 	"st_pointonsurface": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				pointOnSurface, err := geomfn.PointOnSurface(g.Geometry)
@@ -4318,7 +4187,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		),
 	),
 	"st_intersection": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				intersection, err := geomfn.Intersection(a.Geometry, b.Geometry)
@@ -4410,7 +4278,6 @@ Note the geometry must be a LineString with M coordinates.`,
 		),
 	),
 	"st_sharedpaths": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.SharedPaths(a.Geometry, b.Geometry)
@@ -4432,7 +4299,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		),
 	),
 	"st_closestpoint": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ClosestPoint(a.Geometry, b.Geometry)
@@ -4453,7 +4319,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		),
 	),
 	"st_symdifference": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.SymDifference(a.Geometry, b.Geometry)
@@ -4471,7 +4336,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		),
 	),
 	"st_simplify": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -4522,7 +4386,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 	),
 	"st_simplifypreservetopology": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -4550,7 +4413,6 @@ The paths themselves are given in the direction of the first geometry.`,
 	// Transformations
 	//
 	"st_setsrid": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -4593,7 +4455,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 	),
 	"st_transform": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -4719,7 +4580,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 	),
 	"st_translate": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "g", Typ: types.Geometry},
@@ -4772,7 +4632,6 @@ The paths themselves are given in the direction of the first geometry.`,
 		},
 	),
 	"st_affine": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -4858,7 +4717,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_scale": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -4945,7 +4803,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_rotate": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "g", Typ: types.Geometry},
@@ -5021,7 +4878,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_rotatex": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "g", Typ: types.Geometry},
@@ -5046,7 +4902,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_rotatey": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "g", Typ: types.Geometry},
@@ -5071,7 +4926,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_rotatez": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "g", Typ: types.Geometry},
@@ -5096,7 +4950,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_addpoint": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "line_string", Typ: types.Geometry},
@@ -5145,7 +4998,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_setpoint": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "line_string", Typ: types.Geometry},
@@ -5172,7 +5024,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_removepoint": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "line_string", Typ: types.Geometry},
@@ -5197,7 +5048,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_removerepeatedpoints": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -5241,7 +5091,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_reverse": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -5264,7 +5113,6 @@ The matrix transformation will be applied as follows for each coordinate:
 		},
 	),
 	"st_segmentize": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geography", Typ: types.Geography},
@@ -5311,7 +5159,6 @@ The calculations are done on a sphere.`,
 		},
 	),
 	"st_snaptogrid": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -5428,7 +5275,6 @@ The calculations are done on a sphere.`,
 		},
 	),
 	"st_snap": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "input", Typ: types.Geometry},
@@ -5455,7 +5301,6 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 	),
 	"st_buffer": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -5665,7 +5510,6 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 		},
 	),
 	"st_envelope": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				envelope, err := geomfn.Envelope(g.Geometry)
@@ -5705,7 +5549,6 @@ Bottom Left.`,
 		},
 	),
 	"st_makeenvelope": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "xmin", Typ: types.Float},
@@ -5741,7 +5584,6 @@ Bottom Left.`,
 		},
 	),
 	"st_flipcoordinates": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -5764,7 +5606,6 @@ Bottom Left.`,
 		},
 	),
 	"st_swapordinates": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{
@@ -5797,7 +5638,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	),
 
 	"st_angle": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "point1", Typ: types.Geometry},
@@ -5882,7 +5722,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 	),
 
-	"st_asencodedpolyline": makeBuiltin(defProps(),
+	"st_asencodedpolyline": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -5926,7 +5766,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 			Volatility: volatility.Immutable,
 		},
 	),
-	"st_linefromencodedpolyline": makeBuiltin(defProps(),
+	"st_linefromencodedpolyline": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "encoded_polyline", Typ: types.String},
@@ -5976,7 +5816,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		},
 	),
 	"st_unaryunion": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				res, err := geomfn.UnaryUnion(g.Geometry)
@@ -5993,7 +5832,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		),
 	),
 	"st_node": makeBuiltin(
-		defProps(),
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				res, err := geomfn.Node(g.Geometry)
@@ -6010,7 +5848,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		),
 	),
 	"st_subdivide": makeBuiltin(
-		genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -6037,7 +5874,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	//
 
 	"st_makebox2d": makeBuiltin(
-		defProps(),
 		geometryOverload2(
 			func(_ context.Context, _ *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				if a.Geometry.SRID() != b.Geometry.SRID() {
@@ -6076,7 +5912,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		),
 	),
 	"st_combinebbox": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "box2d", Typ: types.Box2D}, {Name: "geometry", Typ: types.Geometry}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
@@ -6107,7 +5942,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		},
 	),
 	"st_expand": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "box2d", Typ: types.Box2D}, {Name: "delta", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
@@ -6201,9 +6035,6 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	//
 
 	"st_estimatedextent": makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategorySpatial,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "schema_name", Typ: types.String},
@@ -6222,6 +6053,9 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 The parent_only boolean is always ignored.`,
 			}.String(),
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6238,6 +6072,9 @@ The parent_only boolean is always ignored.`,
 				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
 			}.String(),
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6253,6 +6090,9 @@ The parent_only boolean is always ignored.`,
 				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
 			}.String(),
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 	),
 
@@ -6261,10 +6101,6 @@ The parent_only boolean is always ignored.`,
 	//
 
 	"addgeometrycolumn": makeBuiltin(
-		tree.FunctionProperties{
-			Class:    tree.SQLClass,
-			Category: builtinconstants.CategorySpatial,
-		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "table_name", Typ: types.String},
@@ -6305,6 +6141,10 @@ The parent_only boolean is always ignored.`,
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Class:    tree.SQLClass,
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6347,6 +6187,10 @@ The parent_only boolean is always ignored.`,
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Class:    tree.SQLClass,
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6390,6 +6234,10 @@ The parent_only boolean is always ignored.`,
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Class:    tree.SQLClass,
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6430,6 +6278,10 @@ The parent_only boolean is always ignored.`,
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Class:    tree.SQLClass,
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6471,6 +6323,10 @@ The parent_only boolean is always ignored.`,
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Class:    tree.SQLClass,
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6513,11 +6369,14 @@ The parent_only boolean is always ignored.`,
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Class:    tree.SQLClass,
+				Category: builtinconstants.CategorySpatial,
+			},
 		},
 	),
 	"st_dwithinexclusive": makeSTDWithinBuiltin(geo.FnExclusive),
 	"st_dfullywithinexclusive": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry_a", Typ: types.Geometry},
@@ -6543,7 +6402,6 @@ The parent_only boolean is always ignored.`,
 		},
 	),
 	"st_pointinsidecircle": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -6593,7 +6451,7 @@ The parent_only boolean is always ignored.`,
 		},
 	),
 
-	"st_memsize": makeBuiltin(defProps(),
+	"st_memsize": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{
@@ -6610,7 +6468,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Immutable,
 		}),
 
-	"st_linelocatepoint": makeBuiltin(defProps(),
+	"st_linelocatepoint": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{
@@ -6648,7 +6506,7 @@ The parent_only boolean is always ignored.`,
 			Volatility: volatility.Immutable,
 		}),
 
-	"st_minimumboundingcircle": makeBuiltin(defProps(),
+	"st_minimumboundingcircle": makeBuiltin(
 		geometryOverload1(
 			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				polygon, _, _, err := geomfn.MinimumBoundingCircle(g.Geometry)
@@ -6691,7 +6549,7 @@ The parent_only boolean is always ignored.`,
 			},
 		},
 	),
-	"st_transscale": makeBuiltin(defProps(),
+	"st_transscale": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -6719,7 +6577,6 @@ The parent_only boolean is always ignored.`,
 			},
 		}),
 	"st_voronoipolygons": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -6784,7 +6641,6 @@ The parent_only boolean is always ignored.`,
 		},
 	),
 	"st_voronoilines": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -6852,7 +6708,6 @@ The parent_only boolean is always ignored.`,
 		},
 	),
 	"st_orientedenvelope": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry", Typ: types.Geometry},
@@ -6874,7 +6729,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"st_linesubstring": makeBuiltin(defProps(),
+	"st_linesubstring": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "linestring", Typ: types.Geometry},
@@ -6933,7 +6788,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 		}),
 
 	"st_linecrossingdirection": makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "linestring_a", Typ: types.Geometry},
@@ -6970,38 +6824,38 @@ Note that the top vertex of the segment touching another line does not count as 
 	// Unimplemented.
 	//
 
-	"st_asgml":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
-	"st_aslatlontext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
-	"st_assvg":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
-	"st_boundingdiagonal":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
-	"st_buildarea":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
-	"st_chaikinsmoothing":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
-	"st_cleangeometry":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
-	"st_clusterdbscan":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
-	"st_clusterintersecting": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
-	"st_clusterkmeans":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
-	"st_clusterwithin":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
-	"st_concavehull":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
-	"st_delaunaytriangles":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
-	"st_dump":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
-	"st_dumppoints":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
-	"st_dumprings":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_geometricmedian":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
-	"st_interpolatepoint":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
-	"st_isvaliddetail":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
-	"st_length2dspheroid":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
-	"st_lengthspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
-	"st_polygonize":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
-	"st_quantizecoordinates": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
-	"st_seteffectivearea":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
-	"st_simplifyvw":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
-	"st_split":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
-	"st_tileenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
-	"st_wrapx":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
-	"st_bdpolyfromtext":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
-	"st_geomfromgml":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
-	"st_geomfromtwkb":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
-	"st_gmltosql":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
+	"st_asgml":               makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48877}}),
+	"st_aslatlontext":        makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48882}}),
+	"st_assvg":               makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48883}}),
+	"st_boundingdiagonal":    makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48889}}),
+	"st_buildarea":           makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48892}}),
+	"st_chaikinsmoothing":    makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48894}}),
+	"st_cleangeometry":       makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48895}}),
+	"st_clusterdbscan":       makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48898}}),
+	"st_clusterintersecting": makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48899}}),
+	"st_clusterkmeans":       makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48900}}),
+	"st_clusterwithin":       makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48901}}),
+	"st_concavehull":         makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48906}}),
+	"st_delaunaytriangles":   makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48915}}),
+	"st_dump":                makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49785}}),
+	"st_dumppoints":          makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49786}}),
+	"st_dumprings":           makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49787}}),
+	"st_geometricmedian":     makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48944}}),
+	"st_interpolatepoint":    makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48950}}),
+	"st_isvaliddetail":       makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48962}}),
+	"st_length2dspheroid":    makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48967}}),
+	"st_lengthspheroid":      makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48968}}),
+	"st_polygonize":          makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49011}}),
+	"st_quantizecoordinates": makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49012}}),
+	"st_seteffectivearea":    makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49030}}),
+	"st_simplifyvw":          makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49039}}),
+	"st_split":               makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49045}}),
+	"st_tileenvelope":        makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49053}}),
+	"st_wrapx":               makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 49068}}),
+	"st_bdpolyfromtext":      makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48801}}),
+	"st_geomfromgml":         makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48807}}),
+	"st_geomfromtwkb":        makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48809}}),
+	"st_gmltosql":            makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 48810}}),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
@@ -7009,7 +6863,6 @@ Note that the top vertex of the segment touching another line does not count as 
 // It is assumed to be fully immutable.
 func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 	return makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -7243,7 +7096,7 @@ func init() {
 
 		newOverloads := make([]tree.Overload, len(geoBuiltins[alias.builtinName].overloads))
 		copy(newOverloads, geoBuiltins[alias.builtinName].overloads)
-		geoBuiltins[alias.alias] = makeBuiltin(geoBuiltins[alias.builtinName].props, newOverloads...)
+		geoBuiltins[alias.alias] = makeBuiltin(newOverloads...)
 	}
 
 	// Indexed functions have an alternative version with an underscore prepended
@@ -7261,10 +7114,7 @@ func init() {
 			ovCopy.Info += "\n\nThis function variant does not utilize any spatial index."
 			overloads[i] = ovCopy
 		}
-		underscoreBuiltin := makeBuiltin(
-			builtin.props,
-			overloads...,
-		)
+		underscoreBuiltin := makeBuiltin(overloads...)
 		geoBuiltins["_"+indexBuiltinName] = underscoreBuiltin
 	}
 
@@ -7582,7 +7432,6 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 		exclusivityStr = ", exclusive."
 	}
 	return makeBuiltin(
-		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "geometry_a", Typ: types.Geometry},

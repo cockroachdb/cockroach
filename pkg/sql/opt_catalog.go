@@ -346,9 +346,10 @@ func (oc *optCatalog) ResolveFunction(
 	return oc.planner.ResolveFunction(ctx, name, path)
 }
 
+// ResolveFunctionByOID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
+) (name string, o *tree.Overload, err error) {
 	return oc.planner.ResolveFunctionByOID(ctx, oid)
 }
 

@@ -47,7 +47,7 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // always returns a boolean with the value false.
 func makeNotUsableFalseBuiltin() builtinDefinition {
 	return makeBuiltin(
-		defProps(),
+
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -100,7 +100,6 @@ func PGIOBuiltinPrefix(typ *types.T) string {
 // initPGBuiltins adds all of the postgres builtins to the builtins map.
 func init() {
 	for k, v := range pgBuiltins {
-		v.props.Category = builtinconstants.CategoryCompatibility
 		registerBuiltin(k, v)
 	}
 
@@ -154,9 +153,6 @@ var errUnimplemented = pgerror.New(pgcode.FeatureNotSupported, "unimplemented")
 
 func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDefinition {
 	return makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategoryCompatibility,
-		},
 		tree.Overload{
 			Types:      paramTypes,
 			ReturnType: tree.FixedReturnType(returnType),
@@ -165,6 +161,9 @@ func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDef
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategoryCompatibility,
+			},
 			// Ignore validity checks for typeio builtins. We don't
 			// implement these anyway, and they are very hard to special
 			// case.
@@ -254,6 +253,10 @@ func makePGGetIndexDef(paramTypes tree.ParamTypes) tree.Overload {
 		},
 		Info:       notUsableInfo,
 		Volatility: volatility.Stable,
+		FunctionProperties: tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
 	}
 }
 
@@ -285,6 +288,10 @@ WHERE c.oid=$1`, args[0])
 		},
 		Info:       "Returns the CREATE statement for an existing view.",
 		Volatility: volatility.Stable,
+		FunctionProperties: tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
 	}
 }
 
@@ -308,6 +315,9 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 		},
 		Info:       notUsableInfo,
 		Volatility: volatility.Stable,
+		FunctionProperties: tree.FunctionProperties{
+			DistsqlBlocklist: true,
+		},
 	}
 }
 
@@ -424,12 +434,12 @@ func makePGPrivilegeInquiryDef(
 			},
 			Info:       fmt.Sprintf(infoFmt, infoDetail),
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlocklist: true,
+			},
 		})
 	}
 	return makeBuiltin(
-		tree.FunctionProperties{
-			DistsqlBlocklist: true,
-		},
 		variants...,
 	)
 }
@@ -497,7 +507,7 @@ func parsePrivilegeStr(arg tree.Datum, m privMap) ([]privilege.Privilege, error)
 }
 
 func makeCreateRegDef(typ *types.T) builtinDefinition {
-	return makeBuiltin(defProps(),
+	return makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "oid", Typ: types.Oid},
@@ -542,7 +552,7 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
-	"pg_backend_pid": makeBuiltin(defProps(),
+	"pg_backend_pid": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -559,7 +569,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	),
 
 	// See https://www.postgresql.org/docs/9.3/static/catalog-pg-database.html.
-	"pg_encoding_to_char": makeBuiltin(defProps(),
+	"pg_encoding_to_char": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "encoding_id", Typ: types.Int},
@@ -579,7 +589,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// Here getdatabaseencoding just returns UTF8 because,
 	// CockroachDB supports just UTF8 for now.
 	"getdatabaseencoding": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -591,6 +600,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns the current encoding name used by the database.",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
@@ -600,7 +612,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// corresponding expression as a string, which means that this function can simply
 	// return the first argument directly. It also means we can ignore the second and
 	// optional third argument.
-	"pg_get_expr": makeBuiltin(defProps(),
+	"pg_get_expr": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 
@@ -631,7 +643,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// pg_get_constraintdef functions like SHOW CREATE CONSTRAINT would if we
 	// supported that statement.
-	"pg_get_constraintdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+	"pg_get_constraintdef": makeBuiltin(
 		makePGGetConstraintDef(tree.ParamTypes{
 			{Name: "constraint_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 		makePGGetConstraintDef(tree.ParamTypes{{Name: "constraint_oid", Typ: types.Oid}}),
@@ -640,7 +652,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_get_partkeydef is only provided for compatibility and always returns
 	// NULL. It is supposed to return the PARTITION BY clause of a table's
 	// CREATE statement.
-	"pg_get_partkeydef": makeBuiltin(defProps(),
+	"pg_get_partkeydef": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -653,7 +665,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	),
 
 	"pg_get_functiondef": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -685,6 +696,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "For user-defined functions, returns the definition of the specified function. " +
 				"For builtin functions, returns the name of the function.",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
@@ -693,7 +707,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// is a known incompatibility with Postgres.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_get_function_result": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -713,6 +726,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns the types of the result of the specified function.",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
@@ -721,7 +737,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// FUNCTION, for instance. This form omits default values.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_get_function_identity_arguments": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -761,13 +776,15 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
 	"pg_get_indexdef": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		makePGGetIndexDef(tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}}),
 		makePGGetIndexDef(tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}, {Name: "column_no", Typ: types.Int}, {Name: "pretty_bool", Typ: types.Bool}}),
 	),
@@ -775,15 +792,11 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
 	"pg_get_viewdef": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		makePGGetViewDef(tree.ParamTypes{{Name: "view_oid", Typ: types.Oid}}),
 		makePGGetViewDef(tree.ParamTypes{{Name: "view_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 	),
 
 	"pg_get_serial_sequence": makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategorySequences,
-		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "column_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -806,6 +819,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns the name of the sequence used by the given column_name in the table table_name.",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySequences,
+			},
 		},
 	),
 
@@ -813,7 +829,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_my_temp_schema": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
@@ -839,6 +854,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the OID of the current session's temporary schema, " +
 				"or zero if it has none (because it has not created any temporary tables).",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
@@ -846,7 +864,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// session's temporary schema.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_is_other_temp_schema": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -874,11 +891,14 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns true if the given OID is the OID of another session's temporary schema. (This can be useful, for example, to exclude other sessions' temporary tables from a catalog display.)",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
-	"pg_typeof": makeBuiltin(defProps(),
+	"pg_typeof": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -893,7 +913,6 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 	"pg_collation_for": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "str", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -912,10 +931,13 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns the collation of the argument",
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategoryString,
+			},
 		},
 	),
 
-	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+	"pg_get_userbyid": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "role_oid", Typ: types.Oid},
@@ -937,10 +959,13 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
-	"pg_sequence_parameters": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+	"pg_sequence_parameters": makeBuiltin(
 		// pg_sequence_parameters is an undocumented Postgres builtin that returns
 		// information about a sequence given its OID. It's nevertheless used by
 		// at least one UI tool, so we provide an implementation for compatibility.
@@ -971,10 +996,13 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
-	"format_type": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+	"format_type": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "type_oid", Typ: types.Oid}, {Name: "typemod", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1016,12 +1044,15 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
-			Volatility:        volatility.Stable,
+			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				DistsqlBlocklist: true,
+			},
 			CalledOnNullInput: true,
 		},
 	),
 
-	"col_description": makeBuiltin(defProps(),
+	"col_description": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_oid", Typ: types.Oid}, {Name: "column_number", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1066,7 +1097,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		},
 	),
 
-	"obj_description": makeBuiltin(defProps(),
+	"obj_description": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1092,7 +1123,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		},
 	),
 
-	"oid": makeBuiltin(defProps(),
+	"oid": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Oid),
@@ -1104,7 +1135,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		},
 	),
 
-	"shobj_description": makeBuiltin(defProps(),
+	"shobj_description": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1143,7 +1174,7 @@ SELECT description
 		},
 	),
 
-	"pg_try_advisory_lock": makeBuiltin(defProps(),
+	"pg_try_advisory_lock": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1155,7 +1186,7 @@ SELECT description
 		},
 	),
 
-	"pg_advisory_unlock": makeBuiltin(defProps(),
+	"pg_advisory_unlock": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1169,7 +1200,7 @@ SELECT description
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html
 	// CockroachDB supports just UTF8 for now.
-	"pg_client_encoding": makeBuiltin(defProps(),
+	"pg_client_encoding": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1186,7 +1217,7 @@ SELECT description
 	// CockroachDB doesn't have a concept of namespaced functions, so this is
 	// always true if the builtin exists at all, and NULL otherwise.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
-	"pg_function_is_visible": makeBuiltin(defProps(),
+	"pg_function_is_visible": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1211,7 +1242,7 @@ SELECT description
 	// pg_table_is_visible returns true if the input oid corresponds to a table
 	// that is part of the schemas on the search path.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
-	"pg_table_is_visible": makeBuiltin(defProps(),
+	"pg_table_is_visible": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1239,7 +1270,7 @@ SELECT description
 	// always return true for any type oid that we support, and NULL for those
 	// that we don't.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
-	"pg_type_is_visible": makeBuiltin(defProps(),
+	"pg_type_is_visible": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1262,7 +1293,7 @@ SELECT description
 	),
 
 	"pg_relation_is_updatable": makeBuiltin(
-		defProps(),
+
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "reloid", Typ: types.Oid}, {Name: "include_triggers", Typ: types.Bool}},
 			ReturnType: tree.FixedReturnType(types.Int4),
@@ -1279,7 +1310,7 @@ SELECT description
 	),
 
 	"pg_column_is_updatable": makeBuiltin(
-		defProps(),
+
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "reloid", Typ: types.Oid},
@@ -1300,7 +1331,6 @@ SELECT description
 	),
 
 	"pg_sleep": makeBuiltin(
-		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "seconds", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1828,10 +1858,6 @@ SELECT description
 
 	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
 	"current_setting": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "setting_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1840,6 +1866,10 @@ SELECT description
 			},
 			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategorySystemInfo,
+				DistsqlBlocklist: true,
+			},
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "setting_name", Typ: types.String}, {Name: "missing_ok", Typ: types.Bool}},
@@ -1849,15 +1879,15 @@ SELECT description
 			},
 			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Stable,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategorySystemInfo,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
 	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
 	"set_config": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
-		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "setting_name", Typ: types.String}, {Name: "new_value", Typ: types.String}, {Name: "is_local", Typ: types.Bool}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1872,6 +1902,10 @@ SELECT description
 			},
 			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Volatile,
+			FunctionProperties: tree.FunctionProperties{
+				Category:         builtinconstants.CategorySystemInfo,
+				DistsqlBlocklist: true,
+			},
 		},
 	),
 
@@ -1886,7 +1920,7 @@ SELECT description
 	// plumbing these values into the EvalContext.
 	//
 	// See https://www.postgresql.org/docs/10/static/functions-info.html
-	"inet_client_addr": makeBuiltin(defProps(),
+	"inet_client_addr": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
@@ -1898,7 +1932,7 @@ SELECT description
 		},
 	),
 
-	"inet_client_port": makeBuiltin(defProps(),
+	"inet_client_port": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -1910,7 +1944,7 @@ SELECT description
 		},
 	),
 
-	"inet_server_addr": makeBuiltin(defProps(),
+	"inet_server_addr": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
@@ -1922,7 +1956,7 @@ SELECT description
 		},
 	),
 
-	"inet_server_port": makeBuiltin(defProps(),
+	"inet_server_port": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -1934,7 +1968,7 @@ SELECT description
 		},
 	),
 
-	"pg_blocking_pids": makeBuiltin(defProps(),
+	"pg_blocking_pids": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.IntArray),
@@ -1950,7 +1984,7 @@ SELECT description
 	// (possibly compressed)
 
 	// Database Object Size Functions, see: https://www.postgresql.org/docs/9.4/functions-admin.html
-	"pg_column_size": makeBuiltin(defProps(),
+	"pg_column_size": makeBuiltin(
 		tree.Overload{
 			Types: tree.VariadicType{
 				VarType: types.Any,
@@ -2012,7 +2046,7 @@ SELECT description
 	//         ELSE null
 	//    END;
 	//
-	"information_schema._pg_char_max_length": makeBuiltin(defProps(),
+	"information_schema._pg_char_max_length": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "typid", Typ: types.Oid},
@@ -2053,7 +2087,7 @@ SELECT description
 	//    WHERE (ss.a).x = $2;
 	//  END;
 	//
-	"information_schema._pg_index_position": makeBuiltin(defProps(),
+	"information_schema._pg_index_position": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "oid", Typ: types.Oid},
@@ -2082,7 +2116,7 @@ SELECT description
 		},
 	),
 
-	"information_schema._pg_numeric_precision": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+	"information_schema._pg_numeric_precision": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "typid", Typ: types.Oid},
@@ -2116,10 +2150,13 @@ SELECT description
 			},
 			Info:       "Returns the precision of the given type with type modifier",
 			Volatility: volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
-	"information_schema._pg_numeric_precision_radix": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+	"information_schema._pg_numeric_precision_radix": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "typid", Typ: types.Oid},
@@ -2138,10 +2175,13 @@ SELECT description
 			},
 			Info:       "Returns the radix of the given type with type modifier",
 			Volatility: volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 
-	"information_schema._pg_numeric_scale": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+	"information_schema._pg_numeric_scale": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "typid", Typ: types.Oid},
@@ -2166,6 +2206,9 @@ SELECT description
 			},
 			Info:       "Returns the scale of the given type with type modifier",
 			Volatility: volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{
+				Category: builtinconstants.CategorySystemInfo,
+			},
 		},
 	),
 }
@@ -2339,7 +2382,7 @@ func schemaHasPrivilegeSpecifier(
 }
 
 func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefinition {
-	return makeBuiltin(defProps(),
+	return makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "pg_attribute", Typ: types.AnyTuple},

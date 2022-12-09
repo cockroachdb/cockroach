@@ -508,9 +508,11 @@ func maybeLookUpUDF(
 	return udfDef, nil
 }
 
+// ResolveFunctionByOID returns the name and overload of the function with the
+// given OID, if one exists.
 func (sr *schemaResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (name string, fn *tree.Overload, err error) {
+) (name string, o *tree.Overload, err error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		name, ok := tree.OidToBuiltinName[oid]
 		if !ok {

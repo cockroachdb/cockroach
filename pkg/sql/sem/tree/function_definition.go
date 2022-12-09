@@ -33,9 +33,6 @@ type FunctionDefinition struct {
 
 	// Definition is the set of overloads for this function name.
 	Definition []*Overload
-
-	// FunctionProperties are the properties common to all overloads.
-	FunctionProperties
 }
 
 // ResolvedFunctionDefinition is similar to FunctionDefinition but with all the
@@ -70,8 +67,7 @@ func MakeQualifiedOverload(schema string, overload *Overload) QualifiedOverload 
 	return QualifiedOverload{Schema: schema, Overload: overload}
 }
 
-// FunctionProperties defines the properties of the built-in
-// functions that are common across all overloads.
+// FunctionProperties defines the properties of the function.
 type FunctionProperties struct {
 	// UnsupportedWithIssue, if non-zero indicates the built-in is not
 	// really supported; the name is a placeholder. Value -1 just says
@@ -189,27 +185,18 @@ var _ = NormalClass
 
 // NewFunctionDefinition allocates a function definition corresponding
 // to the given built-in definition.
-func NewFunctionDefinition(
-	name string, props *FunctionProperties, def []Overload,
-) *FunctionDefinition {
+func NewFunctionDefinition(name string, def []Overload) *FunctionDefinition {
 	overloads := make([]*Overload, len(def))
-
-	for i := range def {
-		if def[i].PreferredOverload {
+	for i := range overloads {
+		overloads[i] = &def[i]
+		if overloads[i].PreferredOverload {
 			// Builtins with a preferred overload are always ambiguous.
-			props.AmbiguousReturnType = true
-			break
+			overloads[i].AmbiguousReturnType = true
 		}
 	}
-
-	for i := range def {
-		def[i].FunctionProperties = *props
-		overloads[i] = &def[i]
-	}
 	return &FunctionDefinition{
-		Name:               name,
-		Definition:         overloads,
-		FunctionProperties: *props,
+		Name:       name,
+		Definition: overloads,
 	}
 }
 

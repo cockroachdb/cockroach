@@ -142,8 +142,9 @@ type Catalog interface {
 		ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 	) (*tree.ResolvedFunctionDefinition, error)
 
-	// ResolveFunctionByOID resolves a function overload by OID.
-	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (string, *tree.Overload, error)
+	// ResolveFunctionByOID resolves a function overload by OID. It returns the
+	// name and overload of the function.
+	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (name string, fn *tree.Overload, err error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

@@ -103,7 +103,8 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 		return 1
 	}
 
-	props, _ := builtinsregistry.GetBuiltinProperties(d.Name)
+	// Use the category of the first builtin overload.
+	props := builtinsregistry.GetBuiltinProperties(d.Name)[0]
 	msg := HelpMessage{
 		Function: f.String(),
 		HelpMessageBody: HelpMessageBody{

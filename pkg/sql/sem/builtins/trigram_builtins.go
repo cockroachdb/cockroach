@@ -32,7 +32,6 @@ func init() {
 var trigramBuiltins = map[string]builtinDefinition{
 	// Trigram functions.
 	"similarity": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryTrigram},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "left", Typ: types.String}, {Name: "right", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -46,10 +45,13 @@ var trigramBuiltins = map[string]builtinDefinition{
 				" completely dissimilar) to one (indicating that the two strings are" +
 				" identical).",
 			Volatility: volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{
+				Category:                builtinconstants.CategoryTrigram,
+				AvailableOnPublicSchema: true,
+			},
 		},
 	),
 	"show_trgm": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryTrigram},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.StringArray),
@@ -67,10 +69,14 @@ var trigramBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns an array of all the trigrams in the given string.",
 			Volatility: volatility.Immutable,
+			FunctionProperties: tree.FunctionProperties{
+				Category:                builtinconstants.CategoryTrigram,
+				AvailableOnPublicSchema: true,
+			},
 		},
 	),
-	"word_similarity":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}),
-	"strict_word_similarity": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}),
-	"show_limit":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}),
-	"set_limit":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}),
+	"word_similarity":        makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}}),
+	"strict_word_similarity": makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}}),
+	"show_limit":             makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}}),
+	"set_limit":              makeBuiltin(tree.Overload{FunctionProperties: tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: builtinconstants.CategoryTrigram}}),
 }

@@ -50,7 +50,7 @@ const (
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
 var mathBuiltins = map[string]builtinDefinition{
-	"abs": makeBuiltin(defProps(),
+	"abs": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Abs(x))), nil
 		}, "Calculates the absolute value of `val`.", volatility.Immutable),
@@ -77,73 +77,73 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"acos": makeBuiltin(defProps(),
+	"acos": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Acos(x))), nil
 		}, "Calculates the inverse cosine of `val`.", volatility.Immutable),
 	),
 
-	"acosd": makeBuiltin(defProps(),
+	"acosd": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(radToDeg * math.Acos(x))), nil
 		}, "Calculates the inverse cosine of `val` with the result in degrees", volatility.Immutable),
 	),
 
-	"acosh": makeBuiltin(defProps(),
+	"acosh": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Acosh(x))), nil
 		}, "Calculates the inverse hyperbolic cosine of `val`.", volatility.Immutable),
 	),
 
-	"asin": makeBuiltin(defProps(),
+	"asin": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Asin(x))), nil
 		}, "Calculates the inverse sine of `val`.", volatility.Immutable),
 	),
 
-	"asind": makeBuiltin(defProps(),
+	"asind": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(radToDeg * math.Asin(x))), nil
 		}, "Calculates the inverse sine of `val` with the result in degrees.", volatility.Immutable),
 	),
 
-	"asinh": makeBuiltin(defProps(),
+	"asinh": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Asinh(x))), nil
 		}, "Calculates the inverse hyperbolic sine of `val`.", volatility.Immutable),
 	),
 
-	"atan": makeBuiltin(defProps(),
+	"atan": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Atan(x))), nil
 		}, "Calculates the inverse tangent of `val`.", volatility.Immutable),
 	),
 
-	"atand": makeBuiltin(defProps(),
+	"atand": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(radToDeg * math.Atan(x))), nil
 		}, "Calculates the inverse tangent of `val` with the result in degrees.", volatility.Immutable),
 	),
 
-	"atanh": makeBuiltin(defProps(),
+	"atanh": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Atanh(x))), nil
 		}, "Calculates the inverse hyperbolic tangent of `val`.", volatility.Immutable),
 	),
 
-	"atan2": makeBuiltin(defProps(),
+	"atan2": makeBuiltin(
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Atan2(x, y))), nil
 		}, "Calculates the inverse tangent of `x`/`y`.", volatility.Immutable),
 	),
 
-	"atan2d": makeBuiltin(defProps(),
+	"atan2d": makeBuiltin(
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(radToDeg * math.Atan2(x, y))), nil
 		}, "Calculates the inverse tangent of `x`/`y` with the result in degrees", volatility.Immutable),
 	),
 
-	"cbrt": makeBuiltin(defProps(),
+	"cbrt": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return eval.Cbrt(x)
 		}, "Calculates the cube root (∛) of `val`.", volatility.Immutable),
@@ -155,43 +155,43 @@ var mathBuiltins = map[string]builtinDefinition{
 	"ceil":    ceilImpl(),
 	"ceiling": ceilImpl(),
 
-	"cos": makeBuiltin(defProps(),
+	"cos": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Cos(x))), nil
 		}, "Calculates the cosine of `val`.", volatility.Immutable),
 	),
 
-	"cosd": makeBuiltin(defProps(),
+	"cosd": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Cos(degToRad * x))), nil
 		}, "Calculates the cosine of `val` where `val` is in degrees.", volatility.Immutable),
 	),
 
-	"cosh": makeBuiltin(defProps(),
+	"cosh": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Cosh(x))), nil
 		}, "Calculates the hyperbolic cosine of `val`.", volatility.Immutable),
 	),
 
-	"cot": makeBuiltin(defProps(),
+	"cot": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(1 / math.Tan(x))), nil
 		}, "Calculates the cotangent of `val`.", volatility.Immutable),
 	),
 
-	"cotd": makeBuiltin(defProps(),
+	"cotd": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(1 / math.Tan(degToRad*x))), nil
 		}, "Calculates the cotangent of `val` where `val` is in degrees.", volatility.Immutable),
 	),
 
-	"degrees": makeBuiltin(defProps(),
+	"degrees": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(radToDeg * x)), nil
 		}, "Converts `val` as a radian value to a degree value.", volatility.Immutable),
 	),
 
-	"div": makeBuiltin(defProps(),
+	"div": makeBuiltin(
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Trunc(x / y))), nil
 		}, "Calculates the integer quotient of `x`/`y`.", volatility.Immutable),
@@ -219,7 +219,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"exp": makeBuiltin(defProps(),
+	"exp": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Exp(x))), nil
 		}, "Calculates *e* ^ `val`.", volatility.Immutable),
@@ -230,7 +230,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Calculates *e* ^ `val`.", volatility.Immutable),
 	),
 
-	"floor": makeBuiltin(defProps(),
+	"floor": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Floor(x))), nil
 		}, "Calculates the largest integer not greater than `val`.", volatility.Immutable),
@@ -250,7 +250,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"isnan": makeBuiltin(defProps(),
+	"isnan": makeBuiltin(
 		tree.Overload{
 			// Can't use floatBuiltin1 here because this one returns
 			// a boolean.
@@ -274,14 +274,14 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"ln": makeBuiltin(defProps(),
+	"ln": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
 		}, "Calculates the natural log of `val`.", volatility.Immutable),
 		decimalLogFn(tree.DecimalCtx.Ln, "Calculates the natural log of `val`."),
 	),
 
-	"log": makeBuiltin(defProps(),
+	"log": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log10(x))), nil
 		}, "Calculates the base 10 log of `val`.", volatility.Immutable),
@@ -330,7 +330,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Calculates the base `b` log of `val`.", volatility.Immutable),
 	),
 
-	"mod": makeBuiltin(defProps(),
+	"mod": makeBuiltin(
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Mod(x, y))), nil
 		}, "Calculates `x`%`y`.", volatility.Immutable),
@@ -358,7 +358,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"pi": makeBuiltin(defProps(),
+	"pi": makeBuiltin(
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -373,13 +373,13 @@ var mathBuiltins = map[string]builtinDefinition{
 	"pow":   powImpls(),
 	"power": powImpls(),
 
-	"radians": makeBuiltin(defProps(),
+	"radians": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(x * degToRad)), nil
 		}, "Converts `val` as a degree value to a radians value.", volatility.Immutable),
 	),
 
-	"round": makeBuiltin(defProps(),
+	"round": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.RoundToEven(x))), nil
 		}, "Rounds `val` to the nearest integer using half to even (banker's) rounding.", volatility.Immutable),
@@ -434,25 +434,25 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"sin": makeBuiltin(defProps(),
+	"sin": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Sin(x))), nil
 		}, "Calculates the sine of `val`.", volatility.Immutable),
 	),
 
-	"sind": makeBuiltin(defProps(),
+	"sind": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Sin(degToRad * x))), nil
 		}, "Calculates the sine of `val` where `val` is in degrees.", volatility.Immutable),
 	),
 
-	"sinh": makeBuiltin(defProps(),
+	"sinh": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Sinh(x))), nil
 		}, "Calculates the hyperbolic sine of `val`.", volatility.Immutable),
 	),
 
-	"sign": makeBuiltin(defProps(),
+	"sign": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			switch {
 			case x < 0:
@@ -488,7 +488,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"sqrt": makeBuiltin(defProps(),
+	"sqrt": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return eval.Sqrt(x)
 		}, "Calculates the square root of `val`.", volatility.Immutable),
@@ -497,25 +497,25 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Calculates the square root of `val`.", volatility.Immutable),
 	),
 
-	"tan": makeBuiltin(defProps(),
+	"tan": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Tan(x))), nil
 		}, "Calculates the tangent of `val`.", volatility.Immutable),
 	),
 
-	"tand": makeBuiltin(defProps(),
+	"tand": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Tan(degToRad * x))), nil
 		}, "Calculates the tangent of `val` where `val` is in degrees.", volatility.Immutable),
 	),
 
-	"tanh": makeBuiltin(defProps(),
+	"tanh": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Tanh(x))), nil
 		}, "Calculates the hyperbolic tangent of `val`.", volatility.Immutable),
 	),
 
-	"trunc": makeBuiltin(defProps(),
+	"trunc": makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Trunc(x))), nil
 		}, "Truncates the decimal values of `val`.", volatility.Immutable),
@@ -562,7 +562,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"width_bucket": makeBuiltin(defProps(),
+	"width_bucket": makeBuiltin(
 		tree.Overload{
 			Types: tree.ParamTypes{{Name: "operand", Typ: types.Decimal}, {Name: "b1", Typ: types.Decimal},
 				{Name: "b2", Typ: types.Decimal}, {Name: "count", Typ: types.Int}},
@@ -627,7 +627,7 @@ var mathBuiltins = map[string]builtinDefinition{
 }
 
 func ceilImpl() builtinDefinition {
-	return makeBuiltin(defProps(),
+	return makeBuiltin(
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
 		}, "Calculates the smallest integer not smaller than `val`.", volatility.Immutable),
@@ -652,7 +652,7 @@ func ceilImpl() builtinDefinition {
 }
 
 func powImpls() builtinDefinition {
-	return makeBuiltin(defProps(),
+	return makeBuiltin(
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
 		}, "Calculates `x`^`y`.", volatility.Immutable),

@@ -25,11 +25,11 @@ import (
 func init() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range windows {
-		if v.props.Class != tree.WindowClass {
-			panic(errors.AssertionFailedf("%s: window functions should be marked with the tree.WindowClass "+
-				"function class, found %v", k, v))
-		}
 		for _, w := range v.overloads {
+			if w.FunctionProperties.Class != tree.WindowClass {
+				panic(errors.AssertionFailedf("%s: window functions should be marked with the tree.WindowClass "+
+					"function class, found %v", k, v))
+			}
 			if w.WindowFunc == nil {
 				panic(errors.AssertionFailedf("%s: window functions should have eval.WindowFunc constructors, "+
 					"found %v", k, w))
@@ -39,17 +39,11 @@ func init() {
 	}
 }
 
-func winProps() tree.FunctionProperties {
-	return tree.FunctionProperties{
-		Class: tree.WindowClass,
-	}
-}
-
 // windows are a special class of builtin functions that can only be applied
 // as window functions using an OVER clause.
 // See `windowFuncHolder` in the sql package.
 var windows = map[string]builtinDefinition{
-	"row_number": makeBuiltin(winProps(),
+	"row_number": makeBuiltin(
 		makeWindowOverload(
 			tree.ParamTypes{},
 			types.Int,
@@ -58,7 +52,7 @@ var windows = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"rank": makeBuiltin(winProps(),
+	"rank": makeBuiltin(
 		makeWindowOverload(
 			tree.ParamTypes{},
 			types.Int,
@@ -67,7 +61,7 @@ var windows = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"dense_rank": makeBuiltin(winProps(),
+	"dense_rank": makeBuiltin(
 		makeWindowOverload(
 			tree.ParamTypes{},
 			types.Int,
@@ -76,7 +70,7 @@ var windows = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"percent_rank": makeBuiltin(winProps(),
+	"percent_rank": makeBuiltin(
 		makeWindowOverload(
 			tree.ParamTypes{},
 			types.Float,
@@ -85,7 +79,7 @@ var windows = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"cume_dist": makeBuiltin(winProps(),
+	"cume_dist": makeBuiltin(
 		makeWindowOverload(
 			tree.ParamTypes{},
 			types.Float,
@@ -95,7 +89,7 @@ var windows = map[string]builtinDefinition{
 			volatility.Immutable,
 		),
 	),
-	"ntile": makeBuiltin(winProps(),
+	"ntile": makeBuiltin(
 		makeWindowOverload(
 			tree.ParamTypes{{Name: "n", Typ: types.Int}},
 			types.Int,
@@ -105,7 +99,6 @@ var windows = map[string]builtinDefinition{
 		),
 	),
 	"lag": collectOverloads(
-		winProps(),
 		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
@@ -143,7 +136,7 @@ var windows = map[string]builtinDefinition{
 			)
 		},
 	),
-	"lead": collectOverloads(winProps(), types.Scalar,
+	"lead": collectOverloads(types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
 				tree.ParamTypes{{Name: "val", Typ: t}},
@@ -179,7 +172,6 @@ var windows = map[string]builtinDefinition{
 		},
 	),
 	"first_value": collectOverloads(
-		winProps(),
 		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
@@ -191,7 +183,6 @@ var windows = map[string]builtinDefinition{
 			)
 		}),
 	"last_value": collectOverloads(
-		winProps(),
 		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
@@ -202,7 +193,7 @@ var windows = map[string]builtinDefinition{
 				volatility.Immutable,
 			)
 		}),
-	"nth_value": collectOverloads(winProps(), types.Scalar,
+	"nth_value": collectOverloads(types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
 				tree.ParamTypes{
@@ -226,6 +217,9 @@ func makeWindowOverload(
 		WindowFunc: f,
 		Info:       info,
 		Volatility: volatility,
+		FunctionProperties: tree.FunctionProperties{
+			Class: tree.WindowClass,
+		},
 	}
 }
 
