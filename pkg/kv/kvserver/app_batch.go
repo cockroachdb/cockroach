@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -32,7 +31,6 @@ type appBatchStats struct {
 	numEntriesProcessed      int
 	numEntriesProcessedBytes int64
 	numEmptyEntries          int
-	followerStoreWriteBytes  kvadmission.FollowerStoreWriteBytes
 	// NB: update `merge` when adding a new field.
 }
 
@@ -41,7 +39,6 @@ func (s *appBatchStats) merge(ss appBatchStats) {
 	s.numEntriesProcessed += ss.numEntriesProcessed
 	s.numEntriesProcessedBytes += ss.numEntriesProcessedBytes
 	ss.numEmptyEntries += ss.numEmptyEntries
-	s.followerStoreWriteBytes.Merge(ss.followerStoreWriteBytes)
 }
 
 // appBatch is the in-progress foundation for standalone log entry
