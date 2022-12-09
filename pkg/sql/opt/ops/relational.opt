@@ -1417,3 +1417,32 @@ define FakeRel {
 define FakeRelPrivate {
     Props RelPropsPtr
 }
+
+# KvScan is relational operator that can read raw values form indexes directly,
+# it is only currently used to back a transformation from
+# crdb_internal.scan s to this operator. For this operator to be
+# used we need to know both the index and table upfront, and cannot use place
+# holder values.
+[Relational]
+define KvScan {
+    _ KvScanPrivate
+}
+
+[Private]
+define KvScanPrivate {
+    # Table identifies the table to scan, if this table scan is limited to
+    # a single table and used for determining stats.
+    Table TableID
+
+    # Index identifies the index to scan, if this scan is limited to a single
+    # index and used for determining stats.
+    Index IndexOrdinal
+
+    # Cols specifies the set of columns that the scan operator projects. This
+    # may be a subset of the columns that the table/index contains.
+    Cols ColSet
+
+    # Datum specifies the Start/End keys as a byte array that we will
+    # be scanning using a raw KV scan.
+    Span Datum
+}

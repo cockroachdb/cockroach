@@ -309,3 +309,120 @@ project
       │    └── columns: j:3
       └── zip
            └── json_array_elements(j:3) [outer=(3), immutable]
+
+# --------------------------------------------------
+# ConvertProjectionSetRawScanToKvScan
+# --------------------------------------------------
+
+# Basic case with constant values.
+norm expect=ConvertProjectionSetRawScanToKvScan
+SELECT * FROM crdb_internal.scan(crdb_internal.table_span(105))
+----
+kv-scan
+ └── columns: key:1 value:2 ts:3
+
+# Basic case with constant values.
+norm expect=ConvertProjectionSetRawScanToKvScan
+SELECT * FROM crdb_internal.scan(crdb_internal.index_span(105, 1))
+----
+kv-scan
+ └── columns: key:1 value:2 ts:3
+
+# Multiple times in from list with inner join.
+norm expect=ConvertProjectionSetRawScanToKvScan
+SELECT * FROM crdb_internal.scan(crdb_internal.index_span(105, 1)) as A, crdb_internal.scan(crdb_internal.table_span(105)) as B WHERE A.value <> B.value
+----
+inner-join (cross)
+ ├── columns: key:1 value:2!null ts:3 key:4 value:5!null ts:6
+ ├── kv-scan
+ │    └── columns: key:1 value:2 ts:3
+ ├── kv-scan
+ │    └── columns: key:4 value:5 ts:6
+ └── filters
+      └── value:2 != value:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+
+# Multiple times on the FROM list with predicate with aggregation + inner join.
+norm expect=ConvertProjectionSetRawScanToKvScan
+SELECT min(A.ts), max(B.ts) FROM crdb_internal.scan(crdb_internal.index_span(105, 1)) as A, crdb_internal.scan(crdb_internal.table_span(105)) as B WHERE A.value <> B.value
+----
+scalar-group-by
+ ├── columns: min:7 max:8
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7,8)
+ ├── inner-join (cross)
+ │    ├── columns: key:1 value:2!null ts:3 key:4 value:5!null ts:6
+ │    ├── kv-scan
+ │    │    └── columns: key:1 value:2 ts:3
+ │    ├── kv-scan
+ │    │    └── columns: key:4 value:5 ts:6
+ │    └── filters
+ │         └── value:2 != value:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ └── aggregations
+      ├── min [as=min:7, outer=(3)]
+      │    └── ts:3
+      └── max [as=max:8, outer=(6)]
+           └── ts:6
+
+# Used in the SELECT list, so this rule should not apply.
+norm expect-not=ConvertProjectionSetRawScanToKvScan
+SELECT crdb_internal.scan(crdb_internal.index_span(105, 1)), crdb_internal.scan(crdb_internal.table_span(105))
+----
+project
+ ├── columns: crdb_internal.scan:7 crdb_internal.scan:8
+ ├── stable
+ ├── project-set
+ │    ├── columns: key:1 value:2 ts:3 key:4 value:5 ts:6
+ │    ├── stable
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         ├── crdb_internal.scan(ARRAY['\xf189','\xf18a']) [stable]
+ │         └── crdb_internal.scan(ARRAY['\xf1','\xf2']) [stable]
+ └── projections
+      ├── ((key:1, value:2, ts:3) AS key, value, ts) [as=crdb_internal.scan:7, outer=(1-3)]
+      └── ((key:4, value:5, ts:6) AS key, value, ts) [as=crdb_internal.scan:8, outer=(4-6)]
+
+# Using variables, so this rule should be skipped.
+norm expect-not=ConvertProjectionSetRawScanToKvScan
+SELECT * FROM crdb_internal.scan(crdb_internal.table_span($1))
+----
+project-set
+ ├── columns: key:1 value:2 ts:3
+ ├── stable, has-placeholder
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── crdb_internal.scan(crdb_internal.table_span($1)) [stable]
+
+# Using variables, so this rule should be skipped.
+norm expect-not=ConvertProjectionSetRawScanToKvScan
+SELECT * FROM crdb_internal.scan(crdb_internal.index_span(105, $1))
+----
+project-set
+ ├── columns: key:1 value:2 ts:3
+ ├── stable, has-placeholder
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── crdb_internal.scan(crdb_internal.index_span(105, $1)) [stable]
+
+# Using a variables, so this rule should be skipped.
+norm expect-not=ConvertProjectionSetRawScanToKvScan
+SELECT * FROM crdb_internal.scan(crdb_internal.index_span($1, 1))
+----
+project-set
+ ├── columns: key:1 value:2 ts:3
+ ├── stable, has-placeholder
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── crdb_internal.scan(crdb_internal.index_span($1, 1)) [stable]

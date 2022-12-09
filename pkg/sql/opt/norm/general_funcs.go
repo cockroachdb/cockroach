@@ -12,6 +12,7 @@ package norm
 
 import (
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1091,4 +1092,118 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		Flags:            jp.Flags,
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
+}
+
+// MakeKvScanFromZip takes a zip containing a call to
+// crdb_internal.scan and converts it into an
+// IndexScan expression, which can directly read from indexes.
+func (c *CustomFuncs) MakeKvScanFromZip(exp memo.RelExpr, zip memo.ZipExpr) memo.RelExpr {
+	item := zip.Child(0).(*memo.ZipItem)
+	scanExpr := item.Fn.(*memo.FunctionExpr)
+	var span tree.DArray
+	switch expr := scanExpr.Args.Child(0).(type) {
+	case *memo.FunctionExpr:
+		var tableIDVal opt.TableID
+		var indexIDVal cat.IndexOrdinal
+		if tableIDConstExpr, ok := expr.Args.Child(0).(*memo.ConstExpr); ok {
+			tableIDVal = opt.TableID(*tableIDConstExpr.Value.(*tree.DInt))
+		} else {
+			panic(errors.AssertionFailedf("index scans can only be generated from constants"))
+		}
+		if expr.Args.ChildCount() == 2 {
+			if indexIDConstExpr, ok := expr.Args.Child(1).(*memo.ConstExpr); ok {
+				indexIDVal = cat.IndexOrdinal(*indexIDConstExpr.Value.(*tree.DInt))
+			} else {
+				panic(errors.AssertionFailedf("index scans can only be generated from constants"))
+			}
+		}
+		var prefix roachpb.Key
+		if indexIDVal == 0 {
+			prefix = c.f.evalCtx.Codec.TablePrefix(uint32(tableIDVal))
+		} else {
+			prefix = c.f.evalCtx.Codec.IndexPrefix(uint32(tableIDVal), uint32(indexIDVal))
+		}
+
+		if err := span.Append(tree.NewDBytes(tree.DBytes(prefix))); err != nil {
+			panic(err)
+		}
+		if err := span.Append(tree.NewDBytes(tree.DBytes(prefix.PrefixEnd()))); err != nil {
+			panic(err)
+		}
+	case *memo.ConstExpr:
+		span = *expr.Value.(*tree.DArray)
+	}
+
+	// Collect metadata statistics if we are scanning a table
+	// and index with this query.
+	mdTableID, indexID := func() (opt.TableID, cat.IndexOrdinal) {
+		startKey := roachpb.Key(*span.Array[0].(*tree.DBytes))
+		_, tableID, err := c.f.evalCtx.Codec.DecodeTablePrefix(startKey)
+		if err != nil {
+			return 0, 0
+		}
+		// Error is intentionally ignored, if the index is missing.
+		_, _, indexID, _ := c.f.evalCtx.Codec.DecodeIndexPrefix(startKey)
+		ds, _, err := c.f.catalog.ResolveDataSourceByID(c.f.ctx, cat.Flags{AvoidDescriptorCaches: true}, cat.StableID(tableID))
+		if err != nil {
+			return 0, 0
+		}
+		fullName, err := c.f.catalog.FullyQualifiedName(c.f.ctx, ds)
+		if err != nil {
+			return 0, 0
+		}
+		mdTableID := c.f.Metadata().AddTable(ds.(cat.Table), &fullName)
+		return mdTableID, cat.IndexOrdinal(indexID)
+	}()
+
+	indexScan := c.f.ConstructKvScan(&memo.KvScanPrivate{
+		Span:  &span,
+		Cols:  item.Cols.ToSet(),
+		Table: mdTableID,
+		Index: indexID,
+	})
+	return indexScan
+}
+
+// IsKvScanBuiltin determines if crdb_internal.scan
+// is executed by this operation, in a manner in which it can be
+// optimized into an index scan expression.
+func (c *CustomFuncs) IsKvScanBuiltin(zip memo.ZipExpr) bool {
+	if zip.ChildCount() != 1 {
+		return false
+	}
+	item, ok := zip.Child(0).(*memo.ZipItem)
+	if !ok {
+		return false
+	}
+	functionExpr, ok := item.Fn.(*memo.FunctionExpr)
+	if !ok {
+		return false
+	}
+	if functionExpr.Name != "crdb_internal.scan" {
+		return false
+	}
+	// We can only transform ones with constant values.
+	if len(functionExpr.Args) != 1 {
+		return false
+	}
+	switch expr := functionExpr.Args.Child(0).(type) {
+	case *memo.FunctionExpr:
+		if (expr.Name == "crdb_internal.index_span" && len(expr.Args) == 2) ||
+			(expr.Name == "crdb_internal.table_span" && len(expr.Args) == 1) {
+			for child := 0; child < expr.Args.ChildCount(); child++ {
+				if expr, ok := expr.Args.Child(child).(*memo.ConstExpr); !ok ||
+					expr.Typ != types.Int {
+					return false
+				}
+			}
+			return true
+		}
+	case *memo.ConstExpr:
+		if expr.Typ == types.BytesArray &&
+			len(expr.Value.(*tree.DArray).Array) == 2 {
+			return true
+		}
+	}
+	return false
 }

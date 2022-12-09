@@ -33,6 +33,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",

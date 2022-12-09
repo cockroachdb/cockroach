@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     # Pin the dependencies required in the auto-generated code.
     deps = [
+        "//pkg/roachpb",  #keep
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/inverted",

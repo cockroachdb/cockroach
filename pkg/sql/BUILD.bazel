@@ -144,6 +144,7 @@ go_library(
         "join.go",
         "join_predicate.go",
         "join_token.go",
+        "kv_scan.go",
         "limit.go",
         "lookup_join.go",
         "max_one_row.go",

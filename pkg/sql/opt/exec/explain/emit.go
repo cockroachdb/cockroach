@@ -310,6 +310,7 @@ var nodeNames = [...]string{
 	insertOp:               "insert",
 	invertedFilterOp:       "inverted filter",
 	invertedJoinOp:         "inverted join",
+	kvScanOp:               "kv scan",
 	limitOp:                "limit",
 	lookupJoinOp:           "", // This node does not have a fixed name.
 	max1RowOp:              "max1row",
@@ -950,6 +951,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.subjectReplicas != tree.RelocateLease {
 			ob.Expr("from", a.fromStoreID, nil /* columns */)
 		}
+
+	case kvScanOp:
+		a := n.args.(*kvScanArgs)
+		ob.Attr("span", a.Span)
 
 	case simpleProjectOp,
 		serializingProjectOp,

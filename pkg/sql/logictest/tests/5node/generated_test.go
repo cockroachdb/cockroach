@@ -170,6 +170,13 @@ func TestLogic_hash_join_dist(
 	runLogicTest(t, "hash_join_dist")
 }
 
+func TestLogic_index_scan_opt(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "index_scan_opt")
+}
+
 func TestLogic_inv_stats(
 	t *testing.T,
 ) {

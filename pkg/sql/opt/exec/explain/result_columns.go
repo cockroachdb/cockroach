@@ -191,6 +191,9 @@ func getResultColumns(
 		}
 		return colinfo.ShowTraceColumns, nil
 
+	case kvScanOp:
+		return colinfo.KvScanColumns, nil
+
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
 		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp,
 		createFunctionOp:
