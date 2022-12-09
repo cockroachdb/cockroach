@@ -72,10 +72,10 @@ func makeOverlapsOverloads() []tree.Overload {
 		res = append(res,
 			tree.Overload{
 				Types: tree.ParamTypes{
-					{"s1", s1},
-					{"e1", e1},
-					{"s1", s2},
-					{"e2", e2},
+					{Name: "s1", Typ: s1},
+					{Name: "e1", Typ: e1},
+					{Name: "s1", Typ: s2},
+					{Name: "e2", Typ: e2},
 				},
 				ReturnType: tree.FixedReturnType(types.Bool),
 				Fn:         overlapsBuiltinFunc,

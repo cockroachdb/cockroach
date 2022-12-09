@@ -104,7 +104,7 @@ var generators = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"aclexplode": makeBuiltin(genProps(),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"aclitems", types.StringArray}},
+			tree.ParamTypes{{Name: "aclitems", Typ: types.StringArray}},
 			aclexplodeGeneratorType,
 			func(_ context.Context, _ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				return aclexplodeGenerator{}, nil
@@ -117,8 +117,8 @@ var generators = map[string]builtinDefinition{
 	"crdb_internal.scan": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"start_key", types.Bytes},
-				{"end_key", types.Bytes},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
 			},
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
@@ -141,7 +141,7 @@ var generators = map[string]builtinDefinition{
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"span", types.BytesArray},
+				{Name: "span", Typ: types.BytesArray},
 			},
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
@@ -170,28 +170,28 @@ var generators = map[string]builtinDefinition{
 	"generate_series": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
-			tree.ParamTypes{{"start", types.Int}, {"end", types.Int}},
+			tree.ParamTypes{{Name: "start", Typ: types.Int}, {Name: "end", Typ: types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
+			tree.ParamTypes{{Name: "start", Typ: types.Int}, {Name: "end", Typ: types.Int}, {Name: "step", Typ: types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"start", types.Timestamp}, {"end", types.Timestamp}, {"step", types.Interval}},
+			tree.ParamTypes{{Name: "start", Typ: types.Timestamp}, {Name: "end", Typ: types.Timestamp}, {Name: "step", Typ: types.Interval}},
 			seriesTSValueGeneratorType,
 			makeTSSeriesGenerator,
 			"Produces a virtual table containing the timestamp values from `start` to `end`, inclusive, by increment of `step`.",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"start", types.TimestampTZ}, {"end", types.TimestampTZ}, {"step", types.Interval}},
+			tree.ParamTypes{{Name: "start", Typ: types.TimestampTZ}, {Name: "end", Typ: types.TimestampTZ}, {Name: "step", Typ: types.Interval}},
 			seriesTSTZValueGeneratorType,
 			makeTSTZSeriesGenerator,
 			"Produces a virtual table containing the timestampTZ values from `start` to `end`, inclusive, by increment of `step`.",
@@ -203,7 +203,7 @@ var generators = map[string]builtinDefinition{
 	// on a TestServer through its eval.TestingKnobs.CallbackGenerators.
 	"crdb_internal.testing_callback": makeBuiltin(genProps(),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"name", types.String}},
+			tree.ParamTypes{{Name: "name", Typ: types.String}},
 			types.Int,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				s, ok := tree.AsDString(args[0])
@@ -238,7 +238,7 @@ var generators = map[string]builtinDefinition{
 		genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"options", types.MakeArray(types.String)},
+				{Name: "options", Typ: types.MakeArray(types.String)},
 			},
 			optionsToOverloadGeneratorType,
 			makeOptionsToTableGenerator,
@@ -253,8 +253,8 @@ var generators = map[string]builtinDefinition{
 		genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"string", types.String},
-				{"pattern", types.String},
+				{Name: "string", Typ: types.String},
+				{Name: "pattern", Typ: types.String},
 			},
 			types.String,
 			makeRegexpSplitToTableGeneratorFactory(false /* hasFlags */),
@@ -263,9 +263,9 @@ var generators = map[string]builtinDefinition{
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"string", types.String},
-				{"pattern", types.String},
-				{"flags", types.String},
+				{Name: "string", Typ: types.String},
+				{Name: "pattern", Typ: types.String},
+				{Name: "flags", Typ: types.String},
 			},
 			types.String,
 			makeRegexpSplitToTableGeneratorFactory(true /* hasFlags */),
@@ -277,7 +277,7 @@ var generators = map[string]builtinDefinition{
 	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
-			tree.ParamTypes{{"input", types.AnyArray}},
+			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
 				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
 					return tree.UnknownReturnType
@@ -315,7 +315,7 @@ var generators = map[string]builtinDefinition{
 
 	"information_schema._pg_expandarray": makeBuiltin(genProps(),
 		makeGeneratorOverloadWithReturnType(
-			tree.ParamTypes{{"input", types.AnyArray}},
+			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
 				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
 					return tree.UnknownReturnType
@@ -343,21 +343,21 @@ var generators = map[string]builtinDefinition{
 	"generate_subscripts": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SUBSCRIPTS
 		makeGeneratorOverload(
-			tree.ParamTypes{{"array", types.AnyArray}},
+			tree.ParamTypes{{Name: "array", Typ: types.AnyArray}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"array", types.AnyArray}, {"dim", types.Int}},
+			tree.ParamTypes{{Name: "array", Typ: types.AnyArray}, {Name: "dim", Typ: types.Int}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
-			tree.ParamTypes{{"array", types.AnyArray}, {"dim", types.Int}, {"reverse", types.Bool}},
+			tree.ParamTypes{{Name: "array", Typ: types.AnyArray}, {Name: "dim", Typ: types.Int}, {Name: "reverse", Typ: types.Bool}},
 			subscriptsValueGeneratorType,
 			makeGenerateSubscriptsGenerator,
 			"Returns a series comprising the given array's subscripts.\n\n"+
@@ -470,7 +470,7 @@ var generators = map[string]builtinDefinition{
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"database_name", types.String},
+				{Name: "database_name", Typ: types.String},
 			},
 			showCreateAllSchemasGeneratorType,
 			makeShowCreateAllSchemasGenerator,
@@ -486,7 +486,7 @@ The output can be used to recreate a database.'
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"database_name", types.String},
+				{Name: "database_name", Typ: types.String},
 			},
 			showCreateAllTablesGeneratorType,
 			makeShowCreateAllTablesGenerator,
@@ -507,7 +507,7 @@ The output can be used to recreate a database.'
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"database_name", types.String},
+				{Name: "database_name", Typ: types.String},
 			},
 			showCreateAllTypesGeneratorType,
 			makeShowCreateAllTypesGenerator,
@@ -523,7 +523,7 @@ The output can be used to recreate a database.'
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"gist", types.String},
+				{Name: "gist", Typ: types.String},
 			},
 			decodePlanGistGeneratorType,
 			makeDecodePlanGistGenerator,
@@ -538,7 +538,7 @@ The output can be used to recreate a database.'
 		},
 		makeGeneratorOverload(
 			tree.ParamTypes{
-				{"gist", types.String},
+				{Name: "gist", Typ: types.String},
 			},
 			decodePlanGistGeneratorType,
 			makeDecodeExternalPlanGistGenerator,
@@ -1252,7 +1252,7 @@ var (
 )
 
 var jsonArrayElementsImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	jsonArrayGeneratorType,
 	makeJSONArrayAsJSONGenerator,
 	"Expands a JSON array to a set of JSON values.",
@@ -1260,7 +1260,7 @@ var jsonArrayElementsImpl = makeGeneratorOverload(
 )
 
 var jsonArrayElementsTextImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	jsonArrayTextGeneratorType,
 	makeJSONArrayAsTextGenerator,
 	"Expands a JSON array to a set of text values.",
@@ -1348,7 +1348,7 @@ func (g *jsonArrayGenerator) Values() (tree.Datums, error) {
 
 // jsonObjectKeysImpl is a key generator of a JSON object.
 var jsonObjectKeysImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	jsonObjectKeysGeneratorType,
 	makeJSONObjectKeysGenerator,
 	"Returns sorted set of keys in the outermost JSON object.",
@@ -1404,7 +1404,7 @@ func (g *jsonObjectKeysGenerator) Values() (tree.Datums, error) {
 }
 
 var jsonEachImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	jsonEachGeneratorType,
 	makeJSONEachImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs.",
@@ -1412,7 +1412,7 @@ var jsonEachImpl = makeGeneratorOverload(
 )
 
 var jsonEachTextImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	jsonEachTextGeneratorType,
 	makeJSONEachTextImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs. "+
@@ -1421,7 +1421,7 @@ var jsonEachTextImpl = makeGeneratorOverload(
 )
 
 var jsonToRecordImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	// NOTE: this type will never actually get used. It is replaced in the
 	// optimizer by looking at the most recent AS alias clause.
 	types.EmptyTuple,
@@ -1431,7 +1431,7 @@ var jsonToRecordImpl = makeGeneratorOverload(
 )
 
 var jsonToRecordSetImpl = makeGeneratorOverload(
-	tree.ParamTypes{{"input", types.Jsonb}},
+	tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
 	// NOTE: this type will never actually get used. It is replaced in the
 	// optimizer by looking at the most recent AS alias clause.
 	types.EmptyTuple,
@@ -1555,7 +1555,7 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 		// the default values of each field will be NULL.
 		// The second argument can also be null, in which case the first argument
 		// is returned as-is.
-		Types:              tree.ParamTypes{{"base", types.Any}, {"from_json", types.Jsonb}},
+		Types:              tree.ParamTypes{{Name: "base", Typ: types.Any}, {Name: "from_json", Typ: types.Jsonb}},
 		ReturnType:         tree.IdentityReturnType(0),
 		GeneratorWithExprs: gen,
 		Info:               info,
