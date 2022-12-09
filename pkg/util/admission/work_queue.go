@@ -486,6 +486,65 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 	}
 }
 
+// TryAdmit is called when requesting admission for some work. If the work is
+// granted immediately, it will return true. Otherwise, once the full impact of
+// this request has been processed,
+// TODO(baptist): I stripped out a lot of code from Admit, it will need to be
+// added back in post prototype.
+// storeId is the store that sent the data to us.
+func (q *WorkQueue) TryAdmit(ctx context.Context, storeId roachpb.StoreID, tenantId roachpb.TenantID, requestedCount int64,
+	accountFor func(context.Context, roachpb.StoreID, roachpb.TenantID, int64)) error {
+
+	enabledSetting := admissionControlEnabledSettings[q.workKind]
+	if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
+		return nil
+	}
+	tenantID := tenantId.ToUint64()
+
+	q.admitMu.Lock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	defer q.admitMu.Unlock()
+
+	tenant, ok := q.mu.tenants[tenantID]
+	if !ok {
+		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+		q.mu.tenants[tenantID] = tenant
+	}
+
+	// Add to tenant heap if not already there
+	// TODO(baptist): What is the tenant heap for?
+	if !isInTenantHeap(tenant) {
+		heap.Push(&q.mu.tenantHeap, tenant)
+	}
+
+	// Push onto waiting heap(s).
+	// TODO(baptist): Not sure what lifo ordering means here since we are not time blocking
+	work := newWaitingWork(admissionpb.NormalPri, fifoWorkOrdering, timeutil.Now().UnixNano(), requestedCount, q.timeNow(), q.mu.epochLengthNanos)
+	heap.Push(&tenant.waitingWorkHeap, work)
+	// TODO(baptist): Fastpath if we can run immediately, return true
+
+	// Take the tokens from the sending store.
+	accountFor(ctx, storeId, tenantId, -requestedCount)
+
+	// TODO(baptist): Don't launch a separate goroutine for each request, instead
+	// have one thread that does this. The behavior will be the same, but will be
+	// lighter weight.
+	go func() {
+		defer releaseWaitingWork(work)
+		_, ok := <-work.ch
+		if !ok {
+			panic(errors.AssertionFailedf("channel should not be closed"))
+		}
+		// Send tokens back to the write source
+
+		// Give the tokens back after fully admitted.
+		accountFor(ctx, storeId, tenantId, requestedCount)
+	}()
+	// TODO(baptist): If this can be satisfied immediately, return true,nil
+	return nil
+}
+
 // Admit is called when requesting admission for some work. If err!=nil, the
 // request was not admitted, potentially due to the deadline being exceeded.
 // The enabled return value is relevant when err=nil, and represents whether

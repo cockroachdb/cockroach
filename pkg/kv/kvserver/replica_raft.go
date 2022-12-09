@@ -980,10 +980,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if r.store.cfg.KVAdmissionController != nil &&
-			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
+		if r.store.cfg.KVAdmissionController != nil {
 			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
-				r.store.StoreID(), stats.apply.followerStoreWriteBytes)
+				ctx, r.store.StoreID(), stats.apply.followerStoreWriteBytes)
 		}
 
 		// etcd raft occasionally adds a nil entry (our own commands are never

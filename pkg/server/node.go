@@ -392,7 +392,7 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
-		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
+		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, n.sendAccountingRequest, cfg.Settings,
 	)
 	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -403,6 +403,23 @@ func NewNode(
 // logging.
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
 	n.execCfg = execCfg
+}
+
+// sendAccountingRequest is used by Admission Control to notify the leaseholder
+// of a backlog building on the receiver. This is sent asynchronously when a
+// follower begins to fall behind.
+func (n *Node) sendAccountingRequest(ctx context.Context, storeId roachpb.StoreID, tenantId roachpb.TenantID, tokens int64) {
+	req :=
+		roachpb.FollowerAccountingRequest{
+			TenantID:  tenantId,
+			StoreID:   int32(storeId),
+			NumTokens: tokens,
+		}
+
+	_, err := kv.SendWrapped(ctx, n.storeCfg.DB.NonTransactionalSender(), &req)
+	if err != nil {
+		log.Fatalf(ctx, "while accounting for request: %v", err)
+	}
 }
 
 // String implements fmt.Stringer.

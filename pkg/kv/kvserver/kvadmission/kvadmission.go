@@ -107,7 +107,8 @@ type Controller interface {
 	// FollowerStoreWriteBytes informs admission control about writes
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
-	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
+	// TODO: Rename this method to FollowerStoreAccounting
+	FollowerStoreWriteBytes(context.Context, roachpb.StoreID, FollowerStoreWriteBytes)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -138,6 +139,7 @@ type controllerImpl struct {
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
+	sendAccountingRequest      func(context.Context, roachpb.StoreID, roachpb.TenantID, int64)
 	settings                   *cluster.Settings
 	every                      log.EveryN
 }
@@ -164,12 +166,14 @@ func MakeController(
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
+	sendAccountingRequest func(context.Context, roachpb.StoreID, roachpb.TenantID, int64),
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
+		sendAccountingRequest:      sendAccountingRequest,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}
@@ -380,18 +384,26 @@ func (n *controllerImpl) SnapshotIngested(
 }
 
 // FollowerStoreWriteBytes implements the Controller interface.
-func (n *controllerImpl) FollowerStoreWriteBytes(
+func (n *controllerImpl) FollowerStoreWriteBytes(ctx context.Context,
 	storeID roachpb.StoreID, followerWriteBytes FollowerStoreWriteBytes,
 ) {
-	if followerWriteBytes.WriteBytes == 0 && followerWriteBytes.IngestedBytes == 0 {
+	//TODO: Check if the storeID is correct
+	if len(followerWriteBytes.Writes) == 0 {
 		return
 	}
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
 	if storeAdmissionQ == nil {
 		return
 	}
-	storeAdmissionQ.BypassedWorkDone(
-		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
+	for tenantId, write := range followerWriteBytes.Writes {
+		err := n.kvAdmissionQ.TryAdmit(ctx, storeID, tenantId, write.WriteBytes, n.sendAccountingRequest)
+		if err != nil {
+			// This shouldn't be happening.
+			if buildutil.CrdbTestBuild {
+				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
+			}
+		}
+	}
 }
 
 // ProvisionedBandwidth set a value of the provisioned
@@ -405,15 +417,21 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 // FollowerStoreWriteBytes captures stats about writes done to a store by a
 // replica that is not the leaseholder. These are used for admission control.
 type FollowerStoreWriteBytes struct {
-	NumEntries int64
-	admission.StoreWorkDoneInfo
+	Writes map[roachpb.TenantID]*admission.StoreWorkDoneInfo
 }
 
-// Merge follower store write statistics using the given data.
-func (f *FollowerStoreWriteBytes) Merge(from FollowerStoreWriteBytes) {
-	f.NumEntries += from.NumEntries
-	f.WriteBytes += from.WriteBytes
-	f.IngestedBytes += from.IngestedBytes
+// Add follower store write statistics using the given data.
+func (f *FollowerStoreWriteBytes) Add(tenantId roachpb.TenantID, write admission.StoreWorkDoneInfo) {
+	if x, found := f.Writes[tenantId]; found {
+		x.WriteBytes += write.WriteBytes
+		x.IngestedBytes += write.IngestedBytes
+	} else {
+		if f.Writes == nil {
+			f.Writes = make(map[roachpb.TenantID]*admission.StoreWorkDoneInfo)
+		}
+
+		f.Writes[tenantId] = &admission.StoreWorkDoneInfo{WriteBytes: write.WriteBytes, IngestedBytes: write.IngestedBytes}
+	}
 }
 
 // StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of

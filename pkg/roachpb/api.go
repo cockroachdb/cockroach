@@ -793,6 +793,9 @@ func (*BarrierRequest) Method() Method { return Barrier }
 // Method implements the Request interface.
 func (*IsSpanEmptyRequest) Method() Method { return IsSpanEmpty }
 
+// Method implements the Request interface.
+func (*FollowerAccountingRequest) Method() Method { return FollowerAccounting }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -1077,6 +1080,12 @@ func (r *BarrierRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *IsSpanEmptyRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *FollowerAccountingRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1452,6 +1461,9 @@ func (*QueryResolvedTimestampRequest) flags() flag {
 }
 func (*BarrierRequest) flags() flag     { return isWrite | isRange }
 func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
+
+// TODO: Check these flags
+func (*FollowerAccountingRequest) flags() flag { return isWrite | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about

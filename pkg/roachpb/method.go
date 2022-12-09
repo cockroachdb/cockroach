@@ -174,6 +174,8 @@ const (
 	// IsSpanEmpty is a non-transaction read request used to determine whether
 	// a span contains any keys whatsoever (garbage or otherwise).
 	IsSpanEmpty
+	// FollowerAccounting is used to account for tokens used on a follower.
+	FollowerAccounting
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )

@@ -212,6 +212,24 @@ message IsSpanEmptyResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// A FollowerAccountingRequest is sent by a receiver of a message twice per
+// write request. The first message will have a negative number of tokens, and
+// the second will have a positive number. The sender should track tokens and
+// stop sending once the number of tokens is too negative.
+// The receiver will only send these messages once it is in an overloaded
+// scenario to try and throttle senders to it.
+message FollowerAccountingRequest {
+  RequestHeader header  = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  TenantID tenant_id    = 2 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+  int32    store_id     = 3 [(gogoproto.customname) = "StoreID"];
+  int64    num_tokens   = 4;
+}
+
+// A FollowerAccountingResponse is the response to a FollowerAccountingRequest.
+message FollowerAccountingResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -2194,6 +2212,7 @@ message RequestUnion {
     BarrierRequest barrier = 53;
     ProbeRequest probe = 54;
     IsSpanEmptyRequest is_span_empty = 56;
+    FollowerAccountingRequest accounting = 57;
   }
   reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
@@ -2249,6 +2268,7 @@ message ResponseUnion {
     BarrierResponse barrier = 53;
     ProbeResponse probe = 54;
     IsSpanEmptyResponse is_span_empty = 56;
+    FollowerAccountingResponse accounting = 57;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }
@@ -2629,22 +2649,6 @@ message AdmissionHeader {
   bool no_memory_reserved_at_source = 5;
 }
 
-// A FollowerAccountingRequest is sent by a receiver of a message twice per
-// write request. The first message will have a negative number of tokens, and
-// the second will have a positive number. The sender should track tokens and
-// stop sending once the number of tokens is too negative.
-// The receiver will only send these messages once it is in an overloaded
-// scenario to try and throttle senders to it.
-// TODO(baptist): Should this be an array.
-message FollowerAccountingRequest {
-  TenantID tenant_id    = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
-  int32    store_id     = 2 [(gogoproto.customname) = "StoreID"];
-  int64    num_tokens   = 3;
-}
-
-// A BatchAbsorbedResponse is the response to a BatchAbsorbedRequest.
-message FollowerAccountingResponse {}
-
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
@@ -2801,7 +2805,6 @@ message RangeFeedError {
 //
 // The entire SST is emitted even for registrations that have a narrower span,
 // it is up to the caller to prune the SST as appropriate. Catchup scans emit
-// the data as RangeFeedValue events instead (i.e. it reads the ingested KV
 // pairs), but Raft log replay will emit RangeFeedSSTable events.
 message RangeFeedSSTable {
   bytes              data     = 1;
@@ -3045,7 +3048,6 @@ message JoinNodeResponse {
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
-  rpc FollowerAccounting (FollowerAccountingRequest) returns (FollowerAccountingResponse)     {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   // RangeFeed RPC is deprecated.  Use MuxRangeFeed instead.
   // To be removed at version 23.1

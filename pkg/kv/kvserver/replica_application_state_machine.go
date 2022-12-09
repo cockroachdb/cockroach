@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -287,9 +288,9 @@ func (b *replicaAppBatch) Stage(
 	// nils the AddSSTable field.
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.NumEntries++
-		b.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		writes := admission.StoreWorkDoneInfo{WriteBytes: writeBytes, IngestedBytes: ingestedBytes}
+		// FIXME: Get correct tenant id
+		b.followerStoreWriteBytes.Add(roachpb.SystemTenantID, writes)
 	}
 
 	// Stage the command's write batch in the application batch.
@@ -800,7 +801,8 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.sm.stats.entriesProcessedBytes += b.entryBytes
 	b.sm.stats.numEmptyEntries += b.emptyEntries
 	b.sm.stats.batchesProcessed++
-	b.sm.stats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+	//FIXME: What is going on here, should these be merged?
+	b.sm.stats.followerStoreWriteBytes = b.followerStoreWriteBytes
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
