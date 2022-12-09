@@ -27,6 +27,9 @@ type appBatchStats struct {
 	// numEntries
 	// numEntriesBytes
 	// numEntriesEmpty
+
+	// numMutations is the number of keys mutated, both via
+	// WriteBatch and AddSST.
 	numMutations             int
 	numEntriesProcessed      int
 	numEntriesProcessedBytes int64
