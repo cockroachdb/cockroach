@@ -33,6 +33,7 @@ func TestDataDriven(t *testing.T) {
 		Order: pgdate.Order_YMD,
 	}
 	is := duration.IntervalStyle_POSTGRES
+	c := NewFormatCache(1000)
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var ret strings.Builder
@@ -48,7 +49,7 @@ func TestDataDriven(t *testing.T) {
 					}
 					ts, _, err := pgdate.ParseTimestamp(now, ds, in)
 					require.NoError(t, err)
-					r, err := TimeToChar(ts.In(tz), lines[0])
+					r, err := TimeToChar(ts.In(tz), c, lines[0])
 					if err != nil {
 						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
 					} else {
@@ -66,7 +67,7 @@ func TestDataDriven(t *testing.T) {
 						ret.WriteString("\n")
 					}
 					require.NoError(t, err)
-					r, err := TimeToChar(ts.In(tz), in)
+					r, err := TimeToChar(ts.In(tz), c, in)
 					if err != nil {
 						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
 					} else {
@@ -83,7 +84,7 @@ func TestDataDriven(t *testing.T) {
 					}
 					ivl, err := duration.ParseInterval(is, in, types.IntervalTypeMetadata{})
 					require.NoError(t, err)
-					r, err := DurationToChar(ivl, lines[0])
+					r, err := DurationToChar(ivl, c, lines[0])
 					if err != nil {
 						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
 					} else {
@@ -101,7 +102,7 @@ func TestDataDriven(t *testing.T) {
 						ret.WriteString("\n")
 					}
 					require.NoError(t, err)
-					r, err := DurationToChar(ivl, in)
+					r, err := DurationToChar(ivl, c, in)
 					if err != nil {
 						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
 					} else {
@@ -135,7 +136,7 @@ func TestAllTimestamps(t *testing.T) {
 	n := timeutil.Now()
 	for _, kw := range dchKeywords {
 		t.Run(kw.name, func(t *testing.T) {
-			_, err := TimeToChar(n, kw.name)
+			_, err := TimeToChar(n, nil, kw.name)
 			if err != nil {
 				require.True(t, pgerror.HasCandidateCode(err))
 			}
@@ -149,11 +150,27 @@ func TestAllIntervals(t *testing.T) {
 	d := duration.MakeDuration(0, 10, 15)
 	for _, kw := range dchKeywords {
 		t.Run(kw.name, func(t *testing.T) {
-			_, err := DurationToChar(d, kw.name)
+			_, err := DurationToChar(d, nil, kw.name)
 			if err != nil {
 				require.True(t, pgerror.HasCandidateCode(err))
 			}
 		})
+	}
+}
+
+func BenchmarkTimeToChar(b *testing.B) {
+	c := NewFormatCache(1)
+	t := time.Date(2020, 12, 22, 11, 13, 15, 123456, time.UTC)
+	for i := 0; i < b.N; i++ {
+		_, _ = TimeToChar(t, c, "YYYY-MM-DD HH24:MI:SS.US")
+	}
+}
+
+func BenchmarkIntervalToChar(b *testing.B) {
+	c := NewFormatCache(1)
+	iv := duration.MakeDuration(int64(12*time.Hour+30*time.Minute+13*time.Second), 20, 30)
+	for i := 0; i < b.N; i++ {
+		_, _ = DurationToChar(iv, c, `YYYY"years" MM"months" DD"days" HH24:MI:SS.US`)
 	}
 }
 
