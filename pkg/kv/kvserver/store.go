@@ -2053,12 +2053,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 					redact.Safe(s.StoreID()))
 			}
 
-			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
-				// We are no longer a member of the range, but we didn't GC the replica
-				// before shutting down. Add the replica to the GC queue.
-				s.replicaGCQueue.AddAsync(ctx, rep, replicaGCPriorityRemoved)
-			}
-
 			// Note that we do not create raft groups at this time; they will be created
 			// on-demand the first time they are needed. This helps reduce the amount of
 			// election-related traffic in a cold start.
