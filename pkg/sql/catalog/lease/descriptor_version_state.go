@@ -27,6 +27,7 @@ import (
 // A lease stored in system.lease.
 type storedLease struct {
 	id         descpb.ID
+	prefix     []byte
 	version    int
 	expiration tree.DTimestamp
 }
