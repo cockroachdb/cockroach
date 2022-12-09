@@ -3718,3 +3718,25 @@ query T
 SELECT crdb_internal.anonymize_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'
 ----
 CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
+
+# More tests are in parse_ident_builtin_test.go.
+query T
+SELECT parse_ident(str) FROM ( VALUES
+  ('a.b.c'),
+  ('"YesCaps".NoCaps'),
+  ('"a""b".xyz'),
+  ('"a\b".xyz')
+) tbl(str)
+----
+{a,b,c}
+{YesCaps,nocaps}
+{"a\"b",xyz}
+{"a\\b",xyz}
+
+query T
+SELECT parse_ident('ab.xyz()', false)
+----
+{ab,xyz}
+
+query error string is not a valid identifier: \"ab.xyz\(\)\"
+SELECT parse_ident('ab.xyz()', true)

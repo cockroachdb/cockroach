@@ -1145,6 +1145,8 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`overlay(input: string, overlay_val: string, start_pos: int, end_pos: int) -> string`:               928,
 	`parse_date(val: string) -> date`:                                                                   1066,
 	`parse_date(string: string, datestyle: string) -> date`:                                             1067,
+	`parse_ident(qualified_identifier: string) -> string[]`:                                             2058,
+	`parse_ident(qualified_identifier: string, strict: bool) -> string[]`:                               2059,
 	`parse_interval(val: string) -> interval`:                                                           1070,
 	`parse_interval(string: string, style: string) -> interval`:                                         1071,
 	`parse_time(val: string) -> time`:                                                                   1068,
