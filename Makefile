@@ -801,7 +801,6 @@ SWAGGER_TARGETS :=
 DOCGEN_TARGETS := \
 	bin/.docgen_bnfs \
 	bin/.docgen_functions \
-	docs/generated/redact_safe.md \
 	bin/.docgen_http \
 	bin/.docgen_logformats \
 	docs/generated/logsinks.md \
@@ -1622,12 +1621,6 @@ bin/.docgen_http: bin/docgen bin/.bootstrap
 	--out docs/generated/http \
 	--protoc-flags "-Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(COREOS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) -I$(ERRORS_PATH) -I$(PROMETHEUS_PATH) ./pkg/server/serverpb/status.proto ./pkg/server/serverpb/admin.proto ./pkg/server/status/statuspb/status.proto"
 	touch $@
-
-.PHONY: docs/generated/redact_safe.md
-
-docs/generated/redact_safe.md:
-	./build/bazelutil/generate_redact_safe.sh >$@.tmp || { rm -f $@.tmp; exit 1; }
-	@mv -f $@.tmp $@
 
 #### WARNING ####
 # You must keep this list in sync with the list in `pkg/util/log/eventpb/PROTOS.bzl`.
