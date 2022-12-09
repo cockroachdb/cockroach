@@ -71,12 +71,12 @@ func IsErrConnectionRefused(err error) bool {
 	return errors.Is(err, syscall.ECONNREFUSED)
 }
 
-// InterruptSelf sends SIGHUP to the process itself.
+// InterruptSelf sends Interrupt to the process itself.
 func InterruptSelf() error {
 	pr, err := os.FindProcess(os.Getpid())
 	if err != nil {
 		// No-op.
 		return nil //nolint:returnerrcheck
 	}
-	return pr.Signal(syscall.SIGHUP)
+	return pr.Signal(os.Interrupt)
 }
