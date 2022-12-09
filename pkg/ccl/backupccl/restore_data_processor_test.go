@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -392,10 +394,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			}
 			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, srcPrefix, newPrefix)
 
-			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(&evalCtx, &flowCtx, mockRestoreDataSpec)
+			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx, mockRestoreDataSpec)
 			require.NoError(t, err)
-			sst, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry)
+			sst, idx, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, 0)
 			require.NoError(t, err)
+			require.Equal(t, len(restoreSpanEntry.Files), idx)
 			rewriter, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.TableRekeys,
 				mockRestoreDataSpec.TenantRekeys, false /* restoreTenantFromStream */)
 			require.NoError(t, err)
@@ -433,16 +436,26 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 }
 
 func newTestingRestoreDataProcessor(
-	evalCtx *eval.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.RestoreDataSpec,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	flowCtx *execinfra.FlowCtx,
+	spec execinfrapb.RestoreDataSpec,
 ) (*restoreDataProcessor, error) {
+	restoreMon := mon.NewMonitorInheritWithLimit("restore-processor-mon", restorePerProcessorMemoryLimit.Get(&flowCtx.EvalCtx.Settings.SV), flowCtx.Cfg.BackupMonitor)
+	restoreMon.StartNoReserved(ctx, flowCtx.Cfg.BackupMonitor)
+	mem := restoreMon.MakeBoundAccount()
+	mem.Mu = &syncutil.Mutex{}
 	rd := &restoreDataProcessor{
 		ProcessorBase: execinfra.ProcessorBase{
 			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
 				EvalCtx: evalCtx,
 			},
 		},
-		flowCtx: flowCtx,
-		spec:    spec,
+		flowCtx:         flowCtx,
+		spec:            spec,
+		mon:             restoreMon,
+		mem:             &mem,
+		sstMemQuotaPool: quotapool.NewIntPool("test-pool", 0),
 	}
 	return rd, nil
 }

@@ -327,8 +327,14 @@ message RestoreDataSpec {
   map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
   reserved 7;
   optional bool validate_only = 8 [(gogoproto.nullable) = false];
+  // MemoryMonitorSSTs, if true, is used to signal to restore data processors
+  // that they are permitted to memory monitor opening of external SSTs and send
+  // partial iterators if necessary. A true value means that the coordinating
+  // node is able to receive progress for these partial iterators and not mark a
+  // span as completed until all of the SSTs for the span have been restored.
+  optional bool memory_monitor_ssts = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "MemoryMonitorSSTs"];
 
-  // NEXT ID: 9.
+  // NEXT ID: 10.
 }
 
 message SplitAndScatterSpec {

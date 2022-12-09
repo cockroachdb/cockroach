@@ -112,6 +112,10 @@ type ServerConfig struct {
 	// used during backup.
 	BackupMonitor *mon.BytesMonitor
 
+	// Child monitor of the bulk monitor which will be used to monitor the memory
+	// used during restore.
+	RestoreMonitor *mon.BytesMonitor
+
 	// BulkSenderLimiter is the concurrency limiter that is shared across all of
 	// the processes in a given sql server when sending bulk ingest (AddSST) reqs.
 	BulkSenderLimiter limit.ConcurrentRequestLimiter

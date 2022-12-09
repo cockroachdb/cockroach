@@ -111,13 +111,14 @@ func distRestore(
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:        jobID,
-			RestoreTime:  restoreTime,
-			Encryption:   fileEncryption,
-			TableRekeys:  dataToRestore.getRekeys(),
-			TenantRekeys: dataToRestore.getTenantRekeys(),
-			PKIDs:        dataToRestore.getPKIDs(),
-			ValidateOnly: dataToRestore.isValidateOnly(),
+			JobID:             jobID,
+			RestoreTime:       restoreTime,
+			Encryption:        fileEncryption,
+			TableRekeys:       dataToRestore.getRekeys(),
+			TenantRekeys:      dataToRestore.getTenantRekeys(),
+			PKIDs:             dataToRestore.getPKIDs(),
+			ValidateOnly:      dataToRestore.isValidateOnly(),
+			MemoryMonitorSSTs: true,
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.

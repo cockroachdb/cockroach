@@ -160,6 +160,19 @@ func NonNegativeFloat(v float64) error {
 	return nil
 }
 
+// NonNegativeFloatWithMaximum can be passed to RegisterFloatSetting.
+func NonNegativeFloatWithMaximum(maxValue float64) func(float64) error {
+	return func(v float64) error {
+		if v < 0 {
+			return errors.Errorf("cannot be set to a negative value: %f", v)
+		}
+		if v > maxValue {
+			return errors.Errorf("cannot be set to a value larger than %f", maxValue)
+		}
+		return nil
+	}
+}
+
 // PositiveFloat can be passed to RegisterFloatSetting.
 func PositiveFloat(v float64) error {
 	if v <= 0 {

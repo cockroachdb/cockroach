@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 var (
@@ -24,6 +25,11 @@ var (
 		"the maximum size of the payload in an AddSSTable request",
 		16<<20,
 	)
+
+	// restoreMemFraction is the maximum percentage of the SQL memory pool that
+	// could be used by restore. This can be overridden by environment variable.
+	restoreMemFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RESTORE_MEM_FRACTION",
+		0.5)
 )
 
 // ingestFileSize determines the target size files sent via AddSSTable requests.
@@ -35,4 +41,10 @@ func ingestFileSize(st *cluster.Settings) int64 {
 		return maxCommandSize
 	}
 	return desiredSize
+}
+
+// RestoreMemLimit returns the limit in bytes of memory that can be used by
+// restore.
+func RestoreMemLimit(sqlMemoryPool int64) int64 {
+	return int64(float64(sqlMemoryPool) * restoreMemFraction)
 }
