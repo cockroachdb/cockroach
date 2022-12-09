@@ -511,6 +511,7 @@ go_library(
         "//pkg/util/syncutil/singleflight",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tochar",
         "//pkg/util/tracing",
         "//pkg/util/tracing/collector",
         "//pkg/util/tracing/tracingpb",
