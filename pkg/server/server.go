@@ -990,7 +990,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// TODO(knz): Remove this once
 		// https://github.com/cockroachdb/cockroach/issues/84585 is
 		// implemented.
-		func(ctx context.Context, name string) error {
+		func(ctx context.Context, name roachpb.TenantName) error {
 			d, err := sc.getOrCreateServer(ctx, name)
 			if err != nil {
 				return err
