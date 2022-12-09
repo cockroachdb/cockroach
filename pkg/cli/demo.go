@@ -358,6 +358,13 @@ func runDemoInternal(
 		return err
 	}
 
+	// Report the PID of the process in a configured PID file. Used in tests.
+	if demoCtx.pidFile != "" {
+		if err := os.WriteFile(demoCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+			return err
+		}
+	}
+
 	// Enable the latency as late in the process of starting the cluster as we
 	// can to minimize the startup time.
 	if demoCtx.SimulateLatency {

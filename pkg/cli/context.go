@@ -591,6 +591,7 @@ func setConvContextDefaults() {
 var demoCtx = struct {
 	democluster.Context
 	disableEnterpriseFeatures bool
+	pidFile                   string
 
 	demoNodeCacheSizeValue  bytesOrPercentageValue
 	demoNodeSQLMemSizeValue bytesOrPercentageValue
@@ -622,6 +623,7 @@ func setDemoContextDefaults() {
 	demoCtx.Multitenant = true
 	demoCtx.DefaultEnableRangefeeds = true
 
+	demoCtx.pidFile = ""
 	demoCtx.disableEnterpriseFeatures = false
 
 	demoCtx.demoNodeCacheSizeValue = makeBytesOrPercentageValue(
