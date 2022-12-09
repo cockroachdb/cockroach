@@ -1828,6 +1828,8 @@ func IterateIDPrefixKeys(
 // IterateRangeDescriptorsFromDisk calls the provided function with each
 // descriptor from the provided Engine. The return values of this method and fn
 // have semantics similar to storage.MVCCIterate.
+//
+// All descriptors returned are guaranteed to be initialized.
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
@@ -1842,7 +1844,7 @@ func IterateRangeDescriptorsFromDisk(
 	kvToDesc := func(kv roachpb.KeyValue) error {
 		allCount++
 		// Only consider range metadata entries; ignore others.
-		_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+		startKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 		if err != nil {
 			return err
 		}
@@ -1853,6 +1855,14 @@ func IterateRangeDescriptorsFromDisk(
 		var desc roachpb.RangeDescriptor
 		if err := kv.Value.GetProto(&desc); err != nil {
 			return err
+		}
+		// Descriptor for range `[a,z)` must be found at `/rdsc/a`.
+		if !startKey.Equal(desc.StartKey.AsRawKey()) {
+			return errors.AssertionFailedf("descriptor stored at %s but has StartKey %s",
+				kv.Key, desc.StartKey)
+		}
+		if !desc.IsInitialized() {
+			return errors.AssertionFailedf("uninitialized descriptor: %s", desc)
 		}
 		matchCount++
 		err = fn(desc)
