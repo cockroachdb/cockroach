@@ -2854,6 +2854,16 @@ func (r *restoreResumer) restoreSystemUsers(
 			return nil
 		}
 
+		userIDMap := make(map[tree.DString]*tree.DOid)
+		selectUserIDs := "SELECT username, user_id FROM system.users"
+		userIDs, err := executor.QueryBuffered(ctx, "get-user-ids", txn, selectUserIDs)
+		if err != nil {
+			return err
+		}
+		for _, userID := range userIDs {
+			userIDMap[tree.MustBeDString(userID[0])] = tree.MustBeDOid(userID[1])
+		}
+
 		selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
 			"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
 		roleMembers, err := executor.QueryBuffered(ctx, "get-role-members",
@@ -2862,12 +2872,16 @@ func (r *restoreResumer) restoreSystemUsers(
 			return err
 		}
 
-		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3)`
+		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, $3, $4, $5)`
 		for _, roleMember := range roleMembers {
+			role := tree.MustBeDString(roleMember[0])
+			member := tree.MustBeDString(roleMember[1])
+			isAdmin := tree.MustBeDBool(roleMember[2])
 			// Only grant roles to users that don't currently exist, i.e., new users we just added
-			if _, ok := newUsernames[roleMember[1].String()]; ok {
-				if _, err = executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
-					roleMember[0], roleMember[1], roleMember[2]); err != nil {
+			if newUsernames[member.String()] {
+				if _, err := executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
+					role, member, isAdmin, userIDMap[role], userIDMap[member],
+				); err != nil {
 					return err
 				}
 			}

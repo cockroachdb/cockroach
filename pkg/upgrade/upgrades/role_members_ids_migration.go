@@ -91,8 +91,14 @@ WHERE member_id IS NULL AND member = u.username
 LIMIT 1000
 `
 
+const setIDColumnsToNotNullRoleMembersStmt = `
+ALTER TABLE system.role_members
+ALTER COLUMN role_id SET NOT NULL,
+ALTER COLUMN member_id SET NOT NULL
+`
+
 func backfillSystemRoleMembersIDColumns(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()
 	for _, backfillStmt := range []string{backfillRoleIDColumnRoleMemberStmt, backfillMemberIDColumnRoleMembersStmt} {
@@ -110,9 +116,19 @@ func backfillSystemRoleMembersIDColumns(
 		}
 	}
 
+	// After we finish backfilling, we can set the ID columns to be NOT NULL
+	// since any existing rows will now have non-NULL values in their ID columns
+	// and any new rows inserted after the previous version (when the columns
+	// were added) will also have their ID columns populated at insertion time.
+	op := operation{
+		name:           "set-id-columns-not-null-system-role-members",
+		schemaList:     []string{"role_id", "member_id"},
+		query:          setIDColumnsToNotNullRoleMembersStmt,
+		schemaExistsFn: columnExistsAndIsNotNull,
+	}
+	if err := migrateTable(ctx, cs, d, op, keys.RoleMembersTableID, systemschema.RoleMembersTable); err != nil {
+		return err
+	}
+
 	return nil
 }
-
-// TODO(yang): Add a migration for making the ID columns not-null. Choosing to
-// put this in a separate migration so that we can handle any BACKUP/RESTORE
-// changes in a separate PR.

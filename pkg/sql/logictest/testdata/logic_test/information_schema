@@ -1593,6 +1593,8 @@ system              public             primary                                  
 system              public             29_23_1_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
 system              public             29_23_2_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
 system              public             29_23_3_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
+system              public             29_23_4_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
+system              public             29_23_5_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
 system              public             primary                                                                                                         system         public        role_members                     PRIMARY KEY      NO             NO
 system              public             role_members_role_id_member_id_key                                                                              system         public        role_members                     UNIQUE           NO             NO
 system              public             29_33_1_not_null                                                                                                system         public        role_options                     CHECK            NO             NO
@@ -1758,6 +1760,8 @@ system              public             29_21_4_not_null                         
 system              public             29_23_1_not_null                                                                                                role IS NOT NULL
 system              public             29_23_2_not_null                                                                                                member IS NOT NULL
 system              public             29_23_3_not_null                                                                                                isAdmin IS NOT NULL
+system              public             29_23_4_not_null                                                                                                role_id IS NOT NULL
+system              public             29_23_5_not_null                                                                                                member_id IS NOT NULL
 system              public             29_24_1_not_null                                                                                                type IS NOT NULL
 system              public             29_24_2_not_null                                                                                                object_id IS NOT NULL
 system              public             29_24_3_not_null                                                                                                sub_id IS NOT NULL
