@@ -1012,17 +1012,16 @@ func (p *pebbleMVCCScanner) backwardLatestVersion(key []byte, i int) bool {
 }
 
 // prevKey advances to the newest version of the user key preceding the
-// specified key. Assumes that the iterator is currently positioned at
-// key or 1 record after key.
+// specified key. Assumes that the iterator is currently positioned at key or 1
+// record after key and that the key is "safe" (i.e. it's a copy and not the
+// "current" key directly).
 func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
-	p.keyBuf = append(p.keyBuf[:0], key...)
-
 	for i := 0; i < p.itersBeforeSeek; i++ {
 		peekedKey, ok := p.iterPeekPrev()
 		if !ok {
 			return false
 		}
-		if !bytes.Equal(peekedKey, p.keyBuf) {
+		if !bytes.Equal(peekedKey, key) {
 			return p.backwardLatestVersion(peekedKey, i+1)
 		}
 		if !p.iterPrev() {
@@ -1031,7 +1030,7 @@ func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 	}
 
 	p.decrementItersBeforeSeek()
-	return p.iterSeekReverse(MVCCKey{Key: p.keyBuf})
+	return p.iterSeekReverse(MVCCKey{Key: key})
 }
 
 // advanceKeyForward advances to the next key in the forward direction.
@@ -1041,7 +1040,9 @@ func (p *pebbleMVCCScanner) advanceKeyForward() bool {
 
 // advanceKeyReverse advances to the next key in the reverse direction.
 func (p *pebbleMVCCScanner) advanceKeyReverse() bool {
-	return p.prevKey(p.curUnsafeKey.Key)
+	// Make a copy to satisfy the contract of prevKey.
+	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
+	return p.prevKey(p.keyBuf)
 }
 
 // setAdvanceKeyAtEnd updates the machine to the corresponding "advance key at
@@ -1084,6 +1085,8 @@ func (p *pebbleMVCCScanner) setAdvanceKeyAtNewKey(origKey []byte) {
 // key after p.machine.origKey in the forward direction.
 func (p *pebbleMVCCScanner) advanceKeyAtNewKeyReverse() bool {
 	// We've advanced to the next key but need to move back to the previous key.
+	// Note that we already made the copy in seekVersion, so we can just use the
+	// key as is.
 	return p.prevKey(p.machine.origKey)
 }
 
