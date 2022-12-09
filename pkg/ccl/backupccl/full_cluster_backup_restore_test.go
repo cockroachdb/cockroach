@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -944,7 +945,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
 					mu.Lock()
 					defer mu.Unlock()
 					if entriesCount == 0 {

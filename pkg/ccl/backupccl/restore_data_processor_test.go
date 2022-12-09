@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -392,10 +393,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			}
 			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, srcPrefix, newPrefix)
 
-			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(&evalCtx, &flowCtx, mockRestoreDataSpec)
+			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx, mockRestoreDataSpec)
 			require.NoError(t, err)
-			sst, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry)
+			sst, idx, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, nil)
 			require.NoError(t, err)
+			require.Equal(t, len(restoreSpanEntry.Files), idx)
 			rewriter, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.TableRekeys,
 				mockRestoreDataSpec.TenantRekeys, false /* restoreTenantFromStream */)
 			require.NoError(t, err)
@@ -433,7 +435,10 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 }
 
 func newTestingRestoreDataProcessor(
-	evalCtx *eval.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.RestoreDataSpec,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	flowCtx *execinfra.FlowCtx,
+	spec execinfrapb.RestoreDataSpec,
 ) (*restoreDataProcessor, error) {
 	rd := &restoreDataProcessor{
 		ProcessorBase: execinfra.ProcessorBase{
@@ -443,6 +448,7 @@ func newTestingRestoreDataProcessor(
 		},
 		flowCtx: flowCtx,
 		spec:    spec,
+		qp:      backuputils.NewMemoryBackedQuotaPool(ctx, nil, "restore-mon", 0),
 	}
 	return rd, nil
 }

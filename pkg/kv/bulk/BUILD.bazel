@@ -26,6 +26,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/limit",

@@ -3,10 +3,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "backuputils",
-    srcs = ["utils.go"],
+    srcs = [
+        "memory_backed_quota_pool.go",
+        "utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/cloud"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/util/mon",
+        "//pkg/util/quotapool",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )
 
 get_x_data(name = "get_x_data")
