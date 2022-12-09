@@ -559,8 +559,6 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 			for {
 				require.NoError(t, db0.Put(ctx, fmt.Sprintf("%s%d", key, rand.Int63()), "ballast"))
 				select {
-				case <-ctx.Done():
-					return
 				case <-tc.Stopper().ShouldQuiesce():
 					return
 				case <-done:
