@@ -400,6 +400,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 							},
 						},
 					},
+					SimulateSeparateTenantProcess: c.demoCtx.SimulateSeparateTenantProcess,
 				})
 				c.stopper.AddCloser(stop.CloserFn(func() {
 					stopCtx := context.Background()
