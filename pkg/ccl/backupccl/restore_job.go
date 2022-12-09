@@ -400,6 +400,15 @@ func restore(
 			}
 
 			mu.res.Add(progDetails.Summary)
+
+			// After the change to bound the memory used by SST iterator, we can now
+			// get a progress entry for a partially completed span. Do not mark the
+			// span as done when receiving these entries.
+			if progDetails.Incomplete {
+				mu.Unlock()
+				continue
+			}
+
 			idx := progDetails.ProgressIdx
 
 			if idx >= mu.ceiling {
