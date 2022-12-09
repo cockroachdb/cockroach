@@ -272,7 +272,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				}
 			}
 
-			err := p.CheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
+			err := p.MustCheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
 			if err != nil {
 				return err
 			}
