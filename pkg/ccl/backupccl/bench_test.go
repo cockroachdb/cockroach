@@ -9,11 +9,27 @@
 package backupccl
 
 import (
+	"context"
 	"fmt"
+	"net/url"
+	"path"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkDatabaseBackup(b *testing.B) {
@@ -146,4 +162,103 @@ func BenchmarkDatabaseFullBackup(b *testing.B) {
 	// We report the number of bytes that incremental backup was able to
 	// *skip*--i.e., the number of bytes in the full backup.
 	b.SetBytes(int64(b.N) * dataSize)
+}
+
+func BenchmarkIteratorMemory(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	ctx := context.Background()
+
+	numAccounts := 1000
+	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	for _, testCase := range []struct {
+		testName string
+	}{
+		{
+			testName: "gcp",
+		},
+		{
+			testName: "aws",
+		},
+	} {
+		b.Run(testCase.testName, func(b *testing.B) {
+			sst := envutil.EnvOrDefaultString("SST_PATH", "unknown")
+			encKey := envutil.EnvOrDefaultString("ENCRYPTION_KEY", "invalid")
+
+			uri, err := url.Parse(sst)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			storeURI := fmt.Sprintf("%s://%s/%s?AUTH=implicit", uri.Scheme, uri.Host, path.Dir(uri.Path))
+			dataFile := path.Base(uri.Path)
+
+			store, err := cloud.ExternalStorageFromURI(
+				ctx,
+				storeURI,
+				base.ExternalIODirConfig{},
+				tc.Servers[0].ClusterSettings(),
+				blobs.TestEmptyBlobClientFactory,
+				username.RootUserName(),
+				tc.Servers[0].InternalDB().(isql.DB),
+				nil, /* limiters */
+				cloud.NilMetrics,
+			)
+
+			require.NoError(b, err)
+
+			for _, encrypted := range []bool{true, false} {
+				for _, iterCount := range []int{1, 10, 100, 1000} {
+					for _, fileCount := range []int{10, 100, 1000, 10000} {
+						b.Run(fmt.Sprintf("fileCount=%d/iterCount=%d/enc=%t", fileCount, iterCount, encrypted), func(b *testing.B) {
+							b.ResetTimer()
+
+							fileStores := make([]storageccl.StoreFile, fileCount)
+
+							for i := 0; i < fileCount; i++ {
+								fileStores[i].Store = store
+								fileStores[i].FilePath = dataFile
+							}
+
+							execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+							iterOpts := storage.IterOptions{
+								RangeKeyMaskingBelow: execCfg.Clock.Now(),
+								KeyTypes:             storage.IterKeyTypePointsAndRanges,
+								LowerBound:           keys.LocalMax,
+								UpperBound:           keys.MaxKey,
+							}
+
+							iters := make([]storage.SimpleMVCCIterator, iterCount)
+							cleanup := func() {
+								for _, iter := range iters {
+									if iter != nil {
+										iter.Close()
+									}
+								}
+							}
+							defer cleanup()
+
+							var enc *kvpb.FileEncryptionOptions
+							if encrypted {
+								enc = &kvpb.FileEncryptionOptions{
+									Key: []byte(encKey),
+								}
+							}
+
+							for j := 0; j < iterCount; j++ {
+								iter, err := storageccl.ExternalSSTReader(ctx, fileStores, enc, iterOpts)
+								require.NoError(b, err)
+
+								iters[j] = iter
+								iter.SeekGE(storage.MVCCKey{})
+							}
+
+							b.StopTimer()
+						})
+					}
+				}
+			}
+		})
+	}
 }
