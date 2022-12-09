@@ -96,10 +96,13 @@ func (c *CopyFromState) Commit(ctx context.Context, cleanupFunc func(), lines st
 	return func(ctx context.Context, conn Conn) (Rows, bool, error) {
 		defer cleanupFunc()
 		rows, isMulti, err := func() (Rows, bool, error) {
-			for _, l := range strings.Split(lines, "\n") {
-				_, err := c.copyFromer.CopyData(ctx, l)
-				if err != nil {
-					return nil, false, err
+			// Do not send anything if it is just an empty string.
+			if lines != "" {
+				for _, l := range strings.Split(lines, "\n") {
+					_, err := c.copyFromer.CopyData(ctx, l)
+					if err != nil {
+						return nil, false, err
+					}
 				}
 			}
 			r, err := c.copyFromer.Exec(nil)
