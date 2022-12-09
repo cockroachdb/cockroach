@@ -60,10 +60,10 @@ func TestMergeResultTypesForSetOp(t *testing.T) {
 			}
 		}
 	}
-	infra := physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
+	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 	var leftPlan, rightPlan PhysicalPlan
-	leftPlan.PhysicalInfrastructure = &infra
-	rightPlan.PhysicalInfrastructure = &infra
+	leftPlan.PhysicalInfrastructure = infra
+	rightPlan.PhysicalInfrastructure = infra
 	leftPlan.ResultRouters = []physicalplan.ProcessorIdx{infra.AddProcessor(physicalplan.Processor{})}
 	rightPlan.ResultRouters = []physicalplan.ProcessorIdx{infra.AddProcessor(physicalplan.Processor{})}
 	for _, td := range testData {

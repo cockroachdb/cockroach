@@ -17,6 +17,7 @@ package physicalplan
 import (
 	"context"
 	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -149,15 +150,36 @@ type PhysicalPlan struct {
 	Distribution PlanDistribution
 }
 
-// MakePhysicalInfrastructure initializes a PhysicalInfrastructure that can then
+var infraPool = sync.Pool{
+	New: func() interface{} {
+		return &PhysicalInfrastructure{}
+	},
+}
+
+// NewPhysicalInfrastructure initializes a PhysicalInfrastructure that can then
 // be used with MakePhysicalPlan.
-func MakePhysicalInfrastructure(
+func NewPhysicalInfrastructure(
 	flowID uuid.UUID, gatewaySQLInstanceID base.SQLInstanceID,
-) PhysicalInfrastructure {
-	return PhysicalInfrastructure{
-		FlowID:               flowID,
-		GatewaySQLInstanceID: gatewaySQLInstanceID,
+) *PhysicalInfrastructure {
+	infra := infraPool.Get().(*PhysicalInfrastructure)
+	infra.FlowID = flowID
+	infra.GatewaySQLInstanceID = gatewaySQLInstanceID
+	return infra
+}
+
+// Release resets the object and puts it back into the pool for reuse.
+func (p *PhysicalInfrastructure) Release() {
+	// We only need to nil out the local processors since these are the only
+	// pointer types.
+	for i := range p.LocalProcessors {
+		p.LocalProcessors[i] = nil
 	}
+	*p = PhysicalInfrastructure{
+		Processors:      p.Processors[:0],
+		LocalProcessors: p.LocalProcessors[:0],
+		Streams:         p.Streams[:0],
+	}
+	infraPool.Put(p)
 }
 
 // MakePhysicalPlan initializes a PhysicalPlan.
