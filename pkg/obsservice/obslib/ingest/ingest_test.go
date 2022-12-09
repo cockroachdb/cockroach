@@ -192,25 +192,30 @@ func TestEventIngestionIntegration(t *testing.T) {
 	t.Run("execution_insights", func(t *testing.T) {
 		// Generate an execution insight and check that we get an event.
 		_, err = sqlDB.Exec("set application_name = $1", t.Name())
-		_, err = sqlDB.Exec("set cluster setting sql.insights.latency_threshold = '100ms'", t.Name())
-		_, err = sqlDB.Exec("create table test")
-		_, err = sqlDB.Exec("select pg_sleep(0.2)")
+		_, err = sqlDB.Exec("set cluster setting sql.insights.latency_threshold = '100ms'")
+		_, err = sqlDB.Exec("create table test (a int)")
+		_, err = sqlDB.Exec("insert into test (a) values (1)")
+		// The 10th running of this statement produces an index recommendation.
+		for i := 0; i < 10; i++ {
+			_, err = sqlDB.Exec("select pg_sleep(0.2), * from test order by a")
+		}
 		require.NoError(t, err)
 
-		// Wait for an event to be ingested.
+		// Wait for the events to be ingested.
 		testutils.SucceedsSoon(t, func() error {
 			r := pool.QueryRow(ctx, "select count(*) from execution_insights where app_name=$1", t.Name())
 			var count int
 			if err = r.Scan(&count); err != nil {
 				return err
 			}
-			if count < 1 {
-				return errors.Newf("no events yet")
+			if count < 10 {
+				return errors.Newf("not enough events yet")
 			}
 
 			var expected, actual insightRow
 
-			s := sqlDB.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "crdb_internal.cluster_execution_insights"), t.Name())
+			insightsQuery := "select * from %s where app_name=$1 order by start_time desc limit 1"
+			s := sqlDB.QueryRow(fmt.Sprintf(insightsQuery, "crdb_internal.cluster_execution_insights"), t.Name())
 			require.NoError(t, s.Scan(expected.fields()...))
 			// TODO(todd): Say why.
 			expected.contention = sql.NullString{}
@@ -220,7 +225,7 @@ func TestEventIngestionIntegration(t *testing.T) {
 			var timestamp time.Time
 			var id string
 
-			r = obsDB.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "execution_insights"), t.Name())
+			r = obsDB.QueryRow(fmt.Sprintf(insightsQuery, "execution_insights"), t.Name())
 			var fields []interface{}
 			fields = append(fields, &timestamp)
 			fields = append(fields, &id)
