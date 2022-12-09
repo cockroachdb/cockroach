@@ -737,25 +737,43 @@ span: test
 	require.Equal(t, rec1, rec2)
 }
 
+// Check that it is illegal to create a child with a different Tracer than the
+// parent.
 func TestChildNeedsSameTracerAsParent(t *testing.T) {
-	// Check that it is illegal to create a child with a different Tracer than the
-	// parent.
-	tr1 := NewTracer()
-	tr2 := NewTracer()
-	parent := tr1.StartSpan("parent")
-	defer parent.Finish()
-	require.Panics(t, func() {
-		tr2.StartSpan("child", WithParent(parent))
-	})
+	type testCase struct {
+		sterileParent bool
+		noopParent    bool
+	}
+	for _, tc := range []testCase{
+		{},
+		{sterileParent: true},
+		{noopParent: true},
+	} {
+		t.Run("", func(t *testing.T) {
+			tr1 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
+			tr2 := NewTracer()
 
-	// Sterile spans can have children created with a different Tracer (because
-	// they are not really children).
-	parent = tr1.StartSpan("parent", WithSterile())
-	defer parent.Finish()
-	require.NotPanics(t, func() {
-		sp := tr2.StartSpan("child", WithParent(parent))
-		sp.Finish()
-	})
+			var opt []SpanOption
+			if tc.sterileParent {
+				opt = append(opt, WithSterile())
+			}
+			if !tc.noopParent {
+				opt = append(opt, WithForceRealSpan())
+			}
+			parent := tr1.StartSpan("parent", opt...)
+			defer parent.Finish()
+			if tc.noopParent {
+				require.True(t, parent.IsNoop())
+			}
+			if tc.sterileParent {
+				require.True(t, parent.IsSterile())
+			}
+
+			require.Panics(t, func() {
+				tr2.StartSpan("child", WithParent(parent))
+			})
+		})
+	}
 }
 
 // TestSpanReuse checks that spans are reused through the Tracer's pool, instead
