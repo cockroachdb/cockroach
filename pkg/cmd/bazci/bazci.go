@@ -210,7 +210,7 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if testResult.run > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("run_%d", testResult.run))
 				}
-				if summary.ShardCount > 1 {
+				if summary != nil && summary.ShardCount > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
 				}
 				if testResult.attempt > 1 {
