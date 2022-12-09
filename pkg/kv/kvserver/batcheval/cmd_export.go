@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -61,21 +60,6 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	),
 	64<<20, /* 64 MiB */
 ).WithPublic()
-
-// exportRequestMaxIterationTime controls time spent by export request iterating
-// over data in underlying storage. This threshold preventing export request from
-// holding locks for too long and preventing non mvcc operations from progressing.
-// If request takes longer than this threshold it would stop and return already
-// collected data and allow caller to use resume span to continue.
-var exportRequestMaxIterationTime = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"kv.bulk_sst.max_request_time",
-	"if set, limits amount of time spent in export requests; "+
-		"if export request can not finish within allocated time it will resume from the point it stopped in "+
-		"subsequent request",
-	// Feature is disabled by default.
-	0,
-)
 
 func init() {
 	RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
@@ -165,8 +149,6 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 
-	maxRunTime := exportRequestMaxIterationTime.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-
 	var maxIntents uint64
 	if m := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
 		maxIntents = uint64(m)
@@ -191,7 +173,6 @@ func evalExport(
 			MaxSize:            maxSize,
 			MaxIntents:         maxIntents,
 			StopMidKey:         args.SplitMidKey,
-			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
 		}
 		var summary roachpb.BulkOpSummary
 		var resume storage.MVCCKey
