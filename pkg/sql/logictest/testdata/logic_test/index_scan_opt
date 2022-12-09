@@ -1,0 +1,146 @@
+# LogicTest: !3node-tenant
+
+# This family of test validates an optimization for scanning indexes via
+# crdb_internal.scan which will modify these queries to use DistSQL processing.
+subtest query-indexes
+
+statement ok
+CREATE TABLE q1(val int primary key, n varchar(25), INVERTED INDEX GIN(n gin_trgm_ops), FAMILY "primary" (val, n));
+
+let $q_id
+SELECT id FROM system.namespace WHERE name = 'q1';
+
+query TTT
+SELECT * FROM crdb_internal.scan(crdb_internal.index_span($q_id,1));
+----
+
+query TTT
+SELECT * FROM crdb_internal.scan(crdb_internal.table_span($q_id));
+----
+
+statement ok
+INSERT INTO q1 VALUES (1, 'cat'),(2, 'cow'),(3, 'mouse'),(4, 'lion'),(5, 'tiger'),(6, 'wolf');
+
+statement ok
+CREATE INDEX i1 on q1(val, n)
+
+query I
+SELECT count(*) FROM crdb_internal.scan(crdb_internal.index_span($q_id, 1));
+----
+6
+
+query I
+SELECT count(*)  FROM crdb_internal.scan(crdb_internal.index_span($q_id, 2));
+----
+30
+
+query I
+SELECT count(*)  FROM crdb_internal.scan(crdb_internal.index_span($q_id, 3));
+----
+6
+
+query I
+SELECT count(*) FROM crdb_internal.scan(crdb_internal.table_span($q_id));
+----
+42
+
+
+query TT
+SELECT crdb_internal.pretty_key(key, 0), encode(value, 'hex') FROM crdb_internal.scan(crdb_internal.table_span($q_id)) ORDER BY 1 DESC;
+----
+/106/3/6/"wolf"/0   0000000003
+/106/3/5/"tiger"/0  0000000003
+/106/3/4/"lion"/0   0000000003
+/106/3/3/"mouse"/0  0000000003
+/106/3/2/"cow"/0    0000000003
+/106/3/1/"cat"/0    0000000003
+/106/2/"wol"/6/0    5420e5cc03
+/106/2/"use"/3/0    97bf872803
+/106/2/"tig"/5/0    d1fe998f03
+/106/2/"se "/3/0    0a4bbc8403
+/106/2/"ow "/2/0    d0dc7f3003
+/106/2/"ous"/3/0    cc9b7e7703
+/106/2/"on "/4/0    2617da9f03
+/106/2/"olf"/6/0    6b0df6a903
+/106/2/"mou"/3/0    9b49599703
+/106/2/"lio"/4/0    93315b4b03
+/106/2/"lf "/6/0    98f3477503
+/106/2/"ion"/4/0    735db3b003
+/106/2/"ige"/5/0    2bb7672303
+/106/2/"ger"/5/0    b771561b03
+/106/2/"er "/5/0    166b5ada03
+/106/2/"cow"/2/0    c2c9809903
+/106/2/"cat"/1/0    1624373303
+/106/2/"at "/1/0    f6f8c9c603
+/106/2/" wo"/6/0    d966bf1403
+/106/2/" ti"/5/0    3c91f8cd03
+/106/2/" mo"/3/0    1c03be7f03
+/106/2/" li"/4/0    6962405303
+/106/2/" co"/2/0    4dfeaf1503
+/106/2/" ca"/1/0    75b2703c03
+/106/2/"  w"/6/0    d091e8db03
+/106/2/"  t"/5/0    5443242c03
+/106/2/"  m"/3/0    74170bcd03
+/106/2/"  l"/4/0    ba04ceed03
+/106/2/"  c"/2/0    4fdf008a03
+/106/2/"  c"/1/0    4d99bed303
+/106/1/6/0          d68ee3630a2604776f6c66
+/106/1/5/0          ddbcb0140a26057469676572
+/106/1/4/0          5e1bbc380a26046c696f6e
+/106/1/3/0          18d02d720a26056d6f757365
+/106/1/2/0          dffd0fe30a2603636f77
+/106/1/1/0          56f874340a2603636174
+
+query TT
+SELECT crdb_internal.pretty_key(key, 0),  encode(value, 'hex') FROM crdb_internal.scan(crdb_internal.index_span($q_id, 1)) ORDER BY 1 DESC;
+----
+/106/1/6/0  d68ee3630a2604776f6c66
+/106/1/5/0  ddbcb0140a26057469676572
+/106/1/4/0  5e1bbc380a26046c696f6e
+/106/1/3/0  18d02d720a26056d6f757365
+/106/1/2/0  dffd0fe30a2603636f77
+/106/1/1/0  56f874340a2603636174
+
+query TT
+SELECT crdb_internal.pretty_key(key, 0),  encode(value, 'hex') FROM crdb_internal.scan(crdb_internal.index_span($q_id, 2)) ORDER BY 1 DESC;
+----
+/106/2/"wol"/6/0  5420e5cc03
+/106/2/"use"/3/0  97bf872803
+/106/2/"tig"/5/0  d1fe998f03
+/106/2/"se "/3/0  0a4bbc8403
+/106/2/"ow "/2/0  d0dc7f3003
+/106/2/"ous"/3/0  cc9b7e7703
+/106/2/"on "/4/0  2617da9f03
+/106/2/"olf"/6/0  6b0df6a903
+/106/2/"mou"/3/0  9b49599703
+/106/2/"lio"/4/0  93315b4b03
+/106/2/"lf "/6/0  98f3477503
+/106/2/"ion"/4/0  735db3b003
+/106/2/"ige"/5/0  2bb7672303
+/106/2/"ger"/5/0  b771561b03
+/106/2/"er "/5/0  166b5ada03
+/106/2/"cow"/2/0  c2c9809903
+/106/2/"cat"/1/0  1624373303
+/106/2/"at "/1/0  f6f8c9c603
+/106/2/" wo"/6/0  d966bf1403
+/106/2/" ti"/5/0  3c91f8cd03
+/106/2/" mo"/3/0  1c03be7f03
+/106/2/" li"/4/0  6962405303
+/106/2/" co"/2/0  4dfeaf1503
+/106/2/" ca"/1/0  75b2703c03
+/106/2/"  w"/6/0  d091e8db03
+/106/2/"  t"/5/0  5443242c03
+/106/2/"  m"/3/0  74170bcd03
+/106/2/"  l"/4/0  ba04ceed03
+/106/2/"  c"/2/0  4fdf008a03
+/106/2/"  c"/1/0  4d99bed303
+
+query TT
+SELECT crdb_internal.pretty_key(key, 0),  encode(value, 'hex') FROM crdb_internal.scan(crdb_internal.index_span($q_id, 3)) ORDER BY 1 DESC;
+----
+/106/3/6/"wolf"/0   0000000003
+/106/3/5/"tiger"/0  0000000003
+/106/3/4/"lion"/0   0000000003
+/106/3/3/"mouse"/0  0000000003
+/106/3/2/"cow"/0    0000000003
+/106/3/1/"cat"/0    0000000003

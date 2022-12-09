@@ -30,6 +30,7 @@ func (g *execExplainGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.write("package explain\n\n")
 
 	g.w.nestIndent("import (\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/roachpb\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")

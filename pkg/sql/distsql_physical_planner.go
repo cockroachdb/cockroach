@@ -532,6 +532,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return checkSupportForPlanNode(n.input)
 
+	case *kvScanNode:
+		return shouldDistribute, nil
+
 	case *invertedFilterNode:
 		return checkSupportForInvertedFilterNode(n)
 
@@ -3428,6 +3431,9 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(ctx, planCtx, n)
 
+	case *kvScanNode:
+		plan, err = dsp.createPlanForKvScan(ctx, planCtx, n)
+
 	case *insertNode:
 		if planCtx.isVectorInsert {
 			plan, err = dsp.createPlanForInsert(ctx, planCtx, n)
@@ -4783,4 +4789,35 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 		typs,
 		execinfrapb.Ordering{})
 	return plan, nil
+}
+
+// createPlanForKvScan creates a physical plan for the KV scan expression,
+// which will be distributed based on the spans of the keys. Each partition
+// will have an execinfrapb.KVScanReaderSpec responsible for the spans that
+// are local.
+func (dsp *DistSQLPlanner) createPlanForKvScan(
+	ctx context.Context, planCtx *PlanningCtx, n *kvScanNode,
+) (*PhysicalPlan, error) {
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, []roachpb.Span{n.span})
+	if err != nil {
+		return nil, err
+	}
+	p := planCtx.NewPhysicalPlan()
+
+	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		corePlacement[i].SQLInstanceID = sp.SQLInstanceID
+		corePlacement[i].EstimatedRowCount = 0
+		corePlacement[i].Core.KvScanReader = &execinfrapb.KVScanReaderSpec{
+			Spans: sp.Spans,
+		}
+	}
+	p.AddNoInputStage(corePlacement,
+		execinfrapb.PostProcessSpec{},
+		planTypes(n),
+		execinfrapb.Ordering{},
+	)
+	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(colinfo.KvScanColumns))
+	return p, nil
 }

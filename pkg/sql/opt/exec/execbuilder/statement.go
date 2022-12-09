@@ -13,6 +13,7 @@ package execbuilder
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -427,4 +428,20 @@ func planWithColumns(node exec.Node, cols opt.ColList) execPlan {
 		ep.outputCols.Set(int(c), i)
 	}
 	return ep
+}
+
+// buildKvScan generates an execution plan from an index scan expression.
+func (b *Builder) buildKvScan(indexScan *memo.KvScanExpr) (execPlan, error) {
+	spanArray := indexScan.Span.(*tree.DArray)
+	span := roachpb.Span{
+		Key:    []byte(*spanArray.Array[0].(*tree.DBytes)),
+		EndKey: []byte(*spanArray.Array[1].(*tree.DBytes)),
+	}
+
+	// Construct a scan operator based on this information.
+	node, err := b.factory.ConstructKvScan(span)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return planWithColumns(node, indexScan.Cols.ToList()), nil
 }

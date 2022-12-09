@@ -127,9 +127,10 @@ message ProcessorCoreUnion {
   optional CloudStorageTestSpec cloudStorageTest = 42;
   optional InsertSpec insert = 43;
   optional IngestStoppedSpec ingestStopped = 44;
+  optional KVScanReaderSpec kvScanReader = 45;
 
   reserved 6, 12, 14, 17, 18, 19, 20;
-  // NEXT ID: 45.
+  // NEXT ID: 46.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just

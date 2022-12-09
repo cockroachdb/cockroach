@@ -2177,6 +2177,13 @@ func (ef *execFactory) ConstructExplain(
 	return n, nil
 }
 
+// ConstructKvScan is part of the exec.Factory interface.
+func (ef *execFactory) ConstructKvScan(span roachpb.Span) (exec.Node, error) {
+	return &kvScanNode{
+		span: span,
+	}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode

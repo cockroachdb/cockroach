@@ -1250,3 +1250,8 @@ func (e *distSQLSpecExecFactory) ConstructLiteralValues(
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: literal values")
 }
+
+// ConstructKvScan is part of the exec.Factory interface.
+func (ef *distSQLSpecExecFactory) ConstructKvScan(span roachpb.Span) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: kv scan")
+}

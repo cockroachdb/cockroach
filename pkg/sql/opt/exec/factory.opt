@@ -785,3 +785,10 @@ define LiteralValues {
 define ShowCompletions {
     Command *tree.ShowCompletions
 }
+
+# KvScan preforms a raw KV scan which is used to back the DistSQL implementation,
+# of crdb_internal.scan.
+define KvScan {
+    # Spans that we are scanning.s
+    Span roachpb.Span
+}

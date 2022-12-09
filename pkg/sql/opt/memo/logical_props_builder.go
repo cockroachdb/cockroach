@@ -2806,3 +2806,29 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 	isCompositeInsensitive, _ := check(e)
 	return !isCompositeInsensitive
 }
+
+func (b *logicalPropsBuilder) buildKvScanProps(kvScan *KvScanExpr, rel *props.Relational) {
+	BuildSharedProps(kvScan, &rel.Shared, b.evalCtx)
+
+	// Output Columns
+	// --------------
+	rel.OutputCols = kvScan.Cols
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// No outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	// Empty FD set.
+
+	// Cardinality
+	// -----------
+	rel.Cardinality = props.AnyCardinality
+
+	b.sb.buildKvScan(kvScan, rel)
+}
