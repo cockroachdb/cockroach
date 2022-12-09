@@ -189,11 +189,11 @@ func (p *planner) CheckPrivilege(
 	return p.CheckPrivilegeForUser(ctx, object, privilege, p.User())
 }
 
-// CheckGrantOptionsForUser calls PrivilegeDescriptor.CheckGrantOptions, which
+// MustCheckGrantOptionsForUser calls PrivilegeDescriptor.CheckGrantOptions, which
 // will return an error if a user tries to grant a privilege it does not have
 // grant options for. Owners implicitly have all grant options, and also grant
 // options are inherited from parent roles.
-func (p *planner) CheckGrantOptionsForUser(
+func (p *planner) MustCheckGrantOptionsForUser(
 	ctx context.Context,
 	privs *catpb.PrivilegeDescriptor,
 	privilegeObject privilege.Object,
@@ -201,25 +201,11 @@ func (p *planner) CheckGrantOptionsForUser(
 	user username.SQLUsername,
 	isGrant bool,
 ) error {
-	// Always allow the command to go through if performed by a superuser or the
-	// owner of the object
-	if isAdmin, err := p.UserHasAdminRole(ctx, user); err != nil {
-		return err
-	} else if isAdmin {
-		return nil
-	}
-
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
-		isOwner, err := isOwner(ctx, p, privilegeObject, role)
-		return privs.CheckGrantOptions(role, privList) || isOwner, err
-	})
-	if err != nil {
+	if hasPriv, err := p.CheckGrantOptionsForUser(
+		ctx, privs, privilegeObject, privList, user,
+	); hasPriv || err != nil {
 		return err
 	}
-	if hasPriv {
-		return nil
-	}
-
 	code := pgcode.WarningPrivilegeNotGranted
 	if !isGrant {
 		code = pgcode.WarningPrivilegeNotRevoked
@@ -234,6 +220,32 @@ func (p *planner) CheckGrantOptionsForUser(
 		code, "user %s missing WITH GRANT OPTION privilege on %s",
 		user, privList.String(),
 	)
+}
+
+// CheckGrantOptionsForUser is like MustCheckGrantOptionsForUser but does not
+// return an error if the check does not succeed due to privileges. It only
+// returns an error if there is a runtime problem calculating whether the
+// user has the priviliges in question.
+func (p *planner) CheckGrantOptionsForUser(
+	ctx context.Context,
+	privs *catpb.PrivilegeDescriptor,
+	privilegeObject privilege.Object,
+	privList privilege.List,
+	user username.SQLUsername,
+) (isGrantable bool, _ error) {
+	// Always allow the command to go through if performed by a superuser or the
+	// owner of the object
+	isAdmin, err := p.UserHasAdminRole(ctx, user)
+	if err != nil {
+		return false, err
+	}
+	if isAdmin {
+		return true, nil
+	}
+	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
+		isOwner, err := isOwner(ctx, p, privilegeObject, role)
+		return privs.CheckGrantOptions(role, privList) || isOwner, err
+	})
 }
 
 func (p *planner) getOwnerOfPrivilegeObject(
