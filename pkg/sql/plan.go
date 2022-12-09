@@ -335,6 +335,8 @@ type physicalPlanTop struct {
 	// closed explicitly since we don't have a planNode tree that performs the
 	// closure.
 	planNodesToClose []planNode
+	// onClose, if non-nil, will be called when closing this object.
+	onClose func()
 }
 
 func (p *physicalPlanTop) Close(ctx context.Context) {
@@ -342,6 +344,10 @@ func (p *physicalPlanTop) Close(ctx context.Context) {
 		plan.Close(ctx)
 	}
 	p.planNodesToClose = nil
+	if p.onClose != nil {
+		p.onClose()
+		p.onClose = nil
+	}
 }
 
 // planMaybePhysical is a utility struct representing a plan. It can currently

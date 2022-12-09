@@ -50,7 +50,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physPlan, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, n.plan.main)
+	physPlan, cleanup, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, n.plan.main)
+	defer cleanup()
 	if err != nil {
 		if len(n.plan.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +

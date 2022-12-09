@@ -870,6 +870,11 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	if len(checks) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
 	}
+	if p, ok := root.(planMaybePhysical); !ok {
+		return nil, errors.AssertionFailedf("unexpected type for root: %T", root)
+	} else {
+		p.physPlan.onClose = e.planCtx.getCleanupFunc()
+	}
 	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount)
 }
 
@@ -883,7 +888,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	options *tree.ExplainOptions,
 	stmtType tree.StatementReturnType,
 	buildFn exec.BuildPlanForExplainFn,
-) (exec.Node, error) {
+) (_ exec.Node, retErr error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
@@ -892,8 +897,14 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// "outer" plan. Create a separate factory.
 	newFactory := newDistSQLSpecExecFactory(e.ctx, e.planner, e.planningMode)
 	plan, err := buildFn(newFactory)
-	// Release the resources acquired during the physical planning right away.
-	newFactory.(*distSQLSpecExecFactory).planCtx.getCleanupFunc()()
+	// Make sure to release the resources of the new factory if we encounter an
+	// error (if we don't, then the cleanup will be performed when closing the
+	// plan).
+	defer func() {
+		if retErr != nil {
+			newFactory.(*distSQLSpecExecFactory).planCtx.getCleanupFunc()()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
