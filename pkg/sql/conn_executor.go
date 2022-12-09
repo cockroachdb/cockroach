@@ -1702,6 +1702,7 @@ func (ns *prepStmtNamespace) resetTo(
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
+	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
