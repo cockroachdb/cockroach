@@ -398,7 +398,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(&evalCtx, &flowCtx, mockRestoreDataSpec)
 			require.NoError(t, err)
 			ssts := make(chan mergedSST, 1)
-			require.NoError(t, mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, ssts))
+			require.NoError(t, mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, ssts, nil))
 			close(ssts)
 			sst := <-ssts
 			rewriter, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.TableRekeys,

@@ -1333,7 +1333,7 @@ func checkInProgressBackupRestore(
 						<-exportSpanCompleteCh
 					}
 				},
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
 					<-allowResponse
 				},
 			},
@@ -7197,7 +7197,7 @@ func TestClientDisconnect(t *testing.T) {
 
 			args := base.TestClusterArgs{}
 			knobs := base.TestingKnobs{
-				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context) {
+				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) {
 					blockBackupOrRestore(ctx)
 				}}},
 				Store: &kvserver.StoreTestingKnobs{
@@ -10616,4 +10616,69 @@ $$;
 	require.Equal(t, "1", rows[0][0])
 	require.NoError(t, err)
 
+}
+
+// Verify that during restore, if an import span has too many files to fit in
+// the memory budget with a single SST iterator, the restore processor should
+// repeatedly open and process iterators for as many files as can fit within the
+// budget until the span is finished.
+func TestRestoreMemoryMonitoring(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	const splitSize = 10
+	// Number of files in the backup
+	const expectedNumFiles = numAccounts / splitSize
+
+	restoreProcessorKnobErr := atomic.Value{}
+	restoreProcessorKnobCount := atomic.Uint32{}
+
+	args := base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) {
+						// The total size of the backup files should be less than the target
+						// SST size, thus should all fit in one import span.
+						if len(entry.Files) != expectedNumFiles {
+							restoreProcessorKnobErr.Store(errors.Newf("expected entry to have %d files, got %d", expectedNumFiles, len(entry.Files)))
+						}
+
+						restoreProcessorKnobCount.Add(1)
+					}}}}}
+	params := base.TestClusterArgs{ServerArgs: args}
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	defer cleanupFn()
+
+	// Add some splits in the table, and set the target file size to be something
+	// small so that we get one flushed file per split in the backup.
+	sqlDB.Exec(t, "ALTER TABLE data.bank SPLIT AT SELECT generate_series($1::INT, $2, $3)", 0, numAccounts, splitSize)
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.file_size = '100B'")
+	sqlDB.Exec(t, "BACKUP data.bank INTO 'userfile:///backup'")
+
+	// Verify the file counts in the backup.
+	var numFiles int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW BACKUP FILES FROM latest IN 'userfile:///backup']").Scan(&numFiles)
+	require.Equal(t, numFiles, numAccounts/splitSize)
+
+	// Set the memory budget for the restore processor to be less than the total
+	// memory required to open all files at once.
+	const restoreProcessorMaxFiles = 10
+	require.Less(t, restoreProcessorMaxFiles, numFiles)
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.per_processor_memory_limit = $1", restoreProcessorMaxFiles*sstReaderMemBytesPerFile)
+
+	sqlDB.Exec(t, "CREATE DATABASE data2")
+	sqlDB.Exec(t, "RESTORE data.bank FROM latest IN 'userfile:///backup' WITH OPTIONS (into_db='data2')")
+	require.Nil(t, restoreProcessorKnobErr.Load())
+
+	// Assert that the restore processor is processing the same span multiple
+	// times, and the count is based on what's expected from the memory budget.
+	require.Equal(t, (expectedNumFiles-1)/restoreProcessorMaxFiles+1, int(restoreProcessorKnobCount.Load()))
+
+	// Verify data in the restored table.
+	expectedFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank")
+	actualFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data2.bank")
+	require.Equal(t, expectedFingerprints, actualFingerprints)
 }
