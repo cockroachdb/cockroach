@@ -43,6 +43,11 @@ func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.Node
 	return nil, errorutil.NewNodeNotFoundError(nodeID)
 }
 
+// GetNodeDescriptorCount is part of the NodeDescStore interface.
+func (ns *mockNodeStore) GetNodeDescriptorCount() int {
+	return len(ns.nodes)
+}
+
 // GetStoreDescriptor is part of the NodeDescStore interface.
 func (ns *mockNodeStore) GetStoreDescriptor(
 	storeID roachpb.StoreID,

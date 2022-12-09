@@ -562,6 +562,16 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 	return g.getNodeDescriptor(nodeID, false /* locked */)
 }
 
+// GetNodeDescriptorCount gets the number of node descriptors.
+func (g *Gossip) GetNodeDescriptorCount() int {
+	count := 0
+	g.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+		count++
+		return true
+	})
+	return count
+}
+
 // GetStoreDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
 	if value, ok := g.storeDescs.Load(int64(storeID)); ok {
