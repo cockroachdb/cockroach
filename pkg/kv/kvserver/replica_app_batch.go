@@ -281,7 +281,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
 		}
 		if added := res.Delta.KeyCount; added > 0 {
-			b.r.loadStats.writeKeys.RecordCount(float64(added), 0)
+			// So far numMutations only tracks the number of keys in
+			// WriteBatches but here we have a trivial WriteBatch.
+			// Also account for keys added via AddSST. We do this
+			// indirectly by relying on the stats, since there isn't
+			// a cheap way to get the number of keys in the SST.
+			b.ab.numMutations += int(added)
 		}
 		if res.AddSSTable.AtWriteTimestamp {
 			b.r.handleSSTableRaftMuLocked(
@@ -614,6 +619,8 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
+	//
+	// This also records the number of keys ingested via AddSST.
 	b.r.loadStats.writeKeys.RecordCount(float64(b.ab.numMutations), 0)
 
 	now := timeutil.Now()
