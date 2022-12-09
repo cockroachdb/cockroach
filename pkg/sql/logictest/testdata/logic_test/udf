@@ -2641,6 +2641,19 @@ subtest variadic
 statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
 CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
 
+
+subtest regression_tests
+
+# Regression test for #93083. UDFs with empty bodies should execute successfully
+# and return NULL.
+statement ok
+CREATE FUNCTION f93083() RETURNS INT LANGUAGE SQL AS '';
+
+query I
+SELECT f93083()
+----
+NULL
+
 # Regression test for #93314
 subtest regression_93314
 
