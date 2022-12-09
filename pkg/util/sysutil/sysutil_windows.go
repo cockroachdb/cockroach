@@ -37,3 +37,8 @@ func IsCrossDeviceLinkErrno(errno error) bool {
 	// See: https://msdn.microsoft.com/en-us/library/cc231199.aspx
 	return errno == syscall.Errno(0x11)
 }
+
+// TerminateSelf is a no-op on windows.
+func TerminateSelf() error {
+	return nil
+}
