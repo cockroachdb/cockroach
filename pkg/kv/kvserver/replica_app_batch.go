@@ -227,6 +227,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// `ApplyToStateMachine`) and then finalize the in- memory portion of the
 	// split/merge in `(stateMachine).ApplySideEffects), following which
 	// splitMergeUnlock is called.
+	//
+	// NB: none of this is necessary in standalone log application, as long
+	// as we don't concurrently apply multiple raft logs.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
 		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
 			err = errors.Wrap(err, "unable to acquire split lock")
@@ -242,6 +245,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 
 	// NB: we need to do this update early, as some fields are zeroed out below
 	// (AddSST for example).
+	//
+	// We don't track these stats in standalone log application since they depend
+	// on whether the proposer is still waiting locally, and this concept does not
+	// apply in a standalone context.
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
 		b.followerStoreWriteBytes.NumEntries++
@@ -254,6 +261,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// expected to ensure that no rangefeeds are currently active across such
 	// spans, but as a safeguard we disconnect the overlapping rangefeeds
 	// with a non-retriable error anyway.
+	//
+	// The are no rangefeeds in standalone mode, so we don't have to do anything
+	// for this on appBatch.
 	if res.MVCCHistoryMutation != nil {
 		for _, span := range res.MVCCHistoryMutation.Spans {
 			b.r.disconnectRangefeedSpanWithErr(span, roachpb.NewError(&roachpb.MVCCHistoryMutationError{
