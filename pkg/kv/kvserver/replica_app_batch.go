@@ -139,9 +139,16 @@ func (b *replicaAppBatch) Stage(
 		return nil, err
 	}
 
-	// Run any triggers that should occur before the batch is applied
-	// but after the write batch is staged in the batch.
-	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd); err != nil {
+	// Run any triggers that should occur before the (entire) batch is applied but
+	// after the (current) write batch is staged in the batch. Note that additional
+	// calls to `Stage` (for subsequent log entries) may occur before the batch
+	// will be committed, but all of these commands will be `IsTrivial()`.
+	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
+		st:          b.r.store.cfg.Settings,
+		eng:         b.r.store.engine,
+		sideloaded:  b.r.raftMu.sideloaded,
+		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -255,39 +262,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		}
 	}
 
-	// AddSSTable ingestions run before the actual batch gets written to the
-	// storage engine. This makes sure that when the Raft command is applied,
-	// the ingestion has definitely succeeded. Note that we have taken
-	// precautions during command evaluation to avoid having mutations in the
-	// WriteBatch that affect the SSTable. Not doing so could result in order
-	// reversal (and missing values) here.
-	//
-	// NB: any command which has an AddSSTable is non-trivial and will be
-	// applied in its own batch so it's not possible that any other commands
-	// which precede this command can shadow writes from this SSTable.
 	if res.AddSSTable != nil {
-		copied := addSSTablePreApply(
-			ctx,
-			b.r.store.cfg.Settings,
-			b.r.store.engine,
-			b.r.raftMu.sideloaded,
-			cmd.Term,
-			cmd.Index(),
-			*res.AddSSTable,
-			b.r.store.limiters.BulkIOWriteRate,
-		)
-		b.r.store.metrics.AddSSTableApplications.Inc(1)
-		if copied {
-			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
-		}
-		if added := res.Delta.KeyCount; added > 0 {
-			// So far numMutations only tracks the number of keys in
-			// WriteBatches but here we have a trivial WriteBatch.
-			// Also account for keys added via AddSST. We do this
-			// indirectly by relying on the stats, since there isn't
-			// a cheap way to get the number of keys in the SST.
-			b.ab.numMutations += int(added)
-		}
+		// We've ingested the SST already (via the appBatch), so all that's left
+		// to do here is notify the rangefeed, if appropriate.
 		if res.AddSSTable.AtWriteTimestamp {
 			b.r.handleSSTableRaftMuLocked(
 				ctx, res.AddSSTable.Data, res.AddSSTable.Span, res.WriteTimestamp)
@@ -655,6 +632,13 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
 	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+
+	if n := b.ab.numAddSST; n > 0 {
+		b.r.store.metrics.AddSSTableApplications.Inc(int64(n))
+	}
+	if n := b.ab.numAddSSTCopies; n > 0 {
+		b.r.store.metrics.AddSSTableApplicationCopies.Inc(int64(n))
+	}
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())

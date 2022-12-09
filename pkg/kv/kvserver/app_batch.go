@@ -15,11 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/time/rate"
 )
 
 type appBatchStats struct {
@@ -30,10 +33,12 @@ type appBatchStats struct {
 
 	// numMutations is the number of keys mutated, both via
 	// WriteBatch and AddSST.
-	numMutations             int
-	numEntriesProcessed      int
-	numEntriesProcessedBytes int64
-	numEmptyEntries          int
+	numMutations               int
+	numEntriesProcessed        int
+	numEntriesProcessedBytes   int64
+	numEmptyEntries            int
+	numAddSST, numAddSSTCopies int
+
 	// NB: update `merge` when adding a new field.
 }
 
@@ -154,8 +159,55 @@ func (b *appBatch) addWriteBatch(
 	return nil
 }
 
-func (b *appBatch) runPostAddTriggers(ctx context.Context, cmd *raftlog.ReplicatedCmd) error {
+type postAddEnv struct {
+	st          *cluster.Settings
+	eng         storage.Engine
+	sideloaded  logstore.SideloadStorage
+	bulkLimiter *rate.Limiter
+}
+
+func (b *appBatch) runPostAddTriggers(
+	ctx context.Context, cmd *raftlog.ReplicatedCmd, env postAddEnv,
+) error {
 	// TODO(sep-raft-log): currently they are commingled in runPostAddTriggersReplicaOnly,
 	// extract them from that method.
+
+	res := cmd.ReplicatedResult()
+
+	// AddSSTable ingestions run before the actual batch gets written to the
+	// storage engine. This makes sure that when the Raft command is applied,
+	// the ingestion has definitely succeeded. Note that we have taken
+	// precautions during command evaluation to avoid having mutations in the
+	// WriteBatch that affect the SSTable. Not doing so could result in order
+	// reversal (and missing values) here.
+	//
+	// NB: any command which has an AddSSTable is non-trivial and will be
+	// applied in its own batch so it's not possible that any other commands
+	// which precede this command can shadow writes from this SSTable.
+	if res.AddSSTable != nil {
+		copied := addSSTablePreApply(
+			ctx,
+			env.st,
+			env.eng,
+			env.sideloaded,
+			cmd.Term,
+			cmd.Index(),
+			*res.AddSSTable,
+			env.bulkLimiter,
+		)
+		b.numAddSST++
+		if copied {
+			b.numAddSSTCopies++
+		}
+		if added := res.Delta.KeyCount; added > 0 {
+			// So far numMutations only tracks the number of keys in
+			// WriteBatches but here we have a trivial WriteBatch.
+			// Also account for keys added via AddSST. We do this
+			// indirectly by relying on the stats, since there isn't
+			// a cheap way to get the number of keys in the SST.
+			b.numMutations += int(added)
+		}
+	}
+
 	return nil
 }
