@@ -1905,7 +1905,7 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 	return ident, err
 }
 
-// loadAndReconcilesReplicas loads the Replicas present on this
+// loadAndReconcileReplicas loads the Replicas present on this
 // store. It reconciles inconsistent state and runs validation checks.
 //
 // TODO(sep-raft-log): also load *uninitialized* Replicas.
@@ -2088,16 +2088,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 		// Add this range and its stats to our counter.
 		s.metrics.ReplicaCount.Inc(1)
+		// INVARIANT: each initialized Replica is associated to a tenant.
 		if _, ok := rep.TenantID(); ok {
-			// TODO(tbg): why the check? We're definitely an initialized range so
-			// we have a tenantID.
 			s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 		} else {
-			return errors.AssertionFailedf("found newly constructed replica"+
-				" for range %d at generation %d with an invalid tenant ID in store %d",
-				redact.Safe(desc.RangeID),
-				redact.Safe(desc.Generation),
-				redact.Safe(s.StoreID()))
+			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
 		}
 	}
 
