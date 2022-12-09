@@ -203,13 +203,16 @@ func WithParent(sp *Span) SpanOption {
 	// below.
 	_ = sp.detectUseAfterFinish()
 
-	// Sterile spans don't get children. Noop spans also don't, but that case is
-	// handled in StartSpan, not here, because we want to assert that the parent's
-	// Tracer is the same as the child's. In contrast, in the IsSterile() case, it
-	// is allowed for the "child" to be created with a different Tracer than the
-	// parent.
-	if sp.IsSterile() {
-		return (parentOption)(spanRef{})
+	// Noop spans and sterile spans don't get children; a span constructed with
+	// WithParent(sterile-or-noop-span) will be a root span. We could return a
+	// zero parentOption here, but instead we return a parentOption referencing
+	// the tracer's noopSpan. This is so that, when constructing the "child" span
+	// using the returned option we can assert that the Tracer used to construct
+	// the child is the same as sp's Tracer.
+	if sp.IsNoop() || sp.IsSterile() {
+		return parentOption{
+			Span: sp.Tracer().noopSpan,
+		}
 	}
 
 	ref, _ /* ok */ := tryMakeSpanRef(sp)

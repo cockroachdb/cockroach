@@ -1096,14 +1096,17 @@ func (t *Tracer) startSpanGeneric(
 	}
 
 	if !opts.Parent.empty() {
-		// If we don't panic, opts.Parent will be moved into the child, and this
-		// release() will be a no-op.
-		defer opts.Parent.release()
+		if !opts.Parent.IsNoop() {
+			// If we don't panic, opts.Parent will be moved into the child, and this
+			// release() will be a no-op.
+			// Note that we can't call release() on a no-op span.
+			defer opts.Parent.release()
+		}
 
 		if !opts.RemoteParent.Empty() {
 			panic("can't specify both Parent and RemoteParent")
 		}
-		if opts.Parent.IsSterile() {
+		if opts.Parent.i.sterile {
 			// A sterile parent should have been optimized away by
 			// WithParent.
 			panic("invalid sterile parent")
@@ -1126,7 +1129,6 @@ child operation: %s, tracer created at:
 		}
 		if opts.Parent.IsNoop() {
 			// If the parent is a no-op, we'll create a root span.
-			opts.Parent.decRef()
 			opts.Parent = spanRef{}
 		}
 	}
