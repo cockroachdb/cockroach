@@ -2008,20 +2008,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			replicaDesc, found := desc.GetReplicaDescriptor(s.StoreID())
 			if !found {
-				// This is a pre-emptive snapshot. It's also possible that this is a
-				// range which has processed a raft command to remove itself (which is
-				// possible prior to 19.2 or if the DisableEagerReplicaRemoval is
-				// enabled) and has not yet been removed by the replica gc queue.
-				// We treat both cases the same way. These should no longer exist in
-				// 20.2 or after as there was a migration in 20.1 to remove them and
-				// no pre-emptive snapshot should have been sent since 19.2 was
-				// finalized.
+				// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
+				// i.e. a Store is a member of all of its local Replicas.
 				return errors.AssertionFailedf(
-					"found RangeDescriptor for range %d at generation %d which does not"+
-						" contain this store %d",
-					redact.Safe(desc.RangeID),
-					redact.Safe(desc.Generation),
-					redact.Safe(s.StoreID()))
+					"RangeDescriptor does not contain local s%d: %s",
+					s.StoreID(), desc)
 			}
 
 			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
