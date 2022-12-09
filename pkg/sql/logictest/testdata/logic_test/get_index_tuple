@@ -1,0 +1,28 @@
+# LogicTest: fakedist
+subtest query-indexes
+
+statement ok
+CREATE TABLE q1(val int primary key, n varchar(25));
+
+let $q_id
+SELECT id FROM system.namespace WHERE name = 'q1';
+
+query S
+SELECT crdb_internal.get_index_tuples($q_id,1);
+----
+
+statement ok
+INSERT INTO q1 VALUES (1, 'cat'),(2, 'cow'),(3, 'mouse'),(4, 'lion'),(5, 'tiger'),(6, 'wolf');
+
+statement ok
+CREATE INDEX i1 on q1(val, n)
+
+query I
+select count(*) from crdb_internal.get_index_tuples($q_id,1);
+----
+6
+
+query I
+select count(*) from crdb_internal.get_index_tuples($q_id,2);
+----
+6

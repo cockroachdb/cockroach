@@ -471,6 +471,13 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
 }
 
+// GetIndexTuples is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) GetIndexTuples(
+	ctx context.Context, descID int64, indexID int64,
+) (eval.ValueGenerator, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 

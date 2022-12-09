@@ -357,6 +357,10 @@ type Planner interface {
 	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
 	// statements.
 	IsANSIDML() bool
+
+	// GetIndexTuples returns a generator that goes over all the tuples
+	// in a given index.
+	GetIndexTuples(ctx context.Context, descID int64, indexID int64) (ValueGenerator, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

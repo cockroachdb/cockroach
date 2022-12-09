@@ -547,6 +547,23 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.get_index_tuples": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "TableID", Typ: types.Int},
+				{Name: "IndexID", Typ: types.Int}},
+			types.MakeLabeledTuple(
+				[]*types.T{types.Bytes, types.Bytes},
+				[]string{"Key", "Value"},
+			),
+			makeGetIndexTuplesGenerator,
+			"Returns tuples from within an index.",
+			volatility.Volatile,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String
@@ -599,6 +616,13 @@ func makeDecodeExternalPlanGistGenerator(
 ) (eval.ValueGenerator, error) {
 	gist := string(tree.MustBeDString(args[0]))
 	return &gistPlanGenerator{gist: gist, evalCtx: evalCtx, external: true}, nil
+}
+func makeGetIndexTuplesGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	tableID := int64(*args[0].(*tree.DInt))
+	indexID := int64(*args[1].(*tree.DInt))
+	return evalCtx.Planner.GetIndexTuples(ctx, tableID, indexID)
 }
 
 func makeGeneratorOverload(

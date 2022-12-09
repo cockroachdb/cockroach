@@ -35,7 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -798,4 +800,87 @@ func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []b
 		return err
 	}
 	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
+}
+
+// IndexTupleGenerator goes over all tuples inside
+// a given index.
+type IndexTupleGenerator struct {
+	indexSpan roachpb.Span
+	batch     *kv.Batch
+	txn       *kv.Txn
+	offset    int
+}
+
+// ResolvedType implements ValueGenerator
+func (i *IndexTupleGenerator) ResolvedType() *types.T {
+	return types.Bytes
+}
+
+// Start implements ValueGenerator
+func (i *IndexTupleGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	i.batch = txn.NewBatch()
+	i.txn = txn
+	i.offset = -1
+	const targetBytesPerScan = 16 << 20 // 16 MiB
+	i.batch.Header.TargetBytes = targetBytesPerScan
+	i.batch.AddRawRequest(roachpb.NewScan(i.indexSpan.Key, i.indexSpan.EndKey, false))
+	return txn.DB().Run(ctx, i.batch)
+}
+
+// Next implements ValueGenerator
+func (i *IndexTupleGenerator) Next(ctx context.Context) (bool, error) {
+	response := i.batch.RawResponse().Responses[0].GetScan()
+	if i.offset+1 < len(response.Rows) {
+		i.offset++
+		return true, nil
+	}
+
+	if response.ResumeSpan == nil {
+		return false, nil
+	}
+
+	i.batch = i.txn.NewBatch()
+	const targetBytesPerScan = 16 << 20 // 16 MiB
+	i.batch.Header.TargetBytes = targetBytesPerScan
+	i.batch.AddRawRequest(roachpb.NewScan(response.ResumeSpan.Key, response.ResumeSpan.EndKey, false))
+	err := i.txn.DB().Run(ctx, i.batch)
+	i.offset = -1
+	if err != nil {
+		return false, err
+	}
+	response = i.batch.RawResponse().Responses[0].GetScan()
+	return len(response.Rows) > 0, nil
+}
+
+// Values implements Generator
+func (i *IndexTupleGenerator) Values() (tree.Datums, error) {
+	response := i.batch.RawResponse().Responses[0].GetScan()
+	return tree.Datums{
+		tree.NewDBytes(tree.DBytes(response.Rows[i.offset].Key)),
+		tree.NewDBytes(tree.DBytes(response.Rows[i.offset].Value.RawBytes))}, nil
+}
+
+// Close implements ValueGenerator
+func (i *IndexTupleGenerator) Close(ctx context.Context) {
+	i.batch = nil
+	i.txn = nil
+	i.offset = -1
+}
+
+// GetIndexTuples is part of the EvalPlanner interface.
+func (p *planner) GetIndexTuples(
+	ctx context.Context, descID int64, indexID int64,
+) (eval.ValueGenerator, error) {
+	table, err := p.Descriptors().GetMutableTableByID(ctx, p.Txn(), descpb.ID(descID), tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+	if err != nil {
+		return nil, err
+	}
+	index, err := table.FindIndexWithID(descpb.IndexID(indexID))
+	if err != nil {
+		return nil, err
+	}
+	// Get the key space for the index
+	indexPrefix := table.IndexSpan(p.EvalContext().Codec, index.GetID())
+	generator := &IndexTupleGenerator{indexSpan: indexPrefix}
+	return generator, nil
 }

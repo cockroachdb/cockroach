@@ -409,6 +409,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.force_retry(val: interval) -> int`:                                                                                   1315,
 	`crdb_internal.gc_tenant(id: int) -> int`:                                                                                           1354,
 	`crdb_internal.get_database_id(name: string) -> int`:                                                                                1328,
+	`crdb_internal.get_index_tuples(TableID: int, IndexID: int) -> tuple{bytes AS Key, bytes AS Value}`:                                 2058,
 	`crdb_internal.get_namespace_id(parent_id: int, name: string) -> int`:                                                               1326,
 	`crdb_internal.get_namespace_id(parent_id: int, parent_schema_id: int, name: string) -> int`:                                        1327,
 	`crdb_internal.get_vmodule() -> string`:                                                                                             1331,

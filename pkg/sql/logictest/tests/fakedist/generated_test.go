@@ -814,6 +814,13 @@ func TestLogic_geospatial_zm(
 	runLogicTest(t, "geospatial_zm")
 }
 
+func TestLogic_get_index_tuple(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "get_index_tuple")
+}
+
 func TestLogic_grant_database(
 	t *testing.T,
 ) {
