@@ -286,6 +286,7 @@ go_test(
         "//pkg/util/admission",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",

@@ -194,6 +194,14 @@ message RestoreProgress {
   roachpb.RowCount summary = 1 [(gogoproto.nullable) = false];
   int64 progressIdx = 2;
   roachpb.Span dataSpan = 3 [(gogoproto.nullable) = false];
+  // Incomplete when true indicates that the processor has not finished
+  // processing all of the data in DataSpan and there are still more
+  // RestoreProgress on the way for DataSpan. When false, the processor has
+  // finished processing the entirety of DataSpan. Note that the default value
+  // of false will always indicate that the span has been completely processed,
+  // which is useful for processors on older versions that are not aware of this
+  // field.
+  bool incomplete = 4;
 }
 
 message BackupProcessorPlanningTraceEvent {
