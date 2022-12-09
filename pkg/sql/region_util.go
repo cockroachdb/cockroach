@@ -2470,6 +2470,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	rbrTables := []string{
 		"sqlliveness",
 		"sql_instances",
+		"lease",
 	}
 
 	if !systemschema.TestSupportMultiRegion() {
