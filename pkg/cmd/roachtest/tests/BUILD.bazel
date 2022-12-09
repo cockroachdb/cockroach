@@ -178,7 +178,6 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/roachprod",
-        "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
