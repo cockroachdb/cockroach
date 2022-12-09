@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +59,8 @@ type replicaAppBatch struct {
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
 
-	start time.Time // time at NewBatch()
+	start                   time.Time // time at NewBatch()
+	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
@@ -235,9 +237,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// (AddSST for example).
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.ab.followerStoreWriteBytes.NumEntries++
-		b.ab.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.ab.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		b.followerStoreWriteBytes.NumEntries++
+		b.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
 	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
@@ -645,6 +647,7 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
+	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
