@@ -75,7 +75,7 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED.String():
 			// Ok.
 		default:
-			failures = append(failures, errors.Errorf("range %d (%s) %s: %s", rangeID, key, status, detail))
+			failures = append(failures, errors.Errorf("range %d (%s) %s:\n%s", rangeID, key, status, detail))
 		}
 	}
 	return failures

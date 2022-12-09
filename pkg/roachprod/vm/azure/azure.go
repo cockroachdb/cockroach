@@ -337,7 +337,7 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	if err != nil {
 		return err
 	}
-	client := compute.NewVirtualMachinesClient(*sub.ID)
+	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -348,10 +348,16 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 		if err != nil {
 			return err
 		}
+		// N.B. VirtualMachineUpdate below overwrites _all_ VM tags. Hence, we must copy all unmodified tags.
+		tags := make(map[string]*string)
+		// Copy all known VM tags.
+		for k, v := range m.Labels {
+			tags[k] = to.StringPtr(v)
+		}
+		// Overwrite Lifetime tag.
+		tags[vm.TagLifetime] = to.StringPtr(lifetime.String())
 		update := compute.VirtualMachineUpdate{
-			Tags: map[string]*string{
-				vm.TagLifetime: to.StringPtr(lifetime.String()),
-			},
+			Tags: tags,
 		}
 		futures[idx], err = client.Update(ctx, vmParts.resourceGroup, vmParts.resourceName, update)
 		if err != nil {

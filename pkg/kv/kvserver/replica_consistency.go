@@ -191,7 +191,8 @@ func (r *Replica) checkConsistencyImpl(
 			// or stats maintenance, but it could also hint at the replica having diverged from its peers.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
 		}
-		res.Detail += fmt.Sprintf("stats - recomputation: %+v\n", enginepb.MVCCStats(results[0].Response.Delta))
+		res.Detail += fmt.Sprintf("delta (stats-computed): %+v\n",
+			enginepb.MVCCStats(results[0].Response.Delta))
 	} else if len(missing) > 0 {
 		// No inconsistency was detected, but we didn't manage to inspect all replicas.
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE
