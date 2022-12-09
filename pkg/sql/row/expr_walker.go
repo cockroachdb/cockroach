@@ -670,13 +670,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["nextval"],
 			tree.Overload{
-				Types:      tree.ParamTypes{{builtinconstants.SequenceNameArg, types.String}},
+				Types:      tree.ParamTypes{{Name: builtinconstants.SequenceNameArg, Typ: types.String}},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextVal,
 			},
 			tree.Overload{
-				Types:      tree.ParamTypes{{builtinconstants.SequenceNameArg, types.RegClass}},
+				Types:      tree.ParamTypes{{Name: builtinconstants.SequenceNameArg, Typ: types.RegClass}},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextValByID,
@@ -687,7 +687,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["default_to_database_primary_region"],
 			tree.Overload{
-				Types:      tree.ParamTypes{{"val", types.String}},
+				Types:      tree.ParamTypes{{Name: "val", Typ: types.String}},
 				ReturnType: tree.FixedReturnType(types.String),
 				Info:       "Returns the primary region of the database.",
 				Fn:         importDefaultToDatabasePrimaryRegion,

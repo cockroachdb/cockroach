@@ -37,10 +37,19 @@ func (t byIDMap) delete(id descpb.ID) (removed catalog.NameEntry) {
 
 func (t byIDMap) clear() {
 	clear(t.t)
+	btreeSyncPool.Put(t.t)
 }
 
 func (t byIDMap) ascend(f EntryIterator) error {
 	return ascend(t.t, func(k interface{}) error {
 		return f(k.(catalog.NameEntry))
 	})
+}
+
+func (t byIDMap) initialized() bool {
+	return t != byIDMap{}
+}
+
+func makeByIDMap() byIDMap {
+	return byIDMap{t: btreeSyncPool.Get().(*btree.BTree)}
 }
