@@ -807,6 +807,7 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.SQLPort, cliflags.DemoSQLPort)
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 		cliflagcfg.StringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
+		cliflagcfg.StringFlag(f, &demoCtx.pidFile, cliflags.PIDFile)
 	}
 
 	{
