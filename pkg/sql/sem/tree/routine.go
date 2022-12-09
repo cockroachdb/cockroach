@@ -106,10 +106,10 @@ func (node *RoutineExpr) ResolvedType() *types.T {
 func (node *RoutineExpr) Format(ctx *FmtCtx) {
 	ctx.Printf("%s(", node.Name)
 	for i := range node.Args {
-		node.Args[i].Format(ctx)
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
+		node.Args[i].Format(ctx)
 	}
 	ctx.WriteByte(')')
 }
