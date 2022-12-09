@@ -3655,3 +3655,25 @@ TIMESTAMP '2000-01-01 00:00:00',
 INTERVAL '2 days',
 DATE '2000-01-01',
 TIMESTAMPTZ '2000-01-01 01:30:00');
+
+# More tests are in parse_ident_builtin_test.go.
+query T
+SELECT parse_ident(str) FROM ( VALUES
+  ('a.b.c'),
+  ('"YesCaps".NoCaps'),
+  ('"a""b".xyz'),
+  ('"a\b".xyz')
+) tbl(str)
+----
+{a,b,c}
+{YesCaps,nocaps}
+{"a\"b",xyz}
+{"a\\b",xyz}
+
+query T
+SELECT parse_ident('ab.xyz()', false)
+----
+{ab,xyz}
+
+query error string is not a valid identifier: \"ab.xyz\(\)\"
+SELECT parse_ident('ab.xyz()', true)

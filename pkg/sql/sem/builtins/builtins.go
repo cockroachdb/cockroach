@@ -3210,6 +3210,58 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"parse_ident": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{Name: "qualified_identifier", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := tree.MustBeDString(args[0])
+				idents, err := parseIdent(string(s), true /* strict */)
+				if err != nil {
+					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				arr := tree.NewDArray(types.String)
+				for _, ident := range idents {
+					if err := arr.Append(tree.NewDString(ident)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info: "Splits qualified_identifier into an array of identifiers, " +
+				"removing any quoting of individual identifiers. " +
+				"Extra characters after the last identifier are considered an error",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{Name: "qualified_identifier", Typ: types.String},
+				{Name: "strict", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := tree.MustBeDString(args[0])
+				strict := tree.MustBeDBool(args[1])
+				idents, err := parseIdent(string(s), bool(strict))
+				if err != nil {
+					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				arr := tree.NewDArray(types.String)
+				for _, ident := range idents {
+					if err := arr.Append(tree.NewDString(ident)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info: "Splits `qualified_identifier` into an array of identifiers, " +
+				"removing any quoting of individual identifiers. " +
+				"If `strict` is false, then extra characters after the last identifier are ignored.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	// parse_timestamp converts strings to timestamps. It is useful in expressions
 	// where casts (which are not immutable) cannot be used, like computed column
 	// expressions or partial index predicates. Only absolute timestamps that do
