@@ -77,41 +77,37 @@ func (c callbackCloser) Close(ctx context.Context) error {
 // synchronizer which then outputs all the data into a materializer.
 // The resulting scheme looks as follows:
 //
-//	Remote Node             |                  Local Node
-//	                        |
-//	 -> output -> Outbox -> | -> Inbox -> |
-//	|                       |
-//
-// Hash Router -> output -> Outbox -> | -> Inbox -> |
-//
-//	|                       |
-//	 -> output -> Outbox -> | -> Inbox -> |
-//	                        |              -> Synchronizer -> materializer -> FlowCoordinator
-//	              Outbox -> | -> Inbox -> |
-//	                        |
-//	              Outbox -> | -> Inbox -> |
-//	                        |
-//	              Outbox -> | -> Inbox -> |
+// |            Remote Node             |                  Local Node
+// |                                    |
+// |             -> output -> Outbox -> | -> Inbox -> |
+// |            |                       |
+// | Hash Router -> output -> Outbox -> | -> Inbox -> |
+// |            |                       |
+// |             -> output -> Outbox -> | -> Inbox -> |
+// |                                    |              -> Synchronizer -> materializer -> FlowCoordinator
+// |                          Outbox -> | -> Inbox -> |
+// |                                    |
+// |                          Outbox -> | -> Inbox -> |
+// |                                    |
+// |                          Outbox -> | -> Inbox -> |
 //
 // Also, with 50% probability, another remote node with the chain of an Outbox
 // and Inbox is placed between the synchronizer and materializer. The resulting
 // scheme then looks as follows:
 //
-//	Remote Node             |            Another Remote Node             |         Local Node
-//	                        |                                            |
-//	 -> output -> Outbox -> | -> Inbox ->                                |
-//	|                       |             |                              |
-//
-// Hash Router -> output -> Outbox -> | -> Inbox ->                                |
-//
-//	|                       |             |                              |
-//	 -> output -> Outbox -> | -> Inbox ->                                |
-//	                        |             | -> Synchronizer -> Outbox -> | -> Inbox -> materializer -> FlowCoordinator
-//	              Outbox -> | -> Inbox ->                                |
-//	                        |             |                              |
-//	              Outbox -> | -> Inbox ->                                |
-//	                        |             |                              |
-//	              Outbox -> | -> Inbox ->                                |
+// |            Remote Node             |            Another Remote Node             |         Local Node
+// |                                    |                                            |
+// |             -> output -> Outbox -> | -> Inbox ->                                |
+// |            |                       |             |                              |
+// | Hash Router -> output -> Outbox -> | -> Inbox ->                                |
+// |            |                       |             |                              |
+// |             -> output -> Outbox -> | -> Inbox ->                                |
+// |                                    |             | -> Synchronizer -> Outbox -> | -> Inbox -> materializer -> FlowCoordinator
+// |                          Outbox -> | -> Inbox ->                                |
+// |                                    |             |                              |
+// |                          Outbox -> | -> Inbox ->                                |
+// |                                    |             |                              |
+// |                          Outbox -> | -> Inbox ->                                |
 //
 // Remote nodes are simulated by having separate contexts and separate outbox
 // registries.
@@ -158,10 +154,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 				rng, _ := randutil.NewTestRand()
 				var (
-					err             error
-					wg              sync.WaitGroup
-					typs            = []*types.T{types.Int}
-					hashRouterInput = coldatatestutils.NewRandomDataOp(
+					err                error
+					wg                 sync.WaitGroup
+					typs               = []*types.T{types.Int}
+					hashRouterInput, _ = coldatatestutils.NewRandomDataOp(
 						testAllocator,
 						rng,
 						coldatatestutils.RandomDataOpArgs{
