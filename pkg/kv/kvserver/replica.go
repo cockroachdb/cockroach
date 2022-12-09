@@ -1328,6 +1328,16 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.mu.state.Desc)
 		}
 	}
+	diskReplID, found, err := r.mu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	if err != nil {
+		log.Fatalf(ctx, "%s", err)
+	}
+	if !found {
+		log.Fatalf(ctx, "no replicaID persisted")
+	}
+	if diskReplID.ReplicaID != r.replicaID {
+		log.Fatalf(ctx, "disk replicaID %d does not match in-mem %d", diskReplID, r.replicaID)
+	}
 }
 
 // TODO(nvanbenschoten): move the following 5 methods to replica_send.go.
