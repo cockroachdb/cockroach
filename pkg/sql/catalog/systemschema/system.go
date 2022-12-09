@@ -287,8 +287,8 @@ CREATE TABLE system.role_members (
   "role"    STRING NOT NULL,
   "member"  STRING NOT NULL,
   "isAdmin" BOOL NOT NULL,
-  role_id   OID,
-  member_id OID,
+  role_id   OID NOT NULL,
+  member_id OID NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY ("role", "member"),
   INDEX ("role"),
   INDEX ("member"),
@@ -1631,8 +1631,8 @@ var (
 				{Name: "role", ID: 1, Type: types.String},
 				{Name: "member", ID: 2, Type: types.String},
 				{Name: "isAdmin", ID: 3, Type: types.Bool},
-				{Name: "role_id", ID: 4, Type: types.Oid, Nullable: true},
-				{Name: "member_id", ID: 5, Type: types.Oid, Nullable: true},
+				{Name: "role_id", ID: 4, Type: types.Oid},
+				{Name: "member_id", ID: 5, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{

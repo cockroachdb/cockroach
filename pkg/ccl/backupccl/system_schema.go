@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // clusterBackupInclusion is an enum that specifies whether a system table
@@ -242,6 +244,88 @@ func usersRestoreFunc(
 	return nil
 }
 
+func roleMembersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns) {
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	}
+
+	// It's enough to just check if role_id exists since member_id was added at
+	// the same time.
+	hasIDColumnsQuery := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'role_id')`, tempTableName)
+	row, err := execCfg.InternalExecutor.QueryRow(ctx, "has-id-columns", txn, hasIDColumnsQuery)
+	if err != nil {
+		return err
+	}
+	hasIDColumns := tree.MustBeDBool(row[0])
+	if hasIDColumns {
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
+
+	_, err = execCfg.InternalExecutor.Exec(ctx, systemTableName+"-data-deletion", txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	it, err := execCfg.InternalExecutor.QueryIteratorEx(ctx, systemTableName+"-query-all-rows",
+		txn, sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+
+		row := it.Cur()
+
+		userNames := map[string]tree.DString{
+			"role":   tree.MustBeDString(row[0]),
+			"member": tree.MustBeDString(row[1]),
+		}
+		isAdmin := tree.MustBeDBool(row[2])
+
+		ids := make(map[string]oid.Oid)
+		for _, col := range []string{"role", "member"} {
+			switch userName := userNames[col]; userName {
+			case username.RootUser:
+				ids[col] = username.RootUserID
+			case username.AdminRole:
+				ids[col] = username.AdminRoleID
+			default:
+				row, err := execCfg.InternalExecutor.QueryRow(ctx, "get-user-id", txn, `SELECT user_id FROM system.users WHERE username = $1`, userName)
+				if err != nil {
+					return err
+				}
+				ids[col] = tree.MustBeDOid(row[0]).Oid
+			}
+		}
+
+		restoreQuery := fmt.Sprintf(`INSERT INTO system.%s ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, $3, $4, $5)`, systemTableName)
+		if _, err := execCfg.InternalExecutor.Exec(ctx, systemTableName+"-data-insert", txn,
+			restoreQuery, userNames["role"], userNames["member"], isAdmin, ids["role"], ids["member"],
+		); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	return nil
+}
+
 func roleOptionsRestoreFunc(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -392,6 +476,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.RoleMembersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            roleMembersRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.RoleOptionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
