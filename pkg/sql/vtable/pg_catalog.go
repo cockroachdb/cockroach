@@ -508,7 +508,8 @@ CREATE TABLE pg_catalog.pg_namespace (
 	oid OID,
 	nspname NAME NOT NULL,
 	nspowner OID,
-	nspacl STRING[]
+	nspacl STRING[],
+	INDEX (oid)
 )`
 
 // PGCatalogOpclass describes the schema of the pg_catalog.pg_opclass table.

@@ -54,11 +54,6 @@ const (
 // and is to be used from Context.
 type DatabaseCatalog interface {
 
-	// ParseQualifiedTableName parses a SQL string of the form
-	// `[ database_name . ] [ schema_name . ] table_name`.
-	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
-	ParseQualifiedTableName(sql string) (*tree.TableName, error)
-
 	// ResolveTableName expands the given table name and
 	// makes it point to a valid object.
 	// If the database name is not given, it uses the search path to find it, and
@@ -69,12 +64,6 @@ type DatabaseCatalog interface {
 	// SchemaExists looks up the schema with the given name and determines
 	// whether it exists.
 	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)
-
-	// IsTableVisible checks if the table with the given ID belongs to a schema
-	// on the given sessiondata.SearchPath.
-	IsTableVisible(
-		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
-	) (isVisible bool, exists bool, err error)
 
 	// IsTypeVisible checks if the type with the given ID belongs to a schema
 	// on the given sessiondata.SearchPath.

@@ -53,9 +53,9 @@ exp,benchmark
 11,GrantRole/grant_1_role
 15,GrantRole/grant_2_roles
 3,ORMQueries/activerecord_type_introspection_query
-3,ORMQueries/django_table_introspection_1_table
-3,ORMQueries/django_table_introspection_4_tables
-3,ORMQueries/django_table_introspection_8_tables
+6,ORMQueries/django_table_introspection_1_table
+6,ORMQueries/django_table_introspection_4_tables
+6,ORMQueries/django_table_introspection_8_tables
 2,ORMQueries/has_column_privilege_using_attnum
 2,ORMQueries/has_column_privilege_using_column_name
 1,ORMQueries/has_schema_privilege_1
@@ -73,8 +73,8 @@ exp,benchmark
 4,ORMQueries/information_schema._pg_index_position
 3,ORMQueries/pg_attribute
 3,ORMQueries/pg_class
-9,ORMQueries/pg_is_other_temp_schema
-17,ORMQueries/pg_is_other_temp_schema_multiple_times
+7,ORMQueries/pg_is_other_temp_schema
+7,ORMQueries/pg_is_other_temp_schema_multiple_times
 4,ORMQueries/pg_my_temp_schema
 4,ORMQueries/pg_my_temp_schema_multiple_times
 4,ORMQueries/pg_namespace

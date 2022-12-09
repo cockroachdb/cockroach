@@ -14,7 +14,6 @@ go_library(
         "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
