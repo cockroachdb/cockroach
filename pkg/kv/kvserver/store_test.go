@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -521,6 +522,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 // deprecated; new tests should create replicas by splitting from a
 // properly-bootstrapped initial range.
 func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Replica {
+	ctx := context.Background()
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  rangeID,
 		StartKey: start,
@@ -532,9 +534,15 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		}},
 		NextReplicaID: 2,
 	}
-	r, err := newReplica(context.Background(), desc, s, 1)
+	const replicaID = 1
+	if err := stateloader.WriteInitialRangeState(
+		ctx, s.engine, *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+	); err != nil {
+		panic(err)
+	}
+	r, err := newReplica(ctx, desc, s, replicaID)
 	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		panic(err)
 	}
 	return r
 }
@@ -825,7 +833,10 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 		RangeID: newRangeID,
 	}
 
-	r, err := newReplica(ctx, desc, store, 1)
+	const replicaID = 1
+	require.NoError(t,
+		logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
+	r, err := newReplica(ctx, desc, store, replicaID)
 	if err != nil {
 		t.Fatal(err)
 	}
