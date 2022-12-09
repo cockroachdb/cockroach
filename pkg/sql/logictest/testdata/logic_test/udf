@@ -2622,3 +2622,16 @@ DROP FUNCTION f_test_exec_dropped;
 
 statement error pq: unknown function: f_test_exec_dropped\(\): function undefined
 SELECT f_test_exec_dropped(321);
+
+
+subtest regression_tests
+
+# Regression test for #93083. UDFs with empty bodies should execute successfully
+# and return NULL.
+statement ok
+CREATE FUNCTION f93083() RETURNS INT LANGUAGE SQL AS '';
+
+query I
+SELECT f93083()
+----
+NULL
