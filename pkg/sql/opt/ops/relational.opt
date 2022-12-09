@@ -1392,3 +1392,20 @@ define FakeRel {
 define FakeRelPrivate {
     Props RelPropsPtr
 }
+
+# IndexScan is relational operator that can read raw values form indexes directly,
+# it is only currently used to back a transformation from
+# crdb_internal.get_index_tuples to this operator. For this operator to be
+# used we need to know both the index and table upfront, and cannot use place
+# holder values.
+[Relational]
+define IndexScan {
+    _ IndexScanPrivate
+}
+
+[Private]
+define IndexScanPrivate {
+    Table TableID
+    Index IndexOrdinal
+    Cols ColList
+}

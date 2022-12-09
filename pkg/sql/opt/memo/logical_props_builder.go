@@ -2806,3 +2806,7 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 	isCompositeInsensitive, _ := check(e)
 	return !isCompositeInsensitive
 }
+
+func (b *logicalPropsBuilder) buildIndexScanProps(indexScan *IndexScanExpr, rel *props.Relational) {
+	b.buildBasicProps(indexScan, indexScan.Cols, rel)
+}

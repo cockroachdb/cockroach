@@ -293,3 +293,10 @@ var TenantColumnsWithReplication = ResultColumns{
 	{Name: "retained_time", Typ: types.Timestamp},
 	{Name: "replication_start_time", Typ: types.Timestamp},
 }
+
+// IndexScanColumns are the results for index scan selects
+var IndexScanColumns = ResultColumns{
+	{Name: "key", Typ: types.Bytes},
+	{Name: "value", Typ: types.Bytes},
+	{Name: "ts", Typ: types.String},
+}

@@ -341,6 +341,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ExportExpr:
 		ep, err = b.buildExport(t)
 
+	case *memo.IndexScanExpr:
+		ep, err = b.buildIndexScan(t)
+
 	default:
 		switch {
 		case opt.IsSetOp(e):

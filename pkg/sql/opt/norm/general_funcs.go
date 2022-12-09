@@ -1087,3 +1087,61 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
 }
+
+// MakeIndexScanFromZip takes a zip containing a call to
+// crdb_internal.scan and converts it into an
+// IndexScan expression, which can directly read from indexes.
+func (c *CustomFuncs) MakeIndexScanFromZip(exp memo.RelExpr, zip memo.ZipExpr) memo.RelExpr {
+	item := zip.Child(0).(*memo.ZipItem)
+	scanExpr := item.Fn.(*memo.FunctionExpr)
+	var tableIDVal opt.TableID
+	var indexIDVal cat.IndexOrdinal
+	functionExpr := scanExpr.Args.Child(0).(*memo.FunctionExpr)
+	if tableIDConstExpr, ok := functionExpr.Args.Child(0).(*memo.ConstExpr); ok {
+		tableIDVal = opt.TableID(*tableIDConstExpr.Value.(*tree.DInt))
+	} else {
+		panic(errors.AssertionFailedf("index scans can only be generated from constants"))
+	}
+	if indexIDConstExpr, ok := functionExpr.Args.Child(1).(*memo.ConstExpr); ok {
+		indexIDVal = cat.IndexOrdinal(*indexIDConstExpr.Value.(*tree.DInt))
+	} else {
+		panic(errors.AssertionFailedf("index scans can only be generated from constants"))
+	}
+	indexScan := c.mem.MemoizeIndexScan(&memo.IndexScanPrivate{
+		Index: indexIDVal,
+		Table: tableIDVal,
+		Cols:  item.Cols})
+	return indexScan
+}
+
+// IsIndexScanBuiltin determines if crdb_internal.scan
+// is executed by this operation, in a manner in which it can be
+// optimized into an index scan expression.
+func (c *CustomFuncs) IsIndexScanBuiltin(zip memo.ZipExpr) bool {
+	if zip.ChildCount() != 1 {
+		return false
+	}
+	item, ok := zip.Child(0).(*memo.ZipItem)
+	if !ok {
+		return false
+	}
+	functionExpr, ok := item.Fn.(*memo.FunctionExpr)
+	if !ok {
+		return false
+	}
+	if functionExpr.Name == "crdb_internal.scan" {
+		// We can only transform ones with constant values.
+		if len(functionExpr.Args) != 1 {
+			return false
+		}
+		indexSpanExpr, ok := functionExpr.Args.Child(0).(*memo.FunctionExpr)
+		if !ok {
+			return false
+		}
+		if indexSpanExpr.Name != "crdb_internal.index_span" || len(indexSpanExpr.Args) != 2 {
+			return false
+		}
+		return true
+	}
+	return false
+}

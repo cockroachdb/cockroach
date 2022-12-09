@@ -3081,7 +3081,7 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="crdb_internal.has_role_option"></a><code>crdb_internal.has_role_option(option: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the current user has the specified role option</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.index_span"></a><code>crdb_internal.index_span(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given index.</p>
-</span></td><td>Leakproof</td></tr>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.is_admin"></a><code>crdb_internal.is_admin() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Retrieves the current user’s admin status.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.is_at_least_version"></a><code>crdb_internal.is_at_least_version(version: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the cluster version is not older than the argument.</p>

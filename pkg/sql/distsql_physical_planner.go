@@ -498,6 +498,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return checkSupportForPlanNode(n.input)
 
+	case *indexScanNode:
+		return shouldDistribute, nil
+
 	case *invertedFilterNode:
 		return checkSupportForInvertedFilterNode(n)
 
@@ -3284,6 +3287,9 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(ctx, planCtx, n)
 
+	case *indexScanNode:
+		plan, err = dsp.createPlanForIndexScan(ctx, planCtx, n)
+
 	case *invertedFilterNode:
 		plan, err = dsp.createPlanForInvertedFilter(ctx, planCtx, n)
 
@@ -4495,4 +4501,44 @@ func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
 	for i := range plan.Processors {
 		plan.Processors[i].Spec.ProcessorID = int32(i)
 	}
+}
+
+// createPlanForIndexScan creates a physical plan for the index scan expression,
+// which will be distributed based on the spans of the indexes. Each partition
+// will have an execinfrapb.IndexReaderSpec responsible for the spans that
+// are local.
+func (dsp *DistSQLPlanner) createPlanForIndexScan(
+	ctx context.Context, planCtx *PlanningCtx, n *indexScanNode,
+) (*PhysicalPlan, error) {
+	startKey := planCtx.planner.execCfg.Codec.IndexPrefix(uint32(n.table.GetID()), n.indexID)
+	span := roachpb.Span{
+		Key:    startKey,
+		EndKey: startKey.PrefixEnd()}
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
+	if err != nil {
+		return nil, err
+	}
+	p := planCtx.NewPhysicalPlan()
+
+	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		ir := &execinfrapb.IndexReaderSpec{
+			Table:   *n.table.TableDesc(),
+			IndexId: n.indexID,
+		}
+		ir.Spans = sp.Spans
+		proc := physicalplan.Processor{
+			SQLInstanceID: sp.SQLInstanceID,
+			Spec: execinfrapb.ProcessorSpec{
+				Core:        execinfrapb.ProcessorCoreUnion{IndexReader: ir},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				ResultTypes: []*types.T{types.Bytes, types.Bytes, types.String},
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+	p.PlanToStreamColMap = []int{0, 1, 2}
+	p.ResultColumns = planColumns(n)
+	return p, nil
 }

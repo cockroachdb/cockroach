@@ -330,6 +330,7 @@ var nodeNames = [...]string{
 	valuesOp:               "", // This node does not have a fixed name.
 	windowOp:               "window",
 	zigzagJoinOp:           "zigzag join",
+	indexScanOp:            "index scan",
 }
 
 func (e *emitter) joinNodeName(algo string, joinType descpb.JoinType) string {
@@ -939,6 +940,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.subjectReplicas != tree.RelocateLease {
 			ob.Expr("from", a.fromStoreID, nil /* columns */)
 		}
+	case indexScanOp:
+		a := n.args.(*indexScanArgs)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /*suffix*/)
 
 	case simpleProjectOp,
 		serializingProjectOp,

@@ -535,6 +535,11 @@ func (s *ExportSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (s *IndexReaderSpec) summary() (string, []string) {
+	return "IndexReaderSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (s *BulkRowWriterSpec) summary() (string, []string) {
 	return "BulkRowWriterSpec", []string{}
 }

@@ -191,6 +191,9 @@ func getResultColumns(
 		}
 		return colinfo.ShowTraceColumns, nil
 
+	case indexScanOp:
+		return colinfo.IndexScanColumns, nil
+
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
 		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp,
 		createFunctionOp:

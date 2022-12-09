@@ -5534,8 +5534,10 @@ value if you rely on the HLC for accuracy.`,
 
 				return result, nil
 			},
-			Info:       "This function returns the span that contains the keys for the given index.",
-			Volatility: volatility.Leakproof,
+			Info: "This function returns the span that contains the keys for the given index.",
+			// Note: This is intentionally volatile, so that transformations can be
+			// used to optimize constant cases into DistSQL, when used with crdb_internal.scan.
+			Volatility: volatility.Volatile,
 		},
 	),
 	// Return a pretty key for a given raw key, skipping the specified number of

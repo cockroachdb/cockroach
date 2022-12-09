@@ -1,0 +1,42 @@
+# LogicTest: fakedist
+
+# This family of test validates an optimization for scanning indexes via
+# crdb_internal.scan which will modify these queries to use DistSQL processing.
+subtest query-indexes
+
+statement ok
+CREATE TABLE q1(val int primary key, n varchar(25));
+
+let $q_id
+SELECT id FROM system.namespace WHERE name = 'q1';
+
+query TTT
+SELECT * FROM crdb_internal.scan(crdb_internal.index_span($q_id,1));
+----
+
+statement ok
+INSERT INTO q1 VALUES (1, 'cat'),(2, 'cow'),(3, 'mouse'),(4, 'lion'),(5, 'tiger'),(6, 'wolf');
+
+statement ok
+CREATE INDEX i1 on q1(val, n)
+
+query I
+SELECT count(*) FROM crdb_internal.scan(crdb_internal.index_span($q_id,1));
+----
+6
+
+query I
+SELECT count(*)  FROM crdb_internal.scan(crdb_internal.index_span($q_id,2));
+----
+6
+
+query T
+EXPLAIN SELECT count(*)  FROM crdb_internal.scan(crdb_internal.index_span($q_id,2));
+----
+ distribution: full
+            vectorized: false
+            ·
+            • group (scalar)
+            │
+            └── • index scan
+                  table: q1@i1

@@ -919,6 +919,13 @@ func TestLogic_index_join(
 	runLogicTest(t, "index_join")
 }
 
+func TestLogic_index_scan_opt(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "index_scan_opt")
+}
+
 func TestLogic_inet(
 	t *testing.T,
 ) {

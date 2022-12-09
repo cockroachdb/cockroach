@@ -295,3 +295,11 @@ $input
     (FoldJSONFieldAccess $projections $jsonCols $col $input)
     $passthrough
 )
+
+# ConvertProjectionSetGetIndexTuplesToIndexScan converts a project set,
+# containing an invocation to crdb_internal.index_get_tuples directly
+# into an index scan expression that supports distributed execution.
+[ConvertProjectionSetGetIndexTuplesToIndexScan, Normalize]
+(ProjectSet $input:* $zip:* & (IsIndexScanBuiltin $zip))
+=>
+(MakeIndexScanFromZip $input $zip)

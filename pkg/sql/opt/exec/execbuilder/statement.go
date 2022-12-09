@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
@@ -406,4 +407,29 @@ func planWithColumns(node exec.Node, cols opt.ColList) execPlan {
 		ep.outputCols.Set(int(c), i)
 	}
 	return ep
+}
+
+// buildIndexScan generates an execution plan from an index scan expression.
+func (b *Builder) buildIndexScan(indexScan *memo.IndexScanExpr) (execPlan, error) {
+	// Resolve the table and index based on IDs.
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.Flags{AvoidDescriptorCaches: true}, cat.StableID(indexScan.Table))
+	if err != nil {
+		return execPlan{}, err
+	}
+	table := ds.(cat.Table)
+	var index cat.Index
+	for idx := 0; idx < table.IndexCount(); idx++ {
+		if table.Index(idx).ID() == cat.StableID(indexScan.Index) {
+			index = table.Index(idx)
+		}
+	}
+	if index == nil {
+		return execPlan{}, errors.AssertionFailedf("unable to resolve index")
+	}
+	// Construct a scan operator based on this information.
+	node, err := b.factory.ConstructIndexScan(table, index)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return planWithColumns(node, indexScan.Cols), nil
 }

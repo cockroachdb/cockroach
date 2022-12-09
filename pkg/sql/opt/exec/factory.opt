@@ -777,3 +777,8 @@ define LiteralValues {
 define ShowCompletions {
     Command *tree.ShowCompletions
 }
+
+define IndexScan {
+    Table cat.Table
+    Index cat.Index
+}

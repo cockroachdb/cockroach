@@ -376,6 +376,9 @@ func NewProcessor(
 		}
 		return newHashGroupJoiner(ctx, flowCtx, processorID, core.HashGroupJoiner, inputs[0], inputs[1], post, outputs[0])
 	}
+	if core.IndexReader != nil {
+		return newIndexScan(ctx, flowCtx, processorID, *core.IndexReader, post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
