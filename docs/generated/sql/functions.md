@@ -2781,6 +2781,10 @@ The output can be used to recreate a database.’</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="parse_date"></a><code>parse_date(val: <a href="string.html">string</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Parses a date assuming it is in MDY format.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="parse_ident"></a><code>parse_ident(qualified_identifier: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Splits qualified_identifier into an array of identifiers, removing any quoting of individual identifiers. Extra characters after the last identifier are considered an error</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="parse_ident"></a><code>parse_ident(qualified_identifier: <a href="string.html">string</a>, strict: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Splits <code>qualified_identifier</code> into an array of identifiers, removing any quoting of individual identifiers. If <code>strict</code> is false, then extra characters after the last identifier are ignored.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="parse_interval"></a><code>parse_interval(string: <a href="string.html">string</a>, style: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Convert a string to an interval using the given IntervalStyle.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="parse_interval"></a><code>parse_interval(val: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Convert a string to an interval assuming the Postgres IntervalStyle.</p>
