@@ -141,6 +141,10 @@ func (m mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 	return m.desc, nil
 }
 
+func (m mockNodeStore) GetNodeDescriptorCount() int {
+	return 1
+}
+
 func (m mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
 	return nil, errorutil.NewStoreNotFoundError(id)
 }

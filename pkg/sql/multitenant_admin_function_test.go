@@ -380,7 +380,6 @@ func TestTruncateTable(t *testing.T) {
 			true,  /* allowSplitAndScatter */
 			false, /* skipSQLSystemTenantCheck */
 		)
-		// TODO(ewall): Retain splits after `TRUNCATE` for secondary tenants.
-		execQueries(db, "secondary", [][]string{{"", ""}})
+		execQueries(db, "secondary", [][]string{{"", "/104/2/1"}, {"/104/2/1", ""}})
 	}()
 }

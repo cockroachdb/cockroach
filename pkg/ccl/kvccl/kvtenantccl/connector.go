@@ -340,6 +340,13 @@ func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	return desc, nil
 }
 
+// GetNodeDescriptorCount implements the kvcoord.NodeDescStore interface.
+func (c *Connector) GetNodeDescriptorCount() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.mu.nodeDescs)
+}
+
 // GetStoreDescriptor implements the kvcoord.NodeDescStore interface.
 func (c *Connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
 	c.mu.RLock()
