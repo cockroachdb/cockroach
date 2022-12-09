@@ -5997,8 +5997,7 @@ func mvccExportToWriter(
 	paginated := opts.TargetSize > 0
 
 	hasElasticCPULimiter := elasticCPUHandle != nil
-	hasTimeBasedResourceLimiter := opts.ResourceLimiter != nil
-	trackKeyBoundary := paginated || hasTimeBasedResourceLimiter || hasElasticCPULimiter
+	trackKeyBoundary := paginated || hasElasticCPULimiter
 	firstIteration := true
 	skipTombstones := !opts.ExportAllRevisions && opts.StartTS.IsEmpty()
 
@@ -6062,30 +6061,6 @@ func mvccExportToWriter(
 			// of starvation. Otherwise operations could spin indefinitely.
 			firstIteration = false
 		} else {
-			// TODO(irfansharif): Remove this time-based resource limiter once
-			// enabling elastic CPU limiting by default. There needs to be a
-			// compelling reason to need two mechanisms.
-			if opts.ResourceLimiter != nil {
-				// In happy day case we want to only stop at key boundaries as it allows callers to use
-				// produced sst's directly. But if we can't find key boundary within reasonable number of
-				// iterations we would split mid key.
-				// To achieve that we use soft and hard thresholds in limiter. Once soft limit is reached
-				// we would start searching for key boundary and return as soon as it is reached. If we
-				// can't find it before hard limit is reached and caller requested mid key stop we would
-				// immediately return.
-				limit := opts.ResourceLimiter.IsExhausted()
-				// We can stop at key once any threshold is reached or force stop at hard limit if midkey
-				// split is allowed.
-				if limit >= ResourceLimitReachedSoft && isNewKey || limit == ResourceLimitReachedHard && opts.StopMidKey {
-					// Reached iteration limit, stop with resume span
-					resumeKey = unsafeKey.Clone()
-					if isNewKey {
-						resumeKey.Timestamp = hlc.Timestamp{}
-					}
-					break
-				}
-			}
-
 			// Check if we're over our allotted CPU time + on a key boundary (we
 			// prefer callers being able to use SSTs directly). Going over limit is
 			// accounted for in admission control by penalizing the subsequent
@@ -6345,10 +6320,6 @@ type MVCCExportOptions struct {
 	// cause problems with multiplexed iteration using NewSSTIterator(), nor when
 	// ingesting the SSTs via `AddSSTable`.
 	StopMidKey bool
-	// ResourceLimiter limits how long iterator could run until it exhausts allocated
-	// resources. Export queries limiter in its iteration loop to break out once
-	// resources are exhausted.
-	ResourceLimiter ResourceLimiter
 	// FingerprintOptions controls how fingerprints are generated
 	// when using MVCCExportFingerprint.
 	FingerprintOptions MVCCExportFingerprintOptions
