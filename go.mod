@@ -158,7 +158,7 @@ require (
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.15.11
 	github.com/klauspost/pgzip v1.2.5
-	github.com/knz/bubbline v0.0.0-20221202175954-247a3055d876
+	github.com/knz/bubbline v0.0.0-20221209194912-dae6b2c4de0d
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0
@@ -249,7 +249,7 @@ require (
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
-	github.com/charmbracelet/bubbletea v0.22.2-0.20221007125427-0e76ba142aa1 // indirect
+	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
