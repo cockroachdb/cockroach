@@ -9468,19 +9468,19 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 
 		// Role 'app_role' and user 'app' will be added, and 'app' is granted with 'app_role'
 		// User test will remain untouched with no role granted
-		sqlDBRestore.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
-			{"admin", "", "true"},
-			{"app", "NULL", "false"},
-			{"app_role", "NULL", "true"},
-			{"root", "", "false"},
-			{"test", "NULL", "false"},
-			{"test_role", "NULL", "true"},
+		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"app", "NULL", "false", "101"},
+			{"app_role", "NULL", "true", "102"},
+			{"root", "", "false", "1"},
+			{"test", "NULL", "false", "100"},
+			{"test_role", "NULL", "true", "103"},
 		})
 		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
-			{"admin", "app", "false"},
-			{"admin", "root", "true"},
-			{"app_role", "app", "false"},
-			{"app_role", "test_role", "false"},
+			{"admin", "app", "false", "NULL", "NULL"},
+			{"admin", "root", "true", "2", "1"},
+			{"app_role", "app", "false", "NULL", "NULL"},
+			{"app_role", "test_role", "false", "NULL", "NULL"},
 		})
 		sqlDBRestore.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
@@ -9501,10 +9501,10 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer cleanupEmptyCluster1()
 	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
 		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
-		sqlDBRestore1.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
-			{"admin", "root", "true"},
+		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "root", "true", "2", "1"},
 		})
-		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\", \"user_id\" FROM system.users", [][]string{
+		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
 			{"admin", "", "true", "2"},
 			{"app", "NULL", "false", "100"},
 			{"app_role", "NULL", "true", "101"},
@@ -9528,10 +9528,10 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 		// allocated properly in the restore.
 		sqlDBRestore2.Exec(t, "CREATE USER testuser")
 		sqlDBRestore2.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
-		sqlDBRestore2.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
-			{"admin", "root", "true"},
+		sqlDBRestore2.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "root", "true", "2", "1"},
 		})
-		sqlDBRestore2.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\", \"user_id\" FROM system.users", [][]string{
+		sqlDBRestore2.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
 			{"admin", "", "true", "2"},
 			{"app", "NULL", "false", "101"},
 			{"app_role", "NULL", "true", "102"},
