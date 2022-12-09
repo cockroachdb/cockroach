@@ -1217,16 +1217,26 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
-				isVisible, exists, err := evalCtx.Planner.IsTableVisible(
-					ctx, evalCtx.SessionData().Database, evalCtx.SessionData().SearchPath, oidArg.Oid,
+				row, err := evalCtx.Planner.QueryRowEx(
+					ctx, "pg_table_is_visible",
+					sessiondata.NoSessionDataOverride,
+					"SELECT n.nspname from pg_class c INNER LOOKUP JOIN pg_namespace n ON c.relnamespace = n.oid WHERE c.oid=$1 LIMIT 1",
+					oidArg.Oid,
 				)
 				if err != nil {
 					return nil, err
 				}
-				if !exists {
+				if row == nil {
 					return tree.DNull, nil
 				}
-				return tree.MakeDBool(tree.DBool(isVisible)), nil
+				foundSchemaName := string(tree.MustBeDString(row[0]))
+				iter := evalCtx.SessionData().SearchPath.Iter()
+				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+					if foundSchemaName == scName {
+						return tree.DBoolTrue, nil
+					}
+				}
+				return tree.DBoolFalse, nil
 			},
 			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,

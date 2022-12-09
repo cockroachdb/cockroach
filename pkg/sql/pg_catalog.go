@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -2047,12 +2049,13 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 	},
 }
 
+var adminOID = makeOidHasher().UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
+
 var pgCatalogNamespaceTable = virtualSchemaTable{
-	comment: `available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
+	comment: `available namespaces
 https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 	schema: vtable.PGCatalogNamespace,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
@@ -2065,10 +2068,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						}
 					} else if sc.SchemaKind() == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
-						//
-						// TODO(ajwerner): The public schema effectively carries the privileges
-						// of the database so consider using the database's owner for public.
-						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
+						ownerOID = adminOID
 					}
 					return addRow(
 						schemaOid(sc.GetID()),         // oid
@@ -2078,6 +2078,64 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					)
 				})
 			})
+	},
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (bool, error) {
+				coid := tree.MustBeDOid(unwrappedConstraint)
+				ooid := coid.Oid
+				sc, ok, err := func() (_ catalog.SchemaDescriptor, found bool, _ error) {
+					// The system database still does not have a physical public schema.
+					if !db.HasPublicSchemaWithDescriptor() && ooid == keys.SystemPublicSchemaID {
+						return schemadesc.GetPublicSchema(), true, nil
+					}
+					if sc, ok := schemadesc.GetVirtualSchemaByID(descpb.ID(ooid)); ok {
+						return sc, true, nil
+					}
+					if sc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.Txn(), descpb.ID(ooid), tree.SchemaLookupFlags{Required: true},
+					); err == nil {
+						return sc, true, nil
+					} else if !sqlerrors.IsUndefinedSchemaError(err) {
+						return nil, false, err
+					}
+					// Fallback to looking for temporary schemas.
+					schemaNames, err := getSchemaNames(ctx, p, db)
+					if err != nil {
+						return nil, false, err
+					}
+					if scName, ok := schemaNames[descpb.ID(ooid)]; ok {
+						return schemadesc.NewTemporarySchema(scName, descpb.ID(ooid), db.GetID()), true, nil
+					}
+					return nil, false, nil
+				}()
+				if !ok || err != nil {
+					return false, err
+				}
+				ownerOID := tree.DNull
+				if sc.SchemaKind() == catalog.SchemaUserDefined {
+					var err error
+					ownerOID, err = getOwnerOID(ctx, p, sc)
+					if err != nil {
+						return false, err
+					}
+				} else if sc.SchemaKind() == catalog.SchemaPublic {
+					// admin is the owner of the public schema.
+					ownerOID = adminOID
+				}
+				if err := addRow(
+					schemaOid(sc.GetID()),         // oid
+					tree.NewDString(sc.GetName()), // nspname
+					ownerOID,                      // nspowner
+					tree.DNull,                    // nspacl
+				); err != nil {
+					return false, err
+				}
+				return true, nil
+			},
+		},
 	},
 }
 

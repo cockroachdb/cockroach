@@ -589,15 +589,6 @@ func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
-// ParseQualifiedTableName implements the eval.DatabaseCatalog interface.
-// This exists to get around a circular dependency between sql/sem/tree and
-// sql/parser. sql/parser depends on tree to make objects, so tree cannot import
-// ParseQualifiedTableName even though some builtins need that function.
-// TODO(jordan): remove this once builtins can be moved outside of sql/sem/tree.
-func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
-	return parser.ParseQualifiedTableName(sql)
-}
-
 // ResolveTableName implements the eval.DatabaseCatalog interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)

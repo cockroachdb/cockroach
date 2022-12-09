@@ -12,6 +12,7 @@ package eval
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -178,17 +181,73 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		if err != nil {
 			return nil, err
 		}
-		id, err := evalCtx.Planner.ResolveTableName(ctx, &tn)
+		if id, err := evalCtx.Planner.ResolveTableName(ctx, &tn); err == nil {
+			// tree.ID is a uint32, so this type conversion is safe.
+			return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
+		} else if pgerror.GetPGCode(err) != pgcode.UndefinedTable {
+			return nil, err
+		}
+		// If the above resulted in an UndefinedTable error, then we can try
+		// searching for an index with this name,
+		oidRes, err := indexNameToOID(ctx, evalCtx, tn)
 		if err != nil {
 			return nil, err
 		}
-		// tree.ID is a uint32, so this type conversion is safe.
-		return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
+		return tree.NewDOidWithTypeAndName(oidRes, t, tn.ObjectName.String()), nil
 
 	default:
 		d, _ /* errSafeToIgnore */, err := evalCtx.Planner.ResolveOIDFromString(ctx, t, tree.NewDString(s))
 		return d, err
 	}
+}
+
+// indexNameToOID finds the OID for the given index. If the name is qualified,
+// then the index must belong to that schema. Otherwise, the schemas are
+// searched in order of the search_path.
+func indexNameToOID(ctx context.Context, evalCtx *Context, tn tree.TableName) (oid.Oid, error) {
+	query := `SELECT c.oid FROM %[1]spg_catalog.pg_class AS c
+             JOIN %[1]spg_catalog.pg_namespace AS n ON c.relnamespace = n.oid
+             WHERE c.relname = $1
+             AND n.nspname = $2
+             LIMIT 1`
+	args := []interface{}{tn.Object(), tn.Schema()}
+	if !tn.ExplicitSchema {
+		// If there is no explicit schema, then we need a different query that
+		// looks for the object name for each schema in the search_path. Choose
+		// the first match in the order of the search_path array. There is an
+		// unused $2 placeholder in the query so that the call to QueryRow can
+		// be consolidated.
+		query = `WITH
+			  current_schemas AS (
+		      SELECT * FROM unnest(current_schemas(true)) WITH ORDINALITY AS scname
+		    )
+			SELECT c.oid
+			FROM %[1]spg_catalog.pg_class AS c
+		  JOIN %[1]spg_catalog.pg_namespace AS n ON c.relnamespace = n.oid
+		  JOIN current_schemas AS cs ON cs.scname = n.nspname
+			WHERE c.relname = $1
+			ORDER BY cs.ordinality ASC
+			LIMIT 1`
+		args = []interface{}{tn.Object()}
+	}
+	catalogPrefix := ""
+	if tn.ExplicitCatalog {
+		catalogPrefix = tn.CatalogName.String() + "."
+	}
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx,
+		"regclass-cast",
+		sessiondata.NoSessionDataOverride,
+		fmt.Sprintf(query, catalogPrefix),
+		args...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, sqlerrors.NewUndefinedRelationError(&tn)
+	}
+	return tree.MustBeDOid(row[0]).Oid, nil
 }
 
 // castStringToRegClassTableName normalizes a TableName from a string.
