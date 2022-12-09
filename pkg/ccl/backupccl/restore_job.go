@@ -293,7 +293,8 @@ func restore(
 		dataToRestore.getSpans(),
 		job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint,
 		on231,
-		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV))
+		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
+		endTime)
 	if err != nil {
 		return emptyRowCount, err
 	}
@@ -378,12 +379,13 @@ func restore(
 	generativeCheckpointLoop := func(ctx context.Context) error {
 		defer close(requestFinishedCh)
 		for progress := range progCh {
-			if err := progressTracker.ingestUpdate(ctx, progress); err != nil {
+			if spanDone, err := progressTracker.ingestUpdate(ctx, progress); err != nil {
 				return err
+			} else if spanDone {
+				// Signal that the processor has finished importing a span, to update job
+				// progress.
+				requestFinishedCh <- struct{}{}
 			}
-			// Signal that the processor has finished importing a span, to update job
-			// progress.
-			requestFinishedCh <- struct{}{}
 		}
 		return nil
 	}
