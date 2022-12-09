@@ -25,6 +25,8 @@ const (
 	SplitManual = roachpb.AdminSplitRequest_ARBITRARY
 	// SplitManualTest is a split caused by a manual action test.
 	SplitManualTest = roachpb.AdminSplitRequest_INGESTION
+	// SplitTruncate is a split caused by a truncate.
+	SplitTruncate = roachpb.AdminSplitRequest_INGESTION
 
 	// UnsplitManual is a split caused by a manual action.
 	UnsplitManual = roachpb.AdminUnsplitRequest_ARBITRARY

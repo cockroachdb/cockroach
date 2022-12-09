@@ -19,6 +19,10 @@ type NodeDescStore interface {
 	// GetNodeDescriptor looks up the node descriptor by node ID.
 	// It returns an error if the node is not known by the cache.
 	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	// GetNodeDescriptorCount get the number of node descriptors in the cache.
+	// TODO(ewall): Replace this function with a new KV endpoint for 23.1.
+	//  See https://github.com/cockroachdb/cockroach/issues/93549.
+	GetNodeDescriptorCount() int
 	// GetStoreDescriptor looks up the store descriptor by store ID.
 	// It returns an error if the store is not known by the cache.
 	GetStoreDescriptor(roachpb.StoreID) (*roachpb.StoreDescriptor, error)
