@@ -217,6 +217,13 @@ func TestExecBuild_explain_analyze_plans(
 	runExecBuildLogicTest(t, "explain_analyze_plans")
 }
 
+func TestExecBuild_index_scan_opt(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "index_scan_opt")
+}
+
 func TestExecBuild_inverted_filter_geospatial_dist(
 	t *testing.T,
 ) {

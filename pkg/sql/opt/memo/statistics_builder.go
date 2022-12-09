@@ -453,6 +453,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		opt.UpsertDistinctOnOp, opt.EnsureUpsertDistinctOnOp:
 		return sb.colStatGroupBy(colSet, e)
 
+	case opt.KvScanOp:
+		return sb.colStatKvScan(colSet, e.(*KvScanExpr))
+
 	case opt.LimitOp:
 		return sb.colStatLimit(colSet, e.(*LimitExpr))
 
@@ -2648,6 +2651,60 @@ func (sb *statisticsBuilder) colStatMutation(
 	colStat.NullCount = inColStat.NullCount
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
+}
+
+// +-----------------+
+// | KV Scan				 |
+// +-----------------+
+
+func (sb *statisticsBuilder) buildKvScan(kvScanExpr *KvScanExpr, relProps *props.Relational) {
+	// If the table ID is not known a single table is not being scanned.
+	if kvScanExpr.Table == 0 {
+		sb.buildUnknown(relProps)
+		return
+	}
+	tbl := sb.md.Table(kvScanExpr.Table)
+	s := relProps.Statistics()
+	if tbl.StatisticCount() > 0 {
+		s.Available = true
+		tblStats := tbl.Statistic(0)
+		indexesToScan := uint64(tbl.IndexCount())
+		if kvScanExpr.Index != 0 {
+			indexesToScan = 1
+		}
+		// Estimate the row count as the tables times the number of
+		// indexes we are trying to read.
+		s.RowCount = float64(tblStats.RowCount() * indexesToScan)
+	} else {
+		s.Available = false
+		s.RowCount = unknownRowCount
+	}
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatKvScan(
+	colSet opt.ColSet, kvScanExpr *KvScanExpr,
+) *props.ColumnStatistic {
+	if kvScanExpr.Table == 0 {
+		return sb.colStatUnknown(colSet, kvScanExpr.Relational())
+	}
+	tbl := sb.md.Table(kvScanExpr.Table)
+	s := kvScanExpr.Relational().Statistics()
+	cs, _ := s.ColStats.Add(colSet)
+	if tbl.StatisticCount() > 0 {
+		tblStats := tbl.Statistic(0)
+		indexesToScan := uint64(tbl.IndexCount())
+		if kvScanExpr.Index != 0 {
+			indexesToScan = 1
+		}
+		// Estimate the row count as the tables times the number of
+		// indexes we are trying to read.
+		cs.DistinctCount = float64(tblStats.RowCount() * indexesToScan)
+	} else {
+		cs.DistinctCount = unknownRowCount
+	}
+	sb.finalizeFromRowCountAndDistinctCounts(cs, s)
+	return cs
 }
 
 // +-----------------+

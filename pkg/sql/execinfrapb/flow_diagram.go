@@ -541,6 +541,13 @@ func (s *ExportSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (s *KVScanReaderSpec) summary() (string, []string) {
+	return "KVScanReaderSpec", []string{
+		fmt.Sprintf("Spans: %v", s.Spans),
+	}
+}
+
+// summary implements the diagramCellType interface.
 func (s *BulkRowWriterSpec) summary() (string, []string) {
 	return "BulkRowWriterSpec", []string{}
 }

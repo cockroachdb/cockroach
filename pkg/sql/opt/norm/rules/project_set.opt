@@ -25,3 +25,11 @@
     []
     (EmptyJoinPrivate)
 )
+
+# ConvertProjectionSetRawScanToKvScan converts a project set,
+# containing an invocation to crdb_internal.scan directly
+# into an index scan expression that supports distributed execution.
+[ConvertProjectionSetRawScanToKvScan, Normalize]
+(ProjectSet $input:* $zip:* & (IsKvScanBuiltin $zip))
+=>
+(MakeKvScanFromZip $input $zip)

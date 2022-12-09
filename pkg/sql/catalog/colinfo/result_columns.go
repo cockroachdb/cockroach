@@ -334,3 +334,11 @@ const RangesExtraRenders = `
 	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
 	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
 `
+
+// KvScanColumns are the results for KV scans, which will have
+// a fixed output.
+var KvScanColumns = ResultColumns{
+	{Name: "key", Typ: types.Bytes},
+	{Name: "value", Typ: types.Bytes},
+	{Name: "ts", Typ: types.String},
+}
