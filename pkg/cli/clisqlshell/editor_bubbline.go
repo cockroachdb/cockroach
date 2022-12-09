@@ -17,7 +17,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 	"github.com/knz/bubbline"
+	"github.com/knz/bubbline/editline"
 )
 
 // bubblineReader implements the editor interface.
@@ -44,6 +47,12 @@ func (b *bubblineReader) init(
 	b.ins.CheckInputComplete = b.checkInputComplete
 	b.ins.SetExternalEditorEnabled(true, "sql")
 	b.ins.NextPrompt = "-> "
+
+	// We override the style because at this time we don't know how to
+	// choose a color theme that works on all our user's terminals.
+	prevSiStyle := b.ins.FocusedStyle.SearchInput
+	b.ins.FocusedStyle = editline.Style{SearchInput: prevSiStyle}
+	b.ins.BlurredStyle = editline.Style{}
 
 	// We override the cursor style (default is a blinking cursor) both
 	// for backward-compatibility with the libedit-based editor, because
@@ -116,6 +125,14 @@ func (b *bubblineReader) getLine() (string, error) {
 		// There was no newline at the end of the input
 		// (e.g. Ctrl+C was entered). Force one.
 		fmt.Fprintln(b.wout)
+	}
+	if errors.Is(err, bubbline.ErrTerminated) {
+		// Bubbline returns this go error when it sees SIGTERM. Convert it
+		// back into a signal, so that the process exit code matches.
+		if err := sysutil.TerminateSelf(); err != nil {
+			return l, err
+		}
+		select {}
 	}
 	return l, err
 }

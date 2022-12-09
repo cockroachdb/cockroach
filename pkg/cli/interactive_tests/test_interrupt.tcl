@@ -119,3 +119,17 @@ send "exit 0\r"
 eexpect eof
 
 stop_server $argv
+
+# Regression test for #92943.
+start_test "Check that SIGTERM sent to an interactive shell terminates the shell."
+
+spawn $argv demo --empty --pid-file=demo_pid
+eexpect "Welcome"
+eexpect root@
+eexpect "defaultdb>"
+
+system "kill -TERM `cat demo_pid`"
+
+eexpect eof
+
+end_test
