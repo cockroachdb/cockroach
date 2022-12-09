@@ -2641,6 +2641,19 @@ subtest variadic
 statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
 CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
 
+
+subtest regression_tests
+
+# Regression test for #93083. UDFs with empty bodies should execute successfully
+# and return NULL.
+statement ok
+CREATE FUNCTION f93083() RETURNS INT LANGUAGE SQL AS '';
+
+query I
+SELECT f93083()
+----
+NULL
+
 # Regression test for #93314
 subtest regression_93314
 
@@ -2686,8 +2699,8 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100250  f_93314        105  1546506610  14  false  false  false  v  0  100249  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100252  f_93314_alias  105  1546506610  14  false  false  false  v  0  100251  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100251  f_93314        105  1546506610  14  false  false  false  v  0  100250  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100253  f_93314_alias  105  1546506610  14  false  false  false  v  0  100252  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
 
 onlyif config local
 query T
