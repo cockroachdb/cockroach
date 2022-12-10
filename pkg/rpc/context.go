@@ -365,8 +365,9 @@ type Context struct {
 	RemoteClocks *RemoteClockMonitor
 	MasterCtx    context.Context
 
-	heartbeatTimeout time.Duration
-	HeartbeatCB      func()
+	heartbeatInterval time.Duration
+	heartbeatTimeout  time.Duration
+	HeartbeatCB       func()
 
 	rpcCompression bool
 
@@ -571,7 +572,8 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		rpcCompression:      enableRPCCompression,
 		MasterCtx:           masterCtx,
 		metrics:             makeMetrics(),
-		heartbeatTimeout:    opts.Config.RPCHeartbeatIntervalAndTimeout,
+		heartbeatInterval:   opts.Config.RPCHeartbeatInterval,
+		heartbeatTimeout:    opts.Config.RPCHeartbeatTimeout,
 		logClosingConnEvery: log.Every(time.Second),
 	}
 
@@ -579,7 +581,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// CLI commands are exempted.
 	if !opts.ClientOnly {
 		rpcCtx.RemoteClocks = newRemoteClockMonitor(
-			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatIntervalAndTimeout, opts.Config.HistogramWindowInterval())
+			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatTimeout, opts.Config.HistogramWindowInterval())
 	}
 
 	if id := opts.Knobs.StorageClusterID; id != nil {
@@ -2193,7 +2195,7 @@ func (rpcCtx *Context) runHeartbeat(
 			})
 		}
 
-		heartbeatTimer.Reset(rpcCtx.Config.RPCHeartbeatIntervalAndTimeout)
+		heartbeatTimer.Reset(rpcCtx.heartbeatInterval)
 	}
 }
 

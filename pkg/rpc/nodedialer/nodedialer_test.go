@@ -462,7 +462,8 @@ func newTestContext(
 ) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
-	cfg.RPCHeartbeatIntervalAndTimeout = 100 * time.Millisecond
+	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
+	cfg.RPCHeartbeatTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID:  roachpb.SystemTenantID,
