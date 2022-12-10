@@ -368,6 +368,13 @@ func TestJSONErrors(t *testing.T) {
 
 		testCase(`{"a":["b","c"]}]`, trailingChars, useStdGoJSON),
 		testCase(`{"a":["b","c"]}]`, trailingChars, useFastJSONParser),
+
+		testCase(`\u`, `unable to decode JSON: invalid character .* looking for beginning of value`, useStdGoJSON),
+		testCase(`\u`, `invalid JSON token`, useFastJSONParser),
+		testCase(`\u1`, `unable to decode JSON: invalid character .* looking for beginning of value`, useStdGoJSON),
+		testCase(`\u1`, `invalid JSON token`, useFastJSONParser),
+		testCase(`\u111z`, `unable to decode JSON: invalid character .* looking for beginning of value`, useStdGoJSON),
+		testCase(`\u111z`, `invalid JSON token`, useFastJSONParser),
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", tc.implName, tc.input), func(t *testing.T) {
