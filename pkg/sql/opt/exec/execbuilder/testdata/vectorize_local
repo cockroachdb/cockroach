@@ -107,50 +107,40 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U9Fq1EAUffcrL
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 ----
-distribute
+project
  ├── columns: a:1
  ├── stats: [rows=10]
- ├── cost: 1121.849
+ ├── cost: 1129.989
  ├── distribution: test
- ├── input distribution:
  ├── prune: (1)
- └── project
-      ├── columns: c.a:1
-      ├── stats: [rows=10]
-      ├── cost: 1121.819
-      ├── prune: (1)
-      └── inner-join (merge)
-           ├── columns: c.a:1 d.b:8
-           ├── flags: force merge join
-           ├── left ordering: +1
-           ├── right ordering: +8
-           ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
-           ├── cost: 1121.699
-           ├── fd: (1)==(8), (8)==(1)
-           ├── sort
-           │    ├── columns: c.a:1
-           │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-           │    ├── cost: 25.95
-           │    ├── ordering: +1
-           │    ├── prune: (1)
-           │    ├── interesting orderings: (+1)
-           │    ├── unfiltered-cols: (1-6)
-           │    └── scan c@sec
-           │         ├── columns: c.a:1
-           │         ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-           │         ├── cost: 25.9
-           │         ├── prune: (1)
-           │         ├── interesting orderings: (+1)
-           │         └── unfiltered-cols: (1-6)
-           ├── scan d
-           │    ├── columns: d.b:8
-           │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
-           │    ├── cost: 1084.62
-           │    ├── ordering: +8
-           │    ├── prune: (8)
-           │    ├── interesting orderings: (+8)
-           │    └── unfiltered-cols: (7-10)
-           └── filters (true)
+ └── inner-join (merge)
+      ├── columns: c.a:1 d.b:8
+      ├── flags: force merge join
+      ├── left ordering: +1
+      ├── right ordering: +8
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+      ├── cost: 1129.869
+      ├── fd: (1)==(8), (8)==(1)
+      ├── distribution: test
+      ├── scan c
+      │    ├── columns: c.a:1
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      │    ├── cost: 30.12
+      │    ├── ordering: +1
+      │    ├── distribution: test
+      │    ├── prune: (1)
+      │    ├── interesting orderings: (+1)
+      │    └── unfiltered-cols: (1-6)
+      ├── scan d
+      │    ├── columns: d.b:8
+      │    ├── stats: [rows=1000, distinct(8)=100, null(8)=0]
+      │    ├── cost: 1088.62
+      │    ├── ordering: +8
+      │    ├── distribution: test
+      │    ├── prune: (8)
+      │    ├── interesting orderings: (+8)
+      │    └── unfiltered-cols: (7-10)
+      └── filters (true)
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -172,28 +162,19 @@ regions: <hidden>
 │ estimated max sql temp disk usage: 0 B
 │ equality: (a) = (b)
 │
-├── • sort
-│   │ nodes: <hidden>
-│   │ regions: <hidden>
-│   │ actual row count: 2
-│   │ estimated max memory allocated: 0 B
-│   │ estimated max sql temp disk usage: 0 B
-│   │ estimated row count: 1
-│   │ order: +a
-│   │
-│   └── • scan
-│         nodes: <hidden>
-│         regions: <hidden>
-│         actual row count: 2
-│         KV time: 0µs
-│         KV contention time: 0µs
-│         KV rows read: 2
-│         KV bytes read: 16 B
-│         KV gRPC calls: 2
-│         estimated max memory allocated: 0 B
-│         estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-│         table: c@sec
-│         spans: FULL SCAN
+├── • scan
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 2
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows read: 2
+│     KV bytes read: 16 B
+│     KV gRPC calls: 2
+│     estimated max memory allocated: 0 B
+│     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+│     table: c@c_pkey
+│     spans: FULL SCAN
 │
 └── • scan
       nodes: <hidden>
@@ -209,7 +190,7 @@ regions: <hidden>
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsUsFqGzEQvfcrhjklRI1316EHQcDUuMVpbYdNyKWYIkvTzRKttJG01MH4s_oD_bKyq4baTuLW0EMPvWnevCfNPL0V-nuNHK9GH0fDa5CnAt7lswlIGE-noxwmo_z9CC5m4ykomE07wjmo0wUyNFbRVFTkkX_CFOcMa2cleW9dC606wlgtkScMS1M3oYXnDKV1hHyFoQyakOO1WGjKSShyvQQZKgqi1N21cuBJIsOh1U1lPAeBDK9q0R5fI8MPNxDKijgk37_5WEtrAplQWvOk5exXD46E4pBFZPEQ6BFK38DbiBb55RCk0NpH4uRmOAQfqAZpGxPgiJahV5pwzCHpJo4EoruXCJVYQkWVdQ8gtLZSBFIcku7BhQjyljzYJtRN4NDyu0kfgQzna4ax-mmhD6Ig5Oma_bnNV9YFcr102-FBeoIMaUmyeerZvrHbnr_XEKiqQZX-DhovCvoLW2WHbLUZnmx7NTVQn-s7etjMz-J_fjac7r_o9C-DG2OdIkdqy9x5q_wd5ZnvmpAr6MKWhlyvv_1dmr6Eo0F6cnzuyuI2HpHhrF1hkP5rIT07JKQ5-doaT7sWPntz0vpGqqD4D942TtKls7J7JpazTtcBinyI3TQWYxNb7YCb4nSvuL8lTnfF2QHibFfc3ys-2xl7vn71IwAA___k6iBM
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk9Fq2zAUhu_3FIdz1TKtsV3YhaAQFrKRbkmKW3ozwlCkM9dEllxJZgkhj7UX2JMNSytrmrajY5e70_nP_0vyd6wt-luNHC_Hn8ajK5AnAt6X8ylImMxm4xKm4_LDGM7nkxkomM-i4QzUyRIZGqtoJhryyD9jjguGrbOSvLeul7bRMFFr5BnD2rRd6OUFQ2kdId9iqIMm5HgllppKEorcIEOGioKoddxWDuWXdkUbZDiyumuM5yCQ4WUr-uUbZPjxGkLdEIfsx3efamlNIBNqaw5azn7z4EgoDkVSlptAd1L-Ft4ltSovRiCF1j4Zp9ejEfhALUjbmQBHtA6D2oRjDlm8dDIQrZ4yNGINDTXWbUBobaUIpDhk8cClCPKGPNgutF3g0PvjTe-EAhc7hqn6RdEHURHyfMf-jnS-T1oN1QHp5X_S90gXT5L-Dbgz1ilypPbgLvrknyyPjGtKrqJzWxtyg2J_XJq-hqNh_vr4zNXVTVoiw3n_CcN-tLQm2R0O5jk2fc_fagjUtKBqv4LOi4r-AbrTl_ykJfnWGk8PET66c9ZzI1VRmoO3nZN04ayMx6RyHnNRUORD6hapmJjYiq_ofjh_Qbh4GC6eDZ_uhbPdYvfqZwAAAP__snHGqQ==
 
 statement ok
 RESET vectorize; RESET distsql

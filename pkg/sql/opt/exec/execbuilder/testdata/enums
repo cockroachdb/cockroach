@@ -20,7 +20,7 @@ scan t
  │    └── x:1 IN ('hello', 'howdy', 'hi') [outer=(1), constraints=(/1: [/'hello' - /'hello'] [/'howdy' - /'howdy'] [/'hi' - /'hi']; tight)]
  ├── cardinality: [0 - 3]
  ├── stats: [rows=3]
- ├── cost: 18.05
+ ├── cost: 22.05
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -122,13 +122,13 @@ distinct-on
  ├── internal-ordering: +1
  ├── cardinality: [0 - 4]
  ├── stats: [rows=4, distinct(1)=4, null(1)=0]
- ├── cost: 1114.88
+ ├── cost: 1118.88
  ├── key: (1)
  ├── distribution: test
  └── scan checks@checks_x_y_idx
       ├── columns: x:1
       ├── stats: [rows=1000, distinct(1)=4, null(1)=0]
-      ├── cost: 1104.82
+      ├── cost: 1108.82
       ├── ordering: +1
       ├── distribution: test
       ├── prune: (1)
@@ -173,28 +173,28 @@ union
  ├── internal-ordering: +11
  ├── cardinality: [0 - 5]
  ├── stats: [rows=5, distinct(11)=5, null(11)=1]
- ├── cost: 2276.86667
+ ├── cost: 2284.86667
  ├── key: (11)
  ├── distribution: test
  ├── interesting orderings: (+11)
  ├── project
  │    ├── columns: nulls.x:1
  │    ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333]
- │    ├── cost: 1138.40333
+ │    ├── cost: 1142.40333
  │    ├── ordering: +1
  │    ├── distribution: test
  │    ├── interesting orderings: (+1)
  │    └── select
  │         ├── columns: nulls.x:1 y:2
  │         ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333, distinct(2)=33.3333, null(2)=0]
- │         ├── cost: 1135.05
+ │         ├── cost: 1139.05
  │         ├── ordering: +1
  │         ├── distribution: test
  │         ├── interesting orderings: (+1,+2)
  │         ├── scan nulls@nulls_x_y_idx
  │         │    ├── columns: nulls.x:1 y:2
  │         │    ├── stats: [rows=1000, distinct(1)=5, null(1)=10, distinct(2)=100, null(2)=10]
- │         │    ├── cost: 1125.02
+ │         │    ├── cost: 1129.02
  │         │    ├── ordering: +1
  │         │    ├── distribution: test
  │         │    ├── prune: (1,2)
@@ -204,21 +204,21 @@ union
  └── project
       ├── columns: nulls.x:6
       ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333]
-      ├── cost: 1138.40333
+      ├── cost: 1142.40333
       ├── ordering: +6
       ├── distribution: test
       ├── interesting orderings: (+6)
       └── select
            ├── columns: nulls.x:6 y:7
            ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333, distinct(7)=33.3333, null(7)=0]
-           ├── cost: 1135.05
+           ├── cost: 1139.05
            ├── ordering: +6
            ├── distribution: test
            ├── interesting orderings: (+6,+7)
            ├── scan nulls@nulls_x_y_idx
            │    ├── columns: nulls.x:6 y:7
            │    ├── stats: [rows=1000, distinct(6)=5, null(6)=10, distinct(7)=100, null(7)=10]
-           │    ├── cost: 1125.02
+           │    ├── cost: 1129.02
            │    ├── ordering: +6
            │    ├── distribution: test
            │    ├── prune: (6,7)

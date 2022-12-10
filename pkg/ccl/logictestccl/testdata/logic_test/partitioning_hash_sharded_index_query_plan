@@ -382,26 +382,16 @@ vectorized: true
                     │ columns: (crdb_internal_id_shard_16, id, part)
                     │ count: 1
                     │
-                    └── • distinct
+                    └── • filter
                         │ columns: (crdb_internal_id_shard_16, id, part)
                         │ estimated row count: 6 (missing stats)
-                        │ distinct on: id, part
+                        │ filter: (crdb_internal_id_shard_16 != 9) OR (part != 'seattle')
                         │
-                        └── • union all
-                            │ columns: (crdb_internal_id_shard_16, id, part)
-                            │ estimated row count: 2 (missing stats)
-                            │
-                            ├── • scan
-                            │     columns: (crdb_internal_id_shard_16, id, part)
-                            │     estimated row count: 1 (missing stats)
-                            │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                            │     spans
-                            │
-                            └── • scan
-                                  columns: (crdb_internal_id_shard_16, id, part)
-                                  estimated row count: 1 (missing stats)
-                                  table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                                  spans: /"new york"/9/4321/0
+                        └── • scan
+                              columns: (crdb_internal_id_shard_16, id, part)
+                              estimated row count: 0 (missing stats)
+                              table: t_unique_hash_pk@t_unique_hash_pk_pkey
+                              spans: /"new york"/9/4321/0 /"seattle"/9/4321/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id, part) VALUES (4321, 'seattle') ON CONFLICT DO NOTHING;
@@ -1025,32 +1015,16 @@ vectorized: true
                     │ columns: (id, email, part)
                     │ count: 1
                     │
-                    └── • distinct
+                    └── • filter
                         │ columns: (id, email, part)
                         │ estimated row count: 6 (missing stats)
-                        │ distinct on: id, part
+                        │ filter: (id != 4321) OR (part != 'seattle')
                         │
-                        └── • union all
-                            │ columns: (id, email, part)
-                            │ estimated row count: 2 (missing stats)
-                            │
-                            ├── • filter
-                            │   │ columns: (id, email, part)
-                            │   │ estimated row count: 1 (missing stats)
-                            │   │ filter: id != 4321
-                            │   │
-                            │   └── • scan
-                            │         columns: (id, email, part)
-                            │         estimated row count: 0 (missing stats)
-                            │         table: t_unique_hash_sec_key@idx_uniq_hash_email
-                            │         spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
-                            │         parallel
-                            │
-                            └── • scan
-                                  columns: (id, email, part)
-                                  estimated row count: 1 (missing stats)
-                                  table: t_unique_hash_sec_key@idx_uniq_hash_email
-                                  spans: /"new york"/13/"some_email"/0
+                        └── • scan
+                              columns: (id, email, part)
+                              estimated row count: 0 (missing stats)
+                              table: t_unique_hash_sec_key@idx_uniq_hash_email
+                              spans: /"new york"/13/"some_email"/0 /"seattle"/13/"some_email"/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email, part) VALUES (4321, 'some_email', 'seattle') ON CONFLICT DO NOTHING;

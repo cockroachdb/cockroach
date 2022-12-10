@@ -718,6 +718,8 @@ func (f *WindowFrame) String() string {
 
 // IsCanonical returns true if the ScanPrivate indicates an original unaltered
 // primary index Scan operator (i.e. unconstrained and not limited).
+// s.InvertedConstraint is implicitly nil because a primary index cannot
+// be inverted.
 func (s *ScanPrivate) IsCanonical() bool {
 	return s.Index == cat.PrimaryIndex &&
 		s.Constraint == nil &&

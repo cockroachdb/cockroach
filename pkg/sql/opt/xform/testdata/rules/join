@@ -289,7 +289,7 @@ memo (optimized, ~43KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~28KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~29KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (inner-join G3 G2 G4)
@@ -335,7 +335,7 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~37KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~38KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
@@ -1241,7 +1241,7 @@ New expression 2 of 2:
 memo expect=ReorderJoins
 SELECT * FROM abc JOIN xyz ON a=z
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+9) (lookup-join G3 G5 abc@ab,keyCols=[9],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G2 G3 G4)
@@ -1485,7 +1485,7 @@ right-join (hash)
 memo
 SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (left-join G2 G3 G4) (right-join G3 G2 G4) (lookup-join G2 G5 abc@ab,keyCols=[9],outCols=(1-3,7-9)) (merge-join G3 G2 G5 right-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (left-join G2 G3 G4)
@@ -1815,7 +1815,7 @@ inner-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
-memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~15KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+7) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9)) (merge-join G3 G2 G5 inner-join,+7,+1) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (merge-join G3="[ordering: +7]" G2="[ordering: +1]" G5 inner-join,+7,+1)
@@ -1844,7 +1844,7 @@ memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
 memo
 SELECT * FROM abc INNER HASH JOIN xyz ON a=x
 ----
-memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G2 G3 G4)
@@ -1914,7 +1914,7 @@ inner-join (lookup xyz@xy)
 memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~18KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
+memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
@@ -2696,10 +2696,10 @@ semi-join (lookup abcd)
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── inner-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1!null n:2 a:13!null b:14 abcd.rowid:16!null continuation:19
+ │    ├── columns: m:1!null n:2 a:13!null abcd.rowid:16!null continuation:19
  │    ├── key columns: [1] = [13]
  │    ├── first join in paired joiner; continuation column: continuation:19
- │    ├── fd: (16)-->(13,14,19), (1)==(13), (13)==(1)
+ │    ├── fd: (16)-->(13,19), (1)==(13), (13)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -2728,10 +2728,10 @@ anti-join (lookup abcd)
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:13 b:14 abcd.rowid:16 continuation:19
+ │    ├── columns: m:1 n:2 a:13 abcd.rowid:16 continuation:19
  │    ├── key columns: [1] = [13]
  │    ├── first join in paired joiner; continuation column: continuation:19
- │    ├── fd: (16)-->(13,14,19)
+ │    ├── fd: (16)-->(13,19)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -13268,11 +13268,11 @@ project
  │         ├── immutable
  │         ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24)
  │         ├── left-join (lookup table11@table1_col1_3_col1_1_expr_idx [as=tab_17533])
- │         │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null tab_17533.col1_1:63 tab_17533.col1_3:65 tab_17533.rowid:70 continuation:73
+ │         │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null tab_17533.col1_3:65 tab_17533.rowid:70 continuation:73
  │         │    ├── key columns: [43] = [65]
  │         │    ├── first join in paired joiner; continuation column: continuation:73
  │         │    ├── immutable
- │         │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24), (70)-->(63,65,73)
+ │         │    ├── fd: (19)==(29), (29)==(19), (14)==(24,44), (24)==(14,44), (21)==(31), (31)==(21), (23)==(33), (33)==(23), (16)==(36), (36)==(16), (49)==(59), (59)==(49), (32)==(52), (52)==(32), (44)==(14,24), (70)-->(65,73)
  │         │    ├── inner-join (hash)
  │         │    │    ├── columns: tab_17534.col1_3:13!null tab_17534.col1_4:14!null tab_17534.col1_6:16!null tab_17534.crdb_internal_mvcc_timestamp:19!null tab_17535.col1_1:21!null tab_17535.col1_3:23!null tab_17535.col1_4:24!null tab_17535.crdb_internal_mvcc_timestamp:29!null tab_17536.col1_1:31!null tab_17536.col1_2:32!null tab_17536.col1_3:33!null tab_17536.col1_6:36!null tab_17537.col1_3:43!null tab_17537.col1_4:44!null tab_17537.crdb_internal_mvcc_timestamp:49!null tab_17538.col1_2:52!null tab_17538.crdb_internal_mvcc_timestamp:59!null
  │         │    │    ├── immutable

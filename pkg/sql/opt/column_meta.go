@@ -69,7 +69,7 @@ func (cl ColList) Equals(other ColList) bool {
 // CopyAndMaybeRemapColumns copies this ColList, remapping any columns present
 // in the provided ColMap.
 func (cl ColList) CopyAndMaybeRemapColumns(m ColMap) (res ColList) {
-	if cl == nil {
+	if len(cl) == 0 {
 		return nil
 	}
 	res = make(ColList, len(cl))

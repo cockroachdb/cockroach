@@ -3006,13 +3006,13 @@ CREATE TABLE user_settings_cascades (
     FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
 ) LOCALITY REGIONAL BY ROW;
 
-# TODO(rytaft): The following query should be able to infer that the join
-# condition
+# With #69617, the following query is able to infer that the join condition
 #   users.id = user_settings.user_id
 # is equivalent to
-#   users.id = user_settings.user_id AND users.crdb_region = user_settings.crdb_region
-# This would allow the optimizer to plan a lookup join between users and user_settings
-# and avoid visiting all regions. See #69617.
+#   users.id = user_settings.user_id AND
+#   users.crdb_region = user_settings.crdb_region
+# This allows the optimizer to plan a lookup join between users and
+# user_settings and avoid visiting all regions.
 query T retry
 EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
   FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
@@ -3020,30 +3020,28 @@ EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS us
 distribution: local
 vectorized: true
 ·
-• merge join
-│ equality: (user_id) = (id)
-│ right cols are key
+• lookup join
+│ table: user_settings@user_settings_pkey
+│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality cols are key
 │
-├── • index join
-│   │ table: user_settings@user_settings_pkey
-│   │
-│   └── • scan
-│         missing stats
-│         table: user_settings@user_settings_user_id_idx
-│         spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
-│
-└── • union all
-    │ limit: 1
+└── • lookup join
+    │ table: user_settings@user_settings_user_id_idx
+    │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (id = user_id)
+    │ pred: user_id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
     │
-    ├── • scan
-    │     missing stats
-    │     table: users@users_pkey
-    │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
-    │
-    └── • scan
-          missing stats
-          table: users@users_pkey
-          spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: users@users_pkey
+        │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+        │
+        └── • scan
+              missing stats
+              table: users@users_pkey
+              spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 
 # Ensure that the FK checks and cascades are efficient.
 query T
@@ -3180,6 +3178,39 @@ WHERE json_col->'loc' @> '{"state":"NY"}'
 
 subtest rbr_input_to_lookup_join
 
+statement ok
+DROP TABLE IF EXISTS regional_by_row_table
+
+statement ok
+CREATE TABLE regional_by_row_table (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  a int NOT NULL,
+  b int NOT NULL,
+  j JSON,
+  INDEX (a),
+  UNIQUE (b),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP TABLE IF EXISTS regional_by_row_table_virt_partial
+
+statement ok
+CREATE TABLE regional_by_row_table_virt_partial (
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  UNIQUE INDEX v_a_gt_0 (v) WHERE a > 0,
+  UNIQUE INDEX v_v_gt_0 (v) WHERE v > 0,
+  UNIQUE INDEX a_plus_10_v_gt_0 ((a + 10)) WHERE v > 0,
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Locality-optimized search of inner lookup joins is cheaper than one
+# locality-optimized join.
 query T retry
 EXPLAIN SELECT * FROM regional_by_row_table t1, regional_by_row_table_virt_partial t2 WHERE t1.b = t2.pk LIMIT 1
 ----
@@ -3191,19 +3222,35 @@ vectorized: true
 │
 └── • render
     │
-    └── • lookup join
-        │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-        │ equality cols are key
-        │ lookup condition: (crdb_region = 'ap-southeast-2') AND (b = pk)
-        │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (b = pk)
+    └── • union all
+        │ limit: 4294967295
         │
-        └── • scan
-              missing stats
-              table: regional_by_row_table@regional_by_row_table_pkey
-              spans: FULL SCAN (SOFT LIMIT)
+        ├── • lookup join
+        │   │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+        │   │ equality cols are key
+        │   │ lookup condition: (crdb_region = 'ap-southeast-2') AND (b = pk)
+        │   │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (b = pk)
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: regional_by_row_table@regional_by_row_table_pkey
+        │         spans: [/'ap-southeast-2' - /'ap-southeast-2']
+        │
+        └── • lookup join
+            │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+            │ equality cols are key
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (b = pk)
+            │
+            └── • scan
+                  missing stats
+                  table: regional_by_row_table@regional_by_row_table_pkey
+                  spans: [/'ca-central-1' - /'us-east-1']
 
+# Locality-optimized search of semi lookup joins is cheaper than one
+# locality-optimized join.
 query T retry
-EXPLAIN SELECT * FROM regional_by_row_table t1 WHERE b IN (SELECT pk FROM regional_by_row_table_virt_partial t2) LIMIT 1
+EXPLAIN SELECT * FROM regional_by_row_table t1 WHERE b IN
+  (SELECT pk FROM regional_by_row_table_virt_partial t2) LIMIT 1
 ----
 distribution: local
 vectorized: true
@@ -3211,13 +3258,81 @@ vectorized: true
 • limit
 │ count: 1
 │
-└── • lookup join (semi)
-    │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-    │ equality cols are key
-    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (b = pk)
-    │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (b = pk)
+└── • union all
+    │ limit: 4294967295
+    │
+    ├── • lookup join (semi)
+    │   │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+    │   │ equality cols are key
+    │   │ lookup condition: (crdb_region = 'ap-southeast-2') AND (b = pk)
+    │   │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (b = pk)
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: regional_by_row_table@regional_by_row_table_pkey
+    │         spans: [/'ap-southeast-2' - /'ap-southeast-2']
+    │
+    └── • lookup join (semi)
+        │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+        │ equality cols are key
+        │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (b = pk)
+        │
+        └── • scan
+              missing stats
+              table: regional_by_row_table@regional_by_row_table_pkey
+              spans: [/'ca-central-1' - /'us-east-1']
+
+# Locality-optimized search of left outer lookup joins is valid, but is
+# currently not picked because we don't pass a limit hint through a filter.
+query T retry
+EXPLAIN SELECT t2.a, t2.b, t2.v, t1.b FROM regional_by_row_table_virt_partial t2 LEFT OUTER JOIN
+  regional_by_row_table t1 ON t1.b = t2.pk WHERE t1.b IS NULL OR t1.b = 7 LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 1
+│
+└── • filter
+    │ filter: (b IS NULL) OR (b = 7)
+    │
+    └── • lookup join (left outer)
+        │ table: regional_by_row_table@regional_by_row_table_b_key
+        │ equality cols are key
+        │ lookup condition: (crdb_region = 'ap-southeast-2') AND (pk = b)
+        │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (pk = b)
+        │
+        └── • render
+            │
+            └── • scan
+                  missing stats
+                  table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+                  spans: FULL SCAN (SOFT LIMIT)
+
+# Locality-optimized search of anti lookup joins is not supported and should
+# not be picked.
+query T retry
+EXPLAIN SELECT * FROM regional_by_row_table t1 WHERE b NOT IN
+  (SELECT pk FROM regional_by_row_table_virt_partial t2) LIMIT 1
+----
+distribution: full
+vectorized: true
+·
+• limit
+│ count: 1
+│
+└── • hash join (anti)
+    │ equality: (b) = (pk)
+    │ left cols are key
+    │ right cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: regional_by_row_table@regional_by_row_table_pkey
+    │     spans: FULL SCAN
     │
     └── • scan
           missing stats
-          table: regional_by_row_table@regional_by_row_table_pkey
-          spans: FULL SCAN (SOFT LIMIT)
+          table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+          spans: FULL SCAN

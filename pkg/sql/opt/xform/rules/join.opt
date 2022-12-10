@@ -704,12 +704,12 @@
 # 'us-east1', the second plan will be much faster. But if they are located in
 # one of the other regions, the first plan would be slightly faster.
 # If the lookup join input is a Select from only remote region rows, as
-# indicated by SelectFromRemoteTableRowsOnly, there is little point planning a
-# locality-optimized join because reading remote rows cannot be avoided, so
+# indicated by IsSelectFromRemoteTableRowsOnly, there is little point planning
+# a locality-optimized join because reading remote rows cannot be avoided, so
 # the rewrite is skipped in this case.
 [GenerateLocalityOptimizedLookupJoin, Explore]
 (LookupJoin
-    $input:* & ^(SelectFromRemoteTableRowsOnly $input)
+    $input:* & ^(IsSelectFromRemoteTableRowsOnly $input)
     $on:*
     $private:* &
         ^(IsAntiJoin $private) &
@@ -738,6 +738,57 @@
 # a locality-optimized in the left branch and a normal lookup join in the right
 # branch. The left branch reads local rows from the input table and the right
 # branch reads remote rows from the input table.
+#
+# For example, suppose we have a multi-region database with regions 'us', 'ca'
+# and 'eu', and we have the following tables and query, issued from region 'us':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child INNER LOOKUP JOIN parent ON c_p_id = p_id LIMIT 3;
+#
+# Normally, this would produce the following plan:
+#
+#  distribute
+#   └── limit
+#        ├── project
+#        │    └── inner-join (lookup parent)
+#        │         ├── flags: force lookup join (into right side)
+#        │         ├── lookup columns are key
+#        │         ├── scan child
+#        │         │    └── check constraint expressions
+#        │         │         └── child.crdb_region IN ('ca', 'eu', 'us')
+#        │         └── filters (true)
+#        └── 3
+#
+# but if the session setting locality_optimized_partitioned_index_scan is
+# enabled, the optimizer will produce this plan:
+#
+#  limit
+#   ├── project
+#   │    └── locality-optimized-search
+#   │         ├── project
+#   │         │    └── inner-join (lookup parent)
+#   │         │         ├── flags: force lookup join (into right side)
+#   │         │         ├── lookup columns are key
+#   │         │         ├── scan child
+#   │         │         │    └── constraint: /13/11: [/'us' - /'us']
+#   │         │         └── filters (true)
+#   │         └── project
+#   │              └── inner-join (lookup parent)
+#   │                   ├── flags: force lookup join (into right side)
+#   │                   ├── lookup columns are key
+#   │                   ├── scan child
+#   │                   │    └── constraint: /18/16: [/'ca' - /'eu']
+#   │                   └── filters (true)
+#   └── 3
+#
 [GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin, Explore]
 (LookupJoin
     $input:* & (IsRegionalByRowTableScanOrSelect $input)
@@ -767,6 +818,55 @@
 # BY ROW table as the input relation into a locality-optimized search of two
 # lookup joins, with the left branch reading local rows from the input table and
 # the right branch reading remote rows from the input table.
+#
+# For example, suppose we have a multi-region database with regions 'us', 'ca'
+# and 'eu', and we have the following tables and query, issued from region 'us':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY
+#   ) LOCALITY REGIONAL BY TABLE;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child INNER LOOKUP JOIN parent ON c_p_id = p_id LIMIT 3;
+#
+# Normally, this would produce the following plan:
+#
+#  distribute
+#   └── limit
+#        ├── inner-join (lookup parent)
+#        │    ├── flags: force lookup join (into right side)
+#        │    ├── lookup columns are key
+#        │    ├── scan child
+#        │    │    └── check constraint expressions
+#        │    │         └── crdb_region IN ('ca', 'eu', 'us')
+#        │    └── filters (true)
+#        └── 3
+#
+# but if the session setting locality_optimized_partitioned_index_scan is
+# enabled, the optimizer will produce this plan:
+#
+#  limit
+#   ├── locality-optimized-search
+#   │    ├── project
+#   │    │    └── inner-join (lookup parent)
+#   │    │         ├── flags: force lookup join (into right side)
+#   │    │         ├── lookup columns are key
+#   │    │         ├── scan child
+#   │    │         │    └── constraint: /12/10: [/'us' - /'us']
+#   │    │         └── filters (true)
+#   │    └── project
+#   │         └── inner-join (lookup parent)
+#   │              ├── flags: force lookup join (into right side)
+#   │              ├── lookup columns are key
+#   │              ├── scan child
+#   │              │    └── constraint: /17/15: [/'ca' - /'eu']
+#   │              └── filters (true)
+#   └── 3
+#
 [GenerateLocalityOptimizedSearchOfLOJs, Explore]
 (LookupJoin
     $input:* & (IsRegionalByRowTableScanOrSelect $input)
@@ -776,6 +876,4 @@
         ^(IsLocalityOptimizedJoin $private)
 )
 =>
-(GenerateLocalityOptimizedSearchLOJ
-    (Root)
-)
+(GenerateLocalityOptimizedSearchLOJ (Root))

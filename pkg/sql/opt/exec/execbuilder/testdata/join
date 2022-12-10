@@ -1594,24 +1594,18 @@ vectorized: true
 • project
 │ columns: (a, b1, b2)
 │
-└── • merge join (left outer)
+└── • lookup join (left outer)
     │ columns: (a, b1, a, b2)
     │ estimated row count: 1 (missing stats)
+    │ table: r@r_pkey
     │ equality: (a) = (a)
-    │ left cols are key
-    │ right cols are key
-    │ merge ordering: +"(a=a)"
-    │
-    ├── • scan
-    │     columns: (a, b1)
-    │     estimated row count: 1 (missing stats)
-    │     table: l@l_pkey
-    │     spans: /3/0
+    │ equality cols are key
+    │ pred: a = 3
     │
     └── • scan
-          columns: (a, b2)
+          columns: (a, b1)
           estimated row count: 1 (missing stats)
-          table: r@r_pkey
+          table: l@l_pkey
           spans: /3/0
 
 query T
@@ -1620,24 +1614,18 @@ EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 distribution: local
 vectorized: true
 ·
-• merge join (left outer)
+• lookup join (left outer)
 │ columns: (a, b1, a, b2)
 │ estimated row count: 1 (missing stats)
+│ table: r@r_pkey
 │ equality: (a) = (a)
-│ left cols are key
-│ right cols are key
-│ merge ordering: +"(a=a)"
-│
-├── • scan
-│     columns: (a, b1)
-│     estimated row count: 1 (missing stats)
-│     table: l@l_pkey
-│     spans: /3/0
+│ equality cols are key
+│ pred: a = 3
 │
 └── • scan
-      columns: (a, b2)
+      columns: (a, b1)
       estimated row count: 1 (missing stats)
-      table: r@r_pkey
+      table: l@l_pkey
       spans: /3/0
 
 query T
@@ -1649,24 +1637,18 @@ vectorized: true
 • project
 │ columns: (a, b1, b2)
 │
-└── • merge join (left outer)
+└── • lookup join (left outer)
     │ columns: (a, b2, a, b1)
     │ estimated row count: 1 (missing stats)
+    │ table: l@l_pkey
     │ equality: (a) = (a)
-    │ left cols are key
-    │ right cols are key
-    │ merge ordering: +"(a=a)"
-    │
-    ├── • scan
-    │     columns: (a, b2)
-    │     estimated row count: 1 (missing stats)
-    │     table: r@r_pkey
-    │     spans: /3/0
+    │ equality cols are key
+    │ pred: a = 3
     │
     └── • scan
-          columns: (a, b1)
+          columns: (a, b2)
           estimated row count: 1 (missing stats)
-          table: l@l_pkey
+          table: r@r_pkey
           spans: /3/0
 
 query T
@@ -1675,24 +1657,18 @@ EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 distribution: local
 vectorized: true
 ·
-• merge join (left outer)
+• lookup join (left outer)
 │ columns: (a, b1, a, b2)
 │ estimated row count: 1 (missing stats)
+│ table: l@l_pkey
 │ equality: (a) = (a)
-│ left cols are key
-│ right cols are key
-│ merge ordering: +"(a=a)"
-│
-├── • scan
-│     columns: (a, b2)
-│     estimated row count: 1 (missing stats)
-│     table: r@r_pkey
-│     spans: /3/0
+│ equality cols are key
+│ pred: a = 3
 │
 └── • scan
-      columns: (a, b1)
+      columns: (a, b2)
       estimated row count: 1 (missing stats)
-      table: l@l_pkey
+      table: r@r_pkey
       spans: /3/0
 
 # Regression tests for #21243

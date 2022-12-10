@@ -74,7 +74,7 @@ memo (optimized, ~11KB, required=[presentation: u:13,v:14,w:15])
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw INTERSECT SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1,+2,+3,+4) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1,+2) (intersect-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
@@ -121,7 +121,7 @@ memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw INTERSECT ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1,+2,+3,+4) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1,+2) (intersect-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
@@ -168,7 +168,7 @@ memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw EXCEPT SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1,+2,+3,+4) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1,+2) (except-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
@@ -215,7 +215,7 @@ memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw EXCEPT ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1,+2,+3,+4) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1,+2) (except-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
@@ -263,7 +263,7 @@ memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
 memo expect-not=GenerateStreamingSetOp
 SELECT * FROM kuvw UNION ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~9KB, required=[presentation: k:13,u:14,v:15,w:16])
+memo (optimized, ~10KB, required=[presentation: k:13,u:14,v:15,w:16])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: k:13,u:14,v:15,w:16]
  │         ├── best: (union-all G2 G3)

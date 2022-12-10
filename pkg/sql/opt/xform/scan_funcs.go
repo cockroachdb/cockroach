@@ -64,6 +64,9 @@ func (c *CustomFuncs) GenerateIndexScans(
 		if isCovering {
 			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
 			scan.Index = index.Ordinal()
+			md := c.e.mem.Metadata()
+			tabMeta := md.TableMeta(scan.Table)
+			scan.Distribution.FromIndexScan(c.e.ctx, c.e.evalCtx, tabMeta, scan.Index, scan.Constraint)
 			c.e.mem.AddScanToGroup(&scan, grp)
 			return
 		}
@@ -282,9 +285,8 @@ func (c *CustomFuncs) makeColMap(src, dst *memo.ScanPrivate) (colMap opt.ColMap)
 // `crdb_region` column.
 func (c *CustomFuncs) getLocalAndRemoteFilters(
 	filters memo.FiltersExpr, ps partition.PrefixSorter, firstIndexCol opt.ColumnID,
-) (localFilters memo.FiltersExpr, remoteFilters memo.FiltersExpr, ok bool) {
-	localFilters = make(memo.FiltersExpr, 1)
-	remoteFilters = make(memo.FiltersExpr, 1)
+) (localFilters opt.ScalarExpr, remoteFilters opt.ScalarExpr, ok bool) {
+	var localFiltersItem, remoteFiltersItem memo.FiltersItem
 	for _, filter := range filters {
 		var inExpr *memo.InExpr
 		inExpr, ok = filter.Condition.(*memo.InExpr)
@@ -295,6 +297,7 @@ func (c *CustomFuncs) getLocalAndRemoteFilters(
 				if !ok {
 					continue
 				}
+				// If equality filter doesn't involve the crdb_region column, continue.
 				if varExpr.Col != firstIndexCol {
 					continue
 				}
@@ -302,18 +305,25 @@ func (c *CustomFuncs) getLocalAndRemoteFilters(
 				if !ok {
 					continue
 				}
+				// We have have a condition like "crdb_region = us-west1" in hand.
+				// Find out if that is a local region.
 				match, ok := constraint.FindMatchOnSingleColumn(constExpr.Value, ps)
 				if ok && match.IsLocal {
-					localFilters[0] =
+					// Found a match and it is local.
+					localFiltersItem =
 						c.e.f.ConstructFiltersItem(
 							c.e.f.ConstructEq(varExpr, constExpr))
-					remoteFilters = remoteFilters[:0]
+					localFilters = &localFiltersItem
 				} else {
-					remoteFilters[0] =
+					// Either found a match and it is not local, or we didn't find a
+					// match, in which case we categorize it as non-local.
+					remoteFiltersItem =
 						c.e.f.ConstructFiltersItem(
 							c.e.f.ConstructEq(varExpr, constExpr))
-					localFilters = localFilters[:0]
+					remoteFilters = &remoteFiltersItem
 				}
+				// We've constructed a new FiltersItem matching the one we're looking
+				// at, and categorized it as local or remote.
 				return localFilters, remoteFilters, true
 			}
 			continue
@@ -322,6 +332,7 @@ func (c *CustomFuncs) getLocalAndRemoteFilters(
 		if !ok {
 			continue
 		}
+		// If IN filter doesn't involve the crdb_region column, continue.
 		if variableExpr.Col != firstIndexCol {
 			continue
 		}
@@ -329,11 +340,15 @@ func (c *CustomFuncs) getLocalAndRemoteFilters(
 		if !ok {
 			continue
 		}
+		// We expect there to be a single local region.
 		localRegions := make(memo.ScalarListExpr, 0, 1)
+		// We expect all other IN list items to be remote regions.
 		remoteRegions := make(memo.ScalarListExpr, 0, len(tupleExpr.Elems)-1)
 
 		for _, tuple := range tupleExpr.Elems {
 			constExpr, ok := tuple.(*memo.ConstExpr)
+			// If any IN list item is not constant, give up, because we must
+			// categorize all items as local or remote.
 			if !ok {
 				localRegions = nil
 				remoteRegions = nil
@@ -342,32 +357,39 @@ func (c *CustomFuncs) getLocalAndRemoteFilters(
 
 			match, ok := constraint.FindMatchOnSingleColumn(constExpr.Value, ps)
 			if ok && match.IsLocal {
+				// Found a match and it is local.
 				localRegions = append(localRegions, constExpr)
 			} else {
+				// Either found a match and it is not local, or we didn't find a match,
+				// in which case we categorize it as non-local.
 				remoteRegions = append(remoteRegions, constExpr)
 			}
 		}
 		if len(localRegions) > 0 || len(remoteRegions) > 0 {
 			if len(localRegions) > 0 {
-				localFilters[0] =
+				// Found a match and it is local.
+				localFiltersItem =
 					c.e.f.ConstructFiltersItem(
 						c.e.f.ConstructIn(variableExpr,
 							c.e.f.ConstructTuple(localRegions, tupleExpr.Typ)))
-			} else {
-				localFilters = localFilters[:0]
+				localFilters = &localFiltersItem
 			}
 			if len(remoteRegions) > 0 {
-				remoteFilters[0] =
+				remoteFiltersItem =
 					c.e.f.ConstructFiltersItem(
 						c.e.f.ConstructIn(variableExpr,
 							c.e.f.ConstructTuple(remoteRegions, tupleExpr.Typ)))
-			} else {
-				remoteFilters = remoteFilters[:0]
+				remoteFilters = &remoteFiltersItem
 			}
+			// localFilters is an IN list with all values matching the local region
+			// (should be only one) and localFilters is an IN list with values which
+			// do not match the local region. For example:
+			// localFilters:  crdb_region IN (us-west1)
+			// remoteFilters: crdb_region IN (us-east1, eu-west1, ap-southeast1)
 			return localFilters, remoteFilters, true
 		}
 	}
-	return memo.FiltersExpr{}, memo.FiltersExpr{}, false
+	return nil, nil, false
 }
 
 // GenerateLocalityOptimizedSearch generates a locality-optimized search on top
@@ -391,7 +413,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 	if !ok {
 		return
 	}
-	if lookupJoinExpr.LocalityOptimized || lookupJoinExpr.LocalityOptimizedSearch {
+	if lookupJoinExpr.LocalityOptimized || lookupJoinExpr.ChildOfLocalityOptimizedSearch {
 		// Already locality optimized. Bail out.
 		return
 	}
@@ -406,33 +428,22 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 		return
 	}
 
-	maybeInputScan := lookupJoinExpr.Input
-	inputIsSelect := false
-	var inputSelect *memo.SelectExpr
-	var localSelectFilters, remoteSelectFilters memo.FiltersExpr
-	if inputSelect, inputIsSelect = maybeInputScan.(*memo.SelectExpr); inputIsSelect {
-		maybeInputScan = inputSelect.Input
-		localSelectFilters = inputSelect.Filters
-		remoteSelectFilters = inputSelect.Filters
-	}
-	inputScan, ok := maybeInputScan.(*memo.ScanExpr)
+	// Only rewrite canonical scans or selects from canonical scans, which also
+	// means they are not locality-optimized.
+	inputScan, inputFilters, ok := c.getfilteredCanonicalScan(lookupJoinExpr.Input)
 	if !ok {
 		return
 	}
-	if !c.IsCanonicalScan(&inputScan.ScanPrivate) {
-		// Only rewrite canonical scans, which also means they are not
-		// locality-optimized.
-		return
+	var localSelectFilters, remoteSelectFilters memo.FiltersExpr
+	if len(inputFilters) > 0 {
+		// Both local and remote branches must evaluate the original filters.
+		localSelectFilters = inputFilters
+		remoteSelectFilters = inputFilters
 	}
 	// We should only generate a locality-optimized search if there is a limit
 	// hint coming from an ancestor expression with a LIMIT, meaning that the
 	// query could be answered solely from rows returned by the local branch.
 	if required.LimitHint == 0 {
-		return
-	}
-	// Don't try to handle inverted constraints for now. Should `IsCanonicalScan`
-	// also be checking for a nil InvertedConstraint?
-	if inputScan.InvertedConstraint != nil {
 		return
 	}
 	tabMeta := c.e.mem.Metadata().TableMeta(inputScan.Table)
@@ -456,18 +467,18 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 
 	// The `crdb_region` ColumnID
 	firstIndexCol := inputScan.ScanPrivate.Table.IndexColumnID(index, 0)
-	localFilters, remoteFilters, ok := c.getLocalAndRemoteFilters(optionalFilters, ps, firstIndexCol)
+	localFiltersItem, remoteFiltersItem, ok := c.getLocalAndRemoteFilters(optionalFilters, ps, firstIndexCol)
 	if !ok {
 		return
 	}
 	// Must have local and remote filters to proceed.
-	if len(localFilters) == 0 || len(remoteFilters) == 0 {
+	if localFiltersItem == nil || remoteFiltersItem == nil {
 		return
 	}
 	// Add the region-distinguishing filters to the original filters, for each
 	// branch of the UNION ALL.
-	localSelectFilters = append(localSelectFilters, localFilters...)
-	remoteSelectFilters = append(remoteSelectFilters, remoteFilters...)
+	localSelectFilters = append(localSelectFilters, *localFiltersItem.(*memo.FiltersItem))
+	remoteSelectFilters = append(remoteSelectFilters, *remoteFiltersItem.(*memo.FiltersItem))
 
 	localLookupJoin := lookupJoinExpr
 	// If the caller specified to create locality-optimized join, use that
@@ -555,8 +566,8 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 	lookupJoinWithRemoteInput := c.mapInputSideOfLookupJoin(lookupJoinExpr, remoteScan, remoteInput)
 	// For costing and enforce_home_region, indicate these joins lie under a
 	// locality-optimized search.
-	lookupJoinWithLocalInput.LocalityOptimizedSearch = true
-	lookupJoinWithRemoteInput.LocalityOptimizedSearch = true
+	lookupJoinWithLocalInput.ChildOfLocalityOptimizedSearch = true
+	lookupJoinWithRemoteInput.ChildOfLocalityOptimizedSearch = true
 
 	// Map referenced column ids coming from the input table.
 	c.mapLookupJoin(lookupJoinWithLocalInput, lookupJoinLookupSideCols, newLocalLookupTableSP)
@@ -585,15 +596,9 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
 	// Project away columns which weren't in the original output columns.
 	if !leftJoinOutputCols.Equals(localBranch.Relational().OutputCols) {
 		localBranch = c.e.f.ConstructProject(localBranch, memo.ProjectionsExpr{}, leftJoinOutputCols)
-		if !leftJoinOutputCols.Equals(leftJoinOutputCols.Copy().Difference(grp.Relational().OutputCols)) {
-			panic(errors.AssertionFailedf("unexpected output columns in local side of locality-optimized search"))
-		}
 	}
 	if !rightJoinOutputCols.Equals(remoteBranch.Relational().OutputCols) {
 		remoteBranch = c.e.f.ConstructProject(remoteBranch, memo.ProjectionsExpr{}, rightJoinOutputCols)
-		if !rightJoinOutputCols.Equals(rightJoinOutputCols.Copy().Difference(grp.Relational().OutputCols)) {
-			panic(errors.AssertionFailedf("unexpected output columns in remote side of locality-optimized search"))
-		}
 	}
 
 	sp :=
@@ -667,7 +672,7 @@ func (c *CustomFuncs) mapInputSideOfLookupJoin(
 	mappedLookupJoinExpr.IsSecondJoinInPairedJoiner = lookupJoinExpr.IsSecondJoinInPairedJoiner
 	mappedLookupJoinExpr.ContinuationCol = lookupJoinExpr.ContinuationCol
 	mappedLookupJoinExpr.LocalityOptimized = lookupJoinExpr.LocalityOptimized
-	mappedLookupJoinExpr.LocalityOptimizedSearch = lookupJoinExpr.LocalityOptimizedSearch
+	mappedLookupJoinExpr.ChildOfLocalityOptimizedSearch = lookupJoinExpr.ChildOfLocalityOptimizedSearch
 	constFilters := c.e.f.RemapCols(&lookupJoinExpr.ConstFilters, colMap).(*memo.FiltersExpr)
 	mappedLookupJoinExpr.ConstFilters = *constFilters
 	mappedLookupJoinExpr.Locking = lookupJoinExpr.Locking
@@ -830,11 +835,11 @@ func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool 
 	return table.IsRegionalByRow()
 }
 
-// SelectFromRemoteTableRowsOnly returns true if `input` is a select from a
+// IsSelectFromRemoteTableRowsOnly returns true if `input` is a select from a
 // REGIONAL BY TABLE or REGIONAL BY ROW table which only reads rows in a remote
 // region without bounded staleness. Bounded staleness would allow local
 // replicas to be used for the scan.
-func (c *CustomFuncs) SelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
+func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
 	selectExpr, ok := input.(*memo.SelectExpr)
 	if !ok {
 		return false
@@ -856,13 +861,13 @@ func (c *CustomFuncs) SelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
 			return true
 		}
 		firstIndexCol := scanExpr.ScanPrivate.Table.IndexColumnID(index, 0)
-		localFilters, _, ok :=
+		localFiltersItem, _, ok :=
 			c.getLocalAndRemoteFilters(selectExpr.Filters, ps, firstIndexCol)
 		if !ok {
 			// There is no filter on crdb_region, so all regions may be read.
 			return false
 		}
-		if len(localFilters) == 0 {
+		if localFiltersItem == nil {
 			return true
 		}
 		return false
