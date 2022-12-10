@@ -101,6 +101,13 @@ func TestParseString(t *testing.T) {
 	testParseString(t, `"\""`, `"""`)
 	testParseString(t, `"\\\\\\\\\t"`, `"\\\\	"`)
 	testParseString(t, `"\\b"`, `"\b"`)
+	// Regression test: unterminated escape code.
+	testParseString(t, `"\u"`, ``)
+	testParseString(t, `"\u2"`, ``)
+	testParseString(t, `"\u23"`, ``)
+	testParseString(t, `"\u234"`, ``)
+	testParseString(t, `"\u2345"`, `"⍅"`)
+	testParseString(t, `"\u2z45"`, ``)
 }
 
 func testParseString(t *testing.T, json, want string) {

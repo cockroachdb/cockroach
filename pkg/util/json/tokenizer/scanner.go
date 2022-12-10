@@ -248,10 +248,8 @@ func (s *Scanner) parseStringSlow(pos int) ([]byte, int) {
 			return b.Bytes(), pos
 		case c == '\\':
 			switch n := readEscaped(w[wp:], b); n {
-			case -1:
-				return nil, pos // Error
 			case 0:
-				break
+				return nil, pos // Error
 			default:
 				wp += n
 				pos += n
@@ -264,7 +262,7 @@ func (s *Scanner) parseStringSlow(pos int) ([]byte, int) {
 // readEscaped reads escape sequence from the window w, and writes unescaped
 // values into provided buffer.
 // Returns number of bytes consumed from w.
-// Returns 0 if more data is needed, and -1 if an error occurred.
+// Returns 0 if the input wasn't parseable / an error occurred.
 func readEscaped(w []byte, buf *buffer) int {
 	if len(w) < 2 {
 		return 0 // need more data
@@ -278,7 +276,7 @@ func readEscaped(w []byte, buf *buffer) int {
 
 		rr := getu4(w[2:6])
 		if rr < 0 {
-			return -1
+			return 0
 		}
 
 		r := 2 + utf8.UTFMax // number of bytes read so far.
@@ -288,13 +286,13 @@ func readEscaped(w []byte, buf *buffer) int {
 			}
 
 			if w[r] != '\\' || w[r+1] != 'u' {
-				return -1
+				return 0
 			}
 
 			rr1 := getu4(w[r+2:])
 			dec := utf16.DecodeRune(rr, rr1)
 			if dec == unicode.ReplacementChar {
-				return -1
+				return 0
 			}
 			// A valid pair; consume.
 			r *= 2
@@ -307,7 +305,7 @@ func readEscaped(w []byte, buf *buffer) int {
 	default:
 		c = unescapeTable[c]
 		if c == 0 {
-			return -1
+			return 0
 		}
 		buf.AppendByte(c)
 		return 2
