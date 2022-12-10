@@ -92,8 +92,12 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	if isDemoCmd(cmd) {
 		// `cockroach demo` is special: it starts a server, but without
 		// disk and interactively. We don't want to litter the console
-		// with warning or error messages unless overridden.
-		h.Config.Sinks.Stderr.Filter = severity.NONE
+		// with warning or error messages unless overridden; however,
+		// should the command encounter a log.Fatal event, we want
+		// to inform the user (who is guaranteed to be looking at the screen).
+		//
+		// NB: this can be overridden from the command line as usual.
+		h.Config.Sinks.Stderr.Filter = severity.FATAL
 	} else if !isServerCmd && !isWorkloadCmd(cmd) {
 		// Client commands don't typically have a log directory so they
 		// naturally default to stderr logging. However, we don't want
