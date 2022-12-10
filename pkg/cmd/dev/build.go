@@ -169,12 +169,14 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, additionalBazelArgs...)
 
 	if cross == "" {
+		// Do not log --build_event_binary_file=... because it is not relevant to the actual call
+		// from the user perspective.
+		logCommand("bazel", args...)
 		if buildutil.CrdbTestBuild {
 			args = append(args, "--build_event_binary_file=/tmp/path")
 		} else {
 			args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
 		}
-		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
