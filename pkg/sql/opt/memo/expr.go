@@ -282,15 +282,23 @@ func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
 // NoOpDistribution returns true if a DistributeExpr has the same distribution
 // as its input.
 func (e *DistributeExpr) NoOpDistribution() bool {
-	distributionProvidedPhysical := e.ProvidedPhysical()
-	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
-
-	if distributionProvidedPhysical != nil && inputDistributionProvidedPhysical != nil {
-		distribution := distributionProvidedPhysical.Distribution
-		inputDistribution := inputDistributionProvidedPhysical.Distribution
-		return distribution.Equals(inputDistribution)
+	if target, source, ok := e.GetDistributions(); ok {
+		return target.Equals(source)
 	}
 	return false
+}
+
+// GetDistributions returns the target and source Distributions of this
+// `DistributeExpr`, if the provided physical properties have been built.
+func (e *DistributeExpr) GetDistributions() (target, source physical.Distribution, ok bool) {
+	distributionProvidedPhysical := e.ProvidedPhysical()
+	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
+	if distributionProvidedPhysical != nil && inputDistributionProvidedPhysical != nil {
+		target = distributionProvidedPhysical.Distribution
+		source = inputDistributionProvidedPhysical.Distribution
+		return target, source, ok
+	}
+	return physical.Distribution{}, physical.Distribution{}, false
 }
 
 // HasHomeRegion returns true if the operation tree being distributed has a home
@@ -718,6 +726,8 @@ func (f *WindowFrame) String() string {
 
 // IsCanonical returns true if the ScanPrivate indicates an original unaltered
 // primary index Scan operator (i.e. unconstrained and not limited).
+// s.InvertedConstraint is implicitly nil because a primary index cannot
+// be inverted.
 func (s *ScanPrivate) IsCanonical() bool {
 	return s.Index == cat.PrimaryIndex &&
 		s.Constraint == nil &&

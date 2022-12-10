@@ -1837,17 +1837,17 @@ SELECT ntile(i) OVER () FROM a
 project
  ├── columns: ntile:7(int)
  ├── stats: [rows=1000]
- ├── cost: 1084.56
+ ├── cost: 1088.56
  ├── prune: (7)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:7(int)
       ├── stats: [rows=1000]
-      ├── cost: 1074.54
+      ├── cost: 1078.54
       ├── prune: (7)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
       │    ├── stats: [rows=1000]
-      │    ├── cost: 1074.52
+      │    ├── cost: 1078.52
       │    └── prune: (2)
       └── windows
            └── ntile [as=ntile:7, type=int, outer=(2)]
@@ -1955,17 +1955,17 @@ SELECT x FROM (SELECT ntile(i) OVER () x, ntile(f::int) OVER () y FROM a)
 project
  ├── columns: x:7(int)
  ├── stats: [rows=1000]
- ├── cost: 1084.56
+ ├── cost: 1088.56
  ├── prune: (7)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:7(int)
       ├── stats: [rows=1000]
-      ├── cost: 1074.54
+      ├── cost: 1078.54
       ├── prune: (7)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
       │    ├── stats: [rows=1000]
-      │    ├── cost: 1074.52
+      │    ├── cost: 1078.52
       │    └── prune: (2)
       └── windows
            └── ntile [as=ntile:7, type=int, outer=(2)]
@@ -4998,12 +4998,12 @@ WITH foo AS (SELECT * FROM a)
 with &1 (foo)
  ├── columns: i:8(int)
  ├── stats: [rows=1000]
- ├── cost: 1104.86
+ ├── cost: 1108.86
  ├── prune: (8)
  ├── scan t.public.a
  │    ├── columns: t.public.a.k:1(int!null) t.public.a.i:2(int) t.public.a.f:3(float) t.public.a.s:4(string)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1104.82
+ │    ├── cost: 1108.82
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
