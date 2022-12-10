@@ -92,19 +92,30 @@ func RandomVec(args RandomVecArgs) {
 		}
 	case types.BytesFamily:
 		bytes := args.Vec.Bytes()
-		isUUID := args.Vec.Type().Family() == types.UuidFamily
-		for i := 0; i < args.N; i++ {
-			bytesLen := args.BytesFixedLength
-			if bytesLen <= 0 {
-				bytesLen = args.Rand.Intn(maxVarLen)
+		if args.Vec.Type().Family() == types.EnumFamily {
+			enumMeta := args.Vec.Type().TypeMeta.EnumData
+			if enumMeta == nil {
+				colexecerror.InternalError(errors.AssertionFailedf("unexpectedly empty enum metadata in RandomVec"))
 			}
-			if isUUID {
-				bytesLen = uuid.Size
+			reps := enumMeta.PhysicalRepresentations
+			for i := 0; i < args.N; i++ {
+				bytes.Set(i, reps[args.Rand.Intn(len(reps))])
 			}
-			randBytes := make([]byte, bytesLen)
-			// Read always returns len(bytes[i]) and nil.
-			_, _ = rand.Read(randBytes)
-			bytes.Set(i, randBytes)
+		} else {
+			isUUID := args.Vec.Type().Family() == types.UuidFamily
+			for i := 0; i < args.N; i++ {
+				bytesLen := args.BytesFixedLength
+				if bytesLen <= 0 {
+					bytesLen = args.Rand.Intn(maxVarLen)
+				}
+				if isUUID {
+					bytesLen = uuid.Size
+				}
+				randBytes := make([]byte, bytesLen)
+				// Read always returns len(bytes[i]) and nil.
+				_, _ = rand.Read(randBytes)
+				bytes.Set(i, randBytes)
+			}
 		}
 	case types.DecimalFamily:
 		decs := args.Vec.Decimal()

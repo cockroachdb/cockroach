@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,6 +106,20 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 		}
 		builder.(*array.Float64Builder).AppendValues(data, valid)
 	case types.BytesFamily:
+		if t.Family() == types.EnumFamily {
+			enumMeta := t.TypeMeta.EnumData
+			if enumMeta == nil {
+				panic(errors.AssertionFailedf("unexpectedly empty enum metadata in RandomVec"))
+			}
+			builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+			data := make([][]byte, n)
+			reps := enumMeta.PhysicalRepresentations
+			for i := range data {
+				data[i] = reps[rng.Intn(len(reps))]
+			}
+			builder.(*array.BinaryBuilder).AppendValues(data, valid)
+			break
+		}
 		// Bytes can be represented 3 different ways. As variable-length bytes,
 		// variable-length strings, or fixed-width bytes.
 		representation := rng.Intn(2)
