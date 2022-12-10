@@ -73,14 +73,6 @@ func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Dura
 		return false, time.Duration(0)
 	}
 
-	// TODO(ssd): It would be nice to get this in some zero-cost
-	// way. We could make ElasticCPUWorkHandle an interface and
-	// then allow for testing implementations. Not sure if the
-	// indirect call is better or worse than the conditional.
-	if h.testingOverrideOverLimit != nil {
-		return h.testingOverrideOverLimit()
-	}
-
 	// What we're effectively doing is just:
 	//
 	// 		runningTime := h.runningTime()
@@ -102,6 +94,10 @@ func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Dura
 }
 
 func (h *ElasticCPUWorkHandle) overLimitInner() (overLimit bool, difference time.Duration) {
+	if h.testingOverrideOverLimit != nil {
+		return h.testingOverrideOverLimit()
+	}
+
 	runningTime := h.runningTime()
 	if runningTime >= h.allotted {
 		return true, grunning.Difference(runningTime, h.allotted)
