@@ -236,7 +236,7 @@ func newArgWidthOverloadBase(
 
 func (b *argWidthOverloadBase) IsBytesLike() bool {
 	switch b.CanonicalTypeFamily {
-	case types.JsonFamily, types.BytesFamily:
+	case types.BytesFamily, types.JsonFamily:
 		return true
 	}
 	return false
@@ -768,6 +768,7 @@ type nonDatumDatumCustomizer struct {
 
 func registerTypeCustomizers() {
 	typeCustomizers = make(map[typePair]typeCustomizer)
+	// Same type customizers.
 	registerTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
 	registerTypeCustomizer(typePair{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}, bytesCustomizer{})
 	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCustomizer{})
@@ -775,8 +776,6 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}, timestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}, intervalCustomizer{})
 	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}, jsonCustomizer{})
-	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}, jsonBytesCustomizer{})
-	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, jsonDatumCustomizer{})
 	registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCustomizer{})
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -807,6 +806,8 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}, intervalTimestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.DecimalFamily, anyWidth}, intervalDecimalCustomizer{})
 	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntervalFamily, anyWidth}, decimalIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}, jsonBytesCustomizer{})
+	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, jsonDatumCustomizer{})
 
 	for _, compatibleFamily := range compatibleCanonicalTypeFamilies[typeconv.DatumVecCanonicalTypeFamily] {
 		if compatibleFamily != typeconv.DatumVecCanonicalTypeFamily {

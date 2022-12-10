@@ -98,9 +98,14 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 							colexecerror.InternalError(err)
 						}
 						%[1]s := %[3]s.NewDUuid(tree.DUuid{UUID: id})`,
-	types.TimestampFamily:                `%[1]s := %[3]s.NewDTimestamp(tree.DTimestamp{Time: %[2]s})`,
-	types.TimestampTZFamily:              `%[1]s := %[3]s.NewDTimestampTZ(tree.DTimestampTZ{Time: %[2]s})`,
-	types.IntervalFamily:                 `%[1]s := %[3]s.NewDInterval(tree.DInterval{Duration: %[2]s})`,
+	types.TimestampFamily:   `%[1]s := %[3]s.NewDTimestamp(tree.DTimestamp{Time: %[2]s})`,
+	types.TimestampTZFamily: `%[1]s := %[3]s.NewDTimestampTZ(tree.DTimestampTZ{Time: %[2]s})`,
+	types.IntervalFamily:    `%[1]s := %[3]s.NewDInterval(tree.DInterval{Duration: %[2]s})`,
+	types.EnumFamily: `e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, %[2]s)
+						if err != nil {
+							colexecerror.InternalError(err)
+						}
+						%[1]s := %[3]s.NewDEnum(e)`,
 	typeconv.DatumVecCanonicalTypeFamily: `%[1]s := %[2]s.(tree.Datum)`,
 }
 
@@ -129,6 +134,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 		types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
 		types.DateFamily, types.BytesFamily, types.EncodedKeyFamily, types.JsonFamily,
 		types.UuidFamily, types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily,
+		types.EnumFamily,
 	}
 	for _, typeFamily := range optimizedTypeFamilies {
 		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)

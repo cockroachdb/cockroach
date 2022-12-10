@@ -355,6 +355,15 @@ func (b *writeBuffer) writeTextColumnarElement(
 	case types.JsonFamily:
 		b.writeLengthPrefixedString(vecs.JSONCols[colIdx].Get(rowIdx).String())
 
+	case types.EnumFamily:
+		// Enums are serialized with their logical representation.
+		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(typ, vecs.BytesCols[colIdx].Get(rowIdx))
+		if err != nil {
+			b.setError(err)
+		} else {
+			b.writeLengthPrefixedString(logical)
+		}
+
 	default:
 		// All other types are represented via the datum-backed vector.
 		writeTextDatumNotNull(b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), conv, sessionLoc, typ)
@@ -842,6 +851,14 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 
 	case types.JsonFamily:
 		writeBinaryJSON(b, vecs.JSONCols[colIdx].Get(rowIdx), typ)
+
+	case types.EnumFamily:
+		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(typ, vecs.BytesCols[colIdx].Get(rowIdx))
+		if err != nil {
+			b.setError(err)
+		} else {
+			b.writeLengthPrefixedString(logical)
+		}
 
 	default:
 		// All other types are represented via the datum-backed vector.

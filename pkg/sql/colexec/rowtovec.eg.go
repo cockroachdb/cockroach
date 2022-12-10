@@ -164,6 +164,14 @@ func EncDatumRowToColVecs(
 					v := datum.(*tree.DJSON).JSON
 					vecs.JSONCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
 				}
+			case types.EnumFamily:
+				switch t.Width() {
+				case -1:
+				default:
+
+					v := datum.(*tree.DEnum).PhysicalRep
+					vecs.BytesCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
+				}
 			case types.EncodedKeyFamily:
 				switch t.Width() {
 				case -1:
