@@ -186,10 +186,7 @@ func (d *dev) generateBazel(cmd *cobra.Command) error {
 
 func (d *dev) generateDocs(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	if err := d.generateTarget(ctx, "//pkg/gen:docs"); err != nil {
-		return err
-	}
-	return d.generateRedactSafe(ctx)
+	return d.generateTarget(ctx, "//pkg/gen:docs")
 }
 
 func (d *dev) generateExecgen(cmd *cobra.Command) error {
@@ -198,10 +195,7 @@ func (d *dev) generateExecgen(cmd *cobra.Command) error {
 
 func (d *dev) generateGoAndDocs(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	if err := d.generateTarget(ctx, "//pkg/gen"); err != nil {
-		return err
-	}
-	return d.generateRedactSafe(ctx)
+	return d.generateTarget(ctx, "//pkg/gen")
 }
 
 func (d *dev) generateGo(cmd *cobra.Command) error {
@@ -262,24 +256,6 @@ func (d *dev) generateTarget(ctx context.Context, target string) error {
 		return fmt.Errorf("generating target %s: %s", target, err.Error())
 	}
 	return nil
-}
-
-func (d *dev) generateRedactSafe(ctx context.Context) error {
-	// docs/generated/redact_safe.md needs special handling.
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-	output, err := d.exec.CommandContextSilent(
-		ctx, filepath.Join(workspace, "build", "bazelutil", "generate_redact_safe.sh"),
-	)
-	if err != nil {
-		// nolint:errwrap
-		return fmt.Errorf("generating redact_safe.md: %s", err.Error())
-	}
-	return d.os.WriteFile(
-		filepath.Join(workspace, "docs", "generated", "redact_safe.md"), string(output),
-	)
 }
 
 func (d *dev) generateCgo(cmd *cobra.Command) error {

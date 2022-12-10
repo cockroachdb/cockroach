@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/loopvarcapture"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nilness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/redactcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
@@ -61,6 +62,7 @@ func main() {
 		hash.Analyzer,
 		leaktestcall.Analyzer,
 		nocopy.Analyzer,
+		redactcheck.Analyzer,
 		returnerrcheck.Analyzer,
 		timer.Analyzer,
 		unconvert.Analyzer,

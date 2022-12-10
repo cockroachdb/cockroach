@@ -17,6 +17,7 @@ package sysutil
 
 import (
 	"fmt"
+	"os"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -34,4 +35,14 @@ func ProcessIdentity() string {
 // error.
 func IsCrossDeviceLinkErrno(errno error) bool {
 	return errno == syscall.EXDEV
+}
+
+// TerminateSelf sends SIGTERM to the process itself.
+func TerminateSelf() error {
+	pr, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		// No-op.
+		return nil //nolint:returnerrcheck
+	}
+	return pr.Signal(unix.SIGTERM)
 }

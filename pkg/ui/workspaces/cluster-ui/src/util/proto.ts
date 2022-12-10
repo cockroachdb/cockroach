@@ -21,6 +21,9 @@ export type StatusMetrics = typeof nodeStatus.metrics;
  * with metrics from `store_statuses.metrics` object.
  */
 export function rollupStoreMetrics(ns: INodeStatus): StatusMetrics {
+  if (!ns.store_statuses) {
+    return ns.metrics || {};
+  }
   return ns.store_statuses
     .map(ss => ss.metrics)
     .reduce((acc, i) => {

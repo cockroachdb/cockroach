@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -435,7 +437,7 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, false))
 		}
 	}
 }
@@ -509,7 +511,7 @@ func acquireNodeLease(
 		if newest != nil {
 			minExpiration = newest.getExpiration()
 		}
-		desc, expiration, err := m.storage.acquire(ctx, minExpiration, id)
+		desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, id)
 		if err != nil {
 			return nil, err
 		}
@@ -518,7 +520,7 @@ func acquireNodeLease(
 		t.mu.takenOffline = false
 		defer t.mu.Unlock()
 		var newDescVersionState *descriptorVersionState
-		newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration)
+		newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, regionPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -734,6 +736,8 @@ func NewLeaseManager(
 		stopper:          stopper,
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
 	}
+	lm.storage.regionPrefix = &atomic.Value{}
+	lm.storage.regionPrefix.Store(enum.One)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.mu.updatesResolvedTimestamp = db.Clock().Now()
@@ -761,6 +765,22 @@ func (m *Manager) findNewest(id descpb.ID) *descriptorVersionState {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.mu.active.findNewest()
+}
+
+// SetRegionPrefix sets the prefix this Manager uses to write leases. If val
+// is empty, this call is a no-op. Note that the default value is enum.One.
+// This means that leases acquired before initial startup may write their
+// entry to a remote region.
+//
+// TODO(ajwerner): We ought to reject attempts to lease descriptors before
+// we've set the prefix if the table is partitioned. In principle, this should
+// just mean returning ErrDescriptorNotFound. The challenge will be to sort
+// out all the conditions in which we expect, or don't expect to get a prefix
+// in a timely manner.
+func (m *Manager) SetRegionPrefix(val []byte) {
+	if len(val) > 0 {
+		m.storage.regionPrefix.Store(val)
+	}
 }
 
 // AcquireByName returns a version for the specified descriptor valid for
@@ -1290,9 +1310,19 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// doesn't implement AS OF SYSTEM TIME.
 
 		// Read orphaned leases.
-		sqlQuery := fmt.Sprintf(`
+		const (
+			queryWithMR = `
+SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+`
+			queryWithoutMR = `
 SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
-`, timeThreshold, instanceID)
+`
+		)
+		query := queryWithoutMR
+		if systemschema.TestSupportMultiRegion() {
+			query = queryWithMR
+		}
+		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()
 		retryOptions.Closer = m.stopper.ShouldQuiesce()
@@ -1318,6 +1348,13 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 				id:         descpb.ID(tree.MustBeDInt(row[0])),
 				version:    int(tree.MustBeDInt(row[1])),
 				expiration: tree.MustBeDTimestamp(row[2]),
+			}
+			if len(row) == 4 {
+				if ed, ok := row[3].(*tree.DEnum); ok {
+					lease.prefix = ed.PhysicalRep
+				} else if bd, ok := row[3].(*tree.DBytes); ok {
+					lease.prefix = []byte((*bd))
+				}
 			}
 			if err := m.stopper.RunAsyncTaskEx(
 				ctx,

@@ -45,17 +45,17 @@ load(":bnf.bzl", "BNF_SRCS")
 # _go_proto_srcs rule and go_proto_library which emit their sources into a
 # path in the sandbox which is not parallel to its path in the repo.
 _GeneratedFileInfo = provider(
-  "Info needed to hoist generated files",
-  fields = {
-    "generated_files": "dictionary from prefix to list of files",
-    "cleanup_tasks": "list of bash commands to run"
-  }
+    "Info needed to hoist generated files",
+    fields = {
+        "generated_files": "dictionary from prefix to list of files",
+        "cleanup_tasks": "list of bash commands to run",
+    },
 )
 
 # This is a useful helper for creating cleanup commands which operate within
 # the workspace root.
-def _subshell_in_workspace_snippet(cmds=[]):
-  return """\
+def _subshell_in_workspace_snippet(cmds = []):
+    return """\
 # Use a subshell with () to avoid changing the directory in the main shell.
 (
     cd "${{BUILD_WORKSPACE_DIRECTORY}}"
@@ -71,50 +71,51 @@ _find_relevant = "find ./pkg -name node_modules -prune -o "
 # provider and map then into a _GeneratedFileInfo which tells _hoist_files
 # how to locate the generated code within the sandbox. Compare this to
 def _go_proto_srcs_impl(ctx):
-  generated_files = {}
-  for s in ctx.attr._srcs:
-    srcs = s[GoSource]
-    lbl = srcs.library.label
-    imp = srcs.library.importpath
-    imp = imp[:imp.find(lbl.package)]
-    prefix = "{}/{}_/{}".format(lbl.package, lbl.name, imp)
-    generated_files[prefix] = [f for f in srcs.srcs]
+    generated_files = {}
+    for s in ctx.attr._srcs:
+        srcs = s[GoSource]
+        lbl = srcs.library.label
+        imp = srcs.library.importpath
+        imp = imp[:imp.find(lbl.package)]
+        prefix = "{}/{}_/{}".format(lbl.package, lbl.name, imp)
+        generated_files[prefix] = [f for f in srcs.srcs]
 
-  return [
-    _GeneratedFileInfo(
-      generated_files = generated_files,
-      # Create a task to remove any existing protobuf files.
-      cleanup_tasks = [
-        _subshell_in_workspace_snippet([
-          _find_relevant + " -type f -name {} -exec rm {{}} +".format(suffix)
-        ]) for suffix in ["*.pb.go", "*.pb.gw.go"]
-      ],
-    )
-  ]
+    return [
+        _GeneratedFileInfo(
+            generated_files = generated_files,
+            # Create a task to remove any existing protobuf files.
+            cleanup_tasks = [
+                _subshell_in_workspace_snippet([
+                    _find_relevant + " -type f -name {} -exec rm {{}} +".format(suffix),
+                ])
+                for suffix in ["*.pb.go", "*.pb.gw.go"]
+            ],
+        ),
+    ]
 
 _go_proto_srcs = rule(
-  implementation = _go_proto_srcs_impl,
-  attrs = {
-   "_srcs": attr.label_list(providers = [GoSource], default=PROTOBUF_SRCS),
-  },
+    implementation = _go_proto_srcs_impl,
+    attrs = {
+        "_srcs": attr.label_list(providers = [GoSource], default = PROTOBUF_SRCS),
+    },
 )
 
 # This rule is the default rule to build construct the input to _hoist_files
 # for srcs which have a path in the sandbox that is parallel to where those
 # files should end up in the repo.
 def _no_prefix_impl(ctx):
-  files = [f for di in ctx.attr.srcs for f in di[DefaultInfo].files.to_list()]
-  return [_GeneratedFileInfo(
-    generated_files = {"": files},
-    cleanup_tasks = ctx.attr.cleanup_tasks,
-  )]
+    files = [f for di in ctx.attr.srcs for f in di[DefaultInfo].files.to_list()]
+    return [_GeneratedFileInfo(
+        generated_files = {"": files},
+        cleanup_tasks = ctx.attr.cleanup_tasks,
+    )]
 
 _no_prefix = rule(
-  implementation = _no_prefix_impl,
-  attrs = {
-    "srcs": attr.label_list(allow_files=True),
-    "cleanup_tasks": attr.string_list(),
-  },
+    implementation = _no_prefix_impl,
+    attrs = {
+        "srcs": attr.label_list(allow_files = True),
+        "cleanup_tasks": attr.string_list(),
+    },
 )
 
 # This rule is responsible for generating an executable which can clean up old
@@ -135,39 +136,39 @@ _no_prefix = rule(
 # TODO(ajwerner): If this script proves slow, we could rewrite it to depend
 # on a go program which can perform the file IO in parallel.
 def _hoist_files_impl(ctx):
-  cleanup_cmds = []
-  src_dst_pairs = []
-  generated_files = {}
-  for set in ctx.attr.data:
-    gfi = set[_GeneratedFileInfo]
-    cleanup_cmds += gfi.cleanup_tasks if hasattr(gfi, "cleanup_tasks") else []
-    for prefix, files in gfi.generated_files.items():
-      if prefix not in generated_files:
-        generated_files[prefix] = []
-      for file in files:
-        dst = '"${{BUILD_WORKSPACE_DIRECTORY}}/{}"'.format(
-          file.short_path[len(prefix):]
-        )
-        src_dst_pairs.append((file.short_path, dst))
-        generated_files[prefix].append(file)
+    cleanup_cmds = []
+    src_dst_pairs = []
+    generated_files = {}
+    for set in ctx.attr.data:
+        gfi = set[_GeneratedFileInfo]
+        cleanup_cmds += gfi.cleanup_tasks if hasattr(gfi, "cleanup_tasks") else []
+        for prefix, files in gfi.generated_files.items():
+            if prefix not in generated_files:
+                generated_files[prefix] = []
+            for file in files:
+                dst = '"${{BUILD_WORKSPACE_DIRECTORY}}/{}"'.format(
+                    file.short_path[len(prefix):],
+                )
+                src_dst_pairs.append((file.short_path, dst))
+                generated_files[prefix].append(file)
 
-  executable = ctx.actions.declare_file(ctx.label.name)
-  ctx.actions.write(
-    executable,
-     _make_hoist_script(cleanup_cmds, src_dst_pairs),
-    is_executable = True,
-  )
-  runfiles = ctx.runfiles(files = [file for files in generated_files.values() for file in files])
-  return [
-    DefaultInfo(executable = executable, runfiles=runfiles),
-    _GeneratedFileInfo(
-      generated_files = generated_files,
-      cleanup_tasks = cleanup_cmds,
+    executable = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.write(
+        executable,
+        _make_hoist_script(cleanup_cmds, src_dst_pairs),
+        is_executable = True,
     )
-  ]
+    runfiles = ctx.runfiles(files = [file for files in generated_files.values() for file in files])
+    return [
+        DefaultInfo(executable = executable, runfiles = runfiles),
+        _GeneratedFileInfo(
+            generated_files = generated_files,
+            cleanup_tasks = cleanup_cmds,
+        ),
+    ]
 
 def _make_hoist_script(cleanup_cmds, files_to_copy):
-  return """\
+    return """\
 #!/bin/bash
 set -euo pipefail
 
@@ -194,9 +195,9 @@ cp_file() {
 {cleanup}
 {hoist}
 """.format(
-    cleanup = "\n".join(cleanup_cmds),
-    hoist = "\n".join(["cp_file {0} {1}".format(*p) for p in files_to_copy])
-  )
+        cleanup = "\n".join(cleanup_cmds),
+        hoist = "\n".join(["cp_file {0} {1}".format(*p) for p in files_to_copy]),
+    )
 
 _hoist_files = rule(
     implementation = _hoist_files_impl,
@@ -207,107 +208,106 @@ _hoist_files = rule(
 )
 
 def go_proto():
-  _go_proto_srcs(name = "go_proto_srcs")
-  _hoist_files(name = "go_proto", data = ["go_proto_srcs"], tags = ["no-remote-exec"])
-
+    _go_proto_srcs(name = "go_proto_srcs")
+    _hoist_files(name = "go_proto", data = ["go_proto_srcs"], tags = ["no-remote-exec"])
 
 # This macro is leveraged below by all of the macros corresponding to targets
 # which don't need any special prefix handling (all but go_proto).
 def _hoist_no_prefix(name, srcs, cleanup_tasks = []):
-  srcs_name = name + "_srcs"
-  _no_prefix(
-    name = srcs_name,
-    srcs = srcs,
-    cleanup_tasks = cleanup_tasks,
-  )
-  _hoist_files(name = name, data = [srcs_name], tags = ["no-remote-exec"])
+    srcs_name = name + "_srcs"
+    _no_prefix(
+        name = srcs_name,
+        srcs = srcs,
+        cleanup_tasks = cleanup_tasks,
+    )
+    _hoist_files(name = name, data = [srcs_name], tags = ["no-remote-exec"])
 
 def gomock():
-  _hoist_no_prefix(
-    name = "gomock",
-    srcs = GOMOCK_SRCS,
-    cleanup_tasks = [
-        _subshell_in_workspace_snippet([
-          _find_relevant + "-type f -name '*.go' " +
-            # Use this || true dance to avoid egrep failing
-            # the whole script.
-            "| { egrep '/mocks_generated(_test)?\\.go' || true ; }"+
-            "| xargs rm ",
-        ]),
-      ],
-  )
+    _hoist_no_prefix(
+        name = "gomock",
+        srcs = GOMOCK_SRCS,
+        cleanup_tasks = [
+            _subshell_in_workspace_snippet([
+                _find_relevant + "-type f -name '*.go' " +
+                # Use this || true dance to avoid egrep failing
+                # the whole script.
+                "| { egrep '/mocks_generated(_test)?\\.go' || true ; }" +
+                "| xargs rm ",
+            ]),
+        ],
+    )
 
 def execgen():
-  _hoist_no_prefix(
-    name = "execgen",
-    srcs = EXECGEN_SRCS,
-    cleanup_tasks = [
-      _subshell_in_workspace_snippet([
-        _find_relevant + "-type f -name '*.eg.go' -exec rm {} +",
-      ])
-    ]
-  )
+    _hoist_no_prefix(
+        name = "execgen",
+        srcs = EXECGEN_SRCS,
+        cleanup_tasks = [
+            _subshell_in_workspace_snippet([
+                _find_relevant + "-type f -name '*.eg.go' -exec rm {} +",
+            ]),
+        ],
+    )
 
 def stringer():
-  _hoist_no_prefix(
-    name = "stringer",
-    srcs = STRINGER_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "stringer",
+        srcs = STRINGER_SRCS,
+    )
 
 def optgen():
-  _hoist_no_prefix(
-    name = "optgen",
-    srcs = OPTGEN_SRCS,
-    cleanup_tasks = [
-      _subshell_in_workspace_snippet([
-        _find_relevant + "-type f -name '*.og.go'" +
-          " ! -regex '.*lang/[^/].*\\.og\\.go$'" +
-          " -exec rm {} +",
-      ]),
-    ],
-  )
+    _hoist_no_prefix(
+        name = "optgen",
+        srcs = OPTGEN_SRCS,
+        cleanup_tasks = [
+            _subshell_in_workspace_snippet([
+                _find_relevant + "-type f -name '*.og.go'" +
+                " ! -regex '.*lang/[^/].*\\.og\\.go$'" +
+                " -exec rm {} +",
+            ]),
+        ],
+    )
 
 def misc():
-  _hoist_no_prefix(
-    name = "misc",
-    srcs = MISC_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "misc",
+        srcs = MISC_SRCS,
+    )
 
 def docs():
-  _hoist_no_prefix(
-    name = "docs",
-    srcs = DOCS_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "docs",
+        srcs = DOCS_SRCS,
+    )
 
 def bindata():
-  _hoist_no_prefix(
-    name = "bindata",
-    srcs = BINDATA_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "bindata",
+        srcs = BINDATA_SRCS,
+    )
 
 def parser():
-  _hoist_no_prefix(
-    name = "parser",
-    srcs = PARSER_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "parser",
+        srcs = PARSER_SRCS,
+    )
 
 def schemachanger():
-  _hoist_no_prefix(
-    name = "schemachanger",
-    srcs = SCHEMACHANGER_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "schemachanger",
+        srcs = SCHEMACHANGER_SRCS,
+    )
 
 def diagrams():
-  _hoist_no_prefix(
-    name = "diagrams",
-    srcs = DIAGRAMS_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "diagrams",
+        srcs = DIAGRAMS_SRCS,
+    )
 
 def bnf():
-  _hoist_no_prefix(
-    name = "bnf",
-    srcs = BNF_SRCS,
-  )
+    _hoist_no_prefix(
+        name = "bnf",
+        srcs = BNF_SRCS,
+    )
 
 def gen(name, srcs):
-  _hoist_files(name = name, data = srcs, tags = ["no-remote-exec"])
+    _hoist_files(name = name, data = srcs, tags = ["no-remote-exec"])

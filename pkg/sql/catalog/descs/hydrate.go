@@ -189,7 +189,7 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 
 func (tc *Collection) canUseHydratedDescriptorCache(id descpb.ID) bool {
 	return tc.hydrated != nil &&
-		tc.stored.GetCachedByID(id) == nil &&
+		!tc.cr.IsIDInCache(id) &&
 		tc.uncommitted.getUncommittedByID(id) == nil &&
 		tc.synthetic.getSyntheticByID(id) == nil
 }

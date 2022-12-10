@@ -64,11 +64,12 @@ corresponding to version 23.1.<foo> doing the `ALTER TABLE` for old cluster, and
 probably a backfill for the table rows. Say that a permanent upgrade like
 `addRootUser()` has code inserting into system.users. If it were not for this
 guarantee, the `addRootUser()` code could not be changed to do:
-   INSERT INTO system.users (..., foo) ....
+
+	INSERT INTO system.users (..., foo) ....
+
 If this query was run in a cluster being upgraded from 22.2 to 23.1, it would
 fail because the column doesn't exist yet (as the upgrade adding it has not yet
 run). This guarantee says that, if addRootUser() runs, it can expect the
 bootstrap schema that has "foo".
 */
-
 package upgrade

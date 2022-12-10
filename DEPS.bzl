@@ -2,7 +2,7 @@ load("@bazel_gazelle//:deps.bzl", "go_repository")
 
 # PRO-TIP: You can inject temorary changes to any of these dependencies by
 # by pointing to an alternate remote to clone from. Delete the `sha256`,
-# `strip_prefix`, and ` + `urls` parameters, and add `vcs = "git"` as well as a
+# `strip_prefix`, and `urls` parameters, and add `vcs = "git"` as well as a
 # custom `remote` and `commit`. For example:
 #     go_repository(
 #        name = "com_github_cockroachdb_sentry_go",
@@ -1162,10 +1162,10 @@ def go_deps():
         name = "com_github_charmbracelet_bubbletea",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/charmbracelet/bubbletea",
-        sha256 = "7b808eab559c7bb038bb63534d6942d48b0fcc639d48414d3005bc2cd40c3151",
-        strip_prefix = "github.com/charmbracelet/bubbletea@v0.22.2-0.20221007125427-0e76ba142aa1",
+        sha256 = "13f48dd8bf68e2b315028800f9533dff9b2b07e7911f39b6d7555c93db80b2bf",
+        strip_prefix = "github.com/charmbracelet/bubbletea@v0.23.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/charmbracelet/bubbletea/com_github_charmbracelet_bubbletea-v0.22.2-0.20221007125427-0e76ba142aa1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/charmbracelet/bubbletea/com_github_charmbracelet_bubbletea-v0.23.1.zip",
         ],
     )
     go_repository(
@@ -1485,10 +1485,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "b422de55eea4f2662a4e1b32807d699f4f7feb0fab40dc0e99455473561c689c",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20221206222826-0d6d19018632",
+        sha256 = "76575b5e3c38334308d006475c1ec3cdf714ceaa4ae3baef8945046f943fab75",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20221207223118-463b049c1dd1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20221206222826-0d6d19018632.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20221207223118-463b049c1dd1.zip",
         ],
     )
     go_repository(
@@ -5163,10 +5163,10 @@ def go_deps():
         name = "com_github_knz_bubbline",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/bubbline",
-        sha256 = "176f2b58f6206410c6118965e6cbdfcb2e626830587d94595c0026a31c70432c",
-        strip_prefix = "github.com/knz/bubbline@v0.0.0-20221202175954-247a3055d876",
+        sha256 = "1a30a8515bb02301d2fbd0deb0b4857a34a11dc23b76cad1249b945169558824",
+        strip_prefix = "github.com/knz/bubbline@v0.0.0-20221209194912-dae6b2c4de0d",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221202175954-247a3055d876.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221209194912-dae6b2c4de0d.zip",
         ],
     )
     go_repository(

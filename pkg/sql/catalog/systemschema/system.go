@@ -132,6 +132,16 @@ CREATE TABLE system.lease (
   CONSTRAINT "primary" PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
+	MRLeaseTableSchema = `CREATE TABLE system.lease (
+  "descID"     INT8,
+  version      INT8,
+  "nodeID"     INT8,
+  expiration   TIMESTAMP,
+  crdb_region  BYTES NOT NULL,
+  CONSTRAINT   "primary" PRIMARY KEY (crdb_region, "descID", version, expiration, "nodeID"),
+  FAMILY       "primary" ("descID", version, "nodeID", expiration, crdb_region)
+);`
+
 	// system.eventlog contains notable events from the cluster.
 	//
 	// This data is also exported to the Observability Service. This table might
@@ -274,12 +284,17 @@ CREATE TABLE system.locations (
 	// role_members stores relationships between roles (role->role and role->user).
 	RoleMembersTableSchema = `
 CREATE TABLE system.role_members (
-  "role"   STRING NOT NULL,
-  "member" STRING NOT NULL,
-  "isAdmin"  BOOL NOT NULL,
+  "role"    STRING NOT NULL,
+  "member"  STRING NOT NULL,
+  "isAdmin" BOOL NOT NULL,
+  role_id   OID,
+  member_id OID,
   CONSTRAINT "primary" PRIMARY KEY ("role", "member"),
   INDEX ("role"),
-  INDEX ("member")
+  INDEX ("member"),
+  INDEX (role_id),
+  INDEX (member_id),
+  UNIQUE INDEX (role_id, member_id)
 );`
 
 	// comments stores comments(database, table, column...).
@@ -833,6 +848,7 @@ func systemTable(
 			tbl.NextFamilyID = fam.ID + 1
 		}
 	}
+	tbl.NextIndexID = tbl.PrimaryIndex.ID + 1
 	for i, idx := range indexes {
 		if tbl.NextIndexID <= idx.ID {
 			tbl.NextIndexID = idx.ID + 1
@@ -908,7 +924,7 @@ func MakeSystemTables() []SystemTable {
 		DescIDSequence,
 		RoleIDSequence,
 		TenantsTable,
-		LeaseTable,
+		LeaseTable(),
 		EventLogTable,
 		RangeEventTable,
 		UITable,
@@ -1215,29 +1231,65 @@ var (
 // suggestions on writing and maintaining them.
 var (
 	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = makeSystemTable(
-		LeaseTableSchema,
-		systemTable(
-			catconstants.LeaseTableName,
-			keys.LeaseTableID,
-			[]descpb.ColumnDescriptor{
-				{Name: "descID", ID: 1, Type: types.Int},
-				{Name: "version", ID: 2, Type: types.Int},
-				{Name: "nodeID", ID: 3, Type: types.Int},
-				{Name: "expiration", ID: 4, Type: types.Timestamp},
-			},
-			[]descpb.ColumnFamilyDescriptor{
-				{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []descpb.ColumnID{1, 2, 3, 4}},
-			},
-			descpb.IndexDescriptor{
-				Name:                "primary",
-				ID:                  1,
-				Unique:              true,
-				KeyColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-				KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
-			},
-		))
+	LeaseTable = func() SystemTable {
+		if TestSupportMultiRegion() {
+			return makeSystemTable(
+				MRLeaseTableSchema,
+				systemTable(
+					catconstants.LeaseTableName,
+					keys.LeaseTableID,
+					[]descpb.ColumnDescriptor{
+						{Name: "descID", ID: 1, Type: types.Int},
+						{Name: "version", ID: 2, Type: types.Int},
+						{Name: "nodeID", ID: 3, Type: types.Int},
+						{Name: "expiration", ID: 4, Type: types.Timestamp},
+						{Name: "crdb_region", ID: 5, Type: types.Bytes},
+					},
+					[]descpb.ColumnFamilyDescriptor{
+						{
+							Name:        "primary",
+							ID:          0,
+							ColumnNames: []string{"descID", "version", "nodeID", "expiration", "crdb_region"},
+							ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+						},
+					},
+					descpb.IndexDescriptor{
+						Name:           "primary",
+						ID:             2,
+						Unique:         true,
+						KeyColumnNames: []string{"crdb_region", "descID", "version", "expiration", "nodeID"},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{
+							catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC,
+							catpb.IndexColumn_ASC, catpb.IndexColumn_ASC,
+						},
+						KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
+					},
+				))
+		}
+		return makeSystemTable(
+			LeaseTableSchema,
+			systemTable(
+				catconstants.LeaseTableName,
+				keys.LeaseTableID,
+				[]descpb.ColumnDescriptor{
+					{Name: "descID", ID: 1, Type: types.Int},
+					{Name: "version", ID: 2, Type: types.Int},
+					{Name: "nodeID", ID: 3, Type: types.Int},
+					{Name: "expiration", ID: 4, Type: types.Timestamp},
+				},
+				[]descpb.ColumnFamilyDescriptor{
+					{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []descpb.ColumnID{1, 2, 3, 4}},
+				},
+				descpb.IndexDescriptor{
+					Name:                "primary",
+					ID:                  1,
+					Unique:              true,
+					KeyColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+					KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
+				},
+			))
+	}
 
 	uuidV4String = "uuid_v4()"
 
@@ -1579,6 +1631,8 @@ var (
 				{Name: "role", ID: 1, Type: types.String},
 				{Name: "member", ID: 2, Type: types.String},
 				{Name: "isAdmin", ID: 3, Type: types.Bool},
+				{Name: "role_id", ID: 4, Type: types.Oid, Nullable: true},
+				{Name: "member_id", ID: 5, Type: types.Oid, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1593,6 +1647,20 @@ var (
 					ColumnNames:     []string{"isAdmin"},
 					ColumnIDs:       []descpb.ColumnID{3},
 					DefaultColumnID: 3,
+				},
+				{
+					Name:            "fam_4_role_id",
+					ID:              4,
+					ColumnNames:     []string{"role_id"},
+					ColumnIDs:       []descpb.ColumnID{4},
+					DefaultColumnID: 4,
+				},
+				{
+					Name:            "fam_5_member_id",
+					ID:              5,
+					ColumnNames:     []string{"member_id"},
+					ColumnIDs:       []descpb.ColumnID{5},
+					DefaultColumnID: 5,
 				},
 			},
 			descpb.IndexDescriptor{
@@ -1621,6 +1689,36 @@ var (
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "role_members_role_id_idx",
+				ID:                  4,
+				Unique:              false,
+				KeyColumnNames:      []string{"role_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "role_members_member_id_idx",
+				ID:                  5,
+				Unique:              false,
+				KeyColumnNames:      []string{"member_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{5},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "role_members_role_id_member_id_key",
+				ID:                  6,
+				Unique:              true,
+				KeyColumnNames:      []string{"role_id", "member_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4, 5},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		))

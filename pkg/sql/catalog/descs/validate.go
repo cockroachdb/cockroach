@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 )
 
@@ -66,14 +67,15 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 }
 
 func (tc *Collection) newValidationDereferencer(txn *kv.Txn) validate.ValidationDereferencer {
-	return &collectionBackedDereferencer{tc: tc, sd: tc.stored.NewValidationDereferencer(txn)}
+	crvd := catkv.NewCatalogReaderBackedValidationDereferencer(tc.cr, txn, tc.validationModeProvider)
+	return &collectionBackedDereferencer{tc: tc, crvd: crvd}
 }
 
 // collectionBackedDereferencer wraps a Collection to implement the
 // validate.ValidationDereferencer interface for validation.
 type collectionBackedDereferencer struct {
-	tc *Collection
-	sd validate.ValidationDereferencer
+	tc   *Collection
+	crvd validate.ValidationDereferencer
 }
 
 var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
@@ -98,25 +100,63 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 	if len(fallbackReqs) == 0 {
 		return ret, nil
 	}
-	fallbackRet, err := c.sd.DereferenceDescriptors(ctx, version, fallbackReqs)
+	fallbackRet, err := c.crvd.DereferenceDescriptors(ctx, version, fallbackReqs)
 	if err != nil {
 		return nil, err
 	}
 	for j, desc := range fallbackRet {
-		if desc != nil {
-			ret[fallbackRetIndexes[j]] = desc
+		ret[fallbackRetIndexes[j]] = desc
+		if c.tc.validationModeProvider.ValidateDescriptorsOnRead() {
+			c.tc.ensureValidationLevel(desc, catalog.ValidationLevelSelfOnly)
 		}
 	}
 	return ret, nil
 }
 
 // DereferenceDescriptorIDs implements the validate.ValidationDereferencer
-// interface by delegating to the storage cache.
+// interface by leveraging the collection's uncommitted descriptors as well
+// as its storage cache.
 func (c collectionBackedDereferencer) DereferenceDescriptorIDs(
 	ctx context.Context, reqs []descpb.NameInfo,
 ) (ret []descpb.ID, _ error) {
-	// TODO(postamar): namespace operations in general should go through Collection
-	return c.sd.DereferenceDescriptorIDs(ctx, reqs)
+	ret = make([]descpb.ID, len(reqs))
+	fallbackReqs := make([]descpb.NameInfo, 0, len(reqs))
+	fallbackRetIndexes := make([]int, 0, len(reqs))
+	for i, ni := range reqs {
+		if uc := c.tc.uncommitted.getUncommittedByName(ni.ParentID, ni.ParentSchemaID, ni.Name); uc == nil {
+			fallbackReqs = append(fallbackReqs, ni)
+			fallbackRetIndexes = append(fallbackRetIndexes, i)
+		} else {
+			ret[i] = uc.GetID()
+		}
+	}
+	if len(fallbackReqs) == 0 {
+		return ret, nil
+	}
+	fallbackRet, err := c.crvd.DereferenceDescriptorIDs(ctx, fallbackReqs)
+	if err != nil {
+		return nil, err
+	}
+	for j, id := range fallbackRet {
+		ret[fallbackRetIndexes[j]] = id
+	}
+	return ret, nil
+}
+
+func (tc *Collection) ensureValidationLevel(
+	desc catalog.Descriptor, newLevel catalog.ValidationLevel,
+) {
+	if desc == nil {
+		return
+	}
+	if tc.validationLevels == nil {
+		tc.validationLevels = make(map[descpb.ID]catalog.ValidationLevel)
+	}
+	vl, ok := tc.validationLevels[desc.GetID()]
+	if ok && vl >= newLevel {
+		return
+	}
+	tc.validationLevels[desc.GetID()] = newLevel
 }
 
 // ValidateSelf validates that the descriptor is internally consistent.

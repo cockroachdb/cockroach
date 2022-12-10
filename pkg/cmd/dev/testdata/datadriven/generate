@@ -43,9 +43,6 @@ exec
 dev generate docs
 ----
 bazel run //pkg/gen:docs
-bazel info workspace --color=no
-crdb-checkout/build/bazelutil/generate_redact_safe.sh
-echo "" > crdb-checkout/docs/generated/redact_safe.md
 export COCKROACH_BAZEL_CHECK_FAST=1
 bazel info workspace --color=no
 crdb-checkout/build/bazelutil/check.sh
@@ -54,9 +51,6 @@ exec
 dev gen go_nocgo docs
 ----
 bazel run //pkg/gen
-bazel info workspace --color=no
-crdb-checkout/build/bazelutil/generate_redact_safe.sh
-echo "" > crdb-checkout/docs/generated/redact_safe.md
 export COCKROACH_BAZEL_CHECK_FAST=1
 bazel info workspace --color=no
 crdb-checkout/build/bazelutil/check.sh

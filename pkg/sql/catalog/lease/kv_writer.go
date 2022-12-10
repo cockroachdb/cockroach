@@ -39,10 +39,10 @@ func newKVWriter(codec keys.SQLCodec, db *kv.DB, id descpb.ID) *kvWriter {
 
 func leaseTableWithID(id descpb.ID) catalog.TableDescriptor {
 	if id == keys.LeaseTableID {
-		return systemschema.LeaseTable
+		return systemschema.LeaseTable()
 	}
 	// Custom IDs are only used for testing.
-	mut := systemschema.LeaseTable.NewBuilder().
+	mut := systemschema.LeaseTable().NewBuilder().
 		BuildExistingMutable().(*tabledesc.Mutable)
 	mut.ID = id
 	return mut.ImmutableCopy().(catalog.TableDescriptor)
@@ -79,14 +79,26 @@ func (w *kvWriter) do(ctx context.Context, txn *kv.Txn, l leaseFields, f addToBa
 }
 
 func newBatch(txn *kv.Txn, l leaseFields, f addToBatchFunc) (*kv.Batch, error) {
-	entries := [...]tree.Datum{
-		tree.NewDInt(tree.DInt(l.descID)),
-		tree.NewDInt(tree.DInt(l.version)),
-		tree.NewDInt(tree.DInt(l.instanceID)),
-		&l.expiration,
+
+	var entries []tree.Datum
+	if systemschema.TestSupportMultiRegion() {
+		entries = []tree.Datum{
+			tree.NewDInt(tree.DInt(l.descID)),
+			tree.NewDInt(tree.DInt(l.version)),
+			tree.NewDInt(tree.DInt(l.instanceID)),
+			&l.expiration,
+			tree.NewDBytes(tree.DBytes(l.regionPrefix)),
+		}
+	} else {
+		entries = []tree.Datum{
+			tree.NewDInt(tree.DInt(l.descID)),
+			tree.NewDInt(tree.DInt(l.version)),
+			tree.NewDInt(tree.DInt(l.instanceID)),
+			&l.expiration,
+		}
 	}
 	b := txn.NewBatch()
-	if err := f(b, entries[:]...); err != nil {
+	if err := f(b, entries...); err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to encode lease entry")
 	}
 	return b, nil
