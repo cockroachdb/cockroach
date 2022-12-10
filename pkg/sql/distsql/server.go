@@ -227,9 +227,7 @@ func (ds *ServerImpl) setupFlow(
 ) (retCtx context.Context, _ flowinfra.Flow, _ execopnode.OpChains, retErr error) {
 	var sp *tracing.Span          // will be Finish()ed by Flow.Cleanup()
 	var monitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
-	onFlowCleanup := func() {
-		reserved.Close(retCtx)
-	}
+	var onFlowCleanup func()
 	// Make sure that we clean up all resources (which in the happy case are
 	// cleaned up in Flow.Cleanup()) if an error is encountered.
 	defer func() {
@@ -237,7 +235,11 @@ func (ds *ServerImpl) setupFlow(
 			if monitor != nil {
 				monitor.Stop(ctx)
 			}
-			onFlowCleanup()
+			if onFlowCleanup != nil {
+				onFlowCleanup()
+			} else {
+				reserved.Close(ctx)
+			}
 			// We finish the span after performing other cleanup in case that
 			// cleanup accesses the context with the span.
 			if sp != nil {
@@ -316,10 +318,9 @@ func (ds *ServerImpl) setupFlow(
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
 		origTxn := evalCtx.Txn
-		oldOnFlowCleanup := onFlowCleanup
 		onFlowCleanup = func() {
 			evalCtx.Txn = origTxn
-			oldOnFlowCleanup()
+			reserved.Close(ctx)
 		}
 		if localState.MustUseLeafTxn() {
 			var err error
@@ -332,6 +333,9 @@ func (ds *ServerImpl) setupFlow(
 			evalCtx.Txn = leafTxn
 		}
 	} else {
+		onFlowCleanup = func() {
+			reserved.Close(ctx)
+		}
 		if localState.IsLocal {
 			return nil, nil, nil, errors.AssertionFailedf(
 				"EvalContext expected to be populated when IsLocal is set")
