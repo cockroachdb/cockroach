@@ -699,11 +699,11 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/120/1/2/0
-batch flow coordinator  CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
-batch flow coordinator  InitPut /Table/120/2/3/0 -> /BYTES/0x8a
-batch flow coordinator  fast path completed
-sql query               rows affected: 1
+colbatchscan  Scan /Table/120/1/2/0
+count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
+count         InitPut /Table/120/2/3/0 -> /BYTES/0x8a
+count         fast path completed
+sql query     rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -712,11 +712,11 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/120/1/1/0
-batch flow coordinator  CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  InitPut /Table/120/2/2/0 -> /BYTES/0x89
-batch flow coordinator  fast path completed
-sql query               rows affected: 1
+colbatchscan  Scan /Table/120/1/1/0
+count         CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
+count         InitPut /Table/120/2/2/0 -> /BYTES/0x89
+count         fast path completed
+sql query     rows affected: 1
 
 statement error duplicate key value
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -726,9 +726,9 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/120/1/2/0
-colbatchscan            fetched: /kv/kv_pkey/2/v -> /3
-batch flow coordinator  Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  Del /Table/120/2/3/0
-batch flow coordinator  CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
-sql query               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+colbatchscan  Scan /Table/120/1/2/0
+colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
+count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
+count         Del /Table/120/2/3/0
+count         CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"

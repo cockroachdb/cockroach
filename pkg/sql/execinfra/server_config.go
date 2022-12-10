@@ -299,6 +299,10 @@ type TestingKnobs struct {
 	// when responding to SetupFlow RPCs, after the flow is set up but before it
 	// is started.
 	SetupFlowCb func(context.Context, base.SQLInstanceID, *execinfrapb.SetupFlowRequest) error
+
+	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
+	// in ProcessorBase.StartInternal if the tracing is enabled.
+	ProcessorNoTracingSpan bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
