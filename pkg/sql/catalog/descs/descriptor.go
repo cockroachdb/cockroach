@@ -111,8 +111,8 @@ func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {
 		return cmt, hasCmt
 	}
-	if cmt, hasCmt, cached := tc.stored.GetCachedComment(key); cached {
-		return cmt, hasCmt
+	if tc.cr.IsIDInCache(descpb.ID(key.ObjectID)) {
+		return tc.cr.Cache().LookupCommentEntry(key)
 	}
 	// TODO(chengxiong): we need to ensure descriptor if it's not in either cache
 	// and it's not a pseudo descriptor.
@@ -143,7 +143,7 @@ func (tc *Collection) GetZoneConfigs(
 	ctx context.Context, txn *kv.Txn, descIDs ...descpb.ID,
 ) (map[descpb.ID]catalog.ZoneConfig, error) {
 	ret := make(map[descpb.ID]catalog.ZoneConfig)
-	var idsForStorageRead catalog.DescriptorIDSet
+	var storageIDs catalog.DescriptorIDSet
 	for _, id := range descIDs {
 		if zc, cached := tc.uncommittedZoneConfigs.getUncommitted(id); cached {
 			if zc != nil {
@@ -151,37 +151,21 @@ func (tc *Collection) GetZoneConfigs(
 			}
 			continue
 		}
-		if zc, cached := tc.stored.GetCachedZoneConfig(id); cached {
-			if zc != nil {
-				ret[id] = zc.Clone()
-			}
-			continue
-		}
-		idsForStorageRead.Add(id)
+		storageIDs.Add(id)
 	}
 
 	// If zone config is not seen in cache, it's a good chance that the id doesn't
 	// have a corresponding descriptor so the zone config wasn't loaded with the
 	// descriptor. Or a descriptor is not resolved for schema change purpose yet.
-	if err := tc.stored.EnsureZoneConfigFromStorage(ctx, txn, idsForStorageRead); err != nil {
+	const isDescriptorRequired = false
+	read, err := tc.cr.GetByIDs(ctx, txn, storageIDs.Ordered(), isDescriptorRequired, catalog.Any)
+	if err != nil {
 		return nil, err
 	}
-
-	var remainingIDs catalog.DescriptorIDSet
-	idsForStorageRead.ForEach(func(id descpb.ID) {
-		if zc, cached := tc.stored.GetCachedZoneConfig(id); cached {
-			if zc != nil {
-				ret[id] = zc.Clone()
-			}
-			return
-		}
-		remainingIDs.Add(id)
+	_ = read.ForEachZoneConfigEntry(func(id descpb.ID, zc catalog.ZoneConfig) error {
+		ret[id] = zc.Clone()
+		return nil
 	})
-
-	if !remainingIDs.Empty() {
-		// This should never happen since we tried hard to load zone configs from storage.
-		return nil, errors.Errorf("Failed to fetch zone config for IDs: %v", idsForStorageRead.Ordered())
-	}
 	return ret, nil
 }
 
@@ -338,13 +322,15 @@ func getDescriptorsByID(
 			// them from.
 			return catalog.ErrDescriptorNotFound
 		}
-		if err = tc.stored.EnsureFromStorageByIDs(ctx, txn, readIDs, catalog.Any); err != nil {
+		const isDescriptorRequired = true
+		read, err := tc.cr.GetByIDs(ctx, txn, readIDs.Ordered(), isDescriptorRequired, catalog.Any)
+		if err != nil {
 			return err
 		}
 		for i, id := range ids {
 			if descs[i] == nil {
-				descs[i] = tc.stored.GetCachedByID(id)
-				vls[i] = tc.stored.GetValidationLevelByID(id)
+				descs[i] = read.LookupDescriptorEntry(id)
+				vls[i] = tc.validationLevels[id]
 			}
 		}
 	}
@@ -425,8 +411,10 @@ func (q *byIDLookupContext) lookupSynthetic(
 func (q *byIDLookupContext) lookupCached(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
-	if desc := q.tc.stored.GetCachedByID(id); desc != nil {
-		return desc, q.tc.stored.GetValidationLevelByID(id), nil
+	if q.tc.cr.IsIDInCache(id) {
+		if desc := q.tc.cr.Cache().LookupDescriptorEntry(id); desc != nil {
+			return desc, q.tc.validationLevels[id], nil
+		}
 	}
 	return nil, catalog.NoValidation, nil
 }
@@ -448,7 +436,7 @@ func (q *byIDLookupContext) lookupLeased(
 	}
 	// If we have already read all of the descriptors, use it as a negative
 	// cache to short-circuit a lookup we know will be doomed to fail.
-	if q.tc.stored.IsIDKnownToNotExist(id, q.flags.ParentID) {
+	if q.tc.cr.IsDescIDKnownToNotExist(id, q.flags.ParentID) {
 		return nil, catalog.NoValidation, catalog.ErrDescriptorNotFound
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
@@ -622,12 +610,15 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
-		if id := tc.stored.GetCachedIDByName(&descpb.NameInfo{
-			ParentID:       parentID,
-			ParentSchemaID: parentSchemaID,
-			Name:           name,
-		}); id != descpb.InvalidID {
-			return haltLookups, id, nil
+		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
+		if _, ok := tc.shadowedNames[ni]; ok {
+			return continueLookups, descpb.InvalidID, nil
+		}
+		if tc.cr.IsNameInCache(&ni) {
+			if e := tc.cr.Cache().LookupNamespaceEntry(&ni); e != nil {
+				return haltLookups, e.GetID(), nil
+			}
+			return haltLookups, descpb.InvalidID, nil
 		}
 		return continueLookups, descpb.InvalidID, nil
 	}
@@ -653,8 +644,18 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if flags.AvoidStorage {
 			return haltLookups, descpb.InvalidID, nil
 		}
-		id, err := tc.stored.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
-		return haltLookups, id, err
+		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
+		if _, ok := tc.shadowedNames[ni]; ok {
+			return haltLookups, descpb.InvalidID, nil
+		}
+		read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{ni})
+		if err != nil {
+			return haltLookups, descpb.InvalidID, err
+		}
+		if e := read.LookupNamespaceEntry(&ni); e != nil {
+			return haltLookups, e.GetID(), nil
+		}
+		return haltLookups, descpb.InvalidID, nil
 	}
 
 	// Iterate through each layer until an ID is conclusively found or not, or an
@@ -718,7 +719,7 @@ func (tc *Collection) finalizeDescriptors(
 			return err
 		}
 		for _, desc := range toValidate {
-			tc.stored.UpdateValidationLevel(desc, requiredLevel)
+			tc.ensureValidationLevel(desc, requiredLevel)
 		}
 	}
 	return nil

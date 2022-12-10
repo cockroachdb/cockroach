@@ -270,7 +270,7 @@ func TestOutboxInbox(t *testing.T) {
 
 			inputMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inputMemAcc.Close(outboxCtx)
-			input := coldatatestutils.NewRandomDataOp(
+			input, _ := coldatatestutils.NewRandomDataOp(
 				colmem.NewAllocator(outboxCtx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
 			)
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -682,7 +682,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
 				typs                     = []*types.T{types.Int}
-				input                    = coldatatestutils.NewRandomDataOp(
+				input, _                 = coldatatestutils.NewRandomDataOp(
 					testAllocator,
 					rng,
 					coldatatestutils.RandomDataOpArgs{

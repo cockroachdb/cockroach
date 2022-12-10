@@ -66,5 +66,10 @@ describe("Proto utils", () => {
         statusWithRolledMetrics.metrics,
       );
     });
+
+    it("does not explode when node fields are missing", () => {
+      const emptyNodeStatus: Partial<INodeStatus> = {};
+      assert.deepEqual(rollupStoreMetrics(emptyNodeStatus), {});
+    });
   });
 });

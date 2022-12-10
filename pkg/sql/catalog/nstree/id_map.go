@@ -13,7 +13,6 @@ package nstree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/google/btree"
 )
 
 // IDMap is a lookup structure for descriptors. It is used to provide
@@ -59,7 +58,6 @@ func (dt *IDMap) Clear() {
 		return
 	}
 	dt.clear()
-	btreeSyncPool.Put(dt.t)
 	*dt = IDMap{}
 }
 
@@ -79,13 +77,9 @@ func (dt *IDMap) Len() int {
 	return dt.len()
 }
 
-func (dt IDMap) initialized() bool {
-	return dt.byIDMap != (byIDMap{})
-}
-
 func (dt *IDMap) maybeInitialize() {
 	if dt.initialized() {
 		return
 	}
-	*dt = IDMap{byIDMap: byIDMap{t: btreeSyncPool.Get().(*btree.BTree)}}
+	*dt = IDMap{byIDMap: makeByIDMap()}
 }

@@ -1585,6 +1585,7 @@ system              public             29_23_1_not_null                         
 system              public             29_23_2_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
 system              public             29_23_3_not_null                                                                                                system         public        role_members                     CHECK            NO             NO
 system              public             primary                                                                                                         system         public        role_members                     PRIMARY KEY      NO             NO
+system              public             role_members_role_id_member_id_key                                                                              system         public        role_members                     UNIQUE           NO             NO
 system              public             29_33_1_not_null                                                                                                system         public        role_options                     CHECK            NO             NO
 system              public             29_33_2_not_null                                                                                                system         public        role_options                     CHECK            NO             NO
 system              public             29_33_4_not_null                                                                                                system         public        role_options                     CHECK            NO             NO
@@ -1933,7 +1934,9 @@ system         public        replication_stats                zone_id           
 system         public        reports_meta                     id                                                                                                        system              public             primary
 system         public        role_id_seq                      value                                                                                                     system              public             primary
 system         public        role_members                     member                                                                                                    system              public             primary
+system         public        role_members                     member_id                                                                                                 system              public             role_members_role_id_member_id_key
 system         public        role_members                     role                                                                                                      system              public             primary
+system         public        role_members                     role_id                                                                                                   system              public             role_members_role_id_member_id_key
 system         public        role_options                     option                                                                                                    system              public             primary
 system         public        role_options                     username                                                                                                  system              public             primary
 system         public        scheduled_jobs                   schedule_id                                                                                               system              public             primary
@@ -2179,7 +2182,9 @@ system         public        reports_meta                     id                
 system         public        role_id_seq                      value                                                                                                     1
 system         public        role_members                     isAdmin                                                                                                   3
 system         public        role_members                     member                                                                                                    2
+system         public        role_members                     member_id                                                                                                 5
 system         public        role_members                     role                                                                                                      1
+system         public        role_members                     role_id                                                                                                   4
 system         public        role_options                     option                                                                                                    2
 system         public        role_options                     user_id                                                                                                   4
 system         public        role_options                     username                                                                                                  1

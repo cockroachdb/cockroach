@@ -5239,14 +5239,17 @@ func makeClusterDatabasePrivilegesFromDescriptor(
 			for _, priv := range u.Privileges {
 				// We use this function to check for the grant option so that the
 				// object owner also gets is_grantable=true.
-				grantOptionErr := p.CheckGrantOptionsForUser(
-					ctx, db.GetPrivileges(), db, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
+				isGrantable, err := p.CheckGrantOptionsForUser(
+					ctx, db.GetPrivileges(), db, []privilege.Kind{priv.Kind}, u.User,
 				)
+				if err != nil {
+					return err
+				}
 				if err := addRow(
 					dbNameStr,                           // database_name
 					userNameStr,                         // grantee
 					tree.NewDString(priv.Kind.String()), // privilege_type
-					yesOrNoDatum(grantOptionErr == nil), // is_grantable
+					yesOrNoDatum(isGrantable),
 				); err != nil {
 					return err
 				}

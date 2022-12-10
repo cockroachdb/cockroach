@@ -52,11 +52,15 @@ func addRootUser(
 
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertMembership = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
           `
 	_, err = deps.InternalExecutor.Exec(
-		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser)
-	return err
+		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func optInToDiagnosticsStatReporting(

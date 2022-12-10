@@ -97,7 +97,7 @@ var windows = map[string]builtinDefinition{
 	),
 	"ntile": makeBuiltin(winProps(),
 		makeWindowOverload(
-			tree.ParamTypes{{"n", types.Int}},
+			tree.ParamTypes{{Name: "n", Typ: types.Int}},
 			types.Int,
 			newNtileWindow,
 			"Calculates an integer ranging from 1 to `n`, dividing the partition as equally as possible.",
@@ -109,7 +109,7 @@ var windows = map[string]builtinDefinition{
 		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
-				tree.ParamTypes{{"val", t}},
+				tree.ParamTypes{{Name: "val", Typ: t}},
 				t,
 				makeLeadLagWindowConstructor(false, false, false),
 				"Returns `val` evaluated at the previous row within current row's partition; "+
@@ -119,7 +119,7 @@ var windows = map[string]builtinDefinition{
 		},
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
-				tree.ParamTypes{{"val", t}, {"n", types.Int}},
+				tree.ParamTypes{{Name: "val", Typ: t}, {Name: "n", Typ: types.Int}},
 				t,
 				makeLeadLagWindowConstructor(false, true, false),
 				"Returns `val` evaluated at the row that is `n` rows before the current row within its partition; "+
@@ -132,7 +132,7 @@ var windows = map[string]builtinDefinition{
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
 				tree.ParamTypes{
-					{"val", t}, {"n", types.Int}, {"default", t},
+					{Name: "val", Typ: t}, {Name: "n", Typ: types.Int}, {Name: "default", Typ: t},
 				},
 				t,
 				makeLeadLagWindowConstructor(false, true, true),
@@ -146,7 +146,7 @@ var windows = map[string]builtinDefinition{
 	"lead": collectOverloads(winProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
-				tree.ParamTypes{{"val", t}},
+				tree.ParamTypes{{Name: "val", Typ: t}},
 				t,
 				makeLeadLagWindowConstructor(true, false, false),
 				"Returns `val` evaluated at the following row within current row's partition; "+""+
@@ -156,7 +156,7 @@ var windows = map[string]builtinDefinition{
 		},
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
-				tree.ParamTypes{{"val", t}, {"n", types.Int}},
+				tree.ParamTypes{{Name: "val", Typ: t}, {Name: "n", Typ: types.Int}},
 				t,
 				makeLeadLagWindowConstructor(true, true, false),
 				"Returns `val` evaluated at the row that is `n` rows after the current row within its partition; "+
@@ -167,7 +167,7 @@ var windows = map[string]builtinDefinition{
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
 				tree.ParamTypes{
-					{"val", t}, {"n", types.Int}, {"default", t},
+					{Name: "val", Typ: t}, {Name: "n", Typ: types.Int}, {Name: "default", Typ: t},
 				},
 				t,
 				makeLeadLagWindowConstructor(true, true, true),
@@ -183,7 +183,7 @@ var windows = map[string]builtinDefinition{
 		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
-				tree.ParamTypes{{"val", t}},
+				tree.ParamTypes{{Name: "val", Typ: t}},
 				t,
 				newFirstValueWindow,
 				"Returns `val` evaluated at the row that is the first row of the window frame.",
@@ -195,7 +195,7 @@ var windows = map[string]builtinDefinition{
 		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
-				tree.ParamTypes{{"val", t}},
+				tree.ParamTypes{{Name: "val", Typ: t}},
 				t,
 				newLastValueWindow,
 				"Returns `val` evaluated at the row that is the last row of the window frame.",
@@ -206,7 +206,7 @@ var windows = map[string]builtinDefinition{
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(
 				tree.ParamTypes{
-					{"val", t}, {"n", types.Int},
+					{Name: "val", Typ: t}, {Name: "n", Typ: types.Int},
 				},
 				t,
 				newNthValueWindow,

@@ -39,6 +39,7 @@ type SQLStatusServer interface {
 	UserSQLRoles(context.Context, *UserSQLRolesRequest) (*UserSQLRolesResponse, error)
 	TxnIDResolution(context.Context, *TxnIDResolutionRequest) (*TxnIDResolutionResponse, error)
 	TransactionContentionEvents(context.Context, *TransactionContentionEventsRequest) (*TransactionContentionEventsResponse, error)
+	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
 	NodesList(context.Context, *NodesListRequest) (*NodesListResponse, error)
 	ListExecutionInsights(context.Context, *ListExecutionInsightsRequest) (*ListExecutionInsightsResponse, error)
 	LogFilesList(context.Context, *LogFilesListRequest) (*LogFilesListResponse, error)

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
@@ -33,6 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+)
+
+// MoveTablePrimaryIndexIDto2 is used to move the primary index of the created
+// lease table from 1 to 2. It is injected from the lease_test package so that
+// it can use sql primitives.
+var MoveTablePrimaryIndexIDto2 func(
+	context.Context, *testing.T, serverutils.TestServerInterface, descpb.ID,
 )
 
 // TestKVWriterMatchesIEWriter is a rather involved test to exercise the
@@ -52,9 +60,17 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	// Otherwise, we wouldn't get complete SSTs in our export under stress.
 	tdb.Exec(t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false")
 
+	schema := systemschema.LeaseTableSchema
+	if systemschema.TestSupportMultiRegion() {
+		schema = systemschema.MRLeaseTableSchema
+	}
 	makeTable := func(name string) (id descpb.ID) {
-		tdb.Exec(t, strings.Replace(systemschema.LeaseTableSchema, "system.lease", name, 1))
+		tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
 		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
+		// The MR variant of the table uses a non-
+		if systemschema.TestSupportMultiRegion() {
+			MoveTablePrimaryIndexIDto2(ctx, t, s, id)
+		}
 		return id
 	}
 	lease1ID := makeTable("lease1")
@@ -185,12 +201,16 @@ func generateWriteOps(n, numGroups int) func() (_ []writeOp, wantMore bool) {
 		if err != nil {
 			panic(err)
 		}
-		return leaseFields{
+		lf := leaseFields{
 			descID:     descpb.ID(rand.Intn(vals)),
 			version:    descpb.DescriptorVersion(rand.Intn(vals)),
 			instanceID: base.SQLInstanceID(rand.Intn(vals)),
 			expiration: *ts,
 		}
+		if systemschema.TestSupportMultiRegion() {
+			lf.regionPrefix = enum.One
+		}
+		return lf
 	}
 	var existing []leaseFields
 	return func() ([]writeOp, bool) {

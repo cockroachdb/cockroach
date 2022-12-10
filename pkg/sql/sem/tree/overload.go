@@ -303,11 +303,7 @@ var _ TypeList = HomogeneousType{}
 var _ TypeList = VariadicType{}
 
 // ParamTypes is a list of function parameter names and their types.
-// TODO(chengxiong): change ParamTypes to []ParamType.
-type ParamTypes []struct {
-	Name string
-	Typ  *types.T
-}
+type ParamTypes []ParamType
 
 // ParamType encapsulate a function parameter name and type.
 type ParamType struct {

@@ -180,15 +180,15 @@ func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDef
 func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDefinition {
 	typname := typ.String()
 	return map[string]builtinDefinition{
-		builtinPrefix + "send": makeTypeIOBuiltin(tree.ParamTypes{{typname, typ}}, types.Bytes),
+		builtinPrefix + "send": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
 		// Note: PG takes type 2281 "internal" for these builtins, which we don't
 		// provide. We won't implement these functions anyway, so it shouldn't
 		// matter.
-		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{"input", types.Any}}, typ),
+		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
 		// Note: PG returns 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{typname, typ}}, types.Bytes),
+		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
 		// Note: PG takes 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{"input", types.Any}}, typ),
+		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
 	}
 }
 
@@ -343,7 +343,7 @@ func makePGPrivilegeInquiryDef(
 		{}, // no user
 	}
 	for _, typ := range strOrOidTypes {
-		paramTypes = append(paramTypes, tree.ParamTypes{{"user", typ}})
+		paramTypes = append(paramTypes, tree.ParamTypes{{Name: "user", Typ: typ}})
 	}
 	// 2. variants have one or more object identification arguments, which each
 	//    accept multiple types.
@@ -352,7 +352,7 @@ func makePGPrivilegeInquiryDef(
 		paramTypes = make([]tree.ParamTypes, 0, len(paramTypes)*len(objSpecArg.Typ))
 		for _, paramType := range prevParamTypes {
 			for _, typ := range objSpecArg.Typ {
-				paramTypeVariant := append(paramType, tree.ParamTypes{{objSpecArg.Name, typ}}...)
+				paramTypeVariant := append(paramType, tree.ParamTypes{{Name: objSpecArg.Name, Typ: typ}}...)
 				paramTypes = append(paramTypes, paramTypeVariant)
 			}
 		}
@@ -361,7 +361,7 @@ func makePGPrivilegeInquiryDef(
 	//    be a string. See parsePrivilegeStr for details on how this
 	//    argument is parsed and used.
 	for i, paramType := range paramTypes {
-		paramTypes[i] = append(paramType, tree.ParamTypes{{"privilege", types.String}}...)
+		paramTypes[i] = append(paramType, tree.ParamTypes{{Name: "privilege", Typ: types.String}}...)
 	}
 
 	var variants []tree.Overload
@@ -500,8 +500,8 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"oid", types.Oid},
-				{"name", types.String},
+				{Name: "oid", Typ: types.Oid},
+				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(typ),
 			Fn: func(_ context.Context, _ *eval.Context, d tree.Datums) (tree.Datum, error) {
@@ -517,7 +517,7 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 	return makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"text", types.String},
+				{Name: "text", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.RegType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -562,7 +562,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_encoding_to_char": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"encoding_id", types.Int},
+				{Name: "encoding_id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -603,8 +603,9 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_expr": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"pg_node_tree", types.String},
-				{"relation_oid", types.Oid},
+
+				{Name: "pg_node_tree", Typ: types.String},
+				{Name: "relation_oid", Typ: types.Oid},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -615,9 +616,9 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"pg_node_tree", types.String},
-				{"relation_oid", types.Oid},
-				{"pretty_bool", types.Bool},
+				{Name: "pg_node_tree", Typ: types.String},
+				{Name: "relation_oid", Typ: types.Oid},
+				{Name: "pretty_bool", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -632,8 +633,8 @@ var pgBuiltins = map[string]builtinDefinition{
 	// supported that statement.
 	"pg_get_constraintdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetConstraintDef(tree.ParamTypes{
-			{"constraint_oid", types.Oid}, {"pretty_bool", types.Bool}}),
-		makePGGetConstraintDef(tree.ParamTypes{{"constraint_oid", types.Oid}}),
+			{Name: "constraint_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
+		makePGGetConstraintDef(tree.ParamTypes{{Name: "constraint_oid", Typ: types.Oid}}),
 	),
 
 	// pg_get_partkeydef is only provided for compatibility and always returns
@@ -641,7 +642,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// CREATE statement.
 	"pg_get_partkeydef": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.DNull, nil
@@ -654,7 +655,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_functiondef": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"func_oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				idToQuery := catid.DescID(tree.MustBeDOid(args[0]).Oid)
@@ -694,7 +695,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_function_result": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"func_oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				funcOid := tree.MustBeDOid(args[0])
@@ -722,7 +723,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_function_identity_arguments": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"func_oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				funcOid := tree.MustBeDOid(args[0])
@@ -767,16 +768,16 @@ var pgBuiltins = map[string]builtinDefinition{
 	// statement.
 	"pg_get_indexdef": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		makePGGetIndexDef(tree.ParamTypes{{"index_oid", types.Oid}}),
-		makePGGetIndexDef(tree.ParamTypes{{"index_oid", types.Oid}, {"column_no", types.Int}, {"pretty_bool", types.Bool}}),
+		makePGGetIndexDef(tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}}),
+		makePGGetIndexDef(tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}, {Name: "column_no", Typ: types.Int}, {Name: "pretty_bool", Typ: types.Bool}}),
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
 	"pg_get_viewdef": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		makePGGetViewDef(tree.ParamTypes{{"view_oid", types.Oid}}),
-		makePGGetViewDef(tree.ParamTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
+		makePGGetViewDef(tree.ParamTypes{{Name: "view_oid", Typ: types.Oid}}),
+		makePGGetViewDef(tree.ParamTypes{{Name: "view_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 	),
 
 	"pg_get_serial_sequence": makeBuiltin(
@@ -784,7 +785,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Category: builtinconstants.CategorySequences,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"table_name", types.String}, {"column_name", types.String}},
+			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "column_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
@@ -847,7 +848,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_is_other_temp_schema": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				schemaArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
@@ -879,7 +880,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"val", types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
@@ -894,7 +895,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_collation_for": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"str", types.Any}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var collation string
@@ -917,7 +918,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"role_oid", types.Oid},
+				{Name: "role_oid", Typ: types.Oid},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -947,7 +948,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		// comma-delimited string enclosed by parentheses.
 		// TODO(jordan): convert this to return a record type once we support that.
 		tree.Overload{
-			Types:      tree.ParamTypes{{"sequence_oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "sequence_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				r, err := evalCtx.Planner.QueryRowEx(
@@ -975,7 +976,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"format_type": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
+			Types:      tree.ParamTypes{{Name: "type_oid", Typ: types.Oid}, {Name: "typemod", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// See format_type.c in Postgres.
@@ -1022,7 +1023,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"col_description": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
+			Types:      tree.ParamTypes{{Name: "table_oid", Typ: types.Oid}, {Name: "column_number", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull || args[1] == tree.DNull {
@@ -1067,7 +1068,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 
 	"obj_description": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"object_oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getPgObjDesc(ctx, evalCtx, "", args[0].(*tree.DOid).Oid)
@@ -1076,7 +1077,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
+			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getPgObjDesc(
@@ -1093,7 +1094,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 
 	"oid": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"int", types.Int}},
+			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Oid),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return eval.PerformCast(ctx, evalCtx, args[0], types.Oid)
@@ -1105,7 +1106,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 
 	"shobj_description": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
+			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				catalogName := string(tree.MustBeDString(args[1]))
@@ -1144,7 +1145,7 @@ SELECT description
 
 	"pg_try_advisory_lock": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"int", types.Int}},
+			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				return tree.DBoolTrue, nil
@@ -1156,7 +1157,7 @@ SELECT description
 
 	"pg_advisory_unlock": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"int", types.Int}},
+			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				return tree.DBoolTrue, nil
@@ -1187,7 +1188,7 @@ SELECT description
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
@@ -1212,7 +1213,7 @@ SELECT description
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_table_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
@@ -1240,7 +1241,7 @@ SELECT description
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_type_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"oid", types.Oid}},
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
@@ -1263,7 +1264,7 @@ SELECT description
 	"pg_relation_is_updatable": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{"reloid", types.Oid}, {"include_triggers", types.Bool}},
+			Types:      tree.ParamTypes{{Name: "reloid", Typ: types.Oid}, {Name: "include_triggers", Typ: types.Bool}},
 			ReturnType: tree.FixedReturnType(types.Int4),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ret, err := evalCtx.CatalogBuiltins.PGRelationIsUpdatable(ctx, tree.MustBeDOid(args[0]))
@@ -1281,9 +1282,9 @@ SELECT description
 		defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"reloid", types.Oid},
-				{"attnum", types.Int2},
-				{"include_triggers", types.Bool},
+				{Name: "reloid", Typ: types.Oid},
+				{Name: "attnum", Typ: types.Int2},
+				{Name: "include_triggers", Typ: types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -1301,7 +1302,7 @@ SELECT description
 	"pg_sleep": makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"seconds", types.Float}},
+			Types:      tree.ParamTypes{{Name: "seconds", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				durationNanos := int64(float64(*args[0].(*tree.DFloat)) * float64(1000000000))
@@ -1832,7 +1833,7 @@ SELECT description
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"setting_name", types.String}},
+			Types:      tree.ParamTypes{{Name: "setting_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, evalCtx, string(tree.MustBeDString(args[0])), false /* missingOk */)
@@ -1841,7 +1842,7 @@ SELECT description
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"setting_name", types.String}, {"missing_ok", types.Bool}},
+			Types:      tree.ParamTypes{{Name: "setting_name", Typ: types.String}, {Name: "missing_ok", Typ: types.Bool}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, evalCtx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
@@ -1858,7 +1859,7 @@ SELECT description
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{"setting_name", types.String}, {"new_value", types.String}, {"is_local", types.Bool}},
+			Types:      tree.ParamTypes{{Name: "setting_name", Typ: types.String}, {Name: "new_value", Typ: types.String}, {Name: "is_local", Typ: types.Bool}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				varName := string(tree.MustBeDString(args[0]))
@@ -2014,8 +2015,8 @@ SELECT description
 	"information_schema._pg_char_max_length": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"typid", types.Oid},
-				{"typmod", types.Int4},
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2055,8 +2056,8 @@ SELECT description
 	"information_schema._pg_index_position": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"oid", types.Oid},
-				{"col", types.Int2},
+				{Name: "oid", Typ: types.Oid},
+				{Name: "col", Typ: types.Int2},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2084,8 +2085,8 @@ SELECT description
 	"information_schema._pg_numeric_precision": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"typid", types.Oid},
-				{"typmod", types.Int4},
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2121,8 +2122,8 @@ SELECT description
 	"information_schema._pg_numeric_precision_radix": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"typid", types.Oid},
-				{"typmod", types.Int4},
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2143,8 +2144,8 @@ SELECT description
 	"information_schema._pg_numeric_scale": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"typid", types.Oid},
-				{"typmod", types.Int4},
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2341,8 +2342,8 @@ func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefiniti
 	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{"pg_attribute", types.AnyTuple},
-				{"pg_type", types.AnyTuple},
+				{Name: "pg_attribute", Typ: types.AnyTuple},
+				{Name: "pg_type", Typ: types.AnyTuple},
 			},
 			ReturnType: tree.FixedReturnType(retType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {

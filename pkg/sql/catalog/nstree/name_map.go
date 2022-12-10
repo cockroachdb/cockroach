@@ -13,7 +13,6 @@ package nstree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/google/btree"
 )
 
 // NameMap is a lookup structure for descriptors. It is used to provide
@@ -83,8 +82,6 @@ func (dt *NameMap) Clear() {
 	}
 	dt.byID.clear()
 	dt.byName.clear()
-	btreeSyncPool.Put(dt.byName.t)
-	btreeSyncPool.Put(dt.byID.t)
 	*dt = NameMap{}
 }
 
@@ -132,7 +129,7 @@ func (dt *NameMap) Len() int {
 }
 
 func (dt NameMap) initialized() bool {
-	return dt.byID != (byIDMap{}) && dt.byName != (byNameMap{}) && dt.nameSkipped != nil
+	return dt.byID.initialized() && dt.byName.initialized() && dt.nameSkipped != nil
 }
 
 func (dt *NameMap) maybeInitialize() {
@@ -140,8 +137,8 @@ func (dt *NameMap) maybeInitialize() {
 		return
 	}
 	*dt = NameMap{
-		byName:      byNameMap{t: btreeSyncPool.Get().(*btree.BTree)},
-		byID:        byIDMap{t: btreeSyncPool.Get().(*btree.BTree)},
+		byName:      makeByNameMap(),
+		byID:        makeByIDMap(),
 		nameSkipped: make(map[descpb.ID]struct{}),
 	}
 }
