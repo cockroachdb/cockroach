@@ -93,27 +93,28 @@ func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 				f.Cleanup(ctx)
 				return err
 			}
-			// The flow can be started.
-			r.metrics.FlowStart()
-			cleanup := func() {
-				func() {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					delete(r.mu.runningFlows, f.GetID())
-					r.mu.acc.Shrink(ctx, memUsage)
+			// Spin up a new task whose job is to wait for the flow to finish
+			// and perform the cleanup.
+			return r.stopper.RunAsyncTask(ctx, "flowinfra.RemoteFlowRunner: waiting for flow to finish", func(ctx context.Context) {
+				r.metrics.FlowStart()
+				defer func() {
+					func() {
+						r.mu.Lock()
+						defer r.mu.Unlock()
+						delete(r.mu.runningFlows, f.GetID())
+						r.mu.acc.Shrink(ctx, memUsage)
+					}()
+					r.metrics.FlowStop()
+					f.Cleanup(ctx)
 				}()
-				r.metrics.FlowStop()
-				f.Cleanup(ctx)
-			}
-			if err := f.Start(ctx); err != nil {
-				cleanup()
-				return err
-			}
-			go func() {
+				// Start the flow to run concurrently.
+				if err := f.Start(ctx); err != nil {
+					return
+				}
+				// Now block this task until the flow exits before performing
+				// the cleanup in the defer above.
 				f.Wait()
-				cleanup()
-			}()
-			return nil
+			})
 		})
 	if err != nil && errors.Is(err, stop.ErrUnavailable) {
 		// If the server is quiescing, we have to explicitly clean up the flow.
