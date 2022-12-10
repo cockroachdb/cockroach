@@ -357,31 +357,41 @@ SELECT * FROM [
             │
             └── • lookup join (anti)
                 │ table: regional_by_row_table@uniq_idx (partial index)
-                │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column4 = a)
+                │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column4 = a)
                 │ pred: column5 > 0
                 │
                 └── • lookup join (anti)
-                    │ table: regional_by_row_table@regional_by_row_table_b_key
-                    │ equality cols are key
-                    │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column5 = b)
+                    │ table: regional_by_row_table@uniq_idx (partial index)
+                    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column4 = a)
+                    │ pred: column5 > 0
                     │
-                    └── • cross join (anti)
+                    └── • lookup join (anti)
+                        │ table: regional_by_row_table@regional_by_row_table_b_key
+                        │ equality cols are key
+                        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = b)
                         │
-                        ├── • values
-                        │     size: 6 columns, 1 row
-                        │
-                        └── • union all
-                            │ limit: 1
+                        └── • lookup join (anti)
+                            │ table: regional_by_row_table@regional_by_row_table_b_key
+                            │ equality cols are key
+                            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column5 = b)
                             │
-                            ├── • scan
-                            │     missing stats
-                            │     table: regional_by_row_table@regional_by_row_table_pkey
-                            │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
-                            │
-                            └── • scan
-                                  missing stats
-                                  table: regional_by_row_table@regional_by_row_table_pkey
-                                  spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
+                            └── • cross join (anti)
+                                │
+                                ├── • values
+                                │     size: 6 columns, 1 row
+                                │
+                                └── • union all
+                                    │ limit: 1
+                                    │
+                                    ├── • scan
+                                    │     missing stats
+                                    │     table: regional_by_row_table@regional_by_row_table_pkey
+                                    │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
+                                    │
+                                    └── • scan
+                                          missing stats
+                                          table: regional_by_row_table@regional_by_row_table_pkey
+                                          spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
 
 # Tests for locality optimized search.
 
@@ -1580,12 +1590,13 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join
-│           │ table: regional_by_row_table@regional_by_row_table_pkey
-│           │ equality: (crdb_region, pk) = (crdb_region,pk)
-│           │ equality cols are key
+│       └── • cross join
 │           │
-│           └── • render
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • index join
+│               │ table: regional_by_row_table@regional_by_row_table_pkey
 │               │
 │               └── • limit
 │                   │ count: 1
@@ -2154,23 +2165,18 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join
-│           │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-│           │ equality: (crdb_region, pk) = (crdb_region,pk)
-│           │ equality cols are key
+│       └── • cross join (right semi)
 │           │
-│           └── • render
-│               │
-│               └── • limit
-│                   │ count: 1
-│                   │
-│                   └── • filter
-│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-│                       │
-│                       └── • scan
-│                             missing stats
-│                             table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
-│                             spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│           ├── • filter
+│           │   │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+│           │   │
+│           │   └── • scan
+│           │         missing stats
+│           │         table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+│           │         spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│           │
+│           └── • values
+│                 size: 1 column, 1 row
 │
 ├── • constraint-check
 │   │
@@ -3006,13 +3012,13 @@ CREATE TABLE user_settings_cascades (
     FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
 ) LOCALITY REGIONAL BY ROW;
 
-# TODO(rytaft): The following query should be able to infer that the join
-# condition
+# With #69617, the following query is able to infer that the join condition
 #   users.id = user_settings.user_id
 # is equivalent to
-#   users.id = user_settings.user_id AND users.crdb_region = user_settings.crdb_region
-# This would allow the optimizer to plan a lookup join between users and user_settings
-# and avoid visiting all regions. See #69617.
+#   users.id = user_settings.user_id AND
+#   users.crdb_region = user_settings.crdb_region
+# This allows the optimizer to plan a lookup join between users and
+# user_settings and avoid visiting all regions.
 query T retry
 EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
   FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
@@ -3180,44 +3186,149 @@ WHERE json_col->'loc' @> '{"state":"NY"}'
 
 subtest rbr_input_to_lookup_join
 
-query T retry
-EXPLAIN SELECT * FROM regional_by_row_table t1, regional_by_row_table_virt_partial t2 WHERE t1.b = t2.pk LIMIT 1
-----
-distribution: local
-vectorized: true
-·
-• limit
-│ count: 1
-│
-└── • render
-    │
-    └── • lookup join
-        │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-        │ equality cols are key
-        │ lookup condition: (crdb_region = 'ap-southeast-2') AND (b = pk)
-        │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (b = pk)
-        │
-        └── • scan
-              missing stats
-              table: regional_by_row_table@regional_by_row_table_pkey
-              spans: FULL SCAN (SOFT LIMIT)
+statement ok
+DROP TABLE IF EXISTS regional_by_row_table
 
+statement ok
+CREATE TABLE regional_by_row_table (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  a int NOT NULL,
+  b int NOT NULL,
+  j JSON,
+  INDEX (a),
+  UNIQUE (b),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP TABLE IF EXISTS regional_by_row_table_virt_partial
+
+statement ok
+CREATE TABLE regional_by_row_table_virt_partial (
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  UNIQUE INDEX v_a_gt_0 (v) WHERE a > 0,
+  UNIQUE INDEX v_v_gt_0 (v) WHERE v > 0,
+  UNIQUE INDEX a_plus_10_v_gt_0 ((a + 10)) WHERE v > 0,
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Locality-optimized search of inner lookup joins is cheaper than one
+# locality-optimized join. The following should produce a
+# locality-optimized-search of two lookup joins.
 query T retry
-EXPLAIN SELECT * FROM regional_by_row_table t1 WHERE b IN (SELECT pk FROM regional_by_row_table_virt_partial t2) LIMIT 1
+EXPLAIN(OPT) SELECT * FROM regional_by_row_table t1, regional_by_row_table_virt_partial t2 WHERE t1.b = t2.pk LIMIT 1
 ----
-distribution: local
-vectorized: true
-·
-• limit
-│ count: 1
-│
-└── • lookup join (semi)
-    │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-    │ equality cols are key
-    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (b = pk)
-    │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (b = pk)
-    │
-    └── • scan
-          missing stats
-          table: regional_by_row_table@regional_by_row_table_pkey
-          spans: FULL SCAN (SOFT LIMIT)
+limit
+ ├── project
+ │    ├── project
+ │    │    └── locality-optimized-search
+ │    │         ├── project
+ │    │         │    └── inner-join (lookup regional_by_row_table_virt_partial)
+ │    │         │         ├── lookup columns are key
+ │    │         │         ├── scan regional_by_row_table [as=t1]
+ │    │         │         │    └── constraint: /24/19: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │         │         └── filters (true)
+ │    │         └── project
+ │    │              └── inner-join (lookup regional_by_row_table_virt_partial)
+ │    │                   ├── lookup columns are key
+ │    │                   ├── scan regional_by_row_table [as=t1]
+ │    │                   │    └── constraint: /33/28: [/'ca-central-1' - /'us-east-1']
+ │    │                   └── filters (true)
+ │    └── projections
+ │         └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
+ └── 1
+
+# Locality-optimized search of semi lookup joins is cheaper than one
+# locality-optimized join. The following should produce a
+# locality-optimized-search of two lookup joins.
+query T retry
+EXPLAIN(OPT) SELECT * FROM regional_by_row_table t1 WHERE b IN
+  (SELECT pk FROM regional_by_row_table_virt_partial t2) LIMIT 1
+----
+limit
+ ├── locality-optimized-search
+ │    ├── project
+ │    │    └── semi-join (lookup regional_by_row_table_virt_partial)
+ │    │         ├── lookup columns are key
+ │    │         ├── scan regional_by_row_table [as=t1]
+ │    │         │    └── constraint: /93/88: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │         └── filters (true)
+ │    └── project
+ │         └── semi-join (lookup regional_by_row_table_virt_partial)
+ │              ├── lookup columns are key
+ │              ├── scan regional_by_row_table [as=t1]
+ │              │    └── constraint: /102/97: [/'ca-central-1' - /'us-east-1']
+ │              └── filters (true)
+ └── 1
+
+# Locality-optimized search of left outer lookup joins is valid, but is
+# currently not picked because we don't pass a limit hint through a filter.
+query T retry
+EXPLAIN(OPT) SELECT t2.a, t2.b, t2.v, t1.b FROM regional_by_row_table_virt_partial t2 LEFT OUTER JOIN
+  regional_by_row_table t1 ON t1.b = t2.pk WHERE t1.b IS NULL OR t1.b = 7 LIMIT 1
+----
+distribute
+ └── project
+      └── limit
+           ├── select
+           │    ├── project
+           │    │    └── left-join (lookup regional_by_row_table@regional_by_row_table_b_key [as=t1])
+           │    │         ├── lookup columns are key
+           │    │         ├── project
+           │    │         │    ├── scan regional_by_row_table_virt_partial
+           │    │         │    │    ├── check constraint expressions
+           │    │         │    │    │    └── regional_by_row_table_virt_partial.crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+           │    │         │    │    ├── computed column expressions
+           │    │         │    │    │    ├── v
+           │    │         │    │    │    │    └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
+           │    │         │    │    │    └── crdb_internal_idx_expr
+           │    │         │    │    │         └── regional_by_row_table_virt_partial.a + 10
+           │    │         │    │    └── partial index predicates
+           │    │         │    │         ├── v_a_gt_0: filters
+           │    │         │    │         │    └── regional_by_row_table_virt_partial.a > 0
+           │    │         │    │         ├── v_v_gt_0: filters
+           │    │         │    │         │    └── (regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b) > 0
+           │    │         │    │         └── a_plus_10_v_gt_0: filters
+           │    │         │    │              └── (regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b) > 0
+           │    │         │    └── projections
+           │    │         │         └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
+           │    │         └── filters (true)
+           │    └── filters
+           │         └── (t1.b IS NULL) OR (t1.b = 7)
+           └── 1
+
+# Locality-optimized search of anti lookup joins is not supported and should
+# not be picked.
+query T retry
+EXPLAIN(OPT) SELECT * FROM regional_by_row_table t1 WHERE b NOT IN
+  (SELECT pk FROM regional_by_row_table_virt_partial t2) LIMIT 1
+----
+distribute
+ └── limit
+      ├── anti-join (hash)
+      │    ├── scan regional_by_row_table [as=t1]
+      │    │    └── check constraint expressions
+      │    │         └── t1.crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+      │    ├── scan regional_by_row_table_virt_partial
+      │    │    ├── check constraint expressions
+      │    │    │    └── regional_by_row_table_virt_partial.crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+      │    │    ├── computed column expressions
+      │    │    │    ├── v
+      │    │    │    │    └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
+      │    │    │    └── crdb_internal_idx_expr
+      │    │    │         └── regional_by_row_table_virt_partial.a + 10
+      │    │    └── partial index predicates
+      │    │         ├── v_a_gt_0: filters
+      │    │         │    └── regional_by_row_table_virt_partial.a > 0
+      │    │         ├── v_v_gt_0: filters
+      │    │         │    └── (regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b) > 0
+      │    │         └── a_plus_10_v_gt_0: filters
+      │    │              └── (regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b) > 0
+      │    └── filters
+      │         └── t1.b = regional_by_row_table_virt_partial.pk
+      └── 1
