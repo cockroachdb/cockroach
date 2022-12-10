@@ -127,7 +127,7 @@ func (info spanEncoderTmplInfo) AssignSpanEncoding(appendTo, valToEncode string)
 		funcName := "Decimal"
 		valToEncode = "&" + valToEncode
 		return assignEncoding(funcName, valToEncode)
-	case types.BytesFamily:
+	case types.BytesFamily, types.EnumFamily:
 		funcName := "Bytes"
 		return assignEncoding(funcName, valToEncode)
 	case types.TimestampTZFamily:

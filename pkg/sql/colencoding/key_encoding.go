@@ -163,6 +163,7 @@ func decodeTableKeyToCol(
 			// GCed.
 			rkey, scratch, err = encoding.DecodeBytesAscendingDeepCopy(key, scratch[:0])
 		} else {
+			// DecodeBytesDescending always performs a deep copy.
 			rkey, scratch, err = encoding.DecodeBytesDescending(key, scratch[:0])
 		}
 		// Set() performs a deep copy, so it is safe to return the scratch slice
@@ -200,6 +201,22 @@ func decodeTableKeyToCol(
 		}
 		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
 		rkey = key[keyLen:]
+	case types.EnumFamily:
+		if dir == catpb.IndexColumn_ASC {
+			// We ask for the deep copy to be made so that scratch doesn't
+			// reference the memory of key - this allows us to return scratch
+			// to the caller to be reused. The deep copy additionally ensures
+			// that the memory of the BatchResponse (where key came from) can be
+			// GCed.
+			rkey, scratch, err = encoding.DecodeBytesAscendingDeepCopy(key, scratch[:0])
+		} else {
+			// DecodeBytesDescending always performs a deep copy.
+			rkey, scratch, err = encoding.DecodeBytesDescending(key, scratch[:0])
+		}
+		// Set() performs a deep copy, so it is safe to return the scratch slice
+		// to the caller. Any modifications to the scratch slice made by the
+		// caller will not affect the value in the vector.
+		vecs.EnumCols[colIdx].Set(rowIdx, scratch)
 	default:
 		var d tree.Datum
 		encDir := encoding.Ascending
@@ -279,6 +296,10 @@ func UnmarshalColumnValueToCol(
 		var v []byte
 		v, err = value.GetBytes()
 		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, v)
+	case types.EnumFamily:
+		var v []byte
+		v, err = value.GetBytes()
+		vecs.EnumCols[colIdx].Set(rowIdx, v)
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum

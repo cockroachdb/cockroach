@@ -50,6 +50,8 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 		return types.TimestampTZFamily
 	case types.IntervalFamily:
 		return types.IntervalFamily
+	case types.EnumFamily:
+		return types.EnumFamily
 	default:
 		// TODO(yuzefovich): consider adding native support for
 		// types.UnknownFamily.

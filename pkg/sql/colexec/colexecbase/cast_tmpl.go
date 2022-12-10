@@ -489,6 +489,14 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
+	// {{if eq $fromFamily "types.EnumFamily"}}
+	// {{/*
+	//     TODO(yuzefovich): fromType should really be propagated as an
+	//     argument, but it is only used in one cast at the moment, so we're
+	//     being lazy.
+	// */}}
+	fromType := inputVec.Type()
+	// {{end}}
 	toType := outputVec.Type()
 	// Remove unused warnings.
 	_ = toType

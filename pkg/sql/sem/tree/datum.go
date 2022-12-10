@@ -4936,6 +4936,18 @@ func GetEnumComponentsFromPhysicalRep(typ *types.T, rep []byte) ([]byte, string,
 	return meta.PhysicalRepresentations[idx], meta.LogicalRepresentations[idx], nil
 }
 
+// GetEnumComponentsFromLogicalRep returns the physical and logical components
+// for an enum of the requested type. It returns an error if it cannot find a
+// matching logical representation.
+func GetEnumComponentsFromLogicalRep(typ *types.T, rep string) ([]byte, string, error) {
+	idx, err := typ.EnumGetIdxOfLogical(rep)
+	if err != nil {
+		return nil, "", err
+	}
+	meta := typ.TypeMeta.EnumData
+	return meta.PhysicalRepresentations[idx], meta.LogicalRepresentations[idx], nil
+}
+
 // NewDEnum initializes a new DEnum from its argument.
 func NewDEnum(e DEnum) *DEnum {
 	return &e
@@ -4972,12 +4984,6 @@ func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (DEnum, error)
 	idx, err := typ.EnumGetIdxOfLogical(rep)
 	if err != nil {
 		return DEnum{}, err
-	}
-	// If this enum member is read only, we cannot construct it from the logical
-	// representation. This is to ensure that it will not be written until all
-	// nodes in the cluster are able to decode the physical representation.
-	if typ.TypeMeta.EnumData.IsMemberReadOnly[idx] {
-		return DEnum{}, errors.Newf("enum value %q is not yet public", rep)
 	}
 	return DEnum{
 		EnumTyp:     typ,

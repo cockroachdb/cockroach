@@ -43,6 +43,7 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Bool, types.Int, boolToIntOrFloat},
 	{types.Bool, types.String, boolToString},
 
+	{types.Bytes, types.AnyEnum, bytesToEnum},
 	{types.Bytes, types.String, bytesToString},
 	{types.Bytes, types.Uuid, bytesToUUID},
 
@@ -64,6 +65,8 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Decimal, types.Int4, getDecimalToIntCastFunc(32)},
 	{types.Decimal, types.Int, getDecimalToIntCastFunc(anyWidth)},
 	{types.Decimal, types.String, decimalToString},
+
+	{types.AnyEnum, types.String, enumToString},
 
 	{types.Float, types.Bool, numToBool},
 	{types.Float, types.Decimal, floatToDecimal},
@@ -99,6 +102,7 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.String, types.Bytes, stringToBytes},
 	{types.String, types.Date, stringToDate},
 	{types.String, types.Decimal, stringToDecimal},
+	{types.String, types.AnyEnum, stringToEnum},
 	{types.String, types.Float, stringToFloat},
 	{types.String, types.Int2, getStringToIntCastFunc(16)},
 	{types.String, types.Int4, getStringToIntCastFunc(32)},
@@ -135,6 +139,12 @@ func boolToIntOrFloat(to, from, _, _, _ string) string {
 
 func boolToString(to, from, _, toType, _ string) string {
 	return toString(fmt.Sprintf("%s = []byte(strconv.FormatBool(%s))", to, from), to, toType)
+}
+
+func bytesToEnum(to, from, _, _, _ string) string {
+	// Bytes value is treated as the physical representation of the enum, so we
+	// just use it directly.
+	return fmt.Sprintf("%s = %s", to, from)
 }
 
 func bytesToString(to, from, evalCtx, toType, _ string) string {
@@ -285,6 +295,17 @@ func floatToString(to, from, evalCtx, toType, _ string) string {
 	return toString(fmt.Sprintf(convStr, to, from, evalCtx), to, toType)
 }
 
+func enumToString(to, from, _, toType, _ string) string {
+	conv := `
+		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(fromType, %[2]s)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		%[1]s = []byte(logical)
+`
+	return toString(fmt.Sprintf(conv, to, from), to, toType)
+}
+
 func intToDecimal(to, from, _, toType, _ string) string {
 	conv := `
 		%[1]s.SetInt64(int64(%[2]s))
@@ -425,6 +446,19 @@ func stringToDecimal(to, from, _, toType, _ string) string {
 		}
 `
 	return toDecimal(fmt.Sprintf(convStr, to, from), to, toType)
+}
+
+func stringToEnum(to, from, _, toType, _ string) string {
+	// String value is treated as the logical representation of the enum.
+	convStr := `
+		_logical := string(%[2]s)
+		var err error
+		%[1]s, _, err = tree.GetEnumComponentsFromLogicalRep(%[3]s, _logical)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+`
+	return fmt.Sprintf(convStr, to, from, toType)
 }
 
 func stringToFloat(to, from, _, toType, _ string) string {
@@ -733,6 +767,11 @@ func (i castFromWidthTmplInfo) VecMethod() string {
 }
 
 func getTypeName(typ *types.T) string {
+	if typ.Family() == types.EnumFamily {
+		// Special case for enums since we're use types.AnyEnum as the
+		// representative type.
+		return "Enum"
+	}
 	// typ.Name() returns the type name in the lowercase. We want to capitalize
 	// the first letter (and all type names start with a letter).
 	name := []byte(typ.Name())

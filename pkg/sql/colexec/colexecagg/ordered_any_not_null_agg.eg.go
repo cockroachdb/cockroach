@@ -94,6 +94,12 @@ func newAnyNotNullOrderedAggAlloc(
 		default:
 			return &anyNotNullJSONOrderedAggAlloc{aggAllocBase: allocBase}, nil
 		}
+	case types.EnumFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &anyNotNullEnumOrderedAggAlloc{aggAllocBase: allocBase}, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -2148,6 +2154,209 @@ func (a *anyNotNullJSONOrderedAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(anyNotNullJSONOrderedAggSliceOverhead + sizeOfAnyNotNullJSONOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullJSONOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+// anyNotNullEnumOrderedAgg implements the ANY_NOT_NULL aggregate, returning the
+// first non-null value in the input column.
+type anyNotNullEnumOrderedAgg struct {
+	orderedAggregateFuncBase
+	col                         *coldata.Enums
+	curAgg                      []byte
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &anyNotNullEnumOrderedAgg{}
+
+func (a *anyNotNullEnumOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Enum()
+}
+
+func (a *anyNotNullEnumOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+
+	oldCurAggSize := len(a.curAgg)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Enum(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
+		col := col
+		if sel == nil {
+			_, _ = groups[endIdx-1], groups[startIdx]
+			_, _ = col.Get(endIdx-1), col.Get(startIdx)
+			if nulls.MaybeHasNulls() {
+				for i := startIdx; i < endIdx; i++ {
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = append(a.curAgg[:0], val...)
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for i := startIdx; i < endIdx; i++ {
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = append(a.curAgg[:0], val...)
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			}
+		} else {
+			sel = sel[startIdx:endIdx]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = append(a.curAgg[:0], val...)
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			} else {
+				for _, i := range sel {
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If this is a new group, check if any non-nulls have been found for the
+							// current group.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = append(a.curAgg[:0], val...)
+						a.foundNonNullForCurrentGroup = true
+					}
+				}
+			}
+		}
+	},
+	)
+	newCurAggSize := len(a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *anyNotNullEnumOrderedAgg) Flush(outputIdx int) {
+	// If we haven't found any non-nulls for this group so far, the output for
+	// this group should be null.
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	col := a.col
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+	// Release the reference to curAgg eagerly.
+	oldCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *anyNotNullEnumOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
+type anyNotNullEnumOrderedAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNullEnumOrderedAgg
+}
+
+var _ aggregateFuncAlloc = &anyNotNullEnumOrderedAggAlloc{}
+
+const sizeOfAnyNotNullEnumOrderedAgg = int64(unsafe.Sizeof(anyNotNullEnumOrderedAgg{}))
+const anyNotNullEnumOrderedAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullEnumOrderedAgg{}))
+
+func (a *anyNotNullEnumOrderedAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(anyNotNullEnumOrderedAggSliceOverhead + sizeOfAnyNotNullEnumOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]anyNotNullEnumOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator

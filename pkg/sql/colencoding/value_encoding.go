@@ -108,6 +108,10 @@ func DecodeTableValueToCol(
 		var d duration.Duration
 		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
 		vecs.IntervalCols[colIdx][rowIdx] = d
+	case types.EnumFamily:
+		var data []byte
+		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
+		vecs.EnumCols[colIdx].Set(rowIdx, data)
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum

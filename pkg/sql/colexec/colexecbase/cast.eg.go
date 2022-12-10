@@ -229,6 +229,12 @@ func GetCastOperator(
 			case -1:
 			default:
 				switch toType.Family() {
+				case types.EnumFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castBytesEnumOp{castOpBase: base}, nil
+					}
 				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
@@ -316,6 +322,19 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castDecimalStringOp{castOpBase: base}, nil
+					}
+				}
+			}
+		case types.EnumFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castEnumStringOp{castOpBase: base}, nil
 					}
 				}
 			}
@@ -516,6 +535,12 @@ func GetCastOperator(
 					case -1:
 					default:
 						return &castStringDecimalOp{castOpBase: base}, nil
+					}
+				case types.EnumFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return &castStringEnumOp{castOpBase: base}, nil
 					}
 				case types.FloatFamily:
 					switch toType.Width() {
@@ -745,6 +770,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			case -1:
 			default:
 				switch toType.Family() {
+				case types.EnumFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
 				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
@@ -827,6 +858,19 @@ func IsCastSupported(fromType, toType *types.T) bool {
 					default:
 						return true
 					}
+				case types.StringFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				}
+			}
+		case types.EnumFamily:
+			switch fromType.Width() {
+			case -1:
+			default:
+				switch toType.Family() {
 				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
@@ -1028,6 +1072,12 @@ func IsCastSupported(fromType, toType *types.T) bool {
 						return true
 					}
 				case types.DecimalFamily:
+					switch toType.Width() {
+					case -1:
+					default:
+						return true
+					}
+				case types.EnumFamily:
 					switch toType.Width() {
 					case -1:
 					default:
@@ -2198,6 +2248,126 @@ func (c *castBoolStringOp) Next() coldata.Batch {
 									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
 							}
 
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBytesEnumOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castBytesEnumOp{}
+var _ colexecop.ClosableOperator = &castBytesEnumOp{}
+
+func (c *castBytesEnumOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Enum()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+							r = v
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+							r = v
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+							r = v
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+							r = v
 							outputCol.Set(tupleIdx, r)
 						}
 					}
@@ -4732,6 +4902,239 @@ func (c *castDecimalStringOp) Next() coldata.Batch {
 							var r []byte
 
 							r = []byte(v.String())
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castEnumStringOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castEnumStringOp{}
+var _ colexecop.ClosableOperator = &castEnumStringOp{}
+
+func (c *castEnumStringOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	fromType := inputVec.Type()
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Enum()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Bytes()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_, logical, err := tree.GetEnumComponentsFromPhysicalRep(fromType, v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(logical)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_, logical, err := tree.GetEnumComponentsFromPhysicalRep(fromType, v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(logical)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_, logical, err := tree.GetEnumComponentsFromPhysicalRep(fromType, v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(logical)
+
+							if toType.Oid() != oid.T_name {
+								// bpchar types truncate trailing whitespace.
+								if toType.Oid() == oid.T_bpchar {
+									r = bytes.TrimRight(r, " ")
+								}
+								// If the string type specifies a limit we truncate to that limit:
+								//   'hello'::CHAR(2) -> 'he'
+								// This is true of all the string type variants.
+								if toType.Width() > 0 {
+									r = []byte(util.TruncateString(string(r), int(toType.Width())))
+								}
+								if toType.Oid() == oid.T_char {
+									// "char" is supposed to truncate long values.
+									r = []byte(util.TruncateString(string(r), 1))
+								}
+							}
+							if toType.Width() > 0 && utf8.RuneCountInString(string(r)) > int(toType.Width()) {
+								_typeString := toType.SQLString()
+								colexecerror.ExpectedError(
+									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_, logical, err := tree.GetEnumComponentsFromPhysicalRep(fromType, v)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = []byte(logical)
+
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
@@ -9738,6 +10141,154 @@ func (c *castStringDecimalOp) Next() coldata.Batch {
 							}
 
 							//gcassert:bce
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castStringEnumOp struct {
+	castOpBase
+}
+
+var _ colexecop.ResettableOperator = &castStringEnumOp{}
+var _ colexecop.ClosableOperator = &castStringEnumOp{}
+
+func (c *castStringEnumOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	toType := outputVec.Type()
+	// Remove unused warnings.
+	_ = toType
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bytes()
+			inputNulls := inputVec.Nulls()
+			outputCol := outputVec.Enum()
+			outputNulls := outputVec.Nulls()
+			if inputVec.MaybeHasNulls() {
+				outputNulls.Copy(inputNulls)
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_logical := string(v)
+							var err error
+							r, _, err = tree.GetEnumComponentsFromLogicalRep(toType, _logical)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if true && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_logical := string(v)
+							var err error
+							r, _, err = tree.GetEnumComponentsFromLogicalRep(toType, _logical)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = sel[i]
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_logical := string(v)
+							var err error
+							r, _, err = tree.GetEnumComponentsFromLogicalRep(toType, _logical)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							outputCol.Set(tupleIdx, r)
+						}
+					}
+				} else {
+					{
+						var (
+							evalCtx *eval.Context = c.evalCtx
+							buf     *bytes.Buffer = &c.buf
+						)
+						// Silence unused warnings.
+						_ = evalCtx
+						_ = buf
+						var tupleIdx int
+						for i := 0; i < n; i++ {
+							tupleIdx = i
+							if false && inputNulls.NullAt(tupleIdx) {
+								continue
+							}
+							v := inputCol.Get(tupleIdx)
+							var r []byte
+
+							_logical := string(v)
+							var err error
+							r, _, err = tree.GetEnumComponentsFromLogicalRep(toType, _logical)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
 							outputCol.Set(tupleIdx, r)
 						}
 					}

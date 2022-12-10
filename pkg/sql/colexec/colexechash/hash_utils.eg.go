@@ -1000,6 +1000,91 @@ func rehash(
 				}
 			}
 		}
+	case types.EnumFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Enum(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+				}
+			}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch col.Type().Width() {
 		case -1:
