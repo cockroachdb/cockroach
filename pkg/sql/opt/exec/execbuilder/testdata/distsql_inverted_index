@@ -80,97 +80,65 @@ start_key           end_key       replicas  lease_holder
 …/1/10              …/1/20        {2}       2
 …/1/20              …/2           {3}       3
 
-# Filter with a fully-specified array. This should use a zigzag join.
+# Filter with a fully-specified array. This should not use a zigzag join due
+# to distribution costs.
 query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a
 ----
-distribution: local
+distribution: full
 vectorized: true
 ·
-• sort
+• filter
 │ estimated row count: 0
-│ order: +a
+│ filter: b @> '[1, 2]'
 │
-└── • lookup join
-    │ estimated row count: 0
-    │ table: json_tab@json_tab_pkey
-    │ equality: (a) = (a)
-    │ equality cols are key
-    │ pred: b @> '[1, 2]'
-    │
-    └── • zigzag join
-          estimated row count: 0
-          left table: json_tab@foo_inv
-          left columns: (a, b_inverted_key)
-          left fixed values: 1 column
-          right table: json_tab@foo_inv
-          right columns: (a, b_inverted_key)
-          right fixed values: 1 column
+└── • scan
+      estimated row count: 33 (100% of the table; stats collected <hidden> ago)
+      table: json_tab@json_tab_pkey
+      spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BS2BdGpNCOZxJ8RVW5zibxlvsF2EFDlu6MkYltBrbY33z_n-Hcs79B_b1Bh-uly-Waxgpfni-Kq-LB8BUW6TM-uQMPbPHsPN57tOugNfHyX5ilsIPnaRdGc4ORaCojLE8jy8zSH08-gUaDlilb6jjyqa5RYCmwdb8l7dkNrNy4sqp-oIoHGtl0Y2qXALTtCtcNgQkOo8Iupf-v6go0lN4tQYEVBm2b0LUxFEKl7tuQb89rYHyjwjJvuznoFWsAGxbQqn7SadUFBMseyF8hdeEDzQdeESvbi6fgDeE66IjeT-_D3JH8P6_aWfqHAJfNt18INGwtsFSSDMFtBEv_35kqpiyJbnT5O8RBBHowQPydCwS6Qm8X7-Il8fdB-_hz7nHzL1tOe_SHnqC8FUlXT9Ik8d25Ll4634zVTmY26sVGRD9NUTsXCTqMB8LFYHhXHx8XxUfH8H3HZv_gTAAD__zhLGuM=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k9Fv0zAQxt_5K073MhCuEjtbkfwUtmWiqDQjqQRoRJPbnKZCFgfbkUBV_3eURNsIrFlQBW-5O3_-frrP2aL9VqDE6OPl_PVsAc_PZ-kyfT9_AWk0j86WoOAiid_BF6vLa6dW8OFNlESwgvBz7fsBwdEVZyCyI4iT8yiB00-gkGGpc1qoW7Ior5AjQ4EMA8wYVkavyVptmtG2PTjLv6P0GW7KqnZNO2O41oZQbtFtXEEocalWBSWkcjKejwxzcmpTtNffoYV3H9fVV_qBDM90Ud-WVoJisEKGaaWaauJxH7MdQ127B0Pr1A2h5Ds2HupiUzgyZLygT9T1JYTijzVJKd-m8eJ0L4DYC_Dgq01OhvK-achfYrZ7hHKhJ7rypv3Tce0khHwvRtDD4OPD4YeF43F_4omx-TzBdZ_P8b_KR4xfjDhwMcKfjNzKE1D3Wzn5H6_2EYCEbKVLSz37fTf7zZOm_Ia6X8Dq2qzp0uh1a9OVcatrGzlZ1015V8zKbtQA_irmg2LRE_PfxWJQ_GrYORgUHw-Ljw_BPhkUT4edp3_lnO2e_QwAAP__EgULFQ==
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
-# This should use a zigzag join.
+# This should not use a zigzag join due to distribution costs.
 query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
-distribution: local
+distribution: full
 vectorized: true
 ·
-• sort
+• filter
 │ estimated row count: 0
-│ order: +a
+│ filter: (b @> '[1]') AND (b @> '[2]')
 │
-└── • lookup join
-    │ estimated row count: 0
-    │ table: json_tab@json_tab_pkey
-    │ equality: (a) = (a)
-    │ equality cols are key
-    │ pred: (b @> '[1]') AND (b @> '[2]')
-    │
-    └── • zigzag join
-          estimated row count: 0
-          left table: json_tab@foo_inv
-          left columns: (a, b_inverted_key)
-          left fixed values: 1 column
-          right table: json_tab@foo_inv
-          right columns: (a, b_inverted_key)
-          right fixed values: 1 column
+└── • scan
+      estimated row count: 33 (100% of the table; stats collected <hidden> ago)
+      table: json_tab@json_tab_pkey
+      spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1vm0AQfO-vWO1LHPUkc_jtnkhiqjpyIYVI_UiRdTZbi8S5pXdH1dbyf6-ANjGRbMVv7MzOMKO9LbofG1QYf76ZX8wSGE1n-W3-cX4OeTyPr25Bw7ss_QD3js3C6yV8eh9nMYyWEH1rgmBCcHYni7NzuEimQzRs0TSbxhlcfgGNAg2XlOhHcqjuUGIhsLa8IufYttC2W5iVv1AFAitTN76FC4ErtoRqi77yG0KFX6v1H72-5sqQHQcosCSvq03nm1clQaCeAkffmReV-YkCr3jTPBqnQAtYouhX5atW08YriCZY7ARy45-jOa_XhEruxOvjt8Ez0iXZsRyGf0ry_2NRP9BvFDhnfmhquOfKABsFUStMExhF4fAQSqnrPE0u_x1kQId79H7H54LyYMHwlII5W092HA7LRfLtQfvJKfYZuZqNo4H9IedgVwikck39E3Pc2BXdWF51v-nHtNN1QEnO96zsh5npqTbgvlgeFYfHxeFR8eSFuNi9-RsAAP__LTAnUQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk19vmzAUxd_3Kaz70lRzBDZpJvmJtqFapgw6iLRNHaqccFVlo5jZRtoU5btPwPqHqaFMechb7r0-vr-cg7dgfuYgIPhyvTifh2Q0myfL5NPilCTBIrhcEkmu4ugj-W5UcWvlinx-H8QBGa2I_61yXQ_JyQ1LT07JeTjrdnndjeJZEJOLr0QChUJlGMp7NCBugAEFDhQ8SCmUWq3RGKXr0bY5OM9-gXApbIqysnU7pbBWGkFswW5sjiBgKVc5xigz1I4LFDK0cpM31z_w-g8_bssf-BsoXKq8ui-MIJKSFVBISllXY4e5kO4oqMo-LTRW3iEItqPDoa42uUWN2vG6RG1fkJHPu94JIT4kUXjx18POmD8b78Xje_GeqJTOUGPWRfLZW0h3L_yHUI1V6Uy7p6PKCuKzvRheB4MNj44dFp3D3LHDh6b3CtdjepPjpMeH28YPtI2744GevQL16NnZ8b_4F_BiNKUqDHbg9t3s1s8Bsztsn49RlV7jtVbrZk1bRo2uaWRobDtlbTEv2lEN-FzMesW8I2b_inmv-F3_Zq9XPOkXTw7BPusVT_s3T_9rc7p78ycAAP__7U0mKw==
 
 # Filter with a nested array. This index expression is not tight.
-# This should use a zigzag join.
+# This should not use a zigzag join due to distribution costs.
 query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a
 ----
-distribution: local
+distribution: full
 vectorized: true
 ·
-• sort
+• filter
 │ estimated row count: 0
-│ order: +a
+│ filter: b @> '[[1, 2]]'
 │
-└── • lookup join
-    │ estimated row count: 0
-    │ table: json_tab@json_tab_pkey
-    │ equality: (a) = (a)
-    │ equality cols are key
-    │ pred: b @> '[[1, 2]]'
-    │
-    └── • zigzag join
-          estimated row count: 0
-          left table: json_tab@foo_inv
-          left columns: (a, b_inverted_key)
-          left fixed values: 1 column
-          right table: json_tab@foo_inv
-          right columns: (a, b_inverted_key)
-          right fixed values: 1 column
+└── • scan
+      estimated row count: 33 (100% of the table; stats collected <hidden> ago)
+      table: json_tab@json_tab_pkey
+      spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BS2BdGpNCOZxJ8SVW5zqbxlvsF2EFDlu6MkYlsRrdY33z_n-Hcs79B_r1Fh-ul6_ma2gJeXs-Km-DB_BUU6Ty9uQMPbPHsPt57tKug1fHyX5imsIfnaRtGU4Gy5lALisjyDLL9Mczj_DBoFWq5ooe_Jo1qixFJg43hD3rPrW7thYVb9RBUJNLZpQ98uBW7YEaodBhNqQoVfzPa33l6xseQmEQqsKGhTD76FqQgi9UCXfGNeGfsDBV5w3d5br0ALWKMYV-WzVrM2KEimWHYCuQ2PaD7oLaGSnXg-fg-ek67ITeQ-_APJ38OquaNfKHDOfNc2cMvGAlsFSS_MFpDE_3l1pdRVkS3On-Z4DCEPhohPCVGwC-Qm8X6ARL4-aD89xT4n37D1tGd_yDnqSoFUbWn8Rp5bt6Frx5vhmrHMBt3QqMiHcSrHYmbHUQ_4VCyPiuPj4vioePqPuOxe_AkAAP___0EcUw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k9Fv0zAQxt_5K6x7GQhXiZ2uSH4K2zJRVJqRVAJUosmtT1Mhi4PtSKCq_ztKom0EtWlQxd5yd_78_XSfswX7IwcB0eeb2dvpnLy8mqaL9OPsFUmjWXS5IJJcJ_EH8s3q4tbJFfn0LkoisiLh18r3AyRnyyWjhGfZGYmTqyghF1-IBAqFVjiX92hBLIEBBQ4UAsgolEav0Vpt6tG2OThVP0H4FDZFWbm6nVFYa4MgtuA2LkcQsJCrHBOUCo3nAwWFTm7y5voHuPDh47b8jr-AwqXOq_vCCiIpWQGFtJR1NfKYD9mOgq7ck6F18g5BsB0dDnW9yR0aNF7QJWr7goR8z6KEEO_TeH5xEIEfRHhy1kahQdW1DdlryHZ7OOd6pEtv0j0dV06QkB3ECDoYbHg87LR4POaPPD40oSNcjwmN_19CfPhq-Imr4f5o4F6OQD3u5fx5Xu4ehARtqQuLHYBDN_v1s0Z1h-1vYHVl1nhj9Lqxacu40TUNhda1U9YW06Id1YB_ilmvmHfE7G8x7xW_6XcOesXjfvH4FOzzXvGk33nyT87Z7sXvAAAA__-LJA31
 
 subtest array
 

@@ -285,7 +285,7 @@ scan g
  ├── stats: [rows=8, distinct(1)=6.5, null(1)=0]
  │   histogram(1)=  0 0.5  0 1.5  0 1.5  0 0.5  0  1   0  1   0 0.5  0 1.5
  │                <--- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17
- ├── cost: 22.1
+ ├── cost: 26.1
  ├── key: (1)
  └── distribution: test
 
@@ -761,7 +761,7 @@ scan i
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0  1   0  1   0  1   0  0
  │                <--- -3 --- -2 --- -1 --- 5
- ├── cost: 21.05
+ ├── cost: 25.05
  ├── key: (1)
  └── distribution: test
 
