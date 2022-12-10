@@ -1840,6 +1840,40 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	if !foundLocalRegion {
 		return errors.AssertionFailedf("The gateway region could not be determined while enforcing query home region.")
 	}
+	regionSet := make(map[string]struct{})
+	moreThanTwoRegionsScans := make([]*memo.ScanExpr, 0, len(b.builtScans))
+	for _, scan := range b.builtScans {
+		if scan.Distribution.Any() {
+			return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+				"Query has no home region. Try accessing only tables defined in multi-region databases.")
+		}
+		if len(scan.Distribution.Regions) > 1 {
+			if scan.Table == opt.TableID(0) {
+				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try adding a LIMIT clause.")
+			}
+			moreThanTwoRegionsScans = append(moreThanTwoRegionsScans, scan)
+		}
+		regionSet[scan.Distribution.Regions[0]] = struct{}{}
+	}
+	if len(moreThanTwoRegionsScans) > 0 {
+		md := moreThanTwoRegionsScans[0].Memo().Metadata()
+		tabMeta := md.TableMeta(moreThanTwoRegionsScans[0].Table)
+		if len(moreThanTwoRegionsScans) == 1 {
+			return b.filterSuggestionError(tabMeta, moreThanTwoRegionsScans[0].Index, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+		}
+		tabMeta2 := md.TableMeta(moreThanTwoRegionsScans[1].Table)
+		return b.filterSuggestionError(
+			tabMeta,
+			moreThanTwoRegionsScans[0].Index,
+			tabMeta2,
+			moreThanTwoRegionsScans[1].Index,
+		)
+	}
+	if len(regionSet) > 2 {
+		return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try adding a LIMIT clause.")
+	}
 	for i, scan := range b.builtScans {
 		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
 		inputTable := inputTableMeta.Table
@@ -1861,7 +1895,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 		if queryHasHomeRegion {
 			if homeRegion != queryHomeRegion {
 				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					`Query has no home region. The home region ('%s') of scan on table '%s' does not match the home region ('%s') of scan on table '%s'.`,
+					`Query has no home region. The home region ('%s') of operation on table '%s' does not match the home region ('%s') of operation on table '%s'.`,
 					queryHomeRegion,
 					inputTableName,
 					homeRegion,

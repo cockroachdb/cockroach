@@ -29,14 +29,14 @@ group-by (streaming)
  ├── internal-ordering: +1
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10, distinct(1)=10, null(1)=1]
- ├── cost: 14.63
+ ├── cost: 18.63
  ├── key: (1)
  ├── interesting orderings: (+1)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
       ├── stats: [rows=10, distinct(1)=10, null(1)=10]
-      ├── cost: 14.41
+      ├── cost: 18.41
       ├── ordering: +1
       ├── prune: (1)
       └── interesting orderings: (+1)
@@ -66,13 +66,13 @@ group-by (hash)
  ├── grouping columns: t.public.abc.a:1(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10, distinct(1)=10, null(1)=1]
- ├── cost: 14.73
+ ├── cost: 18.73
  ├── key: (1)
  ├── interesting orderings: (+1)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
       ├── stats: [rows=10, distinct(1)=10, null(1)=10]
-      ├── cost: 14.41
+      ├── cost: 18.41
       ├── prune: (1)
       └── interesting orderings: (+1)
