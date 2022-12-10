@@ -6039,6 +6039,7 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 				EndTS:              limits.maxTimestamp,
 				ExportAllRevisions: true,
 			})
+			require.False(t, firstCall)
 		})
 	t.Run("elastic CPU limit always exhausted",
 		func(t *testing.T) {
