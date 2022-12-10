@@ -54,7 +54,7 @@ SELECT * FROM abc WHERE b=10
 distribute
  ├── columns: a:1(int!null) b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 25.2500001
+ ├── cost: 425.24
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  ├── distribution: central
@@ -65,7 +65,7 @@ distribute
       ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 25.2200001
+      ├── cost: 225.22
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
       ├── prune: (1,3)
@@ -109,7 +109,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5200001
+ ├── cost: 224.52
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -122,7 +122,7 @@ SELECT b, c FROM abc WHERE b=10
 distribute
  ├── columns: b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 25.0500001
+ ├── cost: 425.04
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: central
@@ -133,7 +133,7 @@ distribute
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 25.0200001
+      ├── cost: 225.02
       ├── lax-key: (3)
       ├── fd: ()-->(2)
       ├── prune: (3)
@@ -205,11 +205,11 @@ scan t.public.abc@bc1
 opt format=show-all locality=(region=us,dc=west)
 SELECT b, c FROM abc WHERE b=10
 ----
-scan t.public.abc@bc2
+scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5200001
+ ├── cost: 24.7700001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: us
@@ -249,11 +249,11 @@ scan t.public.abc@bc1
 opt format=show-all locality=(region=us,dc=east)
 SELECT b, c FROM abc WHERE b=10
 ----
-scan t.public.abc@bc2
+scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5200001
+ ├── cost: 24.7700001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: us
@@ -279,7 +279,7 @@ SELECT b, c FROM abc WHERE b=10
 distribute
  ├── columns: b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5500001
+ ├── cost: 424.54
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: us
@@ -290,7 +290,7 @@ distribute
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 24.5200001
+      ├── cost: 224.52
       ├── lax-key: (3)
       ├── fd: ()-->(2)
       ├── prune: (3)
@@ -303,7 +303,7 @@ SELECT b, c FROM abc WHERE b=10
 distribute
  ├── columns: b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5500001
+ ├── cost: 424.54
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: eu
@@ -314,7 +314,7 @@ distribute
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 24.5200001
+      ├── cost: 224.52
       ├── lax-key: (3)
       ├── fd: ()-->(2)
       ├── prune: (3)
@@ -328,7 +328,7 @@ SELECT b, c FROM abc WHERE b=10
 distribute
  ├── columns: b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5500001
+ ├── cost: 424.54
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: us
@@ -339,7 +339,7 @@ distribute
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 24.5200001
+      ├── cost: 224.52
       ├── lax-key: (3)
       ├── fd: ()-->(2)
       ├── prune: (3)
@@ -353,7 +353,7 @@ SELECT b, c FROM abc WHERE b=10
 distribute
  ├── columns: b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.8000001
+ ├── cost: 424.79
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: ap
@@ -364,7 +364,7 @@ distribute
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 24.7700001
+      ├── cost: 224.77
       ├── lax-key: (3)
       ├── fd: ()-->(2)
       ├── prune: (3)
@@ -386,7 +386,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5200001
+ ├── cost: 28.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: us
@@ -401,7 +401,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 24.5200001
+ ├── cost: 28.5200001
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: eu
@@ -536,7 +536,7 @@ SELECT b, c FROM abc WHERE b=10
 distribute
  ├── columns: b:2(int!null) c:3(string)
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 25.0500001
+ ├── cost: 425.04
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── distribution: central
@@ -547,7 +547,7 @@ distribute
       ├── columns: t.public.abc.b:2(int!null) t.public.abc.c:3(string)
       ├── constraint: /2/3: [/10 - /10]
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 25.0200001
+      ├── cost: 225.02
       ├── lax-key: (3)
       ├── fd: ()-->(2)
       ├── prune: (3)
@@ -812,7 +812,7 @@ locality-optimized-search
  ├── right columns: t.public.abc_part.r:13(string) t.public.abc_part.a:14(int) t.public.abc_part.b:15(int) t.public.abc_part.c:16(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.91, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
- ├── cost: 3.468444
+ ├── cost: 5.6885176
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── distribution: east
@@ -822,7 +822,7 @@ locality-optimized-search
  │    ├── constraint: /7/9/10: [/'east'/1/'foo' - /'east'/1/'foo']
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.9001, distinct(7)=0.9001, null(7)=0, distinct(9)=0.9001, null(9)=0, distinct(10)=0.9001, null(10)=0, distinct(7,9,10)=0.9001, null(7,9,10)=0]
- │    ├── cost: 1.724672
+ │    ├── cost: 5.154016
  │    ├── key: ()
  │    ├── fd: ()-->(7-10)
  │    └── prune: (7-10)
@@ -831,7 +831,7 @@ locality-optimized-search
       ├── constraint: /13/15/16: [/'west'/1/'foo' - /'west'/1/'foo']
       ├── cardinality: [0 - 1]
       ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, distinct(15)=0.9001, null(15)=0, distinct(16)=0.9001, null(16)=0, distinct(13,15,16)=0.9001, null(13,15,16)=0]
-      ├── cost: 1.724672
+      ├── cost: 5.154016
       ├── key: ()
       ├── fd: ()-->(13-16)
       └── prune: (13-16)
@@ -850,7 +850,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │         └── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 18.1443257
+ ├── cost: 20.3643993
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── distribution: east
@@ -862,7 +862,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         └── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.9009, distinct(1)=0.897389, null(1)=0, distinct(2)=0.9009, null(2)=0, distinct(3)=0.9009, null(3)=0, distinct(4)=0.9009, null(4)=0]
- │    ├── cost: 10.8432087
+ │    ├── cost: 13.0632823
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: east
@@ -872,7 +872,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── right columns: a1.r:19 a1.a:20 a1.b:21 a1.c:22
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── stats: [rows=0.91, distinct(1)=0.906283, null(1)=0, distinct(2)=0.91, null(2)=0, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
- │    │    ├── cost: 3.468444
+ │    │    ├── cost: 5.6885176
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
@@ -881,7 +881,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    │    ├── constraint: /13/15/16: [/'east'/1/'foo' - /'east'/1/'foo']
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, distinct(15)=0.9001, null(15)=0, distinct(16)=0.9001, null(16)=0, distinct(13,15,16)=0.9001, null(13,15,16)=0]
- │    │    │    ├── cost: 1.724672
+ │    │    │    ├── cost: 5.154016
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(13-16)
  │    │    └── scan abc_part@bc_idx [as=a1]
@@ -889,7 +889,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── constraint: /19/21/22: [/'west'/1/'foo' - /'west'/1/'foo']
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── stats: [rows=0.9001, distinct(19)=0.9001, null(19)=0, distinct(21)=0.9001, null(21)=0, distinct(22)=0.9001, null(22)=0, distinct(19,21,22)=0.9001, null(19,21,22)=0]
- │    │         ├── cost: 1.724672
+ │    │         ├── cost: 5.154016
  │    │         ├── key: ()
  │    │         └── fd: ()-->(19-22)
  │    └── filters (true)
