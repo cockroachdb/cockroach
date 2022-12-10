@@ -233,6 +233,7 @@ func (s *Scanner) parseStringSlow(pos int) ([]byte, int) {
 	b.Append(w[:pos])
 	w = w[pos:]
 
+loop:
 	for wp := 0; wp < len(w); {
 		switch c := w[wp]; {
 		default:
@@ -251,7 +252,7 @@ func (s *Scanner) parseStringSlow(pos int) ([]byte, int) {
 			case -1:
 				return nil, pos // Error
 			case 0:
-				break
+				break loop
 			default:
 				wp += n
 				pos += n
