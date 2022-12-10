@@ -3663,14 +3663,14 @@ group-by (hash)
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- ├── cost: 1155.01625
+ ├── cost: 1159.01625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1)
  └── project
       ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
-      ├── cost: 1114.84
+      ├── cost: 1118.84
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
@@ -3678,7 +3678,7 @@ group-by (hash)
       └── scan t.public.xyz
            ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float) t.public.xyz.crdb_internal_mvcc_timestamp:4(decimal) t.public.xyz.tableoid:5(oid)
            ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
-           ├── cost: 1104.82
+           ├── cost: 1108.82
            ├── key: (1)
            ├── fd: (1)-->(2-5)
            ├── prune: (1-5)

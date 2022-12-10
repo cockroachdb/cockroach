@@ -17,13 +17,13 @@ group-by (hash)
  ├── columns: max:7!null min:8!null i:2 s:3
  ├── grouping columns: i:2 s:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- ├── cost: 1154.89625
+ ├── cost: 1158.89625
  ├── key: (2,3)
  ├── fd: (2,3)-->(7,8)
  ├── scan a
  │    ├── columns: k:1!null i:2 s:3
  │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- │    ├── cost: 1094.72
+ │    ├── cost: 1098.72
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── aggregations
@@ -40,13 +40,13 @@ group-by (streaming)
  ├── grouping columns: a:2
  ├── internal-ordering: +2
  ├── stats: [rows=100, distinct(2)=100, null(2)=1]
- ├── cost: 1085.45
+ ├── cost: 1089.45
  ├── key: (2)
  ├── fd: (2)-->(7)
  ├── scan b@b_a_b_idx
  │    ├── columns: a:2
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
- │    ├── cost: 1064.42
+ │    ├── cost: 1068.42
  │    └── ordering: +2
  └── aggregations
       └── count-rows [as=count_rows:7]
@@ -59,13 +59,13 @@ group-by (streaming)
  ├── grouping columns: a:2 b:3
  ├── internal-ordering: +2,+3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- ├── cost: 1114.55
+ ├── cost: 1118.55
  ├── key: (2,3)
  ├── fd: (2,3)-->(7)
  ├── scan b@b_a_b_idx
  │    ├── columns: a:2 b:3
  │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- │    ├── cost: 1074.52
+ │    ├── cost: 1078.52
  │    └── ordering: +2,+3
  └── aggregations
       └── count-rows [as=count_rows:7]
@@ -78,7 +78,7 @@ limit
  ├── columns: a:2 count:7!null
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 121.16
+ ├── cost: 125.16
  ├── key: (2)
  ├── fd: (2)-->(7)
  ├── group-by (streaming)
@@ -86,14 +86,14 @@ limit
  │    ├── grouping columns: a:2
  │    ├── internal-ordering: +2
  │    ├── stats: [rows=100, distinct(2)=100, null(2)=1]
- │    ├── cost: 121.05
+ │    ├── cost: 125.05
  │    ├── key: (2)
  │    ├── fd: (2)-->(7)
  │    ├── limit hint: 10.00
  │    ├── scan b@b_a_b_idx
  │    │    ├── columns: a:2
  │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
- │    │    ├── cost: 118.02
+ │    │    ├── cost: 122.02
  │    │    ├── ordering: +2
  │    │    └── limit hint: 100.00
  │    └── aggregations
@@ -107,7 +107,7 @@ limit
  ├── columns: a:2 b:3 count:7!null
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 34.96
+ ├── cost: 38.96
  ├── key: (2,3)
  ├── fd: (2,3)-->(7)
  ├── group-by (streaming)
@@ -115,14 +115,14 @@ limit
  │    ├── grouping columns: a:2 b:3
  │    ├── internal-ordering: +2,+3
  │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- │    ├── cost: 34.85
+ │    ├── cost: 38.85
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(7)
  │    ├── limit hint: 10.00
  │    ├── scan b@b_a_b_idx
  │    │    ├── columns: a:2 b:3
  │    │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- │    │    ├── cost: 24.52
+ │    │    ├── cost: 28.52
  │    │    ├── ordering: +2,+3
  │    │    └── limit hint: 10.00
  │    └── aggregations
@@ -137,7 +137,7 @@ limit
  ├── columns: a:1 c:3 count:8!null
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 641.98
+ ├── cost: 645.98
  ├── key: (1,3)
  ├── fd: (1,3)-->(8)
  ├── group-by (partial streaming)
@@ -145,20 +145,20 @@ limit
  │    ├── grouping columns: a:1 c:3
  │    ├── internal-ordering: +1
  │    ├── stats: [rows=1000, distinct(1,3)=1000, null(1,3)=0.1]
- │    ├── cost: 641.87
+ │    ├── cost: 645.87
  │    ├── key: (1,3)
  │    ├── fd: (1,3)-->(8)
  │    ├── limit hint: 10.00
  │    ├── index-join c
  │    │    ├── columns: a:1 c:3
  │    │    ├── stats: [rows=1000, distinct(1,3)=1000, null(1,3)=0.1]
- │    │    ├── cost: 631.44
+ │    │    ├── cost: 635.44
  │    │    ├── ordering: +1
  │    │    ├── limit hint: 10.00
  │    │    └── scan c@c_a_idx
  │    │         ├── columns: a:1 rowid:5!null
  │    │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    │         ├── cost: 24.42
+ │    │         ├── cost: 28.42
  │    │         ├── key: (5)
  │    │         ├── fd: (5)-->(1)
  │    │         ├── ordering: +1
@@ -174,7 +174,7 @@ limit
  ├── columns: b:2 d:4 count:8!null
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 35.16
+ ├── cost: 39.16
  ├── key: (2,4)
  ├── fd: (2,4)-->(8)
  ├── group-by (partial streaming)
@@ -182,14 +182,14 @@ limit
  │    ├── grouping columns: b:2 d:4
  │    ├── internal-ordering: +2
  │    ├── stats: [rows=1000, distinct(2,4)=1000, null(2,4)=0.1]
- │    ├── cost: 35.05
+ │    ├── cost: 39.05
  │    ├── key: (2,4)
  │    ├── fd: (2,4)-->(8)
  │    ├── limit hint: 10.00
  │    ├── scan c@c_b_c_d_idx
  │    │    ├── columns: b:2 d:4
  │    │    ├── stats: [rows=1000, distinct(2,4)=1000, null(2,4)=0.1]
- │    │    ├── cost: 24.62
+ │    │    ├── cost: 28.62
  │    │    ├── ordering: +2
  │    │    └── limit hint: 10.00
  │    └── aggregations
@@ -203,7 +203,7 @@ limit
  ├── columns: b:2 a:1 count:8!null
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 641.98
+ ├── cost: 645.98
  ├── key: (1,2)
  ├── fd: (1,2)-->(8)
  ├── group-by (partial streaming)
@@ -211,20 +211,20 @@ limit
  │    ├── grouping columns: a:1 b:2
  │    ├── internal-ordering: +1
  │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
- │    ├── cost: 641.87
+ │    ├── cost: 645.87
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(8)
  │    ├── limit hint: 10.00
  │    ├── index-join c
  │    │    ├── columns: a:1 b:2
  │    │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
- │    │    ├── cost: 631.44
+ │    │    ├── cost: 635.44
  │    │    ├── ordering: +1
  │    │    ├── limit hint: 10.00
  │    │    └── scan c@c_a_idx
  │    │         ├── columns: a:1 rowid:5!null
  │    │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    │         ├── cost: 24.42
+ │    │         ├── cost: 28.42
  │    │         ├── key: (5)
  │    │         ├── fd: (5)-->(1)
  │    │         ├── ordering: +1
@@ -240,7 +240,7 @@ limit
  ├── columns: b:2 c:3 a:1 count:8!null
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 642.38
+ ├── cost: 646.38
  ├── key: (1-3)
  ├── fd: (1-3)-->(8)
  ├── group-by (partial streaming)
@@ -248,20 +248,20 @@ limit
  │    ├── grouping columns: a:1 b:2 c:3
  │    ├── internal-ordering: +2,+3
  │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0.001]
- │    ├── cost: 642.27
+ │    ├── cost: 646.27
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(8)
  │    ├── limit hint: 10.00
  │    ├── index-join c
  │    │    ├── columns: a:1 b:2 c:3
  │    │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0.001]
- │    │    ├── cost: 631.74
+ │    │    ├── cost: 635.74
  │    │    ├── ordering: +2,+3
  │    │    ├── limit hint: 10.00
  │    │    └── scan c@c_b_c_d_idx
  │    │         ├── columns: b:2 c:3 rowid:5!null
  │    │         ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- │    │         ├── cost: 24.72
+ │    │         ├── cost: 28.72
  │    │         ├── key: (5)
  │    │         ├── fd: (5)-->(2,3)
  │    │         ├── ordering: +2,+3
@@ -298,27 +298,27 @@ group-by (streaming)
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 46.15
+ ├── cost: 54.15
  ├── key: ()
  ├── fd: ()-->(2,14)
  ├── project
  │    ├── columns: column13:13 f.file_id:2!null
  │    ├── immutable
  │    ├── stats: [rows=10]
- │    ├── cost: 45.92
+ │    ├── cost: 53.92
  │    ├── fd: ()-->(2)
  │    ├── left-join (lookup p)
  │    │    ├── columns: filename:1!null f.file_id:2!null p.file_id:8 payload:10
  │    │    ├── key columns: [2] = [8]
  │    │    ├── stats: [rows=10, distinct(8)=1, null(8)=0]
- │    │    ├── cost: 45.7
+ │    │    ├── cost: 53.7
  │    │    ├── fd: ()-->(1,2,8)
  │    │    ├── scan f
  │    │    │    ├── columns: filename:1!null f.file_id:2!null
  │    │    │    ├── constraint: /1: [/'abc' - /'abc']
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
- │    │    │    ├── cost: 5.08
+ │    │    │    ├── cost: 9.08
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(1,2)
  │    │    └── filters (true)
