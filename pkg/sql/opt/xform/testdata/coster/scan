@@ -8,7 +8,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
- ├── cost: 1084.62
+ ├── cost: 1088.62
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -46,7 +46,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=100000]
- ├── cost: 106024.62
+ ├── cost: 106028.62
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -88,7 +88,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=100000]
- ├── cost: 107274.745
+ ├── cost: 107278.745
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -101,13 +101,13 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 173.545714
+ ├── cost: 177.545714
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── stats: [rows=4666.667, distinct(1)=4666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.67, null(1,2)=0]
- │    ├── cost: 173.335714
+ │    ├── cost: 177.335714
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -115,7 +115,7 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
  │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0]
- │    │    ├── cost: 169.02
+ │    │    ├── cost: 173.02
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 142.86
@@ -132,14 +132,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 32.7179006
+ ├── cost: 36.7179006
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
  │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=407.25, null(1,2)=0]
- │    ├── cost: 32.5079006
+ │    ├── cost: 36.5079006
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -148,7 +148,7 @@ limit
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
  │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
- │    │    ├── cost: 27.9879006
+ │    │    ├── cost: 31.9879006
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 22.10
@@ -175,7 +175,7 @@ SELECT * FROM a ORDER BY k DESC
 scan a,rev
  ├── columns: k:1!null i:2 s:3 d:4!null
  ├── stats: [rows=1]
- ├── cost: 25.9
+ ├── cost: 29.9
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: -1
@@ -193,7 +193,7 @@ select
  ├── cardinality: [0 - 1000]
  ├── immutable
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
- ├── cost: 1034.03
+ ├── cost: 1038.03
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
@@ -201,7 +201,7 @@ select
  │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 1000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1024.01
+ │    ├── cost: 1028.01
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
@@ -214,7 +214,7 @@ select
  ├── cardinality: [0 - 2000]
  ├── immutable
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
- ├── cost: 1039.03
+ ├── cost: 1043.03
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
@@ -222,7 +222,7 @@ select
  │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 2000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1029.01
+ │    ├── cost: 1033.01
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
@@ -353,7 +353,7 @@ scan t60493
  ├── stats: [rows=2, distinct(2)=2, null(2)=0]
  │   histogram(2)=  0     1      0     1
  │                <--- 'useast' --- 'uswest'
- ├── cost: 20.1
+ ├── cost: 220.1
  └── key: (1,2)
 
 # Regression test for #64570. Ensure we always prefer bounded over unbounded scans.
@@ -484,13 +484,13 @@ upsert t64570
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 5.14483333
+ ├── cost: 9.14483333
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── stats: [rows=1]
-      ├── cost: 5.13483333
+      ├── cost: 9.13483333
       ├── key: ()
       ├── fd: ()-->(6-11)
       ├── values
@@ -506,7 +506,7 @@ upsert t64570
       │    ├── constraint: /9/10: [/10/10 - /10/10]
       │    ├── cardinality: [0 - 1]
       │    ├── stats: [rows=0.9333333, distinct(9)=0.933333, null(9)=0, distinct(10)=0.933333, null(10)=0, distinct(9,10)=0.933333, null(9,10)=0]
-      │    ├── cost: 5.066
+      │    ├── cost: 9.066
       │    ├── key: ()
       │    └── fd: ()-->(9-11)
       └── filters (true)
@@ -579,7 +579,7 @@ scan t@abc
  ├── stats: [rows=2e-05, distinct(2)=2e-05, null(2)=0, distinct(3)=2e-05, null(3)=0, distinct(2,3)=2e-05, null(2,3)=0]
  │   histogram(2)=
  │   histogram(3)=
- ├── cost: 14.0200216
+ ├── cost: 18.0200216
  ├── key: (1)
  └── fd: ()-->(2,3), (1)-->(4)
 
@@ -606,14 +606,14 @@ SELECT * FROM t@{NO_FULL_SCAN} WHERE c > 0
 index-join t
  ├── columns: k:1!null a:2 b:3 c:4!null
  ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
- ├── cost: 234667.505
+ ├── cost: 234671.505
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan t@b_partial,partial
       ├── columns: k:1!null b:3
       ├── flags: no-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
-      ├── cost: 34337.4524
+      ├── cost: 34341.4524
       ├── key: (1)
       └── fd: (1)-->(3)
 
@@ -684,7 +684,7 @@ SELECT x FROM b
 scan b@xyz
  ├── columns: x:1
  ├── stats: [rows=1000]
- └── cost: 1051.795
+ └── cost: 1055.795
 
 # The cost of using index xyz is still lowest for a constrained scan.
 opt
@@ -694,4 +694,4 @@ scan b@xyz
  ├── columns: x:1!null
  ├── constraint: /1/2/3/5: (/NULL - /12]
  ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
- └── cost: 356.52
+ └── cost: 360.52

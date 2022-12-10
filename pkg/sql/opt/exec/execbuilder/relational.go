@@ -1714,9 +1714,12 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		// If we are performing locality optimized search, set a limit equal to
 		// the maximum possible number of rows. This will tell the execution engine
 		// not to execute the right child if the limit is reached by the left
-		// child.
+		// child. A value of `math.MaxUint32` means the cardinality is unbounded,
+		// so don't use that as a hard limit.
 		// TODO(rytaft): Store the limit in the expression.
-		hardLimit = uint64(set.Relational().Cardinality.Max)
+		if set.Relational().Cardinality.Max != math.MaxUint32 {
+			hardLimit = uint64(set.Relational().Cardinality.Max)
+		}
 	}
 
 	ep := execPlan{}
@@ -1841,6 +1844,41 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	if !foundLocalRegion {
 		return errors.AssertionFailedf("The gateway region could not be determined while enforcing query home region.")
 	}
+	regionSet := make(map[string]struct{})
+	moreThanOneRegionScans := make([]*memo.ScanExpr, 0, len(b.builtScans))
+	for _, scan := range b.builtScans {
+		if scan.Distribution.Any() {
+			return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+				"Query has no home region. Try accessing only tables defined in multi-region databases.")
+		}
+		if len(scan.Distribution.Regions) > 1 {
+			if scan.Table == opt.TableID(0) {
+				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try adding a LIMIT clause.")
+			}
+			moreThanOneRegionScans = append(moreThanOneRegionScans, scan)
+		} else {
+			regionSet[scan.Distribution.Regions[0]] = struct{}{}
+		}
+	}
+	if len(moreThanOneRegionScans) > 0 {
+		md := moreThanOneRegionScans[0].Memo().Metadata()
+		tabMeta := md.TableMeta(moreThanOneRegionScans[0].Table)
+		if len(moreThanOneRegionScans) == 1 {
+			return b.filterSuggestionError(tabMeta, moreThanOneRegionScans[0].Index, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+		}
+		tabMeta2 := md.TableMeta(moreThanOneRegionScans[1].Table)
+		return b.filterSuggestionError(
+			tabMeta,
+			moreThanOneRegionScans[0].Index,
+			tabMeta2,
+			moreThanOneRegionScans[1].Index,
+		)
+	}
+	if len(regionSet) > 2 {
+		return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try adding a LIMIT clause.")
+	}
 	for i, scan := range b.builtScans {
 		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
 		inputTable := inputTableMeta.Table
@@ -1862,7 +1900,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 		if queryHasHomeRegion {
 			if homeRegion != queryHomeRegion {
 				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					`Query has no home region. The home region ('%s') of scan on table '%s' does not match the home region ('%s') of scan on table '%s'.`,
+					`Query has no home region. The home region ('%s') of operation on table '%s' does not match the home region ('%s') of operation on table '%s'.`,
 					queryHomeRegion,
 					inputTableName,
 					homeRegion,

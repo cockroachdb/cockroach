@@ -14,10 +14,6 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE;
 
-# Zone configs sometimes are not available right away. Add a sleep time to the
-# test to ensure they're available before running tests.
-sleep 5s
-
 statement ok
 USE multi_region_test_db
 
@@ -233,7 +229,7 @@ statement ok
 UPSERT INTO messages_rbr SELECT * FROM messages_rbt
 
 # Upsert should fail accessing all rows in messages_rbr.
-statement error pq: Query has no home region\. Try adding a LIMIT clause\.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 UPSERT INTO messages_rbt SELECT * FROM messages_rbr
 
 # Upsert into an RBR table uses locality-optimized lookup join and should
@@ -242,7 +238,7 @@ statement ok
 UPSERT INTO messages_rbr SELECT * FROM messages_rbt
 
 # UNION ALL where one branch scans all rows of an RBR table should fail.
-statement error pq: Query has no home region\. Try adding a LIMIT clause\.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 SELECT * FROM messages_rbr UNION ALL SELECT * FROM messages_rbt
 
 # UNION ALL where one branch scans 1 row of an RBR table should succeed.
@@ -264,14 +260,46 @@ SELECT c_id FROM child, (SELECT * FROM [VALUES (1)]) v WHERE crdb_region = 'ap-s
 ----
 
 # Joins which may access all regions should error out in phase 1.
-statement error pq: Query has no home region\. Try adding a filter on p\.crdb_region and/or on key column \(p\.p_id\)\. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_p_id\)\.
+statement error pq: Query has no home region\. Try adding a filter on p\.crdb_region and/or on key column \(p\.p_id\)\. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_id\)\.
 SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
 p.crdb_region = c.crdb_region LIMIT 1
 
-# Locality optimized join is not allowed if the input is a full scan of an RBR
-# table.
-statement error pq: Query has no home region. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_id\)\.
-SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
+# Locality-optimized search of locality-optimized join and lookup join is
+# treated as having a home region.
+query T retry
+EXPLAIN SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 1
+│
+└── • union all
+    │
+    ├── • lookup join
+    │   │ table: parent@parent_pkey
+    │   │ equality cols are key
+    │   │ lookup condition: (crdb_region = 'ap-southeast-2') AND (c_p_id = p_id)
+    │   │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: child@child_pkey
+    │         spans: [/'ap-southeast-2' - /'ap-southeast-2']
+    │
+    └── • lookup join
+        │ table: parent@parent_pkey
+        │ equality cols are key
+        │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+        │
+        └── • filter
+            │ filter: crdb_region IN ('ca-central-1', 'us-east-1')
+            │
+            └── • scan
+                  missing stats
+                  table: child@child_pkey
+                  spans: FULL SCAN (SOFT LIMIT)
 
 # Locality optimized lookup join should not error out in phase 1.
 query TT retry
@@ -290,7 +318,7 @@ anti-join (lookup parent)
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 9.35772222
+ ├── cost: 10.6184167
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── distribution: ap-southeast-2
@@ -303,7 +331,7 @@ anti-join (lookup parent)
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.6666667, distinct(1)=0.666667, null(1)=0, distinct(2)=0.665314, null(2)=0.00666667]
- │    ├── cost: 6.65852222
+ │    ├── cost: 7.91921667
  │    ├── key: ()
  │    ├── fd: ()-->(1,2)
  │    ├── distribution: ap-southeast-2
@@ -313,7 +341,7 @@ anti-join (lookup parent)
  │    │    ├── right columns: c_id:16 c_p_id:17
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=0.995512, null(2)=0.01]
- │    │    ├── cost: 4.76472222
+ │    │    ├── cost: 6.02541667
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1,2)
  │    │    ├── distribution: ap-southeast-2
@@ -323,7 +351,7 @@ anti-join (lookup parent)
  │    │    │    ├── constraint: /13/11: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=0.9333333, distinct(11)=0.933333, null(11)=0, distinct(13)=0.933333, null(13)=0, distinct(11,13)=0.933333, null(11,13)=0]
- │    │    │    ├── cost: 1.70518519
+ │    │    │    ├── cost: 5.09555556
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(11,12)
  │    │    └── scan child
@@ -333,7 +361,7 @@ anti-join (lookup parent)
  │    │         │    └── [/'us-east-1'/10 - /'us-east-1'/10]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── stats: [rows=0.9666667, distinct(16)=0.966667, null(16)=0, distinct(18)=0.966667, null(18)=0, distinct(16,18)=0.966667, null(16,18)=0]
- │    │         ├── cost: 3.03953704
+ │    │         ├── cost: 9.09861111
  │    │         ├── key: ()
  │    │         └── fd: ()-->(16,17)
  │    └── filters (true)
@@ -367,7 +395,7 @@ locality-optimized-search
 
 # Locality optimized search with lookup join will be supported in phase 2 or 3
 # when we can dynamically determine if the lookup will access a remote region.
-statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.cust_id\)\.
+statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.id\)\.
 SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 

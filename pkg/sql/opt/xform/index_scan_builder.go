@@ -238,7 +238,11 @@ func (b *indexScanBuilder) BuildNewExpr() (output memo.RelExpr) {
 func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 	// 1. Only scan.
 	if !b.hasConstProjections() && !b.hasInnerFilters() && !b.hasInvertedFilter() && !b.hasIndexJoin() {
-		b.mem.AddScanToGroup(&memo.ScanExpr{ScanPrivate: b.scanPrivate}, grp)
+		scan := &memo.ScanExpr{ScanPrivate: b.scanPrivate}
+		md := b.mem.Metadata()
+		tabMeta := md.TableMeta(scan.Table)
+		scan.Distribution.FromIndexScan(b.c.e.ctx, b.c.e.evalCtx, tabMeta, scan.Index, scan.Constraint)
+		b.mem.AddScanToGroup(scan, grp)
 		return
 	}
 
