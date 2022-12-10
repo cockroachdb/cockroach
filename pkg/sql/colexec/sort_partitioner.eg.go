@@ -101,6 +101,12 @@ func newPartitioner(t *types.T, nullsAreDistinct bool) partitioner {
 		default:
 			return partitionerJSON{nullsAreDistinct: nullsAreDistinct}
 		}
+	case types.EnumFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return partitionerEnum{nullsAreDistinct: nullsAreDistinct}
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -2394,6 +2400,204 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 							colexecerror.ExpectedError(err)
 						}
 
+						unique = cmpResult != 0
+					}
+
+					//gcassert:bce
+					outputCol[outputIdx] = outputCol[outputIdx] || unique
+					{
+						__retval_0 = v
+					}
+				}
+				lastVal = __retval_0
+			}
+		}
+	}
+}
+
+// partitionerEnum partitions an arbitrary-length colVec by running a distinct
+// operation over it. It writes the same format to outputCol that sorted
+// distinct does: true for every row that differs from the previous row in the
+// input column.
+type partitionerEnum struct {
+	nullsAreDistinct bool
+}
+
+func (p partitionerEnum) partitionWithOrder(
+	colVec coldata.Vec, order []int, outputCol []bool, n int,
+) {
+	var lastVal []byte
+	var lastValNull bool
+	var nulls *coldata.Nulls
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec.Enum()
+	// Eliminate bounds checks.
+	_ = outputCol[n-1]
+	_ = order[n-1]
+	outputCol[0] = true
+	if nulls != nil {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
+			checkIdx := order[outputIdx]
+			{
+				var (
+					__retval_lastVal     []byte
+					__retval_lastValNull bool
+				)
+				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
+					null := nulls.NullAt(checkIdx)
+					if null {
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						}
+					} else {
+						v := col.Get(checkIdx)
+						if lastValNull {
+							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						} else {
+							// Neither value is null, so we must compare.
+							var unique bool
+
+							{
+								var cmpResult int
+								cmpResult = bytes.Compare(v, lastVal)
+								unique = cmpResult != 0
+							}
+
+							//gcassert:bce
+							outputCol[outputIdx] = outputCol[outputIdx] || unique
+						}
+						lastVal = v
+					}
+					{
+						__retval_lastVal = lastVal
+						__retval_lastValNull = null
+					}
+				}
+				lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+			}
+		}
+	} else {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
+			checkIdx := order[outputIdx]
+			{
+				var __retval_0 []byte
+				{
+					v := col.Get(checkIdx)
+					var unique bool
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(v, lastVal)
+						unique = cmpResult != 0
+					}
+
+					//gcassert:bce
+					outputCol[outputIdx] = outputCol[outputIdx] || unique
+					{
+						__retval_0 = v
+					}
+				}
+				lastVal = __retval_0
+			}
+		}
+	}
+}
+
+func (p partitionerEnum) partition(colVec coldata.Vec, outputCol []bool, n int) {
+	var (
+		lastVal     []byte
+		lastValNull bool
+		nulls       *coldata.Nulls
+	)
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec.Enum()
+	_ = outputCol[n-1]
+	outputCol[0] = true
+	if nulls != nil {
+		for idx := 0; idx < n; idx++ {
+			{
+				var (
+					__retval_lastVal     []byte
+					__retval_lastValNull bool
+				)
+				{
+					var (
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
+					)
+					null := nulls.NullAt(checkIdx)
+					if null {
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						}
+					} else {
+						v := col.Get(checkIdx)
+						if lastValNull {
+							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						} else {
+							// Neither value is null, so we must compare.
+							var unique bool
+
+							{
+								var cmpResult int
+								cmpResult = bytes.Compare(v, lastVal)
+								unique = cmpResult != 0
+							}
+
+							//gcassert:bce
+							outputCol[outputIdx] = outputCol[outputIdx] || unique
+						}
+						lastVal = v
+					}
+					{
+						__retval_lastVal = lastVal
+						__retval_lastValNull = null
+					}
+				}
+				lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+			}
+		}
+	} else {
+		for idx := 0; idx < n; idx++ {
+			{
+				var __retval_0 []byte
+				{
+					var (
+						checkIdx  int = idx
+						outputIdx int = idx
+					)
+					v := col.Get(checkIdx)
+					var unique bool
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(v, lastVal)
 						unique = cmpResult != 0
 					}
 

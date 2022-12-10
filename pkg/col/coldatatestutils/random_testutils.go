@@ -190,6 +190,16 @@ func RandomVec(args RandomVecArgs) {
 			}
 			j.Set(i, random)
 		}
+	case types.EnumFamily:
+		enumMeta := args.Vec.Type().TypeMeta.EnumData
+		if enumMeta == nil {
+			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly empty enum metadata in RandomVec"))
+		}
+		enums := args.Vec.Enum()
+		reps := enumMeta.PhysicalRepresentations
+		for i := 0; i < args.N; i++ {
+			enums.Set(i, reps[args.Rand.Intn(len(reps))])
+		}
 	default:
 		datums := args.Vec.Datum()
 		for i := 0; i < args.N; i++ {

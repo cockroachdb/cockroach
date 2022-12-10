@@ -9323,6 +9323,228 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selEQEnumEnumConstOp struct {
+	selConstOpBase
+	constArg []byte
+}
+
+func (p *selEQEnumEnumConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selEQEnumEnumOp struct {
+	selOpBase
+}
+
+func (p *selEQEnumEnumOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Enum()
+		col2 := vec2.Enum()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selEQDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -18812,6 +19034,228 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selNEEnumEnumConstOp struct {
+	selConstOpBase
+	constArg []byte
+}
+
+func (p *selNEEnumEnumConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selNEEnumEnumOp struct {
+	selOpBase
+}
+
+func (p *selNEEnumEnumOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Enum()
+		col2 := vec2.Enum()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
 						cmp = cmpResult != 0
 					}
 
@@ -28335,6 +28779,228 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selLTEnumEnumConstOp struct {
+	selConstOpBase
+	constArg []byte
+}
+
+func (p *selLTEnumEnumConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selLTEnumEnumOp struct {
+	selOpBase
+}
+
+func (p *selLTEnumEnumOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Enum()
+		col2 := vec2.Enum()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selLTDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -37824,6 +38490,228 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selLEEnumEnumConstOp struct {
+	selConstOpBase
+	constArg []byte
+}
+
+func (p *selLEEnumEnumConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selLEEnumEnumOp struct {
+	selOpBase
+}
+
+func (p *selLEEnumEnumOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Enum()
+		col2 := vec2.Enum()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
 						cmp = cmpResult <= 0
 					}
 
@@ -47347,6 +48235,228 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selGTEnumEnumConstOp struct {
+	selConstOpBase
+	constArg []byte
+}
+
+func (p *selGTEnumEnumConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selGTEnumEnumOp struct {
+	selOpBase
+}
+
+func (p *selGTEnumEnumOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Enum()
+		col2 := vec2.Enum()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selGTDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -56853,6 +57963,228 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selGEEnumEnumConstOp struct {
+	selConstOpBase
+	constArg []byte
+}
+
+func (p *selGEEnumEnumConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg, p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selGEEnumEnumOp struct {
+	selOpBase
+}
+
+func (p *selGEEnumEnumOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Enum()
+		col2 := vec2.Enum()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = bytes.Compare(arg1, arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selGEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -57317,6 +58649,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.EnumFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selEQEnumEnumConstOp{selConstOpBase: selConstOpBase, constArg: c.([]byte)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -57532,6 +58877,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selNEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.EnumFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selNEEnumEnumConstOp{selConstOpBase: selConstOpBase, constArg: c.([]byte)}, nil
 						}
 					}
 				}
@@ -57753,6 +59111,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.EnumFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selLTEnumEnumConstOp{selConstOpBase: selConstOpBase, constArg: c.([]byte)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -57968,6 +59339,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selLEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.EnumFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selLEEnumEnumConstOp{selConstOpBase: selConstOpBase, constArg: c.([]byte)}, nil
 						}
 					}
 				}
@@ -58189,6 +59573,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.EnumFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selGTEnumEnumConstOp{selConstOpBase: selConstOpBase, constArg: c.([]byte)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -58404,6 +59801,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selGEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.EnumFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selGEEnumEnumConstOp{selConstOpBase: selConstOpBase, constArg: c.([]byte)}, nil
 						}
 					}
 				}
@@ -58657,6 +60067,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.EnumFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selEQEnumEnumOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -58872,6 +60295,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selNEJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.EnumFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selNEEnumEnumOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}
@@ -59093,6 +60529,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.EnumFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selLTEnumEnumOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59308,6 +60757,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selLEJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.EnumFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selLEEnumEnumOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}
@@ -59529,6 +60991,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.EnumFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selGTEnumEnumOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59744,6 +61219,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selGEJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.EnumFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.EnumFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selGEEnumEnumOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}

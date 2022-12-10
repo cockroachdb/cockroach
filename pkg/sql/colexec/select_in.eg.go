@@ -200,6 +200,20 @@ func GetInProjectionOperator(
 			obj.filterRow, obj.hasNulls = fillDatumRowJSON(evalCtx, t, datumTuple)
 			return obj, nil
 		}
+	case types.EnumFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			obj := &projectInOpEnum{
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				allocator:      allocator,
+				colIdx:         colIdx,
+				outputIdx:      resultIdx,
+				negate:         negate,
+			}
+			obj.filterRow, obj.hasNulls = fillDatumRowEnum(evalCtx, t, datumTuple)
+			return obj, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -337,6 +351,18 @@ func GetInOperator(
 				negate:         negate,
 			}
 			obj.filterRow, obj.hasNulls = fillDatumRowJSON(evalCtx, t, datumTuple)
+			return obj, nil
+		}
+	case types.EnumFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			obj := &selectInOpEnum{
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				colIdx:         colIdx,
+				negate:         negate,
+			}
+			obj.filterRow, obj.hasNulls = fillDatumRowEnum(evalCtx, t, datumTuple)
 			return obj, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -2669,6 +2695,228 @@ func (pi *projectInOpJSON) Next() coldata.Batch {
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInJSON(v, col, pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(i)
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		}
+	}
+	return batch
+}
+
+type selectInOpEnum struct {
+	colexecop.OneInputHelper
+	filterRow [][]byte
+	colIdx    int
+	hasNulls  bool
+	negate    bool
+}
+
+var _ colexecop.Operator = &selectInOpEnum{}
+
+type projectInOpEnum struct {
+	colexecop.OneInputHelper
+	allocator *colmem.Allocator
+	filterRow [][]byte
+	colIdx    int
+	outputIdx int
+	hasNulls  bool
+	negate    bool
+}
+
+var _ colexecop.Operator = &projectInOpEnum{}
+
+func fillDatumRowEnum(
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
+) ([][]byte, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
+	conv := colconv.GetDatumToPhysicalFn(t)
+	var result [][]byte
+	hasNulls := false
+	for _, d := range datumTuple.D {
+		if d == tree.DNull {
+			hasNulls = true
+		} else {
+			convRaw := conv(d)
+			converted := convRaw.([]byte)
+			result = append(result, converted)
+		}
+	}
+	return result, hasNulls
+}
+
+func cmpInEnum(
+	targetElem []byte, targetCol *coldata.Enums, filterRow [][]byte, hasNulls bool,
+) comparisonResult {
+	// Filter row input was already sorted in fillDatumRowEnum, so we can
+	// perform a binary search.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+		cmpResult = bytes.Compare(targetElem, filterRow[i])
+		if cmpResult == 0 {
+			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
+		}
+	}
+
+	if hasNulls {
+		return siNull
+	} else {
+		return siFalse
+	}
+}
+
+func (si *selectInOpEnum) Next() coldata.Batch {
+	for {
+		batch := si.Input.Next()
+		if batch.Length() == 0 {
+			return coldata.ZeroBatch
+		}
+
+		vec := batch.ColVec(si.colIdx)
+		col := vec.Enum()
+		var idx int
+		n := batch.Length()
+
+		compVal := siTrue
+		if si.negate {
+			compVal = siFalse
+		}
+
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					v := col.Get(i)
+					if !nulls.NullAt(i) && cmpInEnum(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					v := col.Get(i)
+					if !nulls.NullAt(i) && cmpInEnum(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					v := col.Get(i)
+					if cmpInEnum(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					v := col.Get(i)
+					if cmpInEnum(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (pi *projectInOpEnum) Next() coldata.Batch {
+	batch := pi.Input.Next()
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
+
+	vec := batch.ColVec(pi.colIdx)
+	col := vec.Enum()
+
+	projVec := batch.ColVec(pi.outputIdx)
+	projCol := projVec.Bool()
+	projNulls := projVec.Nulls()
+
+	n := batch.Length()
+
+	cmpVal := siTrue
+	if pi.negate {
+		cmpVal = siFalse
+	}
+
+	if vec.MaybeHasNulls() {
+		nulls := vec.Nulls()
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				if nulls.NullAt(i) {
+					projNulls.SetNull(i)
+				} else {
+					v := col.Get(i)
+					cmpRes := cmpInEnum(v, col, pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(i)
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		} else {
+			_ = col.Get(n - 1)
+			for i := 0; i < n; i++ {
+				if nulls.NullAt(i) {
+					projNulls.SetNull(i)
+				} else {
+					v := col.Get(i)
+					cmpRes := cmpInEnum(v, col, pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(i)
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		}
+	} else {
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				v := col.Get(i)
+				cmpRes := cmpInEnum(v, col, pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(i)
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		} else {
+			_ = col.Get(n - 1)
+			for i := 0; i < n; i++ {
+				v := col.Get(i)
+				cmpRes := cmpInEnum(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
 				} else {

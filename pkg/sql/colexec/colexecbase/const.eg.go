@@ -147,6 +147,17 @@ func NewConstOp(
 				constVal:       constVal.(json.JSON),
 			}, nil
 		}
+	case types.EnumFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &constEnumOp{
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				allocator:      allocator,
+				outputIdx:      outputIdx,
+				constVal:       constVal.([]byte),
+			}, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -528,6 +539,44 @@ func (c constJSONOp) Next() coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.JSON()
+	c.allocator.PerformOperation(
+		[]coldata.Vec{vec},
+		func() {
+			// Shallow copy col to work around Go issue
+			// https://github.com/golang/go/issues/39756 which prevents bound check
+			// elimination from working in this case.
+			col := col
+			if sel := batch.Selection(); sel != nil {
+				for _, i := range sel[:n] {
+					col.Set(i, c.constVal)
+				}
+			} else {
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					col.Set(i, c.constVal)
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type constEnumOp struct {
+	colexecop.OneInputHelper
+
+	allocator *colmem.Allocator
+	outputIdx int
+	constVal  []byte
+}
+
+func (c constEnumOp) Next() coldata.Batch {
+	batch := c.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(c.outputIdx)
+	col := vec.Enum()
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {

@@ -152,6 +152,10 @@ func (c jsonCustomizer) getHashFunc() hashFunc {
 	}
 }
 
+func (c enumCustomizer) getHashFunc() hashFunc {
+	return c.wrapped.getHashFunc()
+}
+
 func (c datumCustomizer) getHashFunc() hashFunc {
 	return func(targetElem, vElem, _, _ string) string {
 		// Note that this overload assumes that there exists

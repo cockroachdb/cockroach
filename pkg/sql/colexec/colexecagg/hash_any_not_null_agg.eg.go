@@ -94,6 +94,12 @@ func newAnyNotNullHashAggAlloc(
 		default:
 			return &anyNotNullJSONHashAggAlloc{aggAllocBase: allocBase}, nil
 		}
+	case types.EnumFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &anyNotNullEnumHashAggAlloc{aggAllocBase: allocBase}, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -1216,6 +1222,118 @@ func (a *anyNotNullJSONHashAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(anyNotNullJSONHashAggSliceOverhead + sizeOfAnyNotNullJSONHashAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullJSONHashAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+// anyNotNullEnumHashAgg implements the ANY_NOT_NULL aggregate, returning the
+// first non-null value in the input column.
+type anyNotNullEnumHashAgg struct {
+	unorderedAggregateFuncBase
+	curAgg                      []byte
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &anyNotNullEnumHashAgg{}
+
+func (a *anyNotNullEnumHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+	if a.foundNonNullForCurrentGroup {
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
+	}
+
+	oldCurAggSize := len(a.curAgg)
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Enum(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[startIdx:endIdx]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = append(a.curAgg[:0], val...)
+						a.foundNonNullForCurrentGroup = true
+						// We have already seen non-null for the current group, and since there
+						// is at most a single group when performing hash aggregation, we can
+						// finish computing.
+						return
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = append(a.curAgg[:0], val...)
+						a.foundNonNullForCurrentGroup = true
+						// We have already seen non-null for the current group, and since there
+						// is at most a single group when performing hash aggregation, we can
+						// finish computing.
+						return
+					}
+				}
+			}
+		}
+	},
+	)
+	newCurAggSize := len(a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *anyNotNullEnumHashAgg) Flush(outputIdx int) {
+	// If we haven't found any non-nulls for this group so far, the output for
+	// this group should be null.
+	col := a.vec.Enum()
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+	// Release the reference to curAgg eagerly.
+	oldCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *anyNotNullEnumHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
+type anyNotNullEnumHashAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNullEnumHashAgg
+}
+
+var _ aggregateFuncAlloc = &anyNotNullEnumHashAggAlloc{}
+
+const sizeOfAnyNotNullEnumHashAgg = int64(unsafe.Sizeof(anyNotNullEnumHashAgg{}))
+const anyNotNullEnumHashAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullEnumHashAgg{}))
+
+func (a *anyNotNullEnumHashAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(anyNotNullEnumHashAggSliceOverhead + sizeOfAnyNotNullEnumHashAgg*a.allocSize)
+		a.aggFuncs = make([]anyNotNullEnumHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator

@@ -112,6 +112,13 @@ func NewLeadOperator(
 			return newBufferedWindowOperator(
 				args, &leadJSONWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
+	case types.EnumFamily:
+		switch argType.Width() {
+		case -1:
+		default:
+			return newBufferedWindowOperator(
+				args, &leadEnumWindow{leadBase: base}, argType, mainMemLimit), nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
@@ -1435,6 +1442,126 @@ func (w *leadJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 			continue
 		}
 		col := vec.JSON()
+		leadLagCol.Copy(col, i, idx)
+	}
+}
+
+type leadEnumWindow struct {
+	leadBase
+}
+
+var _ bufferedWindower = &leadEnumWindow{}
+
+func (w *leadEnumWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if startIdx >= endIdx {
+		// No processing needs to be done for this portion of the current partition.
+		return
+	}
+	leadLagVec := batch.ColVec(w.outputColIdx)
+	leadLagCol := leadLagVec.Enum()
+	leadLagNulls := leadLagVec.Nulls()
+
+	offsetVec := batch.ColVec(w.offsetIdx)
+	offsetCol := offsetVec.Int64()
+	offsetNulls := offsetVec.Nulls()
+	_ = offsetCol[startIdx]
+	_ = offsetCol[endIdx-1]
+
+	defaultVec := batch.ColVec(w.defaultIdx)
+	defaultCol := defaultVec.Enum()
+	defaultNulls := defaultVec.Nulls()
+
+	if offsetNulls.MaybeHasNulls() {
+		if defaultNulls.MaybeHasNulls() {
+			for i := startIdx; i < endIdx; i++ {
+				if offsetNulls.NullAt(i) {
+					// When the offset is null, the output value is also null.
+					leadLagNulls.SetNull(i)
+					w.idx++
+					continue
+				}
+				requestedIdx := w.idx + int(offsetCol[i])
+				w.idx++
+				if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+					// The offset is out of range, so set the output value to the default.
+					if defaultNulls.NullAt(i) {
+						leadLagNulls.SetNull(i)
+						continue
+					}
+					leadLagCol.Copy(defaultCol, i, i)
+					continue
+				}
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+					leadLagNulls.SetNull(i)
+					continue
+				}
+				col := vec.Enum()
+				leadLagCol.Copy(col, i, idx)
+			}
+			return
+		}
+		for i := startIdx; i < endIdx; i++ {
+			if offsetNulls.NullAt(i) {
+				// When the offset is null, the output value is also null.
+				leadLagNulls.SetNull(i)
+				w.idx++
+				continue
+			}
+			requestedIdx := w.idx + int(offsetCol[i])
+			w.idx++
+			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+				// The offset is out of range, so set the output value to the default.
+				leadLagCol.Copy(defaultCol, i, i)
+				continue
+			}
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+				leadLagNulls.SetNull(i)
+				continue
+			}
+			col := vec.Enum()
+			leadLagCol.Copy(col, i, idx)
+		}
+		return
+	}
+	if defaultNulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			requestedIdx := w.idx + int(offsetCol[i])
+			w.idx++
+			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+				// The offset is out of range, so set the output value to the default.
+				if defaultNulls.NullAt(i) {
+					leadLagNulls.SetNull(i)
+					continue
+				}
+				leadLagCol.Copy(defaultCol, i, i)
+				continue
+			}
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+				leadLagNulls.SetNull(i)
+				continue
+			}
+			col := vec.Enum()
+			leadLagCol.Copy(col, i, idx)
+		}
+		return
+	}
+	for i := startIdx; i < endIdx; i++ {
+		requestedIdx := w.idx + int(offsetCol[i])
+		w.idx++
+		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+			// The offset is out of range, so set the output value to the default.
+			leadLagCol.Copy(defaultCol, i, i)
+			continue
+		}
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+			leadLagNulls.SetNull(i)
+			continue
+		}
+		col := vec.Enum()
 		leadLagCol.Copy(col, i, idx)
 	}
 }

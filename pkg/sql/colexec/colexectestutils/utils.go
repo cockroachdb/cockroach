@@ -797,6 +797,8 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *eval.Context)
 			}
 		}
 		vec.JSON().Set(idx, j)
+	case types.EnumFamily:
+		vec.Enum().Set(idx, val.([]byte))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v := val.(type) {
 		case tree.Datum:
@@ -1031,6 +1033,13 @@ func (s *opTestInput) Next() coldata.Batch {
 						t := timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000))
 						t.Round(tree.TimeFamilyPrecisionToRoundDuration(vec.Type().Precision()))
 						setColVal(vec, outputIdx, t, s.evalCtx)
+					case types.EnumFamily:
+						enumMeta := s.typs[i].TypeMeta.EnumData
+						if enumMeta == nil {
+							colexecerror.InternalError(errors.AssertionFailedf("unexpectedly empty enum metadata in opTestInput"))
+						}
+						reps := enumMeta.PhysicalRepresentations
+						setColVal(vec, outputIdx, reps[rng.Intn(len(reps))], s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
 						case types.CollatedStringFamily:

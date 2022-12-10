@@ -591,6 +591,8 @@ func ProportionalSize(v Vec, length int64) int64 {
 		return v.Bytes().ProportionalSize(length)
 	case types.JsonFamily:
 		return v.JSON().ProportionalSize(length)
+	case types.EnumFamily:
+		return v.Enum().ProportionalSize(length)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
 	}
@@ -604,5 +606,7 @@ func ResetIfBytesLike(v Vec) {
 		v.Bytes().Reset()
 	case types.JsonFamily:
 		v.JSON().Reset()
+	case types.EnumFamily:
+		v.Enum().Reset()
 	}
 }
