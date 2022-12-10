@@ -103,7 +103,7 @@ distribution: full
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=2] WHERE info LIKE 'distribution%'
 ----
-distribution: full
+distribution: local
 
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b));

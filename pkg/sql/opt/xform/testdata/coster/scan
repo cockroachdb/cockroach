@@ -353,7 +353,7 @@ scan t60493
  ├── stats: [rows=2, distinct(2)=2, null(2)=0]
  │   histogram(2)=  0     1      0     1
  │                <--- 'useast' --- 'uswest'
- ├── cost: 20.1
+ ├── cost: 220.1
  └── key: (1,2)
 
 # Regression test for #64570. Ensure we always prefer bounded over unbounded scans.

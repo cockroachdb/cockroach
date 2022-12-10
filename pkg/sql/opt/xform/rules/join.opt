@@ -776,6 +776,4 @@
         ^(IsLocalityOptimizedJoin $private)
 )
 =>
-(GenerateLocalityOptimizedSearchLOJ
-    (Root)
-)
+(GenerateLocalityOptimizedSearchLOJ (Root))

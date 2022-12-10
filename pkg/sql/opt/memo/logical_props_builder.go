@@ -183,9 +183,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 
 	// Distribution
 	// ------------
-	if scan.Distribution.Regions == nil {
-		scan.Distribution.FromIndexScan(b.sb.ctx, b.evalCtx, tabMeta, scan.Index, scan.Constraint)
-	}
+	scan.Distribution.FromIndexScan(b.sb.ctx, b.evalCtx, tabMeta, scan.Index, scan.Constraint)
 
 	// Statistics
 	// ----------

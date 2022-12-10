@@ -64,6 +64,9 @@ func (c *CustomFuncs) GenerateIndexScans(
 		if isCovering {
 			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
 			scan.Index = index.Ordinal()
+			md := c.e.mem.Metadata()
+			tabMeta := md.TableMeta(scan.Table)
+			scan.Distribution.FromIndexScan(c.e.ctx, c.e.evalCtx, tabMeta, scan.Index, scan.Constraint)
 			c.e.mem.AddScanToGroup(&scan, grp)
 			return
 		}

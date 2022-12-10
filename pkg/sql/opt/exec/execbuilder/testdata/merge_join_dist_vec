@@ -48,22 +48,18 @@ EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 distribution: full
 vectorized: true
 ·
-• merge join (left outer)
+• lookup join (left outer)
+│ table: r@r_pkey
 │ equality: (a) = (a)
-│ left cols are key
-│ right cols are key
-│
-├── • scan
-│     missing stats
-│     table: l@l_pkey
-│     spans: [/2 - /2]
+│ equality cols are key
+│ pred: a = 2
 │
 └── • scan
       missing stats
-      table: r@r_pkey
+      table: l@l_pkey
       spans: [/2 - /2]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk1GPk0AQx9_9FJN5anVNWYovJJdgTk659OAELpoYYrZlbIkci7tLYtP0uxvApIK92ovRe2N29_ef-c8MO9TfSnTR_3i7eB2EMHkTJGnyfjGFxF_4lyk8h6s4uoESFv5VCtdREIKCuyQI38JETOHDOz_2QcAF2MiwkjmF4p40up-QI0MbM4a1kivSWqr2eNc9CvLv6FoMi6puTHucMVxJReju0BSmJHQxFcuSYhI5qVmrlZMRRdlJK099rr_SFhleyrK5r7QLgsESGSa1aKOZPbMw2zOUjfmZ4qC83MJG6M1Q0-OY7TOG2og1oWvv2QOlHnSaSqqcFOUDpawl__TkiN8bUmu6lkVFajYf1pZua3L7CUR3qR93c0CGJX0xE4-_mF6oYr3pP5Fh1BgXPM48m3nOqAsHh_O_cHik_FC-lPXMGbfiaGpnkJqfvwfWsC-lV_7rPeAPlvo_9sB-0j04UlxMupaVprPGbLX2KF9T3y4tG7WiWyVXXZo-jDqu62xO2vS3Th8EVXfV_Yrnw_w0zMew9StsD2A-hu2T8KsBbI3h-SM8_5b5NMxPw86jPGf7Zz8CAAD__xdu9rU=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkt9r1EAQx9_9K4Z5amXlkpwPsiBEaqopMalJioIcsr0MJXa7s-5uwHLc_y6bKPbEnvo4Pz7f_c7M7tB_1Six-HhZvSprOHlddn33vjqFrqiKsx6ewnnbvAMNVXHew0VT1uDgqivrN3CiTuHD26ItQMFLyFCg4YFqdUce5SdMUWCGG4HW8Za8ZxfTu7mpHL6hTASOxk4hpjcCt-wI5Q7DGDShxJqfsV1F2YGCGvXcthfIU_gF-aBuCOV6Lx4Ip8eFe3WtqSU1kFslB_Koc_3Z3tI9CjxjPd0ZL0EJuEaBnVUxWmWrBB-zkf6PjQsezQ8X6aGL_t6SXBbeXPVFO68dBbrc_XRXMd9OFr7waICNhDxKNDXk63gKKWVZ9y_-MEUzhdgs8kzkzx-dIzuY4y93aslbNp7-6VDJfiOQhhta_oLnyW3p0vF2fmYJm5mbEwP5sFTXS1CapRQNPoTTo3B2HM6Owslv8Gb_5HsAAAD__-nvApk=
 
 # Test that we can handle merge joins with equality columns of integers with
 # different widths.

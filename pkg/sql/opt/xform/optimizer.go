@@ -578,14 +578,17 @@ func (o *Optimizer) optimizeGroupMember(
 			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
 
 			// Accumulate cost of children.
-			if member.Op() == opt.LocalityOptimizedSearchOp {
-				// If the child ops are locality optimized, divide the cost by 3 in
-				// order to make the total cost of the two ops in the locality optimized
-				// plan less than the cost of the single scan in the non-locality
-				// optimized plan.
-				// TODO(msirek): This is hacky. We should really be making this
-				//               determination based on the latency between regions.
-				cost += childCost / 3
+			if member.Op() == opt.LocalityOptimizedSearchOp && i > 0 {
+				// If the child ops are locality optimized, distribution costs are added
+				// to the remote branch, but not the local branch. Scale the remote
+				// branch costs by a factor reflecting the likelihood of executing that
+				// branch. Right now this probability is not estimated, so just use a
+				// default probability of 1/10.
+				// TODO(msirek): Add an estimation of the probability of executing the
+				//               remote branch, e.g., compare the size of the limit hint
+				//               with the expected row count of the local branch.
+				//               Is there a better approach?
+				cost += childCost / 10
 			} else {
 				cost += childCost
 			}
