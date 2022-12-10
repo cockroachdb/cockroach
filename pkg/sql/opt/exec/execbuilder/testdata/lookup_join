@@ -971,7 +971,7 @@ vectorized: true
     │ columns: (c, b, d)
     │
     └── • lookup join (left outer)
-        │ columns: (c, a, b, c, cont, b, d)
+        │ columns: (c, a, b, cont, b, d)
         │ estimated row count: 336
         │ table: large@large_pkey
         │ equality: (a, b) = (a,b)
@@ -979,7 +979,7 @@ vectorized: true
         │ pred: d < 30
         │
         └── • lookup join (left outer)
-            │ columns: (c, a, b, c, cont)
+            │ columns: (c, a, b, cont)
             │ estimated row count: 1,000
             │ table: large@bc
             │ equality: (c) = (b)
@@ -1001,7 +1001,7 @@ vectorized: true
 │ columns: (c)
 │
 └── • lookup join (semi)
-    │ columns: (c, a, b, c, cont)
+    │ columns: (c, a, b, cont)
     │ estimated row count: 100
     │ table: large@large_pkey
     │ equality: (a, b) = (a,b)
@@ -1009,7 +1009,7 @@ vectorized: true
     │ pred: d < 30
     │
     └── • lookup join (inner)
-        │ columns: (c, a, b, c, cont)
+        │ columns: (c, a, b, cont)
         │ estimated row count: 990
         │ table: large@bc
         │ equality: (c) = (b)
@@ -1031,7 +1031,7 @@ vectorized: true
 │ columns: (c)
 │
 └── • lookup join (anti)
-    │ columns: (c, a, b, c, cont)
+    │ columns: (c, a, b, cont)
     │ estimated row count: 0
     │ table: large@large_pkey
     │ equality: (a, b) = (a,b)
@@ -1039,7 +1039,7 @@ vectorized: true
     │ pred: d < 30
     │
     └── • lookup join (left outer)
-        │ columns: (c, a, b, c, cont)
+        │ columns: (c, a, b, cont)
         │ estimated row count: 1,000
         │ table: large@bc
         │ equality: (c) = (b)
