@@ -87,6 +87,15 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// NodeIDs returns the NodeIDs of all servers in the cluster.
+func (tc *TestCluster) NodeIDs() []roachpb.NodeID {
+	nodeIds := make([]roachpb.NodeID, len(tc.Servers))
+	for i, s := range tc.Servers {
+		nodeIds[i] = s.NodeID()
+	}
+	return nodeIds
+}
+
 // ServerTyped is like Server, but returns the right type.
 func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
 	return tc.Servers[idx]

@@ -42,6 +42,9 @@ type TestClusterInterface interface {
 	// Server returns the TestServerInterface corresponding to a specific node.
 	Server(idx int) TestServerInterface
 
+	// NodeIDs returns the IDs of the nodes in the cluster.
+	NodeIDs() []roachpb.NodeID
+
 	// ServerConn returns a gosql.DB connection to a specific node.
 	ServerConn(idx int) *gosql.DB
 
