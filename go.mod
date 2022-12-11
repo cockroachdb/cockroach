@@ -122,6 +122,7 @@ require (
 	github.com/containerd/containerd v1.5.4
 	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/dave/dst v0.24.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/docker/go-connections v0.4.0
@@ -251,7 +252,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect
