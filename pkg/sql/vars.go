@@ -1013,6 +1013,9 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// XXX
+	`log_timezone`: makeCompatStringVar(`log_timezone`, `UTC`),
+
 	// CockroachDB extension.
 	`locality`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {

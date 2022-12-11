@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -4024,7 +4025,13 @@ var pgCatalogTimezoneNamesTable = virtualSchemaTable{
 	comment: "pg_timezone_names was created for compatibility and is currently unimplemented",
 	schema:  vtable.PgCatalogTimezoneNames,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+		// Mock just UTC for now. Need to hack zone a bit more for more stuff to work.
+		return addRow(
+			tree.NewDString("UTC"),
+			tree.NewDString("UTC"),
+			tree.NewDInterval(duration.MakeDuration(0, 0, 0), types.DefaultIntervalTypeMetadata),
+			tree.DBoolFalse,
+		)
 	},
 	unimplemented: true,
 }
