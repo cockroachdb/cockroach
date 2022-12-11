@@ -1,0 +1,17 @@
+# Any changes in this result should be copied to the comment on
+# defaultRangeLeaseRaftElectionTimeoutMultiplier, and the corresponding
+# reasoning should be adjusted.
+echo
+----
+// Raft election:
+// - Heartbeat offset (0-1 heartbeat interval)    [-1.00s - 0.00s]
+// - Election timeout (random 1x-2x timeout)      [ 2.00s - 4.00s]
+// - Election (3x RTT: prevote, vote, append)     [ 0.03s - 1.20s]
+// Total latency                                  [ 1.03s - 5.20s]
+//
+// Lease acquisition:
+// - Heartbeat offset (0-1 heartbeat interval)    [-3.00s - 0.00s]
+// - Lease expiration (constant)                  [ 6.00s - 6.00s]
+// - Liveness epoch bump (2x RTT: CPut + append)  [ 0.02s - 0.80s]
+// - Lease acquisition (1x RTT: append)           [ 0.01s - 0.40s]
+// Total latency                                  [ 3.03s - 7.20s]

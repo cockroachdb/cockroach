@@ -1201,13 +1201,9 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
 ) (status kvserverpb.LeaseStatus, pErr *roachpb.Error) {
-	// We may need to hold a Raft election and repropose the lease acquisition
-	// command, which can take a couple of Raft election timeouts.
-	timeout := 2 * r.store.cfg.RaftElectionTimeout()
-
 	// Does not use RunWithTimeout(), because we do not want to mask the
 	// NotLeaseHolderError on context cancellation.
-	ctx, cancel := context.WithTimeout(ctx, timeout) // nolint:context
+	ctx, cancel := context.WithTimeout(ctx, r.store.cfg.RangeLeaseAcquireTimeout()) // nolint:context
 	defer cancel()
 
 	// Try fast-path.
