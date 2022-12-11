@@ -189,7 +189,7 @@ var panicOnUseAfterFinish = buildutil.CrdbTestBuild ||
 
 // debugUseAfterFinish controls whether to debug uses of Span values after finishing.
 // FOR DEBUGGING ONLY. This will slow down the program.
-var debugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH", false)
+var debugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFTER_FINISH", true)
 
 // reuseSpans controls whether spans can be re-allocated after they've been
 // Finish()ed. See Tracer.spanReusePercent for details.

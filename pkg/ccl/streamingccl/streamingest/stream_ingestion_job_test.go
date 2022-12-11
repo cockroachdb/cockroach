@@ -418,6 +418,8 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	}
 	require.Equal(t, frontier.HighWaterAtStart, previousHighWaterTimestamp)
 	canContinue <- struct{}{}
+	srcTime = c.srcCluster.Server(0).Clock().Now()
+	c.waitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
 	c.cutover(producerJobID, replicationJobID, srcTime.GoTime())
 	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(replicationJobID))
 }
