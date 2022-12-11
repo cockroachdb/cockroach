@@ -5841,15 +5841,33 @@ func MVCCExportToSST(
 	defer iter.Close()
 
 	paginated := opts.TargetSize > 0
-
 	hasElasticCPULimiter := elasticCPUHandle != nil
 	hasTimeBasedResourceLimiter := opts.ResourceLimiter != nil
-	trackKeyBoundary := paginated || hasTimeBasedResourceLimiter || hasElasticCPULimiter
+
+	// trackKeyBoundary is true if we need to know whether the
+	// iteration has proceeded to a new key.
+	//
+	// If opts.ExportAllRevisions is false, then our iteration loop
+	// will use NextKey() and thus will always be on a new key.
+	//
+	// If opts.ExportAllRevisions is true, we only need to track
+	// key boundaries if we may return from our iteration before
+	// the EndKey. This can happen if the user has requested
+	// paginated results, or if we hit a resource limit.
+	trackKeyBoundary := opts.ExportAllRevisions && (paginated || hasTimeBasedResourceLimiter || hasElasticCPULimiter)
+
 	firstIteration := true
+	// skipTombstones controls whether we include tombstones.
+	//
+	// We want tombstones if we are exporting all reivions or if
+	// we have a StartTS. A non-empty StartTS is used by
+	// incremental backups and thus needs to see tombstones if
+	// that happens to be the latest value.
 	skipTombstones := !opts.ExportAllRevisions && opts.StartTS.IsEmpty()
 
 	var rows RowCounter
-	var curKey roachpb.Key // only used if exportAllRevisions
+	// Only used if trackKeyBoundary is true.
+	var curKey roachpb.Key
 	var resumeKey MVCCKey
 	var rangeKeys MVCCRangeKeyStack
 	var rangeKeysSize int64
@@ -5898,8 +5916,12 @@ func MVCCExportToSST(
 
 		unsafeKey := iter.UnsafeKey()
 
-		isNewKey := !opts.ExportAllRevisions || !unsafeKey.Key.Equal(curKey)
-		if trackKeyBoundary && opts.ExportAllRevisions && isNewKey {
+		// isNewKey is true when we aren't tracking key
+		// boundaries because either we are not exporting all
+		// revisions or because we know we won't stop before a
+		// key boundary anyway.
+		isNewKey := !trackKeyBoundary || !unsafeKey.Key.Equal(curKey)
+		if trackKeyBoundary && isNewKey {
 			curKey = append(curKey[:0], unsafeKey.Key...)
 		}
 
@@ -5939,7 +5961,9 @@ func MVCCExportToSST(
 			stopAllowed := isNewKey || opts.StopMidKey
 			if overLimit, _ := elasticCPUHandle.OverLimit(); overLimit && stopAllowed {
 				resumeKey = unsafeKey.Clone()
-				resumeKey.Timestamp = hlc.Timestamp{}
+				if isNewKey {
+					resumeKey.Timestamp = hlc.Timestamp{}
+				}
 				break
 			}
 		}
@@ -6176,9 +6200,8 @@ type MVCCExportOptions struct {
 	ExportAllRevisions bool
 	// If TargetSize is positive, it indicates that the export should produce SSTs
 	// which are roughly target size. Specifically, it will return an SST such that
-	// the last key is responsible for meeting or exceeding the targetSize. If the
-	// resumeKey is non-nil then the data size of the returned sst will be greater
-	// than or equal to the targetSize.
+	// the last key is responsible for meeting or exceeding the targetSize, unless the
+	// iteration has been stopped because of resource limitations.
 	TargetSize uint64
 	// If MaxSize is positive, it is an absolute maximum on byte size for the
 	// returned sst. If it is the case that the versions of the last key will lead
