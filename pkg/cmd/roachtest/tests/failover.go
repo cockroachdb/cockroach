@@ -38,6 +38,7 @@ func registerFailover(r registry.Registry) {
 		failureModeBlackholeSend,
 		failureModeCrash,
 	} {
+		failureMode := failureMode // pin loop variable
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("failover/non-system/%s", failureMode),
 			Owner:   registry.OwnerKV,
