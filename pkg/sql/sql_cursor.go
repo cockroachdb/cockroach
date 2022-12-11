@@ -31,9 +31,9 @@ import (
 // DeclareCursor implements the DECLARE statement.
 // See https://www.postgresql.org/docs/current/sql-declare.html for details.
 func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (planNode, error) {
-	if s.Hold {
+	/*if s.Hold {
 		return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD")
-	}
+	}*/
 	if s.Binary {
 		return nil, unimplemented.NewWithIssue(77099, "DECLARE BINARY CURSOR")
 	}
