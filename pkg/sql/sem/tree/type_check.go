@@ -1685,10 +1685,19 @@ func (expr *Placeholder) TypeCheck(
 		return expr, err
 	} else if ok {
 		typ = typ.WithoutTypeModifiers()
-		if !desired.Equivalent(typ) {
-			// This indicates there's a conflict between what the type system thinks
-			// the type for this position should be, and the actual type of the
-			// placeholder. This actual placeholder type could be either a type hint
+		if !desired.Equivalent(typ) || (typ.IsAmbiguous() && !desired.IsAmbiguous()) {
+			// This indicates either:
+			// - There's a conflict between what the type system thinks
+			//   the type for this position should be, and the actual type of the
+			//   placeholder.
+			// - A type was already set for the placeholder, but it was ambiguous. If
+			//   the desired type is not ambiguous then it can be used as the
+			//   placeholder type. This can happen during overload type checking: an
+			//   overload that operates on collated strings might cause the type
+			//   checker to assign AnyCollatedString to a placeholder, but a later
+			//   stage of type checking can further refine the desired type.
+			//
+			// This actual placeholder type could be either a type hint
 			// (from pgwire or from a SQL PREPARE), or the actual value type.
 			//
 			// To resolve this situation, we *override* the placeholder type with what
@@ -2361,7 +2370,7 @@ func TypeCheckSameTypedExprs(
 	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
-	constIdxs, placeholderIdxs, resolvableIdxs := typeCheckSplitExprs(semaCtx, exprs)
+	constIdxs, placeholderIdxs, resolvableIdxs := typeCheckSplitExprs(exprs)
 
 	s := typeCheckExprsState{
 		ctx:             ctx,
@@ -2519,11 +2528,25 @@ func typeCheckSameTypedConsts(
 	return nil, errors.AssertionFailedf("should throw error above")
 }
 
-// Used to type check all constants with the optional desired type. The
-// type that is chosen here will then be set to any placeholders.
+// Used to type check all constants with the optional desired type. First,
+// placeholders with type hints are checked, then constants are checked to
+// match the resulting type. The type that is chosen here will then be set
+// to any unresolved placeholders.
 func typeCheckConstsAndPlaceholdersWithDesired(
 	s typeCheckExprsState, desired *types.T,
 ) ([]TypedExpr, *types.T, error) {
+	if !s.placeholderIdxs.Empty() {
+		for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
+			if !s.semaCtx.isUnresolvedPlaceholder(s.exprs[i]) {
+				typedExpr, err := typeCheckAndRequire(s.ctx, s.semaCtx, s.exprs[i], desired, "placeholder")
+				if err != nil {
+					return nil, nil, err
+				}
+				s.typedExprs[i] = typedExpr
+				desired = typedExpr.ResolvedType()
+			}
+		}
+	}
 	typ, err := typeCheckSameTypedConsts(s, desired, false)
 	if err != nil {
 		return nil, nil, err
@@ -2541,13 +2564,13 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 // - Placeholders
 // - All other Exprs
 func typeCheckSplitExprs(
-	semaCtx *SemaContext, exprs []Expr,
+	exprs []Expr,
 ) (constIdxs util.FastIntSet, placeholderIdxs util.FastIntSet, resolvableIdxs util.FastIntSet) {
 	for i, expr := range exprs {
 		switch {
 		case isConstant(expr):
 			constIdxs.Add(i)
-		case semaCtx.isUnresolvedPlaceholder(expr):
+		case isPlaceholder(expr):
 			placeholderIdxs.Add(i)
 		default:
 			resolvableIdxs.Add(i)
