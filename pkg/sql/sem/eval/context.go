@@ -249,6 +249,13 @@ type Context struct {
 
 	// ParseHelper makes date parsing more efficient.
 	ParseHelper pgdate.ParseHelper
+
+	ReplicationSlotManager ReplicationSlotManager
+}
+
+type ReplicationSlotManager interface {
+	CreateSlot(ctx context.Context, slotName string) (string, error)
+	DropSlot(ctx context.Context, slotName string) error
 }
 
 // DescIDGenerator generates unique descriptor IDs.

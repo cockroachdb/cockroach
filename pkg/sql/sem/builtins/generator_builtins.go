@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -95,6 +97,129 @@ func (aclexplodeGenerator) Close(_ context.Context)                  {}
 func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
 func (aclexplodeGenerator) Values() (tree.Datums, error)             { return nil, nil }
 
+type createLogicalReplicationSlot struct {
+	name  string
+	lsn   string
+	shown bool
+}
+
+var createLogicalReplicationSlotType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.String /* pg_lsn type */},
+	[]string{"slot_name", "lsn"},
+)
+
+func (c *createLogicalReplicationSlot) ResolvedType() *types.T {
+	return createLogicalReplicationSlotType
+}
+
+func (c *createLogicalReplicationSlot) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+func (c *createLogicalReplicationSlot) Next(ctx context.Context) (bool, error) {
+	if c.shown {
+		return false, nil
+	}
+	c.shown = true
+	return true, nil
+}
+
+func (c *createLogicalReplicationSlot) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDString(c.name), tree.NewDString(c.lsn)}, nil
+}
+
+func (c *createLogicalReplicationSlot) Close(ctx context.Context) {}
+
+var logicalReplicationSlotStreamType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.Int, types.String},
+	[]string{"lsn", "xid", "data"},
+)
+
+type logicalReplicationSlotStream struct {
+	slotName string
+	items    []replicationslot.Item
+	consume  bool
+	curr     replicationslot.Item
+
+	empty         bool
+	showBeginTxn  bool
+	showCommitTxn bool
+}
+
+func (l logicalReplicationSlotStream) ResolvedType() *types.T {
+	return logicalReplicationSlotStreamType
+}
+
+func (l *logicalReplicationSlotStream) Start(ctx context.Context, txn *kv.Txn) error {
+	if replicationslot.ReplicationSlots[l.slotName] == nil {
+		return errors.AssertionFailedf("slot name not found: %s\n", l.slotName)
+	}
+	l.items = replicationslot.ReplicationSlots[l.slotName].NextTxn(l.consume)
+	l.empty = len(l.items) == 0
+	return nil
+}
+
+func (l *logicalReplicationSlotStream) Next(ctx context.Context) (bool, error) {
+	if l.empty {
+		return false, nil
+	}
+	if l.showBeginTxn {
+		l.showBeginTxn = false
+		return true, nil
+	}
+
+	if len(l.items) == 0 {
+		if !l.showCommitTxn {
+			l.showCommitTxn = true
+			return true, nil
+		}
+		return false, nil
+	}
+
+	if l.curr.XID != l.items[0].XID {
+		if !l.showCommitTxn && l.curr.XID != 0 {
+			// Commit the curr txn.
+			l.showCommitTxn = true
+		} else {
+			// Begin the next txn.
+			l.showCommitTxn = false
+			l.showBeginTxn = true
+			l.curr = l.items[0]
+			l.items = l.items[1:]
+		}
+	} else {
+		l.curr = l.items[0]
+		l.items = l.items[1:]
+	}
+	return true, nil
+}
+
+func (l *logicalReplicationSlotStream) Values() (tree.Datums, error) {
+	curr := l.curr
+	if l.showCommitTxn {
+		return []tree.Datum{
+			tree.NewDString(fmt.Sprintf("0/%x", curr.LSN+1)),
+			tree.NewDInt(tree.DInt(curr.XID)),
+			tree.NewDString(fmt.Sprintf("COMMIT %d", curr.XID)),
+		}, nil
+	}
+	if l.showBeginTxn {
+		return []tree.Datum{
+			tree.NewDString(fmt.Sprintf("0/%x", curr.LSN)),
+			tree.NewDInt(tree.DInt(curr.XID)),
+			tree.NewDString(fmt.Sprintf("BEGIN %d", curr.XID)),
+		}, nil
+	}
+	return []tree.Datum{
+		tree.NewDString(fmt.Sprintf("0/%x", curr.LSN)),
+		tree.NewDInt(tree.DInt(curr.XID)),
+		tree.NewDString(fmt.Sprintf("???? FIGURE IT OUT ???? %s %s", curr.Key, curr.Value)),
+	}, nil
+}
+
+func (l logicalReplicationSlotStream) Close(ctx context.Context) {
+}
+
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
 //
@@ -102,6 +227,36 @@ func (aclexplodeGenerator) Values() (tree.Datums, error)             { return ni
 // The properties are reachable via tree.FunctionDefinition.
 var generators = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
+
+	"pg_create_logical_replication_slot": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "name", Typ: types.String}, {Name: "plugin", Typ: types.String}},
+			createLogicalReplicationSlotType,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				// TODO(XXX): check plugin for test_decoding.
+				slotName := string(tree.MustBeDString(args[0]))
+				lsn, err := evalCtx.ReplicationSlotManager.CreateSlot(ctx, slotName)
+				return &createLogicalReplicationSlot{name: slotName, lsn: lsn}, err
+			},
+			"This function makes adam's dreams come true.",
+			volatility.Volatile,
+		),
+	),
+
+	"pg_logical_slot_get_changes": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "name", Typ: types.String}},
+			logicalReplicationSlotStreamType,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				// TODO(XXX): check plugin for test_decoding.
+				slotName := string(tree.MustBeDString(args[0]))
+				return &logicalReplicationSlotStream{slotName: slotName, consume: true}, nil
+			},
+			"This function makes adam's dreams come true.",
+			volatility.Volatile,
+		),
+	),
+
 	"aclexplode": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "aclitems", Typ: types.StringArray}},

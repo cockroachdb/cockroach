@@ -4119,6 +4119,20 @@ value if you rely on the HLC for accuracy.`,
 			CalledOnNullInput: true,
 		},
 	),
+
+	"pg_drop_replication_slot": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "slot_name", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// TODO(XXX): remove changefeed
+				return tree.DVoidDatum, evalCtx.ReplicationSlotManager.DropSlot(ctx, string(tree.MustBeDString(args[0])))
+			},
+			Info:       "This function also makes adam's dreams come true",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},

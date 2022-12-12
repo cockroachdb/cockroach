@@ -25,6 +25,27 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func (p *planner) CreateSlot(ctx context.Context, slotName string) (string, error) {
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"crdb-internal-create-slot",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		// i love me some sql injection
+		fmt.Sprintf("CREATE CHANGEFEED FOR TABLE %s.public.test_table INTO $1", p.SessionData().Database),
+		"replication://"+slotName,
+	)
+	if err != nil {
+		return "", err
+	}
+	return "0/0", nil
+}
+
+func (p *planner) DropSlot(ctx context.Context, slotName string) error {
+	// TODO(XXX): actually implement DROP CHANGEFEED. There is no way of doing this, annoyingly.
+	return nil
+}
+
 // LookupNamespaceID implements tree.PrivilegedAccessor.
 // TODO(sqlexec): make this work for any arbitrary schema.
 // This currently only works for public schemas and databases.

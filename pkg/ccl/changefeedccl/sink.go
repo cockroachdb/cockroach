@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -169,6 +170,18 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
 				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 			})
+		case u.Scheme == "replication":
+			name := u.Host
+			// This breaks all kind of rules!
+			// Really should be distributed, but maybe not for demo purposes on a single
+			// node cluster.
+			if _, ok := replicationslot.ReplicationSlots[name]; !ok {
+				sink := &replicationSink{
+					name: name,
+				}
+				replicationslot.ReplicationSlots[name] = sink
+			}
+			return replicationslot.ReplicationSlots[name].(*replicationSink), nil
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
 			if err != nil {
@@ -467,6 +480,68 @@ func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
 	}
 	strs := append([]string{string(name)}, components...)
 	return s.alloc.NewDString(tree.DString(strings.Join(strs, ".")))
+}
+
+type replicationSink struct {
+	name        string
+	lastXID     int64
+	lastMVCC    hlc.Timestamp
+	writeCursor int64
+	items       []replicationslot.Item
+}
+
+func (r *replicationSink) NextTxn(consume bool) []replicationslot.Item {
+	if len(r.items) == 0 {
+		return nil
+	}
+	ret := r.items
+	if consume {
+		r.items = nil
+	}
+	return ret
+}
+
+func (r replicationSink) Dial() error {
+	return nil
+}
+
+func (r *replicationSink) Close() error {
+	return nil
+}
+
+func (r *replicationSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	// save 1 for commit...
+	r.writeCursor += 2
+	if r.lastMVCC.Less(mvcc) {
+		// assume same mvcc = same txn!
+		r.lastXID++
+		r.lastMVCC = mvcc
+	}
+	item := replicationslot.Item{
+		LSN:   r.writeCursor,
+		XID:   r.lastXID,
+		Key:   key,
+		Value: value,
+	}
+	r.items = append(r.items, item)
+	return nil
+}
+
+func (r replicationSink) Flush(ctx context.Context) error {
+	return nil
+}
+
+func (r replicationSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	// ?? what
+	return nil
 }
 
 type nullSink struct {
