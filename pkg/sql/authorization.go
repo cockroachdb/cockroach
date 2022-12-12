@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -44,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -939,4 +942,102 @@ func insufficientPrivilegeError(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, kind, typeForError, object.GetName())
+}
+
+// WarmSyntheticPrivilegeCacheForVirtualTables will attempt to access
+// each virtual table, and, in doing so, will cache the privileges for those
+// virtual tables. This work is done in parallel. It aids in reducing the cold
+// start latency when accessing virtual tables which themselves list virtual
+// tables.
+func WarmSyntheticPrivilegeCacheForVirtualTables(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	version clusterversion.Handle,
+	cache *cacheutil.Cache,
+	schemas catalog.VirtualSchemas,
+	ief descs.TxnManager,
+	db *kv.DB,
+) {
+	if !version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+		return
+	}
+
+	start := timeutil.Now()
+	var totalErr error
+	if totalErr != nil {
+		log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", totalErr)
+	} else {
+		log.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
+	}
+
+	var tableVersions []descpb.DescriptorVersion
+	vtablePathToPrivilegeDescs := make(map[string]*catpb.PrivilegeDescriptor)
+	query := fmt.Sprintf(
+		`SELECT path, username, privileges, grant_options FROM system.%s WHERE path LIKE '/%s/%%'`,
+		syntheticprivilege.VirtualTablePathPrefix,
+	)
+	totalErr = ief.DescsTxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (retErr error) {
+		_, systemPrivDesc, err := descsCol.GetImmutableTableByName(
+			ctx,
+			txn,
+			syntheticprivilege.SystemPrivilegesTableName,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		if systemPrivDesc.IsUncommittedVersion() {
+			// This shouldn't ever happen, but if it does somehow, then we can't pre-warm the cache.
+			return errors.Newf("%s is at an uncommitted version", syntheticprivilege.SystemPrivilegesTableName)
+		}
+		tableVersions = []descpb.DescriptorVersion{systemPrivDesc.GetVersion()}
+
+		it, err := ie.QueryIteratorEx(
+			ctx, `get-vtable-privileges`, txn, sessiondata.NodeUserSessionDataOverride, query,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			retErr = errors.CombineErrors(retErr, it.Close())
+		}()
+
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			path := tree.MustBeDString(it.Cur()[0])
+			user := tree.MustBeDString(it.Cur()[1])
+			privArr := tree.MustBeDArray(it.Cur()[2])
+			grantOptionArr := tree.MustBeDArray(it.Cur()[3])
+			privileges, err := synthesizePrivilegeDescriptorFromSystemPrivilegesRow(privilege.VirtualTable, user, privArr, grantOptionArr)
+			if err != nil {
+				return err
+			}
+			vtablePathToPrivilegeDescs[string(path)] = privileges
+		}
+		return nil
+	})
+	if totalErr != nil {
+		return
+	}
+
+	for scName := range catconstants.VirtualSchemaNames {
+		sc, _ := schemas.GetVirtualSchema(scName)
+		sc.VisitTables(func(object catalog.VirtualObject) {
+			vtablePriv := syntheticprivilege.VirtualTablePrivilege{
+				SchemaName: scName,
+				TableName:  sc.Desc().GetName(),
+			}
+			privDesc, ok := vtablePathToPrivilegeDescs[vtablePriv.GetPath()]
+			if !ok {
+				privDesc = vtablePriv.GetFallbackPrivileges()
+			}
+			cache.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc)
+		})
+	}
 }

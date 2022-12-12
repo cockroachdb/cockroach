@@ -1519,6 +1519,11 @@ func (s *SQLServer) preStart(
 	)
 
 	scheduledlogging.Start(ctx, stopper, s.execCfg.DB, s.execCfg.Settings, s.internalExecutor, s.execCfg.CaptureIndexUsageStatsKnobs)
+	sql.WarmSyntheticPrivilegeCacheForVirtualTables(
+		ctx, stopper, s.execCfg.Settings.Version,
+		s.execCfg.SyntheticPrivilegeCache, s.execCfg.VirtualSchemas,
+		s.execCfg.InternalExecutorFactory, s.execCfg.DB,
+	)
 	return nil
 }
 

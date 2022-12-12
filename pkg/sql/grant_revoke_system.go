@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -271,7 +272,8 @@ func (p *planner) getPrivilegeDescriptor(
 				TableName:  d.GetName(),
 			}
 			return synthesizePrivilegeDescriptor(
-				ctx, p.ExecCfg(), p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), vDesc,
+				ctx, p.ExecCfg().Settings.Version, p.ExecCfg().SyntheticPrivilegeCache,
+				p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), vDesc,
 			)
 		}
 		return d.GetPrivileges(), nil
@@ -279,7 +281,8 @@ func (p *planner) getPrivilegeDescriptor(
 		return d.GetPrivileges(), nil
 	case syntheticprivilege.Object:
 		return synthesizePrivilegeDescriptor(
-			ctx, p.ExecCfg(), p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), d,
+			ctx, p.ExecCfg().Settings.Version, p.ExecCfg().SyntheticPrivilegeCache,
+			p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), d,
 		)
 	}
 	return nil, errors.AssertionFailedf("unknown privilege.Object type %T", po)
@@ -290,13 +293,14 @@ func (p *planner) getPrivilegeDescriptor(
 // PrivilegeDescriptor.
 func synthesizePrivilegeDescriptor(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
+	version clusterversion.Handle,
+	cache *cacheutil.Cache,
 	ie sqlutil.InternalExecutor,
 	descsCol *descs.Collection,
 	txn *kv.Txn,
 	spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	if !execCfg.Settings.Version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
+	if !version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
 		// Fall back to defaults if the version gate is not active yet.
 		return spo.GetFallbackPrivileges(), nil
 	}
@@ -313,7 +317,6 @@ func synthesizePrivilegeDescriptor(
 		return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, ie, txn, spo)
 	}
 	var tableVersions []descpb.DescriptorVersion
-	cache := execCfg.SyntheticPrivilegeCache
 	found, privileges, retErr := func() (bool, catpb.PrivilegeDescriptor, error) {
 		cache.Lock()
 		defer cache.Unlock()
@@ -382,42 +385,11 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 
 		user := tree.MustBeDString(it.Cur()[0])
 		privArr := tree.MustBeDArray(it.Cur()[1])
-		var privilegeStrings []string
-		for _, elem := range privArr.Array {
-			privilegeStrings = append(privilegeStrings, string(tree.MustBeDString(elem)))
-		}
-
 		grantOptionArr := tree.MustBeDArray(it.Cur()[2])
-		var grantOptionStrings []string
-		for _, elem := range grantOptionArr.Array {
-			grantOptionStrings = append(grantOptionStrings, string(tree.MustBeDString(elem)))
-		}
-		privs, err := privilege.ListFromStrings(privilegeStrings)
+		privileges, err = synthesizePrivilegeDescriptorFromSystemPrivilegesRow(spo.GetObjectType(), user, privArr, grantOptionArr)
 		if err != nil {
 			return nil, err
 		}
-		grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
-		if err != nil {
-			return nil, err
-		}
-		privsWithGrantOption := privilege.ListFromBitField(
-			privs.ToBitField()&grantOptions.ToBitField(),
-			spo.GetObjectType(),
-		)
-		privsWithoutGrantOption := privilege.ListFromBitField(
-			privs.ToBitField()&^privsWithGrantOption.ToBitField(),
-			spo.GetObjectType(),
-		)
-		privileges.Grant(
-			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-			privsWithGrantOption,
-			true, /* withGrantOption */
-		)
-		privileges.Grant(
-			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-			privsWithoutGrantOption,
-			false, /* withGrantOption */
-		)
 	}
 
 	// To avoid having to insert a row for public for each virtual
@@ -442,4 +414,45 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		return nil, err
 	}
 	return privileges, err
+}
+
+func synthesizePrivilegeDescriptorFromSystemPrivilegesRow(
+	objectType privilege.ObjectType, user tree.DString, privArr, grantOptionArr *tree.DArray,
+) (privileges *catpb.PrivilegeDescriptor, retErr error) {
+	var privilegeStrings []string
+	for _, elem := range privArr.Array {
+		privilegeStrings = append(privilegeStrings, string(tree.MustBeDString(elem)))
+	}
+
+	var grantOptionStrings []string
+	for _, elem := range grantOptionArr.Array {
+		grantOptionStrings = append(grantOptionStrings, string(tree.MustBeDString(elem)))
+	}
+	privs, err := privilege.ListFromStrings(privilegeStrings)
+	if err != nil {
+		return nil, err
+	}
+	grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
+	if err != nil {
+		return nil, err
+	}
+	privsWithGrantOption := privilege.ListFromBitField(
+		privs.ToBitField()&grantOptions.ToBitField(),
+		objectType,
+	)
+	privsWithoutGrantOption := privilege.ListFromBitField(
+		privs.ToBitField()&^privsWithGrantOption.ToBitField(),
+		objectType,
+	)
+	privileges.Grant(
+		username.MakeSQLUsernameFromPreNormalizedString(string(user)),
+		privsWithGrantOption,
+		true, /* withGrantOption */
+	)
+	privileges.Grant(
+		username.MakeSQLUsernameFromPreNormalizedString(string(user)),
+		privsWithoutGrantOption,
+		false, /* withGrantOption */
+	)
+	return privileges, nil
 }
