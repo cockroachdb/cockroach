@@ -43,6 +43,8 @@ type ElasticCPUWorkHandle struct {
 	runningTimeAtLastCheck, differenceWithAllottedAtLastCheck time.Duration
 
 	testingOverrideRunningTime func() time.Duration
+
+	testingOverrideOverLimit func() (bool, time.Duration)
 }
 
 func newElasticCPUWorkHandle(allotted time.Duration) *ElasticCPUWorkHandle {
@@ -92,6 +94,10 @@ func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Dura
 }
 
 func (h *ElasticCPUWorkHandle) overLimitInner() (overLimit bool, difference time.Duration) {
+	if h.testingOverrideOverLimit != nil {
+		return h.testingOverrideOverLimit()
+	}
+
 	runningTime := h.runningTime()
 	if runningTime >= h.allotted {
 		return true, grunning.Difference(runningTime, h.allotted)
@@ -137,4 +143,13 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
 	return newElasticCPUWorkHandle(420 * time.Hour) // use a very high allotment
+}
+
+// TestingNewElasticCPUWithCallback constructs an
+// ElascticCPUWorkHandle with a testing override for the behaviour of
+// OverLimit().
+func TestingNewElasticCPUHandleWithCallback(cb func() (bool, time.Duration)) *ElasticCPUWorkHandle {
+	h := TestingNewElasticCPUHandle()
+	h.testingOverrideOverLimit = cb
+	return h
 }
