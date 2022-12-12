@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
 )
 
@@ -99,7 +101,7 @@ func (p *planNodeToRowSource) MustBeStreaming() bool {
 func (p *planNodeToRowSource) InitWithOutput(
 	flowCtx *execinfra.FlowCtx, post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
 ) error {
-	return p.InitWithEvalCtx(
+	if err := p.InitWithEvalCtx(
 		p,
 		post,
 		p.outputTypes,
@@ -116,7 +118,13 @@ func (p *planNodeToRowSource) InitWithOutput(
 			// Input to drain is added in SetInput.
 			TrailingMetaCallback: p.trailingMetaCallback,
 		},
-	)
+	); err != nil {
+		return err
+	}
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+		p.ExecStatsForTrace = p.execStatsForTrace
+	}
+	return nil
 }
 
 // SetInput implements the LocalProcessor interface.
@@ -237,6 +245,22 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 		}
 	}
 	return meta
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
+	// Propagate RUs from IO requests.
+	// TODO(drewk): we should consider propagating other stats for planNode
+	// operators.
+	scanStats := execstats.GetScanStats(p.Ctx(), p.ExecStatsTrace)
+	if scanStats.ConsumedRU == 0 {
+		return nil
+	}
+	return &execinfrapb.ComponentStats{
+		Exec: execinfrapb.ExecStats{
+			ConsumedRU: optional.MakeUint(scanStats.ConsumedRU),
+		},
+	}
 }
 
 // Release releases this planNodeToRowSource back to the pool.

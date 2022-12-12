@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -91,6 +92,9 @@ type instrumentationHelper struct {
 	// collectExecStats is set when we are collecting execution statistics for a
 	// statement.
 	collectExecStats bool
+
+	// isTenant is set when the query is being executed on behalf of a tenant.
+	isTenant bool
 
 	// discardRows is set if we want to discard any results rather than sending
 	// them back to the client. Used for testing/benchmarking. Note that the
@@ -247,6 +251,8 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
+	ih.isTenant = multitenant.TenantRUEstimateEnabled.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
+		cfg.DistSQLSrv.TenantCostController != nil
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
@@ -530,6 +536,13 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+		if ih.isTenant && ih.outputMode != unmodifiedOutput && ih.vectorized {
+			// Only output RU estimate if this is a tenant running EXPLAIN ANALYZE.
+			// Additionally, RUs aren't correctly propagated in all cases for plans
+			// that aren't vectorized - for example, EXPORT statements. For now,
+			// only output RU estimates for vectorized plans.
+			ob.AddRUEstimate(queryStats.RUEstimate)
+		}
 	}
 
 	if len(ih.regions) > 0 {

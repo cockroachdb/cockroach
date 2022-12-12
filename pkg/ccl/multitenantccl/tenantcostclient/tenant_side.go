@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 )
@@ -128,6 +130,9 @@ const defaultTickInterval = time.Second
 //
 //	0.5^(1 second / tickInterval)
 const movingAvgRUPerSecFactor = 0.5
+
+// movingAvgCPUPerSecFactor is the weight applied to a new sample of CPU usage.
+const movingAvgCPUPerSecFactor = 0.5
 
 // We request more tokens when the available RUs go below a threshold. The
 // threshold is a fraction of the last granted RUs.
@@ -260,6 +265,11 @@ type tenantSideCostController struct {
 		// It is read and written on multiple goroutines and so must be protected
 		// by a mutex.
 		consumption roachpb.TenantConsumption
+
+		// avgCPUPerSec is an exponentially-weighted moving average of the CPU usage
+		// per second; used to estimate the CPU usage of a query. It is only written
+		// in the main loop, but can be read by multiple goroutines so is protected.
+		avgCPUPerSec float64
 	}
 
 	// lowRUNotifyChan is used when the number of available RUs is running low and
@@ -389,11 +399,13 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	// Update CPU consumption.
 	deltaCPU := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
 
-	// Subtract any allowance that we consider free background usage.
 	deltaTime := newTime.Sub(c.run.lastTick)
 	if deltaTime > 0 {
+		// Subtract any allowance that we consider free background usage.
 		allowance := CPUUsageAllowance.Get(&c.settings.SV).Seconds() * deltaTime.Seconds()
 		deltaCPU -= allowance
+
+		avgCPU := deltaCPU / deltaTime.Seconds()
 
 		// If total CPU usage is small (less than 3% of a single CPU by default)
 		// and there have been no recent read/write operations, then ignore the
@@ -406,6 +418,9 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 				deltaCPU = 0
 			}
 		}
+		// Keep track of an exponential moving average of CPU usage.
+		c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
+		c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
 		c.mu.Unlock()
 	}
 	if deltaCPU < 0 {
@@ -773,6 +788,16 @@ func (c *tenantSideCostController) OnResponseWait(
 		return err
 	}
 
+	// Record the number of RUs consumed by the IO request.
+	if multitenant.TenantRUEstimateEnabled.Get(&c.settings.SV) {
+		if sp := tracing.SpanFromContext(ctx); sp != nil &&
+			sp.RecordingType() != tracingpb.RecordingOff {
+			sp.RecordStructured(&roachpb.TenantConsumption{
+				RU: float64(totalRU),
+			})
+		}
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -852,4 +877,17 @@ func (c *tenantSideCostController) onExternalIO(
 	c.mu.Unlock()
 
 	return nil
+}
+
+// GetCPUMovingAvg is used to obtain an exponential moving average estimate
+// for the CPU usage in seconds per each second of wall-clock time.
+func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.avgCPUPerSec
+}
+
+// GetCostConfig is part of the multitenant.TenantSideCostController interface.
+func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
+	return &c.costCfg
 }
