@@ -835,6 +835,8 @@ func (cfg *Config) InitNode(ctx context.Context) error {
 		cfg.GossipBootstrapAddresses = addresses
 	}
 
+	cfg.BaseConfig.idProvider.SetTenant(roachpb.SystemTenantID)
+
 	return nil
 }
 
