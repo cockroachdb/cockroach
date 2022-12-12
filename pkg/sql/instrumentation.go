@@ -709,9 +709,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 func (ih *instrumentationHelper) SetIndexRecommendations(
 	ctx context.Context, idxRec *idxrecommendations.IndexRecCache, planner *planner, isInternal bool,
 ) {
-	opc := planner.optPlanningCtx
-	opc.reset(ctx)
-	stmtType := opc.p.stmt.AST.StatementType()
+	stmtType := planner.stmt.AST.StatementType()
 
 	reset := false
 	var recommendations []indexrec.Rec
@@ -722,6 +720,8 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		stmtType,
 		isInternal,
 	) {
+		opc := &planner.optPlanningCtx
+		opc.reset(ctx)
 		f := opc.optimizer.Factory()
 		// EvalContext() has the context with the already closed span, so we
 		// need to update with the current context.
