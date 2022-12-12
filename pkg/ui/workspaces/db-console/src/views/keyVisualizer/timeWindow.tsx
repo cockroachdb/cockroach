@@ -13,8 +13,8 @@ import { TimeScaleOptions } from "@cockroachlabs/cluster-ui";
 import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import moment from "moment";
 
-export const KeyVizualizerTimeWindow = () => {
-  const keyVizualizerTimeScaleOptions: TimeScaleOptions = {
+export const KeyVisualizerTimeWindow = () => {
+  const keyVisualizerTimeScaleOptions: TimeScaleOptions = {
     "Past 10 Minutes": {
       windowSize: moment.duration(10, "minutes"),
       windowValid: moment.duration(15, "minutes"),
@@ -64,7 +64,7 @@ export const KeyVizualizerTimeWindow = () => {
 
   return (
     <TimeScaleDropdown
-      options={keyVizualizerTimeScaleOptions}
+      options={keyVisualizerTimeScaleOptions}
       hasCustomOption={false}
     />
   );

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -98,6 +99,7 @@ type Connector struct {
 type client struct {
 	roachpb.InternalClient
 	serverpb.StatusClient
+	keyvispb.KeyVisualizerClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -716,8 +718,9 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient: roachpb.NewInternalClient(conn),
-				StatusClient:   serverpb.NewStatusClient(conn),
+				InternalClient:      roachpb.NewInternalClient(conn),
+				StatusClient:        serverpb.NewStatusClient(conn),
+				KeyVisualizerClient: keyvispb.NewKeyVisualizerClient(conn),
 			}, nil
 		}
 	}

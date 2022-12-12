@@ -164,3 +164,17 @@ func NonNegativeInt(v int64) error {
 	}
 	return nil
 }
+
+// NonNegativeIntWithMaximum can be passed to RegisterIntSetting
+func NonNegativeIntWithMaximum(maxValue int64) func(int64) error {
+	return func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("cannot be set to a negative value: %d", v)
+		}
+		if v > maxValue {
+			return errors.Errorf("cannot be set to a value larger than %d",
+				maxValue)
+		}
+		return nil
+	}
+}
