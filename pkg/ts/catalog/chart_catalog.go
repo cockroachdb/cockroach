@@ -3343,6 +3343,7 @@ var charts = []sectionDescription{
 					"jobs.auto_span_config_reconciliation.currently_running",
 					"jobs.auto_sql_stats_compaction.currently_running",
 					"jobs.stream_replication.currently_running",
+					"jobs.key_visualizer.currently_running",
 				},
 			},
 			{
@@ -3363,6 +3364,7 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.currently_idle",
 					"jobs.stream_replication.currently_idle",
 					"jobs.typedesc_schema_change.currently_idle",
+					"jobs.key_visualizer.currently_idle",
 				},
 			},
 			{
@@ -3537,6 +3539,17 @@ var charts = []sectionDescription{
 					"jobs.auto_sql_stats_compaction.resume_completed",
 					"jobs.auto_sql_stats_compaction.resume_failed",
 					"jobs.auto_sql_stats_compaction.resume_retry_error",
+				},
+			},
+			{
+				Title: "Key Visualizer",
+				Metrics: []string{
+					"jobs.key_visualizer.fail_or_cancel_completed",
+					"jobs.key_visualizer.fail_or_cancel_failed",
+					"jobs.key_visualizer.fail_or_cancel_retry_error",
+					"jobs.key_visualizer.resume_completed",
+					"jobs.key_visualizer.resume_failed",
+					"jobs.key_visualizer.resume_retry_error",
 				},
 			},
 		},

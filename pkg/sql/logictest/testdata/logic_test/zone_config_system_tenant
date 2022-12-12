@@ -32,6 +32,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
 45   TABLE system.public.tenant_usage
+57   TABLE system.public.span_stats_tenant_boundaries
 106  TABLE test.public.t
 
 # The tests below test semantics around named zone for the system tenant. The
@@ -104,7 +105,6 @@ SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
-{"gcPolicy": {"ttlSeconds": 14400}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
 
 statement ok
 CREATE TABLE db2.t2 (i INT PRIMARY KEY);

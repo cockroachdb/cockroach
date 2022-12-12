@@ -1432,6 +1432,10 @@ system         public              tenant_settings                        BASE T
 system         public              privileges                             BASE TABLE   YES                 1
 system         public              external_connections                   BASE TABLE   YES                 1
 system         public              job_info                               BASE TABLE   YES                 1
+system         public              span_stats_unique_keys                 BASE TABLE   YES                 1
+system         public              span_stats_buckets                     BASE TABLE   YES                 1
+system         public              span_stats_samples                     BASE TABLE   YES                 1
+system         public              span_stats_tenant_boundaries           BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1625,6 +1629,20 @@ system              public             29_47_2_not_null                         
 system              public             29_47_3_not_null                                                                                                system         public        span_configurations              CHECK            NO             NO
 system              public             check_bounds                                                                                                    system         public        span_configurations              CHECK            NO             NO
 system              public             primary                                                                                                         system         public        span_configurations              PRIMARY KEY      NO             NO
+system              public             29_55_1_not_null                                                                                                system         public        span_stats_buckets               CHECK            NO             NO
+system              public             29_55_2_not_null                                                                                                system         public        span_stats_buckets               CHECK            NO             NO
+system              public             29_55_3_not_null                                                                                                system         public        span_stats_buckets               CHECK            NO             NO
+system              public             29_55_4_not_null                                                                                                system         public        span_stats_buckets               CHECK            NO             NO
+system              public             29_55_5_not_null                                                                                                system         public        span_stats_buckets               CHECK            NO             NO
+system              public             primary                                                                                                         system         public        span_stats_buckets               PRIMARY KEY      NO             NO
+system              public             29_56_1_not_null                                                                                                system         public        span_stats_samples               CHECK            NO             NO
+system              public             29_56_2_not_null                                                                                                system         public        span_stats_samples               CHECK            NO             NO
+system              public             primary                                                                                                         system         public        span_stats_samples               PRIMARY KEY      NO             NO
+system              public             29_57_1_not_null                                                                                                system         public        span_stats_tenant_boundaries     CHECK            NO             NO
+system              public             29_57_2_not_null                                                                                                system         public        span_stats_tenant_boundaries     CHECK            NO             NO
+system              public             primary                                                                                                         system         public        span_stats_tenant_boundaries     PRIMARY KEY      NO             NO
+system              public             29_54_1_not_null                                                                                                system         public        span_stats_unique_keys           CHECK            NO             NO
+system              public             primary                                                                                                         system         public        span_stats_unique_keys           PRIMARY KEY      NO             NO
 system              public             29_46_1_not_null                                                                                                system         public        sql_instances                    CHECK            NO             NO
 system              public             primary                                                                                                         system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             29_39_1_not_null                                                                                                system         public        sqlliveness                      CHECK            NO             NO
@@ -1887,6 +1905,16 @@ system              public             29_52_6_not_null                         
 system              public             29_53_1_not_null                                                                                                job_id IS NOT NULL
 system              public             29_53_2_not_null                                                                                                info_key IS NOT NULL
 system              public             29_53_3_not_null                                                                                                written IS NOT NULL
+system              public             29_54_1_not_null                                                                                                id IS NOT NULL
+system              public             29_55_1_not_null                                                                                                id IS NOT NULL
+system              public             29_55_2_not_null                                                                                                sample_id IS NOT NULL
+system              public             29_55_3_not_null                                                                                                start_key_id IS NOT NULL
+system              public             29_55_4_not_null                                                                                                end_key_id IS NOT NULL
+system              public             29_55_5_not_null                                                                                                requests IS NOT NULL
+system              public             29_56_1_not_null                                                                                                id IS NOT NULL
+system              public             29_56_2_not_null                                                                                                sample_time IS NOT NULL
+system              public             29_57_1_not_null                                                                                                tenant_id IS NOT NULL
+system              public             29_57_2_not_null                                                                                                boundaries IS NOT NULL
 system              public             29_5_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
@@ -1963,6 +1991,10 @@ system         public        settings                         name              
 system         public        span_configurations              end_key                                                                                                   system              public             check_bounds
 system         public        span_configurations              start_key                                                                                                 system              public             check_bounds
 system         public        span_configurations              start_key                                                                                                 system              public             primary
+system         public        span_stats_buckets               id                                                                                                        system              public             primary
+system         public        span_stats_samples               id                                                                                                        system              public             primary
+system         public        span_stats_tenant_boundaries     tenant_id                                                                                                 system              public             primary
+system         public        span_stats_unique_keys           id                                                                                                        system              public             primary
 system         public        sql_instances                    id                                                                                                        system              public             primary
 system         public        sqlliveness                      session_id                                                                                                system              public             primary
 system         public        statement_bundle_chunks          id                                                                                                        system              public             primary
@@ -2226,6 +2258,17 @@ system         public        settings                         valueType         
 system         public        span_configurations              config                                                                                                    3
 system         public        span_configurations              end_key                                                                                                   2
 system         public        span_configurations              start_key                                                                                                 1
+system         public        span_stats_buckets               end_key_id                                                                                                4
+system         public        span_stats_buckets               id                                                                                                        1
+system         public        span_stats_buckets               requests                                                                                                  5
+system         public        span_stats_buckets               sample_id                                                                                                 2
+system         public        span_stats_buckets               start_key_id                                                                                              3
+system         public        span_stats_samples               id                                                                                                        1
+system         public        span_stats_samples               sample_time                                                                                               2
+system         public        span_stats_tenant_boundaries     boundaries                                                                                                2
+system         public        span_stats_tenant_boundaries     tenant_id                                                                                                 1
+system         public        span_stats_unique_keys           id                                                                                                        1
+system         public        span_stats_unique_keys           key_bytes                                                                                                 2
 system         pg_extension  spatial_ref_sys                  auth_name                                                                                                 2
 system         pg_extension  spatial_ref_sys                  auth_srid                                                                                                 3
 system         pg_extension  spatial_ref_sys                  proj4text                                                                                                 5
@@ -2273,7 +2316,7 @@ system         public        table_statistics                 avgSize           
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
 system         public        table_statistics                 distinctCount                                                                                             7
-system         public        table_statistics                 fullStatisticID                                                                                          12
+system         public        table_statistics                 fullStatisticID                                                                                           12
 system         public        table_statistics                 histogram                                                                                                 9
 system         public        table_statistics                 name                                                                                                      3
 system         public        table_statistics                 nullCount                                                                                                 8
@@ -3277,6 +3320,38 @@ NULL     root     system         public              span_configurations        
 NULL     root     system         public              span_configurations                    INSERT          YES           NO
 NULL     root     system         public              span_configurations                    SELECT          YES           YES
 NULL     root     system         public              span_configurations                    UPDATE          YES           NO
+NULL     admin    system         public              span_stats_buckets                     DELETE          YES           NO
+NULL     admin    system         public              span_stats_buckets                     INSERT          YES           NO
+NULL     admin    system         public              span_stats_buckets                     SELECT          YES           YES
+NULL     admin    system         public              span_stats_buckets                     UPDATE          YES           NO
+NULL     root     system         public              span_stats_buckets                     DELETE          YES           NO
+NULL     root     system         public              span_stats_buckets                     INSERT          YES           NO
+NULL     root     system         public              span_stats_buckets                     SELECT          YES           YES
+NULL     root     system         public              span_stats_buckets                     UPDATE          YES           NO
+NULL     admin    system         public              span_stats_samples                     DELETE          YES           NO
+NULL     admin    system         public              span_stats_samples                     INSERT          YES           NO
+NULL     admin    system         public              span_stats_samples                     SELECT          YES           YES
+NULL     admin    system         public              span_stats_samples                     UPDATE          YES           NO
+NULL     root     system         public              span_stats_samples                     DELETE          YES           NO
+NULL     root     system         public              span_stats_samples                     INSERT          YES           NO
+NULL     root     system         public              span_stats_samples                     SELECT          YES           YES
+NULL     root     system         public              span_stats_samples                     UPDATE          YES           NO
+NULL     admin    system         public              span_stats_tenant_boundaries           DELETE          YES           NO
+NULL     admin    system         public              span_stats_tenant_boundaries           INSERT          YES           NO
+NULL     admin    system         public              span_stats_tenant_boundaries           SELECT          YES           YES
+NULL     admin    system         public              span_stats_tenant_boundaries           UPDATE          YES           NO
+NULL     root     system         public              span_stats_tenant_boundaries           DELETE          YES           NO
+NULL     root     system         public              span_stats_tenant_boundaries           INSERT          YES           NO
+NULL     root     system         public              span_stats_tenant_boundaries           SELECT          YES           YES
+NULL     root     system         public              span_stats_tenant_boundaries           UPDATE          YES           NO
+NULL     admin    system         public              span_stats_unique_keys                 DELETE          YES           NO
+NULL     admin    system         public              span_stats_unique_keys                 INSERT          YES           NO
+NULL     admin    system         public              span_stats_unique_keys                 SELECT          YES           YES
+NULL     admin    system         public              span_stats_unique_keys                 UPDATE          YES           NO
+NULL     root     system         public              span_stats_unique_keys                 DELETE          YES           NO
+NULL     root     system         public              span_stats_unique_keys                 INSERT          YES           NO
+NULL     root     system         public              span_stats_unique_keys                 SELECT          YES           YES
+NULL     root     system         public              span_stats_unique_keys                 UPDATE          YES           NO
 NULL     admin    system         public              sql_instances                          DELETE          YES           NO
 NULL     admin    system         public              sql_instances                          INSERT          YES           NO
 NULL     admin    system         public              sql_instances                          SELECT          YES           YES
@@ -3967,6 +4042,38 @@ NULL     root     system         public              job_info                   
 NULL     root     system         public              job_info                               INSERT          YES           NO
 NULL     root     system         public              job_info                               SELECT          YES           YES
 NULL     root     system         public              job_info                               UPDATE          YES           NO
+NULL     admin    system         public              span_stats_unique_keys                 DELETE          YES           NO
+NULL     admin    system         public              span_stats_unique_keys                 INSERT          YES           NO
+NULL     admin    system         public              span_stats_unique_keys                 SELECT          YES           YES
+NULL     admin    system         public              span_stats_unique_keys                 UPDATE          YES           NO
+NULL     root     system         public              span_stats_unique_keys                 DELETE          YES           NO
+NULL     root     system         public              span_stats_unique_keys                 INSERT          YES           NO
+NULL     root     system         public              span_stats_unique_keys                 SELECT          YES           YES
+NULL     root     system         public              span_stats_unique_keys                 UPDATE          YES           NO
+NULL     admin    system         public              span_stats_buckets                     DELETE          YES           NO
+NULL     admin    system         public              span_stats_buckets                     INSERT          YES           NO
+NULL     admin    system         public              span_stats_buckets                     SELECT          YES           YES
+NULL     admin    system         public              span_stats_buckets                     UPDATE          YES           NO
+NULL     root     system         public              span_stats_buckets                     DELETE          YES           NO
+NULL     root     system         public              span_stats_buckets                     INSERT          YES           NO
+NULL     root     system         public              span_stats_buckets                     SELECT          YES           YES
+NULL     root     system         public              span_stats_buckets                     UPDATE          YES           NO
+NULL     admin    system         public              span_stats_samples                     DELETE          YES           NO
+NULL     admin    system         public              span_stats_samples                     INSERT          YES           NO
+NULL     admin    system         public              span_stats_samples                     SELECT          YES           YES
+NULL     admin    system         public              span_stats_samples                     UPDATE          YES           NO
+NULL     root     system         public              span_stats_samples                     DELETE          YES           NO
+NULL     root     system         public              span_stats_samples                     INSERT          YES           NO
+NULL     root     system         public              span_stats_samples                     SELECT          YES           YES
+NULL     root     system         public              span_stats_samples                     UPDATE          YES           NO
+NULL     admin    system         public              span_stats_tenant_boundaries           DELETE          YES           NO
+NULL     admin    system         public              span_stats_tenant_boundaries           INSERT          YES           NO
+NULL     admin    system         public              span_stats_tenant_boundaries           SELECT          YES           YES
+NULL     admin    system         public              span_stats_tenant_boundaries           UPDATE          YES           NO
+NULL     root     system         public              span_stats_tenant_boundaries           DELETE          YES           NO
+NULL     root     system         public              span_stats_tenant_boundaries           INSERT          YES           NO
+NULL     root     system         public              span_stats_tenant_boundaries           SELECT          YES           YES
+NULL     root     system         public              span_stats_tenant_boundaries           UPDATE          YES           NO
 
 statement ok
 USE other_db;

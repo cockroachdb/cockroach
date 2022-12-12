@@ -310,12 +310,12 @@ trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration 
 query ITTI
 SELECT range_id, start_pretty, end_pretty, lease_holder FROM crdb_internal.ranges
 ----
-55  /Tenant/10  /Max  1
+59  /Tenant/10  /Max  1
 
 query ITT
 SELECT range_id, start_pretty, end_pretty FROM crdb_internal.ranges_no_leases
 ----
-55  /Tenant/10  /Max
+59  /Tenant/10  /Max
 
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1

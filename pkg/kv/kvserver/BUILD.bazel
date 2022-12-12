@@ -336,6 +336,7 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/keys",
+        "//pkg/keyvisualizer",
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",

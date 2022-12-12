@@ -483,6 +483,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
 45   TABLE system.public.tenant_usage
+57   TABLE system.public.span_stats_tenant_boundaries
 106  DATABASE testdb
 108  TABLE testdb.public.foo
 111  TABLE test.schema.bar

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -6234,6 +6235,11 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		return base.TestServerArgs{
 			Settings:      s,
 			ExternalIODir: baseDir,
+			Knobs: base.TestingKnobs{
+				KeyVisualizer: &keyvisualizer.TestingKnobs{
+					SkipJobBootstrap: true,
+				},
+			},
 		}
 	}
 

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -231,6 +232,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 			DontUseJobs: true,
 		}
+		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 
 		if rts.traceRealSpan {
 			baseDir, dirCleanupFn := testutils.TempDir(t)
@@ -1980,6 +1982,9 @@ func TestShowAutomaticJobs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
+		SkipJobBootstrap: true,
+	}
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.Background())

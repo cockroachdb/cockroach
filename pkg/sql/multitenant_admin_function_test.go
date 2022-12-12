@@ -38,11 +38,12 @@ import (
 )
 
 const (
-	createTable      = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemRangeID    = "54"
-	secondaryRangeID = "55"
-	systemKey        = "/Table/53"
-	secondaryKey     = "/Tenant/10"
+	createTable        = "CREATE TABLE t(i int PRIMARY KEY);"
+	systemRangeID      = "58"
+	secondaryRangeID   = "59"
+	systemKey          = "\xc1"
+	systemKeyPretty    = "/Table/57"
+	secondaryKeyPretty = "/Tenant/10"
 )
 
 type testClusterCfg struct {
@@ -288,39 +289,39 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 		{
 			desc:                          "ALTER RANGE x RELOCATE LEASE",
 			query:                         "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
-			expectedSystemResult:          [][]string{{systemRangeID, systemKey, "ok"}},
+			expectedSystemResult:          [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE x RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
-			expectedSystemResult:     [][]string{{systemRangeID, systemKey, "ok"}},
-			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKey, "request [1 AdmTransferLease] not permitted"}},
+			expectedSystemResult:     [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKeyPretty, "request [1 AdmTransferLease] not permitted"}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
 			desc:                          "ALTER RANGE RELOCATE LEASE",
 			query:                         "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedSystemResult:          [][]string{{systemRangeID, systemKey, "ok"}},
+			expectedSystemResult:          [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedSystemResult:     [][]string{{systemRangeID, systemKey, "ok"}},
-			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKey, "request [1 AdmTransferLease] not permitted"}},
+			expectedSystemResult:     [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKeyPretty, "request [1 AdmTransferLease] not permitted"}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
 			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
 			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: "request [1 AdmTransferLease] not permitted",
 			skipSQLSystemTenantCheck:      true,
 		},
@@ -378,7 +379,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 		{
 			desc:                          "ALTER TABLE x SCATTER",
 			query:                         "ALTER TABLE t SCATTER;",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
@@ -510,27 +511,27 @@ func TestRelocateVoters(t *testing.T) {
 		{
 			desc:                          "ALTER RANGE x RELOCATE VOTERS",
 			query:                         "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
-			expectedSystemResult:          [][]string{{systemRangeID, systemKey, "ok"}},
+			expectedSystemResult:          [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE x RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
-			expectedSystemResult:     [][]string{{systemRangeID, systemKey, "ok"}},
-			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKey, "request [1 AdmChangeReplicas] not permitted"}},
+			expectedSystemResult:     [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKeyPretty, "request [1 AdmChangeReplicas] not permitted"}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
 			desc:                          "ALTER RANGE RELOCATE VOTERS",
 			query:                         "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedSystemResult:          [][]string{{systemRangeID, systemKey, "ok"}},
+			expectedSystemResult:          [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedSystemResult:     [][]string{{systemRangeID, systemKey, "ok"}},
-			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKey, "request [1 AdmChangeReplicas] not permitted"}},
+			expectedSystemResult:     [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKeyPretty, "request [1 AdmChangeReplicas] not permitted"}},
 			skipSQLSystemTenantCheck: true,
 		},
 	}
@@ -631,13 +632,13 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 		{
 			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
 			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[%[1]s], 1);",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[%[1]s], 1);",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: "request [1 AdmRelocateRng] not permitted",
 			skipSQLSystemTenantCheck:      true,
 		},
@@ -737,27 +738,27 @@ func TestRelocateNonVoters(t *testing.T) {
 		{
 			desc:                          "ALTER RANGE x RELOCATE NONVOTERS",
 			query:                         "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM %[1]s TO %[2]s;",
-			expectedSystemResult:          [][]string{{systemRangeID, systemKey, "ok"}},
+			expectedSystemResult:          [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE x RELOCATE NONVOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM %[1]s TO %[2]s;",
-			expectedSystemResult:     [][]string{{systemRangeID, systemKey, "ok"}},
-			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKey, "request [1 AdmChangeReplicas] not permitted"}},
+			expectedSystemResult:     [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKeyPretty, "request [1 AdmChangeReplicas] not permitted"}},
 			skipSQLSystemTenantCheck: true,
 		},
 		{
 			desc:                          "ALTER RANGE RELOCATE NONVOTERS",
 			query:                         "ALTER RANGE RELOCATE NONVOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedSystemResult:          [][]string{{systemRangeID, systemKey, "ok"}},
+			expectedSystemResult:          [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE RELOCATE NONVOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE NONVOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			expectedSystemResult:     [][]string{{systemRangeID, systemKey, "ok"}},
-			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKey, "request [1 AdmChangeReplicas] not permitted"}},
+			expectedSystemResult:     [][]string{{systemRangeID, systemKeyPretty, "ok"}},
+			expectedSecondaryResult:  [][]string{{secondaryRangeID, secondaryKeyPretty, "request [1 AdmChangeReplicas] not permitted"}},
 			skipSQLSystemTenantCheck: true,
 		},
 	}
@@ -855,13 +856,13 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 		{
 			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE NONVOTERS",
 			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[%[1]s], 1);",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                          "ALTER TABLE x EXPERIMENTAL_RELOCATE NONVOTERS SkipSQLSystemTenantCheck",
 			query:                         "ALTER TABLE t EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[%[1]s], 1);",
-			expectedSystemResult:          [][]string{{"\xbd", systemKey}},
+			expectedSystemResult:          [][]string{{systemKey, systemKeyPretty}},
 			expectedSecondaryErrorMessage: "request [1 AdmRelocateRng] not permitted",
 			skipSQLSystemTenantCheck:      true,
 		},

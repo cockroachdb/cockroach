@@ -53,4 +53,5 @@ type TestingKnobs struct {
 	ExternalConnection           ModuleTestingKnobs
 	EventExporter                ModuleTestingKnobs
 	EventLog                     ModuleTestingKnobs
+	KeyVisualizer                ModuleTestingKnobs
 }

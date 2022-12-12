@@ -79,6 +79,8 @@ cockroachdb/admin-ui:
   aliases:
     cockroachdb/admin-ui-prs: other
   triage_column_id: 6598672
+cockroachdb/kv-obs-prs:
+  triage_column_id: 0 # TODO
 cockroachdb/obs-inf-prs:
   triage_column_id: 14196277
 cockroachdb/multi-tenant:

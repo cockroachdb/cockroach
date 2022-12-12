@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -2574,6 +2575,7 @@ func TestUnsplittableRange(t *testing.T) {
 			SpanConfig: &spanconfig.TestingKnobs{
 				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipZoneConfigBootstrap: true},
 		},
 	})
 	s := serv.(*server.TestServer)

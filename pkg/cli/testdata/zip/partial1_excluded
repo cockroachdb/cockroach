@@ -110,7 +110,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] 1 log file ...
 [node 1] [log file ...
 [node 1] requesting ranges... received response... done
-[node 1] 54 ranges found
+[node 1] 58 ranges found
 [node 1] writing range 1... converting to JSON... writing binary output: debug/nodes/1/ranges/1.json... done
 [node 1] writing range 2... converting to JSON... writing binary output: debug/nodes/1/ranges/2.json... done
 [node 1] writing range 3... converting to JSON... writing binary output: debug/nodes/1/ranges/3.json... done
@@ -165,6 +165,10 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] writing range 52... converting to JSON... writing binary output: debug/nodes/1/ranges/52.json... done
 [node 1] writing range 53... converting to JSON... writing binary output: debug/nodes/1/ranges/53.json... done
 [node 1] writing range 54... converting to JSON... writing binary output: debug/nodes/1/ranges/54.json... done
+[node 1] writing range 55... converting to JSON... writing binary output: debug/nodes/1/ranges/55.json... done
+[node 1] writing range 56... converting to JSON... writing binary output: debug/nodes/1/ranges/56.json... done
+[node 1] writing range 57... converting to JSON... writing binary output: debug/nodes/1/ranges/57.json... done
+[node 1] writing range 58... converting to JSON... writing binary output: debug/nodes/1/ranges/58.json... done
 [node 2] skipping node... writing binary output: debug/nodes/2.skipped... done
 [node 3] node status... converting to JSON... writing binary output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
@@ -203,7 +207,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 3] 1 log file ...
 [node 3] [log file ...
 [node 3] requesting ranges... received response... done
-[node 3] 54 ranges found
+[node 3] 58 ranges found
 [node 3] writing range 1... converting to JSON... writing binary output: debug/nodes/3/ranges/1.json... done
 [node 3] writing range 2... converting to JSON... writing binary output: debug/nodes/3/ranges/2.json... done
 [node 3] writing range 3... converting to JSON... writing binary output: debug/nodes/3/ranges/3.json... done
@@ -258,6 +262,10 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 3] writing range 52... converting to JSON... writing binary output: debug/nodes/3/ranges/52.json... done
 [node 3] writing range 53... converting to JSON... writing binary output: debug/nodes/3/ranges/53.json... done
 [node 3] writing range 54... converting to JSON... writing binary output: debug/nodes/3/ranges/54.json... done
+[node 3] writing range 55... converting to JSON... writing binary output: debug/nodes/3/ranges/55.json... done
+[node 3] writing range 56... converting to JSON... writing binary output: debug/nodes/3/ranges/56.json... done
+[node 3] writing range 57... converting to JSON... writing binary output: debug/nodes/3/ranges/57.json... done
+[node 3] writing range 58... converting to JSON... writing binary output: debug/nodes/3/ranges/58.json... done
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done

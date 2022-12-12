@@ -65,11 +65,11 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE xyz WITH DETAILS]
 ----
 start_key           end_key                              replicas  lease_holder
-<before:/Table/53>  …/1/2                                {1}       1
 …/1/2               …/1/4                                {2}       2
 …/1/4               …/1/6                                {3}       3
 …/1/6               …/1/7                                {4}       4
 …/1/7               <after:/Table/107/1/NULL/NULL/NULL>  {5}       5
+<before:/Table/57>  …/1/2                                {1}       1
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE abc WITH DETAILS]

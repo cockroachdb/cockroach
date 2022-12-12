@@ -1441,6 +1441,42 @@ message HotRangesResponseV2 {
   string next_page_token = 3 [(gogoproto.nullable) = true];
 }
 
+
+message KeyVisSamplesRequest {}
+
+
+// KeyVisSamplesResponse returns a space-efficient representation of
+// key visualizer samples. Spans are deduplicated, and are referenced by uuid.
+message KeyVisSamplesResponse {
+  message Bucket {
+    bytes start_key_id = 1 [
+      (gogoproto.customname) = "StartKeyID",
+      (gogoproto.nullable) = false,
+      (gogoproto.customtype) =
+        "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+    ];
+    bytes end_key_id = 2 [
+      (gogoproto.customname) = "EndKeyID",
+      (gogoproto.nullable) = false,
+      (gogoproto.customtype) =
+        "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+    ];
+    uint64 requests = 3;
+  }
+
+  message KeyVisSample {
+    google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false,
+                                             (gogoproto.stdtime) = true];
+    repeated Bucket buckets = 2 [(gogoproto.nullable) = false];
+  }
+
+  // pretty_key_for_uuid is a mapping of hex-encoded UUIDs to pretty keys.
+  map<string, string> pretty_key_for_uuid = 1;
+  repeated string sorted_pretty_keys = 2;
+  repeated KeyVisSample samples = 3 [(gogoproto.nullable) = false];
+}
+
+
 message RangeRequest {
   int64 range_id = 1;
 }
@@ -2194,6 +2230,14 @@ service Status {
     option (google.api.http) = {
       post : "/_status/v2/hotranges"
       body : "*"
+    };
+  }
+
+
+  rpc KeyVisSamples(KeyVisSamplesRequest) returns(KeyVisSamplesResponse) {
+    option (google.api.http) = {
+      post : "/_status/keyvissamples",
+      body: "*"
     };
   }
 

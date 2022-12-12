@@ -3585,6 +3585,92 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 
 
 
+## KeyVisSamples
+
+`POST /_status/keyvissamples`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+KeyVisSamplesResponse returns a space-efficient representation of
+key visualizer samples. Spans are deduplicated, and are referenced by uuid.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| pretty_key_for_uuid | [KeyVisSamplesResponse.PrettyKeyForUuidEntry](#cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.PrettyKeyForUuidEntry) | repeated | pretty_key_for_uuid is a mapping of hex-encoded UUIDs to pretty keys. | [reserved](#support-status) |
+| sorted_pretty_keys | [string](#cockroach.server.serverpb.KeyVisSamplesResponse-string) | repeated |  | [reserved](#support-status) |
+| samples | [KeyVisSamplesResponse.KeyVisSample](#cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.KeyVisSample) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.PrettyKeyForUuidEntry"></a>
+#### KeyVisSamplesResponse.PrettyKeyForUuidEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.KeyVisSamplesResponse-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.KeyVisSamplesResponse-string) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.KeyVisSample"></a>
+#### KeyVisSamplesResponse.KeyVisSample
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.KeyVisSamplesResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| buckets | [KeyVisSamplesResponse.Bucket](#cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.Bucket) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.Bucket"></a>
+#### KeyVisSamplesResponse.Bucket
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| start_key_id | [bytes](#cockroach.server.serverpb.KeyVisSamplesResponse-bytes) |  |  | [reserved](#support-status) |
+| end_key_id | [bytes](#cockroach.server.serverpb.KeyVisSamplesResponse-bytes) |  |  | [reserved](#support-status) |
+| requests | [uint64](#cockroach.server.serverpb.KeyVisSamplesResponse-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## Range
 
 `GET /_status/range/{range_id}`

@@ -705,6 +705,14 @@ message AutoSpanConfigReconciliationProgress {
   util.hlc.Timestamp checkpoint = 1 [(gogoproto.nullable) = false];
 }
 
+// KeyVisualizerDetails is the job detail information for the
+// key visualizer job.
+message KeyVisualizerDetails {}
+
+// KeyVisualizerProgress is the persisted progress for the
+// key visualizer job.
+message KeyVisualizerProgress {}
+
 message ResumeSpanList {
   repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
 }
@@ -1179,6 +1187,7 @@ message Payload {
     // and publish it to the telemetry event log. These jobs are typically
     // created by a built-in schedule named "sql-schema-telemetry".
     SchemaTelemetryDetails schema_telemetry = 37;
+    KeyVisualizerDetails keyVisualizerDetails = 38;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1240,6 +1249,7 @@ message Progress {
     StreamReplicationProgress streamReplication = 24;
     RowLevelTTLProgress row_level_ttl = 25 [(gogoproto.customname)="RowLevelTTL"];
     SchemaTelemetryProgress schema_telemetry = 26;
+    KeyVisualizerProgress keyVisualizerProgress = 27;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1269,6 +1279,7 @@ enum Type {
   STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
   ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
   AUTO_SCHEMA_TELEMETRY = 17 [(gogoproto.enumvalue_customname) = "TypeAutoSchemaTelemetry"];
+  KEY_VISUALIZER = 18 [(gogoproto.enumvalue_customname) = "TypeKeyVisualizer"];
 }
 
 message Job {
