@@ -172,11 +172,15 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	vers := m.listBetween(roachpb.Version{}, upToVersion)
 	var permanentUpgrades []upgradebase.Upgrade
 	for _, v := range vers {
-		upgrade, exists := m.GetUpgrade(v)
-		if !exists || !upgrade.Permanent() {
+		u, exists := m.GetUpgrade(v)
+		if !exists || !u.Permanent() {
 			continue
 		}
-		permanentUpgrades = append(permanentUpgrades, upgrade)
+		_, isSystemUpgrade := u.(*upgrade.SystemUpgrade)
+		if isSystemUpgrade && !m.codec.ForSystemTenant() {
+			continue
+		}
+		permanentUpgrades = append(permanentUpgrades, u)
 	}
 
 	user := username.RootUserName()

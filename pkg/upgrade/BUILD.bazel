@@ -16,6 +16,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/keys",
+        "//pkg/keyvisualizer",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",

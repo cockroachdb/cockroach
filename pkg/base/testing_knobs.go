@@ -54,4 +54,5 @@ type TestingKnobs struct {
 	EventExporter                ModuleTestingKnobs
 	EventLog                     ModuleTestingKnobs
 	LOQRecovery                  ModuleTestingKnobs
+	KeyVisualizer                ModuleTestingKnobs
 }
