@@ -361,6 +361,19 @@ catalog:
   "053":
     descriptor: relation
     namespace: (1, 29, "job_info")
+  "054":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_unique_keys")
+  "055":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_buckets")
+  "056":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_samples")
+  "057":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_tenant_boundaries")
+    zone: gc.ttlseconds=3600
   "100":
     comments:
       database: this is the default database

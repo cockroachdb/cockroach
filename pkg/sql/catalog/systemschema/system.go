@@ -769,6 +769,71 @@ CREATE TABLE system.job_info (
 	CONSTRAINT "primary" PRIMARY KEY (job_id, info_key, written DESC),
 	FAMILY "primary" (job_id, info_key, written, value)
 );`
+
+	// SpanStatsUniqueKeysTableSchema defines the schema to store
+	// the set of unique keys of all samples in SpanStatsSamplesTableSchema.
+	// The raw bytes of keys are stored in this table, so that the cost of storing
+	// a large key is amortized by each bucket that references it.
+	SpanStatsUniqueKeysTableSchema = `
+CREATE TABLE system.span_stats_unique_keys (
+    -- Every key has a unique id. We can't use the value of the key itself
+	-- because we want the cost of storing the key to 
+	-- amortize with repeated references. A UUID is 16 bytes,
+	-- but a roachpb.Key can be arbitrarily large.
+	id UUID DEFAULT gen_random_uuid(),
+	
+	-- key_bytes stores the raw bytes of a roachpb.Key.
+	key_bytes BYTES,
+  	CONSTRAINT "primary" PRIMARY KEY (id),
+	FAMILY "primary" (id, key_bytes)
+);`
+
+	// SpanStatsBucketsTableSchema defines the schema to store
+	// keyvispb.SpanStats objects.
+	SpanStatsBucketsTableSchema = `
+CREATE TABLE system.span_stats_buckets (
+    -- Every bucket has a unique id.
+	id UUID DEFAULT gen_random_uuid(),
+	
+	-- The bucket belongs to sample_id
+	sample_id UUID NOT NULL,
+	
+	-- The uuid of this bucket's span's start key.
+	start_key_id UUID NOT NULL,
+	
+	-- The uuid of this bucket's span's start key.
+	end_key_id UUID NOT NULL,
+	
+	-- The number of KV requests destined for this span. 
+	requests INT NOT NULL,
+  	CONSTRAINT "primary" PRIMARY KEY (id),
+	FAMILY "primary" (id, sample_id, start_key_id, end_key_id, requests)
+);`
+
+	// SpanStatsSamplesTableSchema defines the schema to store
+	// a keyvispb.Sample.
+	SpanStatsSamplesTableSchema = `
+CREATE TABLE system.span_stats_samples (
+    -- Every sample has a unique id.
+	id UUID DEFAULT gen_random_uuid(),
+	
+	-- sample_time represents the time the sample ended.
+	-- The sample's start time is therefore equal to sample_time - keyvissettings.SampleInterval.
+	sample_time TIMESTAMP NOT NULL DEFAULT now(),
+	CONSTRAINT "primary" PRIMARY KEY (id),
+	FAMILY "primary" (id, sample_time)
+);`
+
+	// SpanStatsTenantBoundariesTableSchema stores the boundaries that a tenant
+	// wants KV to collect statistics for. `boundaries` is populated with the
+	// keyvispb.UpdateBoundariesRequest proto.
+	SpanStatsTenantBoundariesTableSchema = `
+CREATE TABLE system.span_stats_tenant_boundaries (
+	tenant_id    INT8 NOT NULL,
+	boundaries	 BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id),
+	FAMILY "primary" (tenant_id, boundaries)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -969,6 +1034,10 @@ func MakeSystemTables() []SystemTable {
 		SpanCountTable,
 		SystemPrivilegeTable,
 		SystemExternalConnectionsTable,
+		SpanStatsTenantBoundariesTable,
+		SpanStatsUniqueKeysTable,
+		SpanStatsBucketsTable,
+		SpanStatsSamplesTable,
 	}
 }
 
@@ -2907,6 +2976,136 @@ var (
 				KeyColumnNames:      []string{"job_id", "info_key", "written"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			}),
+	)
+
+	genRandomUUIDString = "gen_random_uuid()"
+
+	SpanStatsUniqueKeysTable = makeSystemTable(
+		SpanStatsUniqueKeysTableSchema,
+		systemTable(
+			catconstants.SpanStatsUniqueKeys,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "key_bytes", ID: 2, Type: types.Bytes, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"id", "key_bytes"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+					DefaultColumnID: 2,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					//catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	SpanStatsBucketsTable = makeSystemTable(
+		SpanStatsBucketsTableSchema,
+		systemTable(
+			catconstants.SpanStatsBuckets,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "sample_id", ID: 2, Type: types.Uuid},
+				{Name: "start_key_id", ID: 3, Type: types.Uuid},
+				{Name: "end_key_id", ID: 4, Type: types.Uuid},
+				{Name: "requests", ID: 5, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{"id", "sample_id", "start_key_id",
+						"end_key_id", "requests"},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	SpanStatsSamplesTable = makeSystemTable(
+		SpanStatsSamplesTableSchema,
+		systemTable(
+			catconstants.SpanStatsSamples, descpb.InvalidID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "sample_time", ID: 2, Type: types.Timestamp,
+					DefaultExpr: &nowString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"id", "sample_time"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+					DefaultColumnID: 2,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	SpanStatsTenantBoundariesTableTTL = 60 * time.Minute
+	SpanStatsTenantBoundariesTable    = makeSystemTable(
+		SpanStatsTenantBoundariesTableSchema,
+		systemTable(
+			catconstants.SpanStatsTenantBoundaries,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int},
+				{Name: "boundaries", ID: 2, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"tenant_id", "boundaries"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+					DefaultColumnID: 2,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"tenant_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
 			},
 		),
 	)

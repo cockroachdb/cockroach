@@ -30,6 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatsconsumer"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -272,6 +275,9 @@ type sqlServerArgs struct {
 
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
+
+	// Used by the Key Visualizer job.
+	spanStatsAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
@@ -1144,6 +1150,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// versions.
 		var c upgrade.Cluster
 		var systemDeps upgrade.SystemDeps
+		keyVisKnobs, _ := cfg.TestingKnobs.KeyVisualizer.(*keyvisualizer.TestingKnobs)
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
 				NodeLiveness:     nodeLiveness,
@@ -1152,10 +1159,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				DB:               cfg.db,
 			})
 			systemDeps = upgrade.SystemDeps{
-				Cluster:    c,
-				DB:         cfg.internalDB,
-				DistSender: cfg.distSender,
-				Stopper:    cfg.stopper,
+				Cluster:     c,
+				DB:          cfg.internalDB,
+				Settings:    cfg.Settings,
+				JobRegistry: jobRegistry,
+				DistSender:  cfg.distSender,
+				Stopper:     cfg.stopper,
+				KeyVisKnobs: keyVisKnobs,
 			}
 		} else {
 			c = upgradecluster.NewTenantCluster(cfg.db)
@@ -1221,6 +1231,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if cfg.sqlInstanceReader != nil {
 		waitForInstanceReaderStarted = cfg.sqlInstanceReader.WaitForStarted
 	}
+
+	if codec.ForSystemTenant() {
+		ri := kvcoord.MakeRangeIterator(cfg.distSender)
+		spanStatsConsumer := spanstatsconsumer.New(
+			cfg.spanStatsAccessor,
+			&ri,
+			cfg.Settings,
+			cfg.circularInternalExecutor,
+		)
+		execCfg.SpanStatsConsumer = spanStatsConsumer
+	}
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.internalDB,

@@ -172,6 +172,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
         "//pkg/keys",
+        "//pkg/keyvisualizer",
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",

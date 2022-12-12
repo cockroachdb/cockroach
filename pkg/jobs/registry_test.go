@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -123,6 +124,9 @@ func TestRegistryGC(t *testing.T) {
 			UpgradeManager: &upgradebase.TestingKnobs{
 				// This test wants to look at job records.
 				DontUseJobs: true,
+			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{
+				SkipJobBootstrap: true,
 			},
 		},
 	})
@@ -269,6 +273,9 @@ func TestRegistryGCPagination(t *testing.T) {
 				// This test wants to count job records.
 				DontUseJobs: true,
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{
+				SkipJobBootstrap: true,
+			},
 		},
 	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -318,6 +325,9 @@ func TestBatchJobsCreation(t *testing.T) {
 						// DisableAdoptions needs this.
 						UpgradeManager: &upgradebase.TestingKnobs{
 							DontUseJobs: true,
+						},
+						KeyVisualizer: &keyvisualizer.TestingKnobs{
+							SkipJobBootstrap: true,
 						},
 					},
 				}
@@ -492,6 +502,9 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					DontUseJobs: true,
+				},
+				KeyVisualizer: &keyvisualizer.TestingKnobs{
+					SkipJobBootstrap: true,
 				},
 			},
 		}
@@ -1024,6 +1037,9 @@ func TestJobIdleness(t *testing.T) {
 					Cancel: &intervalOverride,
 				},
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{
+				SkipJobBootstrap: true,
+			},
 		},
 	})
 	defer s.Stopper().Stop(ctx)
@@ -1163,6 +1179,9 @@ func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 			// DisableAdoptions needs this.
 			UpgradeManager: &upgradebase.TestingKnobs{
 				DontUseJobs: true,
+			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{
+				SkipJobBootstrap: true,
 			},
 		},
 	})

@@ -52,6 +52,10 @@ translate database=system
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -108,6 +112,10 @@ translate database=system
 /Table/5{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/5{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/5{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -170,3 +178,7 @@ full-translate
 /Table/5{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/5{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/5{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
