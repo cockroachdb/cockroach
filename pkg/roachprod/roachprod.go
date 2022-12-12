@@ -1406,6 +1406,10 @@ func StartGrafana(
 		// Configure scraping on all nodes in the cluster
 		promCfg.WithCluster(nodes)
 		promCfg.WithNodeExporter(nodes)
+		// Scrape all workload prometheus ports, just in case.
+		for _, i := range nodes {
+			promCfg.WithWorkload(fmt.Sprintf("workload_on_n%d", i), i, 0 /* use default port */)
+		}
 
 		// By default, spin up a grafana server
 		promCfg.Grafana.Enabled = true
