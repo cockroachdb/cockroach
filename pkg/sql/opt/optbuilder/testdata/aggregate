@@ -4781,3 +4781,30 @@ project
                      │              └── unnest:2
                      └── projections
                           └── CASE WHEN arr:1 IS NULL THEN '[]' ELSE json_agg:3 END [as=json_agg:4]
+
+# Regression test for incorrectly ignoring NULLS LAST in aggregate functions (#91295).
+exec-ddl
+CREATE TABLE nulls_last_test (
+    id INT NULL
+)
+----
+
+build
+SELECT array_agg(id ORDER BY id NULLS LAST) FROM nulls_last_test
+----
+scalar-group-by
+ ├── columns: array_agg:6
+ ├── window partition=() ordering=+5,+1
+ │    ├── columns: id:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 column5:5!null array_agg:6
+ │    ├── project
+ │    │    ├── columns: column5:5!null id:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    ├── scan nulls_last_test
+ │    │    │    └── columns: id:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    └── projections
+ │    │         └── id:1 IS NULL [as=column5:5]
+ │    └── windows
+ │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+ │              └── id:1
+ └── aggregations
+      └── const-agg [as=array_agg:6]
+           └── array_agg:6
