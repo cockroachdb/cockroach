@@ -847,13 +847,17 @@ func NewColOperator(
 			estimatedRowCount := spec.EstimatedRowCount
 			var scanOp colfetcher.ScanOperator
 			var resultTypes []*types.T
-			var foundUDT bool
+			var foundNonEnumUDT bool
 			fetchSpec := core.TableReader.FetchSpec
 			for _, c := range fetchSpec.KeyAndSuffixColumns {
-				foundUDT = foundUDT || c.Type.UserDefined()
+				if c.Type.UserDefined() && c.Type.Family() != types.EnumFamily {
+					foundNonEnumUDT = true
+				}
 			}
 			for _, c := range fetchSpec.FetchedColumns {
-				foundUDT = foundUDT || c.Type.UserDefined()
+				if c.Type.UserDefined() && c.Type.Family() != types.EnumFamily {
+					foundNonEnumUDT = true
+				}
 			}
 			var foundGet bool
 			for i := range core.TableReader.Spans {
@@ -862,7 +866,7 @@ func NewColOperator(
 					break
 				}
 			}
-			if !foundUDT && !foundGet && !flowCtx.TraceKV &&
+			if !foundNonEnumUDT && !foundGet && !flowCtx.TraceKV &&
 				flowCtx.EvalCtx.SessionData().PlanDirectScan &&
 				row.GetKeyLockingStrength(core.TableReader.LockingStrength) == lock.None &&
 				core.TableReader.LockingWaitPolicy != descpb.ScanLockingWaitPolicy_SKIP_LOCKED {

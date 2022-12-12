@@ -61,7 +61,10 @@ func (a *cFetcherTableArgs) populateTypes(cols []fetchpb.IndexFetchSpec_Column) 
 
 // populateTableArgs fills in cFetcherTableArgs.
 func populateTableArgs(
-	ctx context.Context, fetchSpec *fetchpb.IndexFetchSpec, typeResolver *descs.DistSQLTypeResolver,
+	ctx context.Context,
+	fetchSpec *fetchpb.IndexFetchSpec,
+	typeResolver *descs.DistSQLTypeResolver,
+	allowUnhydratedEnums bool,
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
@@ -73,13 +76,21 @@ func populateTableArgs(
 	// they are hydrated. In row execution engine it is done during the processor
 	// initialization, but neither ColBatchScan nor cFetcher are processors, so we
 	// need to do the hydration ourselves.
-	for i := range args.spec.FetchedColumns {
-		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.FetchedColumns[i].Type, typeResolver); err != nil {
+	for _, c := range args.spec.FetchedColumns {
+		t := c.Type
+		if allowUnhydratedEnums && t.Family() == types.EnumFamily {
+			continue
+		}
+		if err := typedesc.EnsureTypeIsHydrated(ctx, t, typeResolver); err != nil {
 			return nil, err
 		}
 	}
-	for i := range args.spec.KeyAndSuffixColumns {
-		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.KeyAndSuffixColumns[i].Type, typeResolver); err != nil {
+	for _, c := range args.spec.KeyAndSuffixColumns {
+		t := c.Type
+		if allowUnhydratedEnums && t.Family() == types.EnumFamily {
+			continue
+		}
+		if err := typedesc.EnsureTypeIsHydrated(ctx, t, typeResolver); err != nil {
 			return nil, err
 		}
 	}

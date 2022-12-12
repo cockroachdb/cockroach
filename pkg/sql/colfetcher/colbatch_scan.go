@@ -148,7 +148,7 @@ func newColBatchScan(
 	}
 
 	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
-	tableArgs, err := populateTableArgs(ctx, &spec.FetchSpec, typeResolver)
+	tableArgs, err := populateTableArgs(ctx, &spec.FetchSpec, typeResolver, false /* allowUnhydratedEnums */)
 	if err != nil {
 		return nil, nil, nil, err
 	}
