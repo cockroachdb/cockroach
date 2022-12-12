@@ -107,7 +107,6 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/encoding/csv",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
