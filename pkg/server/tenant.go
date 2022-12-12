@@ -108,6 +108,9 @@ type SQLServerWrapper struct {
 
 	// Used for multi-tenant cost control (on the tenant side).
 	costController multitenant.TenantSideCostController
+
+	// promRuleExporter is used by the tenant to expose the prometheus rules.
+	promRuleExporter *metric.PrometheusRuleExporter
 }
 
 // Drain idempotently activates the draining mode.
@@ -324,6 +327,7 @@ func NewTenantServer(
 
 		externalStorageBuilder: args.externalStorageBuilder,
 		costController:         args.costController,
+		promRuleExporter:       args.promRuleExporter,
 	}, nil
 }
 
@@ -581,8 +585,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
 		newAPIV2Server(workersCtx, &apiV2ServerOpts{
-			sqlServer: s.sqlServer,
-			db:        s.db,
+			admin:            s.tenantAdmin,
+			status:           s.tenantStatus,
+			promRuleExporter: s.promRuleExporter,
+			sqlServer:        s.sqlServer,
+			db:               s.db,
 		}), /* apiServer */
 	); err != nil {
 		return err
@@ -730,6 +737,8 @@ func makeTenantSQLServerArgs(
 	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
 
 	registry := metric.NewRegistry()
+	ruleRegistry := metric.NewRuleRegistry()
+	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 
 	var rpcTestingKnobs rpc.ContextTestingKnobs
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
@@ -907,7 +916,8 @@ func makeTenantSQLServerArgs(
 			kvStoresIterator:     kvserverbase.UnsupportedStoresIterator{},
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
-			tenantConnect: tenantConnect,
+			tenantConnect:    tenantConnect,
+			promRuleExporter: promRuleExporter,
 		},
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,

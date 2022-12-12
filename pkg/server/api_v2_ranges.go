@@ -103,12 +103,12 @@ type nodesResponse struct {
 //	  description: List nodes response.
 //	  schema:
 //	    "$ref": "#/definitions/nodesResponse"
-func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
+func (a *apiV2SystemServer) listNodes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
 	ctx = apiToOutgoingGatewayCtx(ctx, r)
 
-	nodes, next, err := a.status.nodesHelper(ctx, limit, offset)
+	nodes, next, err := a.systemStatus.nodesHelper(ctx, limit, offset)
 	if err != nil {
 		apiV2InternalError(ctx, err, w)
 		return
@@ -134,6 +134,10 @@ func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSONResponse(ctx, w, 200, resp)
+}
+
+func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
+	writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
 func parseRangeIDs(input string, w http.ResponseWriter) (ranges []roachpb.RangeID, ok bool) {
@@ -372,7 +376,7 @@ type nodeRangesResponse struct {
 //	  description: Node ranges response.
 //	  schema:
 //	    "$ref": "#/definitions/nodeRangesResponse"
-func (a *apiV2Server) listNodeRanges(w http.ResponseWriter, r *http.Request) {
+func (a *apiV2SystemServer) listNodeRanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = apiToOutgoingGatewayCtx(ctx, r)
 	vars := mux.Vars(r)
@@ -394,7 +398,7 @@ func (a *apiV2Server) listNodeRanges(w http.ResponseWriter, r *http.Request) {
 		RangeIDs: ranges,
 	}
 	limit, offset := getSimplePaginationValues(r)
-	statusResp, next, err := a.status.rangesHelper(ctx, req, limit, offset)
+	statusResp, next, err := a.systemStatus.rangesHelper(ctx, req, limit, offset)
 	if err != nil {
 		apiV2InternalError(ctx, err, w)
 		return
@@ -409,6 +413,10 @@ func (a *apiV2Server) listNodeRanges(w http.ResponseWriter, r *http.Request) {
 		resp.Ranges = append(resp.Ranges, ri)
 	}
 	writeJSONResponse(ctx, w, 200, resp)
+}
+
+func (a *apiV2Server) listNodeRanges(w http.ResponseWriter, r *http.Request) {
+	writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
 type responseError struct {
