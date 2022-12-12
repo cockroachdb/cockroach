@@ -724,8 +724,8 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient: roachpb.NewInternalClient(conn),
-				StatusClient:   serverpb.NewStatusClient(conn),
+				InternalClient:      roachpb.NewInternalClient(conn),
+				StatusClient:        serverpb.NewStatusClient(conn),
 			}, nil
 		}
 	}
