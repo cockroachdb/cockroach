@@ -12,6 +12,7 @@ package cacheutil
 
 import (
 	"context"
+	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -28,6 +29,7 @@ import (
 // during user authentication and session initialization.
 type Cache struct {
 	syncutil.Mutex
+	WarmingGroup  *sync.WaitGroup
 	boundAccount  mon.BoundAccount
 	tableVersions []descpb.DescriptorVersion
 	// TODO(richardjcai): In go1.18 we can use generics.
@@ -42,6 +44,7 @@ type Cache struct {
 func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables int) *Cache {
 	tableVersions := make([]descpb.DescriptorVersion, numSystemTables)
 	return &Cache{
+		WarmingGroup:  &sync.WaitGroup{},
 		tableVersions: tableVersions,
 		boundAccount:  account,
 		stopper:       stopper,

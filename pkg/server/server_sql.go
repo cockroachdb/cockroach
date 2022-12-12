@@ -1519,6 +1519,9 @@ func (s *SQLServer) preStart(
 	)
 
 	scheduledlogging.Start(ctx, stopper, s.execCfg.DB, s.execCfg.Settings, s.internalExecutor, s.execCfg.CaptureIndexUsageStatsKnobs)
+	if err := stopper.RunAsyncTask(ctx, "warm-synthetic-privilege-cache", s.execCfg.WarmSyntheticPrivilegeCacheForVirtualTables); err != nil {
+		return err
+	}
 	return nil
 }
 
