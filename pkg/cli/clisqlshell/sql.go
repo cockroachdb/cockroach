@@ -974,6 +974,7 @@ func (c *cliState) doStartLine(nextState cliStateEnum) cliStateEnum {
 	c.atEOF = false
 	c.partialLines = c.partialLines[:0]
 	c.partialStmtsLen = 0
+	c.concatLines = ""
 
 	c.useContinuePrompt = false
 
@@ -1243,7 +1244,8 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\.`:
 		if c.inCopy() {
-			c.concatLines += "\n" + `\.`
+			c.partialLines = append(c.partialLines, `\.`)
+			c.partialStmtsLen++
 			return cliRunStatement
 		}
 		return c.invalidSyntax(errState)
@@ -1602,7 +1604,7 @@ func (c *cliState) doPrepareStatementLine(
 		(c.inCopy() && (strings.HasSuffix(c.concatLines, "\n"+`\.`) || c.atEOF)) ||
 		// We're always at the end of a statement if EOF is reached in the
 		// single statement mode.
-		c.singleStatement && c.atEOF
+		(c.singleStatement && c.atEOF)
 	if c.atEOF {
 		// Definitely no more input expected.
 		if !endOfStmt {
