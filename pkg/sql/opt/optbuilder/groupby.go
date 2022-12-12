@@ -723,6 +723,11 @@ func (b *Builder) buildAggregateFunction(
 	// If we have ORDER BY, add the ordering columns to the tempScope.
 	if f.OrderBy != nil {
 		for _, o := range f.OrderBy {
+			nullsDefaultOrder := b.hasDefaultNullsOrder(o)
+			if !nullsDefaultOrder {
+				expr := tree.NewTypedIsNullExpr(o.Expr.(tree.TypedExpr))
+				b.buildAggArg(expr, &info, tempScope, fromScope)
+			}
 			b.buildAggArg(o.Expr.(tree.TypedExpr), &info, tempScope, fromScope)
 		}
 	}

@@ -3802,3 +3802,31 @@ query I
 SELECT min(a) FROM t2 WHERE (b <= 11 AND c < 50) OR (b = 11 AND c = 50) OR (b >= 11 AND c > 50)
 ----
 0
+
+# Regression test for incorrectly ignoring NULLS LAST in aggregate functions (#91295).
+statement ok
+CREATE TABLE nulls_last_test (
+    id INT NULL
+);
+INSERT INTO nulls_last_test VALUES
+  (1),
+  (2),
+  (null),
+  (3);
+
+query T
+SELECT array_agg(id ORDER BY id NULLS LAST) FROM nulls_last_test
+----
+{1,2,3,NULL}
+
+statement ok
+SET null_ordered_last = true
+
+# We should get the same result using the session variable.
+query T
+SELECT array_agg(id ORDER BY id) FROM nulls_last_test
+----
+{1,2,3,NULL}
+
+statement ok
+RESET null_ordered_last
