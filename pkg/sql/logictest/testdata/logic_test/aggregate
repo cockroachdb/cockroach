@@ -3802,3 +3802,17 @@ query I
 SELECT min(a) FROM t2 WHERE (b <= 11 AND c < 50) OR (b = 11 AND c = 50) OR (b >= 11 AND c > 50)
 ----
 0
+
+# Regression test for incorrectly ignoring NULLS LAST in aggregate functions (#91295).
+statement ok
+CREATE TABLE nulls_last_test (
+    id INT NULL
+);
+INSERT INTO nulls_last_test VALUES
+  (1),
+  (2),
+  (null),
+  (3);
+
+query error unimplemented: non-default NULLs order in a window or aggregate function
+SELECT array_agg(id ORDER BY id NULLS LAST) FROM nulls_last_test

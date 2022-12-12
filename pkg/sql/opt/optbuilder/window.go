@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -418,6 +419,10 @@ func (b *Builder) buildWindowOrdering(
 ) opt.Ordering {
 	ord := make(opt.Ordering, 0, len(orderBy))
 	for j, t := range orderBy {
+		if !b.hasDefaultNullsOrder(t) {
+			panic(unimplemented.NewWithIssue(93419, "non-default NULLs order in a window or aggregate function"))
+		}
+
 		// ORDER BY (a, b) => ORDER BY a, b.
 		te := inScope.resolveType(t.Expr, types.Any)
 		cols := flattenTuples([]tree.TypedExpr{te})

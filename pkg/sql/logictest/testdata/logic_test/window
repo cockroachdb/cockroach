@@ -4345,3 +4345,24 @@ query I
 SELECT lead(x, 10, y::INT4) OVER () FROM (VALUES (1, 2)) v(x, y);
 ----
 2
+
+# Regression test for incorrectly ignoring NULLS LAST in window functions (#91295).
+statement ok
+CREATE TABLE nulls_last_test (
+    id INT NULL
+);
+INSERT INTO nulls_last_test VALUES
+  (1),
+  (2),
+  (null),
+  (3);
+
+query error unimplemented: non-default NULLs order in a window or aggregate function
+SELECT
+  id,
+  row_number() OVER (ORDER BY id NULLS LAST) AS row_num_using_nulls_last,
+  row_number() OVER (ORDER BY COALESCE(id, 999)) AS row_num_using_coalesce
+FROM
+  nulls_last_test
+ORDER BY
+  id NULLS LAST
