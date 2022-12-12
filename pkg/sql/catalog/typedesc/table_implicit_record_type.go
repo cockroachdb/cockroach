@@ -80,7 +80,8 @@ func CreateImplicitRecordTypeFromTableDesc(
 		Name: &types.UserDefinedTypeName{
 			Name: descriptor.GetName(),
 		},
-		Version: uint32(descriptor.GetVersion()),
+		Version:            uint32(descriptor.GetVersion()),
+		ImplicitRecordType: true,
 	}
 
 	// Note: Implicit types for virtual tables are hardcoded to have USAGE
