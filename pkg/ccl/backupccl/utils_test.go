@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -126,7 +126,7 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	cleanupFn := func() {
-		backuputils.CheckForInvalidDescriptors(t, tc.Conns[0])
+		backuptestutils.CheckForInvalidDescriptors(t, tc.Conns[0])
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
@@ -185,7 +185,7 @@ func backupRestoreTestSetupEmptyWithParams(
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	cleanupFn := func() {
-		backuputils.CheckForInvalidDescriptors(t, tc.Conns[0])
+		backuptestutils.CheckForInvalidDescriptors(t, tc.Conns[0])
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 	}
 
@@ -208,7 +208,7 @@ func createEmptyCluster(
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	cleanupFn := func() {
-		backuputils.CheckForInvalidDescriptors(t, tc.Conns[0])
+		backuptestutils.CheckForInvalidDescriptors(t, tc.Conns[0])
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFn()         // cleans up dir, which is the nodelocal:// storage
 	}
