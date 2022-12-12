@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -137,8 +136,6 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 // right side is assigned rightRangeID and starts at splitKey. The supplied
 // expiration is the "sticky bit" stored on the right descriptor.
 func prepareSplitDescs(
-	ctx context.Context,
-	st *cluster.Settings,
 	rightRangeID roachpb.RangeID,
 	splitKey roachpb.RKey,
 	expiration hlc.Timestamp,
@@ -187,8 +184,7 @@ func splitTxnAttempt(
 	desc := oldDesc
 	oldDesc = nil // prevent accidental use
 
-	leftDesc, rightDesc := prepareSplitDescs(
-		ctx, store.ClusterSettings(), rightRangeID, splitKey, expiration, desc)
+	leftDesc, rightDesc := prepareSplitDescs(rightRangeID, splitKey, expiration, desc)
 
 	// Update existing range descriptor for left hand side of
 	// split. Note that we mutate the descriptor for the left hand
