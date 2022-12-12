@@ -546,6 +546,7 @@ func makeTenantSQLServerArgs(
 		internalExecutorFactory,
 		db,
 		costController,
+		registry,
 	)
 
 	grpcServer := newGRPCServer(rpcContext)

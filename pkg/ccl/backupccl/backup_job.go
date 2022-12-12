@@ -405,7 +405,6 @@ func (b *backupResumer) ForceRealSpan() bool {
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
-	resumerSpan := tracing.SpanFromContext(ctx)
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
@@ -632,14 +631,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res roachpb.RowCount
-	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		retryCount++
-		resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
-			Operation:     "backupResumer.Resume",
-			AttemptNumber: retryCount,
-			RetryError:    tracing.RedactAndTruncateError(err),
-		})
 		res, err = backup(
 			ctx,
 			p,

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 )
@@ -154,6 +155,7 @@ func ExternalStorageFromURI(
 	ief sqlutil.InternalExecutorFactory,
 	kvDB *kv.DB,
 	limiters Limiters,
+	metrics metric.Struct,
 	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
@@ -161,7 +163,7 @@ func ExternalStorageFromURI(
 		return nil, err
 	}
 	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory,
-		ie, ief, kvDB, limiters, opts...)
+		ie, ief, kvDB, limiters, metrics, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -209,8 +211,14 @@ func MakeExternalStorage(
 	ief sqlutil.InternalExecutorFactory,
 	kvDB *kv.DB,
 	limiters Limiters,
+	metrics metric.Struct,
 	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
+	var cloudMetrics *Metrics
+	var ok bool
+	if cloudMetrics, ok = metrics.(*Metrics); !ok {
+		return nil, errors.Newf("invalid metrics type: %T", metrics)
+	}
 	args := ExternalStorageContext{
 		IOConf:                  conf,
 		Settings:                settings,
@@ -220,6 +228,7 @@ func MakeExternalStorage(
 		DB:                      kvDB,
 		Options:                 opts,
 		Limiters:                limiters,
+		MetricsRecorder:         cloudMetrics,
 	}
 	if conf.DisableOutbound && dest.Provider != cloudpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")
@@ -245,6 +254,7 @@ func MakeExternalStorage(
 			ExternalStorage: e,
 			lim:             limiters[dest.Provider],
 			ioRecorder:      options.ioAccountingInterceptor,
+			metricsRecorder: newMetricsReadWriter(cloudMetrics),
 		}, nil
 	}
 
@@ -295,8 +305,9 @@ func MakeLimiters(ctx context.Context, sv *settings.Values) Limiters {
 type esWrapper struct {
 	ExternalStorage
 
-	lim        rwLimiter
-	ioRecorder ReadWriterInterceptor
+	lim             rwLimiter
+	ioRecorder      ReadWriterInterceptor
+	metricsRecorder ReadWriterInterceptor
 }
 
 func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
@@ -306,6 +317,8 @@ func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx
 	if e.ioRecorder != nil {
 		r = e.ioRecorder.Reader(ctx, e.ExternalStorage, r)
 	}
+
+	r = e.metricsRecorder.Reader(ctx, e.ExternalStorage, r)
 	return r
 }
 
@@ -316,6 +329,8 @@ func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCl
 	if e.ioRecorder != nil {
 		w = e.ioRecorder.Writer(ctx, e.ExternalStorage, w)
 	}
+
+	w = e.metricsRecorder.Writer(ctx, e.ExternalStorage, w)
 	return w
 }
 
