@@ -3,26 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "backuputils",
-    srcs = [
-        "testutils.go",
-        "utils.go",
-    ],
+    srcs = ["utils.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/base",
-        "//pkg/ccl/backupccl/backupbase",
-        "//pkg/cloud",
-        "//pkg/testutils",
-        "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/workload/bank",
-        "//pkg/workload/workloadsql",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_logtags//:logtags",
-        "@com_github_kr_pretty//:pretty",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = ["//pkg/cloud"],
 )
 
 get_x_data(name = "get_x_data")

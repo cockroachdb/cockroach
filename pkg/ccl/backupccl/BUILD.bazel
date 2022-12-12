@@ -193,7 +193,7 @@ go_test(
         "//pkg/ccl/backupccl/backupencryption",
         "//pkg/ccl/backupccl/backupinfo",
         "//pkg/ccl/backupccl/backuppb",
-        "//pkg/ccl/backupccl/backuputils",
+        "//pkg/ccl/backupccl/backuptestutils",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
