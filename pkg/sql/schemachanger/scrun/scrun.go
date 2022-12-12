@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,8 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var enforcePlannerSanityCheck = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.schemachanger.strict_planning_sanity_check.enabled",
+	"enforce strict sanity checks in the declarative schema changer planner",
+	buildutil.CrdbTestBuild,
 )
 
 // RunStatementPhase executes in-transaction schema changes for the targeted
@@ -67,6 +76,7 @@ func runTransactionPhase(
 	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
+		EnforcePlannerSanityCheck:  enforcePlannerSanityCheck.Get(&deps.ClusterSettings().SV),
 	})
 	if err != nil {
 		return scpb.CurrentState{}, jobspb.InvalidJobID, err
