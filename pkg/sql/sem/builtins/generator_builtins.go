@@ -194,6 +194,64 @@ func (l *logicalReplicationSlotStream) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// Hacking for now. This should probably be changed to use avroDataRecord
+// NOTE: untested
+func parseJSONValueForPGLogicalPayload(s string) string {
+	// First value found is the record type
+	recordType, colValues, found := strings.Cut(s, ":")
+	if !found {
+		return ""
+	}
+	recordType = strings.Trim(recordType, "{\"")
+	var recordString string
+	if recordType == "resolved" {
+		// This record can be ignored for pg logical replication
+		return ""
+	}
+	if recordType == "after" {
+		// Peek ahead to see if this is an INSERT or a DELETE
+		if strings.Contains(recordType, "after:null") {
+			recordString = "DELETE"
+		} else {
+			recordString = "INSERT"
+		}
+	} else {
+		// FIXME: still have to handle UPDATE
+		panic("Unhandled log record type")
+	}
+
+	// Because hard coding things is so en vogue these days
+	tableName := "test_table"
+	payload := fmt.Sprintf("table %s: %s:", tableName, recordString)
+
+	// Loop through all key values and populate a string based on the trimming/replacing used for keys below
+	colValue, colValues, found := strings.Cut(colValues, ",")
+	for ; found; colValue, colValues, found = strings.Cut(colValues, ",") {
+		// This is ugly and very inefficient.  Fix it!
+		colValue = strings.ReplaceAll(colValue, "{", "")
+		colValue = strings.ReplaceAll(colValue, "}", "")
+		colValue = strings.ReplaceAll(colValue, "\"", "")
+		colValue = strings.ReplaceAll(colValue, " ", "")
+		// And while we're hard coding, hard code the type too
+		// This part is especially bad, and will prevent DMS from working
+		colValue = strings.Replace(colValue, ":", "[int]:", 1)
+		payload = fmt.Sprintf("%s %s", payload, colValue)
+	}
+	// Handle last column
+	// This is ugly and very inefficient.  Fix it!
+	colValue = strings.ReplaceAll(colValue, "{", "")
+	colValue = strings.ReplaceAll(colValue, "}", "")
+	colValue = strings.ReplaceAll(colValue, "\"", "")
+	colValue = strings.ReplaceAll(colValue, " ", "")
+	// And while we're hard coding, hard code the type too
+	colValue = strings.Replace(colValue, ":", "[int]:", 1)
+	payload = fmt.Sprintf("%s %s", payload, colValue)
+
+	// FIXME: need to figure out how to do null handling for DELETE after
+	//  debugging.
+	return payload
+}
+
 func (l *logicalReplicationSlotStream) Values() (tree.Datums, error) {
 	curr := l.curr
 	if l.showCommitTxn {
@@ -210,10 +268,11 @@ func (l *logicalReplicationSlotStream) Values() (tree.Datums, error) {
 			tree.NewDString(fmt.Sprintf("BEGIN %d", curr.XID)),
 		}, nil
 	}
+	s := parseJSONValueForPGLogicalPayload(string(curr.Value))
 	return []tree.Datum{
 		tree.NewDString(fmt.Sprintf("0/%x", curr.LSN)),
 		tree.NewDInt(tree.DInt(curr.XID)),
-		tree.NewDString(fmt.Sprintf("???? FIGURE IT OUT ???? %s %s", curr.Key, curr.Value)),
+		tree.NewDString(s),
 	}, nil
 }
 
