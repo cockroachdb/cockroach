@@ -122,12 +122,11 @@ scan: "r" -> /BYTES/r3 @3.000000000,0
 run ok
 scan k=a end=z ts=1 tombstones
 ----
-scan: "c" -> /<empty> @1.000000000,0
+scan: "a"-"z" -> <no data>
 
 run ok
 scan k=a end=z ts=2 tombstones
 ----
-scan: "c" -> /<empty> @1.000000000,0
 scan: "e" -> /BYTES/e2 @2.000000000,0
 scan: "f" -> /BYTES/f2 @2.000000000,0
 scan: "g" -> /BYTES/g2 @2.000000000,0
@@ -212,7 +211,6 @@ scan: "h" -> /<empty> @3.000000000,0
 run ok
 scan k=d end=i ts=2 tombstones
 ----
-scan: "d" -> /<empty> @1.000000000,0
 scan: "e" -> /BYTES/e2 @2.000000000,0
 scan: "f" -> /BYTES/f2 @2.000000000,0
 scan: "g" -> /BYTES/g2 @2.000000000,0
@@ -289,7 +287,7 @@ scan: "a" -> /BYTES/a3 @3.000000000,0
 run ok
 scan k=a end=z ts=1 reverse tombstones
 ----
-scan: "c" -> /<empty> @1.000000000,0
+scan: "a"-"z" -> <no data>
 
 run ok
 scan k=a end=z ts=2 reverse tombstones
@@ -298,7 +296,6 @@ scan: "h" -> /BYTES/h2 @2.000000000,0
 scan: "g" -> /BYTES/g2 @2.000000000,0
 scan: "f" -> /BYTES/f2 @2.000000000,0
 scan: "e" -> /BYTES/e2 @2.000000000,0
-scan: "c" -> /<empty> @1.000000000,0
 
 run ok
 scan k=a end=z ts=3 reverse tombstones
@@ -383,7 +380,6 @@ scan: "h" -> /BYTES/h2 @2.000000000,0
 scan: "g" -> /BYTES/g2 @2.000000000,0
 scan: "f" -> /BYTES/f2 @2.000000000,0
 scan: "e" -> /BYTES/e2 @2.000000000,0
-scan: "d" -> /<empty> @1.000000000,0
 
 run ok
 scan k=i end=o ts=3 reverse tombstones

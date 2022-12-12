@@ -6,10 +6,11 @@
 #  1    [---)            1   x
 #       a   b                a   b
 #
-# Recall that pebbleMVCCScanner only enables pointSynthesizingIter when it
-# encounters a range key. In the case above, during a reverse scan, the [a-b)@1
-# range key will first become visible to pebbleMVCCScanner when it lands on a@2,
-# so it enabled point synthesis positioned at the a@2 point key. Notice how the
+# Previously, pebbleMVCCScanner used PointSynthesizingIter to synthesize point
+# tombstones. PointSynthesizingIter was only enabled once a range key was
+# encountered. In the case above, during a reverse scan, the [a-b)@1 range key
+# will first become visible to pebbleMVCCScanner when it lands on a@2, so it
+# enabled point synthesis positioned at the a@2 point key. Notice how the
 # iterator has now skipped over the synthetic point tombstone a@1.
 #
 # This is particularly problematic when combined with pebbleMVCCScanner peeking,
@@ -71,7 +72,6 @@ run ok
 scan t=A k=a end=z reverse tombstones
 ----
 scan: "b" -> /BYTES/b3 @3.000000000,0
-scan: "a" -> /<empty> @2.000000000,0
 
 # And with a point between the range tombstone. We place the intent at the
 # lowest timestamp, which is a contrived/unrealistic scenario, and do tombstone
@@ -120,7 +120,6 @@ run ok
 scan t=A k=a end=z reverse tombstones ts=2
 ----
 scan: "b" -> /BYTES/b1 @1.000000000,0
-scan: "a" -> /<empty> @2.000000000,0
 
 run ok
 scan t=A k=a end=z reverse tombstones ts=1
