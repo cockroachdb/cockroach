@@ -4936,9 +4936,9 @@ func GetEnumComponentsFromPhysicalRep(typ *types.T, rep []byte) ([]byte, string,
 	return meta.PhysicalRepresentations[idx], meta.LogicalRepresentations[idx], nil
 }
 
-// MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
+// NewDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
-func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, error) {
+func NewDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, error) {
 	// Return a nice error if the input requested type is types.AnyEnum.
 	if typ.Oid() == oid.T_anyenum {
 		return nil, errors.New("cannot create enum of unspecified type")
@@ -4954,10 +4954,10 @@ func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (*DEnum, erro
 	}, nil
 }
 
-// MakeDEnumFromLogicalRepresentation creates a DEnum of the input type
+// NewDEnumFromLogicalRepresentation creates a DEnum of the input type
 // and input logical representation. It returns an error if the input
 // logical representation is invalid.
-func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error) {
+func NewDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error) {
 	// Return a nice error if the input requested type is types.AnyEnum.
 	if typ.Oid() == oid.T_anyenum {
 		return nil, errors.New("cannot create enum of unspecified type")
@@ -5669,8 +5669,7 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 			)
 		}
 		// We fall back to using the smallest enum value during the dropping period.
-		return MakeDEnumFromPhysicalRepresentation(t,
-			t.TypeMeta.EnumData.PhysicalRepresentations[0])
+		return NewDEnumFromPhysicalRepresentation(t, t.TypeMeta.EnumData.PhysicalRepresentations[0])
 	default:
 		return nil, errors.AssertionFailedf("unhandled type %v", t.SQLString())
 	}

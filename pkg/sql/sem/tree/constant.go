@@ -609,7 +609,7 @@ func (expr *StrVal) ResolveAsType(
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
 		case types.EnumFamily:
-			return MakeDEnumFromPhysicalRepresentation(typ, []byte(expr.s))
+			return NewDEnumFromPhysicalRepresentation(typ, []byte(expr.s))
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:

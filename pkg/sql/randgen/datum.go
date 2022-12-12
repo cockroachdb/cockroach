@@ -273,7 +273,7 @@ func RandDatumWithNullChance(
 			return tree.DNull
 		}
 		// Otherwise, pick a random enum value.
-		d, err := tree.MakeDEnumFromLogicalRepresentation(typ, reps[rng.Intn(len(reps))])
+		d, err := tree.NewDEnumFromLogicalRepresentation(typ, reps[rng.Intn(len(reps))])
 		if err != nil {
 			panic(err)
 		}
