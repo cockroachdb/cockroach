@@ -532,7 +532,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Returns a numerical ID attached to this session. This ID is " +
 				"part of the query cancellation key used by the wire protocol. This " +
-				"function was only added for compatibility, and unlike in Postgres, the" +
+				"function was only added for compatibility, and unlike in Postgres, the " +
 				"returned value does not correspond to a real process ID.",
 			Volatility: tree.VolatilityStable,
 		},
