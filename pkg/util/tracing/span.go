@@ -606,7 +606,7 @@ func (sp *Span) reset(
 			// quiet. We've detected a Span leak nonetheless, but it's likely that the
 			// test that leaked the span has already finished. Panicking in the middle
 			// of an unrelated test would be poor UX.
-			if sp.Tracer().closed() {
+			if sp.i.Tracer().closed() {
 				return
 			}
 			panic(fmt.Sprintf("Span not finished or references not released; "+
