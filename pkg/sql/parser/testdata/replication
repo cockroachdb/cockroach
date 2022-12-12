@@ -1,0 +1,15 @@
+parse
+start_replication slot "bob" logical a/b0b00
+----
+START_REPLICATION SLOT bob LOGICAL a/b0b00 -- normalized!
+START_REPLICATION SLOT bob LOGICAL a/b0b00 -- fully parenthesized
+START_REPLICATION SLOT bob LOGICAL a/b0b00 -- literals removed
+START_REPLICATION SLOT _ LOGICAL _/_ -- identifiers removed
+
+parse
+start_replication slot "bob" logical a00/b0b00 ( "include-timestamps" 'on' )
+----
+START_REPLICATION SLOT bob LOGICAL a00/b0b00 ("include-timestamps" 'on') -- normalized!
+START_REPLICATION SLOT bob LOGICAL a00/b0b00 ("include-timestamps" ('on')) -- fully parenthesized
+START_REPLICATION SLOT bob LOGICAL a00/b0b00 ("include-timestamps" '_') -- literals removed
+START_REPLICATION SLOT _ LOGICAL _/_ (_ 'on') -- identifiers removed

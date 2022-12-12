@@ -256,21 +256,21 @@ func (l *logicalReplicationSlotStream) Values() (tree.Datums, error) {
 	curr := l.curr
 	if l.showCommitTxn {
 		return []tree.Datum{
-			tree.NewDString(fmt.Sprintf("0/%x", curr.LSN+1)),
+			tree.NewDString(replicationslot.FormatLSN(curr.LSN + 1)),
 			tree.NewDInt(tree.DInt(curr.XID)),
 			tree.NewDString(fmt.Sprintf("COMMIT %d", curr.XID)),
 		}, nil
 	}
 	if l.showBeginTxn {
 		return []tree.Datum{
-			tree.NewDString(fmt.Sprintf("0/%x", curr.LSN)),
+			tree.NewDString(replicationslot.FormatLSN(curr.LSN)),
 			tree.NewDInt(tree.DInt(curr.XID)),
 			tree.NewDString(fmt.Sprintf("BEGIN %d", curr.XID)),
 		}, nil
 	}
 	s := parseJSONValueForPGLogicalPayload(string(curr.Value))
 	return []tree.Datum{
-		tree.NewDString(fmt.Sprintf("0/%x", curr.LSN)),
+		tree.NewDString(replicationslot.FormatLSN(curr.LSN)),
 		tree.NewDInt(tree.DInt(curr.XID)),
 		tree.NewDString(s),
 	}, nil
@@ -310,6 +310,19 @@ var generators = map[string]builtinDefinition{
 				// TODO(XXX): check plugin for test_decoding.
 				slotName := string(tree.MustBeDString(args[0]))
 				return &logicalReplicationSlotStream{slotName: slotName, consume: true}, nil
+			},
+			"This function makes adam's dreams come true.",
+			volatility.Volatile,
+		),
+	),
+	"pg_logical_slot_peek_changes": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "name", Typ: types.String}},
+			logicalReplicationSlotStreamType,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				// TODO(XXX): check plugin for test_decoding.
+				slotName := string(tree.MustBeDString(args[0]))
+				return &logicalReplicationSlotStream{slotName: slotName, consume: false}, nil
 			},
 			"This function makes adam's dreams come true.",
 			volatility.Volatile,

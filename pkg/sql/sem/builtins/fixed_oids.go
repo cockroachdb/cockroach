@@ -25,6 +25,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`pg_create_logical_replication_slot(name: string, plugin: string) -> tuple{string AS slot_name, string AS lsn}`: 2058,
 	`pg_drop_replication_slot(slot_name: string) -> void`:                                                           2059,
 	`pg_logical_slot_get_changes(name: string) -> tuple{string AS lsn, int AS xid, string AS data}`:                 2060,
+	`pg_logical_slot_peek_changes(name: string) -> tuple{string AS lsn, int AS xid, string AS data}`:                2061,
 
 	`_st_contains(geometry_a: geometry, geometry_b: geometry) -> bool`:                                                  1765,
 	`_st_containsproperly(geometry_a: geometry, geometry_b: geometry) -> bool`:                                          1753,

@@ -59,6 +59,8 @@ const (
 	// Rows indicates that the statement returns the affected rows after
 	// the statement was applied.
 	Rows
+
+	ReplMode
 	// CopyIn indicates a COPY FROM statement.
 	CopyIn
 	// Unknown indicates that the statement does not have a known
@@ -83,6 +85,7 @@ const (
 	TypeDCL
 	// TCL (Transaction Control Language) deals with a transaction within a database.
 	TypeTCL
+	TypeRepl
 )
 
 // Statements represent a list of statements.

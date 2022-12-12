@@ -437,6 +437,12 @@ func (u *sqlSymUnion) seqOpt() tree.SequenceOption {
 func (u *sqlSymUnion) seqOpts() []tree.SequenceOption {
     return u.val.([]tree.SequenceOption)
 }
+func (u *sqlSymUnion) replOpt() tree.ReplicationOption {
+    return u.val.(tree.ReplicationOption)
+}
+func (u *sqlSymUnion) replOpts() tree.ReplicationOptions {
+    return u.val.(tree.ReplicationOptions)
+}
 func (u *sqlSymUnion) expr() tree.Expr {
     if expr, ok := u.val.(tree.Expr); ok {
         return expr
@@ -936,8 +942,9 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> STABLE START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
+%token <str> STABLE START STATE START_REPLICATION STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
+%token <str> SLOT LOGICAL
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANTS TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
@@ -989,6 +996,8 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> stmt_block
 %type <tree.Statement> stmt stmt_without_legacy_transaction
 
+%type <tree.ReplicationOptions> repl_option_list opt_repl_options
+%type <tree.ReplicationOption> repl_option
 
 %type <tree.Statement> alter_stmt
 %type <tree.Statement> alter_changefeed_stmt
@@ -1240,6 +1249,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> truncate_stmt
 %type <tree.Statement> unlisten_stmt
 %type <tree.Statement> update_stmt
+%type <tree.Statement> repl_stmt
 %type <tree.Statement> upsert_stmt
 %type <tree.Statement> use_stmt
 
@@ -1703,7 +1713,48 @@ stmt_without_legacy_transaction:
 | move_cursor_stmt           // EXTEND WITH HELP: MOVE
 | reindex_stmt
 | unlisten_stmt
+| repl_stmt
 | show_commit_timestamp_stmt // EXTEND WITH HELP: SHOW COMMIT TIMESTAMP
+
+repl_stmt:
+  // This should not be here, but whatever.
+  START_REPLICATION SLOT name LOGICAL name '/' name opt_repl_options
+  {
+    $$.val = &tree.StartReplication{
+      SlotName: tree.Name($3),
+      LSNHigh: tree.Name($5),
+      LSNLow: tree.Name($7),
+      Options: $8.replOpts(),
+    }
+  }
+
+opt_repl_options:
+  '(' repl_option_list ')'
+    {
+      $$.val = $2.replOpts()
+    }
+  | /* EMPTY */ {
+    $$.val = tree.ReplicationOptions(nil)
+  }
+
+repl_option_list:
+  repl_option_list ',' repl_option
+  {
+    $$.val = append($1.replOpts(), $3.replOpt())
+  }
+| repl_option
+  {
+    $$.val = tree.ReplicationOptions{$1.replOpt()}
+  }
+
+repl_option:
+  name string_or_placeholder
+  {
+    $$.val = tree.ReplicationOption{
+      Option: tree.Name($1),
+      Value: $2.expr(),
+    }
+  }
 
 // %Help: ALTER
 // %Category: Group
@@ -15684,6 +15735,9 @@ unreserved_keyword:
 | SQLLOGIN
 | STABLE
 | START
+| START_REPLICATION
+| SLOT
+| LOGICAL
 | STATE
 | STATEMENTS
 | STATISTICS
