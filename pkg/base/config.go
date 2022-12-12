@@ -164,41 +164,57 @@ func DefaultHistogramWindowInterval() time.Duration {
 var (
 	// NetworkTimeout is the timeout used for network operations that require a
 	// single network round trip. It is conservatively defined as one maximum
-	// network round trip time (RTT) plus one TCP packet retransmit (RTO), then
-	// multiplied by 2 as a safety margin.
+	// network round trip time (RTT) plus one TCP packet retransmit (RTO) with an
+	// additional safety margin.
 	//
-	// The maximum RTT between cloud regions is roughly 350ms both in GCP
-	// (asia-south2 to southamerica-west1) and AWS (af-south-1 to sa-east-1). It
-	// can occasionally be up to 500ms, but 400ms is a reasonable upper bound
-	// under nominal conditions.
+	// The maximum RTT between cloud regions is roughly 400ms both in GCP
+	// (asia-south2 to southamerica-west1) and AWS (af-south-1 to sa-east-1), but
+	// p99 RTTs can occasionally approach 600ms.
 	// https://datastudio.google.com/reporting/fc733b10-9744-4a72-a502-92290f608571/page/70YCB
 	// https://www.cloudping.co/grid/p_99/timeframe/1W
 	//
 	// Linux has an RTT-dependant retransmission timeout (RTO) which we can
 	// approximate as 1.5x RTT (smoothed RTT + 4x RTT variance), with a lower
-	// bound of 200ms. Under nominal conditions, this is approximately 600ms.
+	// bound of 200ms. It can thus be up to 900ms in the worst case.
 	//
-	// The maximum p99 RPC heartbeat latency in any Cockroach Cloud cluster over a
-	// 90-day period was 557ms. This was a single-region US cluster, where the
-	// high latency appeared to be due to CPU overload or throttling: the cluster
-	// had 2 vCPU nodes running at 100%.
-	//
-	// The NetworkTimeout is thus set to 2 * (400ms + 600ms) = 2s.
-	//
-	// TODO(erikgrinaker): Consider reducing this to 1 second, which should be
-	// sufficient but may be fragile under latency fluctuations.
+	// The NetworkTimeout is therefore set to 2 seconds: 600ms RTT plus 900ms RTO
+	// plus a 500ms safety margin.
 	NetworkTimeout = envutil.EnvOrDefaultDuration("COCKROACH_NETWORK_TIMEOUT", 2*time.Second)
 
 	// DialTimeout is the timeout used when dialing a node. gRPC connections take
-	// up to 3 roundtrips for the TCP + TLS handshakes. Because NetworkTimeout
-	// allows for both a network roundtrip (RTT) and a TCP retransmit (RTO), with
-	// the RTO being greater than the RTT, and we don't need to tolerate more than
-	// 1 retransmit per connection attempt, 2 * NetworkTimeout is sufficient.
+	// up to 3 roundtrips for the TCP + TLS handshakes. NetworkTimeout allows for
+	// both a network roundtrip and a TCP retransmit, but we don't need to
+	// tolerate more than 1 retransmit per connection attempt, so
+	// 2 * NetworkTimeout is sufficient.
 	DialTimeout = 2 * NetworkTimeout
 
-	// defaultRPCHeartbeatIntervalAndTimeout is the default value of
-	// RPCHeartbeatIntervalAndTimeout used by the RPC context.
-	defaultRPCHeartbeatIntervalAndTimeout = NetworkTimeout
+	// PingInterval is the interval between network heartbeat pings. It is used
+	// both for RPC heartbeat intervals and gRPC server keepalive pings. It is
+	// set to 1 second in order to fail fast, but with large default timeouts
+	// to tolerate high-latency multiregion clusters.
+	PingInterval = envutil.EnvOrDefaultDuration("COCKROACH_PING_INTERVAL", time.Second)
+
+	// defaultRPCHeartbeatTimeout is the default RPC heartbeat timeout. It is set
+	// very high at 3 * NetworkTimeout for several reasons: the gRPC transport may
+	// need to complete a dial/handshake before sending the heartbeat, the
+	// heartbeat has occasionally been seen to require 3 RTTs even post-dial (for
+	// unknown reasons), and under load the heartbeat may be head-of-line blocked
+	// by other RPC traffic.
+	//
+	// High-latency experiments with 6s RPC heartbeat timeouts showed that
+	// clusters running TPCC imports were stable at 400ms RTT, but started seeing
+	// RPC heartbeat failures at 500ms RTT. With light load (e.g. rate-limited
+	// kv50), clusters were stable at 1000ms RTT.
+	//
+	// The maximum p99 RPC heartbeat latency in any Cockroach Cloud cluster over a
+	// 90-day period was found to be 557ms. This was a single-region US cluster
+	// where the latency was caused by CPU overload.
+	//
+	// TODO(erikgrinaker): We should avoid head-of-line blocking for RPC
+	// heartbeats and reduce this to NetworkTimeout (plus DialTimeout for the
+	// initial heartbeat), see:
+	// https://github.com/cockroachdb/cockroach/issues/93397.
+	defaultRPCHeartbeatTimeout = 3 * NetworkTimeout
 
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
 	// before holding an election. The actual election timeout per replica is
@@ -311,11 +327,13 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
-	// RPCHeartbeatIntervalAndTimeout controls how often a Ping request is sent on
-	// peer connections to determine connection health and update the local view
-	// of remote clocks. This is also used as a timeout for heartbeats, so don't
-	// set this too low.
-	RPCHeartbeatIntervalAndTimeout time.Duration
+	// RPCHeartbeatInterval controls how often Ping requests are sent on peer
+	// connections to determine connection health and update the local view of
+	// remote clocks.
+	RPCHeartbeatInterval time.Duration
+
+	// RPCHearbeatTimeout is the timeout for Ping requests.
+	RPCHeartbeatTimeout time.Duration
 
 	// SecondaryTenantPortOffset is the increment to add to the various
 	// addresses to generate the network configuration for the in-memory
@@ -373,7 +391,8 @@ func (cfg *Config) InitDefaults() {
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SocketFile = ""
 	cfg.SSLCertsDir = DefaultCertsDirectory
-	cfg.RPCHeartbeatIntervalAndTimeout = defaultRPCHeartbeatIntervalAndTimeout
+	cfg.RPCHeartbeatInterval = PingInterval
+	cfg.RPCHeartbeatTimeout = defaultRPCHeartbeatTimeout
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
