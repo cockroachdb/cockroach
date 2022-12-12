@@ -30,7 +30,6 @@ go_library(
         "pebble_iterator.go",
         "pebble_merge.go",
         "pebble_mvcc_scanner.go",
-        "point_synthesizing_iter.go",
         "read_as_of_iterator.go",
         "replicas_storage.go",
         "row_counter.go",
