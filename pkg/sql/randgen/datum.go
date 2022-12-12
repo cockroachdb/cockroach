@@ -277,7 +277,7 @@ func RandDatumWithNullChance(
 		if err != nil {
 			panic(err)
 		}
-		return d
+		return tree.NewDEnum(d)
 	case types.VoidFamily:
 		return tree.DVoidDatum
 	case types.TSVectorFamily:
