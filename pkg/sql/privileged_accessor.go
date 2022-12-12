@@ -20,12 +20,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
 func (p *planner) CreateSlot(ctx context.Context, slotName string) (string, error) {
+	if _, ok := replicationslot.ReplicationSlots[slotName]; ok {
+		return "", errors.AssertionFailedf("slot already exists: %s\n", slotName)
+	}
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"crdb-internal-create-slot",
@@ -42,7 +46,18 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (string, erro
 }
 
 func (p *planner) DropSlot(ctx context.Context, slotName string) error {
-	// TODO(XXX): actually implement DROP CHANGEFEED. There is no way of doing this, annoyingly.
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"crdb-internal-drop-slot",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		"cancel jobs select job_id from [show changefeed jobs] where sink_uri = $1",
+		"replication://"+slotName,
+	)
+	if err != nil {
+		return err
+	}
+	delete(replicationslot.ReplicationSlots, slotName)
 	return nil
 }
 
