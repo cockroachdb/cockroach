@@ -350,6 +350,9 @@ const (
 	// ids in the role_members system table have been backfilled.
 	V23_1RoleMembersIDColumnsBackfilled
 
+	// V23_1KeyVisualizerTablesAndJobs adds the system tables that support the key visualizer.
+	V23_1KeyVisualizerTablesAndJobs
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -603,6 +606,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1RoleMembersIDColumnsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 14},
+	},
+	{
+		Key:     V23_1KeyVisualizerTablesAndJobs,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 16},
 	},
 
 	// *************************************************
