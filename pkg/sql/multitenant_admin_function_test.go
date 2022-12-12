@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package sql_test
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,7 +28,15 @@ const createTable = "CREATE TABLE t(i int PRIMARY KEY);"
 const rangeErrorMessage = "RangeIterator failed to seek"
 
 func createTestServer(t *testing.T) (serverutils.TestServerInterface, func()) {
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					AllowUnsynchronizedReplicationChanges: true,
+				},
+			},
+		},
+	})
 	return testCluster.Server(0), func() {
 		testCluster.Stopper().Stop(context.Background())
 	}
