@@ -13,12 +13,14 @@ package sql
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -41,9 +44,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -939,4 +944,73 @@ func insufficientPrivilegeError(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, kind, typeForError, object.GetName())
+}
+
+// WarmSyntheticSchemaPrivilegeCacheForVirtualTables will attempt to access
+// each virtual table, and, in doing so, will cache the privileges for those
+// virtual tables. This work is done in parallel. It aids in reducing the cold
+// start latency when accessing virtual tables which themselves list virtual
+// tables.
+func WarmSyntheticSchemaPrivilegeCacheForVirtualTables(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	version clusterversion.Handle,
+	cache *cacheutil.Cache,
+	schemas catalog.VirtualSchemas,
+	ief descs.TxnManager,
+	db *kv.DB,
+) {
+	start := timeutil.Now()
+	var vTables []syntheticprivilege.VirtualTablePrivilege
+	for n := range catconstants.VirtualSchemaNames {
+		sc, _ := schemas.GetVirtualSchema(n)
+		sc.VisitTables(func(object catalog.VirtualObject) {
+			vTables = append(vTables, syntheticprivilege.VirtualTablePrivilege{
+				SchemaName: n,
+				TableName:  sc.Desc().GetName(),
+			})
+		})
+	}
+	const opName = "virtual-table-privilege-cache-warm"
+	const concurrency = 8 // totally arbitrary
+	lim := quotapool.NewIntPool(opName, concurrency)
+	opts := stop.TaskOpts{
+		TaskName:   opName,
+		Sem:        lim,
+		WaitForSem: true,
+	}
+	errCh := make(chan error)
+	var wg sync.WaitGroup
+	for i := range vTables {
+		q := &vTables[i]
+		wg.Add(1)
+		_ = stopper.RunAsyncTaskEx(ctx, opts, func(ctx context.Context) {
+			defer wg.Done()
+			err := ief.DescsTxnWithExecutor(ctx, db, nil, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+				ie sqlutil.InternalExecutor,
+			) error {
+				_, err := synthesizePrivilegeDescriptor(
+					ctx, version, cache, ie, descriptors, txn, q,
+				)
+				return err
+			})
+			if err != nil {
+				select {
+				case errCh <- err:
+				case <-ctx.Done():
+				}
+			}
+		})
+	}
+	go func() { wg.Wait(); close(errCh) }()
+	var totalErr error
+	for err := range errCh {
+		totalErr = errors.CombineErrors(totalErr, err)
+	}
+	if totalErr != nil {
+		log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", totalErr)
+	} else {
+		log.Infof(ctx, "warmed virtual table privilege for %d table in %v", len(vTables), timeutil.Since(start))
+	}
 }

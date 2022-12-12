@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -271,7 +272,8 @@ func (p *planner) getPrivilegeDescriptor(
 				TableName:  d.GetName(),
 			}
 			return synthesizePrivilegeDescriptor(
-				ctx, p.ExecCfg(), p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), vDesc,
+				ctx, p.ExecCfg().Settings.Version, p.ExecCfg().SyntheticPrivilegeCache,
+				p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), vDesc,
 			)
 		}
 		return d.GetPrivileges(), nil
@@ -279,7 +281,8 @@ func (p *planner) getPrivilegeDescriptor(
 		return d.GetPrivileges(), nil
 	case syntheticprivilege.Object:
 		return synthesizePrivilegeDescriptor(
-			ctx, p.ExecCfg(), p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), d,
+			ctx, p.ExecCfg().Settings.Version, p.ExecCfg().SyntheticPrivilegeCache,
+			p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), d,
 		)
 	}
 	return nil, errors.AssertionFailedf("unknown privilege.Object type %T", po)
@@ -290,13 +293,14 @@ func (p *planner) getPrivilegeDescriptor(
 // PrivilegeDescriptor.
 func synthesizePrivilegeDescriptor(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
+	version clusterversion.Handle,
+	cache *cacheutil.Cache,
 	ie sqlutil.InternalExecutor,
 	descsCol *descs.Collection,
 	txn *kv.Txn,
 	spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	if !execCfg.Settings.Version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
+	if !version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
 		// Fall back to defaults if the version gate is not active yet.
 		return spo.GetFallbackPrivileges(), nil
 	}
@@ -313,7 +317,6 @@ func synthesizePrivilegeDescriptor(
 		return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, ie, txn, spo)
 	}
 	var tableVersions []descpb.DescriptorVersion
-	cache := execCfg.SyntheticPrivilegeCache
 	found, privileges, retErr := func() (bool, catpb.PrivilegeDescriptor, error) {
 		cache.Lock()
 		defer cache.Unlock()
