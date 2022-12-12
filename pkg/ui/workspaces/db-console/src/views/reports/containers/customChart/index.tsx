@@ -23,6 +23,7 @@ import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import {
+  api as clusterUiApi,
   AxisUnits,
   TimeScaleDropdown,
   TimeScale,
@@ -47,6 +48,7 @@ import {
   selectTimeScale,
   setTimeScale,
 } from "src/redux/timeScale";
+import { selectStatementDiagnosticsReports } from "src/redux/statements/statementsSelectors";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -57,6 +59,7 @@ export interface CustomChartProps {
   setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   timeScale: TimeScale;
   setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
+  diagnosticFingerprints: clusterUiApi.StatementDiagnosticsReport[];
 }
 
 interface UrlState {
@@ -98,17 +101,26 @@ export class CustomChart extends React.Component<
         return [];
       }
 
-      return _.keys(nodeStatuses[0].metrics).map(k => {
-        const fullMetricName = isStoreMetric(nodeStatuses[0], k)
-          ? "cr.store." + k
-          : "cr.node." + k;
+      const base: DropdownOption[] = [
+        {
+          label: "experimental.per.statement",
+          value: "experimental.per.statement",
+        },
+      ];
 
-        return {
-          value: fullMetricName,
-          label: k,
-          description: metadata[k] && metadata[k].help,
-        };
-      });
+      return base.concat(
+        _.keys(nodeStatuses[0].metrics).map(k => {
+          const fullMetricName = isStoreMetric(nodeStatuses[0], k)
+            ? "cr.store." + k
+            : "cr.node." + k;
+
+          return {
+            value: fullMetricName,
+            label: k,
+            description: metadata[k] && metadata[k].help,
+          };
+        }),
+      );
     },
   );
 
@@ -277,6 +289,7 @@ export class CustomChart extends React.Component<
           <CustomChartTable
             metricOptions={this.metricOptions(nodesSummary, metricsMetadata)}
             nodeOptions={this.nodeOptions(nodesSummary)}
+            diagnosticFingerprints={this.props.diagnosticFingerprints}
             index={i}
             key={i}
             chartState={chart}
@@ -328,6 +341,7 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesQueryValid: state.cachedData.nodes.valid,
   metricsMetadata: metricsMetadataSelector(state),
   timeScale: selectTimeScale(state),
+  diagnosticFingerprints: selectStatementDiagnosticsReports(state),
 });
 
 const mapDispatchToProps = {

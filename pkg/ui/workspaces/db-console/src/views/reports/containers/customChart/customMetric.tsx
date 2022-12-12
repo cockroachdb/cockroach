@@ -13,7 +13,7 @@ import * as React from "react";
 import Select from "react-select";
 
 import * as protos from "src/js/protos";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
+import { api as clusterUiApi, AxisUnits } from "@cockroachlabs/cluster-ui";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { MetricOption } from "./metricOption";
@@ -69,13 +69,17 @@ export class CustomChartState {
 interface CustomMetricRowProps {
   metricOptions: DropdownOption[];
   nodeOptions: DropdownOption[];
+  diagnosticFingerprints: clusterUiApi.StatementDiagnosticsReport[];
   index: number;
   rowState: CustomMetricState;
   onChange: (index: number, newState: CustomMetricState) => void;
   onDelete: (index: number) => void;
 }
 
-export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
+export class CustomMetricRow extends React.Component<
+  CustomMetricRowProps,
+  CustomMetricState
+> {
   changeState(newState: Partial<CustomMetricState>) {
     this.props.onChange(
       this.props.index,
@@ -137,6 +141,16 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
       },
     } = this.props;
 
+    let nodeOptionsOrFingerprints = nodeOptions;
+    if (metric === "experimental.per.statement") {
+      nodeOptionsOrFingerprints = this.props.diagnosticFingerprints.map(df => {
+        return {
+          label: df.statement_fingerprint,
+          value: df.statement_fingerprint,
+        };
+      });
+    }
+
     return (
       <tr>
         <td>
@@ -197,7 +211,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
               clearable={false}
               searchable={false}
               value={source}
-              options={nodeOptions}
+              options={nodeOptionsOrFingerprints}
               onChange={this.changeSource}
             />
           </div>
@@ -225,6 +239,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
 interface CustomChartTableProps {
   metricOptions: DropdownOption[];
   nodeOptions: DropdownOption[];
+  diagnosticFingerprints: clusterUiApi.StatementDiagnosticsReport[];
   index: number;
   chartState: CustomChartState;
   onChange: (index: number, newState: CustomChartState) => void;
@@ -301,6 +316,7 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
                 key={i}
                 metricOptions={this.props.metricOptions}
                 nodeOptions={this.props.nodeOptions}
+                diagnosticFingerprints={this.props.diagnosticFingerprints}
                 index={i}
                 rowState={row}
                 onChange={this.updateMetricRow}

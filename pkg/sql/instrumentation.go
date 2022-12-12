@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -400,6 +402,26 @@ func (ih *instrumentationHelper) Finish(
 		)
 		phaseTimes := statsCollector.PhaseTimes()
 		execLatency := phaseTimes.GetServiceLatencyNoOverhead()
+
+		// Probably want some new type of instrumentation like `ih.collectMetrics`
+		// up above as a conditional, which then allows for continuous timeseries
+		// collection, perhaps with expiry time.
+		data := []tspb.TimeSeriesData{
+			{
+				Name:   "experimental.per.statement",
+				Source: ih.fingerprint,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: cfg.Clock.PhysicalNow(),
+						Value:          float64(execLatency),
+					},
+				},
+			},
+		}
+		if err := cfg.TSDB.StoreData(ctx, ts.Resolution10s, data); err != nil {
+			log.Errorf(ctx, "unable to write query telemetry to tsdb: %v", err)
+		}
+
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
 			placeholders := p.extendedEvalCtx.Placeholders
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(

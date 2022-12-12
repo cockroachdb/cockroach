@@ -471,6 +471,8 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils/serverutils",
+        "//pkg/ts",
+        "//pkg/ts/tspb",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
         "//pkg/util",

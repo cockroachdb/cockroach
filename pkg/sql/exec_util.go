@@ -95,6 +95,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -1344,6 +1345,8 @@ type ExecutorConfig struct {
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
+
+	TSDB *ts.DB
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
