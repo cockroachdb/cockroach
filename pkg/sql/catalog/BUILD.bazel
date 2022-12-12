@@ -5,7 +5,6 @@ load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "catalog",
     srcs = [
-        "accessor.go",
         "catalog.go",
         "descriptor.go",
         "descriptor_id_set.go",

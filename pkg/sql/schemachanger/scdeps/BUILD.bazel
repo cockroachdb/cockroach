@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/oppurpose",
         "//pkg/sql/rowenc",

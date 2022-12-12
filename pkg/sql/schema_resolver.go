@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -65,9 +66,32 @@ type schemaResolver struct {
 	typeResolutionDbID descpb.ID
 }
 
-// Accessor implements the resolver.SchemaResolver interface.
-func (sr *schemaResolver) Accessor() catalog.Accessor {
-	return sr.descCollection
+// GetObjectNamesAndIDs implements the resolver.SchemaResolver interface.
+func (sr *schemaResolver) GetObjectNamesAndIDs(
+	ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+) (tableNames tree.TableNames, tableIDs descpb.IDs, _ error) {
+	c, err := sr.descCollection.GetObjectNamesAndIDs(ctx, sr.txn, db, sc)
+	if err != nil {
+		return nil, nil, err
+	}
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		tn := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(e.GetName()))
+		tableNames = append(tableNames, tn)
+		tableIDs = append(tableIDs, e.GetID())
+		return nil
+	})
+	return tableNames, tableIDs, nil
+}
+
+// MustGetCurrentSessionDatabase implements the resolver.SchemaResolver interface.
+func (sr *schemaResolver) MustGetCurrentSessionDatabase(
+	ctx context.Context,
+) (catalog.DatabaseDescriptor, error) {
+	flags := tree.DatabaseLookupFlags{
+		AvoidLeased: true,
+		Required:    true,
+	}
+	return sr.descCollection.GetImmutableDatabaseByName(ctx, sr.txn, sr.CurrentDatabase(), flags)
 }
 
 // CurrentSearchPath implements the resolver.SchemaResolver interface.
@@ -75,7 +99,8 @@ func (sr *schemaResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sr.sessionDataStack.Top().SearchPath
 }
 
-// CommonLookupFlagsRequired implements the resolver.SchemaResolver interface.
+// CommonLookupFlagsRequired is a convenience method for returning a
+// default set of tree.CommonLookupFlags.
 func (sr *schemaResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{
 		Required:    true,

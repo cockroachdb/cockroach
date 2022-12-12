@@ -520,11 +520,7 @@ func importPlanHook(
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
-			txn := p.Txn()
-			db, err = p.Accessor().GetImmutableDatabaseByName(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
-				AvoidLeased: true,
-				Required:    true,
-			})
+			db, err = p.MustGetCurrentSessionDatabase(ctx)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedObject,
 					"could not resolve current database")

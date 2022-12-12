@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -175,14 +176,22 @@ func cleanupSessionTempObjects(
 				return err
 			}
 			for _, dbDesc := range allDbDescs {
-				if err := cleanupSchemaObjects(
+				flags := tree.CommonLookupFlags{AvoidLeased: true}
+				tempSchema, err := descsCol.GetImmutableSchemaByName(ctx, txn, dbDesc, tempSchemaName, flags)
+				if err != nil {
+					return err
+				}
+				if tempSchema == nil {
+					continue
+				}
+				if err := cleanupTempSchemaObjects(
 					ctx,
 					txn,
 					descsCol,
 					codec,
 					ie,
 					dbDesc,
-					tempSchemaName,
+					tempSchema,
 				); err != nil {
 					return err
 				}
@@ -205,29 +214,23 @@ func cleanupSessionTempObjects(
 		})
 }
 
-// cleanupSchemaObjects removes all objects that is located within a dbID and schema.
+// cleanupTempSchemaObjects removes all objects that is located within a dbID and schema.
 //
 // TODO(postamar): properly use descsCol
 // We're currently unable to leverage descsCol properly because we run DROP
 // statements in the transaction which cause descsCol's cached state to become
 // invalid. We should either drop all objects programmatically via descsCol's
 // API or avoid it entirely.
-func cleanupSchemaObjects(
+func cleanupTempSchemaObjects(
 	ctx context.Context,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
-	dbDesc catalog.DatabaseDescriptor,
-	schemaName string,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
 ) error {
-	tbNames, tbIDs, err := descsCol.GetObjectNamesAndIDs(
-		ctx,
-		txn,
-		dbDesc,
-		schemaName,
-		tree.DatabaseListFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: false}},
-	)
+	c, err := descsCol.GetObjectNamesAndIDs(ctx, txn, db, sc)
 	if err != nil {
 		return err
 	}
@@ -242,16 +245,16 @@ func cleanupSchemaObjects(
 	var views descpb.IDs
 	var sequences descpb.IDs
 
-	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
-	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
-	for i, tbName := range tbNames {
-		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, tbIDs[i])
+	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor)
+	tblNamesByID := make(map[descpb.ID]tree.TableName)
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, e.GetID())
 		if err != nil {
 			return err
 		}
 
 		tblDescsByID[desc.GetID()] = desc
-		tblNamesByID[desc.GetID()] = tbName
+		tblNamesByID[desc.GetID()] = tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(e.GetName()))
 
 		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
@@ -267,9 +270,10 @@ func cleanupSchemaObjects(
 		} else if !desc.IsSequence() {
 			tables = append(tables, desc.GetID())
 		}
-	}
+		return nil
+	})
 
-	searchPath := sessiondata.DefaultSearchPathForUser(username.RootUserName()).WithTemporarySchemaName(schemaName)
+	searchPath := sessiondata.DefaultSearchPathForUser(username.RootUserName()).WithTemporarySchemaName(sc.GetName())
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath:               &searchPath,
 		User:                     username.RootUserName(),
