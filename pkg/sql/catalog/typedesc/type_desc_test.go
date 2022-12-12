@@ -63,6 +63,17 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 			a: descpb.TypeDescriptor{
 				Name: "a",
 				Kind: descpb.TypeDescriptor_ENUM,
+			},
+			b: descpb.TypeDescriptor{
+				Name: "b",
+				Kind: descpb.TypeDescriptor_COMPOSITE,
+			},
+			err: `"b" of type "COMPOSITE" is not compatible with type "ENUM"`,
+		},
+		{
+			a: descpb.TypeDescriptor{
+				Name: "a",
+				Kind: descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "us-east-1",
@@ -785,6 +796,41 @@ func TestValidateTypeDesc(t *testing.T) {
 				},
 				ArrayTypeID: typeID,
 				Privileges:  defaultPrivileges,
+			},
+		},
+		{
+			`COMPOSITE type desc has nil composite type`,
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       dbID,
+				ParentSchemaID: keys.PublicSchemaID,
+				Kind:           descpb.TypeDescriptor_COMPOSITE,
+				Privileges:     defaultPrivileges,
+			},
+		},
+		{
+			`referenced database ID 500: referenced descriptor not found`,
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       500,
+				ParentSchemaID: keys.PublicSchemaID,
+				Kind:           descpb.TypeDescriptor_COMPOSITE,
+				Privileges:     defaultPrivileges,
+				Composite:      &descpb.TypeDescriptor_Composite{},
+			},
+		},
+		{
+			`referenced schema ID 500: referenced descriptor not found`,
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       dbID,
+				ParentSchemaID: 500,
+				Kind:           descpb.TypeDescriptor_COMPOSITE,
+				Privileges:     defaultPrivileges,
+				Composite:      &descpb.TypeDescriptor_Composite{},
 			},
 		},
 	}

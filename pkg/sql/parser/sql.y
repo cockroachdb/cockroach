@@ -305,6 +305,9 @@ func (u *sqlSymUnion) nameList() tree.NameList {
 func (u *sqlSymUnion) enumValueList() tree.EnumValueList {
     return u.val.(tree.EnumValueList)
 }
+func (u *sqlSymUnion) compositeTypeList() []tree.CompositeTypeElem {
+    return u.val.([]tree.CompositeTypeElem)
+}
 func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
     return u.val.(*tree.UnresolvedName)
 }
@@ -1466,6 +1469,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list opt_enum_val_list enum_val_list
+%type <[]tree.CompositeTypeElem> composite_type_list opt_composite_type_list
 
 %type <tree.ResolvableTypeReference> typename simple_typename cast_target
 %type <*types.T> const_typename
@@ -9695,7 +9699,23 @@ create_type_stmt:
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
   // Record/Composite types.
-| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
+| CREATE TYPE type_name AS '(' opt_composite_type_list ')'
+  {
+    $$.val = &tree.CreateType{
+      TypeName: $3.unresolvedObjectName(),
+      Variety: tree.Composite,
+      CompositeTypeList: $6.compositeTypeList(),
+    }
+  }
+| CREATE TYPE IF NOT EXISTS type_name AS '(' opt_composite_type_list ')'
+  {
+    $$.val = &tree.CreateType{
+      TypeName: $6.unresolvedObjectName(),
+      Variety: tree.Composite,
+      IfNotExists: true,
+      CompositeTypeList: $9.compositeTypeList(),
+    }
+  }
   // Range types.
 | CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
   // Base (primitive) types.
@@ -9723,6 +9743,36 @@ enum_val_list:
 | enum_val_list ',' SCONST
   {
     $$.val = append($1.enumValueList(), tree.EnumValue($3))
+  }
+
+opt_composite_type_list:
+  composite_type_list
+  {
+    $$.val = $1.compositeTypeList()
+  }
+| /* EMPTY */
+  {
+    $$.val = []tree.CompositeTypeElem{}
+  }
+
+composite_type_list:
+  name simple_typename
+  {
+    $$.val = []tree.CompositeTypeElem{
+        tree.CompositeTypeElem{
+            Label: tree.Name($1),
+            Type: $2.typeReference(),
+        },
+    }
+  }
+| composite_type_list ',' name simple_typename
+  {
+    $$.val = append($1.compositeTypeList(),
+        tree.CompositeTypeElem{
+            Label: tree.Name($3),
+            Type: $4.typeReference(),
+        },
+    )
   }
 
 // %Help: CREATE INDEX - create a new index

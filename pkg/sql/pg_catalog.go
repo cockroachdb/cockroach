@@ -3128,14 +3128,18 @@ func addPGTypeRow(
 			builtinPrefix = "array_"
 			typElem = tree.NewDOid(typ.ArrayContents().Oid())
 		}
+	case types.EnumFamily:
+		builtinPrefix = "enum_"
+		typType = typTypeEnum
+		typArray = tree.NewDOid(types.CalcArrayOid(typ))
+	case types.TupleFamily:
+		builtinPrefix = "record_"
+		typType = typTypeComposite
+		typArray = tree.NewDOid(types.CalcArrayOid(typ))
 	case types.VoidFamily:
 		// void does not have an array type.
 	default:
 		typArray = tree.NewDOid(types.CalcArrayOid(typ))
-	}
-	if typ.Family() == types.EnumFamily {
-		builtinPrefix = "enum_"
-		typType = typTypeEnum
 	}
 	if cat == typCategoryPseudo {
 		typType = typTypePseudo
@@ -4341,6 +4345,9 @@ func typCategory(typ *types.T) tree.Datum {
 	// Special case ARRAY of ANY.
 	if typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.AnyFamily {
 		return typCategoryPseudo
+	}
+	if typ.UserDefined() && typ.Family() == types.TupleFamily {
+		return typCategoryComposite
 	}
 	return datumToTypeCategory[typ.Family()]
 }

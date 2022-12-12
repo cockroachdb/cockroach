@@ -697,6 +697,8 @@ func (b *builderState) ResolveEnumType(
 		// Implicit record types are not directly modifiable.
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot modify table record type %q", typ.GetName()))
+	case descpb.TypeDescriptor_COMPOSITE:
+		panic(scerrors.NotImplementedErrorf(name, "composite types not supported in new schema changer"))
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}

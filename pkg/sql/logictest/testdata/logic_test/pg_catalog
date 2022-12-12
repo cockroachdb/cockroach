@@ -410,16 +410,21 @@ statement ok
 CREATE TYPE constraint_db.mytype AS ENUM ('foo', 'bar', 'baz')
 
 statement ok
+CREATE TYPE constraint_db.compositetype AS (a INT, b INT)
+
+statement ok
 CREATE TABLE constraint_db.t6 (
   a INT,
   b INT,
   c STRING,
   m constraint_db.mytype,
+  n constraint_db.compositetype,
   INDEX ((a + b))
 );
 CREATE INDEX ON constraint_db.t6 (lower(c), (a + b));
 CREATE UNIQUE INDEX ON constraint_db.t6 (lower(c));
-CREATE INDEX ON constraint_db.t6 ((m = 'foo')) WHERE m = 'foo'
+CREATE INDEX ON constraint_db.t6 ((m = 'foo')) WHERE m = 'foo';
+CREATE INDEX ON constraint_db.t6 (((n).a = 3)) WHERE ((n).b) = 5
 
 ## pg_catalog.pg_namespace
 
@@ -582,14 +587,15 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 3214807592  t4_pkey            109           0        0          1546506610  2631952481  0            0
 117         t5                 109           100117   0          1546506610  2631952481  0            0
 1869730585  t5_pkey            109           0        0          1546506610  2631952481  0            0
-120         t6                 109           100120   0          1546506610  2631952481  0            0
-2129466852  t6_pkey            109           0        0          1546506610  2631952481  0            0
-2129466855  t6_expr_idx        109           0        0          1546506610  2631952481  0            0
-2129466854  t6_expr_expr1_idx  109           0        0          1546506610  2631952481  0            0
-2129466848  t6_expr_key        109           0        0          1546506610  2631952481  0            0
-2129466850  t6_expr_idx1       109           0        0          1546506610  2631952481  0            0
-121         mv1                109           100121   0          1546506610  0           0            0
-784389845   mv1_pkey           109           0        0          1546506610  2631952481  0            0
+122         t6                 109           100122   0          1546506610  2631952481  0            0
+524653574   t6_pkey            109           0        0          1546506610  2631952481  0            0
+524653573   t6_expr_idx        109           0        0          1546506610  2631952481  0            0
+524653572   t6_expr_expr1_idx  109           0        0          1546506610  2631952481  0            0
+524653570   t6_expr_key        109           0        0          1546506610  2631952481  0            0
+524653568   t6_expr_idx1       109           0        0          1546506610  2631952481  0            0
+524653582   t6_expr_idx2       109           0        0          1546506610  2631952481  0            0
+123         mv1                109           100123   0          1546506610  0           0            0
+3474543863  mv1_pkey           109           0        0          1546506610  2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -621,6 +627,7 @@ t6_expr_idx        NULL      NULL       0              0              false     
 t6_expr_expr1_idx  NULL      NULL       0              0              false        false        p
 t6_expr_key        NULL      NULL       0              0              false        false        p
 t6_expr_idx1       NULL      NULL       0              0              false        false        p
+t6_expr_idx2       NULL      NULL       0              0              false        false        p
 mv1                NULL      NULL       0              0              true         false        p
 mv1_pkey           NULL      NULL       0              0              false        false        p
 
@@ -648,12 +655,13 @@ t4                 false      r        4         0          false       true
 t4_pkey            false      i        1         0          false       false
 t5                 false      r        4         0          false       true
 t5_pkey            false      i        1         0          false       false
-t6                 false      r        5         0          false       true
+t6                 false      r        6         0          false       true
 t6_pkey            false      i        1         0          false       false
 t6_expr_idx        false      i        1         0          false       false
 t6_expr_expr1_idx  false      i        2         0          false       false
 t6_expr_key        false      i        1         0          false       false
 t6_expr_idx1       false      i        1         0          false       false
+t6_expr_idx2       false      i        1         0          false       false
 mv1                false      m        2         0          false       true
 mv1_pkey           false      i        1         0          false       false
 
@@ -687,6 +695,7 @@ t6_expr_idx        false        false           false           0             NU
 t6_expr_expr1_idx  false        false           false           0             NULL    NULL
 t6_expr_key        false        false           false           0             NULL    NULL
 t6_expr_idx1       false        false           false           0             NULL    NULL
+t6_expr_idx2       false        false           false           0             NULL    NULL
 mv1                false        false           false           0             NULL    NULL
 mv1_pkey           false        false           false           0             NULL    NULL
 
@@ -747,20 +756,22 @@ attrelid    relname            attname                   atttypid  attstattarget
 117         t5                 c                         25        0              -1      3       0         -1
 117         t5                 rowid                     20        0              8       4       0         -1
 1869730585  t5_pkey            rowid                     20        0              8       1       0         -1
-120         t6                 a                         20        0              8       1       0         -1
-120         t6                 b                         20        0              8       2       0         -1
-120         t6                 c                         25        0              -1      3       0         -1
-120         t6                 m                         100118    0              -1      4       0         -1
-120         t6                 rowid                     20        0              8       6       0         -1
-2129466852  t6_pkey            rowid                     20        0              8       1       0         -1
-2129466855  t6_expr_idx        crdb_internal_idx_expr    20        0              8       1       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      1       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr    20        0              8       2       0         -1
-2129466848  t6_expr_key        crdb_internal_idx_expr_1  25        0              -1      1       0         -1
-2129466850  t6_expr_idx1       crdb_internal_idx_expr_2  16        0              1       1       0         -1
-121         mv1                ?column?                  20        0              8       1       0         -1
-121         mv1                rowid                     20        0              8       2       0         -1
-784389845   mv1_pkey           rowid                     20        0              8       1       0         -1
+122         t6                 a                         20        0              8       1       0         -1
+122         t6                 b                         20        0              8       2       0         -1
+122         t6                 c                         25        0              -1      3       0         -1
+122         t6                 m                         100118    0              -1      4       0         -1
+122         t6                 n                         100120    0              16      5       0         -1
+122         t6                 rowid                     20        0              8       7       0         -1
+524653574   t6_pkey            rowid                     20        0              8       1       0         -1
+524653573   t6_expr_idx        crdb_internal_idx_expr    20        0              8       1       0         -1
+524653572   t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      1       0         -1
+524653572   t6_expr_expr1_idx  crdb_internal_idx_expr    20        0              8       2       0         -1
+524653570   t6_expr_key        crdb_internal_idx_expr_1  25        0              -1      1       0         -1
+524653568   t6_expr_idx1       crdb_internal_idx_expr_2  16        0              1       1       0         -1
+524653582   t6_expr_idx2       crdb_internal_idx_expr_3  16        0              1       1       0         -1
+123         mv1                ?column?                  20        0              8       1       0         -1
+123         mv1                rowid                     20        0              8       2       0         -1
+3474543863  mv1_pkey           rowid                     20        0              8       1       0         -1
 
 query TTIBTTBBTT colnames,rowsort
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -821,6 +832,7 @@ t6                 a                         -1         NULL      NULL        NU
 t6                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 c                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 m                         -1         NULL      NULL        NULL      false       false      ·            ·
+t6                 n                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
@@ -828,6 +840,7 @@ t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NU
 t6_expr_expr1_idx  crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_key        crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
 t6_expr_idx1       crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx2       crdb_internal_idx_expr_3  -1         NULL      NULL        NULL      false       false      ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -891,6 +904,7 @@ t6                 a                         false         true        0        
 t6                 b                         false         true        0            NULL    NULL        NULL
 t6                 c                         false         true        0            NULL    NULL        NULL
 t6                 m                         false         true        0            NULL    NULL        NULL
+t6                 n                         false         true        0            NULL    NULL        NULL
 t6                 rowid                     false         true        0            NULL    NULL        NULL
 t6_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t6_expr_idx        crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
@@ -898,6 +912,7 @@ t6_expr_expr1_idx  crdb_internal_idx_expr_1  false         true        0        
 t6_expr_expr1_idx  crdb_internal_idx_expr    false         true        0            NULL    NULL        NULL
 t6_expr_key        crdb_internal_idx_expr_1  false         true        0            NULL    NULL        NULL
 t6_expr_idx1       crdb_internal_idx_expr_2  false         true        0            NULL    NULL        NULL
+t6_expr_idx2       crdb_internal_idx_expr_3  false         true        0            NULL    NULL        NULL
 mv1                ?column?                  false         true        0            NULL    NULL        NULL
 mv1                rowid                     false         true        0            NULL    NULL        NULL
 mv1_pkey           rowid                     false         true        0            NULL    NULL        NULL
@@ -998,8 +1013,8 @@ oid         relname  adrelid  adnum  adbin                                 adsrc
 1221463946  t3       114      4      unique_rowid()                        unique_rowid()                        unique_rowid()
 1740936492  t4       116      4      unique_rowid()                        unique_rowid()                        unique_rowid()
 3086013501  t5       117      4      unique_rowid()                        unique_rowid()                        unique_rowid()
-655595746   t6       120      6      unique_rowid()                        unique_rowid()                        unique_rowid()
-2000672759  mv1      121      2      unique_rowid()                        unique_rowid()                        unique_rowid()
+3345749761  t6       122      7      unique_rowid()                        unique_rowid()                        unique_rowid()
+395859477   mv1      123      2      unique_rowid()                        unique_rowid()                        unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -1020,12 +1035,13 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 2695335053  public      t3         t3_a_b_idx         NULL
 3214807592  public      t4         t4_pkey            NULL
 1869730585  public      t5         t5_pkey            NULL
-2129466852  public      t6         t6_pkey            NULL
-2129466855  public      t6         t6_expr_idx        NULL
-2129466854  public      t6         t6_expr_expr1_idx  NULL
-2129466848  public      t6         t6_expr_key        NULL
-2129466850  public      t6         t6_expr_idx1       NULL
-784389845   public      mv1        mv1_pkey           NULL
+524653574   public      t6         t6_pkey            NULL
+524653573   public      t6         t6_expr_idx        NULL
+524653572   public      t6         t6_expr_expr1_idx  NULL
+524653570   public      t6         t6_expr_key        NULL
+524653568   public      t6         t6_expr_idx1       NULL
+524653582   public      t6         t6_expr_idx2       NULL
+3474543863  public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -1044,12 +1060,13 @@ crdb_oid    tablename  indexname          indexdef
 2695335053  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
 3214807592  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON constraint_db.public.t4 USING btree (rowid ASC)
 1869730585  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON constraint_db.public.t5 USING btree (rowid ASC)
-2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
-2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
-2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::constraint_db.public.mytype) ASC) WHERE (m = 'foo'::constraint_db.public.mytype)
-784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
+524653574   t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
+524653573   t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
+524653572   t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
+524653570   t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
+524653568   t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::constraint_db.public.mytype) ASC) WHERE (m = 'foo'::constraint_db.public.mytype)
+524653582   t6         t6_expr_idx2       CREATE INDEX t6_expr_idx2 ON constraint_db.public.t6 USING btree (((n).a = 3) ASC) WHERE ((n).b = 5)
+3474543863  mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
@@ -1061,7 +1078,7 @@ WHERE indnkeyatts = 2
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion
 3687884464  110       2         true         false         false
 2695335053  114       3         false        false         false
-2129466854  120       2         false        false         false
+524653572   122       2         false        false         false
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
@@ -1071,7 +1088,7 @@ WHERE indnkeyatts = 2
 indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 3687884464  true          false           true        false         false
 2695335053  false         false           true        false         false
-2129466854  false         false           true        false         false
+524653572   false         false           true        false         false
 
 query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
@@ -1081,7 +1098,7 @@ WHERE indnkeyatts = 2
 indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs            indpred
 3687884464  110       true       false           3 4     0 0           0 0       2 2        NULL                NULL
 2695335053  114       true       false           1 2 3   0 0           0 0       2 1        NULL                NULL
-2129466854  120       true       false           0 0     3403232968 0  0 0       2 2        (lower(c)) (a + b)  NULL
+524653572   122       true       false           0 0     3403232968 0  0 0       2 2        (lower(c)) (a + b)  NULL
 
 # Index expression elements should have an indkey of 0 and be included in
 # indexprs.
@@ -1098,8 +1115,9 @@ relname            indkey  indexprs                                  indpred
 t6_expr_expr1_idx  0 0     (lower(c)) (a + b)                        NULL
 t6_expr_idx        0       (a + b)                                   NULL
 t6_expr_idx1       0       (m = 'foo'::constraint_db.public.mytype)  m = 'foo'::constraint_db.public.mytype
+t6_expr_idx2       0       ((n).a = 3)                               (n).b = 5
 t6_expr_key        0       (lower(c))                                NULL
-t6_pkey            6       NULL                                      NULL
+t6_pkey            7       NULL                                      NULL
 
 statement ok
 SET DATABASE = system
@@ -1371,9 +1389,9 @@ uwi_b_partial  u        false          false        true          116       0   
 t5_pkey        p        false          false        true          117       0         1869730585
 fk_b_c         f        false          false        true          117       0         0
 t5_a_fkey      f        false          false        true          117       0         0
-t6_pkey        p        false          false        true          120       0         2129466852
-t6_expr_key    u        false          false        true          120       0         2129466848
-mv1_pkey       p        false          false        true          121       0         784389845
+t6_pkey        p        false          false        true          122       0         524653574
+t6_expr_key    u        false          false        true          122       0         524653570
+mv1_pkey       p        false          false        true          123       0         3474543863
 
 query T
 SELECT conname
@@ -1446,8 +1464,8 @@ uwi_b_partial  true        0            true          NULL
 t5_pkey        true        0            true          {4}
 fk_b_c         true        0            true          {2,3}
 t5_a_fkey      true        0            true          {1}
-t6_pkey        true        0            true          {6}
-t6_expr_key    true        0            true          {7}
+t6_pkey        true        0            true          {7}
+t6_expr_key    true        0            true          {8}
 mv1_pkey       true        0            true          {2}
 
 query TTTTTTTTT colnames
@@ -1590,8 +1608,8 @@ SELECT * FROM pg_rewrite WHERE ev_class IN (
 ) ORDER BY oid
 ----
 oid         rulename  ev_class  ev_type  ev_enabled  is_instead  ev_qual  ev_action
-554906963   _RETURN   129       1        NULL        true        NULL     NULL
-1899983969  _RETURN   130       1        NULL        true        NULL     NULL
+2159720243  _RETURN   131       1        NULL        true        NULL     NULL
+3504797253  _RETURN   132       1        NULL        true        NULL     NULL
 
 ## pg_catalog.pg_enum
 statement ok
@@ -1605,10 +1623,10 @@ oid         enumtypid  enumsortorder  enumlabel
 3341603527  100118     0              foo
 3341603335  100118     1              bar
 3341603399  100118     2              baz
-2452389720  100131     0              v1
-2452389784  100131     1              v2
-2553055434  100133     0              v3
-2553055242  100133     1              v4
+2553055434  100133     0              v1
+2553055242  100133     1              v2
+2519500068  100135     0              v3
+2519500260  100135     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1711,15 +1729,17 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 100117  t5                     109           1546506610  -1      false     c
 100118  mytype                 109           1546506610  -1      false     e
 100119  _mytype                109           1546506610  -1      false     b
-100120  t6                     109           1546506610  -1      false     c
-100121  mv1                    109           1546506610  -1      false     c
-100128  source_table           109           1546506610  -1      false     c
-100129  depend_view            109           1546506610  -1      false     c
-100130  view_dependingon_view  109           1546506610  -1      false     c
-100131  newtype1               109           1546506610  -1      false     e
-100132  _newtype1              109           1546506610  -1      false     b
-100133  newtype2               109           1546506610  -1      false     e
-100134  _newtype2              109           1546506610  -1      false     b
+100120  compositetype          109           1546506610  16      true      c
+100121  _compositetype         109           1546506610  -1      false     b
+100122  t6                     109           1546506610  -1      false     c
+100123  mv1                    109           1546506610  -1      false     c
+100130  source_table           109           1546506610  -1      false     c
+100131  depend_view            109           1546506610  -1      false     c
+100132  view_dependingon_view  109           1546506610  -1      false     c
+100133  newtype1               109           1546506610  -1      false     e
+100134  _newtype1              109           1546506610  -1      false     b
+100135  newtype2               109           1546506610  -1      false     e
+100136  _newtype2              109           1546506610  -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1820,15 +1840,17 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 100117  t5                     C            false           true          ,         117       0        0
 100118  mytype                 E            false           true          ,         0         0        100119
 100119  _mytype                A            false           true          ,         0         100118   0
-100120  t6                     C            false           true          ,         120       0        0
-100121  mv1                    C            false           true          ,         121       0        0
-100128  source_table           C            false           true          ,         128       0        0
-100129  depend_view            C            false           true          ,         129       0        0
-100130  view_dependingon_view  C            false           true          ,         130       0        0
-100131  newtype1               E            false           true          ,         0         0        100132
-100132  _newtype1              A            false           true          ,         0         100131   0
-100133  newtype2               E            false           true          ,         0         0        100134
-100134  _newtype2              A            false           true          ,         0         100133   0
+100120  compositetype          C            false           true          ,         0         0        100121
+100121  _compositetype         A            false           true          ,         0         100120   0
+100122  t6                     C            false           true          ,         122       0        0
+100123  mv1                    C            false           true          ,         123       0        0
+100130  source_table           C            false           true          ,         130       0        0
+100131  depend_view            C            false           true          ,         131       0        0
+100132  view_dependingon_view  C            false           true          ,         132       0        0
+100133  newtype1               E            false           true          ,         0         0        100134
+100134  _newtype1              A            false           true          ,         0         100133   0
+100135  newtype2               E            false           true          ,         0         0        100136
+100136  _newtype2              A            false           true          ,         0         100135   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
@@ -1929,15 +1951,17 @@ oid     typname                typinput        typoutput        typreceive      
 100117  t5                     record_in       record_out       record_recv       record_send       0         0          0
 100118  mytype                 enum_in         enum_out         enum_recv         enum_send         0         0          0
 100119  _mytype                array_in        array_out        array_recv        array_send        0         0          0
-100120  t6                     record_in       record_out       record_recv       record_send       0         0          0
-100121  mv1                    record_in       record_out       record_recv       record_send       0         0          0
-100128  source_table           record_in       record_out       record_recv       record_send       0         0          0
-100129  depend_view            record_in       record_out       record_recv       record_send       0         0          0
-100130  view_dependingon_view  record_in       record_out       record_recv       record_send       0         0          0
-100131  newtype1               enum_in         enum_out         enum_recv         enum_send         0         0          0
-100132  _newtype1              array_in        array_out        array_recv        array_send        0         0          0
-100133  newtype2               enum_in         enum_out         enum_recv         enum_send         0         0          0
-100134  _newtype2              array_in        array_out        array_recv        array_send        0         0          0
+100120  compositetype          record_in       record_out       record_recv       record_send       0         0          0
+100121  _compositetype         array_in        array_out        array_recv        array_send        0         0          0
+100122  t6                     record_in       record_out       record_recv       record_send       0         0          0
+100123  mv1                    record_in       record_out       record_recv       record_send       0         0          0
+100130  source_table           record_in       record_out       record_recv       record_send       0         0          0
+100131  depend_view            record_in       record_out       record_recv       record_send       0         0          0
+100132  view_dependingon_view  record_in       record_out       record_recv       record_send       0         0          0
+100133  newtype1               enum_in         enum_out         enum_recv         enum_send         0         0          0
+100134  _newtype1              array_in        array_out        array_recv        array_send        0         0          0
+100135  newtype2               enum_in         enum_out         enum_recv         enum_send         0         0          0
+100136  _newtype2              array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
@@ -2038,15 +2062,17 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 100117  t5                     NULL      NULL        false       0            -1
 100118  mytype                 NULL      NULL        false       0            -1
 100119  _mytype                NULL      NULL        false       0            -1
-100120  t6                     NULL      NULL        false       0            -1
-100121  mv1                    NULL      NULL        false       0            -1
-100128  source_table           NULL      NULL        false       0            -1
-100129  depend_view            NULL      NULL        false       0            -1
-100130  view_dependingon_view  NULL      NULL        false       0            -1
-100131  newtype1               NULL      NULL        false       0            -1
-100132  _newtype1              NULL      NULL        false       0            -1
-100133  newtype2               NULL      NULL        false       0            -1
-100134  _newtype2              NULL      NULL        false       0            -1
+100120  compositetype          NULL      NULL        false       0            -1
+100121  _compositetype         NULL      NULL        false       0            -1
+100122  t6                     NULL      NULL        false       0            -1
+100123  mv1                    NULL      NULL        false       0            -1
+100130  source_table           NULL      NULL        false       0            -1
+100131  depend_view            NULL      NULL        false       0            -1
+100132  view_dependingon_view  NULL      NULL        false       0            -1
+100133  newtype1               NULL      NULL        false       0            -1
+100134  _newtype1              NULL      NULL        false       0            -1
+100135  newtype2               NULL      NULL        false       0            -1
+100136  _newtype2              NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
@@ -2147,15 +2173,17 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 100117  t5                     0         0             NULL           NULL        NULL
 100118  mytype                 0         0             NULL           NULL        NULL
 100119  _mytype                0         0             NULL           NULL        NULL
-100120  t6                     0         0             NULL           NULL        NULL
-100121  mv1                    0         0             NULL           NULL        NULL
-100128  source_table           0         0             NULL           NULL        NULL
-100129  depend_view            0         0             NULL           NULL        NULL
-100130  view_dependingon_view  0         0             NULL           NULL        NULL
-100131  newtype1               0         0             NULL           NULL        NULL
-100132  _newtype1              0         0             NULL           NULL        NULL
-100133  newtype2               0         0             NULL           NULL        NULL
-100134  _newtype2              0         0             NULL           NULL        NULL
+100120  compositetype          0         0             NULL           NULL        NULL
+100121  _compositetype         0         0             NULL           NULL        NULL
+100122  t6                     0         0             NULL           NULL        NULL
+100123  mv1                    0         0             NULL           NULL        NULL
+100130  source_table           0         0             NULL           NULL        NULL
+100131  depend_view            0         0             NULL           NULL        NULL
+100132  view_dependingon_view  0         0             NULL           NULL        NULL
+100133  newtype1               0         0             NULL           NULL        NULL
+100134  _newtype1              0         0             NULL           NULL        NULL
+100135  newtype2               0         0             NULL           NULL        NULL
+100136  _newtype2              0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -2184,7 +2212,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'newtype1'
 ----
 oid     typname   typnamespace  typowner    typlen  typbyval  typtype
-100131  newtype1  109           1546506610  -1      false     e
+100133  newtype1  109           1546506610  -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2206,7 +2234,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'source_table'
 ----
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
-100128  source_table  109           1546506610  -1      false     c
+100130  source_table  109           1546506610  -1      false     c
 
 let $sourceid
 SELECT oid
@@ -2220,7 +2248,7 @@ FROM pg_catalog.pg_type
 WHERE oid = $sourceid
 ----
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
-100128  source_table  109           1546506610  -1      false     c
+100130  source_table  109           1546506610  -1      false     c
 
 let $vtableSourceId
 SELECT oid
@@ -3180,8 +3208,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-137       20        1         1             9223372036854775807  1       1         false
-138       20        6         2             10                   5       1         false
+139       20        1         1             9223372036854775807  1       1         false
+140       20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -3234,8 +3262,8 @@ WHERE n.nspname = 'public'
 1221463946  t3   unique_rowid()
 1740936492  t4   unique_rowid()
 3086013501  t5   unique_rowid()
-655595746   t6   unique_rowid()
-2000672759  mv1  unique_rowid()
+3345749761  t6   unique_rowid()
+395859477   mv1  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
@@ -3772,13 +3800,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-168  168  jt
+170  170  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-168  168   jt
+170  170   jt
 
 subtest regression_49207
 statement ok
