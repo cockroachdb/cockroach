@@ -145,7 +145,7 @@ func newCFetcherWrapper(
 		return nil, errors.AssertionFailedf("expected an IndexFetchSpec, but found a %T", indexFetchSpec)
 	}
 	// TODO: typeResolver.
-	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */)
+	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */, true /* allowUnhydratedEnums */)
 	if err != nil {
 		return nil, err
 	}
