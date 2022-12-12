@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "cockroach_lib",
@@ -13,6 +14,14 @@ go_library(
         "//pkg/ui/distccl",
     ],
 )
+
+disallowed_imports_test(
+    "cockroach_lib",
+    [
+        "//pkg/sql/randgen",
+    ],
+)
+
 
 go_binary(
     name = "cockroach",

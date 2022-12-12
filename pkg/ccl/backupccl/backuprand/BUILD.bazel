@@ -12,7 +12,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/backupccl/backuputils",
+        "//pkg/ccl/backupccl/backuptestutils",
         "//pkg/ccl/storageccl",
         "//pkg/internal/sqlsmith",
         "//pkg/security/securityassets",
