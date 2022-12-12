@@ -136,8 +136,6 @@ type Collection struct {
 	sqlLivenessSession sqlliveness.Session
 }
 
-var _ catalog.Accessor = (*Collection)(nil)
-
 // GetDeletedDescs returns the deleted descriptors of the collection.
 func (tc *Collection) GetDeletedDescs() catalog.DescriptorIDSet {
 	return tc.deletedDescs
@@ -907,51 +905,18 @@ func (tc *Collection) GetSchemasForDatabase(
 	return ret, nil
 }
 
-// GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.
+// GetObjectNamesAndIDs returns the names and IDs of all objects in a schema.
 func (tc *Collection) GetObjectNamesAndIDs(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	scName string,
-	flags tree.DatabaseListFlags,
-) (tree.TableNames, descpb.IDs, error) {
-	if ok, names, ds := tc.virtual.maybeGetObjectNamesAndIDs(
-		scName, db, flags,
-	); ok {
-		return names, ds, nil
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	if sc.SchemaKind() == catalog.SchemaVirtual {
+		tc.virtual.forEachVirtualObject(sc, func(obj catalog.Descriptor) {
+			mc.UpsertNamespaceEntry(obj, obj.GetID(), hlc.Timestamp{})
+		})
+		return mc.Catalog, nil
 	}
-
-	schemaFlags := tree.SchemaLookupFlags{
-		Required:       flags.Required,
-		AvoidLeased:    flags.RequireMutable || flags.AvoidLeased,
-		IncludeDropped: flags.IncludeDropped,
-		IncludeOffline: flags.IncludeOffline,
-	}
-	schema, err := tc.getSchemaByName(ctx, txn, db, scName, schemaFlags)
-	if err != nil {
-		return nil, nil, err
-	}
-	if schema == nil { // required must have been false
-		return nil, nil, nil
-	}
-	read, err := tc.cr.ScanNamespaceForSchemaObjects(ctx, txn, db, schema)
-	if err != nil {
-		return nil, nil, err
-	}
-	var tableNames tree.TableNames
-	var tableIDs descpb.IDs
-	_ = read.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if e.GetParentID() != db.GetID() || e.GetParentSchemaID() != schema.GetID() {
-			return nil
-		}
-		tn := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(scName), tree.Name(e.GetName()))
-		tn.ExplicitCatalog = flags.ExplicitPrefix
-		tn.ExplicitSchema = flags.ExplicitPrefix
-		tableNames = append(tableNames, tn)
-		tableIDs = append(tableIDs, e.GetID())
-		return nil
-	})
-	return tableNames, tableIDs, nil
+	return tc.cr.ScanNamespaceForSchemaObjects(ctx, txn, db, sc)
 }
 
 // SetSyntheticDescriptors sets the provided descriptors as the synthetic

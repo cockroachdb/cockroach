@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -153,22 +152,26 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+	db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
 		database, tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
 
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db)
 	if err != nil {
 		return err
 	}
 
 	var tbNames tree.TableNames
 	for _, schema := range schemas {
-		toAppend, _, err := resolver.GetObjectNamesAndIDs(
-			ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true, /*explicitPrefix*/
+		sc, err := p.Descriptors().GetImmutableSchemaByName(
+			ctx, p.txn, db, schema, p.CommonLookupFlagsRequired(),
 		)
+		if err != nil {
+			return err
+		}
+		toAppend, _, err := p.GetObjectNamesAndIDs(ctx, db, sc)
 		if err != nil {
 			return err
 		}

@@ -295,12 +295,7 @@ func (s *TestState) MayResolveType(
 // MayResolveIndex implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveIndex(
 	ctx context.Context, tableIndexName tree.TableIndexName,
-) (
-	found bool,
-	prefix catalog.ResolvedObjectPrefix,
-	tbl catalog.TableDescriptor,
-	idx catalog.Index,
-) {
+) (found bool, _ catalog.ResolvedObjectPrefix, _ catalog.TableDescriptor, _ catalog.Index) {
 	if tableIndexName.Table.Object() != "" {
 		prefix, tbl := s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName())
 		if tbl == nil {
@@ -314,14 +309,24 @@ func (s *TestState) MayResolveIndex(
 	}
 
 	db, schema := s.mayResolvePrefix(tableIndexName.Table.ObjectNamePrefix)
-	dsNames, _ := s.ReadObjectNamesAndIDs(ctx, db.(catalog.DatabaseDescriptor), schema.(catalog.SchemaDescriptor))
-	for _, dsName := range dsNames {
-		prefix, tbl := s.MayResolveTable(ctx, *dsName.ToUnresolvedObjectName())
-		if tbl == nil {
+	prefix := catalog.ResolvedObjectPrefix{
+		ExplicitDatabase: true,
+		ExplicitSchema:   true,
+		Database:         db.(catalog.DatabaseDescriptor),
+		Schema:           schema.(catalog.SchemaDescriptor),
+	}
+	objectIDs := s.ReadObjectIDs(ctx, prefix.Database, prefix.Schema)
+	for _, objectID := range objectIDs.Ordered() {
+		desc, _ := s.mustReadImmutableDescriptor(objectID)
+		if desc == nil {
 			continue
 		}
-		idx, err := tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
-		if err == nil {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		idx, _ := tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+		if idx != nil {
 			return true, prefix, tbl, idx
 		}
 	}
@@ -431,29 +436,17 @@ func (s *TestState) mayGetByName(
 	return desc
 }
 
-// ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.
-func (s *TestState) ReadObjectNamesAndIDs(
-	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
-) (names tree.TableNames, ids descpb.IDs) {
-	m := make(map[string]descpb.ID)
+// ReadObjectIDs implements the scbuild.CatalogReader interface.
+func (s *TestState) ReadObjectIDs(
+	_ context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
+) (ret catalog.DescriptorIDSet) {
 	_ = s.uncommitted.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 		if e.GetParentID() == db.GetID() && e.GetParentSchemaID() == schema.GetID() {
-			m[e.GetName()] = e.GetID()
-			names = append(names, tree.MakeTableNameWithSchema(
-				tree.Name(db.GetName()),
-				tree.Name(schema.GetName()),
-				tree.Name(e.GetName()),
-			))
+			ret.Add(e.GetID())
 		}
 		return nil
 	})
-	sort.Slice(names, func(i, j int) bool {
-		return names[i].Object() < names[j].Object()
-	})
-	for _, name := range names {
-		ids = append(ids, m[name.Object()])
-	}
-	return names, ids
+	return ret
 }
 
 // ResolveType implements the scbuild.CatalogReader interface.

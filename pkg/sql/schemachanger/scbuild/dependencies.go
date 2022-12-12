@@ -133,8 +133,8 @@ type CatalogReader interface {
 		found bool, prefix catalog.ResolvedObjectPrefix, tbl catalog.TableDescriptor, idx catalog.Index,
 	)
 
-	// ReadObjectNamesAndIDs looks up the namespace entries for a schema.
-	ReadObjectNamesAndIDs(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) (tree.TableNames, descpb.IDs)
+	// ReadObjectIDs looks up the IDs of all objects in a schema.
+	ReadObjectIDs(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) catalog.DescriptorIDSet
 
 	// MustReadDescriptor looks up a descriptor by ID.
 	MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor

@@ -46,10 +46,18 @@ type SchemaResolver interface {
 	tree.TypeReferenceResolver
 	tree.FunctionReferenceResolver
 
-	// Accessor is a crufty name and interface that wraps the *descs.Collection.
-	Accessor() catalog.Accessor
+	// GetObjectNamesAndIDs returns the names and IDs of the objects in the
+	// schema.
+	GetObjectNamesAndIDs(
+		ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+	) (tree.TableNames, descpb.IDs, error)
+
+	// MustGetCurrentSessionDatabase returns the database descriptor for the
+	// current session database.
+	MustGetCurrentSessionDatabase(ctx context.Context) (catalog.DatabaseDescriptor, error)
+
+	// CurrentSearchPath returns the current search path.
 	CurrentSearchPath() sessiondata.SearchPath
-	CommonLookupFlagsRequired() tree.CommonLookupFlags
 }
 
 // ObjectNameExistingResolver is the helper interface to resolve table
@@ -84,25 +92,6 @@ type ObjectNameTargetResolver interface {
 // AllowWithoutPrimaryKey flag is not set.
 var ErrNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
 	"requested table does not have a primary key")
-
-// GetObjectNamesAndIDs retrieves the names and IDs of all objects in the
-// target database/schema. If explicitPrefix is set, the returned
-// table names will have an explicit schema and catalog name.
-func GetObjectNamesAndIDs(
-	ctx context.Context,
-	txn *kv.Txn,
-	sr SchemaResolver,
-	codec keys.SQLCodec,
-	dbDesc catalog.DatabaseDescriptor,
-	scName string,
-	explicitPrefix bool,
-) (tree.TableNames, descpb.IDs, error) {
-	flags := tree.DatabaseListFlags{
-		CommonLookupFlags: sr.CommonLookupFlagsRequired(),
-		ExplicitPrefix:    explicitPrefix,
-	}
-	return sr.Accessor().GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, flags)
-}
 
 // ResolveExistingTableObject looks up an existing object.
 // If required is true, an error is returned if the object does not exist.
@@ -556,8 +545,6 @@ func ResolveIndex(
 	ctx context.Context,
 	schemaResolver SchemaResolver,
 	tableIndexName *tree.TableIndexName,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
 	required bool,
 	requireActiveIndex bool,
 ) (
@@ -624,7 +611,7 @@ func ResolveIndex(
 		}
 
 		tblFound, tbl, idx, err := findTableContainingIndex(
-			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, txn, codec, schemaResolver, requireActiveIndex,
+			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, schemaResolver, requireActiveIndex,
 		)
 		if err != nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
@@ -667,7 +654,7 @@ func ResolveIndex(
 		schemaFound = true
 
 		candidateFound, tbl, idx, curErr := findTableContainingIndex(
-			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, txn, codec, schemaResolver, requireActiveIndex,
+			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, schemaResolver, requireActiveIndex,
 		)
 		if curErr != nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, curErr
@@ -777,14 +764,10 @@ func findTableContainingIndex(
 	ctx context.Context,
 	indexName tree.Name,
 	resolvedPrefix catalog.ResolvedObjectPrefix,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
 	schemaResolver SchemaResolver,
 	requireActiveIndex bool,
 ) (found bool, tblDesc catalog.TableDescriptor, idxDesc catalog.Index, err error) {
-	dsNames, _, err := GetObjectNamesAndIDs(
-		ctx, txn, schemaResolver, codec, resolvedPrefix.Database, resolvedPrefix.Schema.GetName(), true,
-	)
+	dsNames, _, err := schemaResolver.GetObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
 
 	if err != nil {
 		return false, nil, nil, err

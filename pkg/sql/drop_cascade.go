@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -59,9 +58,7 @@ func newDropCascadeState() *dropCascadeState {
 func (d *dropCascadeState) collectObjectsInSchema(
 	ctx context.Context, p *planner, db *dbdesc.Mutable, schema catalog.SchemaDescriptor,
 ) error {
-	names, _, err := resolver.GetObjectNamesAndIDs(
-		ctx, p.txn, p, p.ExecCfg().Codec, db, schema.GetName(), true, /* explicitPrefix */
-	)
+	names, _, err := p.GetObjectNamesAndIDs(ctx, db, schema)
 	if err != nil {
 		return err
 	}

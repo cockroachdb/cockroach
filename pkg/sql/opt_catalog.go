@@ -147,15 +147,7 @@ func (os *optSchema) Name() *cat.SchemaName {
 func (os *optSchema) GetDataSourceNames(
 	ctx context.Context,
 ) ([]cat.DataSourceName, descpb.IDs, error) {
-	return resolver.GetObjectNamesAndIDs(
-		ctx,
-		os.planner.Txn(),
-		os.planner,
-		os.planner.ExecCfg().Codec,
-		os.database,
-		os.name.Schema(),
-		true, /* explicitPrefix */
-	)
+	return os.planner.GetObjectNamesAndIDs(ctx, os.database, os.schema)
 }
 
 func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
@@ -270,8 +262,6 @@ func (oc *optCatalog) ResolveIndex(
 			ctx,
 			oc.planner,
 			name,
-			oc.planner.Txn(),
-			oc.planner.EvalContext().Codec,
 			true, /* required */
 			true, /* requireActiveIndex */
 		)

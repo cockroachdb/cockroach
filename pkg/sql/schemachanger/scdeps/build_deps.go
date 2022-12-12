@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -169,7 +170,7 @@ func (d *buildDeps) MayResolveIndex(
 	idx catalog.Index,
 ) {
 	found, prefix, tbl, idx, err := resolver.ResolveIndex(
-		ctx, d.schemaResolver, &tableIndexName, d.txn, d.codec, false /* required */, false, /* requireActiveIndex */
+		ctx, d.schemaResolver, &tableIndexName, false /* required */, false, /* requireActiveIndex */
 	)
 	if err != nil {
 		panic(err)
@@ -177,24 +178,19 @@ func (d *buildDeps) MayResolveIndex(
 	return found, prefix, tbl, idx
 }
 
-// ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.
-func (d *buildDeps) ReadObjectNamesAndIDs(
+// ReadObjectIDs implements the scbuild.CatalogReader interface.
+func (d *buildDeps) ReadObjectIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
-) (tree.TableNames, descpb.IDs) {
-	names, ids, err := d.descsCollection.GetObjectNamesAndIDs(ctx, d.txn, db, schema.GetName(), tree.DatabaseListFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:       true,
-			RequireMutable: false,
-			AvoidLeased:    true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-		},
-		ExplicitPrefix: true,
-	})
+) (ret catalog.DescriptorIDSet) {
+	c, err := d.descsCollection.GetObjectNamesAndIDs(ctx, d.txn, db, schema)
 	if err != nil {
 		panic(err)
 	}
-	return names, ids
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		ret.Add(e.GetID())
+		return nil
+	})
+	return ret
 }
 
 // ResolveType implements the scbuild.CatalogReader interface.
