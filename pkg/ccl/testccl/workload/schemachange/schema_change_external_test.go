@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/schemachange"
@@ -35,7 +36,9 @@ func TestWorkload(t *testing.T) {
 	defer ccl.TestingEnableEnterprise()()
 	skip.UnderRace(t, "test connections can be too slow under race option.")
 
-	dir := t.TempDir()
+	scope := log.Scope(t)
+	defer scope.Close(t)
+	dir := scope.GetDirectory()
 	ctx := context.Background()
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t,
