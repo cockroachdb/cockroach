@@ -139,7 +139,7 @@ func newCFetcherWrapper(
 	nextKVer storage.NextKVer,
 ) (_ storage.CFetcherWrapper, retErr error) {
 	// TODO: typeResolver.
-	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */)
+	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */, true /* allowUnhydratedEnums */)
 	if err != nil {
 		return nil, err
 	}
