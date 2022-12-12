@@ -812,7 +812,7 @@ func makeEnums(t *testing.T) tree.Datums {
 	res := make(tree.Datums, len(enumMembers))
 	var err error
 	for i := range enumMembers {
-		res[i], err = tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[i])
+		res[i], err = tree.NewDEnumFromLogicalRepresentation(enumType, enumMembers[i])
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1100,15 +1100,15 @@ func makeEnums(t *testing.T) tree.Datums {
 			IsMemberReadOnly: make([]bool, len(enumMembers)),
 		},
 	}
-	enumHello, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[0])
+	enumHello, err := tree.NewDEnumFromLogicalRepresentation(enumType, enumMembers[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	enumHey, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[1])
+	enumHey, err := tree.NewDEnumFromLogicalRepresentation(enumType, enumMembers[1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	enumHi, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[2])
+	enumHi, err := tree.NewDEnumFromLogicalRepresentation(enumType, enumMembers[2])
 	if err != nil {
 		t.Fatal(err)
 	}

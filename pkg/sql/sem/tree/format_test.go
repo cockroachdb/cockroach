@@ -277,11 +277,11 @@ func TestFormatExpr2(t *testing.T) {
 			IsMemberReadOnly: make([]bool, len(enumMembers)),
 		},
 	}
-	enumHi, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[0])
+	enumHi, err := tree.NewDEnumFromLogicalRepresentation(enumType, enumMembers[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	enumHello, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[1])
+	enumHello, err := tree.NewDEnumFromLogicalRepresentation(enumType, enumMembers[1])
 	if err != nil {
 		t.Fatal(err)
 	}

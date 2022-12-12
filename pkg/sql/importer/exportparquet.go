@@ -410,7 +410,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 			return []byte(d.(*tree.DEnum).LogicalRep), nil
 		}
 		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.MakeDEnumFromLogicalRepresentation(typ, string(x.([]byte)))
+			return tree.NewDEnumFromLogicalRepresentation(typ, string(x.([]byte)))
 		}
 	case types.Box2DFamily:
 		populateLogicalStringCol(schemaEl)

@@ -90,7 +90,7 @@ func ParseAndRequireString(
 	case types.UuidFamily:
 		d, err = ParseDUuidFromString(s)
 	case types.EnumFamily:
-		d, err = MakeDEnumFromLogicalRepresentation(t, s)
+		d, err = NewDEnumFromLogicalRepresentation(t, s)
 	case types.TSQueryFamily:
 		d, err = ParseDTSQuery(s)
 	case types.TSVectorFamily:
