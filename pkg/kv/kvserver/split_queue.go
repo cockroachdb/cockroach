@@ -206,7 +206,7 @@ func (sq *splitQueue) processAttempt(
 	// situations).
 	size := r.GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes()
-	if maxBytes > 0 && float64(size)/float64(maxBytes) > 1 {
+	if maxBytes > 0 && size > maxBytes {
 		_, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{},
