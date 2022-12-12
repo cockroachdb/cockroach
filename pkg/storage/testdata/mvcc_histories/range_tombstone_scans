@@ -120,10 +120,8 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "f" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
-scan: "j" -> /<empty> @4.000000000,0
 
 run ok
 scan k=a end=z ts=5 tombstones
@@ -132,10 +130,8 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
-scan: "j" -> /<empty> @4.000000000,0
 
 run ok
 scan k=a end=z ts=6 tombstones inconsistent
@@ -145,10 +141,8 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
-scan: "j" -> /<empty> @4.000000000,0
 
 # Run bounded tombstone scans at 6 and 3.
 run ok
@@ -170,13 +164,13 @@ scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
-scan: "e" -> /<empty> @4.000000000,0
+scan: "e"-"f" -> <no data>
 scan: "f" -> /BYTES/f5 @5.000000000,0
-scan: "g" -> /<empty> @4.000000000,0
+scan: "g"-"h" -> <no data>
 scan: "h" -> /<empty> @4.000000000,0
 scan: "i"-"j" -> <no data>
-scan: "j" -> /<empty> @4.000000000,0
-scan: "k" -> /<empty> @4.000000000,0
+scan: "j"-"k" -> <no data>
+scan: "k"-"l" -> <no data>
 scan: "l"-"m" -> <no data>
 
 run ok
@@ -274,10 +268,8 @@ scan: "a" -> /<empty> @3.000000000,0
 run ok
 scan k=a end=z ts=4 tombstones reverse
 ----
-scan: "j" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -286,10 +278,8 @@ scan: "a" -> /<empty> @3.000000000,0
 run ok
 scan k=a end=z ts=5 tombstones reverse
 ----
-scan: "j" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -299,10 +289,8 @@ run ok
 scan k=a end=z ts=6 tombstones inconsistent reverse
 ----
 scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
-scan: "j" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -328,13 +316,13 @@ scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
-scan: "e" -> /<empty> @4.000000000,0
+scan: "e"-"f" -> <no data>
 scan: "f" -> /BYTES/f5 @5.000000000,0
-scan: "g" -> /<empty> @4.000000000,0
+scan: "g"-"h" -> <no data>
 scan: "h" -> /<empty> @4.000000000,0
 scan: "i"-"j" -> <no data>
-scan: "j" -> /<empty> @4.000000000,0
-scan: "k" -> /<empty> @4.000000000,0
+scan: "j"-"k" -> <no data>
+scan: "k"-"l" -> <no data>
 scan: "l"-"m" -> <no data>
 
 run ok
@@ -369,14 +357,12 @@ run ok
 scan k=h end=z ts=4 tombstones
 ----
 scan: "h" -> /<empty> @4.000000000,0
-scan: "j" -> /<empty> @4.000000000,0
 
 run ok
 scan k=a end=h+ ts=4 tombstones reverse
 ----
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -385,12 +371,12 @@ scan: "a" -> /<empty> @3.000000000,0
 run ok
 scan k=k end=l ts=4 tombstones
 ----
-scan: "k" -> /<empty> @4.000000000,0
+scan: "k"-"l" -> <no data>
 
 run ok
 scan k=j end=k ts=4 tombstones
 ----
-scan: "j" -> /<empty> @4.000000000,0
+scan: "j"-"k" -> <no data>
 
 # failOnMoreRecent: a-d
 run error
