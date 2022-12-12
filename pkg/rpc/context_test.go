@@ -265,7 +265,8 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	clientOpts := opts
 	clientOpts.Config = testutils.NewNodeTestBaseContext()
 	// Experimentally, values below 50ms seem to incur flakiness.
-	clientOpts.Config.RPCHeartbeatIntervalAndTimeout = 100 * time.Millisecond
+	clientOpts.Config.RPCHeartbeatInterval = 100 * time.Millisecond
+	clientOpts.Config.RPCHeartbeatTimeout = 100 * time.Millisecond
 	clientOpts.ClientOnly = clientOnly
 	clientOpts.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
 		select {
@@ -903,7 +904,8 @@ func TestHeartbeatHealth(t *testing.T) {
 	clientCtx.Config.AdvertiseAddr = lisLocalServer.Addr().String()
 
 	// Make the interval shorter to speed up the test.
-	clientCtx.Config.RPCHeartbeatIntervalAndTimeout = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
 
 	m := clientCtx.Metrics()
 
@@ -1148,7 +1150,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	// Make the interval shorter to speed up the test.
-	clientCtx.Config.RPCHeartbeatIntervalAndTimeout = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -1259,7 +1262,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	})
 
 	// Should stay unhealthy despite reconnection attempts.
-	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.Config.RPCHeartbeatIntervalAndTimeout; {
+	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.Config.RPCHeartbeatTimeout; {
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
 		if !isUnhealthy(err) {
 			t.Fatal(err)
@@ -1303,7 +1306,8 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
 	// Make the interval shorter to speed up the test.
-	clientCtx.Config.RPCHeartbeatIntervalAndTimeout = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientClock.getAdvancementInterval()
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
@@ -1465,7 +1469,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		clock := timeutil.NewManualTime(timeutil.Unix(0, start.Add(nodeCtxs[i].offset).UnixNano()))
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clusterID, clock, maxOffset, stopper)
-		nodeCtxs[i].ctx.Config.RPCHeartbeatIntervalAndTimeout = maxOffset
+		nodeCtxs[i].ctx.Config.RPCHeartbeatInterval = maxOffset
+		nodeCtxs[i].ctx.Config.RPCHeartbeatTimeout = maxOffset
 		nodeCtxs[i].ctx.NodeID.Set(context.Background(), roachpb.NodeID(i+1))
 
 		s := newTestServer(t, nodeCtxs[i].ctx)
@@ -1681,7 +1686,8 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	log.Infof(ctx, "setting up client")
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	// Disable automatic heartbeats. We'll send them by hand.
-	clientCtx.Config.RPCHeartbeatIntervalAndTimeout = math.MaxInt64
+	clientCtx.Config.RPCHeartbeatInterval = math.MaxInt64
+	clientCtx.Config.RPCHeartbeatTimeout = math.MaxInt64
 
 	var firstConn int32 = 1
 

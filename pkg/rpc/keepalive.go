@@ -37,8 +37,8 @@ var clientKeepalive = keepalive.ClientParameters{
 	PermitWithoutStream: true,
 }
 var serverKeepalive = keepalive.ServerParameters{
-	// Send periodic pings on the connection.
-	Time: base.NetworkTimeout,
+	// Send periodic pings on the connection when there is no other traffic.
+	Time: base.PingInterval,
 	// If the pings don't get a response within the timeout, we might be
 	// experiencing a network partition. gRPC will close the transport-level
 	// connection and all the pending RPCs (which may not have timeouts) will
