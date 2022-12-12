@@ -1112,5 +1112,5 @@ func makeEnums(t *testing.T) tree.Datums {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tree.Datums{enumHello, enumHey, enumHi}
+	return tree.Datums{&enumHello, &enumHey, &enumHi}
 }
