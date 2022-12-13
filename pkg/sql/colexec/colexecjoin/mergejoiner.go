@@ -510,7 +510,7 @@ func newMergeJoinBase(
 	}
 
 	base := &mergeJoinBase{
-		joinHelper:         newJoinHelper(left, right),
+		TwoInputInitHelper: colexecop.MakeTwoInputInitHelper(left, right),
 		unlimitedAllocator: unlimitedAllocator,
 		memoryLimit:        memoryLimit,
 		diskQueueCfg:       diskQueueCfg,
@@ -546,7 +546,7 @@ func newMergeJoinBase(
 
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
-	*joinHelper
+	colexecop.TwoInputInitHelper
 	colexecop.CloserHelper
 
 	unlimitedAllocator *colmem.Allocator
@@ -592,7 +592,7 @@ func (o *mergeJoinBase) Reset(ctx context.Context) {
 }
 
 func (o *mergeJoinBase) Init(ctx context.Context) {
-	if !o.init(ctx) {
+	if !o.TwoInputInitHelper.Init(ctx) {
 		return
 	}
 	o.outputTypes = o.joinType.MakeOutputTypes(o.left.sourceTypes, o.right.sourceTypes)

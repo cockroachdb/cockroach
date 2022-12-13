@@ -354,6 +354,44 @@ func (h *OneInputInitCloserHelper) Init(ctx context.Context) {
 	h.Input.Init(h.Ctx)
 }
 
+// MakeTwoInputInitHelper returns a new TwoInputInitHelper.
+func MakeTwoInputInitHelper(inputOne, inputTwo Operator) TwoInputInitHelper {
+	return TwoInputInitHelper{InputOne: inputOne, InputTwo: inputTwo}
+}
+
+type TwoInputInitHelper struct {
+	InitHelper
+	InputOne Operator
+	InputTwo Operator
+}
+
+// Init initializes both inputs and returns true if this is the first time Init
+// was called.
+func (h *TwoInputInitHelper) Init(ctx context.Context) bool {
+	if !h.InitHelper.Init(ctx) {
+		return false
+	}
+	h.InputOne.Init(h.Ctx)
+	h.InputTwo.Init(h.Ctx)
+	return true
+}
+
+func (h *TwoInputInitHelper) ChildCount(verbose bool) int {
+	return 2
+}
+
+func (h *TwoInputInitHelper) Child(nth int, verbose bool) execopnode.OpNode {
+	switch nth {
+	case 0:
+		return h.InputOne
+	case 1:
+		return h.InputTwo
+	}
+	colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
 type noopOperator struct {
 	OneInputInitCloserHelper
 	NonExplainable
