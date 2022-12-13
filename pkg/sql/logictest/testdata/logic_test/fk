@@ -2715,7 +2715,7 @@ statement ok
 CREATE TABLE child_duplicate_cols (id INT, parent_id INT, PRIMARY KEY (id))
 
 # The fk constraint is invalid because it has duplicate columns, so automatically adding the index fails
-statement error foreign key contains duplicate column \"parent_id\"
+statement error pgcode 42830 foreign key contains duplicate column ".*parent_id"
 ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, parent_id) references parent
 
 statement ok
