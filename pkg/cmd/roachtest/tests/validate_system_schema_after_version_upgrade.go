@@ -65,8 +65,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 			}
 
 			// expected and actual output of `SHOW CREATE ALL TABLES;`.
-			var expected string
-			var actual string
+			var expected, actual, actualFromCheckpoint string
 
 			// Query node `SHOW CREATE ALL TABLES` and store return in output.
 			obtainSystemSchemaStep := func(node int, output *string) versionStep {
@@ -83,13 +82,13 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 			}
 
 			// Compare whether two strings are equal -- used to compare expected and actual.
-			validateEquivalenceStep := func(str1, str2 string) versionStep {
+			validateEquivalenceStep := func(str1, str2 *string) versionStep {
 				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-					if str1 != str2 {
+					if *str1 != *str2 {
 						t.Fatal("After upgrading, `USE system; SHOW CREATE ALL TABLES;` " +
 							"does not match expected output after version upgrade.\n")
 					}
-					t.L().Printf("validating succeeded")
+					t.L().Printf("validating succeeded:\n%v", *str1)
 				}
 			}
 
@@ -101,6 +100,24 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 				obtainSystemSchemaStep(1, &expected),
 
 				// Wipe the node.
+				wipeClusterStep(c.Node(1)),
+
+				// Obtain the actual from a node which got upgraded to the precessor.
+				uploadAndStartFromCheckpointFixture(c.Node(1), predecessorVersion),
+
+				// Wait for the upgrade to the predecessorVersion.
+				waitForUpgradeStep(c.Node(1)),
+
+				// Upgrade the node version.
+				binaryUpgradeStep(c.Node(1), mainVersion),
+
+				// Wait for the cluster version to also bump up to make sure the migration logic is run.
+				waitForUpgradeStep(c.Node(1)),
+
+				// Obtain the actual output on the upgraded version.
+				obtainSystemSchemaStep(1, &actualFromCheckpoint),
+
+				// Wipe the node again.
 				wipeClusterStep(c.Node(1)),
 
 				// Restart the node with a previous binary version.
@@ -116,7 +133,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 				obtainSystemSchemaStep(1, &actual),
 
 				// Compare the results.
-				validateEquivalenceStep(expected, actual),
+				validateEquivalenceStep(&expected, &actual),
 			)
 			u.run(ctx, t)
 		},
