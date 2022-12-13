@@ -187,7 +187,11 @@ func injectSpanMeta(
 	} else {
 		md = md.Copy()
 	}
-	tracer.InjectMetaInto(clientSpan.Meta(), tracing.MetadataCarrier{MD: md})
+	meta := clientSpan.Meta()
+	if meta.Empty() {
+		return ctx
+	}
+	tracer.InjectMetaInto(meta, tracing.MetadataCarrier{MD: md})
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
@@ -226,10 +230,6 @@ func ClientInterceptor(
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 		parent := tracing.SpanFromContext(ctx)
-		if !tracing.SpanInclusionFuncForClient(parent) {
-			return invoker(ctx, method, req, resp, cc, opts...)
-		}
-
 		clientSpan := tracer.StartSpan(
 			method,
 			tracing.WithParent(parent),
@@ -291,9 +291,6 @@ func StreamClientInterceptor(
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 		parent := tracing.SpanFromContext(ctx)
-		if !tracing.SpanInclusionFuncForClient(parent) {
-			return streamer(ctx, desc, cc, method, opts...)
-		}
 
 		// Create a span that will live for the life of the stream.
 		clientSpan := tracer.StartSpan(
