@@ -45,6 +45,7 @@ type SQLStatusServer interface {
 	LogFilesList(context.Context, *LogFilesListRequest) (*LogFilesListResponse, error)
 	LogFile(context.Context, *LogFileRequest) (*LogEntriesResponse, error)
 	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
+	ListRecentStatements(context.Context, *ListRecentStatementsRequest) (*ListRecentStatementsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present

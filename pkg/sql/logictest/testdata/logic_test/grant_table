@@ -40,6 +40,7 @@ test           crdb_internal       cluster_execution_insights             public
 test           crdb_internal       cluster_inflight_traces                public   SELECT          false
 test           crdb_internal       cluster_locks                          public   SELECT          false
 test           crdb_internal       cluster_queries                        public   SELECT          false
+test           crdb_internal       cluster_recent_statements              public   SELECT          false
 test           crdb_internal       cluster_sessions                       public   SELECT          false
 test           crdb_internal       cluster_settings                       public   SELECT          false
 test           crdb_internal       cluster_statement_statistics           public   SELECT          false
@@ -78,6 +79,7 @@ test           crdb_internal       node_execution_insights                public
 test           crdb_internal       node_inflight_trace_spans              public   SELECT          false
 test           crdb_internal       node_metrics                           public   SELECT          false
 test           crdb_internal       node_queries                           public   SELECT          false
+test           crdb_internal       node_recent_statements                 public   SELECT          false
 test           crdb_internal       node_runtime_info                      public   SELECT          false
 test           crdb_internal       node_sessions                          public   SELECT          false
 test           crdb_internal       node_statement_statistics              public   SELECT          false

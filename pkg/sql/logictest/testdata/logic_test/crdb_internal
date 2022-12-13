@@ -27,6 +27,7 @@ crdb_internal  cluster_execution_insights       table  admin  NULL  NULL
 crdb_internal  cluster_inflight_traces          table  admin  NULL  NULL
 crdb_internal  cluster_locks                    table  admin  NULL  NULL
 crdb_internal  cluster_queries                  table  admin  NULL  NULL
+crdb_internal  cluster_recent_statements        table  admin  NULL  NULL
 crdb_internal  cluster_sessions                 table  admin  NULL  NULL
 crdb_internal  cluster_settings                 table  admin  NULL  NULL
 crdb_internal  cluster_statement_statistics     table  admin  NULL  NULL
@@ -65,6 +66,7 @@ crdb_internal  node_execution_insights          table  admin  NULL  NULL
 crdb_internal  node_inflight_trace_spans        table  admin  NULL  NULL
 crdb_internal  node_metrics                     table  admin  NULL  NULL
 crdb_internal  node_queries                     table  admin  NULL  NULL
+crdb_internal  node_recent_statements           table  admin  NULL  NULL
 crdb_internal  node_runtime_info                table  admin  NULL  NULL
 crdb_internal  node_sessions                    table  admin  NULL  NULL
 crdb_internal  node_statement_statistics        table  admin  NULL  NULL

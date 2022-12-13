@@ -19,6 +19,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [cluster] retrieving SQL data for crdb_internal.cluster_execution_insights... writing output: debug/crdb_internal.cluster_execution_insights.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_locks... writing output: debug/crdb_internal.cluster_locks.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_queries... writing output: debug/crdb_internal.cluster_queries.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_recent_statements... writing output: debug/crdb_internal.cluster_recent_statements.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_settings... writing output: debug/crdb_internal.cluster_settings.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
@@ -87,6 +88,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/1/crdb_internal.node_metrics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/1/crdb_internal.node_queries.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_recent_statements... writing output: debug/nodes/1/crdb_internal.node_recent_statements.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_runtime_info... writing output: debug/nodes/1/crdb_internal.node_runtime_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_sessions... writing output: debug/nodes/1/crdb_internal.node_sessions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/1/crdb_internal.node_statement_statistics.txt... done
@@ -179,6 +181,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 3] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/3/crdb_internal.node_inflight_trace_spans.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/3/crdb_internal.node_metrics.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/3/crdb_internal.node_queries.txt... done
+[node 3] retrieving SQL data for crdb_internal.node_recent_statements... writing output: debug/nodes/3/crdb_internal.node_recent_statements.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_runtime_info... writing output: debug/nodes/3/crdb_internal.node_runtime_info.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_sessions... writing output: debug/nodes/3/crdb_internal.node_sessions.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/3/crdb_internal.node_statement_statistics.txt... done
