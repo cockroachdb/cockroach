@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1337,17 +1336,8 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 
 func TestParseClientProvidedSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 93469, "flaky test")
 	defer log.Scope(t).Close(t)
 
-	// Start a pgwire "server".
-	addr := util.TestAddr
-	ln, err := net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	serverAddr := ln.Addr()
-	log.Infof(context.Background(), "started listener on %s", serverAddr)
 	testCases := []struct {
 		desc   string
 		query  string
@@ -1560,10 +1550,17 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		},
 	}
 
-	baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
-
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// Start a pgwire "server".
+			ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = ln.Close() }()
+			serverAddr := ln.Addr()
+			baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
+			log.Infof(context.Background(), "started listener on %s", serverAddr)
 
 			var connErr error
 			go func(query string) {
