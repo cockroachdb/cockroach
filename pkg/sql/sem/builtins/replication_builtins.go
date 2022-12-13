@@ -12,7 +12,6 @@ package builtins
 
 import (
 	"context"
-	gojson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -73,82 +72,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"but instead returns the job id as soon as it has signaled the job to complete. " +
 				"This builtin can be used in conjunction with `SHOW JOBS WHEN COMPLETE` to ensure that the " +
 				"job has left the cluster in a consistent state.",
-			Volatility: volatility.Volatile,
-		},
-	),
-
-	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
-
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "job_id", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return tree.DNull, errors.New("job_id cannot be specified with null argument")
-				}
-				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
-				if err != nil {
-					return nil, err
-				}
-				jsonStats, err := gojson.Marshal(stats)
-				if err != nil {
-					return nil, err
-				}
-				jsonDatum, err := tree.ParseDJSON(string(jsonStats))
-				if err != nil {
-					return nil, err
-				}
-				return jsonDatum, nil
-			},
-			Info: "This function can be used on the ingestion side to get a statistics summary " +
-				"of a stream ingestion job in json format.",
-			Volatility: volatility.Volatile,
-		},
-	),
-
-	"crdb_internal.stream_ingestion_stats_pb": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			DistsqlBlocklist: true,
-		},
-
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "job_id", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return tree.DNull, errors.New("job_id cannot be specified with null argument")
-				}
-				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
-				if err != nil {
-					return nil, err
-				}
-				rawStatus, err := protoutil.Marshal(stats)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(rawStatus)), nil
-			},
-			Info: "This function can be used on the ingestion side to get a statistics summary " +
-				"of a stream ingestion job in protobuf format.",
 			Volatility: volatility.Volatile,
 		},
 	),
