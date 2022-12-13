@@ -565,6 +565,7 @@ cluster_execution_insights             NULL
 cluster_inflight_traces                NULL
 cluster_locks                          NULL
 cluster_queries                        NULL
+cluster_recent_statements              NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL
 cluster_statement_statistics           NULL
@@ -603,6 +604,7 @@ node_execution_insights                NULL
 node_inflight_trace_spans              NULL
 node_metrics                           NULL
 node_queries                           NULL
+node_recent_statements                 NULL
 node_runtime_info                      NULL
 node_sessions                          NULL
 node_statement_statistics              NULL
