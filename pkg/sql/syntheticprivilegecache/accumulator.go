@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Accumulator accumulates different rows of system.privileges
+// accumulator accumulates different rows of system.privileges
 // and combines them into one PrivilegeDescriptor.
 type accumulator struct {
 	desc       *catpb.PrivilegeDescriptor
