@@ -326,6 +326,8 @@ message UniqueWithoutIndexConstraint {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  // Predicate, if non-nil, means a partial uniqueness constraint.
+  Expression predicate = 4 [(gogoproto.customname) = "Predicate"];
 }
 
 message CheckConstraint {

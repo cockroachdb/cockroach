@@ -80,6 +80,7 @@ object UniqueWithoutIndexConstraint
 UniqueWithoutIndexConstraint :  TableID
 UniqueWithoutIndexConstraint :  ConstraintID
 UniqueWithoutIndexConstraint : []ColumnIDs
+UniqueWithoutIndexConstraint :  Predicate
 
 object CheckConstraint
 

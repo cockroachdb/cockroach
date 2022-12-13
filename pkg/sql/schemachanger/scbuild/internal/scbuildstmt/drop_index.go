@@ -379,12 +379,6 @@ func explicitColumnStartIdx(b BuildCtx, ie *scpb.Index) int {
 			start = int(ipe.NumImplicitColumns)
 		}
 	})
-	// Currently, we only allow implicit partitioning on hash sharded index. When
-	// that happens, the shard column always comes after implicit partition
-	// columns.
-	if ie.Sharding != nil && ie.Sharding.IsSharded {
-		start++
-	}
 	return start
 }
 
@@ -420,6 +414,10 @@ func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.C
 func isIndexUniqueAndCanServeFK(
 	b BuildCtx, ie *scpb.Index, fkReferencedColIDs []tree.ColumnID,
 ) bool {
+	if !ie.IsUnique {
+		return false
+	}
+
 	isPartial := false
 	scpb.ForEachSecondaryIndexPartial(b.QueryByID(ie.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, sipe *scpb.SecondaryIndexPartial,
@@ -428,9 +426,16 @@ func isIndexUniqueAndCanServeFK(
 			isPartial = true
 		}
 	})
+	if isPartial {
+		return false
+	}
 
-	return ie.IsUnique && !isPartial &&
-		explicitKeyColumnIDsWithoutShardColumn(b, ie).PermutationOf(fkReferencedColIDs)
+	keyColIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
+	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
+	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
+	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
+	return explicitKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs) ||
+		allKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs)
 }
 
 // uniqueConstraintHasReplacementCandidate returns true if `elms` contains an index
