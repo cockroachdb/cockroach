@@ -264,9 +264,17 @@ func performCastWithoutPrecisionTruncation(
 	case types.EnumFamily:
 		switch v := d.(type) {
 		case *tree.DString:
-			return tree.MakeDEnumFromLogicalRepresentation(t, string(*v))
+			e, err := tree.MakeDEnumFromLogicalRepresentation(t, string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDEnum(e), nil
 		case *tree.DBytes:
-			return tree.MakeDEnumFromPhysicalRepresentation(t, []byte(*v))
+			e, err := tree.MakeDEnumFromPhysicalRepresentation(t, []byte(*v))
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDEnum(e), nil
 		case *tree.DEnum:
 			return d, nil
 		}

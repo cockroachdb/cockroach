@@ -571,7 +571,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// we need to set a min_checkpoint_frequency here because if we
 		// use the default 30s duration, the test will likely not be able
 		// to finish within 30 minutes
-		"min_checkpoint_frequency": "'10s'",
+		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
 	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).
@@ -664,6 +664,10 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			baV,
 		}
 		v := cdctest.MakeCountValidator(validators)
+
+		timeSpentValidatingRows := 0 * time.Second
+		numRowsValidated := 0
+
 		for {
 			m, ok := <-messageBuf
 			if !ok {
@@ -676,16 +680,25 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			partitionStr := strconv.Itoa(int(m.Partition))
 			if len(m.Key) > 0 {
+				startTime := timeutil.Now()
 				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
 					return err
 				}
+				timeSpentValidatingRows += timeutil.Since(startTime)
+				numRowsValidated++
 			} else {
+				noteResolvedStartTime := timeutil.Now()
 				if err := v.NoteResolved(partitionStr, resolved); err != nil {
 					return err
 				}
 				l.Printf("%d of %d resolved timestamps validated, latest is %s behind realtime",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()))
 
+				l.Printf("%s was spent validating this resolved timestamp: %s", timeutil.Since(noteResolvedStartTime))
+				l.Printf("%s was spent validating %d rows", timeSpentValidatingRows, numRowsValidated)
+
+				numRowsValidated = 0
+				timeSpentValidatingRows = 0
 			}
 		}
 		if failures := v.Failures(); len(failures) > 0 {
