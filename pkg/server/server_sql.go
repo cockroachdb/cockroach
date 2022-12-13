@@ -1095,7 +1095,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.ProtectedTimestampManager,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
-		sql.ValidateCheckConstraint,
+		sql.ValidateConstraint,
 		sql.NewFakeSessionData,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
