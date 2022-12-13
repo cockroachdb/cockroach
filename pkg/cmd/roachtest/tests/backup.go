@@ -618,7 +618,7 @@ func registerBackup(r registry.Registry) {
 		Name:              fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           backup2TBSpec,
-		EncryptionSupport: registry.EncryptionMetamorphic,
+		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if c.IsLocal() {

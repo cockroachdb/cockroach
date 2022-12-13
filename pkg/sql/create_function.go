@@ -295,7 +295,6 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Functions,
-		n.dbDesc.GetPrivileges(),
 	)
 
 	newUdfDesc := funcdesc.NewMutableFunctionDescriptor(

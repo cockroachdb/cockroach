@@ -361,7 +361,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
 		privilege.Tables,
-		n.dbDesc.GetPrivileges(),
 	)
 	if n.n.As() {
 		asCols := planColumns(n.sourcePlan)

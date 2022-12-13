@@ -156,8 +156,8 @@ func getIngestingPrivilegesForTableOrSchema(
 		}
 
 		updatedPrivileges = catprivilege.CreatePrivilegesFromDefaultPrivileges(
-			dbDefaultPrivileges, schemaDefaultPrivileges,
-			parentDB.GetID(), user, targetObject, parentDB.GetPrivileges())
+			dbDefaultPrivileges, schemaDefaultPrivileges, parentDB.GetID(), user, targetObject,
+		)
 	}
 	return updatedPrivileges, nil
 }

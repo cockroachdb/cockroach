@@ -784,7 +784,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 // addIndexNameForNewUniqueSecondaryIndex constructs and adds an IndexName
 // element for the new, unique secondary index on the old primary key.
 func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID catid.IndexID) {
-	indexName := getImplicitSecondaryIndexName(b, tbl, indexID, 0 /* numImplicitColumns */)
+	indexName := getImplicitSecondaryIndexName(b, tbl.TableID, indexID, 0 /* numImplicitColumns */)
 	b.Add(&scpb.IndexName{
 		TableID: tbl.TableID,
 		IndexID: indexID,
