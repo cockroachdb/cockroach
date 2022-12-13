@@ -75,7 +75,7 @@ func (desc *wrapper) HasConcurrentSchemaChanges() bool {
 
 // SkipNamespace implements the descriptor interface.
 func (desc *wrapper) SkipNamespace() bool {
-	return false
+	return desc.IsVirtualTable()
 }
 
 // immutable is a custom type for TableDescriptors

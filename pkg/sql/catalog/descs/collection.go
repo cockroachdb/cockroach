@@ -30,11 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -696,274 +696,404 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 	return errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
 }
 
-// GetAllDescriptorsForDatabase retrieves the complete set of descriptors
-// in the requested database.
-func (tc *Collection) GetAllDescriptorsForDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
-) (nstree.Catalog, error) {
-	read, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
+// GetAll returns all descriptors, namespace entries, comments and
+// zone configs visible by the transaction.
+func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+	stored, err := tc.cr.ScanAll(ctx, txn)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	var ids catalog.DescriptorIDSet
-	ids.Add(db.GetID())
-	_ = read.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if e.GetParentID() != db.GetID() || tc.isShadowedName(e) {
-			return nil
-		}
-		if !strings.HasPrefix(e.GetName(), catconstants.PgTempSchemaName) &&
-			e.GetID() != catconstants.PublicSchemaID {
-			ids.Add(e.GetID())
-		}
-		return nil
-	})
-	for _, iterator := range []func(func(catalog.Descriptor) error) error{
-		tc.uncommitted.iterateUncommittedByID,
-		tc.synthetic.iterateSyntheticByID,
-	} {
-		_ = iterator(func(desc catalog.Descriptor) error {
-			if desc.GetParentID() == db.GetID() {
-				ids.Add(desc.GetID())
-			}
-			return nil
-		})
-	}
-	// Look up all non-function descriptors.
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-	}
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+	ret, err := tc.aggregateAllLayers(ctx, txn, stored, catalog.DescriptorIDSet{})
 	if err != nil {
 		return nstree.Catalog{}, err
-	}
-	var ret nstree.MutableCatalog
-	var functionIDs catalog.DescriptorIDSet
-	for _, desc := range descs {
-		ret.UpsertDescriptor(desc)
-		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-			_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-				functionIDs.Add(overload.ID)
-				return nil
-			})
-		}
-	}
-	// Look up all function descriptors.
-	descs, err = tc.getDescriptorsByID(ctx, txn, flags, functionIDs.Ordered()...)
-	if err != nil {
-		return nstree.Catalog{}, err
-	}
-	for _, desc := range descs {
-		ret.UpsertDescriptor(desc)
 	}
 	return ret.Catalog, nil
 }
 
-// GetAllDescriptors returns all descriptors visible by the transaction,
-func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	read, err := tc.cr.ScanAll(ctx, txn)
+// GetAllDatabases is like GetAll but filtered to databases.
+func (tc *Collection) GetAllDatabases(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+	stored, err := tc.cr.ScanNamespaceForDatabases(ctx, txn)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	var ids catalog.DescriptorIDSet
-	_ = read.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		ids.Add(desc.GetID())
+	var dbIDs catalog.DescriptorIDSet
+	ret, err := tc.aggregateAllLayers(ctx, txn, stored, dbIDs)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() != catalog.Database {
+			return nil
+		}
+		dbIDs.Add(desc.GetID())
 		return nil
 	})
+	return ret.FilterByIDs(dbIDs.Ordered()), nil
+}
+
+// GetAllSchemasInDatabase is like GetAll but filtered to the schemas with
+// the specified parent database. Includes virtual schemas.
+func (tc *Collection) GetAllSchemasInDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	stored, err := tc.cr.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	schemaIDs := childIDsFromDescriptor(db)
+	ret, err := tc.aggregateAllLayers(ctx, txn, stored, schemaIDs)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() != catalog.Schema {
+			return nil
+		}
+		if dbID := desc.GetParentID(); dbID != descpb.InvalidID && dbID != db.GetID() {
+			return nil
+		}
+		schemaIDs.Add(desc.GetID())
+		return nil
+	})
+	return ret.FilterByIDs(schemaIDs.Ordered()), nil
+}
+
+// GetAllObjectsInSchema is like GetAll but filtered to the objects with
+// the specified parent schema. Includes virtual objects.
+func (tc *Collection) GetAllObjectsInSchema(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+) (nstree.Catalog, error) {
+	objectIDs := childIDsFromDescriptor(sc)
+	var ret nstree.MutableCatalog
+	if sc.SchemaKind() == catalog.SchemaVirtual {
+		tc.virtual.addAllToCatalog(ret)
+	} else {
+		stored, err := tc.cr.ScanNamespaceForSchemaObjects(ctx, txn, db, sc)
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
+		ret, err = tc.aggregateAllLayers(ctx, txn, stored, objectIDs)
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
+	}
+	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.GetParentSchemaID() != sc.GetID() {
+			return nil
+		}
+		objectIDs.Add(desc.GetID())
+		return nil
+	})
+	return ret.FilterByIDs(objectIDs.Ordered()), nil
+}
+
+// GetAllInDatabase is like the union of GetAllSchemasInDatabase and
+// GetAllObjectsInSchema applied to each of those schemas.
+func (tc *Collection) GetAllInDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	stored, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	schemas, err := tc.GetAllSchemasInDatabase(ctx, txn, db)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	var inDatabaseIDs catalog.DescriptorIDSet
+	_ = schemas.ForEachDescriptor(func(sc catalog.Descriptor) error {
+		inDatabaseIDs.Add(sc.GetID())
+		childIDsFromDescriptor(sc).ForEach(inDatabaseIDs.Add)
+		return nil
+	})
+	ret, err := tc.aggregateAllLayers(ctx, txn, stored, inDatabaseIDs)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() == catalog.Schema {
+			if dbID := desc.GetParentID(); dbID != descpb.InvalidID && dbID != db.GetID() {
+				return nil
+			}
+		} else {
+			if schemas.LookupDescriptor(desc.GetParentSchemaID()) == nil {
+				return nil
+			}
+		}
+		inDatabaseIDs.Add(desc.GetID())
+		return nil
+	})
+	return ret.FilterByIDs(inDatabaseIDs.Ordered()), nil
+}
+
+// GetAllTablesInDatabase is like GetAllInDatabase but filtered to tables.
+func (tc *Collection) GetAllTablesInDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	stored, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	var inDatabaseIDs catalog.DescriptorIDSet
+	ret, err := tc.aggregateAllLayers(ctx, txn, stored, inDatabaseIDs)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.DescriptorType() != catalog.Table {
+			return nil
+		}
+		if dbID := desc.GetParentID(); dbID != descpb.InvalidID && dbID != db.GetID() {
+			return nil
+		}
+		inDatabaseIDs.Add(desc.GetID())
+		return nil
+	})
+	return ret.FilterByIDs(inDatabaseIDs.Ordered()), nil
+}
+
+// aggregateAllLayers is the helper function used by GetAll* methods which
+// takes care to stack all of the Collection's layer appropriately and ensures
+// that the returned descriptors are properly hydrated and validated.
+func (tc *Collection) aggregateAllLayers(
+	ctx context.Context, txn *kv.Txn, stored nstree.Catalog, seedIDs catalog.DescriptorIDSet,
+) (ret nstree.MutableCatalog, _ error) {
+	descIDs := catalog.MakeDescriptorIDSet(seedIDs.Ordered()...)
+	// Descriptors need to be re-read to ensure proper validation hydration etc.
+	// We collect their IDs for this purpose and we'll re-add them later.
+	// Start with the descriptors we might have retrieved from the storage layer.
+	_ = stored.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		descIDs.Add(desc.GetID())
+		childIDsFromDescriptor(desc).ForEach(descIDs.Add)
+		return nil
+	})
+	// Add stored namespace entries which are not shadowed.
+	_ = stored.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		if tc.isShadowedName(e) {
+			return nil
+		}
+		// Temporary schemas don't have descriptors and are persisted only
+		// as namespace table entries.
+		if e.GetParentID() != descpb.InvalidID && e.GetParentSchemaID() == descpb.InvalidID &&
+			strings.HasPrefix(e.GetName(), catconstants.PgTempSchemaName) {
+			ret.UpsertDescriptor(schemadesc.NewTemporarySchema(e.GetName(), e.GetID(), e.GetParentID()))
+		} else {
+			descIDs.Add(e.GetID())
+		}
+		ret.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
+		return nil
+	})
+	// Add stored comments which are not shadowed.
+	_ = stored.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
+		if _, _, isShadowed := tc.uncommittedComments.getUncommitted(key); !isShadowed {
+			ret.UpsertComment(key, cmt)
+		}
+		return nil
+	})
+	// Add stored zone configs which are not shadowed.
+	_ = stored.ForEachZoneConfig(func(id descpb.ID, zc catalog.ZoneConfig) error {
+		if _, isShadowed := tc.uncommittedZoneConfigs.getUncommitted(id); !isShadowed {
+			ret.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
+		}
+		return nil
+	})
+	// Add uncommitted and synthetic namespace entries from descriptors,
+	// collect descriptor IDs to re-read.
 	for _, iterator := range []func(func(desc catalog.Descriptor) error) error{
 		tc.uncommitted.iterateUncommittedByID,
 		tc.synthetic.iterateSyntheticByID,
 		// TODO(postamar): include temporary descriptors?
 	} {
 		_ = iterator(func(desc catalog.Descriptor) error {
-			ids.Add(desc.GetID())
+			descIDs.Add(desc.GetID())
+			childIDsFromDescriptor(desc).ForEach(descIDs.Add)
+			if !desc.Dropped() && !desc.SkipNamespace() {
+				ret.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
+			}
 			return nil
 		})
 	}
+	// Add in-memory temporary schema IDs.
+	if tc.temporarySchemaProvider.HasTemporarySchema() {
+		descIDs.ForEach(func(maybeDatabaseID descpb.ID) {
+			schemaID := tc.temporarySchemaProvider.GetTemporarySchemaIDForDB(maybeDatabaseID)
+			if schemaID != descpb.InvalidID {
+				descIDs.Add(schemaID)
+			}
+		})
+	}
+	// Add uncommitted comments and zone configs.
+	tc.uncommittedComments.addAllToCatalog(ret)
+	tc.uncommittedZoneConfigs.addAllToCatalog(ret)
+	// Remove deleted descriptors from consideration, re-read and add the rest.
+	tc.deletedDescs.ForEach(descIDs.Remove)
 	flags := tree.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
-	// getDescriptorsByID must be used to ensure proper validation hydration etc.
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+	allDescs, err := tc.getDescriptorsByID(ctx, txn, flags, descIDs.Ordered()...)
+	if err != nil {
+		return nstree.MutableCatalog{}, err
+	}
+	for _, desc := range allDescs {
+		ret.UpsertDescriptor(desc)
+	}
+	// Add the virtual catalog.
+	tc.virtual.addAllToCatalog(ret)
+	return ret, nil
+}
+
+func childIDsFromDescriptor(desc catalog.Descriptor) (ret catalog.DescriptorIDSet) {
+	switch d := desc.(type) {
+	case catalog.DatabaseDescriptor:
+		_ = d.ForEachSchema(func(id descpb.ID, _ string) error {
+			ret.Add(id)
+			return nil
+		})
+	case catalog.SchemaDescriptor:
+		_ = d.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+			ret.Add(overload.ID)
+			return nil
+		})
+	}
+	return ret
+}
+
+// GetAllDescriptorsForDatabase retrieves the complete set of descriptors
+// in the requested database.
+// Deprecated: prefer GetAllInDatabase.
+func (tc *Collection) GetAllDescriptorsForDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	c, err := tc.GetAllInDatabase(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
 	var ret nstree.MutableCatalog
-	for _, desc := range descs {
+	ret.UpsertDescriptor(db)
+	_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		ret.UpsertDescriptor(desc)
+		return nil
+	})
+	return ret.Catalog, nil
+}
+
+// GetAllDescriptors returns all descriptors visible by the transaction,
+// except for virtual descriptors.
+// Deprecated: prefer GetAll.
+func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+	all, err := tc.GetAll(ctx, txn)
+	if err != nil {
+		return nstree.Catalog{}, err
 	}
+	var ret nstree.MutableCatalog
+	_ = all.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		switch d := desc.(type) {
+		case catalog.SchemaDescriptor:
+			if d.SchemaKind() == catalog.SchemaVirtual {
+				return nil
+			}
+		case catalog.TableDescriptor:
+			if d.IsVirtualTable() {
+				return nil
+			}
+		}
+		ret.UpsertDescriptor(desc)
+		return nil
+	})
 	return ret.Catalog, nil
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
 // transaction, ordered by name.
+// Deprecated: prefer GetAllDatabases.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]catalog.DatabaseDescriptor, error) {
-
-	read, err := tc.cr.ScanNamespaceForDatabases(ctx, txn)
-	if err != nil {
-		return nil, err
-	}
-	var readIDs catalog.DescriptorIDSet
-	_ = read.ForEachDatabaseNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if !tc.isShadowedName(e) {
-			readIDs.Add(e.GetID())
-		}
-		return nil
-	})
-	const isDescriptorRequired = true
-	read, err = tc.cr.GetByIDs(ctx, txn, readIDs.Ordered(), isDescriptorRequired, catalog.Database)
-	if err != nil {
-		return nil, err
-	}
-	var m nstree.NameMap
-	_ = read.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		m.Upsert(desc, desc.SkipNamespace())
-		return nil
-	})
-	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
-		if desc.DescriptorType() == catalog.Database {
-			m.Upsert(desc, desc.SkipNamespace())
-		}
-		return nil
-	})
-	_ = tc.synthetic.iterateSyntheticByID(func(desc catalog.Descriptor) error {
-		if desc.DescriptorType() == catalog.Database {
-			m.Upsert(desc, desc.SkipNamespace())
-		}
-		return nil
-	})
-	var ids catalog.DescriptorIDSet
-	_ = m.IterateDatabasesByName(func(entry catalog.NameEntry) error {
-		ids.Add(entry.GetID())
-		return nil
-	})
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-	}
-	// getDescriptorsByID must be used to ensure proper validation hydration etc.
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+) (ret []catalog.DatabaseDescriptor, _ error) {
+	c, err := tc.GetAllDatabases(ctx, txn)
 	if err != nil {
 		return nil, err
 	}
 	// Returned slice must be ordered by name.
-	m.Clear()
-	dbDescs := make([]catalog.DatabaseDescriptor, 0, len(descs))
-	for _, desc := range descs {
-		m.Upsert(desc, desc.SkipNamespace())
+	if err := c.ForEachDatabaseNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		desc := c.LookupDescriptor(e.GetID())
+		db, err := catalog.AsDatabaseDescriptor(desc)
+		ret = append(ret, db)
+		return err
+	}); err != nil {
+		return nil, err
 	}
-	_ = m.IterateDatabasesByName(func(entry catalog.NameEntry) error {
-		dbDescs = append(dbDescs, entry.(catalog.DatabaseDescriptor))
-		return nil
-	})
-	return dbDescs, nil
+	return ret, nil
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
 // the transaction under the database with the given ID.
+// Deprecated: prefer GetAllTablesInDatabase.
 func (tc *Collection) GetAllTableDescriptorsInDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
-) ([]catalog.TableDescriptor, error) {
-	all, err := tc.GetAllDescriptors(ctx, txn)
+) (ret []catalog.TableDescriptor, _ error) {
+	c, err := tc.GetAllTablesInDatabase(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}
-	// Ensure the given ID does indeed belong to a database.
-	if desc := all.LookupDescriptor(db.GetID()); desc == nil || desc.DescriptorType() != catalog.Database {
-		return nil, sqlerrors.NewUndefinedDatabaseError(db.GetName())
-	}
-	dbID := db.GetID()
-	var ret []catalog.TableDescriptor
-	_ = all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if desc.GetParentID() != dbID {
+	if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.GetParentID() != db.GetID() {
 			return nil
 		}
-		if table, ok := desc.(catalog.TableDescriptor); ok {
-			ret = append(ret, table)
-		}
-		return nil
-	})
+		tbl, err := catalog.AsTableDescriptor(desc)
+		ret = append(ret, tbl)
+		return err
+	}); err != nil {
+		return nil, err
+	}
 	return ret, nil
 }
 
 // GetSchemasForDatabase returns the schemas for a given database
 // visible by the transaction.
+// Deprecated: prefer GetAllSchemasInDatabase.
 func (tc *Collection) GetSchemasForDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
-	read, err := tc.cr.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
+	c, err := tc.GetAllSchemasInDatabase(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}
 	ret := make(map[descpb.ID]string)
-	// This is needed at least for the temp system db during restores.
-	if !db.HasPublicSchemaWithDescriptor() {
-		ret[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
+	if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		sc, err := catalog.AsSchemaDescriptor(desc)
+		if err != nil {
+			return err
+		}
+		if sc.SchemaKind() == catalog.SchemaVirtual {
+			return nil
+		}
+		ret[desc.GetID()] = desc.GetName()
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	_ = read.ForEachSchemaNamespaceEntryInDatabase(db.GetID(), func(e nstree.NamespaceEntry) error {
-		if !tc.isShadowedName(e) {
-			ret[e.GetID()] = e.GetName()
-		}
-		return nil
-	})
-	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
-		if desc.DescriptorType() == catalog.Schema && desc.GetParentID() == db.GetID() {
-			ret[desc.GetID()] = desc.GetName()
-		}
-		return nil
-	})
-	_ = tc.synthetic.iterateSyntheticByID(func(desc catalog.Descriptor) error {
-		if desc.DescriptorType() == catalog.Schema && desc.GetParentID() == db.GetID() {
-			ret[desc.GetID()] = desc.GetName()
-		}
-		return nil
-	})
 	return ret, nil
 }
 
 // GetObjectNamesAndIDs returns the names and IDs of all objects in a schema.
+// Deprecated: prefer GetAllObjectsInSchema.
 func (tc *Collection) GetObjectNamesAndIDs(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 ) (nstree.Catalog, error) {
-	var mc nstree.MutableCatalog
-	if sc.SchemaKind() == catalog.SchemaVirtual {
-		tc.virtual.forEachVirtualObject(sc, func(obj catalog.Descriptor) {
-			mc.UpsertNamespaceEntry(obj, obj.GetID(), hlc.Timestamp{})
-		})
-		return mc.Catalog, nil
-	}
-	read, err := tc.cr.ScanNamespaceForSchemaObjects(ctx, txn, db, sc)
+	c, err := tc.GetAllObjectsInSchema(ctx, txn, db, sc)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	_ = read.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if !tc.isShadowedName(e) {
-			mc.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
+	var ret nstree.MutableCatalog
+	_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if !desc.Dropped() {
+			ret.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
 		}
 		return nil
 	})
-	for _, iterator := range []func(func(catalog.Descriptor) error) error{
-		tc.uncommitted.iterateUncommittedByID,
-		tc.synthetic.iterateSyntheticByID,
-	} {
-		_ = iterator(func(desc catalog.Descriptor) error {
-			if desc.GetParentID() != db.GetID() || desc.GetParentSchemaID() != sc.GetID() {
-				return nil
-			}
-			if desc.Dropped() || desc.SkipNamespace() {
-				return nil
-			}
-			mc.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
-			return nil
-		})
-	}
-	return mc.Catalog, nil
+	return ret.Catalog, nil
 }
 
 // SetSyntheticDescriptors sets the provided descriptors as the synthetic
