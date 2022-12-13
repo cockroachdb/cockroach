@@ -161,6 +161,9 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	if created {
+		if err := n.addSuperRegionOnNewDB(params, desc); err != nil {
+			return err
+		}
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
 		if err := params.p.logEvent(params.ctx, desc.GetID(),

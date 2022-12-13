@@ -48,6 +48,7 @@ type CreateDatabase struct {
 	SurvivalGoal    SurvivalGoal
 	Placement       DataPlacement
 	Owner           RoleSpec
+	SuperRegion     SuperRegion
 	SecondaryRegion Name
 }
 
@@ -119,6 +120,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.Owner.Name != "" {
 		ctx.WriteString(" OWNER = ")
 		ctx.FormatNode(&node.Owner)
+	}
+
+	if node.SuperRegion.Name != "" {
+		ctx.FormatNode(&node.SuperRegion)
 	}
 
 	if node.SecondaryRegion != "" {
@@ -2234,5 +2239,22 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
 		ctx.FormatNode(node.ReplicationSourceAddress)
+	}
+}
+
+type SuperRegion struct {
+	Name    Name
+	Regions NameList
+}
+
+func (node *SuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SUPER REGION ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" VALUES ")
+	for i, region := range node.Regions {
+		if i != 0 {
+			ctx.WriteString(",")
+		}
+		ctx.FormatNode(&region)
 	}
 }

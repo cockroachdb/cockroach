@@ -177,6 +177,33 @@ func (p *planner) createDatabase(
 		return nil, true, err
 	}
 
+	if database.SuperRegion.Name != "" {
+		if err := p.isSuperRegionEnabled(); err != nil {
+			return nil, false, err
+		}
+
+		typeID, err := db.MultiRegionEnumID()
+		if err != nil {
+			return nil, false, err
+		}
+		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if err = p.addSuperRegion(
+			ctx,
+			db,
+			typeDesc,
+			database.SuperRegion.Regions,
+			database.SuperRegion.Name,
+			tree.AsStringWithFQNames(database, p.Ann()),
+		); err != nil {
+			return nil, false, err
+		}
+
+	}
+
 	return db, true, nil
 }
 
