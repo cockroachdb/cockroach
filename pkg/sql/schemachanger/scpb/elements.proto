@@ -340,6 +340,12 @@ message ForeignKeyConstraint {
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 referenced_table_id = 4 [(gogoproto.customname) = "ReferencedTableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 referenced_column_ids = 5 [(gogoproto.customname) = "ReferencedColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  int32 on_update_action = 6 [(gogoproto.customname) = "OnUpdateAction", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.ReferenceAction"];
+  int32 on_delete_action = 7 [(gogoproto.customname) = "OnDeleteAction", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.ReferenceAction"];
+  int32 composite_key_match_method = 8 [(gogoproto.customname) = "CompositeKeyMatchMethod", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.CompositeKeyMatchMethod"];
+  // IndexIDForValidation is the index id to hint to the foreign key constraint validation SQL query about which index
+  // to validate against. It is used exclusively by sql.validateFKExpr.
+  uint32 index_id_for_validation = 9 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message EnumType {

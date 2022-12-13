@@ -319,6 +319,37 @@ type MakeValidatedCheckConstraintPublic struct {
 	ConstraintID descpb.ConstraintID
 }
 
+// MakeAbsentForeignKeyConstraintWriteOnly adds a non-existent foreign key
+// constraint to the table in the WRITE_ONLY state.
+type MakeAbsentForeignKeyConstraintWriteOnly struct {
+	mutationOp
+	TableID                 descpb.ID
+	ConstraintID            descpb.ConstraintID
+	ColumnIDs               []descpb.ColumnID
+	ReferencedTableID       descpb.ID
+	ReferencedColumnIDs     []descpb.ColumnID
+	OnUpdateAction          catpb.ForeignKeyAction
+	OnDeleteAction          catpb.ForeignKeyAction
+	CompositeKeyMatchMethod descpb.ForeignKeyReference_Match
+}
+
+// MakeValidatedForeignKeyConstraintPublic moves a new, validated foreign key
+// constraint from mutation to public.
+type MakeValidatedForeignKeyConstraintPublic struct {
+	mutationOp
+	TableID           descpb.ID
+	ConstraintID      descpb.ConstraintID
+	ReferencedTableID descpb.ID
+}
+
+// MakePublicForeignKeyConstraintValidated moves a public
+// check constraint to VALIDATED.
+type MakePublicForeignKeyConstraintValidated struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
 // RemoveForeignKeyConstraint removes a foreign key from the origin table.
 type RemoveForeignKeyConstraint struct {
 	mutationOp
