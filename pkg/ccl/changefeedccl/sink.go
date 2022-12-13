@@ -178,6 +178,9 @@ func getSink(
 			if _, ok := replicationslot.ReplicationSlots[name]; !ok {
 				sink := &replicationSink{
 					name: name,
+					// TOTAL HACK ALERT! Putting A in front of everything so
+					// it can be recognised as tree.Name.
+					lsn: 0xAAAAAAAAAA000000,
 				}
 				replicationslot.ReplicationSlots[name] = sink
 			}
@@ -483,11 +486,15 @@ func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
 }
 
 type replicationSink struct {
-	name        string
-	lastXID     int64
-	lastMVCC    hlc.Timestamp
-	writeCursor int64
-	items       []replicationslot.Item
+	name     string
+	lastXID  int64
+	lastMVCC hlc.Timestamp
+	lsn      uint64
+	items    []replicationslot.Item
+}
+
+func (r replicationSink) LSN() uint64 {
+	return r.lsn
 }
 
 func (r *replicationSink) NextTxn(consume bool) []replicationslot.Item {
@@ -517,17 +524,20 @@ func (r *replicationSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	// save 1 for commit...
-	r.writeCursor += 2
+	r.lsn += 16
 	if r.lastMVCC.Less(mvcc) {
 		// assume same mvcc = same txn!
 		r.lastXID++
 		r.lastMVCC = mvcc
 	}
 	item := replicationslot.Item{
-		LSN:   r.writeCursor,
+		// TOTAL HACK ALERT! Putting A in front of everything so
+		// it can be recognised as tree.Name.
+		LSN:   r.lsn,
 		XID:   r.lastXID,
 		Key:   key,
 		Value: value,
+		MVCC:  mvcc,
 	}
 	r.items = append(r.items, item)
 	return nil

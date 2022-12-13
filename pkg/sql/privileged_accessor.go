@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (p *planner) CreateSlot(ctx context.Context, slotName string) (string, error) {
+func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, error) {
 	if _, ok := replicationslot.ReplicationSlots[slotName]; ok {
-		return "", errors.AssertionFailedf("slot already exists: %s\n", slotName)
+		return 0, errors.AssertionFailedf("slot already exists: %s\n", slotName)
 	}
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
@@ -40,9 +40,9 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (string, erro
 		"replication://"+slotName,
 	)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	return "0/0", nil
+	return replicationslot.ReplicationSlots[slotName].LSN(), nil
 }
 
 func (p *planner) DropSlot(ctx context.Context, slotName string) error {

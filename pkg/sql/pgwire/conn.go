@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -33,11 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -877,6 +880,19 @@ func (c *conn) handleSimpleQuery(
 			copyDone.Wait()
 			return nil
 		}
+		if cp, ok := stmts[i].AST.(*tree.StartReplication); ok {
+			if err := c.stmtBuf.Push(
+				ctx,
+				sql.StartReplication{
+					SlotName: string(cp.SlotName),
+					HighLSN:  string(cp.LSNHigh),
+					LowLSN:   string(cp.LSNLow),
+				},
+			); err != nil {
+				return err
+			}
+			return nil
+		}
 
 		// Determine whether there is only SHOW COMMIT TIMESTAMP after this
 		// statement in the batch. That case should be treated as though it
@@ -1340,7 +1356,7 @@ func cookTag(
 			tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 		}
 
-	case tree.CopyIn:
+	case tree.CopyIn, tree.ReplMode:
 		// Nothing to do. The CommandComplete message has been sent elsewhere.
 		panic(errors.AssertionFailedf("CopyIn statements should have been handled elsewhere " +
 			"and not produce results"))
@@ -1517,6 +1533,84 @@ func (c *conn) bufferCloseComplete() {
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
+}
+
+func (c *conn) WriteReplKeepAlive(pos sql.CmdPos, lsn uint64) error {
+	c.msgBuilder.initMsg('d')
+
+	c.msgBuilder.writeByte('k')
+	// overallformat
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, lsn)
+	c.msgBuilder.write(buf) // wal
+	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
+	c.msgBuilder.Write(buf) // serverTime
+	c.msgBuilder.writeByte(0)
+	c.msgBuilder.finishMsg(&c.writerState.buf)
+	return c.Flush(pos)
+}
+
+func (c *conn) WriteBegin(pos sql.CmdPos, lsn uint64, xid int64) error {
+	c.msgBuilder.initMsg('d')
+
+	c.msgBuilder.writeByte('w')
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, lsn)
+	c.msgBuilder.Write(buf) // walStart
+	binary.BigEndian.PutUint64(buf, lsn)
+	c.msgBuilder.Write(buf) // walEnd
+	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
+	c.msgBuilder.Write(buf) // serverTime
+	c.msgBuilder.writeString(fmt.Sprintf("BEGIN %d", xid))
+	c.msgBuilder.finishMsg(&c.writerState.buf)
+	return nil
+}
+
+const timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+
+func (c *conn) WriteCommit(pos sql.CmdPos, lsn uint64, xid int64, mvcc hlc.Timestamp) error {
+	c.msgBuilder.initMsg('d')
+
+	c.msgBuilder.writeByte('w')
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, lsn)
+	c.msgBuilder.Write(buf) // walStart
+	binary.BigEndian.PutUint64(buf, lsn)
+	c.msgBuilder.Write(buf) // walEnd
+	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
+	c.msgBuilder.Write(buf) // serverTime
+	// https://github.com/postgres/postgres/blob/master/contrib/test_decoding/test_decoding.c#L340-L342
+	str := fmt.Sprintf("COMMIT %d (at %s)", xid, time.Unix(0, hlc.UnixNano()).Format(timestampTZOutputFormat))
+	c.msgBuilder.writeString(str)
+	c.msgBuilder.finishMsg(&c.writerState.buf)
+	return nil
+}
+
+func (c *conn) WriteCopyBothFormat(pos sql.CmdPos) error {
+	c.msgBuilder.initMsg('W')
+	// overallformat
+	c.msgBuilder.writeByte(0)
+	// sourceformatcodes
+	c.msgBuilder.writeByte(0)
+	c.msgBuilder.writeByte(0)
+	c.msgBuilder.finishMsg(&c.writerState.buf)
+	return c.Flush(pos)
+}
+
+func (c *conn) WriteReplData(item replicationslot.Item) error {
+	c.msgBuilder.initMsg('d')
+
+	c.msgBuilder.writeByte('w')
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, item.LSN)
+	c.msgBuilder.Write(buf) // walStart
+	binary.BigEndian.PutUint64(buf, item.LSN)
+	c.msgBuilder.Write(buf) // walEnd
+	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
+	c.msgBuilder.Write(buf) // serverTime
+	c.msgBuilder.Write([]byte(replicationslot.ParseJSONValueForPGLogicalPayload(string(item.Value))))
+
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
 func (c *conn) bufferCommandComplete(tag []byte) {

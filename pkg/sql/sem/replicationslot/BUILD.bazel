@@ -5,4 +5,5 @@ go_library(
     srcs = ["replicationslot.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/hlc"],
 )

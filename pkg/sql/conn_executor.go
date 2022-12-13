@@ -44,12 +44,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1884,6 +1886,29 @@ func (ex *connExecutor) run(
 
 }
 
+type StartReplication struct {
+	SlotName        string
+	HighLSN, LowLSN string
+}
+
+func (s StartReplication) String() string {
+	return fmt.Sprintf("start_replication %s", s.SlotName)
+}
+
+func (s StartReplication) command() string {
+	return "start_replication"
+}
+
+type hackInterface interface {
+	WriteCopyBothFormat(pos CmdPos) error
+	Rd() pgwirebase.BufferedReader
+	WriteReplData(item replicationslot.Item) error
+	WriteReplKeepAlive(pos CmdPos, lsn uint64) error
+	Flush(pos CmdPos) error
+	WriteBegin(pos CmdPos, lsn uint64, xid int64) error
+	WriteCommit(pos CmdPos, lsn uint64, xid int64, mvcc hlc.Timestamp) error
+}
+
 // errDrainingComplete is returned by execCmd when the connExecutor previously got
 // a DrainRequest and the time is ripe to finish this session (i.e. we're no
 // longer in a transaction).
@@ -2112,6 +2137,81 @@ func (ex *connExecutor) execCmd() error {
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
+		}
+	case StartReplication:
+		// Creates a no completion message which is fine...
+		res = ex.clientComm.CreateCopyInResult(pos)
+		if c, ok := ex.clientComm.(hackInterface); ok {
+			// Send that it is done.
+			if err := c.WriteCopyBothFormat(pos); err != nil {
+				return err
+			}
+
+			readBuf := pgwirebase.MakeReadBuffer(
+				pgwirebase.ReadBufferOptionWithClusterSettings(&ex.planner.execCfg.Settings.SV),
+			)
+			lsn := replicationslot.ParseLSN(tcmd.HighLSN + "/" + tcmd.LowLSN)
+			slot := replicationslot.ReplicationSlots[tcmd.SlotName]
+			if slot == nil {
+				panic(errors.AssertionFailedf("unknown slot %s\n", tcmd.SlotName))
+			}
+			go func() {
+				// TODO: proper session management.
+				for {
+					// Read any incoming message.
+					typ, _, err := readBuf.ReadTypedMsg(c.Rd())
+					if err != nil {
+						log.Errorf(ctx, "error: %s\n", err)
+						return
+					}
+					switch typ {
+					case 'd': // client keep alive
+						log.Infof(ctx, "client sent keepalive")
+					default:
+						panic(errors.AssertionFailedf("unhandled type %c", typ))
+					}
+				}
+			}()
+			// TODO: figure out exit condition
+			for it := 0; it < int(10*time.Minute/time.Second); it++ {
+				// Keep outputting results every second.
+				time.Sleep(time.Second)
+
+				// Write any slot info.
+				next := slot.NextTxn(true)
+				if len(next) > 0 {
+					var xid int64
+					for idx, item := range next {
+						log.Infof(ctx, "writing row %s (idx %d/%d)", item.Value, idx, len(next))
+						if idx == 0 || item.XID != xid {
+							if err := c.WriteBegin(pos, item.LSN, item.XID); err != nil {
+								return err
+							}
+						}
+						if err := c.WriteReplData(item); err != nil {
+							return err
+						}
+						if idx == len(next)-1 || item.XID != next[idx+1].XID {
+							if err := c.WriteCommit(pos, item.LSN+8, item.XID, item.MVCC); err != nil {
+								return err
+							}
+						}
+						lsn = item.LSN
+						xid = item.XID
+					}
+
+					log.Infof(ctx, "flushing!!!")
+					if err := c.Flush(pos); err != nil {
+						return err
+					}
+				} else {
+					// Send keep-alive message
+					log.Infof(ctx, "writing keep-alive")
+					if err := c.WriteReplKeepAlive(pos, lsn); err != nil {
+						return err
+					}
+				}
+			}
 		}
 	case DrainRequest:
 		// We received a drain request. We terminate immediately if we're not in a

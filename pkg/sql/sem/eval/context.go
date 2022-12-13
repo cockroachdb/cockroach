@@ -254,7 +254,7 @@ type Context struct {
 }
 
 type ReplicationSlotManager interface {
-	CreateSlot(ctx context.Context, slotName string) (string, error)
+	CreateSlot(ctx context.Context, slotName string) (uint64, error)
 	DropSlot(ctx context.Context, slotName string) error
 }
 
