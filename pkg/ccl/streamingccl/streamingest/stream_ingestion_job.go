@@ -64,31 +64,22 @@ func completeStreamIngestion(
 }
 
 func getStreamIngestionStats(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+	ctx context.Context,
+	streamIngestionDetails jobspb.StreamIngestionDetails,
+	jobProgress jobspb.Progress,
 ) (*streampb.StreamIngestionStats, error) {
-	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, txn)
-	if err != nil {
-		return nil, err
-	}
-	details, ok := j.Details().(jobspb.StreamIngestionDetails)
-	if !ok {
-		return nil, errors.Errorf("job with id %d is not a stream ingestion job", ingestionJobID)
-	}
-
-	progress := j.Progress()
 	stats := &streampb.StreamIngestionStats{
-		IngestionDetails:  &details,
-		IngestionProgress: progress.GetStreamIngest(),
+		IngestionDetails:  &streamIngestionDetails,
+		IngestionProgress: jobProgress.GetStreamIngest(),
 	}
-	if highwater := progress.GetHighWater(); highwater != nil && !highwater.IsEmpty() {
+	if highwater := jobProgress.GetHighWater(); highwater != nil && !highwater.IsEmpty() {
 		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
 			MinIngestedTimestamp: *highwater,
 		}
 		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
 		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
 		// TODO(casper): track spans that the slowest partition is associated
-		for _, resolvedSpan := range progress.GetStreamIngest().Checkpoint.ResolvedSpans {
+		for _, resolvedSpan := range jobProgress.GetStreamIngest().Checkpoint.ResolvedSpans {
 			if resolvedSpan.Timestamp.Less(lagInfo.EarliestCheckpointedTimestamp) {
 				lagInfo.EarliestCheckpointedTimestamp = resolvedSpan.Timestamp
 			}
@@ -103,11 +94,11 @@ func getStreamIngestionStats(
 		stats.ReplicationLagInfo = lagInfo
 	}
 
-	client, err := streamclient.GetFirstActiveClient(ctx, progress.GetStreamIngest().StreamAddresses)
+	client, err := streamclient.GetFirstActiveClient(ctx, jobProgress.GetStreamIngest().StreamAddresses)
 	if err != nil {
 		return nil, err
 	}
-	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(details.StreamID), hlc.MaxTimestamp)
+	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(streamIngestionDetails.StreamID), hlc.MaxTimestamp)
 	if err != nil {
 		stats.ProducerError = err.Error()
 	} else {
