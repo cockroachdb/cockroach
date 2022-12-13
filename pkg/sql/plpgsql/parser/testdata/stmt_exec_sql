@@ -1,0 +1,78 @@
+parse
+DECLARE
+BEGIN
+  IMPORT TABLE employees
+  FROM PGDUMP 's3://{BUCKET NAME}/{employees-full.sql}?AWS_ACCESS_KEY_ID={ACCESS KEY}&AWS_SECRET_ACCESS_KEY={SECRET ACCESS KEY}'
+  WITH skip_foreign_keys WITH ignore_unsupported_statements;
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query
+END
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2);
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query
+END
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query WITH INTO
+END
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2) RETURNING x INTO STRICT y;
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query WITH INTO STRICT
+END
+
+parse
+DECLARE
+BEGIN
+  MERGE INTO whatever;
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query
+END
+
+parse
+DECLARE
+BEGIN
+  IMPORT xxxx INTO whatever;
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query
+END
+
+parse
+DECLARE
+BEGIN
+  CREATE TABLE t1 (a int);
+END
+----
+DECLARE
+BEGIN
+EXECUTE bare sql query
+END

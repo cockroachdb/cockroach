@@ -2,10 +2,8 @@
 package parser
 
 import (
+  "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-  "github.com/cockroachdb/cockroach/pkg/sql/types"
-  "github.com/lib/pq/oid"
 )
 %}
 
@@ -57,6 +55,14 @@ func (u *plpgsqlSymUnion) plpgsqlStmtBlock() *plpgsqltree.PLpgSQLStmtBlock {
 
 func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
     return u.val.(plpgsqltree.PLpgSQLStatement)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlDeclareheader() *declareHeader {
+    return u.val.(*declareHeader)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
+    return u.val.([]plpgsqltree.PLpgSQLStatement)
 }
 
 %}
@@ -202,7 +208,7 @@ func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
   union plpgsqlSymUnion
 }
 
-%type <declareHeader> decl_sect
+%type <*declareHeader> decl_sect
 %type <varName> decl_varname
 %type <boolean>	decl_const decl_notnull exit_type
 %type <plpgsqltree.PLpgSQLExpr>	decl_defval decl_cursor_query
@@ -225,11 +231,12 @@ func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
 %type <plpgsqltree.PLpgSQLStatement>	for_control
 
 %type <str>		any_identifier opt_block_label opt_loop_label opt_label
-%type <str>		option_value
+//%type <str>		option_value
 
-//%type <list>	proc_sect stmt_elsifs stmt_else // TODO is this a list of statement?
-%type <loopBody>	loop_body
-%type <*plpgsqltree.PLpgSQLStmtBlock> pl_block
+%type <[]plpgsqltree.PLpgSQLStatement> proc_sect
+%type <[]plpgsqltree.PLpgSQLStatement> stmt_elsifs stmt_else // TODO is this a list of statement?
+%type <loopBody> loop_body
+%type <plpgsqltree.PLpgSQLStatement> pl_block
 %type <plpgsqltree.PLpgSQLStatement>	proc_stmt
 %type <plpgsqltree.PLpgSQLStatement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit
 %type <plpgsqltree.PLpgSQLStatement>	stmt_return stmt_raise stmt_assert stmt_execsql
@@ -262,31 +269,38 @@ func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
 
 %%
 
+// TODO(chengxiong): add `comp_options` (these options are plpgsql compiler
+// variables, probably not important for the parser yet)
 pl_function:
   // TODO we need to set the final AST in this block. To achieve that, the lexer
   // need to have a statement field to catch that.
   pl_block opt_semi
   {
-
+    plpgsqllex.(*lexer).SetStmt($1.plpgsqlStatement())
   }
 
-option_value : T_WORD
-				{
-				}
-			 | unreserved_keyword
-				{
-				}
+//option_value : T_WORD
+//				{
+//				}
+//			 | unreserved_keyword
+//				{
+//				}
 
 opt_semi		:
 				| ';'
 				;
 
 pl_block		: decl_sect BEGIN proc_sect exception_sect END opt_label
-          // TODO we need to create a new scope for each block
-          // 1. create a scope and push to stack before parsing statements
-          // 2. pop the scope after all statements are parsed.
 					{
-					  stmtBlock := &plpgsqltree.PLpgSQLStmtBlock{}
+					  // TODO(chengxiong): log declare section ($1) here.
+					  header := $1.plpgsqlDeclareheader()
+					  stmtBlock := &plpgsqltree.PLpgSQLStmtBlock{
+					    Label: header.label,
+					    Body: $3.plpgsqlStatements(),
+					  }
+					  if header.initVars != nil {
+					    stmtBlock.InitVars = header.initVars
+					  }
 					  $$.val = stmtBlock
 					}
 				;
@@ -294,12 +308,27 @@ pl_block		: decl_sect BEGIN proc_sect exception_sect END opt_label
 
 decl_sect		: opt_block_label
 					{
+					  $$.val = &declareHeader{label: $1}
 					}
 				| opt_block_label decl_start
 					{
+					  $$.val = &declareHeader{
+					    label: $1,
+					    initVars: make([]plpgsqltree.PLpgSQLVariable, 0),
+					  }
 					}
 				| opt_block_label decl_start decl_stmts
 					{
+					  h := &declareHeader{
+					    label: $1,
+					    // TODO(chengxiong): right now we only need to know there is
+					    // non-empty "DECLARE" block. It's sufficient to just match the
+					    // dclare statements and do nothing, but make it a length 1 slice
+					    // with only a nil element.
+					    initVars: make([]plpgsqltree.PLpgSQLVariable, 1),
+					  }
+					  h.initVars = append(h.initVars, nil)
+					  $$.val = h
 					}
 				;
 
@@ -315,10 +344,14 @@ decl_stmts		: decl_stmts decl_stmt
 decl_stmt		: decl_statement
 				| DECLARE
 					{
+					// This is to allow useless extra "DECLARE" keywords in the declare section.
 					}
-				| LESS_LESS any_identifier GREATER_GREATER
-					{
-					}
+				// TODO(chengxiong): turn this block on and throw useful error if user
+				// tries to put the block label just before BEGIN instead of before
+				// DECLARE.
+//				| LESS_LESS any_identifier GREATER_GREATER
+//					{
+//					}
 				;
 
 decl_statement	: decl_varname decl_const decl_datatype decl_collate decl_notnull decl_defval
@@ -327,9 +360,7 @@ decl_statement	: decl_varname decl_const decl_datatype decl_collate decl_notnull
 				| decl_varname ALIAS FOR decl_aliasitem ';'
 					{
 					}
-				| decl_varname opt_scrollable CURSOR
-					{ }
-				  decl_cursor_args decl_is_for decl_cursor_query
+				| decl_varname opt_scrollable CURSOR decl_cursor_args decl_is_for decl_cursor_query ';'
 					{
 					}
 				;
@@ -374,18 +405,15 @@ decl_cursor_arg : decl_varname decl_datatype
 decl_is_for		:	IS |		/* Oracle */
 					FOR;		/* SQL standard */
 
-decl_aliasitem	: T_WORD
-					{
-					}
-				| unreserved_keyword
-					{
-					}
-				| T_CWORD
-					{
-					}
-				;
+decl_aliasitem: IDENT
+  {
+  }
+| unreserved_keyword
+  {
+  }
+;
 
-decl_varname	: T_WORD
+decl_varname	: IDENT
 					{
 					}
 				| unreserved_keyword
@@ -399,20 +427,18 @@ decl_const		:
 					{ }
 				;
 
-decl_datatype	:
-					{
-					}
-				;
+// TODO(chengxiong): better handling for type names.
+decl_datatype	: IDENT
+    {
+    }
+  ;
 
 decl_collate	:
 					{ }
-				| COLLATE T_WORD
+				| COLLATE IDENT
 					{
 					}
 				| COLLATE unreserved_keyword
-					{
-					}
-				| COLLATE T_CWORD
 					{
 					}
 				;
@@ -430,9 +456,11 @@ decl_defval		: ';'
 					}
 				;
 
-decl_defkey		: assign_operator
-				| DEFAULT
-				;
+decl_defkey: assign_operator d_expr ';'
+{}
+| DEFAULT d_expr ';'
+{}
+;
 
 /*
  * Ada-based PL/SQL uses := for assignment and variable defaults, while
@@ -444,9 +472,14 @@ assign_operator	: '='
 				;
 
 proc_sect		:
-					{ }
+					{
+					  $$.val = []plpgsqltree.PLpgSQLStatement{}
+					}
 				| proc_sect proc_stmt
 					{
+					  stmts := $1.plpgsqlStatements()
+					  stmts = append(stmts, $2.plpgsqlStatement())
+					  $$.val = stmts
 					}
 				;
 
@@ -470,21 +503,31 @@ proc_stmt:
 				| stmt_foreach_a
 						{ }
 				| stmt_exit
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						}
 				| stmt_return
 						{ }
 				| stmt_raise
 						{ }
 				| stmt_assert
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						}
 				| stmt_execsql
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						}
 				| stmt_dynexecute
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						}
 				| stmt_perform
 						{ }
 				| stmt_call
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						}
 				| stmt_getdiag
 						{ }
 				| stmt_open
@@ -494,7 +537,9 @@ proc_stmt:
 				| stmt_move
 						{ }
 				| stmt_close
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						}
 				| stmt_null
 						{ }
 				| stmt_commit
@@ -508,11 +553,13 @@ stmt_perform	: PERFORM
 					}
 				;
 
-stmt_call		: CALL
+stmt_call		: CALL  ';'
 					{
+					  $$.val = &plpgsqltree.PLpgSQLStmtCall{IsCall: true}
 					}
-				| DO
+				| DO  ';'
 					{
+					  $$.val = &plpgsqltree.PLpgSQLStmtCall{IsCall: false}
 					}
 				;
 
@@ -683,6 +730,7 @@ foreach_slice	:
 
 stmt_exit		: exit_type opt_label opt_exitcond
 					{
+					  $$.val = &plpgsqltree.PLpgSQLStmtExit{}
 					}
 				;
 
@@ -714,8 +762,9 @@ stmt_raise		: RAISE
 					}
 				;
 
-stmt_assert		: ASSERT
+stmt_assert		: ASSERT  ';'
 					{
+					  $$.val = &plpgsqltree.PLpgSQLStmtAssert{}
 					}
 				;
 
@@ -734,25 +783,30 @@ loop_body		: proc_sect END LOOP opt_label ';'
  * assignment.  Give an appropriate complaint for that, instead of letting
  * the core parser throw an unhelpful "syntax error".
  */
+// MakeExecSqlStmt read until a ';'
 stmt_execsql	: IMPORT
 					{
+					  $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(IMPORT)
 					}
 				| INSERT
 					{
+					  $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(INSERT)
 					}
 				| MERGE
 					{
+					  $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(MERGE)
 					}
-				| T_WORD
+				| IDENT
 					{
-					}
-				| T_CWORD
-					{
+					  $$.val = plpgsqllex.(*lexer).MakeExecSqlStmt(IDENT)
 					}
 				;
 
-stmt_dynexecute : EXECUTE
+// TODO(chengxiong): we should parse a valid expression, INTO and USING keywords
+// instead of just match random symbols.
+stmt_dynexecute : EXECUTE  ';'
 					{
+					  $$.val = &plpgsqltree.PLpgSQLStmtDynamicExecute{}
 					}
 				;
 
@@ -779,6 +833,7 @@ opt_fetch_direction	:
 
 stmt_close		: CLOSE cursor_variable ';'
 					{
+					  $$.val = &plpgsqltree.PLpgSQLStmtClose{}
 					}
 				;
 
@@ -804,16 +859,9 @@ opt_transaction_chain:
 				;
 
 
-cursor_variable	: T_DATUM
-					{
-					}
-				| T_WORD
-					{
-					}
-				| T_CWORD
-					{
-					}
-				;
+cursor_variable	: any_identifier
+{}
+;
 
 exception_sect	:
 					{ }
@@ -851,7 +899,7 @@ proc_condition	: any_identifier
 						}
 				;
 
-expr_until_semi :
+expr_until_semi :  ';'
 					{ }
 				;
 
@@ -865,9 +913,11 @@ expr_until_loop :
 
 opt_block_label	:
 					{
+					  $$ = ""
 					}
 				| LESS_LESS any_identifier GREATER_GREATER
 					{
+					  $$ = $2
 					}
 				;
 
@@ -897,15 +947,20 @@ opt_exitcond	: ';'
  * need to allow DATUM because scanner will have tried to resolve as variable
  */
 any_identifier:
-  T_WORD
+  IDENT
   {
   }
 | unreserved_keyword
   {
   }
-| T_DATUM
-  {
-  }
+;
+
+d_expr: ICONST {}
+| FCONST {}
+| SCONST {}
+| USCONST {}
+| BCONST {}
+;
 
 unreserved_keyword:
   ABSOLUTE
