@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -3952,7 +3953,27 @@ var pgCatalogLargeobjectMetadataTable = virtualSchemaTable{
 var pgCatalogReplicationSlotsTable = virtualSchemaTable{
 	comment: "pg_replication_slots was created for compatibility and is currently unimplemented",
 	schema:  vtable.PgCatalogReplicationSlots,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, d catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for slotName, info := range replicationslot.ReplicationSlots {
+			if err := addRow(
+				tree.NewDString(slotName),
+				tree.NewDString("test_decoding"),
+				tree.NewDString("logical"),
+				dbOid(d.GetID()),             // wrong but whatever.
+				tree.NewDString(d.GetName()), // wrong but whatever.
+				tree.DBoolFalse,
+				tree.DBoolTrue,
+				tree.DNull,
+				tree.DNull,
+				tree.NewDInt(1),
+				tree.NewDString(replicationslot.FormatLSN(info.LSN())),
+				tree.NewDString(replicationslot.FormatLSN(info.LSN())),
+				tree.NewDString("extended"),
+				tree.DNull,
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
 	unimplemented: true,
