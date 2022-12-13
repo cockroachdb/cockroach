@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -590,6 +592,18 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+
+	// Setup the default session settings.
+	h.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
+	h.evalCtx.SessionData().OptimizerUseMultiColStats = true
+	h.evalCtx.SessionData().ZigzagJoinEnabled = true
+	h.evalCtx.SessionData().OptimizerUseForecasts = true
+	h.evalCtx.SessionData().OptimizerUseHistograms = true
+	h.evalCtx.SessionData().LocalityOptimizedSearch = true
+	h.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
+	h.evalCtx.SessionData().InsertFastPath = true
+	h.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
+	h.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
