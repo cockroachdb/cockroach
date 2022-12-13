@@ -1688,19 +1688,6 @@ func (w MetadataCarrier) ForEach(fn func(key, val string) error) error {
 	return nil
 }
 
-// SpanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
-// of RPCs, deciding for which operations the gRPC tracing interceptor should
-// create a span.
-//
-// We use this to circumvent the interceptor's work when tracing is
-// disabled. Otherwise, the interceptor causes an increase in the
-// number of packets (even with an Empty context!).
-//
-// See #17177.
-func SpanInclusionFuncForClient(parent *Span) bool {
-	return parent != nil && !parent.IsNoop()
-}
-
 // SpanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
 // of RPCs, deciding for which operations the gRPC tracing interceptor should
 // create a span.
