@@ -227,6 +227,22 @@ func enqueueDropCheckConstraintMutation(
 	return nil
 }
 
+func enqueueAddForeignKeyConstraintMutation(
+	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
+) error {
+	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_ADD)
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueDropForeignKeyConstraintMutation(
+	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
+) error {
+	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_DROP)
+	tbl.NextMutationID--
+	return nil
+}
+
 func enqueueAddIndexMutation(
 	tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor, state descpb.DescriptorMutation_State,
 ) error {
