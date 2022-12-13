@@ -24,6 +24,8 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/opt",
         "//pkg/sql/opt/exec",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/exec/explain",
