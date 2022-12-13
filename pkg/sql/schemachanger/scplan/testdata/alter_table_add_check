@@ -32,7 +32,7 @@ PostCommitPhase stage 1 of 2 with 1 ValidationType op
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
-    *scop.ValidateCheckConstraint
+    *scop.ValidateConstraint
       ConstraintID: 2
       TableID: 104
 PostCommitPhase stage 2 of 2 with 4 MutationType ops

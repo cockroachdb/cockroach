@@ -28,8 +28,8 @@ type ValidateIndex struct {
 	IndexID descpb.IndexID
 }
 
-// ValidateCheckConstraint validates a check constraint on a table's columns.
-type ValidateCheckConstraint struct {
+// ValidateConstraint validates a check constraint on a table's columns.
+type ValidateConstraint struct {
 	validationOp
 	TableID              descpb.ID
 	ConstraintID         descpb.ConstraintID
