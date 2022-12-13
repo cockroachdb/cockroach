@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/sem/catid",  # keep
+        "//pkg/sql/sem/tree",  # keep
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
