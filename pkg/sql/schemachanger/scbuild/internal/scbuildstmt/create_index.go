@@ -205,13 +205,12 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// an implicit name if one is required.
 	indexName := string(n.Name)
 	if indexName == "" {
-		_, _, tbl := scpb.FindTable(relationElements)
 		numImplicitColumns := 0
 		if idxSpec.partitioning != nil {
 			numImplicitColumns = int(idxSpec.partitioning.NumImplicitColumns)
 		}
 		indexName = getImplicitSecondaryIndexName(b,
-			tbl,
+			screl.GetDescID(relation),
 			idxSpec.secondary.IndexID,
 			numImplicitColumns,
 		)
