@@ -515,6 +515,12 @@ func (c *CustomFuncs) HasStrictKey(input memo.RelExpr) bool {
 	return hasKey
 }
 
+// HasTrivialKey returns true if the input expression has key columns that
+// are determined trivially, i.e., are constant.
+func (c *CustomFuncs) HasTrivialKey(input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.HasMax1Row()
+}
+
 // ColsAreStrictKey returns true if the given columns form a strict key for the
 // given input expression. A strict key means that any two rows will have unique
 // key column values. Nulls are treated as equal to one another (i.e. no
