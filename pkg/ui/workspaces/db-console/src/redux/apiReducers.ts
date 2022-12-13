@@ -97,6 +97,14 @@ export const locationsReducerObj = new CachedDataReducer(
 );
 export const refreshLocations = locationsReducerObj.refresh;
 
+const txnContentionEventReducerObj = new CachedDataReducer(
+  clusterUiApi.getTxnContentionEvents,
+  "txnContentionEvents",
+  null,
+  moment.duration(10, "m"),
+);
+export const refreshTxnContentionEvents = txnContentionEventReducerObj.refresh;
+
 const databasesReducerObj = new CachedDataReducer(
   clusterUiApi.getDatabasesList,
   "databases",
@@ -553,6 +561,7 @@ export interface APIReducersState {
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
   transactionInsights: CachedDataReducerState<TxnContentionInsightEvent[]>;
   transactionInsightDetails: KeyedCachedDataReducerState<TxnContentionInsightDetails>;
+  txnContentionEvents: CachedDataReducerState<clusterUiApi.ContentionEventsResponse>;
   executionInsights: CachedDataReducerState<TxnInsightEvent[]>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
@@ -604,6 +613,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     transactionInsightsReducerObj.reducer,
   [transactionInsightDetailsReducerObj.actionNamespace]:
     transactionInsightDetailsReducerObj.reducer,
+  [txnContentionEventReducerObj.actionNamespace]:
+    txnContentionEventReducerObj.reducer,
   [executionInsightsReducerObj.actionNamespace]:
     executionInsightsReducerObj.reducer,
   [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,
