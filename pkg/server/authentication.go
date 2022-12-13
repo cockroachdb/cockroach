@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -55,7 +57,9 @@ const (
 	secretLength = 16
 	// SessionCookieName is the name of the cookie used for HTTP auth.
 	SessionCookieName = "session"
-
+	// MultiTenantSessionCookieName is the name of the cookie used for HTTP auth
+	// when the cluster is multitenant.
+	MultitenantSessionCookieName = "multitenant-session"
 	// DemoLoginPath is the demo shell auto-login URL.
 	DemoLoginPath = "/demologin"
 )
@@ -616,29 +620,9 @@ func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
 func (am *authenticationMux) getSession(
 	w http.ResponseWriter, req *http.Request,
 ) (string, *serverpb.SessionCookie, error) {
-	ctx := req.Context()
-	// Validate the returned cookie.
-	cookies := req.Cookies()
-	found := false
-	var cookie *serverpb.SessionCookie
-	var err error
-	for _, c := range cookies {
-		if c.Name != SessionCookieName {
-			continue
-		}
-		found = true
-		cookie, err = decodeSessionCookie(c)
-		if err != nil {
-			// Multiple cookies with the same name may be included in the
-			// header. We continue searching even if we find a matching
-			// name with an invalid value
-			log.Infof(ctx, "found a matching cookie that failed decoding: %v", err)
-			continue
-		}
-		break
-	}
-	if err != nil || !found {
-		return "", nil, http.ErrNoCookie
+	cookie, err := findAndDecodeSessionCookie(req.Context(), req.Cookies())
+	if err != nil {
+		return "", nil, err
 	}
 
 	valid, username, err := am.server.verifySession(req.Context(), cookie)
@@ -695,4 +679,135 @@ func forwardAuthenticationMetadata(ctx context.Context, _ *http.Request) metadat
 		md.Set(webSessionIDKeyStr, fmt.Sprintf("%v", sessionID))
 	}
 	return md
+}
+
+// sessionCookieValue defines the data needed to construct the
+// aggregate session cookie in the order provided.
+type sessionCookieValue struct {
+	// The name of the tenant.
+	name string
+	// The value of set-cookie.
+	setCookie string
+}
+
+// createAggregatedSessionCookieValue is used for multi-tenant login.
+// It takes a slice of sessionCookieValue and converts it to a single
+// string which is the aggregated session. Currently the format of the
+// aggregated session is: `session,tenant_name,session2,tenant_name2` etc.
+func createAggregatedSessionCookieValue(sessionCookieValue []sessionCookieValue) string {
+	var sessionsStr string
+	for _, val := range sessionCookieValue {
+		sessionCookieSlice := strings.Split(strings.ReplaceAll(val.setCookie, "session=", ""), ";")
+		sessionsStr += sessionCookieSlice[0] + "," + val.name + ","
+	}
+	if len(sessionsStr) > 0 {
+		sessionsStr = sessionsStr[:len(sessionsStr)-1]
+	}
+	return sessionsStr
+}
+
+// findAndDecodeSessionCookie looks for multitenant-session and session cookies
+// in the cookies slice. If they are found the value will need to be processed if
+// it is a multitenant-session cookie (see findSessionCookieValue for details)
+// and then decoded. Multitenant-session cookies are prioritized over session cookies.
+// If neither cookie types are found or there is an error in decoding or processing,
+// the function will return an error.
+func findAndDecodeSessionCookie(
+	ctx context.Context, cookies []*http.Cookie,
+) (*serverpb.SessionCookie, error) {
+	// Validate the returned cookie.
+	found := false
+	var cookie *serverpb.SessionCookie
+	var err error
+	var sessionCookies []*http.Cookie
+	// Prioritize multitenant session cookies.
+	for _, c := range cookies {
+		if c.Name == MultitenantSessionCookieName {
+			sessionCookies = append([]*http.Cookie{c}, sessionCookies...)
+		} else if c.Name == SessionCookieName {
+			sessionCookies = append(sessionCookies, c)
+		}
+	}
+	for _, sessionCookie := range sessionCookies {
+		found = true
+		// This case is if the multitenant session cookie is set.
+		if sessionCookie.Name == MultitenantSessionCookieName {
+			mtSessionVal, err := findSessionCookieValue(cookies)
+			if err != nil {
+				return cookie, apiInternalError(ctx, err)
+			}
+			if mtSessionVal != "" {
+				sessionCookie.Value = mtSessionVal
+			}
+		}
+		cookie, err = decodeSessionCookie(sessionCookie)
+		if err != nil {
+			// Multiple cookies with the same name may be included in the
+			// header. We continue searching even if we find a matching
+			// name with an invalid value
+			log.Infof(ctx, "found a matching cookie that failed decoding: %v", err)
+			found = false
+			continue
+		}
+		break
+	}
+	if err != nil || !found {
+		return nil, http.ErrNoCookie
+	}
+	return cookie, nil
+}
+
+// findSessionCookieValue finds the encoded session in an aggregated
+// session cookie value established in multi-tenant clusters. If the
+// method cannot find a match between the tenant name and session
+// or cannot find the tenant cookie value, it will return an empty
+// string to indicate this.
+// e.g. tenant cookie value is "system" and multitenant-session cookie
+// value is "abcd1234,system,efgh5678,app" the output will be "abcd1234".
+func findSessionCookieValue(cookies []*http.Cookie) (string, error) {
+	if mtSessionStr := findMultitenantSessionCookieValue(cookies); mtSessionStr != "" {
+		tenantName := findTenantCookieValue(cookies)
+		// TODO(santamaura): Change this once the tenant name is configurable,
+		// see: https://github.com/cockroachdb/cockroach/issues/91741.
+		if tenantName == "" {
+			tenantName = catconstants.SystemTenantName
+		}
+		sessionSlice := strings.Split(mtSessionStr, ",")
+		var encodedSession string
+		for idx, val := range sessionSlice {
+			if val == tenantName && idx > 0 {
+				encodedSession = sessionSlice[idx-1]
+			}
+		}
+		if encodedSession == "" {
+			return "", errors.Newf("unable to find session cookie value that matches tenant %q", tenantName)
+		}
+		return encodedSession, nil
+	}
+	return "", nil
+}
+
+// findTenantCookieValue iterates through all request cookies
+// in order to find the value of the tenant cookie. If
+// the tenant cookie is not found, it assumes the default
+// to be the system tenant.
+func findTenantCookieValue(cookies []*http.Cookie) string {
+	for _, c := range cookies {
+		if c.Name == TenantSelectCookieName {
+			return c.Value
+		}
+	}
+	return catconstants.SystemTenantName
+}
+
+// findMultitenantSessionCookieValue iterates through all request
+// cookies to find the value of the multitenant-session cookie.
+// If not found, it return an empty string.
+func findMultitenantSessionCookieValue(cookies []*http.Cookie) string {
+	for _, c := range cookies {
+		if c.Name == MultitenantSessionCookieName {
+			return c.Value
+		}
+	}
+	return ""
 }

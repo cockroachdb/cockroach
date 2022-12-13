@@ -308,41 +308,26 @@ func (a *authenticationV2Mux) getSession(
 		return "", nil, http.StatusUnauthorized, err
 	}
 
-	possibleSessions := []string{}
-	if rawSession == apiV2UseCookieBasedAuth {
-		cookies := req.Cookies()
-		for _, c := range cookies {
-			if c.Name != SessionCookieName {
-				continue
-			}
-			possibleSessions = append(possibleSessions, c.Value)
-		}
-	} else {
-		possibleSessions = append(possibleSessions, rawSession)
-	}
-
-	sessionCookie := &serverpb.SessionCookie{}
-	var decoded []byte
+	cookie := &serverpb.SessionCookie{}
 	var err error
-	for i := range possibleSessions {
-		decoded, err = base64.StdEncoding.DecodeString(possibleSessions[i])
+	if rawSession == apiV2UseCookieBasedAuth {
+		cookie, err = findAndDecodeSessionCookie(req.Context(), req.Cookies())
+	} else {
+		decoded, err := base64.StdEncoding.DecodeString(rawSession)
 		if err != nil {
 			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
-			continue
+			return "", nil, http.StatusBadRequest, err
 		}
-		err = protoutil.Unmarshal(decoded, sessionCookie)
+		err = protoutil.Unmarshal(decoded, cookie)
 		if err != nil {
 			log.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
-			continue
 		}
-		// We've successfully decoded a session from cookie or header.
-		break
 	}
 	if err != nil {
 		err := errors.New("invalid session header")
 		return "", nil, http.StatusBadRequest, err
 	}
-	valid, username, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
+	valid, username, err := a.s.authServer.verifySession(req.Context(), cookie)
 	if err != nil {
 		apiV2InternalError(req.Context(), err, w)
 		return "", nil, http.StatusInternalServerError, err
@@ -352,7 +337,7 @@ func (a *authenticationV2Mux) getSession(
 		return "", nil, http.StatusUnauthorized, err
 	}
 
-	return username, sessionCookie, http.StatusOK, nil
+	return username, cookie, http.StatusOK, nil
 }
 
 func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request) {

@@ -11,14 +11,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -39,6 +41,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+)
+
+const (
+	// AcceptHeader is the canonical header name for accept.
+	AcceptHeader = "Accept"
+	// ContentTypeHeader is the canonical header name for content type.
+	ContentTypeHeader = "Content-Type"
+	// JSONContentType is the JSON content type.
+	JSONContentType = "application/json"
 )
 
 // onDemandServer represents a server that can be started on demand.
@@ -195,40 +206,230 @@ const TenantSelectCookieName = `tenant`
 // If no tenant is specified, the default tenant is used.
 func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	tenantName := getTenantNameFromHTTPRequest(r)
+	tenantName, nameProvided := getTenantNameFromHTTPRequest(r)
 	s, err := c.getOrCreateServer(ctx, tenantName)
 	if err != nil {
 		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "cannot find tenant")
 		return
 	}
-
+	// if the client didnt specify tenant name call these for login/logout.
+	if !nameProvided {
+		switch r.URL.Path {
+		case loginPath:
+			c.attemptLoginToAllTenants().ServeHTTP(w, r)
+			return
+		case logoutPath:
+			c.attemptLogoutFromAllTenants().ServeHTTP(w, r)
+			return
+		}
+	}
 	s.getHTTPHandlerFn()(w, r)
 }
 
-func getTenantNameFromHTTPRequest(r *http.Request) string {
+func getTenantNameFromHTTPRequest(r *http.Request) (string, bool) {
 	// Highest priority is manual override on the URL query parameters.
 	const tenantNameParamInQueryURL = "tenant_name"
 	if tenantName := r.URL.Query().Get(tenantNameParamInQueryURL); tenantName != "" {
-		return tenantName
+		return tenantName, true
 	}
 
 	// If not in parameters, try an explicit header.
 	if tenantName := r.Header.Get(TenantSelectHeader); tenantName != "" {
-		return tenantName
+		return tenantName, true
 	}
 
 	// No parameter, no explicit header. Is there a cookie?
 	if c, _ := r.Cookie(TenantSelectCookieName); c != nil && c.Value != "" {
-		return c.Value
+		return c.Value, true
 	}
 
 	// No luck so far.
 	//
 	// TODO(knz): Make the default tenant route for HTTP configurable.
 	// See: https://github.com/cockroachdb/cockroach/issues/91741
-	return catconstants.SystemTenantName
+	return catconstants.SystemTenantName, false
+}
+
+func (c *serverController) getCurrentTenantNames() []string {
+	var serverNames []string
+	c.mu.Lock()
+	for name := range c.mu.servers {
+		serverNames = append(serverNames, name)
+	}
+	c.mu.Unlock()
+	return serverNames
+}
+
+func getSessionFromCookie(sessionStr string, name string) string {
+	sessionsInfo := strings.Split(sessionStr, ",")
+	for idx, info := range sessionsInfo {
+		if info == name && idx != 0 {
+			return sessionsInfo[idx-1]
+		}
+	}
+	return sessionStr
+}
+
+// attemptLoginToAllTenants attempts login for each of the tenants and
+// if successful, appends the encoded session and tenant name to the
+// new session cookie. If login fails for all tenants, the StatusUnauthorized
+// code will be set in the header.
+func (c *serverController) attemptLoginToAllTenants() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		tenantNames := c.getCurrentTenantNames()
+		var tenantNameToSetCookieSlice []sessionCookieValue
+		// The request body needs to be cloned since r.Clone() does not do it.
+		clonedBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Warning(ctx, "unable to write body")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer r.Body.Close()
+
+		for _, name := range tenantNames {
+			// Make a new sessionWriter for every tenant. A fresh header is needed
+			// each time since the grpc method writes to it.
+			sw := &sessionWriter{header: w.Header().Clone()}
+			newReq := r.Clone(ctx)
+			newReq.Body = io.NopCloser(bytes.NewBuffer(clonedBody))
+			server, err := c.getOrCreateServer(ctx, name)
+			if err != nil {
+				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			// Invoke the handler, passing the new sessionWriter and the cloned
+			// request.
+			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
+			// Extract the entire set-cookie from the header. The session cookie will be
+			// embedded within set-cookie.
+			setCookieHeader := sw.Header().Get("set-cookie")
+			if len(setCookieHeader) == 0 {
+				log.Warningf(ctx, "unable to find session cookie for tenant %q", name)
+			} else {
+				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, sessionCookieValue{
+					name:      name,
+					setCookie: setCookieHeader,
+				})
+			}
+		}
+		// If the map has entries, the method to create the aggregated session should
+		// be called and cookies should be set. Otherwise, login was not successful
+		// for any of the tenants.
+		if len(tenantNameToSetCookieSlice) > 0 {
+			sessionsStr := createAggregatedSessionCookieValue(tenantNameToSetCookieSlice)
+			cookie := http.Cookie{
+				Name:     MultitenantSessionCookieName,
+				Value:    sessionsStr,
+				Path:     "/",
+				HttpOnly: false,
+			}
+			http.SetCookie(w, &cookie)
+			// The tenant cookie needs to be set at some point in order for
+			// the dropdown to have a current selection on first load. Subject to change
+			// once this issue is resolved: https://github.com/cockroachdb/cockroach/issues/91741.
+			cookie = http.Cookie{
+				Name:     TenantSelectCookieName,
+				Value:    catconstants.SystemTenantName,
+				Path:     "/",
+				HttpOnly: false,
+			}
+			http.SetCookie(w, &cookie)
+			if r.Header.Get(AcceptHeader) == JSONContentType {
+				w.Header().Add(ContentTypeHeader, JSONContentType)
+				_, err = w.Write([]byte("{}"))
+				if err != nil {
+					log.Warningf(ctx, "unable to write empty response :%q", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	})
+}
+
+// attemptLogoutFromAllTenants attempts logout for each of the tenants and
+// clears both the session cookie and tenant cookie. If logout fails, the
+// StatusInternalServerError code will be set in the header.
+func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		tenantNames := c.getCurrentTenantNames()
+		// The request body needs to be cloned since r.Clone() does not do it.
+		clonedBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Warning(ctx, "unable to write body")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		sessionCookie, err := r.Cookie(SessionCookieName)
+		if err != nil {
+			log.Warning(ctx, "unable to find session cookie")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		for _, name := range tenantNames {
+			// Make a new sessionWriter for every tenant. A fresh header is needed
+			// each time since the grpc method writes to it.
+			sw := &sessionWriter{header: w.Header().Clone()}
+			newReq := r.Clone(ctx)
+			newReq.Body = io.NopCloser(bytes.NewBuffer(clonedBody))
+			// Extract the session which matches to the current tenant name or fallback
+			// to the value provided.
+			relevantSession := getSessionFromCookie(sessionCookie.Value, name)
+
+			// Set the matching session in the cookie so that the grpc method can
+			// logout correctly.
+			newReq.Header.Set("Cookie", "session="+relevantSession)
+			server, err := c.getOrCreateServer(ctx, name)
+			if err != nil {
+				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
+			// If a logout was unsuccessful, set cookie will be empty in which case
+			// set the header to an error status and return.
+			if sw.header.Get("Set-Cookie") == "" {
+				log.Warningf(ctx, "logout for tenant %q failed", name)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+		// Clear session and tenant cookies after all logouts have completed.
+		cookie := http.Cookie{
+			Name:     MultitenantSessionCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Expires:  timeutil.Unix(0, 0),
+		}
+		http.SetCookie(w, &cookie)
+		cookie = http.Cookie{
+			Name:     TenantSelectCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: false,
+			Expires:  timeutil.Unix(0, 0),
+		}
+		http.SetCookie(w, &cookie)
+		if r.Header.Get(AcceptHeader) == JSONContentType {
+			w.Header().Add(ContentTypeHeader, JSONContentType)
+			_, err = w.Write([]byte("{}"))
+			if err != nil {
+				log.Warningf(ctx, "unable to write empty response :%q", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 }
 
 // TestingGetSQLAddrForTenant extracts the SQL address for the target tenant.
