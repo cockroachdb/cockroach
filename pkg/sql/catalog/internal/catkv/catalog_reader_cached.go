@@ -113,7 +113,7 @@ func (c *cachedCatalogReader) IsNameInCache(key catalog.NameKey) bool {
 
 // IsDescIDKnownToNotExist is part of the CatalogReader interface.
 func (c *cachedCatalogReader) IsDescIDKnownToNotExist(id, maybeParentID descpb.ID) bool {
-	if c.cache.LookupDescriptorEntry(id) != nil {
+	if c.cache.LookupDescriptor(id) != nil {
 		return false
 	}
 	if c.hasScanAll {
@@ -303,7 +303,7 @@ func (c *cachedCatalogReader) GetByIDs(
 			continue
 		}
 		if desc := c.systemDatabaseCache.lookupDescriptor(c.version, id); desc != nil {
-			c.cache.UpsertDescriptorEntry(desc)
+			c.cache.UpsertDescriptor(desc)
 		}
 		ids[i], ids[numUncached] = ids[numUncached], id
 		numUncached++
@@ -323,10 +323,10 @@ func (c *cachedCatalogReader) GetByIDs(
 			c.setByIDState(id, s)
 		}
 	}
-	ret := c.cache.FilterByIDs(ids)
+	ret := c.cache.FilterByIDsExclusive(ids)
 	if isDescriptorRequired {
 		for _, id := range ids[numUncached:] {
-			if ret.LookupDescriptorEntry(id) == nil {
+			if ret.LookupDescriptor(id) == nil {
 				return nstree.Catalog{}, wrapError(expectedType, id, requiredError(expectedType, id))
 			}
 		}
@@ -378,7 +378,7 @@ func (c *cachedCatalogReader) ensure(ctx context.Context, read nstree.Catalog) e
 	oldSize := c.cache.ByteSize()
 	c.cache.AddAll(read)
 	c.systemDatabaseCache.update(c.version, read)
-	_ = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	_ = read.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.Dropped() {
 			return nil
 		}

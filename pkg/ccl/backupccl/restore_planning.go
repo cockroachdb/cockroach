@@ -768,7 +768,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 	// A data structure for efficient descriptor lookup by ID or by name.
 	descCatalog := &nstree.MutableCatalog{}
 	for _, d := range descs {
-		descCatalog.UpsertDescriptorEntry(d)
+		descCatalog.UpsertDescriptor(d)
 	}
 
 	for j, desc := range descs {
@@ -781,7 +781,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 		if err := b.RunPostDeserializationChanges(); err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
 		}
-		err := b.RunRestoreChanges(descCatalog.LookupDescriptorEntry)
+		err := b.RunRestoreChanges(descCatalog.LookupDescriptor)
 		if err != nil {
 			return err
 		}

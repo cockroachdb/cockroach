@@ -184,7 +184,7 @@ func ExamineDescriptors(
 			descReport(stdout, desc, "different id in descriptor table: %d", row.ID)
 			continue
 		}
-		cb.UpsertDescriptorEntry(desc)
+		cb.UpsertDescriptor(desc)
 	}
 	for _, row := range descTable {
 		id := descpb.ID(row.ID)

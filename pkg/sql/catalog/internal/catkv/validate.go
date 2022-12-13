@@ -65,7 +65,7 @@ func (c catalogReaderBackedDereferencer) DereferenceDescriptors(
 	}
 	ret := make([]catalog.Descriptor, len(reqs))
 	for i, id := range reqs {
-		desc := read.LookupDescriptorEntry(id)
+		desc := read.LookupDescriptor(id)
 		if desc == nil {
 			continue
 		}

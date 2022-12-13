@@ -2077,7 +2077,7 @@ func (r *restoreResumer) publishDescriptors(
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for i := range details.TableDescs {
-		mutTable := all.LookupDescriptorEntry(details.TableDescs[i].GetID()).(*tabledesc.Mutable)
+		mutTable := all.LookupDescriptor(details.TableDescs[i].GetID()).(*tabledesc.Mutable)
 		// Note that we don't need to worry about the re-validated indexes for descriptors
 		// with a declarative schema change job.
 		if mutTable.GetDeclarativeSchemaChangerState() != nil {
@@ -2132,7 +2132,7 @@ func (r *restoreResumer) publishDescriptors(
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
 	for i := range details.TypeDescs {
-		typ := all.LookupDescriptorEntry(details.TypeDescs[i].GetID()).(catalog.TypeDescriptor)
+		typ := all.LookupDescriptor(details.TypeDescs[i].GetID()).(catalog.TypeDescriptor)
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.GetDeclarativeSchemaChangerState() == nil &&
 			typ.HasPendingSchemaChanges() {
@@ -2144,19 +2144,19 @@ func (r *restoreResumer) publishDescriptors(
 		}
 	}
 	for i := range details.SchemaDescs {
-		sc := all.LookupDescriptorEntry(details.SchemaDescs[i].GetID()).(catalog.SchemaDescriptor)
+		sc := all.LookupDescriptor(details.SchemaDescs[i].GetID()).(catalog.SchemaDescriptor)
 		newSchemas = append(newSchemas, sc.SchemaDesc())
 	}
 	for i := range details.DatabaseDescs {
-		db := all.LookupDescriptorEntry(details.DatabaseDescs[i].GetID()).(catalog.DatabaseDescriptor)
+		db := all.LookupDescriptor(details.DatabaseDescs[i].GetID()).(catalog.DatabaseDescriptor)
 		newDBs = append(newDBs, db.DatabaseDesc())
 	}
 	for i := range details.FunctionDescs {
-		fn := all.LookupDescriptorEntry(details.FunctionDescs[i].GetID()).(catalog.FunctionDescriptor)
+		fn := all.LookupDescriptor(details.FunctionDescs[i].GetID()).(catalog.FunctionDescriptor)
 		newFunctions = append(newFunctions, fn.FuncDesc())
 	}
 	b := txn.NewBatch()
-	if err := all.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		d := desc.(catalog.MutableDescriptor)
 		d.SetPublic()
 		return descsCol.WriteDescToBatch(
@@ -2250,7 +2250,7 @@ func prefetchDescriptors(
 				got[i].GetID(), got[i].GetVersion(), expVersion[id],
 			)
 		}
-		all.UpsertDescriptorEntry(got[i])
+		all.UpsertDescriptor(got[i])
 	}
 	return all.Catalog, nil
 }

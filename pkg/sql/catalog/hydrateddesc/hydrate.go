@@ -67,7 +67,7 @@ func MakeTypeLookupFuncForHydration(
 	c nstree.Catalog, lookupFn HydrationLookupFunc,
 ) typedesc.TypeLookupFunc {
 	return func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error) {
-		typDesc := c.LookupDescriptorEntry(id)
+		typDesc := c.LookupDescriptor(id)
 		if typDesc == nil {
 			typDesc, err = lookupFn(ctx, id)
 			if err != nil {
@@ -89,7 +89,7 @@ func MakeTypeLookupFuncForHydration(
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
-		dbDesc := c.LookupDescriptorEntry(typ.GetParentID())
+		dbDesc := c.LookupDescriptor(typ.GetParentID())
 		if dbDesc == nil {
 			dbDesc, err = lookupFn(ctx, typ.GetParentID())
 			if err != nil {
@@ -103,7 +103,7 @@ func MakeTypeLookupFuncForHydration(
 		if _, err = catalog.AsDatabaseDescriptor(dbDesc); err != nil {
 			return tree.TypeName{}, nil, err
 		}
-		scDesc := c.LookupDescriptorEntry(typ.GetParentSchemaID())
+		scDesc := c.LookupDescriptor(typ.GetParentSchemaID())
 		if scDesc == nil {
 			scDesc, err = lookupFn(ctx, typ.GetParentSchemaID())
 			if err != nil {
