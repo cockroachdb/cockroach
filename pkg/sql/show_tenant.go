@@ -12,8 +12,10 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,9 +31,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type tenantStatus string
+
+const (
+	replicating              tenantStatus = "REPLICATING"
+	replicationPaused        tenantStatus = "REPLICATION PAUSED"
+	replicationUnknownFormat tenantStatus = "REPLICATION UNKNOWN (%s)"
+)
+
 type showTenantNode struct {
 	name               tree.TypedExpr
 	tenantInfo         *descpb.TenantInfo
+	tenantStatus       tenantStatus
 	withReplication    bool
 	replicationInfo    *streampb.StreamIngestionStats
 	protectedTimestamp hlc.Timestamp
@@ -91,12 +102,35 @@ func (n *showTenantNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	var job *jobs.Job
 	n.tenantInfo = tenantRecord
 	jobId := n.tenantInfo.TenantReplicationJobID
-	registry := params.p.execCfg.JobRegistry
-	job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.Txn())
-	if err != nil {
-		return err
+	if jobId == 0 {
+		n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+	} else {
+		registry := params.p.execCfg.JobRegistry
+		job, err = registry.LoadJobWithTxn(params.ctx, jobId, params.p.Txn())
+		if err != nil {
+			return err
+		}
+		switch n.tenantInfo.State {
+		case descpb.TenantInfo_ADD:
+			switch job.Status() {
+			case jobs.StatusPending:
+				// Replication did not start yet, this is similar to a tenant in the ADD state.
+				n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+			case jobs.StatusRunning, jobs.StatusPauseRequested:
+				n.tenantStatus = replicating
+			case jobs.StatusPaused:
+				n.tenantStatus = replicationPaused
+			default:
+				n.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), job.Status()))
+			}
+		case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
+			n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+		default:
+			return errors.Newf("unknown tenant status %s", n.tenantInfo.State)
+		}
 	}
 
 	if n.withReplication {
@@ -151,7 +185,7 @@ func (n *showTenantNode) Next(_ runParams) (bool, error) {
 func (n *showTenantNode) Values() tree.Datums {
 	tenantId := tree.NewDInt(tree.DInt(n.tenantInfo.ID))
 	tenantName := tree.NewDString(string(n.tenantInfo.Name))
-	tenantStatus := tree.NewDString(n.tenantInfo.State.String())
+	tenantStatus := tree.NewDString(string(n.tenantStatus))
 	if !n.withReplication {
 		// This is a simple 'SHOW TENANT name'.
 		return tree.Datums{
