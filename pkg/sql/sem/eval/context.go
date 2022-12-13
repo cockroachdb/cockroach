@@ -770,6 +770,7 @@ type StreamIngestManager interface {
 	// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
 	GetStreamIngestionStats(
 		ctx context.Context,
-		ingestionJobID jobspb.JobID,
+		streamIngestionDetails jobspb.StreamIngestionDetails,
+		jobProgress jobspb.Progress,
 	) (*streampb.StreamIngestionStats, error)
 }

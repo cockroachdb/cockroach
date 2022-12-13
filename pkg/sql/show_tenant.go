@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -90,24 +91,34 @@ func (n *showTenantNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-
 	n.tenantInfo = tenantRecord
+	jobId := n.tenantInfo.TenantReplicationJobID
+	registry := params.p.execCfg.JobRegistry
+	job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.Txn())
+	if err != nil {
+		return err
+	}
+
 	if n.withReplication {
-		if n.tenantInfo.TenantReplicationJobID == 0 {
+		if jobId == 0 {
 			return errors.Newf("tenant %q does not have an active replication job", tenantName)
 		}
 		mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
 		if err != nil {
 			return err
 		}
-		stats, err := mgr.GetStreamIngestionStats(params.ctx, n.tenantInfo.TenantReplicationJobID)
+		details, ok := job.Details().(jobspb.StreamIngestionDetails)
+		if !ok {
+			return errors.Newf("job with id %d is not a stream ingestion job", job.ID())
+		}
+		stats, err := mgr.GetStreamIngestionStats(params.ctx, details, job.Progress())
 		if err != nil {
 			// An error means we don't have stats but we can still present some info,
 			// therefore we don't fail here.
 			// TODO(lidor): we need a better signal from GetStreamIngestionStats(), instead of
 			// ignoring all errors.
 			log.Infof(params.ctx, "stream ingestion stats unavailable for tenant %q and job %d",
-				tenantName, n.tenantInfo.TenantReplicationJobID)
+				tenantName, jobId)
 		} else {
 			n.replicationInfo = stats
 			if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
@@ -115,7 +126,7 @@ func (n *showTenantNode) startExec(params runParams) error {
 				// the info we do have about tenant replication status, logging an error
 				// and continuing.
 				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d",
-					tenantName, n.tenantInfo.TenantReplicationJobID)
+					tenantName, jobId)
 			} else {
 				ptp := params.p.execCfg.ProtectedTimestampProvider
 				record, err := ptp.GetRecord(params.ctx, params.p.Txn(), *stats.IngestionDetails.ProtectedTimestampRecordID)

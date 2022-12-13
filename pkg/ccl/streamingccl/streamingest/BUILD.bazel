@@ -54,6 +54,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -68,6 +69,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
@@ -129,7 +131,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/upgrade/upgradebase",
         "//pkg/util/hlc",
-        "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/limit",
         "//pkg/util/log",
