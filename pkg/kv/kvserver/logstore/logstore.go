@@ -13,6 +13,7 @@ package logstore
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -220,6 +221,10 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	return state, nil
 }
 
+var valPool = sync.Pool{
+	New: func() interface{} { return &roachpb.Value{} },
+}
+
 // logAppend adds the given entries to the raft log. Takes the previous log
 // state, and returns the updated state. It's the caller's responsibility to
 // maintain exclusive access to the raft log for the duration of the method
@@ -239,7 +244,9 @@ func logAppend(
 		return prev, nil
 	}
 	var diff enginepb.MVCCStats
-	var value roachpb.Value
+	value := valPool.Get().(*roachpb.Value)
+	value.RawBytes = value.RawBytes[:0]
+	defer valPool.Put(value)
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, ent.Index)
@@ -250,9 +257,9 @@ func logAppend(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prev.LastIndex {
-			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
+			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
 		} else {
-			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
+			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, *value, nil /* txn */)
 		}
 		if err != nil {
 			return RaftState{}, err
