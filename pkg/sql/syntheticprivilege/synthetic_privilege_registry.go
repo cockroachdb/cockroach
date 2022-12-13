@@ -11,6 +11,7 @@
 package syntheticprivilege
 
 import (
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -52,8 +53,8 @@ var registry = []*Metadata{
 		val:    reflect.TypeOf((*GlobalPrivilege)(nil)),
 	},
 	{
-		prefix: "/vtable",
-		regex:  regexp.MustCompile(`(/vtable/((?P<SchemaName>.*))/((?P<TableName>.*)))$`),
+		prefix: fmt.Sprintf("/%s", VirtualTablePathPrefix),
+		regex:  regexp.MustCompile(fmt.Sprintf(`(/%s/((?P<SchemaName>.*))/((?P<TableName>.*)))$`, VirtualTablePathPrefix)),
 		val:    reflect.TypeOf((*VirtualTablePrivilege)(nil)),
 	},
 	{
