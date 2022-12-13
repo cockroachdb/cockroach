@@ -175,6 +175,9 @@ func getSink(
 			// This breaks all kind of rules!
 			// Really should be distributed, but maybe not for demo purposes on a single
 			// node cluster.
+			// I believe this is racy so putting a lock on it :)
+			replicationslot.ReplicationSlotsMu.Lock()
+			defer replicationslot.ReplicationSlotsMu.Unlock()
 			if _, ok := replicationslot.ReplicationSlots[name]; !ok {
 				sink := &replicationSink{
 					name: name,
@@ -494,7 +497,7 @@ type replicationSink struct {
 	items    []replicationslot.Item
 }
 
-func (r replicationSink) LSN() uint64 {
+func (r *replicationSink) LSN() uint64 {
 	return r.lsn
 }
 
@@ -502,7 +505,7 @@ func (r *replicationSink) SetDatabase(s string) {
 	r.database = s
 }
 
-func (r replicationSink) Database() string {
+func (r *replicationSink) Database() string {
 	return r.database
 }
 

@@ -27,8 +27,9 @@ import (
 )
 
 func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, error) {
-	if _, ok := replicationslot.ReplicationSlots[slotName]; ok {
-		return 0, errors.AssertionFailedf("slot already exists: %s\n", slotName)
+	// ???? drop again just in case.
+	if err := p.DropSlot(ctx, slotName); err != nil {
+		return 0, err
 	}
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
@@ -42,7 +43,7 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, erro
 	if err != nil {
 		return 0, err
 	}
-	replicationslot.ReplicationSlots[slotName].SetDatabase(p.SessionData().Database)
+	replicationslot.ReplicationSlots[slotName].SetDatabase(p.CurrentDatabase())
 	return replicationslot.ReplicationSlots[slotName].LSN(), nil
 }
 
@@ -52,7 +53,7 @@ func (p *planner) DropSlot(ctx context.Context, slotName string) error {
 		"crdb-internal-drop-slot",
 		p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"cancel jobs select job_id from [show changefeed jobs] where sink_uri = $1",
+		"cancel jobs select job_id from [show changefeed jobs] where sink_uri = $1 and status = 'running'",
 		"replication://"+slotName,
 	)
 	if err != nil {

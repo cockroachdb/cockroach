@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -16,6 +17,7 @@ type Item struct {
 }
 
 var ReplicationSlots = make(map[string]replicationSlotLooker)
+var ReplicationSlotsMu syncutil.Mutex
 
 type replicationSlotLooker interface {
 	NextTxn(consume bool) []Item
@@ -73,7 +75,7 @@ func ParseJSONValueForPGLogicalPayload(s string) string {
 
 	// Because hard coding things is so en vogue these days
 	tableName := "test_table"
-	payload := fmt.Sprintf("table %s: %s:", tableName, recordString)
+	payload := fmt.Sprintf("table public.%s: %s:", tableName, recordString)
 
 	// Loop through all key values and populate a string based on the trimming/replacing used for keys below
 	colValue, colValues, found := strings.Cut(colValues, ",")

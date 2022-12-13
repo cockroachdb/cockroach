@@ -2173,7 +2173,7 @@ func (ex *connExecutor) execCmd() error {
 				}
 			}()
 			// TODO: figure out exit condition
-			for it := 0; it < int(10*time.Minute/time.Second); it++ {
+			for it := 0; it < int(24*time.Hour/time.Second); it++ {
 				// Keep outputting results every second.
 				time.Sleep(time.Second)
 

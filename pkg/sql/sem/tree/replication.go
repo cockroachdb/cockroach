@@ -10,6 +10,28 @@
 
 package tree
 
+type IdentifySystem struct{}
+
+func (i IdentifySystem) String() string {
+	return AsString(&i)
+}
+
+func (i IdentifySystem) Format(ctx *FmtCtx) {
+	ctx.WriteString("IDENTIFY_SYSTEM")
+}
+
+func (i IdentifySystem) StatementReturnType() StatementReturnType {
+	return Rows
+}
+
+func (i IdentifySystem) StatementType() StatementType {
+	return TypeDML
+}
+
+func (i IdentifySystem) StatementTag() string {
+	return "IDENTIFY_SYSTEM"
+}
+
 type ReplicationOptions []ReplicationOption
 
 func (r ReplicationOptions) Format(ctx *FmtCtx) {

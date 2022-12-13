@@ -22,6 +22,12 @@ import (
 // commandColumn converts executor execution arguments into jsonb representation.
 const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args'`
 
+func (d *delegator) delegateIdentifySystem(n *tree.IdentifySystem) (tree.Statement, error) {
+	return parse(
+		"SELECT 100 AS systemid, 1 AS timeline, confirmed_flush_lsn AS xlogpos, database AS dbname FROM pg_replication_slots",
+	)
+}
+
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
 
