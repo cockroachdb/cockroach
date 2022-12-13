@@ -41,14 +41,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"xor", 9, 12, "a", "public"}
 
 comp at=10
@@ -68,14 +66,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"", 10, 10, "a", "public"}
 
 comp at=9
@@ -95,14 +91,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"", 9, 9, "a", "public"}
 
 
@@ -127,14 +121,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"xor", 11, 14, "a", "b"}
 
 comp at=12
@@ -154,14 +146,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"", 12, 12, "a", "b"}
 
 comp at=11
@@ -181,14 +171,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"", 11, 11, "a", "b"}
 
 
@@ -213,14 +201,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"pg_", 12, 16, "mydb", "public"}
 
 # Quoted uppercase is an entire schema entirely.
@@ -241,14 +227,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 --placeholders: []interface {}{"PG_", 12, 16, "mydb", "public"}
 
 

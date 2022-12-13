@@ -443,6 +443,13 @@ func TestLogic_crdb_internal(
 	runLogicTest(t, "crdb_internal")
 }
 
+func TestLogic_crdb_internal_catalog(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_catalog")
+}
+
 func TestLogic_crdb_internal_default_privileges(
 	t *testing.T,
 ) {

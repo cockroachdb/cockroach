@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -108,6 +110,10 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalBackwardDependenciesTableID:        crdbInternalBackwardDependenciesTable,
 		catconstants.CrdbInternalBuildInfoTableID:                   crdbInternalBuildInfoTable,
 		catconstants.CrdbInternalBuiltinFunctionsTableID:            crdbInternalBuiltinFunctionsTable,
+		catconstants.CrdbInternalCatalogCommentsTableID:             crdbInternalCatalogCommentsTable,
+		catconstants.CrdbInternalCatalogDescriptorTableID:           crdbInternalCatalogDescriptorTable,
+		catconstants.CrdbInternalCatalogNamespaceTableID:            crdbInternalCatalogNamespaceTable,
+		catconstants.CrdbInternalCatalogZonesTableID:                crdbInternalCatalogZonesTable,
 		catconstants.CrdbInternalClusterContendedIndexesViewID:      crdbInternalClusterContendedIndexesView,
 		catconstants.CrdbInternalClusterContendedKeysViewID:         crdbInternalClusterContendedKeysView,
 		catconstants.CrdbInternalClusterContendedTablesViewID:       crdbInternalClusterContendedTablesView,
@@ -151,7 +157,6 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
-		catconstants.CrdbInternalPredefinedCommentsTableID:          crdbInternalPredefinedCommentsTable,
 		catconstants.CrdbInternalRangesNoLeasesTableID:              crdbInternalRangesNoLeasesTable,
 		catconstants.CrdbInternalRangesViewID:                       crdbInternalRangesView,
 		catconstants.CrdbInternalRuntimeInfoTableID:                 crdbInternalRuntimeInfoTable,
@@ -4895,51 +4900,154 @@ CREATE TABLE crdb_internal.kv_store_status (
 	},
 }
 
-// crdbInternalPredefinedComments exposes the predefined
-// comments for virtual tables. This is used by SHOW TABLES WITH COMMENT
-// as fall-back when system.comments is silent.
-// TODO(knz): extend this with vtable column comments.
-//
-// TODO(tbg): prefix with node_.
-var crdbInternalPredefinedCommentsTable = virtualSchemaTable{
-	comment: `comments for predefined virtual tables (RAM/static)`,
+var crdbInternalCatalogDescriptorTable = virtualSchemaTable{
+	comment: `like system.descriptor but overlaid with in-txn in-memory changes and including virtual objects`,
 	schema: `
-CREATE TABLE crdb_internal.predefined_comments (
-	TYPE      INT,
-	OBJECT_ID INT,
-	SUB_ID    INT,
-	COMMENT   STRING
+CREATE TABLE crdb_internal.kv_catalog_descriptor (
+  id            INT NOT NULL,
+  descriptor    JSON NOT NULL
 )`,
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
+		all, err := p.Descriptors().GetAll(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		// Delegate privilege check to system table.
+		{
+			sysTable := all.LookupDescriptor(systemschema.DescriptorTable.GetID())
+			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+				return nil
+			}
+		}
+		return all.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			j, err := protoreflect.MessageToJSON(desc.DescriptorProto(), protoreflect.FmtFlags{})
+			if err != nil {
+				return err
+			}
+			return addRow(
+				tree.NewDInt(tree.DInt(int64(desc.GetID()))),
+				tree.NewDJSON(j),
+			)
+		})
+	},
+}
+
+var crdbInternalCatalogZonesTable = virtualSchemaTable{
+	comment: `like system.zones but overlaid with in-txn in-memory changes`,
+	schema: `
+CREATE TABLE crdb_internal.kv_catalog_zones (
+  id        INT NOT NULL,
+  config    JSON NOT NULL
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) error {
+		all, err := p.Descriptors().GetAll(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		// Delegate privilege check to system table.
+		{
+			sysTable := all.LookupDescriptor(systemschema.ZonesTable.GetID())
+			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+				return nil
+			}
+		}
+		// Loop over all zone configs.
+		return all.ForEachZoneConfig(func(id descpb.ID, zc catalog.ZoneConfig) error {
+			j, err := protoreflect.MessageToJSON(zc.ZoneConfigProto(), protoreflect.FmtFlags{})
+			if err != nil {
+				return err
+			}
+			return addRow(
+				tree.NewDInt(tree.DInt(int64(id))),
+				tree.NewDJSON(j),
+			)
+		})
+	},
+}
+
+var crdbInternalCatalogNamespaceTable = virtualSchemaTable{
+	comment: `like system.namespace but overlaid with in-txn in-memory changes`,
+	schema: `
+CREATE TABLE crdb_internal.kv_catalog_namespace (
+  parent_id        INT NOT NULL,
+  parent_schema_id INT NOT NULL,
+  name             STRING NOT NULL,
+  id               INT NOT NULL
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) error {
+		all, err := p.Descriptors().GetAll(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		// Delegate privilege check to system table.
+		{
+			sysTable := all.LookupDescriptor(systemschema.NamespaceTable.GetID())
+			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+				return nil
+			}
+		}
+		// Loop over all namespace entries.
+		return all.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+			return addRow(
+				tree.NewDInt(tree.DInt(int64(e.GetParentID()))),
+				tree.NewDInt(tree.DInt(int64(e.GetParentSchemaID()))),
+				tree.NewDString(e.GetName()),
+				tree.NewDInt(tree.DInt(int64(e.GetID()))),
+			)
+		})
+	},
+}
+
+var crdbInternalCatalogCommentsTable = virtualSchemaTable{
+	comment: `like system.comments but overlaid with in-txn in-memory changes and including virtual objects`,
+	schema: `
+CREATE TABLE crdb_internal.kv_catalog_comments (
+  type        STRING NOT NULL,
+  object_id   INT NOT NULL,
+  sub_id      INT NOT NULL,
+  comment     STRING NOT NULL
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+	) error {
+		all, err := p.Descriptors().GetAll(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		// Delegate privilege check to system table.
+		{
+			sysTable := all.LookupDescriptor(systemschema.CommentsTable.GetID())
+			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+				return nil
+			}
+		}
+		// Loop over all comment entries.
 		// NB if ever anyone were to extend this table to carry column
 		// comments, make sure to update pg_catalog.col_description to
 		// retrieve those comments.
-		tableCommentKey := tree.NewDInt(tree.DInt(catalogkeys.TableCommentType))
-		vt := p.getVirtualTabler()
-		vEntries := vt.getSchemas()
-		vSchemaNames := vt.getSchemaNames()
-
-		for _, virtSchemaName := range vSchemaNames {
-			e := vEntries[virtSchemaName]
-
-			for _, tName := range e.orderedDefNames {
-				vTableEntry := e.defs[tName]
-				table := vTableEntry.desc
-
-				if vTableEntry.comment != "" {
-					if err := addRow(
-						tableCommentKey,
-						tree.NewDInt(tree.DInt(table.GetID())),
-						zeroVal,
-						tree.NewDString(vTableEntry.comment)); err != nil {
-						return err
-					}
+		// TODO(knz): extend this with vtable column comments.
+		for _, ct := range catalogkeys.AllCommentTypes {
+			dct := tree.NewDString(ct.String())
+			if err := all.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
+				if ct != key.CommentType {
+					return nil
 				}
+				return addRow(
+					dct,
+					tree.NewDInt(tree.DInt(int64(key.ObjectID))),
+					tree.NewDInt(tree.DInt(int64(key.SubID))),
+					tree.NewDString(cmt),
+				)
+			}); err != nil {
+				return err
 			}
 		}
-
 		return nil
 	},
 }
