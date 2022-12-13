@@ -2440,10 +2440,10 @@ var regularBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"interval", types.Interval}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				d := tree.MustBeDInterval(args[0])
 				f := tree.MustBeDString(args[1])
-				s, err := tochar.DurationToChar(d.Duration, string(f))
+				s, err := tochar.DurationToChar(d.Duration, ctx.ToCharFormatCache, string(f))
 				return tree.NewDString(s), err
 			},
 			Info:       "Convert an interval to a string using the given format.",
@@ -2452,10 +2452,10 @@ var regularBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ts := tree.MustBeDTimestamp(args[0])
 				f := tree.MustBeDString(args[1])
-				s, err := tochar.TimeToChar(ts.Time, string(f))
+				s, err := tochar.TimeToChar(ts.Time, ctx.ToCharFormatCache, string(f))
 				return tree.NewDString(s), err
 			},
 			Info:       "Convert an timestamp to a string using the given format.",
@@ -2464,10 +2464,10 @@ var regularBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamptz", types.TimestampTZ}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ts := tree.MustBeDTimestampTZ(args[0])
 				f := tree.MustBeDString(args[1])
-				s, err := tochar.TimeToChar(ts.Time, string(f))
+				s, err := tochar.TimeToChar(ts.Time, ctx.ToCharFormatCache, string(f))
 				return tree.NewDString(s), err
 			},
 			Info:       "Convert a timestamp with time zone to a string using the given format.",

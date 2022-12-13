@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
@@ -62,10 +63,11 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
-	flowRegistry  *flowinfra.FlowRegistry
-	flowScheduler *flowinfra.FlowScheduler
-	memMonitor    *mon.BytesMonitor
-	regexpCache   *tree.RegexpCache
+	flowRegistry      *flowinfra.FlowRegistry
+	flowScheduler     *flowinfra.FlowScheduler
+	memMonitor        *mon.BytesMonitor
+	regexpCache       *tree.RegexpCache
+	toCharFormatCache *tochar.FormatCache
 }
 
 var _ execinfrapb.DistSQLServer = &ServerImpl{}
@@ -75,10 +77,11 @@ func NewServer(
 	ctx context.Context, cfg execinfra.ServerConfig, flowScheduler *flowinfra.FlowScheduler,
 ) *ServerImpl {
 	ds := &ServerImpl{
-		ServerConfig:  cfg,
-		regexpCache:   tree.NewRegexpCache(512),
-		flowRegistry:  flowinfra.NewFlowRegistry(),
-		flowScheduler: flowScheduler,
+		ServerConfig:      cfg,
+		regexpCache:       tree.NewRegexpCache(512),
+		toCharFormatCache: tochar.NewFormatCache(512),
+		flowRegistry:      flowinfra.NewFlowRegistry(),
+		flowScheduler:     flowScheduler,
 		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
@@ -364,16 +367,17 @@ func (ds *ServerImpl) setupFlow(
 			return nil, nil, nil, err
 		}
 		evalCtx = &eval.Context{
-			Settings:         ds.ServerConfig.Settings,
-			SessionDataStack: sessiondata.NewStack(sd),
-			ClusterID:        ds.ServerConfig.LogicalClusterID.Get(),
-			ClusterName:      ds.ServerConfig.ClusterName,
-			NodeID:           ds.ServerConfig.NodeID,
-			Codec:            ds.ServerConfig.Codec,
-			ReCache:          ds.regexpCache,
-			Mon:              monitor,
-			Locality:         ds.ServerConfig.Locality,
-			Tracer:           ds.ServerConfig.Tracer,
+			Settings:          ds.ServerConfig.Settings,
+			SessionDataStack:  sessiondata.NewStack(sd),
+			ClusterID:         ds.ServerConfig.LogicalClusterID.Get(),
+			ClusterName:       ds.ServerConfig.ClusterName,
+			NodeID:            ds.ServerConfig.NodeID,
+			Codec:             ds.ServerConfig.Codec,
+			ReCache:           ds.regexpCache,
+			ToCharFormatCache: ds.toCharFormatCache,
+			Mon:               monitor,
+			Locality:          ds.ServerConfig.Locality,
+			Tracer:            ds.ServerConfig.Tracer,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:                   ctx,

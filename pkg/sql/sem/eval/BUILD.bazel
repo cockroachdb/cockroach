@@ -81,6 +81,7 @@ go_library(
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tochar",
         "//pkg/util/tracing",
         "//pkg/util/trigram",
         "//pkg/util/uuid",
