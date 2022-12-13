@@ -44,8 +44,8 @@ import (
 // enabling tracing, capturing the physical plan of a test statement, and
 // constructing a TraceAnalyzer from the resulting trace and physical plan.
 func TestTraceAnalyzer(t *testing.T) {
-	defer log.Scope(t).Close(t)
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		testStmt = "SELECT * FROM test.foo ORDER BY v"

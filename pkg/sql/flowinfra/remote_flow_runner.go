@@ -70,6 +70,8 @@ func (r *RemoteFlowRunner) Init(metrics *execinfra.DistSQLMetrics) {
 
 // RunFlow starts the given flow; does not wait for the flow to complete.
 func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
+	// cleanedUp is only accessed from the current goroutine.
+	cleanedUp := false
 	err := r.stopper.RunTaskWithErr(
 		ctx, "flowinfra.RemoteFlowRunner: running flow", func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "flow runner running flow %s", f.GetID())
@@ -93,7 +95,6 @@ func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 				f.Cleanup(ctx)
 				return err
 			}
-			// The flow can be started.
 			r.metrics.FlowStart()
 			cleanup := func() {
 				func() {
@@ -105,18 +106,40 @@ func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 				r.metrics.FlowStop()
 				f.Cleanup(ctx)
 			}
-			if err := f.Start(ctx); err != nil {
-				cleanup()
-				return err
-			}
-			go func() {
+			// First, make sure that we can spin up a new async task whose job
+			// is to wait for the flow to finish and perform the cleanup.
+			//
+			// However, we need to make sure that this task blocks until the
+			// flow is started. True value will be sent on waiterShouldExit if
+			// we couldn't start the flow and the async task must exit right
+			// away, without waiting; when the channel is closed, the flow has
+			// been started successfully, and the async task proceeds to waiting
+			// for its completion.
+			waiterShouldExit := make(chan bool)
+			if err := r.stopper.RunAsyncTask(ctx, "flowinfra.RemoteFlowRunner: waiting for flow to finish", func(ctx context.Context) {
+				if shouldExit := <-waiterShouldExit; shouldExit {
+					return
+				}
 				f.Wait()
 				cleanup()
-			}()
+			}); err != nil {
+				cleanup()
+				cleanedUp = true
+				return err
+			}
+			// Now, start the flow to run concurrently.
+			if err := f.Start(ctx); err != nil {
+				cleanup()
+				cleanedUp = true
+				waiterShouldExit <- true
+				return err
+			}
+			close(waiterShouldExit)
 			return nil
 		})
-	if err != nil && errors.Is(err, stop.ErrUnavailable) {
-		// If the server is quiescing, we have to explicitly clean up the flow.
+	if err != nil && errors.Is(err, stop.ErrUnavailable) && !cleanedUp {
+		// If the server is quiescing, we have to explicitly clean up the flow
+		// if it hasn't been cleaned up yet.
 		f.Cleanup(ctx)
 	}
 	return err
