@@ -47,7 +47,7 @@ type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.StreamID, error)
+	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
@@ -74,12 +74,8 @@ type Client interface {
 	// the specified remote address. This is used by each consumer processor to
 	// open its subscription to its partition of a larger stream.
 	// TODO(dt): ts -> checkpointToken.
-	Subscribe(
-		ctx context.Context,
-		streamID streampb.StreamID,
-		spec SubscriptionToken,
-		checkpoint hlc.Timestamp,
-	) (Subscription, error)
+	Subscribe(ctx context.Context, streamID streampb.StreamID, spec SubscriptionToken,
+		initialScanTime hlc.Timestamp, previousHighWater hlc.Timestamp) (Subscription, error)
 
 	// Close releases all the resources used by this client.
 	Close(ctx context.Context) error

@@ -228,7 +228,7 @@ func newStreamIngestionDataProcessor(
 		trackedSpans = append(trackedSpans, partitionSpec.Spans...)
 	}
 
-	frontier, err := span.MakeFrontierAt(spec.StartTime, trackedSpans...)
+	frontier, err := span.MakeFrontierAt(spec.PreviousHighWaterTimestamp, trackedSpans...)
 	if err != nil {
 		return nil, err
 	}
@@ -325,15 +325,16 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		startTime := frontierForSpans(sip.frontier, partitionSpec.Spans...)
+		previousHighWater := frontierForSpans(sip.frontier, partitionSpec.Spans...)
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
+				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousHighWater)
 			}
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token, startTime)
+		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token,
+			sip.spec.InitialScanTimestamp, previousHighWater)
 
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))

@@ -111,10 +111,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		return err
 	}
 
-	if s.spec.StartFrom.IsEmpty() {
-		// Arrange to perform initial scan.
-		s.spec.StartFrom = s.execCfg.Clock.Now()
-
+	initialTimestamp := s.spec.InitialScanTimestamp
+	if s.spec.PreviousHighWaterTimestamp.IsEmpty() {
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
@@ -128,12 +126,13 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 				return int(s.spec.Config.InitialScanParallelism)
 			}),
 
-			rangefeed.WithOnScanCompleted(s.onSpanCompleted),
+			rangefeed.WithOnScanCompleted(s.onInitialScanSpanCompleted),
 		)
 	} else {
+		initialTimestamp = s.spec.PreviousHighWaterTimestamp
 		// When resuming from cursor, advance frontier to the cursor position.
 		for _, sp := range s.spec.Spans {
-			if _, err := frontier.Forward(sp, s.spec.StartFrom); err != nil {
+			if _, err := frontier.Forward(sp, s.spec.PreviousHighWaterTimestamp); err != nil {
 				return err
 			}
 		}
@@ -141,7 +140,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	// Start rangefeed, which spins up a separate go routine to perform it's job.
 	s.rf = s.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onValue, opts...)
+		fmt.Sprintf("streamID=%d", s.streamID), initialTimestamp, s.onValue, opts...)
 	if err := s.rf.Start(ctx, s.spec.Spans); err != nil {
 		return err
 	}
@@ -243,10 +242,10 @@ func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *roachpb.Rang
 	}
 }
 
-func (s *eventStream) onSpanCompleted(ctx context.Context, sp roachpb.Span) error {
+func (s *eventStream) onInitialScanSpanCompleted(ctx context.Context, sp roachpb.Span) error {
 	checkpoint := roachpb.RangeFeedCheckpoint{
 		Span:       sp,
-		ResolvedTS: s.spec.StartFrom,
+		ResolvedTS: s.spec.InitialScanTimestamp,
 	}
 	select {
 	case <-ctx.Done():
