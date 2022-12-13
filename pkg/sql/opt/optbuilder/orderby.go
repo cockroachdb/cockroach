@@ -285,6 +285,7 @@ func (b *Builder) hasDefaultNullsOrder(order *tree.Order) bool {
 		telemetry.Inc(sqltelemetry.OrderByNullsNonStandardCounter)
 		return false
 	}
+	telemetry.Inc(sqltelemetry.OrderByNullsStandardCounter)
 	return true
 }
 
