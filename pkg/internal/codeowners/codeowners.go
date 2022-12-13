@@ -54,6 +54,9 @@ func LoadCodeOwners(r io.Reader, teams map[team.Alias]team.Team) (*CodeOwners, e
 			return nil, s.Err()
 		}
 		t := s.Text()
+		if strings.HasPrefix(t, "#!") {
+			t = t[2:]
+		}
 		if strings.HasPrefix(t, "#") {
 			continue
 		}
