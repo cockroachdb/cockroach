@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 // GetPublicSchema returns a synthetic public schema which is
@@ -42,25 +42,21 @@ type public struct {
 var _ catalog.SchemaDescriptor = public{}
 var _ privilege.Object = public{}
 
-func (p public) GetParentID() descpb.ID { return descpb.InvalidID }
-func (p public) GetID() descpb.ID       { return keys.PublicSchemaID }
-func (p public) GetName() string        { return tree.PublicSchema }
-func (p public) GetPrivileges() *catpb.PrivilegeDescriptor {
-	return catpb.NewPublicSchemaPrivilegeDescriptor()
-}
-func (p public) GetRawBytesInStorage() []byte { return nil }
-
-// GetObjectType implements the Object interface.
-func (p public) GetObjectType() privilege.ObjectType {
-	return privilege.Schema
-}
+func (p public) GetID() descpb.ID                     { return keys.PublicSchemaID }
+func (p public) GetParentID() descpb.ID               { return descpb.InvalidID }
+func (p public) GetName() string                      { return catconstants.PublicSchemaName }
+func (p public) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
+func (p public) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
 
 type publicBase struct{}
 
-func (p publicBase) kindName() string                 { return "public" }
-func (p publicBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaPublic }
+var _ syntheticBase = publicBase{}
+
+func (publicBase) kindName() string                 { return "public" }
+func (publicBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaPublic }
+func (publicBase) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewPublicSchemaPrivilegeDescriptor()
+}
 
 // publicDesc is a singleton returned by GetPublicSchema.
-var publicDesc catalog.SchemaDescriptor = public{
-	synthetic{publicBase{}},
-}
+var publicDesc catalog.SchemaDescriptor = public{synthetic{publicBase{}}}

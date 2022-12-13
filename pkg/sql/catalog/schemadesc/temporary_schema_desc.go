@@ -45,22 +45,18 @@ type temporary struct {
 var _ catalog.SchemaDescriptor = temporary{}
 var _ privilege.Object = temporary{}
 
-func (p temporary) GetID() descpb.ID       { return p.id }
-func (p temporary) GetName() string        { return p.name }
-func (p temporary) GetParentID() descpb.ID { return p.parentID }
-func (p temporary) GetPrivileges() *catpb.PrivilegeDescriptor {
-	return catpb.NewTemporarySchemaPrivilegeDescriptor()
-}
-func (p temporary) GetRawBytesInStorage() []byte { return nil }
-
-// GetObjectType implements the Object interface.
-func (p temporary) GetObjectType() privilege.ObjectType {
-	return privilege.Schema
-}
+func (p temporary) GetID() descpb.ID                     { return p.id }
+func (p temporary) GetName() string                      { return p.name }
+func (p temporary) GetParentID() descpb.ID               { return p.parentID }
+func (p temporary) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
+func (p temporary) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
 
 type temporaryBase struct{}
 
-func (t temporaryBase) kindName() string                 { return "temporary" }
-func (t temporaryBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaTemporary }
-
 var _ syntheticBase = temporaryBase{}
+
+func (temporaryBase) kindName() string                 { return "temporary" }
+func (temporaryBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaTemporary }
+func (temporaryBase) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewTemporarySchemaPrivilegeDescriptor()
+}
