@@ -172,7 +172,25 @@
 
 /pkg/geo/                    @cockroachdb/geospatial
 
-/pkg/kv/                     @cockroachdb/kv-prs
+# The KV team generally owns ./pkg/kv/... but some of it belongs to Repl.
+/pkg/kv/                                @cockroachdb/kv-prs
+/pkg/kv/kvserver/*circuit*.go           @cockroachdb/repl-prs
+/pkg/kv/kvserver/*closed*ts*.go         @cockroachdb/repl-prs
+/pkg/kv/kvserver/*_app*.go              @cockroachdb/repl-prs
+/pkg/kv/kvserver/*closed_timestamp*.go  @cockroachdb/repl-prs
+/pkg/kv/kvserver/*consistency*.go       @cockroachdb/repl-prs
+/pkg/kv/kvserver/*probe*.go             @cockroachdb/repl-prs
+/pkg/kv/kvserver/*proposal*.go          @cockroachdb/repl-prs
+/pkg/kv/kvserver/*raft*.go              @cockroachdb/repl-prs
+/pkg/kv/kvserver/*raft*/                @cockroachdb/repl-prs
+/pkg/kv/kvserver/*rangefeed*.go         @cockroachdb/repl-prs
+/pkg/kv/kvserver/*sideload*.go          @cockroachdb/repl-prs
+/pkg/kv/kvserver/apply/                 @cockroachdb/repl-prs
+/pkg/kv/kvserver/closedts/              @cockroachdb/repl-prs
+/pkg/kv/kvserver/logstore/              @cockroachdb/repl-prs
+/pkg/kv/kvserver/rangefeed/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/rditer/                @cockroachdb/repl-prs
+
 /pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
 
