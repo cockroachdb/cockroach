@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TableElementMaybeMutation is an interface used as a subtype for the various
@@ -995,4 +996,23 @@ func ColumnNeedsBackfill(col Column) bool {
 		return false
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
+}
+
+// GetConstraintType finds the type of constraint.
+func GetConstraintType(c Constraint) descpb.ConstraintType {
+	if c.AsCheck() != nil {
+		return descpb.ConstraintTypeCheck
+	} else if c.AsForeignKey() != nil {
+		return descpb.ConstraintTypeFK
+	} else if c.AsUniqueWithoutIndex() != nil {
+		return descpb.ConstraintTypeUniqueWithoutIndex
+	} else if c.AsUniqueWithIndex() != nil {
+		if c.AsUniqueWithIndex().GetEncodingType() == descpb.PrimaryIndexEncoding {
+			return descpb.ConstraintTypePK
+		} else {
+			return descpb.ConstraintTypeUnique
+		}
+	} else {
+		panic(errors.AssertionFailedf("unknown constraint type %T", c))
+	}
 }
