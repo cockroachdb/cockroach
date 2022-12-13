@@ -291,4 +291,5 @@ var TenantColumnsWithReplication = ResultColumns{
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
 	{Name: "retained_time", Typ: types.Timestamp},
+	{Name: "replication_start_time", Typ: types.Timestamp},
 }
