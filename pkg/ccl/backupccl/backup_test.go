@@ -5748,6 +5748,7 @@ func TestBatchedInsertStats(t *testing.T) {
 			// RestoreDetails.
 			Details:  jobspb.RestoreDetails{},
 			Progress: jobspb.RestoreProgress{},
+			Username: username.TestUserName(),
 		}, id, nil /* txn */)
 		require.NoError(t, err)
 		return job

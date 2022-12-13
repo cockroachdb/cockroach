@@ -390,3 +390,42 @@ vectorized: true
     │
     └── • virtual table
           table: pg_type@primary
+
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: system_jobs@system_jobs_status_idx
+          spans: [/'paused' - /'paused']
+
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE job_type = 'changefeed'] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: system_jobs@system_jobs_job_type_idx
+          spans: [/'changefeed' - /'changefeed']
+
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE id = 1] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: system_jobs@system_jobs_id_idx
+          spans: [/1 - /1]

@@ -89,6 +89,7 @@ crdb_internal  session_trace                    table  admin  NULL  NULL
 crdb_internal  session_variables                table  admin  NULL  NULL
 crdb_internal  statement_statistics             view   admin  NULL  NULL
 crdb_internal  super_regions                    table  admin  NULL  NULL
+crdb_internal  system_jobs                      table  admin  NULL  NULL
 crdb_internal  table_columns                    table  admin  NULL  NULL
 crdb_internal  table_indexes                    table  admin  NULL  NULL
 crdb_internal  table_row_statistics             table  admin  NULL  NULL

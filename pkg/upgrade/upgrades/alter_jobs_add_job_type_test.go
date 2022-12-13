@@ -118,6 +118,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 				// override the resumer for each type to be a fake resumer, the type of
 				// progess we pass in does not matter.
 				Progress: jobspb.ImportProgress{},
+				Username: username.TestUserName(),
 			}
 
 			_, err := registry.CreateJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
