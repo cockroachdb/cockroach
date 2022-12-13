@@ -112,7 +112,7 @@ func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 		return cmt, hasCmt
 	}
 	if tc.cr.IsIDInCache(descpb.ID(key.ObjectID)) {
-		return tc.cr.Cache().LookupCommentEntry(key)
+		return tc.cr.Cache().LookupComment(key)
 	}
 	// TODO(chengxiong): we need to ensure descriptor if it's not in either cache
 	// and it's not a pseudo descriptor.
@@ -162,7 +162,7 @@ func (tc *Collection) GetZoneConfigs(
 	if err != nil {
 		return nil, err
 	}
-	_ = read.ForEachZoneConfigEntry(func(id descpb.ID, zc catalog.ZoneConfig) error {
+	_ = read.ForEachZoneConfig(func(id descpb.ID, zc catalog.ZoneConfig) error {
 		ret[id] = zc.Clone()
 		return nil
 	})
@@ -329,7 +329,7 @@ func getDescriptorsByID(
 		}
 		for i, id := range ids {
 			if descs[i] == nil {
-				descs[i] = read.LookupDescriptorEntry(id)
+				descs[i] = read.LookupDescriptor(id)
 				vls[i] = tc.validationLevels[id]
 			}
 		}
@@ -412,7 +412,7 @@ func (q *byIDLookupContext) lookupCached(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
 	if q.tc.cr.IsIDInCache(id) {
-		if desc := q.tc.cr.Cache().LookupDescriptorEntry(id); desc != nil {
+		if desc := q.tc.cr.Cache().LookupDescriptor(id); desc != nil {
 			return desc, q.tc.validationLevels[id], nil
 		}
 	}

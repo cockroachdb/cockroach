@@ -213,7 +213,7 @@ func (h testHelper) argDesc(
 	})
 	require.NoErrorf(h.t, err,
 		"%s: error reading %s descriptor %d", h.d.Pos, expectedType, id)
-	desc := c.LookupDescriptorEntry(id)
+	desc := c.LookupDescriptor(id)
 	require.NotNilf(h.t, desc,
 		"%s: nil %s descriptor %d", h.d.Pos, expectedType, id)
 	require.Equal(h.t, expectedType, desc.DescriptorType(),
@@ -305,7 +305,7 @@ func (h testHelper) catalogToYaml(c nstree.Catalog) interface{} {
 		m[ns.GetID()] = j
 		return nil
 	})
-	_ = c.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
+	_ = c.ForEachDescriptor(func(d catalog.Descriptor) error {
 		mut := d.NewBuilder().BuildCreatedMutable()
 		mut.ResetModificationTime()
 		j := m[d.GetID()]
@@ -313,13 +313,13 @@ func (h testHelper) catalogToYaml(c nstree.Catalog) interface{} {
 		m[d.GetID()] = j
 		return nil
 	})
-	_ = c.ForEachZoneConfigEntry(func(id descpb.ID, zc catalog.ZoneConfig) error {
+	_ = c.ForEachZoneConfig(func(id descpb.ID, zc catalog.ZoneConfig) error {
 		j := m[id]
 		j.zc = zc
 		m[id] = j
 		return nil
 	})
-	_ = c.ForEachCommentEntry(func(key catalogkeys.CommentKey, cmt string) error {
+	_ = c.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
 		id := descpb.ID(key.ObjectID)
 		j := m[id]
 		j.comments = append(j.comments, struct {
