@@ -1519,9 +1519,7 @@ func (s *SQLServer) preStart(
 	)
 
 	scheduledlogging.Start(ctx, stopper, s.execCfg.DB, s.execCfg.Settings, s.internalExecutor, s.execCfg.CaptureIndexUsageStatsKnobs)
-	if err := stopper.RunAsyncTask(ctx, "warm-synthetic-privilege-cache", s.execCfg.WarmSyntheticPrivilegeCacheForVirtualTables); err != nil {
-		return err
-	}
+	s.execCfg.WarmSyntheticPrivilegeCacheForVirtualTables(ctx)
 	return nil
 }
 
@@ -1552,6 +1550,9 @@ func (s *SQLServer) startServeSQL(
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
+	if err := s.execCfg.SyntheticPrivilegeCache.WaitForWarm(); err != nil {
+		return err
+	}
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := makeTCPKeepAliveManager()
 

@@ -305,7 +305,6 @@ func synthesizePrivilegeDescriptor(
 		return spo.GetFallbackPrivileges(), nil
 	}
 
-	cache.WarmingGroup.Wait()
 	_, desc, err := descsCol.GetImmutableTableByName(
 		ctx,
 		txn,

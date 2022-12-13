@@ -12,10 +12,10 @@ package cacheutil
 
 import (
 	"context"
-	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -29,7 +29,7 @@ import (
 // during user authentication and session initialization.
 type Cache struct {
 	syncutil.Mutex
-	WarmingGroup  *sync.WaitGroup
+	warmingGroup  ctxgroup.Group
 	boundAccount  mon.BoundAccount
 	tableVersions []descpb.DescriptorVersion
 	// TODO(richardjcai): In go1.18 we can use generics.
@@ -43,12 +43,30 @@ type Cache struct {
 // We use it to initialize the tableVersions slice to 0 for each table.
 func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables int) *Cache {
 	tableVersions := make([]descpb.DescriptorVersion, numSystemTables)
+	ctx, _ := stopper.WithCancelOnQuiesce(context.Background())
 	return &Cache{
-		WarmingGroup:  &sync.WaitGroup{},
+		warmingGroup:  ctxgroup.WithContext(ctx),
 		tableVersions: tableVersions,
 		boundAccount:  account,
 		stopper:       stopper,
 	}
+}
+
+// Warm warms the cache using the given function. It runs async with a context
+// that is cancelled if Cache.stopper is quiescing.
+func (c *Cache) Warm(fn func(context.Context)) {
+	c.warmingGroup.GoCtx(
+		func(ctx context.Context) error {
+			fn(ctx)
+			return nil
+		},
+	)
+	return
+}
+
+// WaitForWarm waits for the async Warm process to complete.
+func (c *Cache) WaitForWarm() error {
+	return c.warmingGroup.Wait()
 }
 
 // GetValueLocked returns the value and if the key is found in the cache.

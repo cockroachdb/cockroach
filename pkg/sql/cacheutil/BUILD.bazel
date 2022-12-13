@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/stop",

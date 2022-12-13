@@ -954,96 +954,96 @@ func (cfg *ExecutorConfig) WarmSyntheticPrivilegeCacheForVirtualTables(ctx conte
 		return
 	}
 
-	start := timeutil.Now()
-	var err error
-	cfg.SyntheticPrivilegeCache.WarmingGroup.Add(1)
-	defer func() {
-		cfg.SyntheticPrivilegeCache.WarmingGroup.Done()
-		if err != nil {
-			log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)
-		} else {
-			log.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
-		}
-	}()
-
-	var tableVersions []descpb.DescriptorVersion
-	vtablePathToPrivilegeAccumulator := make(map[string]*syntheticprivilege.Accumulator)
-	query := fmt.Sprintf(
-		`SELECT path, username, privileges, grant_options FROM system.%s WHERE path LIKE $1`,
-		catconstants.SystemPrivilegeTableName,
-	)
-	err = cfg.InternalExecutorFactory.DescsTxnWithExecutor(
-		ctx,
-		cfg.DB,
-		nil, /* sessionData */
-		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (retErr error) {
-			_, systemPrivDesc, err := descsCol.GetImmutableTableByName(
-				ctx,
-				txn,
-				syntheticprivilege.SystemPrivilegesTableName,
-				tree.ObjectLookupFlagsWithRequired(),
-			)
+	cfg.SyntheticPrivilegeCache.Warm(func(ctx context.Context) {
+		start := timeutil.Now()
+		var err error
+		defer func() {
 			if err != nil {
-				return err
+				log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)
+			} else {
+				log.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
 			}
-			if systemPrivDesc.IsUncommittedVersion() {
-				// This shouldn't ever happen, but if it does somehow, then we can't pre-warm the cache.
-				logcrash.ReportOrPanic(ctx, &cfg.Settings.SV, "cannot warm cache: %s is at an uncommitted version", syntheticprivilege.SystemPrivilegesTableName)
-				return errors.Newf("%s is at an uncommitted version", syntheticprivilege.SystemPrivilegesTableName)
-			}
-			tableVersions = []descpb.DescriptorVersion{systemPrivDesc.GetVersion()}
+		}()
 
-			it, err := ie.QueryIteratorEx(
-				ctx, `get-vtable-privileges`, txn, sessiondata.NodeUserSessionDataOverride,
-				query, fmt.Sprintf("/%s/%%", syntheticprivilege.VirtualTablePathPrefix),
-			)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				retErr = errors.CombineErrors(retErr, it.Close())
-			}()
-
-			for {
-				ok, err := it.Next(ctx)
+		var tableVersions []descpb.DescriptorVersion
+		vtablePathToPrivilegeAccumulator := make(map[string]*syntheticprivilege.Accumulator)
+		query := fmt.Sprintf(
+			`SELECT path, username, privileges, grant_options FROM system.%s WHERE path LIKE $1`,
+			catconstants.SystemPrivilegeTableName,
+		)
+		err = cfg.InternalExecutorFactory.DescsTxnWithExecutor(
+			ctx,
+			cfg.DB,
+			nil, /* sessionData */
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (retErr error) {
+				_, systemPrivDesc, err := descsCol.GetImmutableTableByName(
+					ctx,
+					txn,
+					syntheticprivilege.SystemPrivilegesTableName,
+					tree.ObjectLookupFlagsWithRequired(),
+				)
 				if err != nil {
 					return err
 				}
-				if !ok {
-					break
+				if systemPrivDesc.IsUncommittedVersion() {
+					// This shouldn't ever happen, but if it does somehow, then we can't pre-warm the cache.
+					logcrash.ReportOrPanic(ctx, &cfg.Settings.SV, "cannot warm cache: %s is at an uncommitted version", syntheticprivilege.SystemPrivilegesTableName)
+					return errors.Newf("%s is at an uncommitted version", syntheticprivilege.SystemPrivilegesTableName)
 				}
-				path := tree.MustBeDString(it.Cur()[0])
-				user := tree.MustBeDString(it.Cur()[1])
-				privArr := tree.MustBeDArray(it.Cur()[2])
-				grantOptionArr := tree.MustBeDArray(it.Cur()[3])
-				accum, ok := vtablePathToPrivilegeAccumulator[string(path)]
-				if !ok {
-					accum = syntheticprivilege.NewAccumulator(privilege.VirtualTable, string(path))
-					vtablePathToPrivilegeAccumulator[string(path)] = accum
-				}
-				if err := accum.AddRow(path, user, privArr, grantOptionArr); err != nil {
+				tableVersions = []descpb.DescriptorVersion{systemPrivDesc.GetVersion()}
+
+				it, err := ie.QueryIteratorEx(
+					ctx, `get-vtable-privileges`, txn, sessiondata.NodeUserSessionDataOverride,
+					query, fmt.Sprintf("/%s/%%", syntheticprivilege.VirtualTablePathPrefix),
+				)
+				if err != nil {
 					return err
 				}
-			}
-			return nil
-		},
-	)
-	if err != nil {
-		return
-	}
+				defer func() {
+					retErr = errors.CombineErrors(retErr, it.Close())
+				}()
 
-	for scName := range catconstants.VirtualSchemaNames {
-		sc, _ := cfg.VirtualSchemas.GetVirtualSchema(scName)
-		sc.VisitTables(func(object catalog.VirtualObject) {
-			vtablePriv := syntheticprivilege.VirtualTablePrivilege{
-				SchemaName: scName,
-				TableName:  sc.Desc().GetName(),
-			}
-			privDesc := vtablePriv.GetFallbackPrivileges()
-			if accum, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]; ok {
-				privDesc = accum.GetDescriptor()
-			}
-			cfg.SyntheticPrivilegeCache.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc)
-		})
-	}
+				for {
+					ok, err := it.Next(ctx)
+					if err != nil {
+						return err
+					}
+					if !ok {
+						break
+					}
+					path := tree.MustBeDString(it.Cur()[0])
+					user := tree.MustBeDString(it.Cur()[1])
+					privArr := tree.MustBeDArray(it.Cur()[2])
+					grantOptionArr := tree.MustBeDArray(it.Cur()[3])
+					accum, ok := vtablePathToPrivilegeAccumulator[string(path)]
+					if !ok {
+						accum = syntheticprivilege.NewAccumulator(privilege.VirtualTable, string(path))
+						vtablePathToPrivilegeAccumulator[string(path)] = accum
+					}
+					if err := accum.AddRow(path, user, privArr, grantOptionArr); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		)
+		if err != nil {
+			return
+		}
+
+		for scName := range catconstants.VirtualSchemaNames {
+			sc, _ := cfg.VirtualSchemas.GetVirtualSchema(scName)
+			sc.VisitTables(func(object catalog.VirtualObject) {
+				vtablePriv := syntheticprivilege.VirtualTablePrivilege{
+					SchemaName: scName,
+					TableName:  sc.Desc().GetName(),
+				}
+				privDesc := vtablePriv.GetFallbackPrivileges()
+				if accum, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]; ok {
+					privDesc = accum.GetDescriptor()
+				}
+				cfg.SyntheticPrivilegeCache.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc)
+			})
+		}
+	})
 }
