@@ -483,10 +483,10 @@ func (noopValidator) ValidateInvertedIndexes(
 	return nil
 }
 
-func (noopValidator) ValidateCheckConstraint(
+func (noopValidator) ValidateConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.CheckConstraint,
+	constraint catalog.Constraint,
 	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
