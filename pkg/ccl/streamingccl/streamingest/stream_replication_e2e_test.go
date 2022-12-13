@@ -1259,7 +1259,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
-	require.Equal(t, "ADD", status)
+	require.Equal(t, "REPLICATING", status)
 	require.Equal(t, "source", source)
 	require.Equal(t, c.srcURL.String(), sourceUri)
 	require.Equal(t, ingestionJobID, jobId)
