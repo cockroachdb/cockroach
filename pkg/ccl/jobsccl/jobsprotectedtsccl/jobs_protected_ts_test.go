@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -38,6 +39,30 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
+
+// Register a fake job resumer for the test. We don't want the job to do
+// anything.
+func init() {
+	jobs.RegisterConstructor(
+		jobspb.TypeSchemaChangeGC,
+		func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return fakeResumer{}
+		},
+		jobs.UsesTenantCostControl,
+	)
+}
+
+type fakeResumer struct{}
+
+func (f fakeResumer) Resume(ctx context.Context, _ interface{}) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (f fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
 
 func testJobsProtectedTimestamp(
 	ctx context.Context,
