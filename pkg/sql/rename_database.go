@@ -127,7 +127,11 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	for _, schema := range schemas {
-		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, schema, lookupFlags, catalog.Database); err != nil {
+		sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, dbDesc, schema, lookupFlags)
+		if err != nil {
+			return err
+		}
+		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, lookupFlags, catalog.Database); err != nil {
 			return err
 		}
 	}
@@ -197,35 +201,22 @@ func getQualifiedDependentObjectName(
 func maybeFailOnDependentDescInRename(
 	ctx context.Context,
 	p *planner,
-	dbDesc catalog.DatabaseDescriptor,
-	schema string,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
 	lookupFlags tree.CommonLookupFlags,
 	renameDescType catalog.DescriptorType,
 ) error {
-	tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
-		ctx,
-		p.txn,
-		dbDesc,
-		schema,
-		tree.DatabaseListFlags{
-			CommonLookupFlags: lookupFlags,
-			ExplicitPrefix:    true,
-		},
-	)
+	_, ids, err := p.GetObjectNamesAndIDs(ctx, db, sc)
 	if err != nil {
 		return err
 	}
-	lookupFlags.Required = false
-	// TODO(ajwerner): Make this do something better than one-at-a-time lookups
-	// followed by catalogkv reads on each dependency.
-	for i := range tbNames {
-		found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
-			ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
-		)
-		if err != nil {
-			return err
-		}
-		if !found {
+	descs, err := p.Descriptors().GetImmutableDescriptorsByID(ctx, p.txn, lookupFlags, ids...)
+	if err != nil {
+		return err
+	}
+	for _, desc := range descs {
+		tbDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
 			continue
 		}
 
@@ -243,12 +234,12 @@ func maybeFailOnDependentDescInRename(
 			}
 
 			tbTableName := tree.MakeTableNameWithSchema(
-				tree.Name(dbDesc.GetName()),
-				tree.Name(schema),
+				tree.Name(db.GetName()),
+				tree.Name(sc.GetName()),
 				tree.Name(tbDesc.GetName()),
 			)
 			dependentDescQualifiedString, err := getQualifiedDependentObjectName(
-				ctx, p, dbDesc.GetName(), schema, tbDesc, dependentDesc,
+				ctx, p, db.GetName(), sc.GetName(), tbDesc, dependentDesc,
 			)
 			if err != nil {
 				return err

@@ -99,26 +99,14 @@ func (tc virtualDescriptors) getSchemaByID(
 	}
 }
 
-func (tc virtualDescriptors) maybeGetObjectNamesAndIDs(
-	scName string, dbDesc catalog.DatabaseDescriptor, flags tree.DatabaseListFlags,
-) (isVirtual bool, _ tree.TableNames, _ descpb.IDs) {
-	if tc.vs == nil {
-		return false, nil, nil
-	}
-	entry, ok := tc.vs.GetVirtualSchema(scName)
+func (tc virtualDescriptors) forEachVirtualObject(
+	sc catalog.SchemaDescriptor, fn func(obj catalog.Descriptor),
+) {
+	scEntry, ok := tc.vs.GetVirtualSchemaByID(sc.GetID())
 	if !ok {
-		return false, nil, nil
+		return
 	}
-	names := make(tree.TableNames, 0, entry.NumTables())
-	IDs := make(descpb.IDs, 0, entry.NumTables())
-	schemaDesc := entry.Desc()
-	entry.VisitTables(func(table catalog.VirtualObject) {
-		name := tree.MakeTableNameWithSchema(
-			tree.Name(dbDesc.GetName()), tree.Name(schemaDesc.GetName()), tree.Name(table.Desc().GetName()))
-		name.ExplicitCatalog = flags.ExplicitPrefix
-		name.ExplicitSchema = flags.ExplicitPrefix
-		names = append(names, name)
-		IDs = append(IDs, table.Desc().GetID())
+	scEntry.VisitTables(func(object catalog.VirtualObject) {
+		fn(object.Desc())
 	})
-	return true, names, IDs
 }

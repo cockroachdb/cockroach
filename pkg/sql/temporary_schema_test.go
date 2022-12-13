@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -109,14 +110,19 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		if err != nil {
 			return err
 		}
-		return cleanupSchemaObjects(
+		flags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
+		tempSchema, err := descsCol.GetImmutableSchemaByName(ctx, txn, defaultDB, tempSchemaName, flags)
+		if err != nil {
+			return err
+		}
+		return cleanupTempSchemaObjects(
 			ctx,
 			txn,
 			descsCol,
 			execCfg.Codec,
 			ie,
 			defaultDB,
-			tempSchemaName,
+			tempSchema,
 		)
 	}))
 

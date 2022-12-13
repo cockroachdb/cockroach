@@ -93,9 +93,17 @@ func deleteTempTables(ctx context.Context, p *planner) error {
 		if err != nil {
 			return err
 		}
-		for _, dbDesc := range allDbDescs {
-			schemaName := p.TemporarySchemaName()
-			err = cleanupSchemaObjects(ctx, p.Txn(), descCol, codec, ie, dbDesc, schemaName)
+		flags := p.CommonLookupFlagsRequired()
+		flags.Required = false
+		for _, db := range allDbDescs {
+			sc, err := descCol.GetImmutableSchemaByName(ctx, p.Txn(), db, p.TemporarySchemaName(), flags)
+			if err != nil {
+				return err
+			}
+			if sc == nil {
+				continue
+			}
+			err = cleanupTempSchemaObjects(ctx, p.Txn(), descCol, codec, ie, db, sc)
 			if err != nil {
 				return err
 			}

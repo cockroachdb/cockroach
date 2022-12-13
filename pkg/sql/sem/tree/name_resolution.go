@@ -188,12 +188,7 @@ type SchemaLookupFlags = CommonLookupFlags
 type DatabaseLookupFlags = CommonLookupFlags
 
 // DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
-type DatabaseListFlags struct {
-	CommonLookupFlags
-	// ExplicitPrefix, when set, will cause the returned table names to
-	// have an explicit schema and catalog part.
-	ExplicitPrefix bool
-}
+type DatabaseListFlags = CommonLookupFlags
 
 // DesiredObjectKind represents what kind of object is desired in a name
 // resolution attempt.

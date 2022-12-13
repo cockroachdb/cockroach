@@ -1003,10 +1003,7 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		// Handle special case of schema children, which have to be added to
 		// the back-referenced ID set but which aren't explicitly referenced in
 		// the schema descriptor itself.
-		_, objectIDs := b.cr.ReadObjectNamesAndIDs(b.ctx, db.(catalog.DatabaseDescriptor), d)
-		for _, objectID := range objectIDs {
-			c.backrefs.Add(objectID)
-		}
+		b.cr.ReadObjectIDs(b.ctx, db.(catalog.DatabaseDescriptor), d).ForEach(c.backrefs.Add)
 		if err := d.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
 			c.backrefs.Add(overload.ID)
 			return nil
