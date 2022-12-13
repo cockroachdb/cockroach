@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -211,12 +212,12 @@ func decodeTableKeyToCol(
 	return rkey, false, scratch, err
 }
 
-// UnmarshalColumnValueToCol decodes the value from a roachpb.Value using the
-// type expected by the column, writing into the vecIdx'th vector of
-// coldata.TypedVecs at the given rowIdx. An error is returned if the value's
-// type does not match the column's type.
-// See the analog, rowenc.UnmarshalColumnValue, in
-// rowenc/column_type_encoding.go.
+// UnmarshalColumnValueToCol decodes the value from a non-zero length
+// roachpb.Value using the type expected by the column, writing into the
+// vecIdx'th vector of coldata.TypedVecs at the given rowIdx. An error is
+// returned if the value's type does not match the column's type.
+//
+// See the analog, valueside.UnmarshalLegacy, in valueside/legacy.go.
 func UnmarshalColumnValueToCol(
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
@@ -224,10 +225,11 @@ func UnmarshalColumnValueToCol(
 	typ *types.T,
 	value roachpb.Value,
 ) error {
-	if value.RawBytes == nil {
-		vecs.Nulls[vecIdx].SetNull(rowIdx)
+	if buildutil.CrdbTestBuild {
+		if len(value.RawBytes) == 0 {
+			return errors.AssertionFailedf("zero-length value in UnmarshalColumnValueToCol")
+		}
 	}
-
 	// Find the position of the target vector among the typed columns of its
 	// type.
 	colIdx := vecs.ColsMap[vecIdx]
