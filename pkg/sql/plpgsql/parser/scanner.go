@@ -224,6 +224,10 @@ func (s *Scanner) Scan(lval ScanSymType) {
 			s.pos++
 			lval.SetID(lexbase.TYPECAST)
 			return
+		case '=':
+			s.pos++
+			lval.SetID(lexbase.COLON_EQUALS)
+			return
 		}
 		return
 
@@ -334,7 +338,6 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 	}
 
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
-	return
 }
 
 func (s *Scanner) scanNumber(lval ScanSymType, ch int) {

@@ -5,11 +5,8 @@ go_library(
     name = "lexbase",
     srcs = [
         "encode.go",
-        "keywords.go",
         "normalize.go",
         "predicates.go",
-        "reserved_keywords.go",
-        "tokens.go",
         ":gen-keywords",  # keep
         ":gen-reserved-keywords",  # keep
         ":gen-tokens",  # keep
