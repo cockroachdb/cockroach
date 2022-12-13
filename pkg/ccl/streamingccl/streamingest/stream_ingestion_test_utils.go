@@ -9,11 +9,19 @@
 package streamingest
 
 import (
+	"context"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/stretchr/testify/require"
 )
 
 // streamClientValidatorWrapper wraps a Validator and exposes additional methods
@@ -65,4 +73,21 @@ func (sv *streamClientValidator) getValuesForKeyBelowTimestamp(
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
 	return sv.GetValuesForKeyBelowTimestamp(key, timestamp)
+}
+
+func streamIngestionStats(
+	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
+) *streampb.StreamIngestionStats {
+	var payloadBytes []byte
+	var progressBytes []byte
+	var payload jobspb.Payload
+	var progress jobspb.Progress
+	sqlRunner.QueryRow(t, "SELECT payload, progress FROM system.jobs WHERE id = $1",
+		ingestionJobID).Scan(&payloadBytes, &progressBytes)
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	details := payload.GetStreamIngestion()
+	stats, err := getStreamIngestionStats(ctx, *details, progress)
+	require.NoError(t, err)
+	return stats
 }
