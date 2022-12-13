@@ -32,9 +32,12 @@ const VirtualTablePrivilegeType = "VirtualTable"
 
 var _ Object = &VirtualTablePrivilege{}
 
+// VirtualTablePathPrefix is the prefix used for virtual table privileges in system.privileges.
+const VirtualTablePathPrefix = "vtable"
+
 // GetPath implements the Object interface.
 func (p *VirtualTablePrivilege) GetPath() string {
-	return fmt.Sprintf("/vtable/%s/%s", p.SchemaName, p.TableName)
+	return fmt.Sprintf("/%s/%s/%s", VirtualTablePathPrefix, p.SchemaName, p.TableName)
 }
 
 // SystemPrivilegesTableVersionGate implements the Object interface.
