@@ -59,6 +59,7 @@ type VirtualSchemas interface {
 	GetVirtualSchema(schemaName string) (VirtualSchema, bool)
 	GetVirtualSchemaByID(id descpb.ID) (VirtualSchema, bool)
 	GetVirtualObjectByID(id descpb.ID) (VirtualObject, bool)
+	Visit(func(desc Descriptor, comment string) error) error
 }
 
 // VirtualSchema represents a collection of VirtualObjects.
