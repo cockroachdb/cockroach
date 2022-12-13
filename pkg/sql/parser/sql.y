@@ -473,6 +473,9 @@ func (u *sqlSymUnion) tblExprs() tree.TableExprs {
 func (u *sqlSymUnion) from() tree.From {
     return u.val.(tree.From)
 }
+func (u *sqlSymUnion) superRegion() tree.SuperRegion {
+    return u.val.(tree.SuperRegion)
+}
 func (u *sqlSymUnion) int32s() []int32 {
     return u.val.([]int32)
 }
@@ -1308,6 +1311,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
 %type <str> region_name primary_region_clause opt_primary_region_clause secondary_region_clause opt_secondary_region_clause
+%type <tree.SuperRegion> super_region_clause opt_super_region_clause
 %type <tree.DataPlacement> opt_placement_clause placement_clause
 %type <tree.NameList> region_name_list
 %type <tree.SurvivalGoal> survival_goal_clause opt_survival_goal_clause
@@ -10867,7 +10871,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_secondary_region_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -10881,10 +10885,11 @@ create_database_stmt:
       SurvivalGoal: $12.survivalGoal(),
       Placement: $13.dataPlacement(),
       Owner: $14.roleSpec(),
-      SecondaryRegion: tree.Name($15),
+      SuperRegion: $15.superRegion(),
+      SecondaryRegion: tree.Name($16),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_secondary_region_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_super_region_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -10898,7 +10903,8 @@ create_database_stmt:
       Regions: $14.nameList(),
       SurvivalGoal: $15.survivalGoal(),
       Placement: $16.dataPlacement(),
-      SecondaryRegion: tree.Name($17),
+      SuperRegion: $17.superRegion(),
+      SecondaryRegion: tree.Name($18),
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
@@ -10926,6 +10932,19 @@ secondary_region_clause:
   SECONDARY REGION opt_equal region_name {
     $$ = $4
   }
+
+opt_super_region_clause:
+  super_region_clause
+| /* EMPTY */
+{
+  $$.val = tree.SuperRegion{}
+}
+
+super_region_clause:
+SUPER REGION name VALUES region_name_list
+{
+  $$.val = tree.SuperRegion{Name: tree.Name($3), Regions: $5.nameList()}
+}
 
 opt_placement_clause:
   placement_clause

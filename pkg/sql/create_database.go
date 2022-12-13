@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -161,6 +162,9 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	if created {
+		if err := n.addSuperRegionOnNewDB(params, desc); err != nil {
+			return err
+		}
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
 		if err := params.p.logEvent(params.ctx, desc.GetID(),
@@ -182,3 +186,33 @@ func (*createDatabaseNode) Close(context.Context)        {}
 // which must be read during validation. We also call CONFIGURE ZONE which
 // perms multiple KV operations on descriptors and expects to see its own writes.
 func (*createDatabaseNode) ReadingOwnWrites() {}
+
+func (n *createDatabaseNode) addSuperRegionOnNewDB(params runParams, desc *dbdesc.Mutable) error {
+	if n.n.SuperRegion.Name != "" {
+		if err := params.p.isSuperRegionEnabled(); err != nil {
+			return err
+		}
+
+		typeID, err := desc.MultiRegionEnumID()
+		if err != nil {
+			return err
+		}
+		typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+		if err != nil {
+			return err
+		}
+
+		if err = params.p.addSuperRegion(
+			params.ctx,
+			desc,
+			typeDesc,
+			n.n.SuperRegion.Regions,
+			n.n.SuperRegion.Name,
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+		); err != nil {
+			return err
+		}
+
+	}
+	return nil
+}

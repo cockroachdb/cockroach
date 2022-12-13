@@ -5,6 +5,41 @@ statement ok
 SET enable_super_regions = 'on'
 
 statement ok
+CREATE DATABASE oncreate PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SUPER REGION "create" VALUES "ap-southeast-2", "us-east-1"
+
+statement ok
+CREATE TABLE oncreate.rbt(x INT) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+statement ok
+CREATE TABLE oncreate.rbr(x INT) LOCALITY REGIONAL BY ROW;
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE oncreate.rbt;
+----
+TABLE oncreate.public.rbt  ALTER TABLE oncreate.public.rbt CONFIGURE ZONE USING
+                             range_min_bytes = 134217728,
+                             range_max_bytes = 536870912,
+                             gc.ttlseconds = 90000,
+                             num_replicas = 4,
+                             num_voters = 3,
+                             constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                             voter_constraints = '[+region=us-east-1]',
+                             lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE oncreate.rbr
+----
+PARTITION "us-east-1" OF TABLE oncreate.public.rbr  ALTER PARTITION "us-east-1" OF TABLE oncreate.public.rbr CONFIGURE ZONE USING
+                                                      range_min_bytes = 134217728,
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 90000,
+                                                      num_replicas = 4,
+                                                      num_voters = 3,
+                                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                      voter_constraints = '[+region=us-east-1]',
+                                                      lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
 CREATE DATABASE db PRIMARY REGION "ca-central-1"
 
 # Cannot add super regions with regions that are not regions of the database.
@@ -57,7 +92,7 @@ TABLE mr1.public.rbt  ALTER TABLE mr1.public.rbt CONFIGURE ZONE USING
 
 # mr1.rbr should only have its subzones changed.
 query TT
-SHOW ZONE CONFIGURATION FOR TABLE mr1.rbr
+SHOW ZONE CONFIGURATION FOR TABLE mr1.public.rbr
 ----
 DATABASE mr1  ALTER DATABASE mr1 CONFIGURE ZONE USING
               range_min_bytes = 134217728,
@@ -738,13 +773,14 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
 query ITTT
 SELECT id, database_name, super_region_name, regions FROM crdb_internal.super_regions
 ----
-106  db   test           {ap-southeast-2,us-east-1}
-136  db2  test           {ca-central-1}
-140  db3  test1          {us-west-1}
-110  mr1  test           {us-east-1}
-116  mr2  ca-central-sr  {ca-central-1}
-116  mr2  test           {ap-southeast-2,us-east-1}
-131  mr3  r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+112  db        test           {ap-southeast-2,us-east-1}
+142  db2       test           {ca-central-1}
+146  db3       test1          {us-west-1}
+116  mr1       test           {us-east-1}
+122  mr2       ca-central-sr  {ca-central-1}
+122  mr2       test           {ap-southeast-2,us-east-1}
+137  mr3       r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+106  oncreate  create         {ap-southeast-2,us-east-1}
 
 query TTT
 SHOW SUPER REGIONS FROM DATABASE test
