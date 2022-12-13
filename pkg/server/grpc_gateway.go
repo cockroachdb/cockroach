@@ -96,7 +96,7 @@ func configureGRPCGateway(
 
 	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
 	// uniquely in-process connection.
-	dialOpts, err := rpcContext.GRPCDialOptions()
+	dialOpts, err := rpcContext.GRPCDialOptions(GRPCAddr, rpc.DefaultClass)
 	if err != nil {
 		return nil, nil, nil, err
 	}
