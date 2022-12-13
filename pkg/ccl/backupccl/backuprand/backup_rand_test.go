@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -104,12 +104,12 @@ database_name = 'rand' AND schema_name = 'public'`)
 	dbBackup := localFoo + "wholedb"
 	tablesBackup := localFoo + "alltables"
 	dbBackups := []string{dbBackup, tablesBackup}
-	if err := backuputils.VerifyBackupRestoreStatementResult(
+	if err := backuptestutils.VerifyBackupRestoreStatementResult(
 		t, sqlDB, "BACKUP DATABASE rand INTO $1", dbBackup,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := backuputils.VerifyBackupRestoreStatementResult(
+	if err := backuptestutils.VerifyBackupRestoreStatementResult(
 		t, sqlDB, "BACKUP TABLE rand.* INTO $1", tablesBackup,
 	); err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s)", runSchemaOnlyExtension)
-		if err := backuputils.VerifyBackupRestoreStatementResult(
+		if err := backuptestutils.VerifyBackupRestoreStatementResult(
 			t, sqlDB, tableQuery, backup,
 		); err != nil {
 			t.Fatal(err)
@@ -151,7 +151,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 
 		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s)", runSchemaOnlyExtension)
-		if err := backuputils.VerifyBackupRestoreStatementResult(t, sqlDB, dbQuery, backup); err != nil {
+		if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, dbQuery, backup); err != nil {
 			t.Fatal(err)
 		}
 		verifyTables(t, tableNames)

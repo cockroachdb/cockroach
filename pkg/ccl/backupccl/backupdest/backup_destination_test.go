@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -37,8 +38,8 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, _, _, cleanupFn := backuputils.BackupDestinationTestSetup(t, backuputils.MultiNode, 1,
-		backuputils.InitManualReplication)
+	tc, _, _, cleanupFn := backuptestutils.BackupDestinationTestSetup(t, backuptestutils.MultiNode, 1,
+		backuptestutils.InitManualReplication)
 	defer cleanupFn()
 
 	ctx := context.Background()
