@@ -272,7 +272,7 @@
 /pkg/cmd/compile-build/      @cockroachdb/dev-inf
 /pkg/cmd/cr2pg/              @cockroachdb/sql-sessions
 /pkg/cmd/dev/                @cockroachdb/dev-inf
-/pkg/cmd/docgen/             @cockroachdb/docs
+/pkg/cmd/docgen/             @cockroachdb/docs-infra-prs
 /pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-sessions
@@ -318,7 +318,7 @@
 /pkg/cmd/teamcity-trigger/   @cockroachdb/dev-inf
 /pkg/cmd/testfilter/         @cockroachdb/test-eng
 /pkg/cmd/uptodate/           @cockroachdb/dev-inf
-/pkg/cmd/urlcheck/           @cockroachdb/docs
+/pkg/cmd/urlcheck/           @cockroachdb/docs-infra-prs
 /pkg/cmd/whoownsit/          @cockroachdb/test-eng
 /pkg/cmd/workload/           @cockroachdb/test-eng #! @cockroachdb/sql-sessions-noreview
 #!/pkg/cmd/wraprules/          @cockroachdb/obs-inf-prs-noreview
@@ -326,7 +326,7 @@
 /pkg/col/                    @cockroachdb/sql-queries
 /pkg/compose/                @cockroachdb/sql-sessions
 /pkg/config/                 @cockroachdb/kv-prs @cockroachdb/server-prs
-/pkg/docs/                   @cockroachdb/docs
+/pkg/docs/                   @cockroachdb/docs-infra-prs
 #!/pkg/featureflag/            @cockroachdb/cli-prs-noreview
 /pkg/gossip/                 @cockroachdb/kv-prs
 /pkg/internal/client/requestbatcher/ @cockroachdb/kv-prs
