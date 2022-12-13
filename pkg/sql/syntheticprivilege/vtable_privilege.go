@@ -47,9 +47,7 @@ func (p *VirtualTablePrivilege) GetPrivilegeDescriptor(
 	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
 		return planner.SynthesizePrivilegeDescriptor(ctx, p)
 	}
-	return catpb.NewPrivilegeDescriptor(
-		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, username.NodeUserName(),
-	), nil
+	return p.GetFallbackPrivileges(), nil
 }
 
 // GetObjectType implements the PrivilegeObject interface.
@@ -60,4 +58,13 @@ func (p *VirtualTablePrivilege) GetObjectType() privilege.ObjectType {
 // GetName implements the PrivilegeObject interface.
 func (p *VirtualTablePrivilege) GetName() string {
 	return fmt.Sprintf("%s.%s", p.SchemaName, p.TableName)
+}
+
+// GetFallbackPrivileges returns the privilege descriptor to be used
+// if synthetic privileges have not be activated.
+func (p *VirtualTablePrivilege) GetFallbackPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewPrivilegeDescriptor(
+		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{},
+		username.NodeUserName(),
+	)
 }
