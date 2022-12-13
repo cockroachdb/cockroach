@@ -354,6 +354,12 @@ var (
 		Measurement: "Bytes/Sec",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaAverageCPUNanosPerSecond = metric.Metadata{
+		Name:        "rebalancing.cpunanospersecond",
+		Help:        "Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.",
+		Measurement: "Nanoseconds/Sec",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Metric for tracking follower reads.
 	metaFollowerReadsCount = metric.Metadata{
@@ -1745,6 +1751,7 @@ type StoreMetrics struct {
 	AverageRequestsPerSecond   *metric.GaugeFloat64
 	AverageWriteBytesPerSecond *metric.GaugeFloat64
 	AverageReadBytesPerSecond  *metric.GaugeFloat64
+	AverageCPUNanosPerSecond   *metric.GaugeFloat64
 	// l0SublevelsWindowedMax doesn't get recorded to metrics itself, it maintains
 	// an ad-hoc history for gosipping information for allocator use.
 	l0SublevelsWindowedMax syncutil.AtomicFloat64
@@ -2286,6 +2293,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AverageReadsPerSecond:      metric.NewGaugeFloat64(metaAverageReadsPerSecond),
 		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
 		AverageReadBytesPerSecond:  metric.NewGaugeFloat64(metaAverageReadBytesPerSecond),
+		AverageCPUNanosPerSecond:   metric.NewGaugeFloat64(metaAverageCPUNanosPerSecond),
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),

@@ -388,6 +388,41 @@ type Context struct {
 	clientStreamInterceptors []grpc.StreamClientInterceptor
 
 	logClosingConnEvery log.EveryN
+
+	// loopbackDialFn, when non-nil, is used when the target of the dial
+	// is ourselves (== AdvertiseAddr).
+	//
+	// This special case is not merely a performance optimization: it
+	// ensures that we are always able to self-dial. Reasons that could
+	// block a self-dial, and have been seen in the wild, include:
+	//
+	// - DNS is not ready so AdvertiseAddr does not resolve.
+	// - firewall rule only allows other machines to connect to our
+	//   listen/external address, not ourselves.
+	// - TCP port shortage on the local interface.
+	//
+	// The loopback listener is guaranteed to never talk to the OS'
+	// TCP stack and thus always avoids any TCP-related shortcoming.
+	//
+	// Note that this mechanism is separate (and fully independent) from
+	// the one used to provide the RestrictedInternalClient interface
+	// via DialInternalClient(). RestrictedInternalClient is an
+	// optimization for the "hot path" of KV batch requests, that takes
+	// many shortcuts through our abstraction stack to provide direct Go
+	// function calls for API functions, without the overhead of data
+	// serialization/deserialization.
+	//
+	// At this stage, we only plan to use this optimization for the
+	// small set of RPC endpoints it was designed for. The "common case"
+	// remains the regular gRPC protocol using ser/deser over a link.
+	// The loopbackDialFn fits under that common case by transporting
+	// the gRPC protocol over an in-memory pipe.
+	loopbackDialFn func(context.Context) (net.Conn, error)
+}
+
+// SetLoopbackDialer configures the loopback dialer function.
+func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
+	c.loopbackDialFn = loopbackDialFn
 }
 
 // connKey is used as key in the Context.conns map.
@@ -575,6 +610,15 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		heartbeatInterval:   opts.Config.RPCHeartbeatInterval,
 		heartbeatTimeout:    opts.Config.RPCHeartbeatTimeout,
 		logClosingConnEvery: log.Every(time.Second),
+	}
+
+	if opts.Knobs.NoLoopbackDialer {
+		// The test has decided it doesn't need/want a loopback dialer.
+		// Ensure we still have a working dial function in that case.
+		rpcCtx.loopbackDialFn = func(ctx context.Context) (net.Conn, error) {
+			d := onlyOnceDialer{}
+			return d.dial(ctx, opts.Config.AdvertiseAddr)
+		}
 	}
 
 	// We only monitor remote clocks in server-to-server connections.
@@ -1375,23 +1419,80 @@ func (rpcCtx *Context) ConnHealth(
 	return ErrNoConnection
 }
 
+type transportType bool
+
+const (
+	// loopbackTransport is used for in-memory connections that bypass
+	// the TCP stack entirely, using the loopback listener.
+	loopbackTransport transportType = false
+	// tcpTransport is used when reaching out via TCP.
+	tcpTransport transportType = true
+)
+
 // GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
-// to a server created with `NewServer`.
-//
-// At the time of writing, this is being used for making net.Pipe-based
-// connections, so only those options that affect semantics are included. In
-// particular, performance tuning options are omitted. Decompression is
-// necessarily included to support compression-enabled servers, and compression
-// is included for symmetry. These choices are admittedly subjective.
-func (rpcCtx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
-	return rpcCtx.grpcDialOptions("", DefaultClass)
+// to a server.
+func (rpcCtx *Context) GRPCDialOptions(
+	ctx context.Context, target string, class ConnectionClass,
+) ([]grpc.DialOption, error) {
+	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, tcpTransport)
 }
 
-// grpcDialOptions extends GRPCDialOptions to support a connection class for use
-// with TestingKnobs.
-func (rpcCtx *Context) grpcDialOptions(
-	target string, class ConnectionClass,
+// grpcDialOptions produces dial options suitable for connecting to the given target and class.
+func (rpcCtx *Context) grpcDialOptionsInternal(
+	ctx context.Context, target string, class ConnectionClass, transport transportType,
 ) ([]grpc.DialOption, error) {
+	dialOpts, err := rpcCtx.dialOptsCommon(class)
+	if err != nil {
+		return nil, err
+	}
+
+	switch transport {
+	case tcpTransport:
+		netOpts, err := rpcCtx.dialOptsNetwork(ctx, target, class)
+		if err != nil {
+			return nil, err
+		}
+		dialOpts = append(dialOpts, netOpts...)
+	case loopbackTransport:
+		localOpts, err := rpcCtx.dialOptsLocal()
+		if err != nil {
+			return nil, err
+		}
+		dialOpts = append(dialOpts, localOpts...)
+	default:
+		// This panic in case the type is ever changed to include more values.
+		panic(errors.AssertionFailedf("unhandled: %v", transport))
+	}
+	return dialOpts, nil
+}
+
+// dialOptsLocal computes options used only for loopback connections.
+func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
+	// We need to include a TLS overlay even for loopback connections,
+	// because currently a non-insecure server always refuses non-TLS
+	// incoming connections, and inspects the TLS certs to determine the
+	// identity of the client peer.
+	//
+	// We can elide TLS for loopback connections when we add a non-TLS
+	// way to identify peers, i.e. fix these issues:
+	// https://github.com/cockroachdb/cockroach/issues/54007
+	// https://github.com/cockroachdb/cockroach/issues/91996
+	dialOpts, err := rpcCtx.dialOptsNetworkCredentials()
+	if err != nil {
+		return nil, err
+	}
+
+	dialOpts = append(dialOpts, grpc.WithContextDialer(
+		func(ctx context.Context, _ string) (net.Conn, error) {
+			return rpcCtx.loopbackDialFn(ctx)
+		}))
+
+	return dialOpts, err
+}
+
+// dialOptsNetworkCredentials computes options that determines how the
+// RPC client authenticates itself to the remote server.
+func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
 	if rpcCtx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -1409,18 +1510,31 @@ func (rpcCtx *Context) grpcDialOptions(
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	}
 
-	// The limiting factor for lowering the max message size is the fact
-	// that a single large kv can be sent over the network in one message.
-	// Our maximum kv size is unlimited, so we need this to be very large.
-	//
-	// TODO(peter,tamird): need tests before lowering.
-	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(
-		grpc.MaxCallRecvMsgSize(math.MaxInt32),
-		grpc.MaxCallSendMsgSize(math.MaxInt32),
-	))
+	return dialOpts, nil
+}
 
-	// Compression is enabled separately from decompression to allow staged
-	// rollout.
+// dialOptsNetwork compute options used only for over-the-network RPC
+// connections.
+func (rpcCtx *Context) dialOptsNetwork(
+	ctx context.Context, target string, class ConnectionClass,
+) ([]grpc.DialOption, error) {
+	dialOpts, err := rpcCtx.dialOptsNetworkCredentials()
+	if err != nil {
+		return nil, err
+	}
+
+	// Request request compression. Note that it's the client that
+	// decides to opt into compressions; the server accepts either
+	// compressed or decompressed payloads, and the specific codec used
+	// is named in the request (so different clients can use different
+	// compression algorithms.)
+	//
+	// On a related note, this configuration uses our own snappy codec.
+	// We believe it works better than the gzip codec provided natively
+	// by grpc, although the specific reason is now lost to history. It
+	// would be possible to change/simplify this, and since it's for
+	// each client to decide changing this will not require much
+	// cross-version compatibility dance.
 	if rpcCtx.rpcCompression {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
@@ -1433,41 +1547,100 @@ func (rpcCtx *Context) grpcDialOptions(
 	// [1]: https://github.com/grpc/grpc-go/blob/c0736608/Documentation/proxy.md
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 
-	// Append a testing stream interceptor, if so configured. Note that this can
-	// only be done at Dial() time, as opposed to when the rpcCtx is created,
-	// because the testing knob callback wants access to the dial details for this
-	// particular connection.
-	streamInterceptors := rpcCtx.clientStreamInterceptors
+	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
+	// ~second range. Note that we only retry once (see onlyOnceDialer) so we only
+	// hit the first backoff (BaseDelay). Note also that this delay serves as a
+	// sort of circuit breaker, since it will make sure that we're not trying to
+	// dial a down node in a tight loop. This is not a great mechanism but it's
+	// what we have right now. Higher levels have some protection (node dialer
+	// circuit breakers) but not all connection attempts go through that.
+	backoffConfig := backoff.DefaultConfig
+
+	// We need to define a MaxBackoff but it should never be used due to
+	// our setup with onlyOnceDialer below. So note that our choice here is
+	// inconsequential assuming all works as designed.
+	backoff := time.Second
+	if backoff > base.DialTimeout {
+		// This is for testing where we set a small DialTimeout. gRPC will
+		// internally round up the min connection timeout to the max backoff. This
+		// can be unintuitive and so we opt out of it by lowering the max backoff.
+		backoff = base.DialTimeout
+	}
+	backoffConfig.BaseDelay = backoff
+	backoffConfig.MaxDelay = backoff
+	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
+		Backoff:           backoffConfig,
+		MinConnectTimeout: base.DialTimeout}))
+
+	// Ensure the TCP link remains active so that overzealous firewalls
+	// don't shut it down.
+	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
+
+	// Append a testing stream interceptor, if so configured.
+	//
+	// Note that we cannot do this earlier (e.g. in dialOptsNetwork)
+	// because at that time the target address may not be known yet.
 	if rpcCtx.Knobs.StreamClientInterceptor != nil {
 		testingStreamInterceptor := rpcCtx.Knobs.StreamClientInterceptor(target, class)
 		if testingStreamInterceptor != nil {
-			// Make a copy of the interceptors slice and append the knob one.
-			streamInterceptors = append(append([]grpc.StreamClientInterceptor(nil), streamInterceptors...), testingStreamInterceptor)
+			dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(testingStreamInterceptor))
 		}
 	}
+
+	// Set up the dialer. Like for the stream client interceptor, we cannot
+	// do this earlier because it is sensitive to the actual target address,
+	// which is only definitely provided during dial.
+	dialer := onlyOnceDialer{}
+	dialerFunc := dialer.dial
 	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
-		dialerFunc := func(ctx context.Context, target string) (net.Conn, error) {
-			dialer := net.Dialer{
-				LocalAddr: sourceAddr,
-			}
-			return dialer.DialContext(ctx, "tcp", target)
-		}
 		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
-		log.VEventf(rpcCtx.MasterCtx, 1, "connecting to node %s with simulated latency %dms", target, latency)
+		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
+			latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
 			latency:    latency,
 			enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
 		}
 		dialerFunc = dialer.dial
-		dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
+	}
+	dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
+
+	return dialOpts, nil
+}
+
+// dialOptsCommon computes options used for both in-memory and
+// over-the-network RPC connections.
+func (rpcCtx *Context) dialOptsCommon(class ConnectionClass) ([]grpc.DialOption, error) {
+	// The limiting factor for lowering the max message size is the fact
+	// that a single large kv can be sent over the network in one message.
+	// Our maximum kv size is unlimited, so we need this to be very large.
+	//
+	// TODO(peter,tamird): need tests before lowering.
+	dialOpts := []grpc.DialOption{grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(math.MaxInt32),
+		grpc.MaxCallSendMsgSize(math.MaxInt32),
+	)}
+
+	// We throw this one in for good measure, but it only disables the retries
+	// for RPCs that were already pending (which are opt in anyway, and we don't
+	// opt in). It doesn't disable what gRPC calls "transparent retries" (RPC
+	// was not yet put on the wire when the error occurred). So we should
+	// consider this one a no-op, though it can't hurt.
+	dialOpts = append(dialOpts, grpc.WithDisableRetry())
+
+	// Configure the window sizes with optional env var overrides.
+	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(initialConnWindowSize))
+	if class == RangefeedClass {
+		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rangefeedInitialWindowSize))
+	} else {
+		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
 	}
 
 	if len(rpcCtx.clientUnaryInterceptors) > 0 {
 		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptors...))
 	}
-	if len(streamInterceptors) > 0 {
-		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
+	if len(rpcCtx.clientStreamInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptors...))
 	}
 	return dialOpts, nil
 }
@@ -1732,67 +1905,17 @@ func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
 func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context, target string, class ConnectionClass,
 ) (*grpc.ClientConn, error) {
-	dialOpts, err := rpcCtx.grpcDialOptions(target, class)
+	transport := tcpTransport
+	if rpcCtx.Config.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+		// See the explanation on loopbackDialFn for an explanation about this.
+		transport = loopbackTransport
+	}
+	dialOpts, err := rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
 	if err != nil {
 		return nil, err
 	}
 
-	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
-	// ~second range. Note that we only retry once (see onlyOnceDialer) so we only
-	// hit the first backoff (BaseDelay). Note also that this delay serves as a
-	// sort of circuit breaker, since it will make sure that we're not trying to
-	// dial a down node in a tight loop. This is not a great mechanism but it's
-	// what we have right now. Higher levels have some protection (node dialer
-	// circuit breakers) but not all connection attempts go through that.
-	backoffConfig := backoff.DefaultConfig
-
-	// We need to define a MaxBackoff but it should never be used due to
-	// our setup with onlyOnceDialer below. So note that our choice here is
-	// inconsequential assuming all works as designed.
-	backoff := time.Second
-	if backoff > base.DialTimeout {
-		// This is for testing where we set a small DialTimeout. gRPC will
-		// internally round up the min connection timeout to the max backoff. This
-		// can be unintuitive and so we opt out of it by lowering the max backoff.
-		backoff = base.DialTimeout
-	}
-	backoffConfig.BaseDelay = backoff
-	backoffConfig.MaxDelay = backoff
-	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
-		Backoff:           backoffConfig,
-		MinConnectTimeout: base.DialTimeout}))
-	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
-	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(initialConnWindowSize))
-	if class == RangefeedClass {
-		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rangefeedInitialWindowSize))
-	} else {
-		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
-	}
-
-	dialer := onlyOnceDialer{}
-	dialerFunc := dialer.dial
-	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
-		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
-		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
-			latency)
-		dialer := artificialLatencyDialer{
-			dialerFunc: dialerFunc,
-			latency:    latency,
-			enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
-		}
-		dialerFunc = dialer.dial
-	}
-	dialOpts = append(dialOpts,
-		grpc.WithContextDialer(dialerFunc),
-		// We throw this one in for good measure, but it only disables the retries
-		// for RPCs that were already pending (which are opt in anyway, and we don't
-		// opt in). It doesn't disable what gRPC calls "transparent retries" (RPC
-		// was not yet put on the wire when the error occurred). So we should
-		// consider this one a no-op, though it can't hurt.
-		grpc.WithDisableRetry(),
-	)
-
-	// add testingDialOpts after our dialer because one of our tests
+	// Add testingDialOpts at the end because one of our tests
 	// uses a custom dialer (this disables the only-one-connection
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, rpcCtx.testingDialOpts...)

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -447,7 +448,11 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
 ) (*roachpb.JoinNodeResponse, error) {
-	conn, err := grpc.DialContext(ctx, addr, s.config.dialOpts...)
+	dialOpts, err := s.config.getDialOpts(ctx, addr, rpc.SystemClass)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := grpc.DialContext(ctx, addr, dialOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -599,8 +604,8 @@ type initServerCfg struct {
 	defaultSystemZoneConfig   zonepb.ZoneConfig
 	defaultZoneConfig         zonepb.ZoneConfig
 
-	// dialOpts holds onto the dial options used when sending out Join RPCs.
-	dialOpts []grpc.DialOption
+	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
+	getDialOpts func(ctx context.Context, target string, class rpc.ConnectionClass) ([]grpc.DialOption, error)
 
 	// bootstrapAddresses is a list of node addresses (populated using --join
 	// addresses) that is used to form a connected graph/network of CRDB servers.
@@ -619,7 +624,9 @@ type initServerCfg struct {
 }
 
 func newInitServerConfig(
-	ctx context.Context, cfg Config, dialOpts []grpc.DialOption,
+	ctx context.Context,
+	cfg Config,
+	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
@@ -640,7 +647,7 @@ func newInitServerConfig(
 		binaryVersion:             binaryVersion,
 		defaultSystemZoneConfig:   cfg.DefaultSystemZoneConfig,
 		defaultZoneConfig:         cfg.DefaultZoneConfig,
-		dialOpts:                  dialOpts,
+		getDialOpts:               getDialOpts,
 		bootstrapAddresses:        bootstrapAddresses,
 		testingKnobs:              cfg.TestingKnobs,
 	}

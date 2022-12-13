@@ -78,6 +78,10 @@ func NewNetwork(
 			MaxOffset: 0,
 			Stopper:   n.Stopper,
 			Settings:  cluster.MakeTestingClusterSettings(),
+
+			Knobs: rpc.ContextTestingKnobs{
+				NoLoopbackDialer: true,
+			},
 		})
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()

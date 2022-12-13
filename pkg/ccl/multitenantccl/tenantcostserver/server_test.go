@@ -41,10 +41,10 @@ import (
 
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 
 		var ts testState
 		ts.start(t)

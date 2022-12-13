@@ -396,10 +396,13 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc)
+	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc)
 	if err != nil {
 		return err
 	}
+
+	// Tell the RPC context how to connect in-memory.
+	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
 
 	// NB: This is where (*Server).PreStart() reports the listener readiness
 	// via testing knobs: PauseAfterGettingRPCAddress, SignalAfterGettingRPCAddress.

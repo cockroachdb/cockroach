@@ -196,12 +196,13 @@ func TestClusterConnectivity(t *testing.T) {
 					ctx := context.Background()
 					serv := tc.Server(bootstrapNode)
 
-					dialOpts, err := tc.Server(bootstrapNode).RPCContext().GRPCDialOptions()
+					target := serv.ServingRPCAddr()
+					dialOpts, err := tc.Server(bootstrapNode).RPCContext().GRPCDialOptions(ctx, target, rpc.SystemClass)
 					if err != nil {
 						return err
 					}
 
-					conn, err := grpc.DialContext(ctx, serv.ServingRPCAddr(), dialOpts...)
+					conn, err := grpc.DialContext(ctx, target, dialOpts...)
 					if err != nil {
 						return err
 					}

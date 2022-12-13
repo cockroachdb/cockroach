@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -130,6 +131,10 @@ func (r *Replica) SendWithWriteBytes(
 	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
+
+	// Record the CPU time processing the request for this replica. This is
+	// recorded regardless of errors that are encountered.
+	defer r.MeasureReqCPUNanos(grunning.Time())
 
 	// Record summary throughput information about the batch request for
 	// accounting.
