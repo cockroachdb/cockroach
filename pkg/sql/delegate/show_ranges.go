@@ -79,6 +79,9 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 		return parse(fmt.Sprintf(dbQuery, n.DatabaseName.String(), lexbase.EscapeSQLString(string(n.DatabaseName))))
 	}
 
+	// Remember the original syntax: Resolve below modifies the TableOrIndex struct in-place.
+	noIndexSpecified := n.TableOrIndex.Index == ""
+
 	idx, resName, err := cat.ResolveTableIndex(
 		d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, &n.TableOrIndex,
 	)
@@ -94,13 +97,25 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 		return nil, errors.New("SHOW RANGES may not be called on a virtual table")
 	}
 
-	span := idx.Span()
-	startKey := hex.EncodeToString(span.Key)
-	endKey := hex.EncodeToString(span.EndKey)
+	var startKey, endKey string
+	if noIndexSpecified {
+		// All indexes.
+		tableID := idx.Table().ID()
+		prefix := d.evalCtx.Codec.TablePrefix(uint32(tableID))
+		startKey = hex.EncodeToString(prefix)
+		endKey = hex.EncodeToString(prefix.PrefixEnd())
+	} else {
+		// Just one index.
+		span := idx.Span()
+		startKey = hex.EncodeToString(span.Key)
+		endKey = hex.EncodeToString(span.EndKey)
+	}
+
 	return parse(fmt.Sprintf(`
 SELECT 
   CASE WHEN r.start_key <= x'%[1]s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
   CASE WHEN r.end_key >= x'%[2]s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
+  index_name,
   range_id,
   range_size / 1000000 as range_size_mb,
   lease_holder,
@@ -109,7 +124,7 @@ SELECT
   replica_localities
 FROM %[3]s.crdb_internal.ranges AS r
 WHERE (r.start_key < x'%[2]s')
-  AND (r.end_key   > x'%[1]s') ORDER BY r.start_key
+  AND (r.end_key   > x'%[1]s') ORDER BY index_name, r.start_key
 `,
 		startKey, endKey, resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 	))
