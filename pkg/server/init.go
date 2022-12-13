@@ -448,7 +448,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
 ) (*roachpb.JoinNodeResponse, error) {
-	dialOpts, err := s.config.getDialOpts(addr, rpc.SystemClass)
+	dialOpts, err := s.config.getDialOpts(ctx, addr, rpc.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +605,7 @@ type initServerCfg struct {
 	defaultZoneConfig         zonepb.ZoneConfig
 
 	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
-	getDialOpts func(target string, class rpc.ConnectionClass) ([]grpc.DialOption, error)
+	getDialOpts func(ctx context.Context, target string, class rpc.ConnectionClass) ([]grpc.DialOption, error)
 
 	// bootstrapAddresses is a list of node addresses (populated using --join
 	// addresses) that is used to form a connected graph/network of CRDB servers.
@@ -626,7 +626,7 @@ type initServerCfg struct {
 func newInitServerConfig(
 	ctx context.Context,
 	cfg Config,
-	getDialOpts func(string, rpc.ConnectionClass) ([]grpc.DialOption, error),
+	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
