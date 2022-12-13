@@ -94,6 +94,7 @@ test           crdb_internal       session_trace                          public
 test           crdb_internal       session_variables                      public   SELECT          false
 test           crdb_internal       statement_statistics                   public   SELECT          false
 test           crdb_internal       super_regions                          public   SELECT          false
+test           crdb_internal       system_jobs                            public   SELECT          false
 test           crdb_internal       table_columns                          public   SELECT          false
 test           crdb_internal       table_indexes                          public   SELECT          false
 test           crdb_internal       table_row_statistics                   public   SELECT          false

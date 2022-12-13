@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -143,6 +144,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalIndexUsageStatisticsTableID:        crdbInternalIndexUsageStatistics,
 		catconstants.CrdbInternalInflightTraceSpanTableID:           crdbInternalInflightTraceSpanTable,
 		catconstants.CrdbInternalJobsTableID:                        crdbInternalJobsTable,
+		catconstants.CrdbInternalSystemJobsTableID:                  crdbInternalSystemJobsTable,
 		catconstants.CrdbInternalKVNodeStatusTableID:                crdbInternalKVNodeStatusTable,
 		catconstants.CrdbInternalKVStoreStatusTableID:               crdbInternalKVStoreStatusTable,
 		catconstants.CrdbInternalLeasesTableID:                      crdbInternalLeasesTable,
@@ -854,8 +856,181 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 }
 
 const (
-	jobsQSelect      = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
-	jobsQFrom        = ` FROM system.jobs`
+	systemJobsBaseQuery = `
+		SELECT
+			id, status, created, payload, progress, created_by_type, created_by_id,
+			claim_session_id, claim_instance_id, num_runs, last_run, job_type
+		FROM system.jobs`
+	// TODO(jayant): remove the version gate in 24.1
+	// Before clusterversion.V23_1BackfillTypeColumnInJobsTable, the system.jobs table did not have
+	// a fully populated job_type column, so we must project it manually
+	// with crdb_internal.job_payload_type.
+	oldSystemJobsBaseQuery = `
+		SELECT id, status, created, payload, progress, created_by_type, created_by_id,
+			claim_session_id, claim_instance_id, num_runs, last_run,
+			crdb_internal.job_payload_type(payload) as job_type
+		FROM system.jobs`
+	systemJobsIDPredicate     = ` WHERE id = $1`
+	systemJobsTypePredicate   = ` WHERE job_type = $1`
+	systemJobsStatusPredicate = ` WHERE status = $1`
+)
+
+func getInternalSystemJobsQueryFromClusterVersion(
+	ctx context.Context, version clusterversion.Handle,
+) string {
+	if !version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
+		return oldSystemJobsBaseQuery
+	}
+	return systemJobsBaseQuery
+}
+
+// TODO(tbg): prefix with kv_.
+var crdbInternalSystemJobsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.system_jobs (
+	id                INT8      NOT NULL,      
+	status            STRING    NOT NULL,
+	created           TIMESTAMP NOT NULL,
+	payload           BYTES     NOT NULL,
+	progress          BYTES,
+	created_by_type   STRING,
+	created_by_id     INT,
+	claim_session_id  BYTES,
+	claim_instance_id INT8,
+	num_runs          INT8,
+	last_run          TIMESTAMP,
+	job_type          STRING,
+	INDEX (id),
+  INDEX (job_type),
+  INDEX (status)
+)`,
+	comment: `wrapper over system.jobs with row access control (KV scan)`,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version) + systemJobsIDPredicate
+				targetType := tree.MustBeDInt(unwrappedConstraint)
+				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
+			},
+		},
+		{
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version) + systemJobsTypePredicate
+				targetType := tree.MustBeDString(unwrappedConstraint)
+				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
+			},
+		},
+		{
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version) + systemJobsStatusPredicate
+				targetType := tree.MustBeDString(unwrappedConstraint)
+				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		_, err := populateSystemJobsTableRows(ctx, p, addRow, getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version))
+		return err
+	},
+}
+
+// populateSystemJobsTableRows calls addRow for all rows of the system.jobs table
+// except for rows that the user does not have access to. It returns true
+// if at least one row was generated.
+func populateSystemJobsTableRows(
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	query string,
+	params ...interface{},
+) (bool, error) {
+	const jobIdIdx = 0
+	const jobPayloadIdx = 3
+
+	matched := false
+
+	user := p.User()
+	userIsAdmin, err := p.UserHasAdminRole(ctx, user)
+	if err != nil {
+		return matched, err
+	}
+	userHasControlJobRoleOption, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
+	if err != nil {
+		return matched, err
+	}
+
+	// Note: we query system.jobs as root, so we must be careful about which rows we return.
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(ctx,
+		"system-jobs-scan",
+		p.Txn(),
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		query,
+		params...,
+	)
+	if err != nil {
+		return matched, err
+	}
+
+	cleanup := func(ctx context.Context) {
+		if err := it.Close(); err != nil {
+			// TODO(yuzefovich): this error should be propagated further up
+			// and not simply being logged. Fix it (#61123).
+			//
+			// Doing that as a return parameter would require changes to
+			// `planNode.Close` signature which is a bit annoying. One other
+			// possible solution is to panic here and catch the error
+			// somewhere.
+			log.Warningf(ctx, "error closin3g an iterator: %v", err)
+		}
+	}
+	defer cleanup(ctx)
+
+	for {
+		hasNext, err := it.Next(ctx)
+		if !hasNext || err != nil {
+			return matched, err
+		}
+
+		currentRow := it.Cur()
+		payloadBytes := currentRow[jobPayloadIdx]
+		payload, err := jobs.UnmarshalPayload(payloadBytes)
+		if err != nil {
+			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
+		}
+		jobOwnerUser := payload.UsernameProto.Decode()
+		jobOwnerIsAdmin, err := p.UserHasAdminRole(ctx, jobOwnerUser)
+		if err != nil {
+			return matched, err
+		}
+
+		// The user can access the row if the meet one of the conditions:
+		//  1. The user is an admin.
+		//  2. The job is owned by the user.
+		//  3. The user has CONTROLJOB privilege and the job is not owned by
+		//     an admin.
+		if canAccess := userIsAdmin || (!jobOwnerIsAdmin &&
+			userHasControlJobRoleOption) || user == jobOwnerUser; !canAccess {
+			continue
+		}
+
+		if err := addRow(currentRow...); err != nil {
+			return matched, err
+		}
+		matched = true
+	}
+}
+
+func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
+	return errors.WithHintf(err, "could not decode the payload for job %s."+
+		" consider deleting this job from system.jobs", jobID)
+}
+
+const (
+	jobsQSelect = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
+	// Note that we are querying crdb_internal.system_jobs instead of system.jobs directly.
+	// The former has access control built in and will filter out jobs that the
+	// user is not allowed to see.
+	jobsQFrom        = ` FROM crdb_internal.system_jobs`
 	jobsBackoffArgs  = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
 	jobsStatusFilter = ` WHERE status = $3`
 	jobsQuery        = jobsQSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
@@ -890,7 +1065,7 @@ CREATE TABLE crdb_internal.jobs (
   execution_events      JSONB,
   INDEX(status)
 )`,
-	comment: `decoded job metadata from system.jobs (KV scan)`,
+	comment: `decoded job metadata from crdb_internal.system_jobs (KV scan)`,
 	indexes: []virtualIndex{{
 		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 			q := jobsQuery + jobsStatusFilter
@@ -913,22 +1088,13 @@ func makeJobsTableRows(
 	query string,
 	params ...interface{},
 ) (matched bool, err error) {
-	// Beware: we're querying system.jobs as root; we need to be careful to filter
-	// out results that the current user is not able to see.
-	currentUser := p.SessionData().User()
-	isAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return matched, err
-	}
-
-	hasControlJob, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
-	if err != nil {
-		return matched, err
-	}
-
+	// We use QueryIteratorEx here and specify the current user
+	// instead of using InternalExecutor.QueryIterator because
+	// the latter is being deprecated for sometimes executing
+	// the query as the root user.
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.txn,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.InternalExecutorOverride{User: p.User()},
 		query, params...)
 	if err != nil {
 		return matched, err
@@ -999,18 +1165,13 @@ func makeJobsTableRows(
 
 		// Extract data from the payload.
 		payload, err := jobs.UnmarshalPayload(payloadBytes)
+		if err != nil {
+			return matched, wrapPayloadUnMarshalError(err, id)
+		}
 
 		// We filter out masked rows before we allocate all the
 		// datums. Needless allocate when not necessary.
-		ownedByAdmin := false
-		var sqlUsername username.SQLUsername
-		if payload != nil {
-			sqlUsername = payload.UsernameProto.Decode()
-			ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
-			if err != nil {
-				errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
-			}
-		}
+		sqlUsername := payload.UsernameProto.Decode()
 		if sessionID, ok := sessionIDBytes.(*tree.DBytes); ok {
 			if isAlive, err := p.EvalContext().SQLLivenessReader.IsAlive(
 				ctx, sqlliveness.SessionID(*sessionID),
@@ -1021,40 +1182,29 @@ func makeJobsTableRows(
 			}
 		}
 
-		sameUser := payload != nil && sqlUsername == currentUser
-		// The user can access the row if the meet one of the conditions:
-		//  1. The user is an admin.
-		//  2. The job is owned by the user.
-		//  3. The user has CONTROLJOB privilege and the job is not owned by
-		//      an admin.
-		if canAccess := isAdmin || !ownedByAdmin && hasControlJob || sameUser; !canAccess {
-			continue
+		// TODO(jayant): we can select the job_type as a column
+		// rather than decoding the payload. This would allow us
+		// to create a virtual index on it.
+		jobType = tree.NewDString(payload.Type().String())
+		description = tree.NewDString(payload.Description)
+		statement = tree.NewDString(strings.Join(payload.Statement, "; "))
+		user = tree.NewDString(sqlUsername.Normalized())
+		descriptorIDsArr := tree.NewDArray(types.Int)
+		for _, descID := range payload.DescriptorIDs {
+			if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
+				return matched, err
+			}
 		}
-
+		descriptorIDs = descriptorIDsArr
+		started, err = tsOrNull(payload.StartedMicros)
 		if err != nil {
-			errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
-		} else {
-			jobType = tree.NewDString(payload.Type().String())
-			description = tree.NewDString(payload.Description)
-			statement = tree.NewDString(strings.Join(payload.Statement, "; "))
-			user = tree.NewDString(sqlUsername.Normalized())
-			descriptorIDsArr := tree.NewDArray(types.Int)
-			for _, descID := range payload.DescriptorIDs {
-				if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
-					return matched, err
-				}
-			}
-			descriptorIDs = descriptorIDsArr
-			started, err = tsOrNull(payload.StartedMicros)
-			if err != nil {
-				return matched, err
-			}
-			finished, err = tsOrNull(payload.FinishedMicros)
-			if err != nil {
-				return matched, err
-			}
-			errorStr = tree.NewDString(payload.Error)
+			return matched, err
 		}
+		finished, err = tsOrNull(payload.FinishedMicros)
+		if err != nil {
+			return matched, err
+		}
+		errorStr = tree.NewDString(payload.Error)
 
 		// Extract data from the progress field.
 		if progressBytes != tree.DNull {
@@ -1091,7 +1241,7 @@ func makeJobsTableRows(
 				traceID = tree.NewDInt(tree.DInt(progress.TraceID))
 			}
 		}
-		if payload != nil {
+		if len(payload.RetriableExecutionFailureLog) > 0 {
 			executionErrors = jobs.FormatRetriableExecutionErrorLogToStringArray(
 				ctx, payload.RetriableExecutionFailureLog,
 			)

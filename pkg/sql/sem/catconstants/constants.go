@@ -130,6 +130,7 @@ const (
 	CrdbInternalIndexUsageStatisticsTableID
 	CrdbInternalInflightTraceSpanTableID
 	CrdbInternalJobsTableID
+	CrdbInternalSystemJobsTableID
 	CrdbInternalKVNodeStatusTableID
 	CrdbInternalKVStoreStatusTableID
 	CrdbInternalLeasesTableID
