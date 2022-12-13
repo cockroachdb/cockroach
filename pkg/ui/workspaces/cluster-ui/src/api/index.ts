@@ -21,4 +21,5 @@ export * from "./schedulesApi";
 export * from "./sqlApi";
 export * from "./tracezApi";
 export * from "./databasesApi";
+export * from "./txnContentionApi";
 export * from "./eventsApi";
