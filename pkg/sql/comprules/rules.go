@@ -262,14 +262,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname %s),
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 `
 	query := fmt.Sprintf(queryT, schema)
@@ -304,14 +302,12 @@ func completeSchemaInCurrentDatabase(
 	const query = `
 SELECT nspname AS completion,
        'schema' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 4
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 4
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 `
 	iter, err := c.Query(ctx, query, prefix, start, end)
@@ -433,14 +429,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.table_id = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.table_id = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname, schema)
 	return iter, err

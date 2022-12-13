@@ -587,6 +587,10 @@ index_columns                          NULL
 index_usage_statistics                 NULL
 invalid_objects                        NULL
 jobs                                   NULL
+kv_catalog_comments                    NULL
+kv_catalog_descriptor                  NULL
+kv_catalog_namespace                   NULL
+kv_catalog_zones                       NULL
 kv_node_liveness                       NULL
 kv_node_status                         NULL
 kv_store_status                        NULL
@@ -607,7 +611,6 @@ node_transactions                      NULL
 node_txn_stats                         NULL
 partitions                             NULL
 pg_catalog_table_is_implemented        NULL
-predefined_comments                    NULL
 ranges                                 NULL
 ranges_no_leases                       NULL
 regions                                NULL
