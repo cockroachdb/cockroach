@@ -422,11 +422,34 @@ func TestAlterChangefeedTelemetry(t *testing.T) {
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH diff`)
 		defer closeFeed(t, testFeed)
-
 		feed := testFeed.(cdctest.EnterpriseTestFeed)
 
 		require.NoError(t, feed.Pause())
 
+		// The job system clears the lease asyncronously after
+		// cancellation. This lease clearing transaction can
+		// cause a restart in the alter changefeed
+		// transaction, which will lead to different feature
+		// counter counts. Thus, we want to wait for the lease
+		// clear. However, the lease clear isn't guaranteed to
+		// happen, so we only wait a few seconds for it.
+		waitForNoLease := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				var sessionID []byte
+				sqlDB.QueryRow(t, `SELECT claim_session_id FROM system.jobs WHERE id = $1`, feed.JobID()).Scan(&sessionID)
+				if sessionID == nil {
+					return
+				}
+				time.Sleep(250 * time.Millisecond)
+			}
+		}
+
+		waitForNoLease()
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar, foo ADD baz UNSET diff SET resolved, format=json`, feed.JobID()))
 
 		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
