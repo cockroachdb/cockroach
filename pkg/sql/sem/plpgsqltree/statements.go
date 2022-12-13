@@ -19,14 +19,13 @@ import (
 type PLpgSQLExpr = tree.Expr
 
 type PLpgSQLStatement interface {
-	GetType() PLpgSQLStatementType
+	tree.NodeFormatter
 	GetLineNo() int
 	GetStmtID() uint
 	plpgsqlStmt()
 }
 
 type PLpgSQLStatementImpl struct {
-	CmdType PLpgSQLStatementType
 	// TODO (Chengxiong) figure out how to get line number from scanner.
 	LineNo int
 	/*
@@ -36,10 +35,6 @@ type PLpgSQLStatementImpl struct {
 	 */
 	// TODO (Chengxiong) figure out how to get statement id from parser.
 	StmtID uint
-}
-
-func (s *PLpgSQLStatementImpl) GetType() PLpgSQLStatementType {
-	return s.CmdType
 }
 
 func (s *PLpgSQLStatementImpl) GetLineNo() int {
@@ -62,11 +57,26 @@ type PLpgSQLStmtBlock struct {
 	Scope      VariableScope
 }
 
+func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
+	if s.InitVars != nil {
+		ctx.WriteString("DECLARE\n")
+	}
+	ctx.WriteString("BEGIN\n")
+	for _, childStmt := range s.Body {
+		childStmt.Format(ctx)
+	}
+	ctx.WriteString("END\n")
+}
+
 // stmt_assign
 type PLpgSQLStmtAssign struct {
 	PLpgSQLStatement
 	Var   PLpgSQLVariable
 	Value PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
+
 }
 
 // stmt_if
@@ -78,10 +88,16 @@ type PLpgSQLStmtIf struct {
 	ElseBody   []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtIfElseIfArm struct {
 	LineNo    int
 	Condition PLpgSQLExpr
 	Stmts     []PLpgSQLStatement
+}
+
+func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_case
@@ -94,10 +110,16 @@ type PLpgSQLStmtCase struct {
 	ElseStmts    []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtCaseWhenArm struct {
 	LineNo int
 	Expr   PLpgSQLExpr
 	Stmts  []PLpgSQLStatement
+}
+
+func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_loop
@@ -107,12 +129,18 @@ type PLpgSQLStmtSimpleLoop struct {
 	Body  []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtSimpleLoop) Format(ctx *tree.FmtCtx) {
+}
+
 // stmt_while
 type PLpgSQLStmtWhileLoop struct {
 	PLpgSQLStatementImpl
 	Label     string
 	Condition PLpgSQLExpr
 	Body      []PLpgSQLStatement
+}
+
+func (s *PLpgSQLStmtWhileLoop) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_for
@@ -127,6 +155,9 @@ type PLpgSQLStmtForIntLoop struct {
 	Body    []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtForIntLoop) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtForQueryLoop struct {
 	PLpgSQLStatementImpl
 	Label string
@@ -134,9 +165,15 @@ type PLpgSQLStmtForQueryLoop struct {
 	Body  []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtForQueryLoop) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtForQuerySelectLoop struct {
 	PLpgSQLStmtForQueryLoop
 	Query PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtForQuerySelectLoop) Format(ctx *tree.FmtCtx) {
 }
 
 type PLpgSQLStmtForQueryCursorLoop struct {
@@ -145,10 +182,16 @@ type PLpgSQLStmtForQueryCursorLoop struct {
 	ArgQuery PLpgSQLExpr
 }
 
+func (s *PLpgSQLStmtForQueryCursorLoop) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtForDynamicLoop struct {
 	PLpgSQLStmtForQueryLoop
 	Query  PLpgSQLExpr
 	Params []PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtForDynamicLoop) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_foreach_a
@@ -161,12 +204,19 @@ type PLpgSQLStmtForEachALoop struct {
 	Body  []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtForEachALoop) Format(ctx *tree.FmtCtx) {
+}
+
 // stmt_exit
 type PLpgSQLStmtExit struct {
 	PLpgSQLStatementImpl
 	IsExit    bool
 	Label     string
 	Condition PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtExit) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("EXIT\n")
 }
 
 // stmt_return
@@ -176,10 +226,16 @@ type PLpgSQLStmtReturn struct {
 	RetVar PLpgSQLVariable
 }
 
+func (s *PLpgSQLStmtReturn) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtReturnNext struct {
 	PLpgSQLStatementImpl
 	Expr   PLpgSQLExpr
 	RetVar PLpgSQLVariable
+}
+
+func (s *PLpgSQLStmtReturnNext) Format(ctx *tree.FmtCtx) {
 }
 
 type PLpgSQLStmtReturnQuery struct {
@@ -187,6 +243,9 @@ type PLpgSQLStmtReturnQuery struct {
 	Query        PLpgSQLExpr
 	DynamicQuery PLpgSQLExpr
 	Params       []PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtReturnQuery) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_raise
@@ -199,9 +258,15 @@ type PLpgSQLStmtRaise struct {
 	Options  []PLpgSQLStmtRaiseOption
 }
 
+func (s *PLpgSQLStmtRaise) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtRaiseOption struct {
 	OptType PLpgSQLRaiseOptionType
 	Expr    PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtRaiseOption) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_assert
@@ -211,15 +276,30 @@ type PLpgSQLStmtAssert struct {
 	Message   PLpgSQLExpr
 }
 
+func (s *PLpgSQLStmtAssert) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("ASSERT\n")
+}
+
 // stmt_execsql
 type PLpgSQLStmtExecSql struct {
 	PLpgSQLStatementImpl
-	SqlStmt            PLpgSQLExpr
+	SqlStmt            string
 	IsModifyingStmt    bool            // is the stmt insert/update/delete/merge?
 	IsModifyingStmtSet bool            // is the stmt valid yet?
 	Into               bool            // INTO provided?
 	Strict             bool            // INTO STRICT flag
 	Target             PLpgSQLVariable // INTO target (record variable or row variable)
+}
+
+func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("EXECUTE bare sql query")
+	if s.Into {
+		ctx.WriteString(" WITH INTO")
+	}
+	if s.Strict {
+		ctx.WriteString(" STRICT")
+	}
+	ctx.WriteString("\n")
 }
 
 // stmt_dynexecute
@@ -232,10 +312,17 @@ type PLpgSQLStmtDynamicExecute struct {
 	Params []PLpgSQLExpr
 }
 
+func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("EXECUTE a dynamic command\n")
+}
+
 // stmt_perform
 type PLpgSQLStmtPerform struct {
 	PLpgSQLStatementImpl
 	Expr PLpgSQLExpr
+}
+
+func (s *PLpgSQLStmtPerform) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_call
@@ -246,6 +333,14 @@ type PLpgSQLStmtCall struct {
 	Target PLpgSQLVariable
 }
 
+func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
+	if s.IsCall {
+		ctx.WriteString("CALL a function/procedure\n")
+	} else {
+		ctx.WriteString("DO a code block\n")
+	}
+}
+
 // stmt_getdiag
 type PLpgSQLStmtGetDiag struct {
 	PLpgSQLStatementImpl
@@ -253,9 +348,15 @@ type PLpgSQLStmtGetDiag struct {
 	DiagItems []PLpgSQLStmtGetDiagItem // TODO what is this?
 }
 
+func (s *PLpgSQLStmtGetDiag) Format(ctx *tree.FmtCtx) {
+}
+
 type PLpgSQLStmtGetDiagItem struct {
 	Kind   PLpgSQLGetDiagKind
 	Target int // where to assign it?
+}
+
+func (s *PLpgSQLStmtGetDiagItem) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_open
@@ -306,6 +407,9 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
+func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
+}
+
 // stmt_fetch
 // stmt_move (where IsMove = true)
 type PLpgSQLStmtFetch struct {
@@ -319,10 +423,17 @@ type PLpgSQLStmtFetch struct {
 	ReturnsMultiRows bool
 }
 
+func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
+}
+
 // stmt_close
 type PLpgSQLStmtClose struct {
 	PLpgSQLStatementImpl
 	CurVar int // TODO this could just a PLpgSQLVariable
+}
+
+func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("CLOSE a cursor\n")
 }
 
 // TODO stmt_null ? it's only a `NULL`
@@ -333,8 +444,14 @@ type PLpgSQLStmtCommit struct {
 	Chain bool
 }
 
+func (s *PLpgSQLStmtCommit) Format(ctx *tree.FmtCtx) {
+}
+
 // stmt_rollback
 type PLpgSQLStmtRollback struct {
 	PLpgSQLStatementImpl
 	Chain bool
+}
+
+func (s *PLpgSQLStmtRollback) Format(ctx *tree.FmtCtx) {
 }
