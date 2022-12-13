@@ -1130,7 +1130,7 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 
 // ReferenceAction is the method used to maintain referential integrity through
 // foreign keys.
-type ReferenceAction int
+type ReferenceAction int32
 
 // The values for ReferenceAction.
 const (
@@ -1176,7 +1176,7 @@ func (node *ReferenceActions) Format(ctx *FmtCtx) {
 // See https://github.com/cockroachdb/cockroach/issues/20305 or
 // https://www.postgresql.org/docs/11/sql-createtable.html for details on the
 // different composite foreign key matching methods.
-type CompositeKeyMatchMethod int
+type CompositeKeyMatchMethod int32
 
 // The values for CompositeKeyMatchMethod.
 const (
