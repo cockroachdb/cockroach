@@ -303,22 +303,6 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
 ) {
-	p.AddNoGroupingStageWithCoreFunc(
-		func(_ int, _ *Processor) execinfrapb.ProcessorCoreUnion { return core },
-		post,
-		outputTypes,
-		newOrdering,
-	)
-}
-
-// AddNoGroupingStageWithCoreFunc is like AddNoGroupingStage, but creates a core
-// spec based on the input processor's spec.
-func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
-	coreFunc func(int, *Processor) execinfrapb.ProcessorCoreUnion,
-	post execinfrapb.PostProcessSpec,
-	outputTypes []*types.T,
-	newOrdering execinfrapb.Ordering,
-) {
 	// New stage has the same distribution as the previous one, so we need to
 	// figure out whether the last stage contains a remote processor.
 	stageID := p.NewStage(p.IsLastStageDistributed(), false /* allowPartialDistribution */)
@@ -333,7 +317,7 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 					Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 					ColumnTypes: prevStageResultTypes,
 				}},
-				Core: coreFunc(int(resultProc), prevProc),
+				Core: core,
 				Post: post,
 				Output: []execinfrapb.OutputRouterSpec{{
 					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
@@ -432,6 +416,23 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	p.ResultRouters[0] = pIdx
 
 	p.MergeOrdering = execinfrapb.Ordering{}
+}
+
+// ReplaceLastStage replaces the processors of the last stage with the provided
+// arguments while keeping all other attributes unchanged.
+func (p *PhysicalPlan) ReplaceLastStage(
+	core execinfrapb.ProcessorCoreUnion,
+	post execinfrapb.PostProcessSpec,
+	outputTypes []*types.T,
+	newOrdering execinfrapb.Ordering,
+) {
+	for _, prevProcIdx := range p.ResultRouters {
+		oldProcSpec := &p.Processors[prevProcIdx].Spec
+		oldProcSpec.Core = core
+		oldProcSpec.Post = post
+		oldProcSpec.ResultTypes = outputTypes
+	}
+	p.SetMergeOrdering(newOrdering)
 }
 
 // EnsureSingleStreamOnGateway ensures that there is only one stream on the

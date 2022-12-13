@@ -228,6 +228,13 @@ func TestExecBuild_geospatial(
 	runExecBuildLogicTest(t, "geospatial")
 }
 
+func TestExecBuild_group_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "group_join")
+}
+
 func TestExecBuild_hash_sharded_index(
 	t *testing.T,
 ) {

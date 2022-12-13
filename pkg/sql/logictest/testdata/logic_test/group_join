@@ -1,0 +1,31 @@
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Generate all combinations of values 1 to 3.
+statement ok
+INSERT INTO data SELECT a, b, c, d FROM
+   generate_series(1, 3) AS a(a),
+   generate_series(1, 3) AS b(b),
+   generate_series(1, 3) AS c(c),
+   generate_series(1, 3) AS d(d)
+
+statement ok
+SET experimental_hash_group_join_enabled = true
+
+query II rowsort
+SELECT data1.a, sum_int(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+1  1458
+2  1458
+3  1458
+
+statement ok
+RESET experimental_hash_group_join_enabled
+
+# Same query as above, but with the hash group-join disabled.
+query II rowsort
+SELECT data1.a, sum_int(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
+----
+1  1458
+2  1458
+3  1458
