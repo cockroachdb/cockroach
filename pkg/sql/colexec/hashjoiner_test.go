@@ -1104,11 +1104,14 @@ func BenchmarkHashJoiner(b *testing.B) {
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
-										hj := colexecjoin.NewHashJoiner(
-											testAllocator, testAllocator, hjSpec,
-											leftSource, rightSource,
-											colexecjoin.HashJoinerInitialNumBuckets,
-										)
+										hj := colexecjoin.NewHashJoiner(colexecjoin.NewHashJoinerArgs{
+											BuildSideAllocator:       testAllocator,
+											OutputUnlimitedAllocator: testAllocator,
+											Spec:                     hjSpec,
+											LeftSource:               leftSource,
+											RightSource:              rightSource,
+											InitialNumBuckets:        colexecjoin.HashJoinerInitialNumBuckets,
+										})
 										hj.Init(ctx)
 
 										for i := 0; i < nBatches; i++ {

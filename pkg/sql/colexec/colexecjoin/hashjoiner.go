@@ -168,7 +168,7 @@ type hashJoinerSourceSpec struct {
 // all build table rows that have never been matched and stitching it together
 // with NULL values on the probe side.
 type hashJoiner struct {
-	*joinHelper
+	colexecop.TwoInputInitHelper
 
 	// hashTableAllocator should be used when building the hash table from the
 	// right input.
@@ -254,7 +254,7 @@ var _ colexecop.Resetter = &hashJoiner{}
 const HashJoinerInitialNumBuckets = 256
 
 func (hj *hashJoiner) Init(ctx context.Context) {
-	if !hj.init(ctx) {
+	if !hj.TwoInputInitHelper.Init(ctx) {
 		return
 	}
 
@@ -326,7 +326,7 @@ func (hj *hashJoiner) Next() coldata.Batch {
 }
 
 func (hj *hashJoiner) build() {
-	hj.ht.FullBuild(hj.inputTwo)
+	hj.ht.FullBuild(hj.InputTwo)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
@@ -496,7 +496,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 		// There were no matches in that batch, so we move on to the next one.
 	}
 	for {
-		batch := hj.inputOne.Next()
+		batch := hj.InputOne.Next()
 		batchSize := batch.Length()
 
 		if batchSize == 0 {
@@ -693,12 +693,12 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 }
 
 func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
-	if hj.inputOne == input {
+	if hj.InputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
 		// point we haven't requested a single batch from the left.
 		return coldata.ZeroBatch
-	} else if hj.inputTwo == input {
+	} else if hj.InputTwo == input {
 		if hj.exportBufferedState.hashTableReleased {
 			return coldata.ZeroBatch
 		}
@@ -758,11 +758,7 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 }
 
 func (hj *hashJoiner) Reset(ctx context.Context) {
-	for _, input := range []colexecop.Operator{hj.inputOne, hj.inputTwo} {
-		if r, ok := input.(colexecop.Resetter); ok {
-			r.Reset(ctx)
-		}
-	}
+	hj.TwoInputInitHelper.Reset(ctx)
 	hj.state = hjBuilding
 	// Note that hj.ht.Reset() doesn't reset hj.ht.Same and hj.ht.Visited
 	// slices, but we'll reset them manually in hj.build(). We also keep
@@ -849,24 +845,29 @@ func MakeHashJoinerSpec(
 	}
 }
 
+// NewHashJoinerArgs encompasses all arguments to NewHashJoiner call.
+type NewHashJoinerArgs struct {
+	BuildSideAllocator       *colmem.Allocator
+	OutputUnlimitedAllocator *colmem.Allocator
+	Spec                     HashJoinerSpec
+	LeftSource               colexecop.Operator
+	RightSource              colexecop.Operator
+	InitialNumBuckets        uint64
+}
+
 // NewHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
 // hashTableAllocator should use a limited memory account and will be used for
 // the build side whereas outputUnlimitedAllocator should use an unlimited
 // memory account and will only be used when populating the output.
 // memoryLimit will limit the size of the batches produced by the hash joiner.
-func NewHashJoiner(
-	buildSideAllocator, outputUnlimitedAllocator *colmem.Allocator,
-	spec HashJoinerSpec,
-	leftSource, rightSource colexecop.Operator,
-	initialNumBuckets uint64,
-) colexecop.ResettableOperator {
+func NewHashJoiner(args NewHashJoinerArgs) colexecop.ResettableOperator {
 	return &hashJoiner{
-		joinHelper:                 newJoinHelper(leftSource, rightSource),
-		hashTableAllocator:         buildSideAllocator,
-		outputUnlimitedAllocator:   outputUnlimitedAllocator,
-		spec:                       spec,
-		outputTypes:                spec.JoinType.MakeOutputTypes(spec.Left.SourceTypes, spec.Right.SourceTypes),
-		hashTableInitialNumBuckets: initialNumBuckets,
+		TwoInputInitHelper:         colexecop.MakeTwoInputInitHelper(args.LeftSource, args.RightSource),
+		hashTableAllocator:         args.BuildSideAllocator,
+		outputUnlimitedAllocator:   args.OutputUnlimitedAllocator,
+		spec:                       args.Spec,
+		outputTypes:                args.Spec.JoinType.MakeOutputTypes(args.Spec.Left.SourceTypes, args.Spec.Right.SourceTypes),
+		hashTableInitialNumBuckets: args.InitialNumBuckets,
 	}
 }

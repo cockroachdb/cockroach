@@ -8,7 +8,6 @@ go_library(
     srcs = [
         "crossjoiner.go",
         "hashjoiner.go",
-        "joiner_utils.go",
         "mergejoiner.go",
         "mergejoiner_util.go",
         ":gen-exec",  # keep
@@ -27,7 +26,6 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
-        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/memsize",
         "//pkg/sql/sem/eval",
