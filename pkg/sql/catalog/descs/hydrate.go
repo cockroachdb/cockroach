@@ -118,7 +118,7 @@ func makeMutableTypeLookupFunc(
 		if _, ok := desc.(catalog.MutableDescriptor); !ok {
 			continue
 		}
-		mut.UpsertDescriptorEntry(desc)
+		mut.UpsertDescriptor(desc)
 	}
 	mutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
 		// This special case exists to deal with the desire to use enums in the
@@ -150,7 +150,7 @@ func makeImmutableTypeLookupFunc(
 		if _, ok := desc.(catalog.MutableDescriptor); ok {
 			continue
 		}
-		imm.UpsertDescriptorEntry(desc)
+		imm.UpsertDescriptor(desc)
 	}
 	immutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
 		return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
@@ -173,7 +173,7 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
 	typeLookupFunc := hydrateddesc.MakeTypeLookupFuncForHydration(c.Catalog, fakeLookupFunc)
-	return c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	return c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if !hydrateddesc.IsHydratable(desc) {
 			return nil
 		}
@@ -182,7 +182,7 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 		}
 		// Deep-copy the immutable descriptor and overwrite the catalog entry.
 		desc = desc.NewBuilder().BuildImmutable()
-		defer c.UpsertDescriptorEntry(desc)
+		defer c.UpsertDescriptor(desc)
 		return hydrateddesc.Hydrate(ctx, desc, typeLookupFunc)
 	})
 }

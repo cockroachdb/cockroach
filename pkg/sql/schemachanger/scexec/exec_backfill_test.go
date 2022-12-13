@@ -99,7 +99,7 @@ func TestExecBackfiller(t *testing.T) {
 	}
 
 	findTableWithName := func(c nstree.Catalog, name string) (tab catalog.TableDescriptor) {
-		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			var ok bool
 			tab, ok = desc.(catalog.TableDescriptor)
 			if ok && tab.GetName() == name {
@@ -132,7 +132,7 @@ func TestExecBackfiller(t *testing.T) {
 			require.NotNil(t, tab)
 			mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
 			addIndexMutation(t, mut, "idx", 2, false /* isTempIndex */, "j")
-			descs.UpsertDescriptorEntry(mut)
+			descs.UpsertDescriptor(mut)
 			mc, bt, bf, _, deps := setupTestDeps(t, tdb, descs.Catalog)
 			defer mc.Finish()
 			read, err := deps.Catalog().MustReadImmutableDescriptors(ctx, mut.GetID())
@@ -191,7 +191,7 @@ func TestExecBackfiller(t *testing.T) {
 					mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
 					addIndexMutation(t, mut, "idx", 2, false /* isTempIndex */, "j")
 					addIndexMutation(t, mut, "idx", 3, false /* isTempIndex */, "k", "j")
-					descs.UpsertDescriptorEntry(mut)
+					descs.UpsertDescriptor(mut)
 				}
 				var barID descpb.ID
 				{
@@ -201,7 +201,7 @@ func TestExecBackfiller(t *testing.T) {
 					mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
 					addIndexMutation(t, mut, "idx", 4, false /* isTempIndex */, "j")
 					addIndexMutation(t, mut, "idx", 5, false /* isTempIndex */, "k", "j")
-					descs.UpsertDescriptorEntry(mut)
+					descs.UpsertDescriptor(mut)
 				}
 
 				mc, bt, bf, _, deps := setupTestDeps(t, tdb, descs.Catalog)
@@ -290,7 +290,7 @@ func TestExecBackfiller(t *testing.T) {
 					m.State = descpb.DescriptorMutation_WRITE_ONLY
 				}
 			}
-			descs.UpsertDescriptorEntry(mut)
+			descs.UpsertDescriptor(mut)
 			mc, bt, _, m, deps := setupTestDeps(t, tdb, descs.Catalog)
 			defer mc.Finish()
 			read, err := deps.Catalog().MustReadImmutableDescriptors(ctx, mut.GetID())

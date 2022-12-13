@@ -224,7 +224,7 @@ func (d *direct) readDescriptorsForDirectAccess(
 	}
 	descs := make([]catalog.Descriptor, len(ids))
 	for i, id := range ids {
-		desc := c.LookupDescriptorEntry(id)
+		desc := c.LookupDescriptor(id)
 		if desc == nil {
 			continue
 		}

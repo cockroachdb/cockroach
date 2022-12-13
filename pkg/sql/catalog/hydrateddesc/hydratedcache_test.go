@@ -77,10 +77,10 @@ func TestHydratedCache(t *testing.T) {
 		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Change the database name.
-		dbDesc := dbdesc.NewBuilder(dg.LookupDescriptorEntry(dbID).(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
+		dbDesc := dbdesc.NewBuilder(dg.LookupDescriptor(dbID).(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
 		dbDesc.SetName("new_name")
 		dbDesc.Version++
-		dg.UpsertDescriptorEntry(dbDesc.ImmutableCopy())
+		dg.UpsertDescriptor(dbDesc.ImmutableCopy())
 
 		// Ensure that we observe a new descriptor get created due to
 		// the name change.
@@ -136,9 +136,9 @@ func TestHydratedCache(t *testing.T) {
 		assertMetrics(t, m, 0, 1, catalog.Table)
 
 		// Change the type descriptor.
-		typDesc := typedesc.NewBuilder(dg.LookupDescriptorEntry(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
+		typDesc := typedesc.NewBuilder(dg.LookupDescriptor(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
 		typDesc.Version++
-		dg.UpsertDescriptorEntry(typedesc.NewBuilder(typDesc.TypeDesc()).BuildImmutable())
+		dg.UpsertDescriptor(typedesc.NewBuilder(typDesc.TypeDesc()).BuildImmutable())
 
 		// Ensure that a new descriptor is returned.
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
@@ -180,7 +180,7 @@ func TestHydratedCache(t *testing.T) {
 	})
 	t.Run("modified table gets rejected", func(t *testing.T) {
 		c, _, dg, res := makeCache()
-		mut := tabledesc.NewBuilder(dg.LookupDescriptorEntry(tableUDTID).(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
+		mut := tabledesc.NewBuilder(dg.LookupDescriptor(tableUDTID).(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		td := mut.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
@@ -190,7 +190,7 @@ func TestHydratedCache(t *testing.T) {
 	t.Run("modified type does not get cached", func(t *testing.T) {
 		c, m, dg, res := makeCache()
 
-		mut := typedesc.NewBuilder(dg.LookupDescriptorEntry(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
+		mut := typedesc.NewBuilder(dg.LookupDescriptor(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		dgWithMut := mkDescGetter(append(descs, mut)...)
 		resWithMut := &descGetterTypeDescriptorResolver{dg: &dgWithMut}
@@ -463,7 +463,7 @@ var (
 
 func mkDescGetter(descs ...catalog.MutableDescriptor) (cb nstree.MutableCatalog) {
 	for _, desc := range descs {
-		cb.UpsertDescriptorEntry(desc.ImmutableCopy())
+		cb.UpsertDescriptor(desc.ImmutableCopy())
 	}
 	return cb
 }
@@ -484,15 +484,15 @@ func (d *descGetterTypeDescriptorResolver) GetTypeDescriptor(
 			return tree.TypeName{}, nil, err
 		}
 	}
-	desc := d.dg.LookupDescriptorEntry(id)
+	desc := d.dg.LookupDescriptor(id)
 	if d.unqualifiedName {
 		return tree.MakeUnqualifiedTypeName(desc.GetName()),
 			desc.(catalog.TypeDescriptor), nil
 	}
-	dbDesc := d.dg.LookupDescriptorEntry(desc.GetParentID())
+	dbDesc := d.dg.LookupDescriptor(desc.GetParentID())
 	// Assume we've got a user-defined schema.
 	// TODO(ajwerner): Unify this with some other resolution logic.
-	scDesc := d.dg.LookupDescriptorEntry(desc.GetParentSchemaID())
+	scDesc := d.dg.LookupDescriptor(desc.GetParentSchemaID())
 	name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), desc.GetName())
 	return name, desc.(catalog.TypeDescriptor), nil
 }

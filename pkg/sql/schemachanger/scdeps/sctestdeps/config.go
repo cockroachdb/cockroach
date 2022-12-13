@@ -50,7 +50,7 @@ func WithNamespace(c nstree.Catalog) Option {
 func WithDescriptors(c nstree.Catalog) Option {
 	modifTime := hlc.Timestamp{WallTime: defaultOverriddenCreatedAt.UnixNano()}
 	return optionFunc(func(state *TestState) {
-		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			mut := desc.NewBuilder().BuildCreatedMutable()
 			switch m := mut.(type) {
 			case *tabledesc.Mutable:
@@ -63,8 +63,8 @@ func WithDescriptors(c nstree.Catalog) Option {
 			}
 			mut.ResetModificationTime()
 			desc = mut.ImmutableCopy()
-			state.committed.UpsertDescriptorEntry(desc)
-			state.uncommitted.UpsertDescriptorEntry(desc)
+			state.committed.UpsertDescriptor(desc)
+			state.uncommitted.UpsertDescriptor(desc)
 			return nil
 		})
 	})
