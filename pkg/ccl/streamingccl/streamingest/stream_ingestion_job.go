@@ -214,10 +214,14 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	progress := ingestionJob.Progress()
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
 
-	startTime := progress.GetStreamIngest().StartTime
+	var previousHighWater, heartbeatTimestamp hlc.Timestamp
+	initialScanTimestamp := details.ReplicationStartTime
 	// Start from the last checkpoint if it exists.
 	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		startTime = *h
+		previousHighWater = *h
+		heartbeatTimestamp = previousHighWater
+	} else {
+		heartbeatTimestamp = initialScanTimestamp
 	}
 
 	// Initialize a stream client and resolve topology.
@@ -229,7 +233,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		streamID := streampb.StreamID(details.StreamID)
 		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf("connecting to the producer job %d "+
 			"and creating a stream replication plan", streamID))
-		if err := waitUntilProducerActive(ctx, client, streamID, startTime, ingestionJob.ID()); err != nil {
+		if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
 			return err
 		}
 
@@ -241,9 +245,6 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 
 		// TODO(casper): update running status
 		err = ingestionJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Progress.GetStreamIngest().StartTime.Less(startTime) {
-				md.Progress.GetStreamIngest().StartTime = startTime
-			}
 			md.Progress.GetStreamIngest().StreamAddresses = topology.StreamAddresses()
 			ju.UpdateProgress(md.Progress)
 			return nil
@@ -252,8 +253,14 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 			return errors.Wrap(err, "failed to update job progress")
 		}
 
-		log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
-			ingestionJob.ID(), progress.GetStreamIngest().StartTime)
+		if previousHighWater.IsEmpty() {
+			log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
+				ingestionJob.ID(), initialScanTimestamp)
+		} else {
+			log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
+				ingestionJob.ID(), previousHighWater)
+		}
+
 		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
 		checkpoint := ingestProgress.Checkpoint
 
@@ -268,10 +275,14 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, progress.GetStreamIngest().StartTime, checkpoint,
+			streamAddress, topology, sqlInstanceIDs, initialScanTimestamp, previousHighWater, checkpoint,
 			ingestionJob.ID(), streamID, topology.SourceTenantID, details.DestinationTenantID)
 		if err != nil {
 			return err
+		}
+
+		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterReplicationFlowPlan != nil {
+			knobs.AfterReplicationFlowPlan(streamIngestionSpecs, streamIngestionFrontierSpec)
 		}
 
 		// Plan and run the DistSQL flow.

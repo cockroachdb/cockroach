@@ -163,18 +163,22 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Types: tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
 			},
-			ReturnType: tree.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
 				tenantName := string(tree.MustBeDString(args[0]))
-				jobID, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName))
+				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(jobID)), err
+				rawReplicationProducerSpec, err := protoutil.Marshal(&replicationProducerSpec)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawReplicationProducerSpec)), err
 			},
 			Info: "This function can be used on the producer side to start a replication stream for " +
 				"the specified tenant. The returned stream ID uniquely identifies created stream. " +

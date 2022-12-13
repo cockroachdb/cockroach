@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -263,4 +265,18 @@ func (rh *ReplicationHelper) TableSpan(codec keys.SQLCodec, table string) roachp
 	desc := desctestutils.TestingGetPublicTableDescriptor(
 		rh.SysServer.DB(), codec, "d", table)
 	return desc.PrimaryIndexSpan(codec)
+}
+
+// StartReplicationStream reaches out to the system tenant to start the
+// replication stream from the source tenant.
+func (rh *ReplicationHelper) StartReplicationStream(
+	t *testing.T, sourceTenantName roachpb.TenantName,
+) streampb.ReplicationProducerSpec {
+	var rawReplicationProducerSpec []byte
+	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.start_replication_stream($1)`, sourceTenantName)
+	row.Scan(&rawReplicationProducerSpec)
+	var replicationProducerSpec streampb.ReplicationProducerSpec
+	err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec)
+	require.NoError(t, err)
+	return replicationProducerSpec
 }

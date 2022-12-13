@@ -197,7 +197,7 @@ func startReplication(
 func testStreamReplicationStatus(
 	t *testing.T,
 	runner *sqlutils.SQLRunner,
-	streamID string,
+	streamID streampb.StreamID,
 	streamStatus streampb.StreamReplicationStatus_StreamStatus,
 ) {
 	checkStreamStatus := func(t *testing.T, frontier hlc.Timestamp,
@@ -249,10 +249,10 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
-		rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-		streamID := rows[0][0]
+		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+		streamID := replicationProducerSpec.StreamID
 
-		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
+		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{"failed"}})
 		testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
@@ -260,16 +260,16 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	// Make sure the stream does not time out within the test timeout
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
-		rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-		streamID := rows[0][0]
+		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+		streamID := replicationProducerSpec.StreamID
 
-		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
+		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{"running"}})
 
 		// Ensures the job is continuously running for 3 seconds.
 		testDuration, now := 3*time.Second, timeutil.Now()
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
-			h.SysSQL.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
+			h.SysSQL.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 				[][]string{{"running"}})
 			testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
@@ -289,7 +289,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
-		testStreamReplicationStatus(t, h.SysSQL, "123", streampb.StreamReplicationStatus_STREAM_INACTIVE)
+		testStreamReplicationStatus(t, h.SysSQL, streampb.StreamID(123), streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 }
 
@@ -297,7 +297,8 @@ func encodeSpec(
 	t *testing.T,
 	h *streamingtest.ReplicationHelper,
 	srcTenant streamingtest.TenantState,
-	startFrom hlc.Timestamp,
+	initialScanTime hlc.Timestamp,
+	previousHighWater hlc.Timestamp,
 	tables ...string,
 ) []byte {
 	var spans []roachpb.Span
@@ -308,8 +309,9 @@ func encodeSpec(
 	}
 
 	spec := &streampb.StreamPartitionSpec{
-		StartFrom: startFrom,
-		Spans:     spans,
+		InitialScanTimestamp:       initialScanTime,
+		PreviousHighWaterTimestamp: previousHighWater,
+		Spans:                      spans,
 		Config: streampb.StreamPartitionSpec_ExecutionConfig{
 			MinCheckpointFrequency: 10 * time.Millisecond,
 		},
@@ -344,8 +346,9 @@ USE d;
 `)
 
 	ctx := context.Background()
-	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-	streamID := rows[0][0]
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	streamID := replicationProducerSpec.StreamID
+	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t1")
@@ -353,7 +356,7 @@ USE d;
 
 	t.Run("stream-table-cursor-error", func(t *testing.T) {
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, hlc.Timestamp{}, "t2"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t2"))
 		defer feed.Close(ctx)
 
 		subscribedSpan := h.TableSpan(srcTenant.Codec, "t2")
@@ -380,7 +383,8 @@ USE d;
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, hlc.Timestamp{}, "t1"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
+				hlc.Timestamp{}, "t1"))
 		defer feed.Close(ctx)
 
 		expected := streamingtest.EncodeKV(t, srcTenant.Codec, t1Descr, 42)
@@ -409,7 +413,8 @@ USE d;
 		srcTenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'мир' WHERE i = 42`)
 
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, beforeUpdateTS, "t1"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
+				beforeUpdateTS, "t1"))
 		defer feed.Close(ctx)
 
 		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
@@ -445,7 +450,8 @@ CREATE TABLE t3(
 		addRows(0, 10)
 
 		source, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, hlc.Timestamp{}, "t1"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
+				hlc.Timestamp{}, "t1"))
 		defer feed.Close(ctx)
 
 		// Few more rows after feed started.
@@ -488,8 +494,8 @@ USE d;
 `)
 
 	ctx := context.Background()
-	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-	streamID := rows[0][0]
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	streamID := replicationProducerSpec.StreamID
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 
@@ -506,18 +512,21 @@ USE d;
 		// Make any import operation to be a AddSSTable operation instead of kv writes.
 		h.SysSQL.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1';")
 
-		var startTime time.Time
+		var clockTime time.Time
 		srcTenant.SQL.Exec(t, fmt.Sprintf("CREATE TABLE %s (id INT PRIMARY KEY, n INT)", table))
-		srcTenant.SQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&startTime)
-		startHlcTime := hlc.Timestamp{WallTime: startTime.UnixNano()}
-		if initialScan {
-			startHlcTime = hlc.Timestamp{}
+		srcTenant.SQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&clockTime)
+
+		var previousHighWater hlc.Timestamp
+		initialScanTimestamp := hlc.Timestamp{WallTime: clockTime.UnixNano()}
+		if !initialScan {
+			previousHighWater = hlc.Timestamp{WallTime: clockTime.UnixNano()}
 		}
 		if addSSTableBeforeRangefeed {
 			srcTenant.SQL.Exec(t, fmt.Sprintf("IMPORT INTO %s CSV DATA ($1)", table), dataSrv.URL)
 		}
 		source, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, startHlcTime, table))
+			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
+				previousHighWater, table))
 		defer feed.Close(ctx)
 		if !addSSTableBeforeRangefeed {
 			srcTenant.SQL.Exec(t, fmt.Sprintf("IMPORT INTO %s CSV DATA ($1)", table), dataSrv.URL)
@@ -573,10 +582,8 @@ func TestCompleteStreamReplication(t *testing.T) {
 		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '2s';",
 		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
 
-	var timedOutStreamID int
-	row := h.SysSQL.QueryRow(t,
-		"SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-	row.Scan(&timedOutStreamID)
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	timedOutStreamID := replicationProducerSpec.StreamID
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
 	// Makes the producer job not easily time out.
@@ -587,10 +594,8 @@ func TestCompleteStreamReplication(t *testing.T) {
 			timedOutStreamID, successfulIngestion)
 
 		// Create a new replication stream and complete it.
-		var streamID int
-		row := h.SysSQL.QueryRow(t,
-			"SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-		row.Scan(&streamID)
+		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+		streamID := replicationProducerSpec.StreamID
 		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
 			streamID, successfulIngestion)
@@ -664,13 +669,15 @@ USE d;
 `)
 
 	ctx := context.Background()
-	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", testTenantName)
-	streamID := rows[0][0]
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	streamID := replicationProducerSpec.StreamID
+	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	// Only subscribe to table t1 and t2, not t3.
 	source, feed := startReplication(t, h, makePartitionStreamDecoder,
-		streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, h.SysServer.Clock().Now(), "t1", "t2"))
+		streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
+			hlc.Timestamp{}, "t1", "t2"))
 	defer feed.Close(ctx)
 
 	// TODO(casper): Replace with DROP TABLE once drop table uses the MVCC-compatible DelRange
