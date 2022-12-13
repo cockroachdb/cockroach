@@ -1747,9 +1747,16 @@ https://www.postgresql.org/docs/9.6/catalog-pg-event-trigger.html`,
 	schema: vtable.PGCatalogEventTrigger,
 	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Event triggers are not currently supported.
-		return nil
+		return addRow(
+			tree.NewDString("awsdms_intercept_ddl"),
+			tree.DNull,
+			tree.DNull,
+			tree.DNull,
+			tree.DNull,
+			tree.DNull,
+			tree.DNull,
+		)
 	},
-	unimplemented: true,
 }
 
 var pgCatalogExtensionTable = virtualSchemaTable{
@@ -2488,6 +2495,45 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
+
+					if err := addRow(
+						tree.NewDOid(99999999),                  // oid
+						tree.NewDString("awsdms_intercept_ddl"), // proname
+						schemaOid(scDesc.GetID()),               // pronamespace
+						tree.DNull,                              // proowner
+						tree.NewDOid(14),                        // prolang
+						tree.DNull,                              // procost
+						tree.DNull,                              // prorows
+						oidZero,                                 // provariadic
+						tree.DNull,                              // protransform
+						tree.DBoolFalse,                         // proisagg
+						tree.DBoolFalse,                         // proiswindow
+						tree.DBoolFalse,                         // prosecdef
+						tree.MakeDBool(false),                   // proleakproof
+						tree.MakeDBool(false),                   // proisstrict
+						tree.MakeDBool(false),                   // proretset
+						tree.NewDString(volatility.Volatile.String()), // provolatile
+						tree.DNull,                     // proparallel
+						tree.NewDInt(tree.DInt(0)),     // pronargs
+						tree.NewDInt(tree.DInt(0)),     // pronargdefaults
+						tree.NewDOid(types.Void.Oid()), // prorettype
+						tree.DNull,                     // proargtypes
+						tree.DNull,                     // proallargtypes
+						tree.DNull,                     // proargmodes
+						tree.DNull,                     // proargnames
+						tree.DNull,                     // proargdefaults
+						tree.DNull,                     // protrftypes
+						tree.DNull,                     // prosrc
+						tree.DNull,                     // probin
+						tree.DNull,                     // proconfig
+						tree.DNull,                     // proacl
+						// These columns were automatically created by pg_catalog_test's missing column generator.
+						tree.DNull, // prokind
+						tree.DNull, // prosupport
+					); err != nil {
+						return err
+					}
+
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
 						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
 							ctx, p.Txn(), overload.ID,
