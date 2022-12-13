@@ -430,6 +430,7 @@ ALL_TESTS = [
     "//pkg/sql/pgwire:pgwire_test",
     "//pkg/sql/physicalplan/replicaoracle:replicaoracle_test",
     "//pkg/sql/physicalplan:physicalplan_test",
+    "//pkg/sql/plpgsql/parser:parser_test",
     "//pkg/sql/privilege:privilege_test",
     "//pkg/sql/protoreflect:protoreflect_test",
     "//pkg/sql/querycache:querycache_test",
@@ -1627,6 +1628,7 @@ GO_TARGETS = [
     "//pkg/sql/plpgsql/parser/plpgsqllexbase/allkeywords:allkeywords_lib",
     "//pkg/sql/plpgsql/parser/plpgsqllexbase:plpgsqllexbase",
     "//pkg/sql/plpgsql/parser:parser",
+    "//pkg/sql/plpgsql/parser:parser_test",
     "//pkg/sql/privilege:privilege",
     "//pkg/sql/privilege:privilege_test",
     "//pkg/sql/protoreflect/test:test",
@@ -2821,11 +2823,7 @@ GET_X_DATA_TARGETS = [
     "//pkg/sql/sem/eval/cast_test:get_x_data",
     "//pkg/sql/sem/eval/eval_test:get_x_data",
     "//pkg/sql/sem/normalize:get_x_data",
-<<<<<<< HEAD
-=======
     "//pkg/sql/sem/plpgsqltree:get_x_data",
-    "//pkg/sql/sem/semenumpb:get_x_data",
->>>>>>> 19b6cb96436 (sql: add plpgsql parser scaffold.)
     "//pkg/sql/sem/transform:get_x_data",
     "//pkg/sql/sem/tree:get_x_data",
     "//pkg/sql/sem/tree/evalgen:get_x_data",
