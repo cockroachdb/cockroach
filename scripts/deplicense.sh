@@ -103,6 +103,8 @@ function inspect() {
   echo "unable to determine license"
 }
 
+make -k vendor_rebuild
+
 pkgs=$(grep '^  name = ' Gopkg.lock | cut -d'"' -f2)
 
 for pkg in ${pkgs}; do

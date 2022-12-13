@@ -42,13 +42,9 @@ tc_end_block "Ensure generated code is up-to-date"
 
 # generated code can generate new dependencies; check dependencies after generated code.
 tc_start_block "Ensure dependencies are up-to-date"
-# Run go mod tidy and `make -k vendor_rebuild` and ensure nothing changes.
+# Run `go mod tidy` and ensure nothing changes.
 run build/builder.sh go mod tidy
-check_workspace_clean 'go_mod_tidy' "Run \`go mod tidy\` and \`make -k vendor_rebuild\` to automatically regenerate these."
-run build/builder.sh make -k vendor_rebuild
-cd vendor
-check_workspace_clean 'vendor_rebuild' "Run \`make -k vendor_rebuild\` to automatically regenerate these."
-cd ..
+check_workspace_clean 'go_mod_tidy' "Run \`go mod tidy\` to automatically regenerate these."
 
 end_check_generated_code_tests
 tc_end_block "Ensure dependencies are up-to-date"

@@ -1,6 +1,3 @@
-[submodule "vendor"]
-	path = vendor
-	url = https://github.com/cockroachdb/vendored
 [submodule "c-deps/jemalloc"]
 	path = c-deps/jemalloc
 	url = https://github.com/cockroachdb/jemalloc.git
