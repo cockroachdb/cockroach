@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catenumpb"
 )
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
@@ -314,6 +315,37 @@ type MakePublicCheckConstraintValidated struct {
 // MakeValidatedCheckConstraintPublic moves a new, validated check
 // constraint from mutation to public.
 type MakeValidatedCheckConstraintPublic struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakeAbsentForeignKeyConstraintWriteOnly adds a non-existent foreign key
+// constraint to the table in the WRITE_ONLY state.
+type MakeAbsentForeignKeyConstraintWriteOnly struct {
+	mutationOp
+	TableID                 descpb.ID
+	ConstraintID            descpb.ConstraintID
+	ColumnIDs               []descpb.ColumnID
+	ReferencedTableID       descpb.ID
+	ReferencedColumnIDs     []descpb.ColumnID
+	OnUpdateAction          catenumpb.ForeignKeyAction
+	OnDeleteAction          catenumpb.ForeignKeyAction
+	CompositeKeyMatchMethod catenumpb.Match
+}
+
+// MakeValidatedForeignKeyConstraintPublic moves a new, validated foreign key
+// constraint from mutation to public.
+type MakeValidatedForeignKeyConstraintPublic struct {
+	mutationOp
+	TableID           descpb.ID
+	ConstraintID      descpb.ConstraintID
+	ReferencedTableID descpb.ID
+}
+
+// MakePublicForeignKeyConstraintValidated moves a public
+// check constraint to VALIDATED.
+type MakePublicForeignKeyConstraintValidated struct {
 	mutationOp
 	TableID      descpb.ID
 	ConstraintID descpb.ConstraintID
