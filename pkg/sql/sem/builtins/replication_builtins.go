@@ -91,7 +91,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				// Keeping this builtin as 'unimplemented' in order to reserve the oid.
 				return tree.DNull, errors.New("unimplemented")
 			},
-			Info:       "DEPRECATED, consider using `SHOW TENANT name WITH REPLICATION STATS`",
+			Info:       "DEPRECATED, consider using `SHOW TENANT name WITH REPLICATION STATUS`",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -111,7 +111,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				// Keeping this builtin as 'unimplemented' in order to reserve the oid.
 				return tree.DNull, errors.New("unimplemented")
 			},
-			Info:       "DEPRECATED, consider using `SHOW TENANT name WITH REPLICATION STATS`",
+			Info:       "DEPRECATED, consider using `SHOW TENANT name WITH REPLICATION STATUS`",
 			Volatility: volatility.Volatile,
 		},
 	),
