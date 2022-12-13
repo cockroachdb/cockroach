@@ -610,7 +610,11 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return d.(*tree.DEnum).LogicalRep, nil
 			},
 			func(x interface{}) (tree.Datum, error) {
-				return tree.MakeDEnumFromLogicalRepresentation(typ, x.(string))
+				e, err := tree.MakeDEnumFromLogicalRepresentation(typ, x.(string))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDEnum(e), nil
 			},
 		)
 	case types.ArrayFamily:

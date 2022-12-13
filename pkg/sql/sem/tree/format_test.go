@@ -330,7 +330,7 @@ func TestFormatExpr2(t *testing.T) {
 		},
 		{tree.NewDTuple(
 			types.MakeTuple([]*types.T{enumType, enumType}),
-			tree.DNull, enumHi),
+			tree.DNull, &enumHi),
 			tree.FmtParsable,
 			`(NULL:::greeting, 'hi':::greeting)`,
 		},
@@ -339,13 +339,13 @@ func TestFormatExpr2(t *testing.T) {
 		// enclosing tuple for serialization purposes.
 		{tree.NewDTuple(
 			types.MakeTuple([]*types.T{enumType, enumType}),
-			enumHi, enumHello),
+			&enumHi, &enumHello),
 			tree.FmtSerializable,
 			`(x'4201':::@100500, x'42':::@100500)`,
 		},
 		{tree.NewDTuple(
 			types.MakeTuple([]*types.T{enumType, enumType}),
-			tree.DNull, enumHi),
+			tree.DNull, &enumHi),
 			tree.FmtSerializable,
 			`(NULL:::@100500, x'4201':::@100500)`,
 		},
