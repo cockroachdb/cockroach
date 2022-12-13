@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -809,9 +811,15 @@ func TestInternalJobsTableRetryColumns(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			tdb := sqlutils.MakeSQLRunner(db)
 
+			payload := jobspb.Payload{
+				Details:       jobspb.WrapPayloadDetails(jobspb.ImportDetails{}),
+				UsernameProto: username.RootUserName().EncodeProto(),
+			}
+			payloadBytes, err := protoutil.Marshal(&payload)
+			assert.NoError(t, err)
 			tdb.Exec(t,
-				"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
-				1, jobs.StatusRunning, timeutil.Now(),
+				"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
+				1, jobs.StatusRunning, timeutil.Now(), payloadBytes,
 			)
 
 			validateFn(ctx, tdb)

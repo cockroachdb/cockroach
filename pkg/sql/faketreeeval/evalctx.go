@@ -170,6 +170,18 @@ func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
 	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
 }
 
+// DummySystemJobsIteratorFactory implements the eval.SystemJobsIteratorFactory
+// interface by returning errors.
+type DummySystemJobsIteratorFactory struct{}
+
+func (sji *DummySystemJobsIteratorFactory) GetJobsIterator(
+	ctx context.Context,
+) (eval.ValueGenerator, error) {
+	return nil, errors.WithStack(errors.New("System jobs iterator factory not implemented"))
+}
+
+var _ eval.SystemJobsIteratorFactory = &DummySystemJobsIteratorFactory{}
+
 // DummyEvalPlanner implements the eval.Planner interface by returning
 // errors.
 type DummyEvalPlanner struct {
@@ -226,6 +238,13 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
+}
+
+// HasRoleOption is part of the Planner interface.
+func (ep *DummyEvalPlanner) HasRoleOption(
+	ctx context.Context, roleOption roleoption.Option,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalPlanner)
 }

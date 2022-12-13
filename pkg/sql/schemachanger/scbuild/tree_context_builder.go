@@ -46,18 +46,19 @@ func (b buildCtx) EvalCtx() *eval.Context {
 
 func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 	evalCtx := &eval.Context{
-		ClusterID:            d.ClusterID(),
-		SessionDataStack:     sessiondata.NewStack(d.SessionData()),
-		Planner:              &faketreeeval.DummyEvalPlanner{},
-		StreamManagerFactory: &faketreeeval.DummyStreamManagerFactory{},
-		PrivilegedAccessor:   &faketreeeval.DummyPrivilegedAccessor{},
-		SessionAccessor:      &faketreeeval.DummySessionAccessor{},
-		ClientNoticeSender:   d.ClientNoticeSender(),
-		Sequence:             &faketreeeval.DummySequenceOperators{},
-		Tenant:               &faketreeeval.DummyTenantOperator{},
-		Regions:              &faketreeeval.DummyRegionOperator{},
-		Settings:             d.ClusterSettings(),
-		Codec:                d.Codec(),
+		ClusterID:                 d.ClusterID(),
+		SessionDataStack:          sessiondata.NewStack(d.SessionData()),
+		Planner:                   &faketreeeval.DummyEvalPlanner{},
+		StreamManagerFactory:      &faketreeeval.DummyStreamManagerFactory{},
+		SystemJobsIteratorFactory: &faketreeeval.DummySystemJobsIteratorFactory{},
+		PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
+		SessionAccessor:           &faketreeeval.DummySessionAccessor{},
+		ClientNoticeSender:        d.ClientNoticeSender(),
+		Sequence:                  &faketreeeval.DummySequenceOperators{},
+		Tenant:                    &faketreeeval.DummyTenantOperator{},
+		Regions:                   &faketreeeval.DummyRegionOperator{},
+		Settings:                  d.ClusterSettings(),
+		Codec:                     d.Codec(),
 	}
 	evalCtx.SetDeprecatedContext(ctx)
 	return evalCtx

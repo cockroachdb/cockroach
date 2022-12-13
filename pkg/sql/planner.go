@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -382,6 +383,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.StreamManagerFactory = p
+	p.extendedEvalCtx.SystemJobsIteratorFactory = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.ClientNoticeSender = p
@@ -827,6 +829,11 @@ func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
 	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.Txn())
+}
+
+// GetJobsIterator returns a JobRowsGenerator.
+func (p *planner) GetJobsIterator(ctx context.Context) (eval.ValueGenerator, error) {
+	return builtins.NewJobsGenerator(ctx, p.Txn(), p.ExecCfg().InternalExecutor, p, p.User())
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
