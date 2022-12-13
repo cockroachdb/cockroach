@@ -672,6 +672,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			conf,
 			candidates,
 			candidateReplica,
+			desc,
 			candidateReplica.Stats(),
 			true, /* forceDecisionWithoutStats */
 			allocator.TransferLeaseOptions{
@@ -867,6 +868,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			rebalanceCtx.conf,
 			targetVoterRepls,
 			rebalanceCtx.candidateReplica,
+			rangeDesc,
 			allocator.TransferLeaseOptions{
 				AllowUninitializedCandidates: true,
 			},

@@ -1794,14 +1794,16 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
+			repl := &mockRepl{
+				replicationFactor: 3,
+				storeID:           c.leaseholder,
+			}
 			target := a.TransferLeaseTarget(
 				ctx,
 				emptySpanConfig(),
 				c.existing,
-				&mockRepl{
-					replicationFactor: 3,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -1915,6 +1917,7 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 				emptySpanConfig(),
 				c.existing,
 				repl,
+				repl.Desc(),
 				nil,
 				false, /* alwaysAllowDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -2001,14 +2004,16 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
+			repl := &mockRepl{
+				replicationFactor: 3,
+				storeID:           c.leaseholder,
+			}
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				c.conf,
 				c.existing,
-				&mockRepl{
-					replicationFactor: 3,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -2112,14 +2117,16 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
+			repl := &mockRepl{
+				replicationFactor: 3,
+				storeID:           c.leaseholder,
+			}
 			target := a.TransferLeaseTarget(
 				ctx,
 				c.conf,
 				c.existing,
-				&mockRepl{
-					replicationFactor: 3,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -2393,14 +2400,16 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
+			testRepl := &mockRepl{
+				storeID:           c.leaseholder,
+				replicationFactor: int32(len(c.existing)),
+			}
 			result := a.ShouldTransferLease(
 				ctx,
 				emptySpanConfig(),
 				c.existing,
-				&mockRepl{
-					storeID:           c.leaseholder,
-					replicationFactor: int32(len(c.existing)),
-				},
+				testRepl,
+				testRepl.Desc(),
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
@@ -2460,14 +2469,16 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
+			testRepl := &mockRepl{
+				storeID:           c.leaseholder,
+				replicationFactor: int32(len(c.existing)),
+			}
 			result := a.ShouldTransferLease(
 				ctx,
 				emptySpanConfig(),
 				c.existing,
-				&mockRepl{
-					storeID:           c.leaseholder,
-					replicationFactor: int32(len(c.existing)),
-				},
+				testRepl,
+				testRepl.Desc(),
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
@@ -2506,11 +2517,13 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 
 	assertShouldTransferLease := func(expected bool) {
 		t.Helper()
+		testRepl := &mockRepl{storeID: 2, replicationFactor: 3}
 		result := a.ShouldTransferLease(
 			ctx,
 			emptySpanConfig(),
 			replicas(1, 2, 3),
-			&mockRepl{storeID: 2, replicationFactor: 3},
+			testRepl,
+			testRepl.Desc(),
 			nil, /* replicaStats */
 		)
 		require.Equal(t, expected, result)
@@ -2646,28 +2659,32 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			conf := roachpb.SpanConfig{LeasePreferences: c.preferences}
+			testRepl := &mockRepl{
+				storeID:           c.leaseholder,
+				replicationFactor: int32(len(c.existing)),
+			}
 			result := a.ShouldTransferLease(
 				ctx,
 				conf,
 				c.existing,
-				&mockRepl{
-					storeID:           c.leaseholder,
-					replicationFactor: int32(len(c.existing)),
-				},
+				testRepl,
+				testRepl.Desc(),
 				nil, /* replicaStats */
 			)
 			expectTransfer := c.expectAllowLeaseRepl != 0
 			if expectTransfer != result {
 				t.Errorf("expected %v, but found %v", expectTransfer, result)
 			}
+			repl := &mockRepl{
+				replicationFactor: 5,
+				storeID:           c.leaseholder,
+			}
 			target := a.TransferLeaseTarget(
 				ctx,
 				conf,
 				c.existing,
-				&mockRepl{
-					replicationFactor: 5,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -2682,10 +2699,8 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				ctx,
 				conf,
 				c.existing,
-				&mockRepl{
-					replicationFactor: 5,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -2770,14 +2785,16 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			conf := roachpb.SpanConfig{LeasePreferences: c.preferences}
+			repl := &mockRepl{
+				replicationFactor: 6,
+				storeID:           c.leaseholder,
+			}
 			target := a.TransferLeaseTarget(
 				ctx,
 				conf,
 				c.existing,
-				&mockRepl{
-					replicationFactor: 6,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -2793,10 +2810,8 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 				ctx,
 				conf,
 				c.existing,
-				&mockRepl{
-					replicationFactor: 6,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
@@ -5408,14 +5423,16 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			a := MakeAllocator(st, storePool, func(addr string) (time.Duration, bool) {
 				return c.latency[addr], true
 			}, nil)
+			repl := &mockRepl{
+				replicationFactor: 3,
+				storeID:           c.leaseholder,
+			}
 			target := a.TransferLeaseTarget(
 				ctx,
 				emptySpanConfig(),
 				existing,
-				&mockRepl{
-					replicationFactor: 3,
-					storeID:           c.leaseholder,
-				},
+				repl,
+				repl.Desc(),
 				c.stats.SnapshotRatedSummary(),
 				false,
 				allocator.TransferLeaseOptions{

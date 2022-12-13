@@ -663,6 +663,7 @@ func (rq *replicateQueue) shouldQueue(
 			conf,
 			voterReplicas,
 			repl,
+			desc,
 			repl.loadStats.batchRequests.SnapshotRatedSummary(),
 		) {
 		log.KvDistribution.VEventf(ctx, 2, "lease transfer needed, enqueuing")
@@ -1422,7 +1423,6 @@ func (rq *replicateQueue) planAddOrReplaceNonVoters(
 func (rq *replicateQueue) findRemoveVoter(
 	ctx context.Context,
 	repl interface {
-		DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
@@ -1540,6 +1540,7 @@ func (rq *replicateQueue) maybeTransferLeaseAwayTarget(
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
+		desc,
 		repl.loadStats.batchRequests.SnapshotRatedSummary(),
 		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
@@ -1990,6 +1991,7 @@ func (rq *replicateQueue) shedLease(
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
+		desc,
 		repl.loadStats.batchRequests.SnapshotRatedSummary(),
 		false, /* forceDecisionWithoutStats */
 		opts,

@@ -3678,7 +3678,7 @@ func (r *Replica) adminScatter(
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc := r.Desc()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
-			ctx, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
+			ctx, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, desc, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID

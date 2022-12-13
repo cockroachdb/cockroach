@@ -1586,6 +1586,7 @@ func (a *Allocator) ValidLeaseTargets(
 		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
+	rangeDesc *roachpb.RangeDescriptor,
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
@@ -1631,7 +1632,6 @@ func (a *Allocator) ValidLeaseTargets(
 			// replica set, however are in the candidate list. Uninitialized
 			// replicas will always need a snapshot.
 			existingCandidates := []roachpb.ReplicaDescriptor{}
-			rangeDesc := leaseRepl.Desc()
 			for _, candidate := range candidates {
 				if _, ok := rangeDesc.GetReplicaDescriptor(candidate.StoreID); ok {
 					existingCandidates = append(existingCandidates, candidate)
@@ -1751,6 +1751,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
+	rangeDesc *roachpb.RangeDescriptor,
 	statSummary *replicastats.RatedSummary,
 	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
@@ -1775,7 +1776,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, opts)
+	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, rangeDesc, opts)
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		log.KvDistribution.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
@@ -2004,6 +2005,7 @@ func (a *Allocator) ShouldTransferLease(
 		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
+	rangeDesc *roachpb.RangeDescriptor,
 	statSummary *replicastats.RatedSummary,
 ) bool {
 	if a.leaseholderShouldMoveDueToPreferences(ctx, conf, leaseRepl, existing) {
@@ -2014,6 +2016,7 @@ func (a *Allocator) ShouldTransferLease(
 		conf,
 		existing,
 		leaseRepl,
+		rangeDesc,
 		allocator.TransferLeaseOptions{},
 	)
 
