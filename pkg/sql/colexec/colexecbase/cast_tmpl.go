@@ -97,9 +97,10 @@ func isIdentityCast(fromType, toType *types.T) bool {
 		// by float64 physically.
 		return true
 	}
-	if fromType.Family() == types.UuidFamily && toType.Family() == types.BytesFamily {
-		// The cast from UUID to Bytes is an identity because we don't need to
-		// perform any conversion since both are represented in the same way.
+	if toType.Family() == types.BytesFamily && (fromType.Family() == types.UuidFamily || fromType.Family() == types.EnumFamily) {
+		// The casts from UUID or enum to Bytes is an identity because we don't
+		// need to perform any conversion since both are represented in the same
+		// way.
 		return true
 	}
 	return false

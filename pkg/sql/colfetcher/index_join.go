@@ -352,8 +352,6 @@ func (s *ColIndexJoin) next() bool {
 			s.mem.byteLikeCols = append(s.mem.byteLikeCols, vec.Bytes())
 		case types.JsonFamily:
 			s.mem.byteLikeCols = append(s.mem.byteLikeCols, &vec.JSON().Bytes)
-		case types.EnumFamily:
-			s.mem.byteLikeCols = append(s.mem.byteLikeCols, &vec.Enum().Bytes)
 		case types.DecimalFamily:
 			s.mem.decimalCols = append(s.mem.decimalCols, vec.Decimal())
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -623,7 +621,6 @@ func (s *ColIndexJoin) prepareMemLimit(inputTypes []*types.T) {
 			types.DecimalFamily,
 			types.BytesFamily,
 			types.JsonFamily,
-			types.EnumFamily,
 			typeconv.DatumVecCanonicalTypeFamily:
 			s.mem.varSizeVecIdxs.Add(i)
 			s.mem.hasVarSizeCols = true

@@ -43,7 +43,6 @@ var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Bool, types.Int, boolToIntOrFloat},
 	{types.Bool, types.String, boolToString},
 
-	{types.Bytes, types.AnyEnum, bytesToEnum},
 	{types.Bytes, types.String, bytesToString},
 	{types.Bytes, types.Uuid, bytesToUUID},
 
@@ -139,12 +138,6 @@ func boolToIntOrFloat(to, from, _, _, _ string) string {
 
 func boolToString(to, from, _, toType, _ string) string {
 	return toString(fmt.Sprintf("%s = []byte(strconv.FormatBool(%s))", to, from), to, toType)
-}
-
-func bytesToEnum(to, from, _, _, _ string) string {
-	// Bytes value is treated as the physical representation of the enum, so we
-	// just use it directly.
-	return fmt.Sprintf("%s = %s", to, from)
 }
 
 func bytesToString(to, from, evalCtx, toType, _ string) string {

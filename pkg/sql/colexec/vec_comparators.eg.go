@@ -491,42 +491,6 @@ func (c *JSONVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	}
 }
 
-type EnumVecComparator struct {
-	vecs  []*coldata.Enums
-	nulls []*coldata.Nulls
-}
-
-func (c *EnumVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) int {
-	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
-	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
-	if n1 && n2 {
-		return 0
-	} else if n1 {
-		return -1
-	} else if n2 {
-		return 1
-	}
-	left := c.vecs[vecIdx1].Get(valIdx1)
-	right := c.vecs[vecIdx2].Get(valIdx2)
-	var cmp int
-	cmp = bytes.Compare(left, right)
-	return cmp
-}
-
-func (c *EnumVecComparator) setVec(idx int, vec coldata.Vec) {
-	c.vecs[idx] = vec.Enum()
-	c.nulls[idx] = vec.Nulls()
-}
-
-func (c *EnumVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
-	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
-		c.nulls[dstVecIdx].SetNull(dstIdx)
-	} else {
-		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		c.vecs[dstVecIdx].Copy(c.vecs[srcVecIdx], dstIdx, srcIdx)
-	}
-}
-
 type DatumVecComparator struct {
 	vecs  []coldata.DatumVec
 	nulls []*coldata.Nulls
@@ -647,15 +611,6 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		default:
 			return &JSONVecComparator{
 				vecs:  make([]*coldata.JSONs, numVecs),
-				nulls: make([]*coldata.Nulls, numVecs),
-			}
-		}
-	case types.EnumFamily:
-		switch t.Width() {
-		case -1:
-		default:
-			return &EnumVecComparator{
-				vecs:  make([]*coldata.Enums, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}

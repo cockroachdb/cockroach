@@ -27092,94 +27092,6 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
-type projEQEnumEnumConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projEQEnumEnumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Enums
-	col = vec.Enum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult == 0
-						}
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult == 0
-						}
-
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult == 0
-					}
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult == 0
-					}
-
-				}
-			}
-		}
-	})
-	return batch
-}
-
 type projEQDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -31190,94 +31102,6 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						projCol[i] = cmpResult != 0
-					}
-
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projNEEnumEnumConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projNEEnumEnumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Enums
-	col = vec.Enum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult != 0
-						}
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult != 0
-						}
-
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult != 0
-					}
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
 						projCol[i] = cmpResult != 0
 					}
 
@@ -35308,94 +35132,6 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
-type projLTEnumEnumConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projLTEnumEnumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Enums
-	col = vec.Enum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult < 0
-						}
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult < 0
-						}
-
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult < 0
-					}
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult < 0
-					}
-
-				}
-			}
-		}
-	})
-	return batch
-}
-
 type projLTDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -39406,94 +39142,6 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
-						projCol[i] = cmpResult <= 0
-					}
-
-				}
-			}
-		}
-	})
-	return batch
-}
-
-type projLEEnumEnumConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projLEEnumEnumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Enums
-	col = vec.Enum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult <= 0
-						}
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult <= 0
-						}
-
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult <= 0
-					}
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
 						projCol[i] = cmpResult <= 0
 					}
 
@@ -43524,94 +43172,6 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
-type projGTEnumEnumConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projGTEnumEnumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Enums
-	col = vec.Enum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult > 0
-						}
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult > 0
-						}
-
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult > 0
-					}
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult > 0
-					}
-
-				}
-			}
-		}
-	})
-	return batch
-}
-
 type projGTDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -47632,94 +47192,6 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 	return batch
 }
 
-type projGEEnumEnumConstOp struct {
-	projConstOpBase
-	constArg []byte
-}
-
-func (p projGEEnumEnumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col *coldata.Enums
-	col = vec.Enum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		projCol := projVec.Bool()
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult >= 0
-						}
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if p.calledOnNullInput || !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						{
-							var cmpResult int
-							cmpResult = bytes.Compare(arg, p.constArg)
-							projCol[i] = cmpResult >= 0
-						}
-
-					}
-				}
-			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult >= 0
-					}
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(arg, p.constArg)
-						projCol[i] = cmpResult >= 0
-					}
-
-				}
-			}
-		}
-	})
-	return batch
-}
-
 type projGEDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
@@ -50499,22 +49971,6 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
-				case types.EnumFamily:
-					switch leftType.Width() {
-					case -1:
-					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-						case types.EnumFamily:
-							switch rightType.Width() {
-							case -1:
-							default:
-								return &projEQEnumEnumConstOp{
-									projConstOpBase: projConstOpBase,
-									constArg:        c.([]byte),
-								}, nil
-							}
-						}
-					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
@@ -50822,22 +50278,6 @@ func GetProjectionRConstOperator(
 								return &projNEJSONJSONConstOp{
 									projConstOpBase: projConstOpBase,
 									constArg:        c.(json.JSON),
-								}, nil
-							}
-						}
-					}
-				case types.EnumFamily:
-					switch leftType.Width() {
-					case -1:
-					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-						case types.EnumFamily:
-							switch rightType.Width() {
-							case -1:
-							default:
-								return &projNEEnumEnumConstOp{
-									projConstOpBase: projConstOpBase,
-									constArg:        c.([]byte),
 								}, nil
 							}
 						}
@@ -51153,22 +50593,6 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
-				case types.EnumFamily:
-					switch leftType.Width() {
-					case -1:
-					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-						case types.EnumFamily:
-							switch rightType.Width() {
-							case -1:
-							default:
-								return &projLTEnumEnumConstOp{
-									projConstOpBase: projConstOpBase,
-									constArg:        c.([]byte),
-								}, nil
-							}
-						}
-					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
@@ -51476,22 +50900,6 @@ func GetProjectionRConstOperator(
 								return &projLEJSONJSONConstOp{
 									projConstOpBase: projConstOpBase,
 									constArg:        c.(json.JSON),
-								}, nil
-							}
-						}
-					}
-				case types.EnumFamily:
-					switch leftType.Width() {
-					case -1:
-					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-						case types.EnumFamily:
-							switch rightType.Width() {
-							case -1:
-							default:
-								return &projLEEnumEnumConstOp{
-									projConstOpBase: projConstOpBase,
-									constArg:        c.([]byte),
 								}, nil
 							}
 						}
@@ -51807,22 +51215,6 @@ func GetProjectionRConstOperator(
 							}
 						}
 					}
-				case types.EnumFamily:
-					switch leftType.Width() {
-					case -1:
-					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-						case types.EnumFamily:
-							switch rightType.Width() {
-							case -1:
-							default:
-								return &projGTEnumEnumConstOp{
-									projConstOpBase: projConstOpBase,
-									constArg:        c.([]byte),
-								}, nil
-							}
-						}
-					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch leftType.Width() {
 					case -1:
@@ -52130,22 +51522,6 @@ func GetProjectionRConstOperator(
 								return &projGEJSONJSONConstOp{
 									projConstOpBase: projConstOpBase,
 									constArg:        c.(json.JSON),
-								}, nil
-							}
-						}
-					}
-				case types.EnumFamily:
-					switch leftType.Width() {
-					case -1:
-					default:
-						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-						case types.EnumFamily:
-							switch rightType.Width() {
-							case -1:
-							default:
-								return &projGEEnumEnumConstOp{
-									projConstOpBase: projConstOpBase,
-									constArg:        c.([]byte),
 								}, nil
 							}
 						}

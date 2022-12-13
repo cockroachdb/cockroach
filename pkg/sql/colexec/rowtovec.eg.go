@@ -170,7 +170,7 @@ func EncDatumRowToColVecs(
 				default:
 
 					v := datum.(*tree.DEnum).PhysicalRep
-					vecs.EnumCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
+					vecs.BytesCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
 				}
 			case types.EncodedKeyFamily:
 				switch t.Width() {

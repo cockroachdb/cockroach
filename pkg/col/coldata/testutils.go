@@ -132,17 +132,6 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					}
 				}
 			}
-		} else if canonicalTypeFamily == types.EnumFamily {
-			expectedEnum := expectedVec.Enum().Window(0, expected.Length())
-			resultEnum := actualVec.Enum().Window(0, actual.Length())
-			require.Equal(t, expectedEnum.Len(), resultEnum.Len())
-			for i := 0; i < expectedEnum.Len(); i++ {
-				if !expectedNulls.NullAt(i) {
-					if !bytes.Equal(expectedEnum.Get(i), resultEnum.Get(i)) {
-						t.Fatalf("enum mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedEnum, resultEnum)
-					}
-				}
-			}
 		} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 			expectedDatum := expectedVec.Datum().Window(0 /* start */, expected.Length())
 			resultDatum := actualVec.Datum().Window(0 /* start */, actual.Length())

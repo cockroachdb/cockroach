@@ -40,7 +40,6 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 	types.TimestampTZFamily:              {types.TimestampTZFamily},
 	types.IntervalFamily:                 {types.IntervalFamily},
 	types.JsonFamily:                     {types.JsonFamily},
-	types.EnumFamily:                     {types.EnumFamily},
 	typeconv.DatumVecCanonicalTypeFamily: {typeconv.DatumVecCanonicalTypeFamily},
 }
 
@@ -343,10 +342,6 @@ if err != nil {
 }
 `, targetElem, leftElem, rightElem)
 	}
-}
-
-func (c enumCustomizer) getCmpOpCompareFunc() compareFunc {
-	return c.wrapped.getCmpOpCompareFunc()
 }
 
 // getDatumVecVariableName returns the variable name for a datumVec given

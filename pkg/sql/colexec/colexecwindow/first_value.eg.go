@@ -118,13 +118,6 @@ func NewFirstValueOperator(
 			windower := &firstValueJSONWindow{firstValueBase: base}
 			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
-	case types.EnumFamily:
-		switch argType.Width() {
-		case -1:
-		default:
-			windower := &firstValueEnumWindow{firstValueBase: base}
-			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
-		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
@@ -515,41 +508,6 @@ func (w *firstValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endId
 			continue
 		}
 		col := vec.JSON()
-		outputCol.Copy(col, i, idx)
-	}
-}
-
-type firstValueEnumWindow struct {
-	firstValueBase
-}
-
-var _ bufferedWindower = &firstValueEnumWindow{}
-
-// processBatch implements the bufferedWindower interface.
-func (w *firstValueEnumWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
-	if startIdx >= endIdx {
-		// No processing needs to be done for this portion of the current partition.
-		return
-	}
-	outputVec := batch.ColVec(w.outputColIdx)
-	outputCol := outputVec.Enum()
-	outputNulls := outputVec.Nulls()
-
-	for i := startIdx; i < endIdx; i++ {
-		w.framer.next(w.Ctx)
-		requestedIdx := w.framer.frameFirstIdx()
-		if requestedIdx == -1 {
-			// The requested row does not exist.
-			outputNulls.SetNull(i)
-			continue
-		}
-
-		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, w.bufferArgIdx, requestedIdx)
-		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
-			outputNulls.SetNull(i)
-			continue
-		}
-		col := vec.Enum()
 		outputCol.Copy(col, i, idx)
 	}
 }

@@ -67,9 +67,10 @@ func isIdentityCast(fromType, toType *types.T) bool {
 		// by float64 physically.
 		return true
 	}
-	if fromType.Family() == types.UuidFamily && toType.Family() == types.BytesFamily {
-		// The cast from UUID to Bytes is an identity because we don't need to
-		// perform any conversion since both are represented in the same way.
+	if toType.Family() == types.BytesFamily && (fromType.Family() == types.UuidFamily || fromType.Family() == types.EnumFamily) {
+		// The casts from UUID or enum to Bytes is an identity because we don't
+		// need to perform any conversion since both are represented in the same
+		// way.
 		return true
 	}
 	return false
@@ -229,12 +230,6 @@ func GetCastOperator(
 			case -1:
 			default:
 				switch toType.Family() {
-				case types.EnumFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return &castBytesEnumOp{castOpBase: base}, nil
-					}
 				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
@@ -770,12 +765,6 @@ func IsCastSupported(fromType, toType *types.T) bool {
 			case -1:
 			default:
 				switch toType.Family() {
-				case types.EnumFamily:
-					switch toType.Width() {
-					case -1:
-					default:
-						return true
-					}
 				case types.StringFamily:
 					switch toType.Width() {
 					case -1:
@@ -2248,126 +2237,6 @@ func (c *castBoolStringOp) Next() coldata.Batch {
 									pgerror.Newf(pgcode.StringDataRightTruncation, "value too long for type "+_typeString))
 							}
 
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			}
-		},
-	)
-	return batch
-}
-
-type castBytesEnumOp struct {
-	castOpBase
-}
-
-var _ colexecop.ResettableOperator = &castBytesEnumOp{}
-var _ colexecop.ClosableOperator = &castBytesEnumOp{}
-
-func (c *castBytesEnumOp) Next() coldata.Batch {
-	batch := c.Input.Next()
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	sel := batch.Selection()
-	inputVec := batch.ColVec(c.colIdx)
-	outputVec := batch.ColVec(c.outputIdx)
-	toType := outputVec.Type()
-	// Remove unused warnings.
-	_ = toType
-	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Bytes()
-			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Enum()
-			outputNulls := outputVec.Nulls()
-			if inputVec.MaybeHasNulls() {
-				outputNulls.Copy(inputNulls)
-				if sel != nil {
-					{
-						var (
-							evalCtx *eval.Context = c.evalCtx
-							buf     *bytes.Buffer = &c.buf
-						)
-						// Silence unused warnings.
-						_ = evalCtx
-						_ = buf
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-							r = v
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var (
-							evalCtx *eval.Context = c.evalCtx
-							buf     *bytes.Buffer = &c.buf
-						)
-						// Silence unused warnings.
-						_ = evalCtx
-						_ = buf
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if true && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-							r = v
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					{
-						var (
-							evalCtx *eval.Context = c.evalCtx
-							buf     *bytes.Buffer = &c.buf
-						)
-						// Silence unused warnings.
-						_ = evalCtx
-						_ = buf
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = sel[i]
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-							r = v
-							outputCol.Set(tupleIdx, r)
-						}
-					}
-				} else {
-					{
-						var (
-							evalCtx *eval.Context = c.evalCtx
-							buf     *bytes.Buffer = &c.buf
-						)
-						// Silence unused warnings.
-						_ = evalCtx
-						_ = buf
-						var tupleIdx int
-						for i := 0; i < n; i++ {
-							tupleIdx = i
-							if false && inputNulls.NullAt(tupleIdx) {
-								continue
-							}
-							v := inputCol.Get(tupleIdx)
-							var r []byte
-							r = v
 							outputCol.Set(tupleIdx, r)
 						}
 					}
@@ -4956,7 +4825,7 @@ func (c *castEnumStringOp) Next() coldata.Batch {
 	_ = toType
 	c.allocator.PerformOperation(
 		[]coldata.Vec{outputVec}, func() {
-			inputCol := inputVec.Enum()
+			inputCol := inputVec.Bytes()
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
@@ -10174,7 +10043,7 @@ func (c *castStringEnumOp) Next() coldata.Batch {
 		[]coldata.Vec{outputVec}, func() {
 			inputCol := inputVec.Bytes()
 			inputNulls := inputVec.Nulls()
-			outputCol := outputVec.Enum()
+			outputCol := outputVec.Bytes()
 			outputNulls := outputVec.Nulls()
 			if inputVec.MaybeHasNulls() {
 				outputNulls.Copy(inputNulls)

@@ -681,7 +681,7 @@ func ColVecToDatumAndDeselect(
 				switch ct.Width() {
 				case -1:
 				default:
-					typedCol := col.Enum()
+					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
 						{
 							destIdx = idx
@@ -1075,7 +1075,7 @@ func ColVecToDatumAndDeselect(
 				switch ct.Width() {
 				case -1:
 				default:
-					typedCol := col.Enum()
+					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
 						{
 							destIdx = idx
@@ -1537,7 +1537,7 @@ func ColVecToDatum(
 					switch ct.Width() {
 					case -1:
 					default:
-						typedCol := col.Enum()
+						typedCol := col.Bytes()
 						for idx = 0; idx < length; idx++ {
 							{
 								//gcassert:bce
@@ -2012,7 +2012,7 @@ func ColVecToDatum(
 					switch ct.Width() {
 					case -1:
 					default:
-						typedCol := col.Enum()
+						typedCol := col.Bytes()
 						for idx = 0; idx < length; idx++ {
 							{
 								destIdx = idx
@@ -2405,7 +2405,7 @@ func ColVecToDatum(
 					switch ct.Width() {
 					case -1:
 					default:
-						typedCol := col.Enum()
+						typedCol := col.Bytes()
 						for idx = 0; idx < length; idx++ {
 							{
 								//gcassert:bce
@@ -2792,7 +2792,7 @@ func ColVecToDatum(
 					switch ct.Width() {
 					case -1:
 					default:
-						typedCol := col.Enum()
+						typedCol := col.Bytes()
 						for idx = 0; idx < length; idx++ {
 							{
 								destIdx = idx

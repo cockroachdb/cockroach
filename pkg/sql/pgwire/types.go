@@ -357,7 +357,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 
 	case types.EnumFamily:
 		// Enums are serialized with their logical representation.
-		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(typ, vecs.EnumCols[colIdx].Get(rowIdx))
+		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(typ, vecs.BytesCols[colIdx].Get(rowIdx))
 		if err != nil {
 			b.setError(err)
 		} else {
@@ -853,7 +853,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		writeBinaryJSON(b, vecs.JSONCols[colIdx].Get(rowIdx), typ)
 
 	case types.EnumFamily:
-		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(typ, vecs.EnumCols[colIdx].Get(rowIdx))
+		_, logical, err := tree.GetEnumComponentsFromPhysicalRep(typ, vecs.BytesCols[colIdx].Get(rowIdx))
 		if err != nil {
 			b.setError(err)
 		} else {

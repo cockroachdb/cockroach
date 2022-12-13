@@ -60,8 +60,6 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 		return sizeOfDecimals(vec.Decimal(), 0 /* startIdx */)
 	case types.JsonFamily:
 		return vec.JSON().Size()
-	case types.EnumFamily:
-		return vec.Enum().Size()
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return vec.Datum().Size(0 /* startIdx */)
 	}
@@ -108,7 +106,7 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 	}
 	for _, vec := range b.ColVecs() {
 		switch vec.CanonicalTypeFamily() {
-		case types.BytesFamily, types.JsonFamily, types.EnumFamily:
+		case types.BytesFamily, types.JsonFamily:
 			proportionalBatchMemSize += coldata.ProportionalSize(vec, length)
 		default:
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
@@ -593,7 +591,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	numBytesVectors := 0
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-		case types.BytesFamily, types.JsonFamily, types.EnumFamily:
+		case types.BytesFamily, types.JsonFamily:
 			numBytesVectors++
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
@@ -864,7 +862,7 @@ func (h *SetAccountingHelper) Init(allocator *Allocator, memoryLimit int64, typs
 
 	for vecIdx, typ := range typs {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
-		case types.BytesFamily, types.JsonFamily, types.EnumFamily:
+		case types.BytesFamily, types.JsonFamily:
 			h.bytesLikeVecIdxs.Add(vecIdx)
 		case types.DecimalFamily:
 			h.decimalVecIdxs.Add(vecIdx)
@@ -917,8 +915,6 @@ func (h *SetAccountingHelper) ResetMaybeReallocate(
 					h.bytesLikeVectors = append(h.bytesLikeVectors, vecs[vecIdx].Bytes())
 				case types.JsonFamily:
 					h.bytesLikeVectors = append(h.bytesLikeVectors, &vecs[vecIdx].JSON().Bytes)
-				case types.EnumFamily:
-					h.bytesLikeVectors = append(h.bytesLikeVectors, &vecs[vecIdx].Enum().Bytes)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected bytes-like type: %s", typs[vecIdx].SQLString()))
 				}

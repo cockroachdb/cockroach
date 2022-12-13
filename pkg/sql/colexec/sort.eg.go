@@ -93,12 +93,6 @@ func newSingleSorterWithNulls(t *types.T, dir execinfrapb.Ordering_Column_Direct
 			default:
 				return &sortJSONAscWithNullsOp{}
 			}
-		case types.EnumFamily:
-			switch t.Width() {
-			case -1:
-			default:
-				return &sortEnumAscWithNullsOp{}
-			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
@@ -159,12 +153,6 @@ func newSingleSorterWithNulls(t *types.T, dir execinfrapb.Ordering_Column_Direct
 			case -1:
 			default:
 				return &sortJSONDescWithNullsOp{}
-			}
-		case types.EnumFamily:
-			switch t.Width() {
-			case -1:
-			default:
-				return &sortEnumDescWithNullsOp{}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
@@ -235,12 +223,6 @@ func newSingleSorterWithoutNulls(t *types.T, dir execinfrapb.Ordering_Column_Dir
 			default:
 				return &sortJSONAscOp{}
 			}
-		case types.EnumFamily:
-			switch t.Width() {
-			case -1:
-			default:
-				return &sortEnumAscOp{}
-			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
@@ -301,12 +283,6 @@ func newSingleSorterWithoutNulls(t *types.T, dir execinfrapb.Ordering_Column_Dir
 			case -1:
 			default:
 				return &sortJSONDescOp{}
-			}
-		case types.EnumFamily:
-			switch t.Width() {
-			case -1:
-			default:
-				return &sortEnumDescOp{}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
@@ -1178,83 +1154,6 @@ func (s *sortJSONAscWithNullsOp) Swap(i, j int) {
 }
 
 func (s *sortJSONAscWithNullsOp) Len() int {
-	return len(s.order)
-}
-
-type sortEnumAscWithNullsOp struct {
-	nulls         *coldata.Nulls
-	cancelChecker colexecutils.CancelChecker
-	sortCol       *coldata.Enums
-	order         []int
-}
-
-func (s *sortEnumAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
-) {
-	s.sortCol = col.Enum()
-	s.nulls = col.Nulls()
-	s.order = order
-	s.cancelChecker.Init(ctx)
-}
-
-func (s *sortEnumAscWithNullsOp) reset() {
-	s.sortCol = nil
-	s.nulls = nil
-	s.order = nil
-}
-
-func (s *sortEnumAscWithNullsOp) sort() {
-	n := s.sortCol.Len()
-	s.pdqsort(0, n, bits.Len(uint(n)))
-}
-
-func (s *sortEnumAscWithNullsOp) sortPartitions(partitions []int) {
-	order := s.order
-	for i, partitionStart := range partitions {
-		var partitionEnd int
-		if i == len(partitions)-1 {
-			partitionEnd = len(order)
-		} else {
-			partitionEnd = partitions[i+1]
-		}
-		s.order = order[partitionStart:partitionEnd]
-		n := partitionEnd - partitionStart
-		s.pdqsort(0, n, bits.Len(uint(n)))
-	}
-}
-
-func (s *sortEnumAscWithNullsOp) Less(i, j int) bool {
-	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
-	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
-	// If ascending, nulls always sort first, so we encode that logic here.
-	if n1 && n2 {
-		return false
-	} else if n1 {
-		return true
-	} else if n2 {
-		return false
-	}
-
-	var lt bool
-	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(arg1, arg2)
-		lt = cmpResult < 0
-	}
-
-	return lt
-}
-
-func (s *sortEnumAscWithNullsOp) Swap(i, j int) {
-	// We don't physically swap the column - we merely edit the order vector.
-	s.order[i], s.order[j] = s.order[j], s.order[i]
-}
-
-func (s *sortEnumAscWithNullsOp) Len() int {
 	return len(s.order)
 }
 
@@ -2197,83 +2096,6 @@ func (s *sortJSONDescWithNullsOp) Len() int {
 	return len(s.order)
 }
 
-type sortEnumDescWithNullsOp struct {
-	nulls         *coldata.Nulls
-	cancelChecker colexecutils.CancelChecker
-	sortCol       *coldata.Enums
-	order         []int
-}
-
-func (s *sortEnumDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
-) {
-	s.sortCol = col.Enum()
-	s.nulls = col.Nulls()
-	s.order = order
-	s.cancelChecker.Init(ctx)
-}
-
-func (s *sortEnumDescWithNullsOp) reset() {
-	s.sortCol = nil
-	s.nulls = nil
-	s.order = nil
-}
-
-func (s *sortEnumDescWithNullsOp) sort() {
-	n := s.sortCol.Len()
-	s.pdqsort(0, n, bits.Len(uint(n)))
-}
-
-func (s *sortEnumDescWithNullsOp) sortPartitions(partitions []int) {
-	order := s.order
-	for i, partitionStart := range partitions {
-		var partitionEnd int
-		if i == len(partitions)-1 {
-			partitionEnd = len(order)
-		} else {
-			partitionEnd = partitions[i+1]
-		}
-		s.order = order[partitionStart:partitionEnd]
-		n := partitionEnd - partitionStart
-		s.pdqsort(0, n, bits.Len(uint(n)))
-	}
-}
-
-func (s *sortEnumDescWithNullsOp) Less(i, j int) bool {
-	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
-	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
-	// If descending, nulls always sort last, so we encode that logic here.
-	if n1 && n2 {
-		return false
-	} else if n1 {
-		return false
-	} else if n2 {
-		return true
-	}
-
-	var lt bool
-	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(arg1, arg2)
-		lt = cmpResult > 0
-	}
-
-	return lt
-}
-
-func (s *sortEnumDescWithNullsOp) Swap(i, j int) {
-	// We don't physically swap the column - we merely edit the order vector.
-	s.order[i], s.order[j] = s.order[j], s.order[i]
-}
-
-func (s *sortEnumDescWithNullsOp) Len() int {
-	return len(s.order)
-}
-
 type sortDatumDescWithNullsOp struct {
 	nulls         *coldata.Nulls
 	cancelChecker colexecutils.CancelChecker
@@ -3116,73 +2938,6 @@ func (s *sortJSONAscOp) Len() int {
 	return len(s.order)
 }
 
-type sortEnumAscOp struct {
-	nulls         *coldata.Nulls
-	cancelChecker colexecutils.CancelChecker
-	sortCol       *coldata.Enums
-	order         []int
-}
-
-func (s *sortEnumAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
-) {
-	s.sortCol = col.Enum()
-	s.nulls = col.Nulls()
-	s.order = order
-	s.cancelChecker.Init(ctx)
-}
-
-func (s *sortEnumAscOp) reset() {
-	s.sortCol = nil
-	s.nulls = nil
-	s.order = nil
-}
-
-func (s *sortEnumAscOp) sort() {
-	n := s.sortCol.Len()
-	s.pdqsort(0, n, bits.Len(uint(n)))
-}
-
-func (s *sortEnumAscOp) sortPartitions(partitions []int) {
-	order := s.order
-	for i, partitionStart := range partitions {
-		var partitionEnd int
-		if i == len(partitions)-1 {
-			partitionEnd = len(order)
-		} else {
-			partitionEnd = partitions[i+1]
-		}
-		s.order = order[partitionStart:partitionEnd]
-		n := partitionEnd - partitionStart
-		s.pdqsort(0, n, bits.Len(uint(n)))
-	}
-}
-
-func (s *sortEnumAscOp) Less(i, j int) bool {
-
-	var lt bool
-	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(arg1, arg2)
-		lt = cmpResult < 0
-	}
-
-	return lt
-}
-
-func (s *sortEnumAscOp) Swap(i, j int) {
-	// We don't physically swap the column - we merely edit the order vector.
-	s.order[i], s.order[j] = s.order[j], s.order[i]
-}
-
-func (s *sortEnumAscOp) Len() int {
-	return len(s.order)
-}
-
 type sortDatumAscOp struct {
 	nulls         *coldata.Nulls
 	cancelChecker colexecutils.CancelChecker
@@ -4012,73 +3767,6 @@ func (s *sortJSONDescOp) Swap(i, j int) {
 }
 
 func (s *sortJSONDescOp) Len() int {
-	return len(s.order)
-}
-
-type sortEnumDescOp struct {
-	nulls         *coldata.Nulls
-	cancelChecker colexecutils.CancelChecker
-	sortCol       *coldata.Enums
-	order         []int
-}
-
-func (s *sortEnumDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
-) {
-	s.sortCol = col.Enum()
-	s.nulls = col.Nulls()
-	s.order = order
-	s.cancelChecker.Init(ctx)
-}
-
-func (s *sortEnumDescOp) reset() {
-	s.sortCol = nil
-	s.nulls = nil
-	s.order = nil
-}
-
-func (s *sortEnumDescOp) sort() {
-	n := s.sortCol.Len()
-	s.pdqsort(0, n, bits.Len(uint(n)))
-}
-
-func (s *sortEnumDescOp) sortPartitions(partitions []int) {
-	order := s.order
-	for i, partitionStart := range partitions {
-		var partitionEnd int
-		if i == len(partitions)-1 {
-			partitionEnd = len(order)
-		} else {
-			partitionEnd = partitions[i+1]
-		}
-		s.order = order[partitionStart:partitionEnd]
-		n := partitionEnd - partitionStart
-		s.pdqsort(0, n, bits.Len(uint(n)))
-	}
-}
-
-func (s *sortEnumDescOp) Less(i, j int) bool {
-
-	var lt bool
-	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i])
-	arg2 := s.sortCol.Get(s.order[j])
-
-	{
-		var cmpResult int
-		cmpResult = bytes.Compare(arg1, arg2)
-		lt = cmpResult > 0
-	}
-
-	return lt
-}
-
-func (s *sortEnumDescOp) Swap(i, j int) {
-	// We don't physically swap the column - we merely edit the order vector.
-	s.order[i], s.order[j] = s.order[j], s.order[i]
-}
-
-func (s *sortEnumDescOp) Len() int {
 	return len(s.order)
 }
 

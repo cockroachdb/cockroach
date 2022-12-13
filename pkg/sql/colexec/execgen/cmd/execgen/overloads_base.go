@@ -236,7 +236,7 @@ func newArgWidthOverloadBase(
 
 func (b *argWidthOverloadBase) IsBytesLike() bool {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, types.EnumFamily:
+	case types.BytesFamily, types.JsonFamily:
 		return true
 	}
 	return false
@@ -447,8 +447,6 @@ func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
 		return "coldata.Float64s"
 	case types.TimestampTZFamily:
 		return "coldata.Times"
-	case types.EnumFamily:
-		return "*coldata.Enums"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "coldata.DatumVec"
 	}
@@ -469,7 +467,7 @@ func (b *argWidthOverloadBase) GoTypeSliceNameInColdata() string {
 
 func copyVal(canonicalTypeFamily types.Family, dest, src string) string {
 	switch canonicalTypeFamily {
-	case types.BytesFamily, types.EnumFamily:
+	case types.BytesFamily:
 		return fmt.Sprintf("%[1]s = append(%[1]s[:0], %[2]s...)", dest, src)
 	case types.JsonFamily:
 		return fmt.Sprintf(`
@@ -499,7 +497,7 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 // (i.e. whether it is a Golang's slice).
 func sliceable(canonicalTypeFamily types.Family) bool {
 	switch canonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, types.EnumFamily, typeconv.DatumVecCanonicalTypeFamily:
+	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return false
 	default:
 		return true
@@ -517,7 +515,7 @@ func (b *argWidthOverloadBase) AppendSlice(
 ) string {
 	var tmpl string
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, types.EnumFamily, typeconv.DatumVecCanonicalTypeFamily:
+	case types.BytesFamily, types.JsonFamily, typeconv.DatumVecCanonicalTypeFamily:
 		tmpl = `{{.Tgt}}.AppendSlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
 	case types.DecimalFamily:
 		tmpl = `{
@@ -562,7 +560,7 @@ func (b *argWidthOverloadBase) AppendSlice(
 // AppendVal is a function that should only be used in templates.
 func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily, types.EnumFamily:
+	case types.BytesFamily, types.JsonFamily:
 		colexecerror.InternalError(errors.AssertionFailedf("AppendVal should not be called on Bytes vector"))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
@@ -580,7 +578,7 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 // variable). The value object must be of canonicalTypeFamily representation.
 func setVariableSize(canonicalTypeFamily types.Family, target, value string) string {
 	switch canonicalTypeFamily {
-	case types.BytesFamily, types.EnumFamily:
+	case types.BytesFamily:
 		return fmt.Sprintf(`%s := len(%s)`, target, value)
 	case types.JsonFamily:
 		return fmt.Sprintf(`var %[1]s uintptr
@@ -709,14 +707,6 @@ type intervalCustomizer struct{}
 // jsonCustomizer is necessary since json.JSON doesn't have infix operators.
 type jsonCustomizer struct{}
 
-// enumCustomizer is necessary since []byte doesn't support comparison ops in
-// Go - bytes.Compare and so on have to be used.
-type enumCustomizer struct {
-	// We delegate the implementations of compare and hash methods to the bytes
-	// customizer but want to disallow all binary operations.
-	wrapped bytesCustomizer
-}
-
 // timestampIntervalCustomizer supports mixed type expression with a timestamp
 // left-hand side and an interval right-hand side.
 type timestampIntervalCustomizer struct{}
@@ -786,7 +776,6 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}, timestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}, intervalCustomizer{})
 	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}, jsonCustomizer{})
-	registerTypeCustomizer(typePair{types.EnumFamily, anyWidth, types.EnumFamily, anyWidth}, enumCustomizer{})
 	registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCustomizer{})
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -839,7 +828,6 @@ var supportedCanonicalTypeFamilies = []types.Family{
 	types.TimestampTZFamily,
 	types.IntervalFamily,
 	types.JsonFamily,
-	types.EnumFamily,
 	typeconv.DatumVecCanonicalTypeFamily,
 }
 
@@ -862,7 +850,6 @@ var supportedWidthsByCanonicalTypeFamily = map[types.Family][]int32{
 	types.TimestampTZFamily:              {anyWidth},
 	types.IntervalFamily:                 {anyWidth},
 	types.JsonFamily:                     {anyWidth},
-	types.EnumFamily:                     {anyWidth},
 	typeconv.DatumVecCanonicalTypeFamily: {anyWidth},
 }
 
@@ -897,8 +884,6 @@ func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
 		return "Interval"
 	case types.JsonFamily:
 		return "JSON"
-	case types.EnumFamily:
-		return "Enum"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "Datum"
 	default:
@@ -938,8 +923,6 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 		return "duration.Duration"
 	case types.JsonFamily:
 		return "json.JSON"
-	case types.EnumFamily:
-		return "[]byte"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		// This is somewhat unfortunate, but we can neither use coldata.Datum
 		// nor tree.Datum because we have generated files living in two
