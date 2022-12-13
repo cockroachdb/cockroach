@@ -171,12 +171,18 @@ func matchFullUnacceptableKeyQuery(
 // WHERE t.a IS NULL
 // LIMIT 1  -- if limitResults is set
 //
+// It is possible to force FK validation query to perform against a particular
+// index, as specified in `indexIDForValidation` when it's non zero. This is necessary
+// if we are validating a FK constraint on a primary index that's being added (e.g.
+// `ADD COLUMN ... REFERENCES other_table(...)`).
+//
 // TODO(radu): change this to a query which executes as an anti-join when we
 // remove the heuristic planner.
 func nonMatchingRowQuery(
 	srcTbl catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	targetTbl catalog.TableDescriptor,
+	indexIDForValidation descpb.IndexID,
 	limitResults bool,
 ) (sql string, originColNames []string, _ error) {
 	originColNames, err := srcTbl.NamesForColumnIDs(fk.OriginColumnIDs)
@@ -229,7 +235,7 @@ func nonMatchingRowQuery(
 	if limitResults {
 		limit = " LIMIT 1"
 	}
-	return fmt.Sprintf(
+	query := fmt.Sprintf(
 		`SELECT %[1]s FROM 
 		  (SELECT %[2]s FROM [%[3]d AS src]@{IGNORE_FOREIGN_KEYS} WHERE %[4]s) AS s
 			LEFT OUTER JOIN
@@ -245,7 +251,28 @@ func nonMatchingRowQuery(
 		// Sufficient to check the first column to see whether there was no matching row
 		targetCols[0], // 7
 		limit,         // 8
-	), originColNames, nil
+	)
+	if indexIDForValidation != 0 {
+		query = fmt.Sprintf(
+			`SELECT %[1]s FROM 
+		  (SELECT %[2]s FROM [%[3]d AS src]@{IGNORE_FOREIGN_KEYS, FORCE_INDEX=[%[4]d]} WHERE %[5]s) AS s
+			LEFT OUTER JOIN
+			[%[6]d AS target] AS t
+			ON %[7]s
+		 WHERE %[8]s IS NULL %[9]s`,
+			strings.Join(qualifiedSrcCols, ", "), // 1
+			strings.Join(srcCols, ", "),          // 2
+			srcTbl.GetID(),                       // 3
+			indexIDForValidation,                 // 4
+			strings.Join(srcWhere, " AND "),      // 5
+			targetTbl.GetID(),                    // 6
+			strings.Join(on, " AND "),            // 7
+			// Sufficient to check the first column to see whether there was no matching row
+			targetCols[0], // 8
+			limit,         // 9
+		)
+	}
+	return query, originColNames, nil
 }
 
 // validateForeignKey verifies that all the rows in the srcTable
@@ -258,8 +285,9 @@ func validateForeignKey(
 	srcTable *tabledesc.Mutable,
 	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
-	ie sqlutil.InternalExecutor,
+	indexIDForValidation descpb.IndexID,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	nCols := len(fk.OriginColumnIDs)
 
@@ -299,10 +327,7 @@ func validateForeignKey(
 			), fk.Name)
 		}
 	}
-	query, colNames, err := nonMatchingRowQuery(
-		srcTable, fk, targetTable,
-		true, /* limitResults */
-	)
+	query, colNames, err := nonMatchingRowQuery(srcTable, fk, targetTable, indexIDForValidation, true /* limitResults */)
 	if err != nil {
 		return err
 	}

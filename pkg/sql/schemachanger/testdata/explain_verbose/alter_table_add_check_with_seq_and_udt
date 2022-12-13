@@ -88,7 +88,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
     │   │
     │   └── • 1 Validation operation
     │       │
-    │       └── • ValidateCheckConstraint
+    │       └── • ValidateConstraint
     │             ConstraintID: 2
     │             TableID: 107
     │
