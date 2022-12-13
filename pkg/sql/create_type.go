@@ -439,6 +439,7 @@ func CreateCompositeTypeDesc(
 		params.SessionData().User(),
 		privilege.Types,
 		dbDesc.GetPrivileges(),
+		1,
 	)
 
 	return typedesc.NewBuilder(&descpb.TypeDescriptor{
