@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -225,6 +226,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 				ParentID: parentID,
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 	}
 	makeTableGCJobRecord := func(dropTime int64, id descpb.ID) jobs.Record {
@@ -238,6 +240,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 	}
 
@@ -530,6 +533,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.RootUserName(),
 		}
 
 		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenID)})
@@ -559,6 +563,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.RootUserName(),
 		}
 
 		// Protect after drop time, so it should not block GC.
@@ -624,6 +629,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 					},
 				},
 				Progress: jobspb.SchemaChangeGCProgress{},
+				Username: username.RootUserName(),
 			}
 
 			clusterTarget := ptpb.MakeClusterTarget()

@@ -344,6 +344,7 @@ func TestBatchJobsCreation(t *testing.T) {
 						JobID:    r.MakeJobID(),
 						Details:  jobspb.ImportDetails{},
 						Progress: jobspb.ImportProgress{},
+						Username: username.RootUserName(),
 					})
 				}
 				// Create jobs in a batch.
@@ -391,6 +392,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			_, err := r.CreateJobWithTxn(ctx, Record{
 				Details:  jobspb.ImportDetails{},
 				Progress: jobspb.ImportProgress{},
+				Username: username.TestUserName(),
 			}, jobID, txn)
 			return err
 		}))
@@ -815,6 +817,7 @@ func TestExponentialBackoffSettings(t *testing.T) {
 					// ImportDetails.
 					Details:  jobspb.ImportDetails{},
 					Progress: jobspb.ImportProgress{},
+					Username: username.TestUserName(),
 				}, id, txn)
 				return err
 			}))
@@ -1037,6 +1040,7 @@ func TestJobIdleness(t *testing.T) {
 			_, err := r.CreateJobWithTxn(ctx, Record{
 				Details:  jobspb.ImportDetails{},
 				Progress: jobspb.ImportProgress{},
+				Username: username.TestUserName(),
 			}, jobID, txn)
 			return err
 		}))

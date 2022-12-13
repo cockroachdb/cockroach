@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -151,6 +152,23 @@ func (sr *SQLRunner) ExpectErr(t Fataler, errRE string, query string, args ...in
 			s = pgerror.FullError(err)
 		}
 		t.Fatalf("expected error '%s', got: %s", errRE, s)
+	}
+}
+
+// ExpectErrWithHint runs the given statement and verifies that it returns an error
+// with a hint matching the expected hint.
+func (sr *SQLRunner) ExpectErrWithHint(t Fataler, hint string, query string, args ...interface{}) {
+	helperOrNoop(t)()
+	_, err := sr.DB.ExecContext(context.Background(), query, args...)
+	if err == nil {
+		t.Fatalf("expected error with hint '%s', but got error 'nil'", hint)
+	}
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		if pqErr.Hint != hint {
+			t.Fatalf("expected error with hint '%s', but got error with hint '%s'", hint, pqErr.Hint)
+		}
+	} else {
+		t.Fatalf("could not parse pq error")
 	}
 }
 

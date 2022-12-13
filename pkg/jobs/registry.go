@@ -302,12 +302,16 @@ func (r *Registry) newJob(ctx context.Context, record Record) *Job {
 
 // makePayload creates a Payload structure based on the given Record.
 func (r *Registry) makePayload(ctx context.Context, record *Record) jobspb.Payload {
+	details := jobspb.WrapPayloadDetails(record.Details)
+	if record.Username.Undefined() {
+		panic("job record missing username")
+	}
 	return jobspb.Payload{
 		Description:            record.Description,
 		Statement:              record.Statements,
 		UsernameProto:          record.Username.EncodeProto(),
 		DescriptorIDs:          record.DescriptorIDs,
-		Details:                jobspb.WrapPayloadDetails(record.Details),
+		Details:                details,
 		Noncancelable:          record.NonCancelable,
 		CreationClusterVersion: r.settings.Version.ActiveVersion(ctx).Version,
 		CreationClusterID:      r.clusterID.Get(),
