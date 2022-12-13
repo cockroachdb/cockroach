@@ -3959,8 +3959,8 @@ var pgCatalogReplicationSlotsTable = virtualSchemaTable{
 				tree.NewDString(slotName),
 				tree.NewDString("test_decoding"),
 				tree.NewDString("logical"),
-				dbOid(d.GetID()),             // wrong but whatever.
-				tree.NewDString(d.GetName()), // wrong but whatever.
+				dbOid(d.GetID()), // wrong but whatever.
+				tree.NewDString(info.Database()),
 				tree.DBoolFalse,
 				tree.DBoolTrue,
 				tree.DNull,

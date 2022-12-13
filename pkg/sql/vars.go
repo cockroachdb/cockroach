@@ -275,6 +275,11 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 	`server_encoding`: makeReadOnlyVar("UTF8"),
 
+	`max_replication_slots`: makeReadOnlyVar("20"),
+	`max_wal_senders`:       makeReadOnlyVar("25"),
+	`wal_level`:             makeReadOnlyVar("logical"),
+	`wal_sender_timeout`:    makeReadOnlyVar("30000"),
+
 	// CockroachDB extension.
 	`database`: {
 		GetStringVal: func(

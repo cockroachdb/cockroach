@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 type Item struct {
@@ -19,6 +20,8 @@ var ReplicationSlots = make(map[string]replicationSlotLooker)
 type replicationSlotLooker interface {
 	NextTxn(consume bool) []Item
 	LSN() uint64
+	SetDatabase(s string)
+	Database() string
 }
 
 func FormatLSN(lsn uint64) string {
@@ -36,10 +39,10 @@ func ParseLSN(s string) uint64 {
 	}
 
 	if nparsed != 2 {
-		panic(err)
+		panic(errors.AssertionFailedf("need 2 args"))
 	}
 
-	return uint64((upperHalf << 32) + lowerHalf)
+	return (upperHalf << 32) + lowerHalf
 }
 
 // Hacking for now. This should probably be changed to use avroDataRecord

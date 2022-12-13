@@ -1544,9 +1544,13 @@ func (c *conn) WriteReplKeepAlive(pos sql.CmdPos, lsn uint64) error {
 	binary.BigEndian.PutUint64(buf, lsn)
 	c.msgBuilder.write(buf) // wal
 	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
-	c.msgBuilder.Write(buf) // serverTime
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // serverTime
 	c.msgBuilder.writeByte(0)
-	c.msgBuilder.finishMsg(&c.writerState.buf)
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		return err
+	}
 	return c.Flush(pos)
 }
 
@@ -1556,14 +1560,19 @@ func (c *conn) WriteBegin(pos sql.CmdPos, lsn uint64, xid int64) error {
 	c.msgBuilder.writeByte('w')
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, lsn)
-	c.msgBuilder.Write(buf) // walStart
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // walStart
 	binary.BigEndian.PutUint64(buf, lsn)
-	c.msgBuilder.Write(buf) // walEnd
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // walEnd
 	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
-	c.msgBuilder.Write(buf) // serverTime
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // serverTime
 	c.msgBuilder.writeString(fmt.Sprintf("BEGIN %d", xid))
-	c.msgBuilder.finishMsg(&c.writerState.buf)
-	return nil
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
 const timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
@@ -1574,16 +1583,21 @@ func (c *conn) WriteCommit(pos sql.CmdPos, lsn uint64, xid int64, mvcc hlc.Times
 	c.msgBuilder.writeByte('w')
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, lsn)
-	c.msgBuilder.Write(buf) // walStart
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // walStart
 	binary.BigEndian.PutUint64(buf, lsn)
-	c.msgBuilder.Write(buf) // walEnd
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // walEnd
 	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
-	c.msgBuilder.Write(buf) // serverTime
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // serverTime
 	// https://github.com/postgres/postgres/blob/master/contrib/test_decoding/test_decoding.c#L340-L342
 	str := fmt.Sprintf("COMMIT %d (at %s)", xid, time.Unix(0, hlc.UnixNano()).Format(timestampTZOutputFormat))
 	c.msgBuilder.writeString(str)
-	c.msgBuilder.finishMsg(&c.writerState.buf)
-	return nil
+	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
 func (c *conn) WriteCopyBothFormat(pos sql.CmdPos) error {
@@ -1593,7 +1607,9 @@ func (c *conn) WriteCopyBothFormat(pos sql.CmdPos) error {
 	// sourceformatcodes
 	c.msgBuilder.writeByte(0)
 	c.msgBuilder.writeByte(0)
-	c.msgBuilder.finishMsg(&c.writerState.buf)
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		return err
+	}
 	return c.Flush(pos)
 }
 
@@ -1603,12 +1619,20 @@ func (c *conn) WriteReplData(item replicationslot.Item) error {
 	c.msgBuilder.writeByte('w')
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, item.LSN)
-	c.msgBuilder.Write(buf) // walStart
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // walStart
 	binary.BigEndian.PutUint64(buf, item.LSN)
-	c.msgBuilder.Write(buf) // walEnd
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // walEnd
 	binary.BigEndian.PutUint64(buf, uint64(timeutil.Now().Unix()))
-	c.msgBuilder.Write(buf) // serverTime
-	c.msgBuilder.Write([]byte(replicationslot.ParseJSONValueForPGLogicalPayload(string(item.Value))))
+	if _, err := c.msgBuilder.Write(buf); err != nil {
+		return err
+	} // serverTime
+	if _, err := c.msgBuilder.Write([]byte(replicationslot.ParseJSONValueForPGLogicalPayload(string(item.Value)))); err != nil {
+		return err
+	}
 
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }

@@ -42,6 +42,7 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, erro
 	if err != nil {
 		return 0, err
 	}
+	replicationslot.ReplicationSlots[slotName].SetDatabase(p.SessionData().Database)
 	return replicationslot.ReplicationSlots[slotName].LSN(), nil
 }
 

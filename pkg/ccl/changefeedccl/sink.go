@@ -488,6 +488,7 @@ func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
 type replicationSink struct {
 	name     string
 	lastXID  int64
+	database string
 	lastMVCC hlc.Timestamp
 	lsn      uint64
 	items    []replicationslot.Item
@@ -495,6 +496,14 @@ type replicationSink struct {
 
 func (r replicationSink) LSN() uint64 {
 	return r.lsn
+}
+
+func (r *replicationSink) SetDatabase(s string) {
+	r.database = s
+}
+
+func (r replicationSink) Database() string {
+	return r.database
 }
 
 func (r *replicationSink) NextTxn(consume bool) []replicationslot.Item {
