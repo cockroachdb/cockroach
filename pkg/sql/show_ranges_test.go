@@ -13,16 +13,19 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShowRangesWithLocality(t *testing.T) {
@@ -38,28 +41,35 @@ func TestShowRangesWithLocality(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE t SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
 
-	const leaseHolderIdx = 0
-	const leaseHolderLocalityIdx = 1
-	const replicasColIdx = 2
-	const localitiesColIdx = 3
+	const (
+		leaseHolderIdx = iota
+		leaseHolderLocalityIdx
+		replicasColIdx
+		localitiesColIdx
+		votingReplicasIdx
+		nonVotingReplicasIdx
+	)
 	replicas := make([]int, 3)
 
 	// TestClusters get some localities by default.
-	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities from [SHOW RANGES FROM TABLE t]`
+	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities, voting_replicas, non_voting_replicas FROM [SHOW RANGES FROM TABLE t]`
 	result := sqlDB.QueryStr(t, q)
 	for _, row := range result {
 		// Verify the leaseholder localities.
 		leaseHolder := row[leaseHolderIdx]
 		leaseHolderLocalityExpected := fmt.Sprintf(`region=test,dc=dc%s`, leaseHolder)
-		if row[leaseHolderLocalityIdx] != leaseHolderLocalityExpected {
-			t.Fatalf("expected %s found %s", leaseHolderLocalityExpected, row[leaseHolderLocalityIdx])
-		}
+		require.Equal(t, leaseHolderLocalityExpected, row[leaseHolderLocalityIdx])
 
 		// Verify the replica localities.
 		_, err := fmt.Sscanf(row[replicasColIdx], "{%d,%d,%d}", &replicas[0], &replicas[1], &replicas[2])
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+
+		votingReplicas := sqltestutils.ArrayStringToSlice(t, row[votingReplicasIdx])
+		sort.Strings(votingReplicas)
+		require.Equal(t, []string{"1", "2", "3"}, votingReplicas)
+		nonVotingReplicas := sqltestutils.ArrayStringToSlice(t, row[nonVotingReplicasIdx])
+		require.Equal(t, []string{}, nonVotingReplicas)
+
 		var builder strings.Builder
 		builder.WriteString("{")
 		for i, replica := range replicas {
@@ -70,9 +80,7 @@ func TestShowRangesWithLocality(t *testing.T) {
 		}
 		builder.WriteString("}")
 		expected := builder.String()
-		if row[localitiesColIdx] != expected {
-			t.Fatalf("expected %s found %s", expected, row[localitiesColIdx])
-		}
+		require.Equal(t, expected, row[localitiesColIdx])
 	}
 }
 
