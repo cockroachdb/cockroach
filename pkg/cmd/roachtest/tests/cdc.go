@@ -987,8 +987,9 @@ func registerCDC(r registry.Registry) {
 				opts:       map[string]string{"initial_scan": "'no'"},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 3 * time.Minute,
-				steadyLatency:      5 * time.Minute,
+				// Higher latencies are permitted due to retry backoff
+				initialScanLatency: 10 * time.Minute,
+				steadyLatency:      30 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
@@ -1013,8 +1014,9 @@ func registerCDC(r registry.Registry) {
 				tolerateErrors: true,
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 3 * time.Minute,
-				steadyLatency:      5 * time.Minute,
+				// Higher latencies are permitted due to retry backoff
+				initialScanLatency: 5 * time.Minute,
+				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
