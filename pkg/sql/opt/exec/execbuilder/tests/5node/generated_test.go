@@ -116,6 +116,13 @@ func TestExecBuild_distsql_distinct_on(
 	runExecBuildLogicTest(t, "distsql_distinct_on")
 }
 
+func TestExecBuild_distsql_group_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "distsql_group_join")
+}
+
 func TestExecBuild_distsql_indexjoin(
 	t *testing.T,
 ) {
