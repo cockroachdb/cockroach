@@ -40,7 +40,10 @@ go_library(
 
 go_test(
     name = "logstore_test",
-    srcs = ["sideload_test.go"],
+    srcs = [
+        "logstore_bench_test.go",
+        "sideload_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":logstore"],
     deps = [
@@ -53,6 +56,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",

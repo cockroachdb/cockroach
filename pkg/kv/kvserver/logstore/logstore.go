@@ -102,18 +102,33 @@ type LogStore struct {
 	Metrics     Metrics
 }
 
+func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
+	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
+	// Use a more efficient write-only batch because we don't need to do any
+	// reads from the batch. Any reads are performed on the underlying DB.
+	return eng.NewUnindexedBatch(false /* writeOnly */)
+}
+
 // StoreEntries persists newly appended Raft log Entries to the log storage.
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
 func (s *LogStore) StoreEntries(
 	ctx context.Context, state RaftState, rd Ready, stats *AppendStats,
 ) (RaftState, error) {
-	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch. Any reads are performed on the underlying DB.
-	batch := s.Engine.NewUnindexedBatch(false /* writeOnly */)
+	batch := newStoreEntriesBatch(s.Engine)
 	defer batch.Close()
+	return s.storeEntriesAndCommitBatch(ctx, state, rd, stats, batch)
+}
 
+type batchI interface {
+	storage.ReadWriter
+	Len() int
+	Commit(sync bool) error
+}
+
+func (s *LogStore) storeEntriesAndCommitBatch(
+	ctx context.Context, state RaftState, rd Ready, stats *AppendStats, batch batchI,
+) (RaftState, error) {
 	prevLastIndex := state.LastIndex
 	if len(rd.Entries) > 0 {
 		stats.Begin = timeutil.Now()
