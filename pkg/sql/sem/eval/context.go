@@ -143,6 +143,8 @@ type Context struct {
 
 	StreamManagerFactory StreamManagerFactory
 
+	SystemJobsIteratorFactory SystemJobsIteratorFactory
+
 	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
 	JobExecContext interface{}
 
@@ -355,6 +357,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx.TestingMon = monitor
 	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
 	ctx.StreamManagerFactory = &fakeStreamManagerFactory{}
+	ctx.SystemJobsIteratorFactory = &fakeSystemJobsIteratorFactory{}
 	ctx.deprecatedContext = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
@@ -374,6 +377,10 @@ func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
 
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
+}
+
+type fakeSystemJobsIteratorFactory struct {
+	SystemJobsIteratorFactory
 }
 
 // SessionData returns the SessionData the current EvalCtx should use to eval.
@@ -714,6 +721,11 @@ func UnwrapDatum(ctx context.Context, evalCtx *Context, d tree.Datum) tree.Datum
 type StreamManagerFactory interface {
 	GetReplicationStreamManager(ctx context.Context) (ReplicationStreamManager, error)
 	GetStreamIngestManager(ctx context.Context) (StreamIngestManager, error)
+}
+
+// SystemJobsIteratorFactory stores methods that return the streaming managers.
+type SystemJobsIteratorFactory interface {
+	GetJobsIterator(ctx context.Context) (ValueGenerator, error)
 }
 
 // ReplicationStreamManager represents a collection of APIs that streaming replication supports

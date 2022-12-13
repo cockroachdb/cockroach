@@ -547,6 +547,24 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.system_jobs": makeBuiltin(
+		tree.FunctionProperties{
+			Undocumented:     true,
+			Category:         builtinconstants.CategoryStreamIngestion,
+			DistsqlBlocklist: false,
+			Class:            tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			jobsIterType,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				return evalCtx.SystemJobsIteratorFactory.GetJobsIterator(ctx)
+
+			},
+			"Iterate over system.jobs while excluding rows based on permissions.",
+			volatility.Volatile,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String

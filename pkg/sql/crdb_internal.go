@@ -1016,13 +1016,7 @@ func makeJobsTableRows(
 			}
 		}
 
-		sameUser := payload != nil && sqlUsername == currentUser
-		// The user can access the row if the meet one of the conditions:
-		//  1. The user is an admin.
-		//  2. The job is owned by the user.
-		//  3. The user has CONTROLJOB privilege and the job is not owned by
-		//      an admin.
-		if canAccess := isAdmin || !ownedByAdmin && hasControlJob || sameUser; !canAccess {
+		if !builtins.UserHasJobAccess(currentUser, isAdmin, hasControlJob, sqlUsername, ownedByAdmin) {
 			continue
 		}
 

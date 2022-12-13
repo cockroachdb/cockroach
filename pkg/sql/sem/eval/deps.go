@@ -260,6 +260,15 @@ type Planner interface {
 	// the `system.users` table
 	UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error)
 
+	// HasRoleOption converts the roleoption to its SQL column name and checks if
+	// the user belongs to a role where the option has value true. Requires a
+	// valid transaction to be open.
+	//
+	// This check should be done on the version of the privilege that is stored in
+	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
+	// NOLOGIN instead of LOGIN.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
