@@ -13,7 +13,6 @@ package opt
 import (
 	"context"
 	"fmt"
-	"math/bits"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -270,14 +269,14 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 	// Search for the same name / object pair.
 	for i := range md.deps {
 		if md.deps[i].ds == ds && md.deps[i].name.equals(&name) {
-			md.deps[i].privileges |= (1 << priv)
+			md.deps[i].privileges |= privilegeBitmap(priv.Mask())
 			return
 		}
 	}
 	md.deps = append(md.deps, mdDep{
 		ds:         ds,
 		name:       name,
-		privileges: (1 << priv),
+		privileges: privilegeBitmap(priv.Mask()),
 	})
 }
 
@@ -313,20 +312,13 @@ func (md *Metadata) CheckDependencies(
 			return false, nil
 		}
 
-		for privs := md.deps[i].privileges; privs != 0; {
-			// Strip off each privilege bit and make call to CheckPrivilege for it.
-			// Note that priv == 0 can occur when a dependency was added with
-			// privilege.Kind = 0 (e.g. for a table within a view, where the table
-			// privileges do not need to be checked). Ignore the "zero privilege".
-			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
-			if priv != 0 {
+		privs := md.deps[i].privileges
+		for priv := privilege.MinKind; priv <= privilege.MaxKind; priv <<= 1 {
+			if privs&privilegeBitmap(priv) != 0 {
 				if err := catalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
 					return false, err
 				}
 			}
-
-			// Set the just-handled privilege bit to zero and look for next.
-			privs &= ^(1 << priv)
 		}
 	}
 	// Check that all of the user defined types present have not changed.

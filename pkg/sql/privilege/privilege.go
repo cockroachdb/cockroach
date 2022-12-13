@@ -12,12 +12,14 @@ package privilege
 
 import (
 	"bytes"
+	"math"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 //go:generate stringer -type=Kind -linecomment
@@ -31,34 +33,60 @@ type Kind uint32
 // Do not change values of privileges. These correspond to the position
 // of the privilege in a bit field and are expected to stay constant.
 const (
-	ALL    Kind = 1
-	CREATE Kind = 2
-	DROP   Kind = 3
-	// DEPRECATEDGRANT is a placeholder to make sure that 4 is not reused.
-	// It was previously used for the GRANT privilege that has been replaced with the more granular Privilege.GrantOption.
-	DEPRECATEDGRANT          Kind = 4 // GRANT
-	SELECT                   Kind = 5
-	INSERT                   Kind = 6
-	DELETE                   Kind = 7
-	UPDATE                   Kind = 8
-	USAGE                    Kind = 9
-	ZONECONFIG               Kind = 10
-	CONNECT                  Kind = 11
-	RULE                     Kind = 12
-	MODIFYCLUSTERSETTING     Kind = 13
-	EXTERNALCONNECTION       Kind = 14
-	VIEWACTIVITY             Kind = 15
-	VIEWACTIVITYREDACTED     Kind = 16
-	VIEWCLUSTERSETTING       Kind = 17
-	CANCELQUERY              Kind = 18
-	NOSQLLOGIN               Kind = 19
-	EXECUTE                  Kind = 20
-	VIEWCLUSTERMETADATA      Kind = 21
-	VIEWDEBUG                Kind = 22
-	BACKUP                   Kind = 23
-	RESTORE                  Kind = 24
-	EXTERNALIOIMPLICITACCESS Kind = 25
-	CHANGEFEED               Kind = 26
+	// The first bit is reserved.
+	_ Kind = 1 << iota
+	ALL
+	CREATE
+	DROP
+	// GRANT was previously used for the GRANT privilege that has been replaced with the more granular Privilege.GrantOption.
+	_
+	SELECT
+	INSERT
+	DELETE
+	UPDATE
+	USAGE
+	ZONECONFIG
+	CONNECT
+	RULE
+	MODIFYCLUSTERSETTING
+	EXTERNALCONNECTION
+	VIEWACTIVITY
+	VIEWACTIVITYREDACTED
+	VIEWCLUSTERSETTING
+	CANCELQUERY
+	NOSQLLOGIN
+	EXECUTE
+	VIEWCLUSTERMETADATA
+	VIEWDEBUG
+	BACKUP
+	RESTORE
+	EXTERNALIOIMPLICITACCESS
+	CHANGEFEED
+)
+
+var (
+	// MinKind is used to iterate over Kinds.
+	MinKind = func() Kind {
+		keys := maps.Keys(_Kind_map)
+		min := Kind(math.MaxUint32)
+		for _, key := range keys {
+			if key < min {
+				min = key
+			}
+		}
+		return min
+	}()
+	// MaxKind is used to iterate over Kinds.
+	MaxKind = func() Kind {
+		keys := maps.Keys(_Kind_map)
+		max := Kind(0)
+		for _, key := range keys {
+			if key > max {
+				max = key
+			}
+		}
+		return max
+	}()
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -133,7 +161,7 @@ var (
 
 // Mask returns the bitmask for a given privilege.
 func (k Kind) Mask() uint32 {
-	return 1 << k
+	return uint32(k)
 }
 
 // IsSetIn returns true if this privilege kind is set in the supplied bitfield.
@@ -141,41 +169,14 @@ func (k Kind) IsSetIn(bits uint32) bool {
 	return bits&k.Mask() != 0
 }
 
-// ByValue is just an array of privilege kinds sorted by value.
-var ByValue = [...]Kind{
-	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
-	MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING,
-	CANCELQUERY, NOSQLLOGIN, EXECUTE, VIEWCLUSTERMETADATA, VIEWDEBUG, BACKUP,
-}
-
 // ByName is a map of string -> kind value.
-var ByName = map[string]Kind{
-	"ALL":                      ALL,
-	"CHANGEFEED":               CHANGEFEED,
-	"CONNECT":                  CONNECT,
-	"CREATE":                   CREATE,
-	"DROP":                     DROP,
-	"SELECT":                   SELECT,
-	"INSERT":                   INSERT,
-	"DELETE":                   DELETE,
-	"UPDATE":                   UPDATE,
-	"ZONECONFIG":               ZONECONFIG,
-	"USAGE":                    USAGE,
-	"RULE":                     RULE,
-	"MODIFYCLUSTERSETTING":     MODIFYCLUSTERSETTING,
-	"EXTERNALCONNECTION":       EXTERNALCONNECTION,
-	"VIEWACTIVITY":             VIEWACTIVITY,
-	"VIEWACTIVITYREDACTED":     VIEWACTIVITYREDACTED,
-	"VIEWCLUSTERSETTING":       VIEWCLUSTERSETTING,
-	"CANCELQUERY":              CANCELQUERY,
-	"NOSQLLOGIN":               NOSQLLOGIN,
-	"EXECUTE":                  EXECUTE,
-	"VIEWCLUSTERMETADATA":      VIEWCLUSTERMETADATA,
-	"VIEWDEBUG":                VIEWDEBUG,
-	"BACKUP":                   BACKUP,
-	"RESTORE":                  RESTORE,
-	"EXTERNALIOIMPLICITACCESS": EXTERNALIOIMPLICITACCESS,
-}
+var ByName = func() map[string]Kind {
+	m := make(map[string]Kind)
+	for k, v := range _Kind_map {
+		m[v] = k
+	}
+	return m
+}()
 
 // List is a list of privileges.
 type List []Kind

@@ -8,42 +8,66 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[ALL-1]
-	_ = x[CREATE-2]
-	_ = x[DROP-3]
-	_ = x[DEPRECATEDGRANT-4]
-	_ = x[SELECT-5]
-	_ = x[INSERT-6]
-	_ = x[DELETE-7]
-	_ = x[UPDATE-8]
-	_ = x[USAGE-9]
-	_ = x[ZONECONFIG-10]
-	_ = x[CONNECT-11]
-	_ = x[RULE-12]
-	_ = x[MODIFYCLUSTERSETTING-13]
-	_ = x[EXTERNALCONNECTION-14]
-	_ = x[VIEWACTIVITY-15]
-	_ = x[VIEWACTIVITYREDACTED-16]
-	_ = x[VIEWCLUSTERSETTING-17]
-	_ = x[CANCELQUERY-18]
-	_ = x[NOSQLLOGIN-19]
-	_ = x[EXECUTE-20]
-	_ = x[VIEWCLUSTERMETADATA-21]
-	_ = x[VIEWDEBUG-22]
-	_ = x[BACKUP-23]
-	_ = x[RESTORE-24]
-	_ = x[EXTERNALIOIMPLICITACCESS-25]
-	_ = x[CHANGEFEED-26]
+	_ = x[ALL-2]
+	_ = x[CREATE-4]
+	_ = x[DROP-8]
+	_ = x[SELECT-32]
+	_ = x[INSERT-64]
+	_ = x[DELETE-128]
+	_ = x[UPDATE-256]
+	_ = x[USAGE-512]
+	_ = x[ZONECONFIG-1024]
+	_ = x[CONNECT-2048]
+	_ = x[RULE-4096]
+	_ = x[MODIFYCLUSTERSETTING-8192]
+	_ = x[EXTERNALCONNECTION-16384]
+	_ = x[VIEWACTIVITY-32768]
+	_ = x[VIEWACTIVITYREDACTED-65536]
+	_ = x[VIEWCLUSTERSETTING-131072]
+	_ = x[CANCELQUERY-262144]
+	_ = x[NOSQLLOGIN-524288]
+	_ = x[EXECUTE-1048576]
+	_ = x[VIEWCLUSTERMETADATA-2097152]
+	_ = x[VIEWDEBUG-4194304]
+	_ = x[BACKUP-8388608]
+	_ = x[RESTORE-16777216]
+	_ = x[EXTERNALIOIMPLICITACCESS-33554432]
+	_ = x[CHANGEFEED-67108864]
 }
 
-const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATEUSAGEZONECONFIGCONNECTRULEMODIFYCLUSTERSETTINGEXTERNALCONNECTIONVIEWACTIVITYVIEWACTIVITYREDACTEDVIEWCLUSTERSETTINGCANCELQUERYNOSQLLOGINEXECUTEVIEWCLUSTERMETADATAVIEWDEBUGBACKUPRESTOREEXTERNALIOIMPLICITACCESSCHANGEFEED"
+const _Kind_name = "ALLCREATEDROPSELECTINSERTDELETEUPDATEUSAGEZONECONFIGCONNECTRULEMODIFYCLUSTERSETTINGEXTERNALCONNECTIONVIEWACTIVITYVIEWACTIVITYREDACTEDVIEWCLUSTERSETTINGCANCELQUERYNOSQLLOGINEXECUTEVIEWCLUSTERMETADATAVIEWDEBUGBACKUPRESTOREEXTERNALIOIMPLICITACCESSCHANGEFEED"
 
-var _Kind_index = [...]uint16{0, 3, 9, 13, 18, 24, 30, 36, 42, 47, 57, 64, 68, 88, 106, 118, 138, 156, 167, 177, 184, 203, 212, 218, 225, 249, 259}
+var _Kind_map = map[Kind]string{
+	2:        _Kind_name[0:3],
+	4:        _Kind_name[3:9],
+	8:        _Kind_name[9:13],
+	32:       _Kind_name[13:19],
+	64:       _Kind_name[19:25],
+	128:      _Kind_name[25:31],
+	256:      _Kind_name[31:37],
+	512:      _Kind_name[37:42],
+	1024:     _Kind_name[42:52],
+	2048:     _Kind_name[52:59],
+	4096:     _Kind_name[59:63],
+	8192:     _Kind_name[63:83],
+	16384:    _Kind_name[83:101],
+	32768:    _Kind_name[101:113],
+	65536:    _Kind_name[113:133],
+	131072:   _Kind_name[133:151],
+	262144:   _Kind_name[151:162],
+	524288:   _Kind_name[162:172],
+	1048576:  _Kind_name[172:179],
+	2097152:  _Kind_name[179:198],
+	4194304:  _Kind_name[198:207],
+	8388608:  _Kind_name[207:213],
+	16777216: _Kind_name[213:220],
+	33554432: _Kind_name[220:244],
+	67108864: _Kind_name[244:254],
+}
 
 func (i Kind) String() string {
-	i -= 1
-	if i >= Kind(len(_Kind_index)-1) {
-		return "Kind(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	if str, ok := _Kind_map[i]; ok {
+		return str
 	}
-	return _Kind_name[_Kind_index[i]:_Kind_index[i+1]]
+	return "Kind(" + strconv.FormatInt(int64(i), 10) + ")"
 }

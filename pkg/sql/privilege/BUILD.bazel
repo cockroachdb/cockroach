@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_exp//maps",
     ],
 )
 
@@ -30,6 +31,7 @@ go_test(
         ":privilege",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

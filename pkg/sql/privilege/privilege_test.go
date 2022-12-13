@@ -11,14 +11,19 @@
 package privilege_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrivilegeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testCases := []struct {
 		raw              uint32
 		privileges       privilege.List
@@ -39,20 +44,53 @@ func TestPrivilegeDecode(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		pl := privilege.ListFromBitField(tc.raw, privilege.Any)
-		if len(pl) != len(tc.privileges) {
-			t.Fatalf("%+v: wrong privilege list from raw: %+v", tc, pl)
-		}
-		for i := 0; i < len(pl); i++ {
-			if pl[i] != tc.privileges[i] {
-				t.Fatalf("%+v: wrong privilege list from raw: %+v", tc, pl)
-			}
-		}
-		if pl.String() != tc.stringer {
-			t.Fatalf("%+v: wrong String() output: %q", tc, pl.String())
-		}
-		if pl.SortedString() != tc.sorted {
-			t.Fatalf("%+v: wrong SortedString() output: %q", tc, pl.SortedString())
-		}
+		raw := tc.raw
+		t.Run(fmt.Sprintf("%d", raw), func(t *testing.T) {
+			pl := privilege.ListFromBitField(raw, privilege.Any)
+			require.Equal(t, pl, tc.privileges)
+			require.Equal(t, pl.String(), tc.stringer)
+			require.Equal(t, pl.SortedString(), tc.sorted)
+		})
 	}
+}
+
+func TestMinMaxKind(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.Equal(t, privilege.MinKind, privilege.ALL)
+	require.Equal(t, privilege.MaxKind, privilege.CHANGEFEED)
+}
+
+func TestByName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.Equal(t, privilege.ByName, map[string]privilege.Kind{
+		"ALL":                      2,
+		"BACKUP":                   8388608,
+		"CANCELQUERY":              262144,
+		"CHANGEFEED":               67108864,
+		"CONNECT":                  2048,
+		"CREATE":                   4,
+		"DELETE":                   128,
+		"DROP":                     8,
+		"EXECUTE":                  1048576,
+		"EXTERNALCONNECTION":       16384,
+		"EXTERNALIOIMPLICITACCESS": 33554432,
+		"INSERT":                   64,
+		"MODIFYCLUSTERSETTING":     8192,
+		"NOSQLLOGIN":               524288,
+		"RESTORE":                  16777216,
+		"RULE":                     4096,
+		"SELECT":                   32,
+		"UPDATE":                   256,
+		"USAGE":                    512,
+		"VIEWACTIVITY":             32768,
+		"VIEWACTIVITYREDACTED":     65536,
+		"VIEWCLUSTERMETADATA":      2097152,
+		"VIEWCLUSTERSETTING":       131072,
+		"VIEWDEBUG":                4194304,
+		"ZONECONFIG":               1024,
+	})
 }
