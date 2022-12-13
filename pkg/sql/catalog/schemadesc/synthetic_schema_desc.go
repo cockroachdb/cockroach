@@ -34,6 +34,7 @@ type synthetic struct {
 // syntheticBase is an interface to differentiate some of the
 // behavior of synthetic.
 type syntheticBase interface {
+	GetPrivileges() *catpb.PrivilegeDescriptor
 	kindName() string
 	kind() catalog.ResolvedSchemaKind
 }
@@ -49,10 +50,6 @@ func (p synthetic) GetVersion() descpb.DescriptorVersion {
 }
 func (p synthetic) GetModificationTime() hlc.Timestamp {
 	return hlc.Timestamp{}
-}
-func (p synthetic) GetPrivileges() *catpb.PrivilegeDescriptor {
-	log.Fatalf(context.TODO(), "cannot access privileges on a %s descriptor", p.kindName())
-	return nil
 }
 func (p synthetic) DescriptorType() catalog.DescriptorType {
 	return catalog.Schema
@@ -74,11 +71,6 @@ func (p synthetic) Offline() bool {
 }
 func (p synthetic) GetOfflineReason() string {
 	return ""
-}
-func (p synthetic) DescriptorProto() *descpb.Descriptor {
-	log.Fatalf(context.TODO(),
-		"%s schema cannot be encoded", p.kindName())
-	return nil // unreachable
 }
 func (p synthetic) ByteSize() int64 {
 	return 0
@@ -106,11 +98,6 @@ func (p synthetic) ValidateTxnCommit(
 ) {
 }
 func (p synthetic) SchemaKind() catalog.ResolvedSchemaKind { return p.kind() }
-func (p synthetic) SchemaDesc() *descpb.SchemaDescriptor {
-	log.Fatalf(context.TODO(),
-		"synthetic %s cannot be encoded", p.kindName())
-	return nil // unreachable
-}
 func (p synthetic) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
 	return nil
 }
@@ -129,11 +116,6 @@ func (p synthetic) SkipNamespace() bool {
 	return true
 }
 
-// GetName implements the Object interface.
-func (p synthetic) GetName() string {
-	return p.kindName()
-}
-
 // GetObjectType implements the Object interface.
 func (p synthetic) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
@@ -141,7 +123,7 @@ func (p synthetic) GetObjectType() privilege.ObjectType {
 
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
-	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
+	return catprivilege.MakeDefaultPrivileges(makeSyntheticDefaultPrivilegeDescriptor())
 }
 
 // GetFunction implements the SchemaDescriptor interface.
@@ -156,6 +138,10 @@ func (p synthetic) ForEachFunctionOverload(
 	return nil
 }
 
+func (p synthetic) GetRawBytesInStorage() []byte {
+	return nil
+}
+
 func (p synthetic) ContainsUserDefinedTypes() bool {
 	return false
 }
@@ -163,4 +149,24 @@ func (p synthetic) ContainsUserDefinedTypes() bool {
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.
 func (p synthetic) GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool) {
 	return nil, false
+}
+
+func makeSyntheticDefaultPrivilegeDescriptor() *catpb.DefaultPrivilegeDescriptor {
+	return catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA)
+}
+
+func makeSyntheticSchemaDesc(sc catalog.SchemaDescriptor) *descpb.SchemaDescriptor {
+	return &descpb.SchemaDescriptor{
+		ID:                sc.GetID(),
+		ParentID:          sc.GetParentID(),
+		Version:           sc.GetVersion(),
+		Name:              sc.GetName(),
+		State:             descpb.DescriptorState_PUBLIC,
+		Privileges:        sc.GetPrivileges(),
+		DefaultPrivileges: makeSyntheticDefaultPrivilegeDescriptor(),
+	}
+}
+
+func makeSyntheticDesc(sc catalog.SchemaDescriptor) *descpb.Descriptor {
+	return &descpb.Descriptor{Union: &descpb.Descriptor_Schema{Schema: makeSyntheticSchemaDesc(sc)}}
 }
