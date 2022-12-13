@@ -170,7 +170,9 @@
 
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
-/pkg/ccl/streamingccl/       @cockroachdb/tenant-streaming
+# TODO(dt): either add the cockroach repository to this team or remove this team from
+# CODEOWNERS.
+#!/pkg/ccl/streamingccl/       @cockroachdb/tenant-streaming
 
 /pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
