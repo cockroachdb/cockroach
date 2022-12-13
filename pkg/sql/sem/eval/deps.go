@@ -65,12 +65,6 @@ type DatabaseCatalog interface {
 	// whether it exists.
 	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)
 
-	// IsTypeVisible checks if the type with the given ID belongs to a schema
-	// on the given sessiondata.SearchPath.
-	IsTypeVisible(
-		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
-	) (isVisible bool, exists bool, err error)
-
 	// HasAnyPrivilege returns whether the current user has privilege to access
 	// the given object.
 	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user username.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)

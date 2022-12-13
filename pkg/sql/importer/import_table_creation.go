@@ -303,13 +303,6 @@ func (so *importSequenceOperators) SchemaExists(
 	return false, errSequenceOperators
 }
 
-// IsTypeVisible is part of the eval.DatabaseCatalog interface.
-func (so *importSequenceOperators) IsTypeVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
-) (bool, bool, error) {
-	return false, false, errors.WithStack(errSequenceOperators)
-}
-
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) HasAnyPrivilege(
 	ctx context.Context,

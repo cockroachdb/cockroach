@@ -129,7 +129,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 	return rows, nil
 }
 
-func parseAvroSchema(t *testing.T, j string) (*avroDataRecord, error) {
+func parseAvroSchema(t *testing.T, evalCtx *eval.Context, j string) (*avroDataRecord, error) {
 	var s avroDataRecord
 	if err := json.Unmarshal([]byte(j), &s); err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func parseAvroSchema(t *testing.T, j string) (*avroDataRecord, error) {
 		// They're needed for serialization/deserialization, so fake out a
 		// column descriptor so that we can reuse columnToAvroSchema to get
 		// all the various fields of avroSchemaField populated for free.
-		colDesc, err := avroFieldMetadataToColDesc(f.Metadata)
+		colDesc, err := avroFieldMetadataToColDesc(evalCtx, f.Metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +167,9 @@ func parseAvroSchema(t *testing.T, j string) (*avroDataRecord, error) {
 		), "", "")
 }
 
-func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
+func avroFieldMetadataToColDesc(
+	evalCtx *eval.Context, metadata string,
+) (*descpb.ColumnDescriptor, error) {
 	parsed, err := parser.ParseOne(`ALTER TABLE FOO ADD COLUMN ` + metadata)
 	if err != nil {
 		return nil, err
@@ -175,7 +177,7 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &eval.Context{})
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -382,6 +384,7 @@ func TestAvroSchema(t *testing.T) {
 		tests = append(tests, randTypeTest)
 	}
 
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tableDesc, err := parseTableDesc(
@@ -392,7 +395,7 @@ func TestAvroSchema(t *testing.T) {
 				avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			jsonSchema := origSchema.codec.Schema()
-			roundtrippedSchema, err := parseAvroSchema(t, jsonSchema)
+			roundtrippedSchema, err := parseAvroSchema(t, evalCtx, jsonSchema)
 			require.NoError(t, err)
 			// It would require some work, but we could also check that the
 			// roundtrippedSchema can be used to recreate the original `CREATE
