@@ -133,10 +133,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	// Set all the environment variables to valid values and ensure they are set
 	// correctly.
-	if err := os.Setenv("COCKROACH_DISABLE_SPAN_CONFIGS", "true"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.SpanConfigsDisabled = true
 	if err := os.Setenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE", "true"); err != nil {
 		t.Fatal(err)
 	}

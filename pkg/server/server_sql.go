@@ -1154,7 +1154,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
-	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
+	if !codec.ForSystemTenant() {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)

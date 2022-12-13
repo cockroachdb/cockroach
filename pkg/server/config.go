@@ -172,11 +172,6 @@ type BaseConfig struct {
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
 
-	// SpanConfigsDisabled disables the use of the span configs infrastructure.
-	//
-	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
-	SpanConfigsDisabled bool
-
 	// Disables the default test tenant.
 	DisableDefaultTestTenant bool
 
@@ -571,9 +566,6 @@ func (cfg *Config) String() string {
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	}
-	if !cfg.SpanConfigsDisabled {
-		fmt.Fprintln(w, "span configs enabled\t", !cfg.SpanConfigsDisabled)
-	}
 	_ = w.Flush()
 
 	return buf.String()
@@ -870,7 +862,6 @@ func (cfg *BaseConfig) RequireWebSession() bool {
 }
 
 func (cfg *Config) readSQLEnvironmentVariables() {
-	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 }
 
