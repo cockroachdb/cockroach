@@ -36,3 +36,12 @@ type NewAggregatorArgs struct {
 	ConstArguments []tree.Datums
 	OutputTypes    []*types.T
 }
+
+// NewHashAggregatorArgs encompasses all mandatory arguments necessary to
+// instantiate the hash aggregator.
+type NewHashAggregatorArgs struct {
+	*NewAggregatorArgs
+	HashTableAllocator       *colmem.Allocator
+	OutputUnlimitedAllocator *colmem.Allocator
+	MaxOutputBatchMemSize    int64
+}

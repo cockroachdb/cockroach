@@ -84,12 +84,16 @@ func NewExternalHashJoiner(
 		// to join using in-memory hash joiner fit under the limit, so we use
 		// the same unlimited allocator for both buildSideAllocator and
 		// outputUnlimitedAllocator arguments.
-		return colexecjoin.NewHashJoiner(
-			unlimitedAllocator, unlimitedAllocator, spec, partitionedInputs[0], partitionedInputs[1],
+		return colexecjoin.NewHashJoiner(colexecjoin.NewHashJoinerArgs{
+			BuildSideAllocator:       unlimitedAllocator,
+			OutputUnlimitedAllocator: unlimitedAllocator,
+			Spec:                     spec,
+			LeftSource:               partitionedInputs[0],
+			RightSource:              partitionedInputs[1],
 			// We start with relatively large initial number of buckets since we
 			// expect each partition to be of significant size.
-			uint64(coldata.BatchSize()),
-		)
+			InitialNumBuckets: uint64(coldata.BatchSize()),
+		})
 	}
 	diskBackedFallbackOpConstructor := func(
 		partitionedInputs []*partitionerToOperator,
