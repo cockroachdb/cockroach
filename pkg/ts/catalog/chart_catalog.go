@@ -693,6 +693,10 @@ var charts = []sectionDescription{
 				Title:   "Bytes Written Per Second",
 				Metrics: []string{"rebalancing.writebytespersecond"},
 			},
+			{
+				Title:   "CPU Nanos Used Per Second",
+				Metrics: []string{"rebalancing.cpunanospersecond"},
+			},
 		},
 	},
 	{

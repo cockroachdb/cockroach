@@ -178,6 +178,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
+        "//pkg/util/grunning",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/iterutil",

@@ -276,6 +276,8 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		MaxOffset: 0,
 		Stopper:   c.stopper,
 		Settings:  cluster.MakeTestingClusterSettings(),
+
+		ClientOnly: true,
 	})
 
 	n := &Node{

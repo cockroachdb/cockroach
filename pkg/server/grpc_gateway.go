@@ -13,14 +13,12 @@ package server
 import (
 	"context"
 	"fmt"
-	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -79,24 +77,9 @@ func configureGRPCGateway(
 	gwCtx, gwCancel := context.WithCancel(ambientCtx.AnnotateCtx(context.Background()))
 	stopper.AddCloser(stop.CloserFn(gwCancel))
 
-	// loopback handles the HTTP <-> RPC loopback connection.
-	loopback := newLoopbackListener(workersCtx, stopper)
-
-	waitQuiesce := func(context.Context) {
-		<-stopper.ShouldQuiesce()
-		_ = loopback.Close()
-	}
-	if err := stopper.RunAsyncTask(workersCtx, "gw-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(workersCtx)
-	}
-
-	_ = stopper.RunAsyncTask(workersCtx, "serve-loopback", func(context.Context) {
-		netutil.FatalIfUnexpected(grpcSrv.Serve(loopback))
-	})
-
 	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
 	// uniquely in-process connection.
-	dialOpts, err := rpcContext.GRPCDialOptions()
+	dialOpts, err := rpcContext.GRPCDialOptions(ctx, GRPCAddr, rpc.DefaultClass)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -112,12 +95,9 @@ func configureGRPCGateway(
 		telemetry.Inc(getServerEndpointCounter(method))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	conn, err := grpc.DialContext(ctx, GRPCAddr, append(append(
+	conn, err := grpc.DialContext(ctx, GRPCAddr, append(
 		dialOpts,
-		grpc.WithUnaryInterceptor(callCountInterceptor)),
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return loopback.Connect(ctx)
-		}),
+		grpc.WithUnaryInterceptor(callCountInterceptor),
 	)...)
 	if err != nil {
 		return nil, nil, nil, err
