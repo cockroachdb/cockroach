@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -118,7 +118,7 @@ func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 	// them manually to ensure all queries finish on tests that share these
 	// resources.
 	for _, db := range d.sqlDBs {
-		backuputils.CheckForInvalidDescriptors(t, db)
+		backuptestutils.CheckForInvalidDescriptors(t, db)
 		db.Close()
 	}
 	for _, s := range d.firstNode {

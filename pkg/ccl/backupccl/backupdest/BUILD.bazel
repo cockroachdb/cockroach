@@ -46,6 +46,7 @@ go_test(
         ":backupdest",
         "//pkg/ccl",
         "//pkg/ccl/backupccl/backupbase",
+        "//pkg/ccl/backupccl/backuptestutils",
         "//pkg/ccl/backupccl/backuputils",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",

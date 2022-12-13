@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -43,8 +43,8 @@ func TestMetadataSST(t *testing.T) {
 	ctx := context.Background()
 	const numAccounts = 1
 	userfile := "userfile:///0"
-	tc, sqlDB, _, cleanupFn := backuputils.BackupRestoreTestSetup(t, backuputils.SingleNode, numAccounts,
-		backuputils.InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backuptestutils.BackupRestoreTestSetup(t, backuptestutils.SingleNode, numAccounts,
+		backuptestutils.InitManualReplication)
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
