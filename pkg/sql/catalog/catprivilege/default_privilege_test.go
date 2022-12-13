@@ -169,7 +169,7 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &catpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, tc.objectCreator, tc.targetObject,
 		)
 
 		for _, grantee := range tc.grantees {
@@ -281,7 +281,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &catpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, tc.objectCreator, tc.targetObject,
 		)
 
 		for _, grantee := range tc.grantees {
@@ -307,7 +307,7 @@ func TestRevokeDefaultPrivilegesFromEmptyList(t *testing.T) {
 
 	newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-		nonSystemDatabaseID, creatorUser, privilege.Tables, &catpb.PrivilegeDescriptor{},
+		nonSystemDatabaseID, creatorUser, privilege.Tables,
 	)
 
 	if newPrivileges.AnyPrivilege(fooUser) {
@@ -323,7 +323,7 @@ func TestCreatePrivilegesFromDefaultPrivilegesForSystemDatabase(t *testing.T) {
 	creatorUser := username.MakeSQLUsernameFromPreNormalizedString("creator")
 	newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-		keys.SystemDatabaseID, creatorUser, privilege.Tables, &catpb.PrivilegeDescriptor{},
+		keys.SystemDatabaseID, creatorUser, privilege.Tables,
 	)
 
 	if !newPrivileges.Owner().IsNodeUser() {
@@ -342,7 +342,7 @@ func TestPresetDefaultPrivileges(t *testing.T) {
 	for _, targetObject := range targetObjectTypes {
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, creatorUser, targetObject, &catpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, creatorUser, targetObject,
 		)
 
 		if !newPrivileges.CheckPrivilege(creatorUser, privilege.ALL) {
@@ -368,7 +368,7 @@ func TestPresetDefaultPrivilegesInSchema(t *testing.T) {
 	for _, targetObject := range targetObjectTypes {
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, creatorUser, targetObject, &catpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, creatorUser, targetObject,
 		)
 
 		// The owner always has ALL privileges.
@@ -683,7 +683,6 @@ func TestDefaultPrivileges(t *testing.T) {
 			tc.dbID,
 			tc.objectCreator,
 			tc.targetObject,
-			&catpb.PrivilegeDescriptor{},
 		)
 
 		for _, userAndGrant := range tc.expectedGrantsOnObject {

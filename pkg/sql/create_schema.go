@@ -156,7 +156,6 @@ func CreateSchemaDescriptorWithPrivileges(
 		db.GetID(),
 		user,
 		privilege.Schemas,
-		db.GetPrivileges(),
 	)
 
 	privs.SetOwner(owner)

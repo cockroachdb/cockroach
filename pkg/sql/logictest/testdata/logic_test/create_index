@@ -417,3 +417,16 @@ CREATE INDEX ON opclasses(c blah_ops)
 # Make sure that we don't permit creating indexes with opclasses that don't exist
 statement error pgcode 42704 operator class "blah_ops" does not exist
 CREATE INVERTED INDEX ON opclasses(c blah_ops)
+
+subtest create_index_on_materialized_view
+
+statement ok
+DROP TABLE t CASCADE;
+CREATE TABLE t (a INT PRIMARY KEY);
+INSERT INTO t SELECT generate_series(0, 9);
+
+statement ok
+CREATE MATERIALIZED VIEW v (b) AS SELECT a * 2 FROM t WITH DATA;
+
+statement ok
+CREATE INDEX ON v (b);

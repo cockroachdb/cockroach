@@ -167,7 +167,6 @@ func CreatePrivilegesFromDefaultPrivileges(
 	dbID descpb.ID,
 	user username.SQLUsername,
 	targetObject privilege.TargetObjectType,
-	databasePrivileges *catpb.PrivilegeDescriptor,
 ) *catpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
