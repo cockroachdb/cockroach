@@ -36,7 +36,8 @@ type lexer struct {
 	// token returned by Lex().
 	lastPos int
 
-	stmt tree.Statement
+	stmt *plpgsqltree.PLpgSQLStmtBlock
+
 	// numPlaceholders is 1 + the highest placeholder index encountered.
 	numPlaceholders int
 	numAnnotations  tree.AnnotationIdx
@@ -177,8 +178,8 @@ func (l *lexer) NewAnnotation() tree.AnnotationIdx {
 }
 
 // SetStmt is called from the parser when the statement is constructed.
-func (l *lexer) SetStmt(stmt tree.Statement) {
-	l.stmt = stmt
+func (l *lexer) SetStmt(stmt plpgsqltree.PLpgSQLStatement) {
+	l.stmt = stmt.(*plpgsqltree.PLpgSQLStmtBlock)
 }
 
 // UpdateNumPlaceholders is called from the parser when a placeholder is constructed.

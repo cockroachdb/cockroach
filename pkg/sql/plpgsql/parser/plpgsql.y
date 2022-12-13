@@ -3,9 +3,6 @@ package parser
 
 import (
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-  "github.com/cockroachdb/cockroach/pkg/sql/types"
-  "github.com/lib/pq/oid"
 )
 %}
 
@@ -57,6 +54,14 @@ func (u *plpgsqlSymUnion) plpgsqlStmtBlock() *plpgsqltree.PLpgSQLStmtBlock {
 
 func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
     return u.val.(plpgsqltree.PLpgSQLStatement)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlDeclareheader() *declareHeader {
+    return u.val.(*declareHeader)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
+    return u.val.([]plpgsqltree.PLpgSQLStatement)
 }
 
 %}
@@ -202,7 +207,7 @@ func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
   union plpgsqlSymUnion
 }
 
-%type <declareHeader> decl_sect
+%type <*declareHeader> decl_sect
 %type <varName> decl_varname
 %type <boolean>	decl_const decl_notnull exit_type
 %type <plpgsqltree.PLpgSQLExpr>	decl_defval decl_cursor_query
@@ -227,9 +232,10 @@ func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
 %type <str>		any_identifier opt_block_label opt_loop_label opt_label
 %type <str>		option_value
 
-//%type <list>	proc_sect stmt_elsifs stmt_else // TODO is this a list of statement?
-%type <loopBody>	loop_body
-%type <*plpgsqltree.PLpgSQLStmtBlock> pl_block
+%type <[]plpgsqltree.PLpgSQLStatement> proc_sect
+%type <[]plpgsqltree.PLpgSQLStatement> stmt_elsifs stmt_else // TODO is this a list of statement?
+%type <loopBody> loop_body
+%type <plpgsqltree.PLpgSQLStatement> pl_block
 %type <plpgsqltree.PLpgSQLStatement>	proc_stmt
 %type <plpgsqltree.PLpgSQLStatement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit
 %type <plpgsqltree.PLpgSQLStatement>	stmt_return stmt_raise stmt_assert stmt_execsql
@@ -262,12 +268,14 @@ func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
 
 %%
 
+// TODO(chengxiong): add `comp_options` (these options are plpgsql compiler
+// variables, probably not important for the parser yet)
 pl_function:
   // TODO we need to set the final AST in this block. To achieve that, the lexer
   // need to have a statement field to catch that.
   pl_block opt_semi
   {
-
+    plpgsqllex.(*lexer).SetStmt($1.plpgsqlStatement())
   }
 
 option_value : T_WORD
@@ -282,11 +290,13 @@ opt_semi		:
 				;
 
 pl_block		: decl_sect BEGIN proc_sect exception_sect END opt_label
-          // TODO we need to create a new scope for each block
-          // 1. create a scope and push to stack before parsing statements
-          // 2. pop the scope after all statements are parsed.
 					{
-					  stmtBlock := &plpgsqltree.PLpgSQLStmtBlock{}
+					  // TODO(chengxiong): log declare section ($1) here.
+					  header := $1.plpgsqlDeclareheader()
+					  stmtBlock := &plpgsqltree.PLpgSQLStmtBlock{
+					    Label: header.label,
+					    Body: $3.plpgsqlStatements(),
+					  }
 					  $$.val = stmtBlock
 					}
 				;
@@ -294,12 +304,27 @@ pl_block		: decl_sect BEGIN proc_sect exception_sect END opt_label
 
 decl_sect		: opt_block_label
 					{
+					  $$.val = &declareHeader{label: $1}
 					}
 				| opt_block_label decl_start
 					{
+					  $$.val = &declareHeader{
+					    label: $1,
+					    initVars: make([]plpgsqltree.PLpgSQLVariable, 0),
+					  }
 					}
 				| opt_block_label decl_start decl_stmts
 					{
+					  h := &declareHeader{
+					    label: $1,
+					    // TODO(chengxiong): right now we only need to know there is
+					    // non-empty "DECLARE" block. It's sufficient to just match the
+					    // dclare statements and do nothing, but make it a length 1 slice
+					    // with only a nil element.
+					    initVars: make([]plpgsqltree.PLpgSQLVariable, 1),
+					  }
+					  h.initVars = append(h.initVars, nil)
+					  $$.val = h
 					}
 				;
 
@@ -315,10 +340,14 @@ decl_stmts		: decl_stmts decl_stmt
 decl_stmt		: decl_statement
 				| DECLARE
 					{
+					// This is to allow useless extra "DECLARE" keywords in the declare section.
 					}
-				| LESS_LESS any_identifier GREATER_GREATER
-					{
-					}
+				// TODO(chengxiong): turn this block on and throw useful error if user
+				// tries to put the block label just before BEGIN instead of before
+				// DECLARE.
+//				| LESS_LESS any_identifier GREATER_GREATER
+//					{
+//					}
 				;
 
 decl_statement	: decl_varname decl_const decl_datatype decl_collate decl_notnull decl_defval
@@ -444,9 +473,13 @@ assign_operator	: '='
 				;
 
 proc_sect		:
-					{ }
+					{
+					  $$.val = []plpgsqltree.PLpgSQLStatement{}
+					}
 				| proc_sect proc_stmt
 					{
+					  stmts := $1.plpgsqlStatements()
+					  stmts = append(stmts, $2.plpgsqlStatement())
 					}
 				;
 
@@ -865,9 +898,11 @@ expr_until_loop :
 
 opt_block_label	:
 					{
+					  $$ = ""
 					}
 				| LESS_LESS any_identifier GREATER_GREATER
 					{
+					  $$ = $2
 					}
 				;
 
