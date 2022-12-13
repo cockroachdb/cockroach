@@ -30,6 +30,7 @@ func TestMatch(t *testing.T) {
 /a/b* @cockroachdb/team-b @cockroachdb/team-a
 **/c/ @cockroachdb/team-c
 #!/q/ @cockroachdb/team-q
+/qq/ @cockroachdb/team-q #! @cockroachdb/team-b-noreview
 `
 	teams := map[team.Alias]team.Team{
 		"cockroachdb/team-a": {},
@@ -52,6 +53,7 @@ func TestMatch(t *testing.T) {
 		{"no/owner/", nil},
 		{"hmm/what/about/c/file", []team.Team{teams["cockroachdb/team-c"]}},
 		{"q/foo.txt", []team.Team{teams["cockroachdb/team-q"]}},
+		{"qq/foo.txt", []team.Team{teams["cockroachdb/team-q"], teams["cockroachdb/team-b"]}},
 	}
 
 	for _, tc := range testCases {
