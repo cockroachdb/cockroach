@@ -17,7 +17,7 @@ go_test(
     ],
     embed = [":schemachangerccl"],
     shard_count = 16,
-    tags = ["cpu:3"],
+    tags = ["cpu:2"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

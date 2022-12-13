@@ -266,7 +266,7 @@ go_test(
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
     shard_count = {{ if gt .TestCount 16 }}16{{ else }}{{ .TestCount }}{{end}},
-    tags = ["cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}"],
+    tags = ["cpu:{{ if gt .NumCPU 3 }}3{{ else }}{{ .NumCPU }}{{ end }}"],
     deps = [
         "//pkg/build/bazel",{{ if .Ccl }}
         "//pkg/ccl",{{ end }}
