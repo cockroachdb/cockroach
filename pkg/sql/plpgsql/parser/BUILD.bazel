@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 sh_binary(
     name = "plpgsql-gen",
@@ -56,6 +56,19 @@ exports_files(
         "plpgsql.y",
     ],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "parser_test",
+    srcs = ["parser_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":parser",
+        "//pkg/testutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")

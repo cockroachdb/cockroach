@@ -11,28 +11,26 @@
 package parser
 
 import (
-	"fmt"
 	"go/constant"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	scanner.NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
-	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
+	NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
+	NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
 }
 
 // Statement is the result of parsing a single statement. It contains the AST
 // node along with other information.
 type Statement struct {
 	// AST is the root of the AST tree for the parsed statement.
-	AST tree.Statement
+	AST *plpgsqltree.PLpgSQLStmtBlock
 
 	// SQL is the original SQL from which the statement was parsed. Note that this
 	// is not appropriate for use in logging, as it may contain passwords and
@@ -54,30 +52,22 @@ type Statement struct {
 	NumAnnotations tree.AnnotationIdx
 }
 
-// Statements is a list of parsed statements.
-type Statements []Statement
-
 // String returns the AST formatted as a string.
-func (stmts Statements) String() string {
-	return stmts.StringWithFlags(tree.FmtSimple)
+func (stmt Statement) String() string {
+	return stmt.StringWithFlags(tree.FmtSimple)
 }
 
 // StringWithFlags returns the AST formatted as a string (with the given flags).
-func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
+func (stmt Statement) StringWithFlags(flags tree.FmtFlags) string {
 	ctx := tree.NewFmtCtx(flags)
-	for i, s := range stmts {
-		if i > 0 {
-			ctx.WriteString("; ")
-		}
-		ctx.FormatNode(s.AST)
-	}
+	stmt.AST.Format(ctx)
 	return ctx.CloseAndGetString()
 }
 
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner.Scanner
+	scanner    Scanner
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType
@@ -103,25 +93,22 @@ func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
 }
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (Statements, error) {
+func (p *Parser) Parse(sql string) (Statement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
-func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
+func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statement, error) {
 	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
 func (p *Parser) parseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
-	stmts, err := p.parseWithDepth(1, sql, nakedIntType)
+	stmt, err := p.parseWithDepth(1, sql, nakedIntType)
 	if err != nil {
 		return Statement{}, err
 	}
-	if len(stmts) != 1 {
-		return Statement{}, errors.AssertionFailedf("expected 1 statement, but found %d", len(stmts))
-	}
-	return stmts[0], nil
+	return stmt, nil
 }
 
 func (p *Parser) scanOneStmt() (sql string, tokens []plpgsqlSymType, done bool) {
@@ -129,14 +116,9 @@ func (p *Parser) scanOneStmt() (sql string, tokens []plpgsqlSymType, done bool) 
 	tokens = p.tokBuf[:0]
 
 	// Scan the first token.
-	for {
-		p.scanner.Scan(&lval)
-		if lval.id == 0 {
-			return "", nil, true
-		}
-		if lval.id != ';' {
-			break
-		}
+	p.scanner.Scan(&lval)
+	if lval.id == 0 {
+		return "", nil, true
 	}
 
 	startPos := lval.pos
@@ -149,7 +131,7 @@ func (p *Parser) scanOneStmt() (sql string, tokens []plpgsqlSymType, done bool) 
 		}
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
-		if lval.id == 0 || lval.id == ';' {
+		if lval.id == 0 {
 			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos
@@ -157,24 +139,20 @@ func (p *Parser) scanOneStmt() (sql string, tokens []plpgsqlSymType, done bool) 
 	}
 }
 
-func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (Statements, error) {
-	stmts := Statements(p.stmtBuf[:0])
-	p.scanner.Init(sql)
+func (p *Parser) parseWithDepth(
+	depth int, plpgsql string, nakedIntType *types.T,
+) (Statement, error) {
+	p.scanner.Init(plpgsql)
 	defer p.scanner.Cleanup()
-	for {
-		sql, tokens, done := p.scanOneStmt()
-		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
-		if err != nil {
-			return nil, err
-		}
-		if stmt.AST != nil {
-			stmts = append(stmts, stmt)
-		}
-		if done {
-			break
-		}
+	sql, tokens, done := p.scanOneStmt()
+	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
+	if err != nil {
+		return Statement{}, err
 	}
-	return stmts, nil
+	if !done {
+		return Statement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
+	}
+	return stmt, nil
 }
 
 // parse parses a statement from the given scanned tokens.
@@ -233,7 +211,7 @@ func unaryNegation(e tree.Expr) tree.Expr {
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (Statements, error) {
+func Parse(sql string) (Statement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
@@ -253,127 +231,6 @@ func ParseOne(sql string) (Statement, error) {
 func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
 	var p Parser
 	return p.parseOneWithInt(sql, nakedIntType)
-}
-
-// ParseQualifiedTableName parses a possibly qualified table name. The
-// table name must contain one or more name parts, using the full
-// input SQL syntax: each name part containing special characters, or
-// non-lowercase characters, must be enclosed in double quote. The
-// name may not be an invalid table name (the caller is responsible
-// for guaranteeing that only valid table names are provided as
-// input).
-func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
-	name, err := ParseTableName(sql)
-	if err != nil {
-		return nil, err
-	}
-	tn := name.ToTableName()
-	return &tn, nil
-}
-
-// ParseTableName parses a table name. The table name must contain one
-// or more name parts, using the full input SQL syntax: each name
-// part containing special characters, or non-lowercase characters,
-// must be enclosed in double quote. The name may not be an invalid
-// table name (the caller is responsible for guaranteeing that only
-// valid table names are provided as input).
-func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
-	// We wrap the name we want to parse into a dummy statement since our parser
-	// can only parse full statements.
-	stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", sql))
-	if err != nil {
-		return nil, err
-	}
-	rename, ok := stmt.AST.(*tree.RenameTable)
-	if !ok {
-		return nil, errors.AssertionFailedf("expected an ALTER TABLE statement, but found %T", stmt)
-	}
-	return rename.Name, nil
-}
-
-// parseExprsWithInt parses one or more sql expressions.
-func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error) {
-	stmt, err := ParseOneWithInt(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), nakedIntType)
-	if err != nil {
-		return nil, err
-	}
-	set, ok := stmt.AST.(*tree.SetVar)
-	if !ok {
-		return nil, errors.AssertionFailedf("expected a SET statement, but found %T", stmt)
-	}
-	return set.Values, nil
-}
-
-// ParseExprs parses a comma-delimited sequence of SQL scalar
-// expressions. The caller is responsible for ensuring that the input
-// is, in fact, a comma-delimited sequence of SQL scalar expressions —
-// the results are undefined if the string contains invalid SQL
-// syntax.
-func ParseExprs(sql []string) (tree.Exprs, error) {
-	if len(sql) == 0 {
-		return tree.Exprs{}, nil
-	}
-	return parseExprsWithInt(sql, defaultNakedIntType)
-}
-
-// ParseExpr parses a SQL scalar expression. The caller is responsible
-// for ensuring that the input is, in fact, a valid SQL scalar
-// expression — the results are undefined if the string contains
-// invalid SQL syntax.
-func ParseExpr(sql string) (tree.Expr, error) {
-	return ParseExprWithInt(sql, defaultNakedIntType)
-}
-
-// ParseExprWithInt parses a SQL scalar expression, using the given
-// type when INT is used as type name in the SQL syntax. The caller is
-// responsible for ensuring that the input is, in fact, a valid SQL
-// scalar expression — the results are undefined if the string
-// contains invalid SQL syntax.
-func ParseExprWithInt(sql string, nakedIntType *types.T) (tree.Expr, error) {
-	exprs, err := parseExprsWithInt([]string{sql}, nakedIntType)
-	if err != nil {
-		return nil, err
-	}
-	if len(exprs) != 1 {
-		return nil, errors.AssertionFailedf("expected 1 expression, found %d", len(exprs))
-	}
-	return exprs[0], nil
-}
-
-// GetTypeReferenceFromName turns a type name into a type
-// reference. This supports only “simple” (single-identifier)
-// references to built-in types, when the identifer has already been
-// parsed away from the input SQL syntax.
-func GetTypeReferenceFromName(typeName tree.Name) (tree.ResolvableTypeReference, error) {
-	expr, err := ParseExpr(fmt.Sprintf("1::%s", typeName.String()))
-	if err != nil {
-		return nil, err
-	}
-
-	cast, ok := expr.(*tree.CastExpr)
-	if !ok {
-		return nil, errors.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
-	}
-
-	return cast.Type, nil
-}
-
-// GetTypeFromValidSQLSyntax retrieves a type from its SQL syntax. The caller is
-// responsible for guaranteeing that the type expression is valid
-// SQL. This includes verifying that complex identifiers are enclosed
-// in double quotes, etc.
-func GetTypeFromValidSQLSyntax(sql string) (tree.ResolvableTypeReference, error) {
-	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
-	if err != nil {
-		return nil, err
-	}
-
-	cast, ok := expr.(*tree.CastExpr)
-	if !ok {
-		return nil, errors.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
-	}
-
-	return cast.Type, nil
 }
 
 var errBitLengthNotPositive = pgerror.WithCandidateCode(

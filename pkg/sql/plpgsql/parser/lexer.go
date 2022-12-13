@@ -36,7 +36,8 @@ type lexer struct {
 	// token returned by Lex().
 	lastPos int
 
-	stmt tree.Statement
+	stmt *plpgsqltree.PLpgSQLStmtBlock
+
 	// numPlaceholders is 1 + the highest placeholder index encountered.
 	numPlaceholders int
 	numAnnotations  tree.AnnotationIdx
@@ -108,6 +109,60 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 	return int(lval.id)
 }
 
+// MakeExecSqlStmt makes a PLpgSQLStmtExecSql from current token position.
+// TODO(chengxiong): we need to fill in variables as well.
+func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSql {
+	sqlToks := make([]string, 0)
+	if startTokenID == 0 || startTokenID == ';' {
+		panic("plpgsql_execsql: invalid start token")
+	}
+	if int(l.lastToken().id) != startTokenID {
+		panic("plpgsql_execsql: given start token does not match current pos of lexer")
+	}
+
+	var hasInto bool
+	var hasStrict bool
+	var preTok plpgsqlSymType
+	tok := l.lastToken()
+	for {
+		if !hasInto {
+			sqlToks = append(sqlToks, tok.Str())
+		}
+		preTok = tok
+		l.Lex(&tok)
+		if tok.id == ';' {
+			break
+		}
+		if tok.id == 0 {
+			panic("unexpected end of function definition")
+		}
+		if hasInto && tok.id == STRICT {
+			hasStrict = true
+			continue
+		}
+		if tok.id == INTO {
+			if preTok.id == INSERT {
+				continue
+			}
+			if preTok.id == MERGE {
+				continue
+			}
+			if startTokenID == IMPORT {
+				continue
+			}
+			if hasInto {
+				panic("plpgsql_execsql: INTO specified more than once")
+			}
+			hasInto = true
+		}
+	}
+	return &plpgsqltree.PLpgSQLStmtExecSql{
+		SqlStmt: strings.Join(sqlToks, " "),
+		Into:    hasInto,
+		Strict:  hasStrict,
+	}
+}
+
 // TODO we need to know the return type of the function. We should have know it
 // when we do "CREATE FUNCTION"
 func (l *lexer) ReadSqlExpression() string {
@@ -177,8 +232,8 @@ func (l *lexer) NewAnnotation() tree.AnnotationIdx {
 }
 
 // SetStmt is called from the parser when the statement is constructed.
-func (l *lexer) SetStmt(stmt tree.Statement) {
-	l.stmt = stmt
+func (l *lexer) SetStmt(stmt plpgsqltree.PLpgSQLStatement) {
+	l.stmt = stmt.(*plpgsqltree.PLpgSQLStmtBlock)
 }
 
 // UpdateNumPlaceholders is called from the parser when a placeholder is constructed.
