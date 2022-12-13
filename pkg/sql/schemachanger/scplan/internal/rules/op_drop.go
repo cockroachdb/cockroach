@@ -169,6 +169,7 @@ func init() {
 			),
 			constraint.Type(
 				(*scpb.CheckConstraint)(nil),
+				(*scpb.ForeignKeyConstraint)(nil),
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
 			),
 

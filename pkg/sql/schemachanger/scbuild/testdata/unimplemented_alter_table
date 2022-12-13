@@ -13,10 +13,6 @@ CREATE TABLE defaultdb.foo (
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD COLUMN j INT REFERENCES defaultdb.foo(i)
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ADD COLUMN j SERIAL
 ----
 
@@ -90,10 +86,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i DROP DEFAULT
 
 unimplemented
 ALTER TABLE defaultdb.foo ADD UNIQUE(i);
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo ADD FOREIGN KEY (i) REFERENCES defaultdb.foo(i);
 ----
 
 unimplemented

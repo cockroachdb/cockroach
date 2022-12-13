@@ -121,13 +121,13 @@ DROP TABLE defaultdb.shipments CASCADE;
   {comment: pkey is good, indexId: 1, tableId: 109}
 - [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 109}
-- [[ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC]
+- [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {columnIds: [4], constraintId: 2, referencedColumnIds: [1], referencedTableId: 104, tableId: 109}
 - [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC]
   {constraintId: 2, name: fk_customers, tableId: 109}
 - [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is important}, ABSENT], PUBLIC]
   {comment: customer is important, constraintId: 2, tableId: 109}
-- [[ForeignKeyConstraint:{DescID: 109, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC]
+- [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {columnIds: [4], constraintId: 3, referencedColumnIds: [2], referencedTableId: 105, tableId: 109}
 - [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC]
   {constraintId: 3, name: fk_orders, tableId: 109}
