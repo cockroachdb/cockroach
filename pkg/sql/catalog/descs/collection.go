@@ -375,7 +375,7 @@ func (tc *Collection) DeleteNamespaceEntryToBatch(
 }
 
 func (tc *Collection) markAsShadowedName(id descpb.ID) {
-	desc := tc.cr.Cache().LookupDescriptorEntry(id)
+	desc := tc.cr.Cache().LookupDescriptor(id)
 	if desc == nil {
 		return
 	}
@@ -741,7 +741,7 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 	var ret nstree.MutableCatalog
 	var functionIDs catalog.DescriptorIDSet
 	for _, desc := range descs {
-		ret.UpsertDescriptorEntry(desc)
+		ret.UpsertDescriptor(desc)
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
 			_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
 				functionIDs.Add(overload.ID)
@@ -755,7 +755,7 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 		return nstree.Catalog{}, err
 	}
 	for _, desc := range descs {
-		ret.UpsertDescriptorEntry(desc)
+		ret.UpsertDescriptor(desc)
 	}
 	return ret.Catalog, nil
 }
@@ -767,7 +767,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 		return nstree.Catalog{}, err
 	}
 	var ids catalog.DescriptorIDSet
-	_ = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	_ = read.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		ids.Add(desc.GetID())
 		return nil
 	})
@@ -793,7 +793,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 	}
 	var ret nstree.MutableCatalog
 	for _, desc := range descs {
-		ret.UpsertDescriptorEntry(desc)
+		ret.UpsertDescriptor(desc)
 	}
 	return ret.Catalog, nil
 }
@@ -821,7 +821,7 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		return nil, err
 	}
 	var m nstree.NameMap
-	_ = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	_ = read.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		m.Upsert(desc, desc.SkipNamespace())
 		return nil
 	})
@@ -875,12 +875,12 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 		return nil, err
 	}
 	// Ensure the given ID does indeed belong to a database.
-	if desc := all.LookupDescriptorEntry(db.GetID()); desc == nil || desc.DescriptorType() != catalog.Database {
+	if desc := all.LookupDescriptor(db.GetID()); desc == nil || desc.DescriptorType() != catalog.Database {
 		return nil, sqlerrors.NewUndefinedDatabaseError(db.GetName())
 	}
 	dbID := db.GetID()
 	var ret []catalog.TableDescriptor
-	_ = all.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	_ = all.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.GetParentID() != dbID {
 			return nil
 		}

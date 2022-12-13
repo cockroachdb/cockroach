@@ -115,7 +115,7 @@ func (cq catalogQuery) processDescriptorResultRow(
 	if err != nil {
 		return wrapError(expectedType, id, err)
 	}
-	cb.UpsertDescriptorEntry(desc)
+	cb.UpsertDescriptor(desc)
 	return nil
 }
 
