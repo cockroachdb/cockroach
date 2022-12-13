@@ -94,9 +94,20 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 		return nil, errors.New("SHOW RANGES may not be called on a virtual table")
 	}
 
-	span := idx.Span()
-	startKey := hex.EncodeToString(span.Key)
-	endKey := hex.EncodeToString(span.EndKey)
+	var startKey, endKey string
+	if n.TableOrIndex.Index == "" {
+		// All indexes.
+		tableID := idx.Table().ID()
+		prefix := d.evalCtx.Codec.TablePrefix(uint32(tableID))
+		startKey = hex.EncodeToString(prefix)
+		endKey = hex.EncodeToString(prefix.PrefixEnd())
+	} else {
+		// Just one index.
+		span := idx.Span()
+		startKey = hex.EncodeToString(span.Key)
+		endKey = hex.EncodeToString(span.EndKey)
+	}
+
 	return parse(fmt.Sprintf(`
 SELECT 
   CASE WHEN r.start_key <= x'%[1]s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
