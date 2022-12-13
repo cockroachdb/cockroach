@@ -125,3 +125,18 @@ func IsClientSideQueryCanceledErr(err error) bool {
 	}
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
 }
+
+// ArrayStringToSlice converts a string array column to a string slice.
+// "{}" -> {}
+// "{a}" -> {"a"}
+// "{a,b}" -> {"a", "b"}
+func ArrayStringToSlice(t *testing.T, array string, message ...string) []string {
+	length := len(array)
+	require.GreaterOrEqual(t, length, 2, message)
+	require.Equal(t, "{", string(array[0]), message)
+	require.Equal(t, "}", string(array[length-1]), message)
+	if length == 2 {
+		return []string{}
+	}
+	return strings.Split(array[1:length-1], ",")
+}
