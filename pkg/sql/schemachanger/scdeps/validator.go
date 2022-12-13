@@ -53,11 +53,11 @@ type ValidateInvertedIndexesFn func(
 	protectedTSProvider scexec.ProtectedTimestampManager,
 ) error
 
-// ValidateCheckConstraintFn callback function for validting check constraints.
-type ValidateCheckConstraintFn func(
+// ValidateConstraintFn callback function for validating constraints.
+type ValidateConstraintFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.CheckConstraint,
+	constraint catalog.Constraint,
 	indexIDForValidation descpb.IndexID,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -75,7 +75,7 @@ type validator struct {
 	ieFactory                  sqlutil.InternalExecutorFactory
 	validateForwardIndexes     ValidateForwardIndexesFn
 	validateInvertedIndexes    ValidateInvertedIndexesFn
-	validateCheckConstraint    ValidateCheckConstraintFn
+	validateConstraint         ValidateConstraintFn
 	newFakeSessionData         NewFakeSessionDataFn
 	protectedTimestampProvider scexec.ProtectedTimestampManager
 }
@@ -113,14 +113,14 @@ func (vd validator) ValidateInvertedIndexes(
 	)
 }
 
-func (vd validator) ValidateCheckConstraint(
+func (vd validator) ValidateConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.CheckConstraint,
+	constraint catalog.Constraint,
 	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	return vd.validateCheckConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(&vd.settings.SV),
+	return vd.validateConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(&vd.settings.SV),
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 
@@ -151,7 +151,7 @@ func NewValidator(
 	protectedTimestampProvider scexec.ProtectedTimestampManager,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
-	validateCheckConstraint ValidateCheckConstraintFn,
+	validateCheckConstraint ValidateConstraintFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
@@ -161,7 +161,7 @@ func NewValidator(
 		ieFactory:                  ieFactory,
 		validateForwardIndexes:     validateForwardIndexes,
 		validateInvertedIndexes:    validateInvertedIndexes,
-		validateCheckConstraint:    validateCheckConstraint,
+		validateConstraint:         validateCheckConstraint,
 		newFakeSessionData:         newFakeSessionData,
 		protectedTimestampProvider: protectedTimestampProvider,
 	}

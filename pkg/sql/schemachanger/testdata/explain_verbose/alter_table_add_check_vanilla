@@ -60,7 +60,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
     │   │
     │   └── • 1 Validation operation
     │       │
-    │       └── • ValidateCheckConstraint
+    │       └── • ValidateConstraint
     │             ConstraintID: 2
     │             TableID: 104
     │
