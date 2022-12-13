@@ -967,11 +967,10 @@ func (cfg *ExecutorConfig) WarmSyntheticPrivilegeCacheForVirtualTables(ctx conte
 	}()
 
 	var tableVersions []descpb.DescriptorVersion
-	vtablePathToPrivilegeAccumulator := make(map[string]*catpb.PrivilegeDescriptor)
+	vtablePathToPrivilegeAccumulator := make(map[string]*syntheticprivilege.Accumulator)
 	query := fmt.Sprintf(
-		`SELECT path, username, privileges, grant_options FROM system.%s WHERE path LIKE '/%s/%%'`,
+		`SELECT path, username, privileges, grant_options FROM system.%s WHERE path LIKE $1`,
 		catconstants.SystemPrivilegeTableName,
-		syntheticprivilege.VirtualTablePathPrefix,
 	)
 	err = cfg.InternalExecutorFactory.DescsTxnWithExecutor(
 		ctx,
@@ -995,7 +994,8 @@ func (cfg *ExecutorConfig) WarmSyntheticPrivilegeCacheForVirtualTables(ctx conte
 			tableVersions = []descpb.DescriptorVersion{systemPrivDesc.GetVersion()}
 
 			it, err := ie.QueryIteratorEx(
-				ctx, `get-vtable-privileges`, txn, sessiondata.NodeUserSessionDataOverride, query,
+				ctx, `get-vtable-privileges`, txn, sessiondata.NodeUserSessionDataOverride,
+				query, fmt.Sprintf("/%s/%%", syntheticprivilege.VirtualTablePathPrefix),
 			)
 			if err != nil {
 				return err
@@ -1016,14 +1016,14 @@ func (cfg *ExecutorConfig) WarmSyntheticPrivilegeCacheForVirtualTables(ctx conte
 				user := tree.MustBeDString(it.Cur()[1])
 				privArr := tree.MustBeDArray(it.Cur()[2])
 				grantOptionArr := tree.MustBeDArray(it.Cur()[3])
-				privDesc, ok := vtablePathToPrivilegeAccumulator[string(path)]
+				accum, ok := vtablePathToPrivilegeAccumulator[string(path)]
 				if !ok {
-					privDesc = &catpb.PrivilegeDescriptor{}
+					accum = syntheticprivilege.NewAccumulator(privilege.VirtualTable, string(path))
+					vtablePathToPrivilegeAccumulator[string(path)] = accum
 				}
-				if err := accumulatePrivilegeDescriptorFromSystemPrivilegesRow(privilege.VirtualTable, privDesc, user, privArr, grantOptionArr); err != nil {
+				if err := accum.AddRow(path, user, privArr, grantOptionArr); err != nil {
 					return err
 				}
-				vtablePathToPrivilegeAccumulator[string(path)] = privDesc
 			}
 			return nil
 		},
@@ -1039,9 +1039,9 @@ func (cfg *ExecutorConfig) WarmSyntheticPrivilegeCacheForVirtualTables(ctx conte
 				SchemaName: scName,
 				TableName:  sc.Desc().GetName(),
 			}
-			privDesc, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]
-			if !ok {
-				privDesc = vtablePriv.GetFallbackPrivileges()
+			privDesc := vtablePriv.GetFallbackPrivileges()
+			if accum, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]; ok {
+				privDesc = accum.GetDescriptor()
 			}
 			cfg.SyntheticPrivilegeCache.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc)
 		})

@@ -358,15 +358,15 @@ func synthesizePrivilegeDescriptor(
 // resolve the PrivilegeDescriptor from the cache.
 func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, spo syntheticprivilege.Object,
-) (privDesc *catpb.PrivilegeDescriptor, retErr error) {
+) (_ *catpb.PrivilegeDescriptor, retErr error) {
 
 	query := fmt.Sprintf(
-		`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
+		`SELECT username, privileges, grant_options FROM system.%s WHERE path = $1`,
 		catconstants.SystemPrivilegeTableName,
-		spo.GetPath())
+	)
 
 	it, err := ie.QueryIteratorEx(
-		ctx, `get-system-privileges`, txn, sessiondata.NodeUserSessionDataOverride, query,
+		ctx, `get-system-privileges`, txn, sessiondata.NodeUserSessionDataOverride, query, spo.GetPath(),
 	)
 	if err != nil {
 		return nil, err
@@ -375,7 +375,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		retErr = errors.CombineErrors(retErr, it.Close())
 	}()
 
-	privDesc = &catpb.PrivilegeDescriptor{}
+	privAccumulator := syntheticprivilege.NewAccumulator(spo.GetObjectType(), spo.GetPath())
 	for {
 		ok, err := it.Next(ctx)
 		if err != nil {
@@ -388,12 +388,12 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		user := tree.MustBeDString(it.Cur()[0])
 		privArr := tree.MustBeDArray(it.Cur()[1])
 		grantOptionArr := tree.MustBeDArray(it.Cur()[2])
-		err = accumulatePrivilegeDescriptorFromSystemPrivilegesRow(spo.GetObjectType(), privDesc, user, privArr, grantOptionArr)
-		if err != nil {
+		if err := privAccumulator.AddRow(tree.DString(spo.GetPath()), user, privArr, grantOptionArr); err != nil {
 			return nil, err
 		}
 	}
 
+	privDesc := privAccumulator.GetDescriptor()
 	// To avoid having to insert a row for public for each virtual
 	// table into system.privileges, we assume that if there is
 	// NO entry for public in the PrivilegeDescriptor, Public has
@@ -416,48 +416,4 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		return nil, err
 	}
 	return privDesc, err
-}
-
-func accumulatePrivilegeDescriptorFromSystemPrivilegesRow(
-	objectType privilege.ObjectType,
-	privileges *catpb.PrivilegeDescriptor,
-	user tree.DString,
-	privArr, grantOptionArr *tree.DArray,
-) (retErr error) {
-	var privilegeStrings []string
-	for _, elem := range privArr.Array {
-		privilegeStrings = append(privilegeStrings, string(tree.MustBeDString(elem)))
-	}
-
-	var grantOptionStrings []string
-	for _, elem := range grantOptionArr.Array {
-		grantOptionStrings = append(grantOptionStrings, string(tree.MustBeDString(elem)))
-	}
-	privs, err := privilege.ListFromStrings(privilegeStrings)
-	if err != nil {
-		return err
-	}
-	grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
-	if err != nil {
-		return err
-	}
-	privsWithGrantOption := privilege.ListFromBitField(
-		privs.ToBitField()&grantOptions.ToBitField(),
-		objectType,
-	)
-	privsWithoutGrantOption := privilege.ListFromBitField(
-		privs.ToBitField()&^privsWithGrantOption.ToBitField(),
-		objectType,
-	)
-	privileges.Grant(
-		username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-		privsWithGrantOption,
-		true, /* withGrantOption */
-	)
-	privileges.Grant(
-		username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-		privsWithoutGrantOption,
-		false, /* withGrantOption */
-	)
-	return nil
 }
