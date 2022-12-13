@@ -125,7 +125,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 
 		lookupFlags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
 		if err := maybeFailOnDependentDescInRename(
-			params.ctx, params.p, n.db, n.desc.GetName(), lookupFlags, catalog.Schema,
+			params.ctx, params.p, n.db, n.desc, lookupFlags, catalog.Schema,
 		); err != nil {
 			return err
 		}

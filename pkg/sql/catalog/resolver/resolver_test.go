@@ -637,7 +637,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		for _, tc := range testCases {
 			t.Run(tc.testName, func(t *testing.T) {
 				_, prefix, tblDesc, idxDesc, err := resolver.ResolveIndex(
-					ctx, schemaResolver, tc.name, txn, execCfg.Codec, true, false)
+					ctx, schemaResolver, tc.name, true, false)
 				var res string
 				if err != nil {
 					res = fmt.Sprintf("error: %s", err.Error())
@@ -647,7 +647,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 				require.Equal(t, tc.expected, res)
 
 				_, _, _, _, err = resolver.ResolveIndex(
-					ctx, schemaResolver, tc.name, txn, execCfg.Codec, false, false)
+					ctx, schemaResolver, tc.name, false, false)
 				if tc.errIfNotRequired {
 					require.Error(t, err)
 				} else {
@@ -720,8 +720,6 @@ CREATE INDEX baz_idx ON baz (s);
 			ctx,
 			schemaResolver,
 			newTableIndexName("", "", "", "baz_idx"),
-			txn,
-			execCfg.Codec,
 			false,
 			false,
 		)
@@ -735,8 +733,6 @@ CREATE INDEX baz_idx ON baz (s);
 			ctx,
 			schemaResolver,
 			newTableIndexName("", "", "", "foo_idx"),
-			txn,
-			execCfg.Codec,
 			false,
 			false,
 		)

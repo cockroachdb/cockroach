@@ -348,9 +348,18 @@ type fkResolver struct {
 
 var _ resolver.SchemaResolver = &fkResolver{}
 
-// Accessor implements the resolver.SchemaResolver interface.
-func (r *fkResolver) Accessor() catalog.Accessor {
-	return nil
+// GetObjectNamesAndIDs implements the resolver.SchemaResolver interface.
+func (r *fkResolver) GetObjectNamesAndIDs(
+	ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+) (tree.TableNames, descpb.IDs, error) {
+	return nil, nil, errors.AssertionFailedf("GetObjectNamesAndIDs is not implemented by fkResolver")
+}
+
+// MustGetCurrentSessionDatabase implements the resolver.SchemaResolver interface.
+func (r *fkResolver) MustGetCurrentSessionDatabase(
+	ctx context.Context,
+) (catalog.DatabaseDescriptor, error) {
+	return nil, errors.AssertionFailedf("MustGetCurrentSessionDatabase is not implemented by fkResolver")
 }
 
 // CurrentDatabase implements the resolver.SchemaResolver interface.
@@ -361,11 +370,6 @@ func (r *fkResolver) CurrentDatabase() string {
 // CurrentSearchPath implements the resolver.SchemaResolver interface.
 func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
-}
-
-// CommonLookupFlagsRequired implements the resolver.SchemaResolver interface.
-func (r *fkResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
-	return tree.CommonLookupFlags{Required: true}
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.

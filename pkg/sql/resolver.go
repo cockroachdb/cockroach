@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -448,18 +447,22 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		if targets.AllTablesInSchema || targets.AllSequencesInSchema {
 			// Get all the descriptors for the tables in the specified schemas.
 			var descs []DescriptorWithObjectType
-			for _, sc := range targets.Schemas {
+			for _, scName := range targets.Schemas {
 				dbName := p.CurrentDatabase()
-				if sc.ExplicitCatalog {
-					dbName = sc.Catalog()
+				if scName.ExplicitCatalog {
+					dbName = scName.Catalog()
 				}
 				db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, flags)
 				if err != nil {
 					return nil, err
 				}
-				_, objectIDs, err := resolver.GetObjectNamesAndIDs(
-					ctx, p.txn, p, p.ExecCfg().Codec, db, sc.Schema(), true, /* explicitPrefix */
+				sc, err := p.Descriptors().GetImmutableSchemaByName(
+					ctx, p.txn, db, scName.Schema(), p.CommonLookupFlagsRequired(),
 				)
+				if err != nil {
+					return nil, err
+				}
+				_, objectIDs, err := p.GetObjectNamesAndIDs(ctx, db, sc)
 				if err != nil {
 					return nil, err
 				}
@@ -735,18 +738,13 @@ func expandMutableIndexName(
 	ctx context.Context, p *planner, index *tree.TableIndexName, requireTable bool,
 ) (tn *tree.TableName, desc *tabledesc.Mutable, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tn, desc, err = expandIndexName(ctx, p.txn, p, p.ExecCfg().Codec, index, requireTable)
+		tn, desc, err = expandIndexName(ctx, p, index, requireTable)
 	})
 	return tn, desc, err
 }
 
 func expandIndexName(
-	ctx context.Context,
-	txn *kv.Txn,
-	p *planner,
-	codec keys.SQLCodec,
-	index *tree.TableIndexName,
-	requireTable bool,
+	ctx context.Context, p *planner, index *tree.TableIndexName, requireTable bool,
 ) (tn *tree.TableName, desc *tabledesc.Mutable, err error) {
 	tn = &index.Table
 	if tn.Object() != "" {
@@ -762,7 +760,7 @@ func expandIndexName(
 		return tn, desc, nil
 	}
 
-	found, resolvedPrefix, tbl, _, err := resolver.ResolveIndex(ctx, p, index, txn, codec, requireTable, false /*requireActiveIndex*/)
+	found, resolvedPrefix, tbl, _, err := resolver.ResolveIndex(ctx, p, index, requireTable, false /*requireActiveIndex*/)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -806,7 +804,7 @@ func (p *planner) getTableAndIndexImpl(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, catalog.Index, error) {
 	_, resolvedPrefix, tbl, idx, err := resolver.ResolveIndex(
-		ctx, p, tableWithIndex, p.Txn(), p.EvalContext().Codec, true /* required */, true, /* requireActiveIndex */
+		ctx, p, tableWithIndex, true /* required */, true, /* requireActiveIndex */
 	)
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, nil, err

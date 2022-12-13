@@ -136,8 +136,6 @@ type Collection struct {
 	sqlLivenessSession sqlliveness.Session
 }
 
-var _ catalog.Accessor = (*Collection)(nil)
-
 // GetDeletedDescs returns the deleted descriptors of the collection.
 func (tc *Collection) GetDeletedDescs() catalog.DescriptorIDSet {
 	return tc.deletedDescs
@@ -391,6 +389,24 @@ func (tc *Collection) markAsShadowedName(id descpb.ID) {
 	}] = struct{}{}
 }
 
+func (tc *Collection) isShadowedName(nameKey catalog.NameKey) bool {
+	var k descpb.NameInfo
+	switch t := nameKey.(type) {
+	case descpb.NameInfo:
+		k = t
+	case *descpb.NameInfo:
+		k = *t
+	default:
+		k = descpb.NameInfo{
+			ParentID:       nameKey.GetParentID(),
+			ParentSchemaID: nameKey.GetParentSchemaID(),
+			Name:           nameKey.GetName(),
+		}
+	}
+	_, ok := tc.shadowedNames[k]
+	return ok
+}
+
 // WriteCommentToBatch adds the comment changes to uncommitted layer and writes
 // to the kv batch.
 func (tc *Collection) WriteCommentToBatch(
@@ -615,7 +631,7 @@ func (tc *Collection) lookupDescriptorID(
 		return objInMemory.GetID(), nil
 	}
 	// Look up ID in storage if nothing was found in memory.
-	if _, ok := tc.shadowedNames[key]; ok {
+	if tc.isShadowedName(key) {
 		return descpb.InvalidID, nil
 	}
 	read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{key})
@@ -692,7 +708,7 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 	var ids catalog.DescriptorIDSet
 	ids.Add(db.GetID())
 	_ = read.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if e.GetParentID() != db.GetID() {
+		if e.GetParentID() != db.GetID() || tc.isShadowedName(e) {
 			return nil
 		}
 		if !strings.HasPrefix(e.GetName(), catconstants.PgTempSchemaName) &&
@@ -794,7 +810,9 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	}
 	var readIDs catalog.DescriptorIDSet
 	_ = read.ForEachDatabaseNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		readIDs.Add(e.GetID())
+		if !tc.isShadowedName(e) {
+			readIDs.Add(e.GetID())
+		}
 		return nil
 	})
 	const isDescriptorRequired = true
@@ -889,7 +907,9 @@ func (tc *Collection) GetSchemasForDatabase(
 		ret[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
 	}
 	_ = read.ForEachSchemaNamespaceEntryInDatabase(db.GetID(), func(e nstree.NamespaceEntry) error {
-		ret[e.GetID()] = e.GetName()
+		if !tc.isShadowedName(e) {
+			ret[e.GetID()] = e.GetName()
+		}
 		return nil
 	})
 	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
@@ -907,51 +927,43 @@ func (tc *Collection) GetSchemasForDatabase(
 	return ret, nil
 }
 
-// GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.
+// GetObjectNamesAndIDs returns the names and IDs of all objects in a schema.
 func (tc *Collection) GetObjectNamesAndIDs(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	scName string,
-	flags tree.DatabaseListFlags,
-) (tree.TableNames, descpb.IDs, error) {
-	if ok, names, ds := tc.virtual.maybeGetObjectNamesAndIDs(
-		scName, db, flags,
-	); ok {
-		return names, ds, nil
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	if sc.SchemaKind() == catalog.SchemaVirtual {
+		tc.virtual.forEachVirtualObject(sc, func(obj catalog.Descriptor) {
+			mc.UpsertNamespaceEntry(obj, obj.GetID(), hlc.Timestamp{})
+		})
+		return mc.Catalog, nil
 	}
-
-	schemaFlags := tree.SchemaLookupFlags{
-		Required:       flags.Required,
-		AvoidLeased:    flags.RequireMutable || flags.AvoidLeased,
-		IncludeDropped: flags.IncludeDropped,
-		IncludeOffline: flags.IncludeOffline,
-	}
-	schema, err := tc.getSchemaByName(ctx, txn, db, scName, schemaFlags)
+	read, err := tc.cr.ScanNamespaceForSchemaObjects(ctx, txn, db, sc)
 	if err != nil {
-		return nil, nil, err
+		return nstree.Catalog{}, err
 	}
-	if schema == nil { // required must have been false
-		return nil, nil, nil
-	}
-	read, err := tc.cr.ScanNamespaceForSchemaObjects(ctx, txn, db, schema)
-	if err != nil {
-		return nil, nil, err
-	}
-	var tableNames tree.TableNames
-	var tableIDs descpb.IDs
 	_ = read.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if e.GetParentID() != db.GetID() || e.GetParentSchemaID() != schema.GetID() {
-			return nil
+		if !tc.isShadowedName(e) {
+			mc.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 		}
-		tn := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(scName), tree.Name(e.GetName()))
-		tn.ExplicitCatalog = flags.ExplicitPrefix
-		tn.ExplicitSchema = flags.ExplicitPrefix
-		tableNames = append(tableNames, tn)
-		tableIDs = append(tableIDs, e.GetID())
 		return nil
 	})
-	return tableNames, tableIDs, nil
+	for _, iterator := range []func(func(catalog.Descriptor) error) error{
+		tc.uncommitted.iterateUncommittedByID,
+		tc.synthetic.iterateSyntheticByID,
+	} {
+		_ = iterator(func(desc catalog.Descriptor) error {
+			if desc.GetParentID() != db.GetID() || desc.GetParentSchemaID() != sc.GetID() {
+				return nil
+			}
+			if desc.Dropped() || desc.SkipNamespace() {
+				return nil
+			}
+			mc.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
+			return nil
+		})
+	}
+	return mc.Catalog, nil
 }
 
 // SetSyntheticDescriptors sets the provided descriptors as the synthetic
