@@ -349,21 +349,18 @@ func TestTracerInjectExtract(t *testing.T) {
 }
 
 func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
-	// Verify that when a span is put on the wire on one end, and is checked
-	// against the span inclusion functions both on the client and server, a real
-	// span results in a real span.
+	// Verify that when a span is put on the wire on one end a real span results
+	// in a real span.
 	tr1 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 	sp1 := tr1.StartSpan("tr1.root")
 	defer sp1.Finish()
 	carrier := MetadataCarrier{MD: metadata.MD{}}
-	require.True(t, SpanInclusionFuncForClient(sp1))
 	tr1.InjectMetaInto(sp1.Meta(), carrier)
 	require.Equal(t, 3, carrier.Len(), "%+v", carrier) // trace id, span id, recording mode
 
 	tr2 := NewTracer()
 	meta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
-	require.True(t, SpanInclusionFuncForServer(tr2, meta))
 	sp2 := tr2.StartSpan("tr2.child", WithRemoteParentFromSpanMeta(meta))
 	defer sp2.Finish()
 	require.NotZero(t, sp2.i.crdb.spanID)
