@@ -19,6 +19,8 @@
 
 cockroachdb/docs:
   triage_column_id: 3971225
+  aliases:
+    cockroachdb/docs-infra-prs: other
 cockroachdb/sql-sessions:
   aliases:
     cockroachdb/sql-syntax-prs: other
