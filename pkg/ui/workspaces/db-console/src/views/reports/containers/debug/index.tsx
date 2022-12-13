@@ -369,6 +369,12 @@ export default function Debug() {
             url="debug/closedts-receiver"
           />
         </DebugTableRow>
+        <DebugTableRow title="Transaction Contention">
+          <DebugTableLink
+            name="Cluster-wide transaction contention"
+            url="debug/contention-visualizer"
+          />
+        </DebugTableRow>
       </DebugTable>
       <DebugTable
         heading={

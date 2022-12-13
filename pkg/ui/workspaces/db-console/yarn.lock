@@ -3094,6 +3094,13 @@
   dependencies:
     "@types/react" "*"
 
+"@types/react-d3-graph@^2.6.3":
+  version "2.6.3"
+  resolved "https://registry.yarnpkg.com/@types/react-d3-graph/-/react-d3-graph-2.6.3.tgz#cbb6584f0a41328de016ba8afd15c74660abc6ab"
+  integrity sha512-OYM7eO/4U6ARP8E3izk5VrkHLqO/0YI3QGFymLGt/AR/ETbc4Spx0Ljpa/3hJ/0wLmncLTyUV6gegcNooDAEww==
+  dependencies:
+    "@types/react" "*"
+
 "@types/react-dom@^16.9.4":
   version "16.9.13"
   resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-16.9.13.tgz#5898f0ee68fe200685e6b61d3d7d8828692814d0"
@@ -13255,6 +13262,11 @@ react-copy-to-clipboard@^5.0.1:
   dependencies:
     copy-to-clipboard "^3"
     prop-types "^15.5.8"
+
+react-d3-graph@^2.6.0:
+  version "2.6.0"
+  resolved "https://registry.yarnpkg.com/react-d3-graph/-/react-d3-graph-2.6.0.tgz#b994131e430b568e086970560ba8a26809113173"
+  integrity sha512-U72didZuPuYEqAi1n2bJvnph+9MviIw2x9I0eoxb1IKk3cyEwsJV96n3RL72z/7HDsa1FOvDKuOJE7ujSNZB/Q==
 
 react-dev-utils@^11.0.3:
   version "11.0.4"

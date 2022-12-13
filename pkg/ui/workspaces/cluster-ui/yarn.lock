@@ -3210,6 +3210,13 @@
   dependencies:
     "@types/react" "*"
 
+"@types/react-d3-graph@^2.6.3":
+  version "2.6.3"
+  resolved "https://registry.yarnpkg.com/@types/react-d3-graph/-/react-d3-graph-2.6.3.tgz#cbb6584f0a41328de016ba8afd15c74660abc6ab"
+  integrity sha512-OYM7eO/4U6ARP8E3izk5VrkHLqO/0YI3QGFymLGt/AR/ETbc4Spx0Ljpa/3hJ/0wLmncLTyUV6gegcNooDAEww==
+  dependencies:
+    "@types/react" "*"
+
 "@types/react-dom@*":
   version "17.0.8"
   resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-17.0.8.tgz#3180de6d79bf53762001ad854e3ce49f36dd71fc"
@@ -11807,6 +11814,11 @@ react-colorful@^5.1.2:
   version "5.2.2"
   resolved "https://registry.yarnpkg.com/react-colorful/-/react-colorful-5.2.2.tgz#0a69d0648db47e51359d343854d83d250a742243"
   integrity sha512-Xdb1Rl6lZ5SMdNBH59eE0lGqR1g2LVD8IgPlw0WeMDrOC65lYI8fgMEwj/0dDpVRVMh5qp73ciISDst/t2O2iQ==
+
+react-d3-graph@^2.6.0:
+  version "2.6.0"
+  resolved "https://registry.yarnpkg.com/react-d3-graph/-/react-d3-graph-2.6.0.tgz#b994131e430b568e086970560ba8a26809113173"
+  integrity sha512-U72didZuPuYEqAi1n2bJvnph+9MviIw2x9I0eoxb1IKk3cyEwsJV96n3RL72z/7HDsa1FOvDKuOJE7ujSNZB/Q==
 
 react-dev-utils@^11.0.3:
   version "11.0.4"
