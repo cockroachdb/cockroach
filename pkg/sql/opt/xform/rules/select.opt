@@ -93,14 +93,16 @@
 # constraints do not need to be duplicated in the left and right scans of the
 # union.
 #
-# Also note that this rule only matches Selects that have strict keys. See
-# SplitDisjunctionAddKey which handles Selects that do not have strict keys.
+# Also note that this rule only matches Selects that have non-trivial strict
+# keys. See SplitDisjunctionAddKey which handles Selects that do not have strict
+# keys.
 [SplitDisjunction, Explore]
 (Select
     $input:(Scan
             $scanPrivate:* & (IsCanonicalScan $scanPrivate)
         ) &
-        (HasStrictKey $input)
+        (HasStrictKey $input) &
+        ^(HasZeroOrOneRow $input)
     $filters:* &
         (Let
             (
