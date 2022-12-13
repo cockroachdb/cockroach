@@ -92,10 +92,6 @@ ForeignKeyConstraint :  ConstraintID
 ForeignKeyConstraint : []ColumnIDs
 ForeignKeyConstraint :  ReferencedTableID
 ForeignKeyConstraint : []ReferencedColumnIDs
-ForeignKeyConstraint :  OnUpdateAction
-ForeignKeyConstraint :  OnDeleteAction
-ForeignKeyConstraint :  CompositeKeyMatchMethod
-ForeignKeyConstraint :  IndexIDForValidation
 
 object TableComment
 

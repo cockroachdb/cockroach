@@ -66,12 +66,8 @@ func newSQLForeignKeyCheckOperation(
 func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	checkQuery, _, err := nonMatchingRowQuery(
-		o.tableDesc,
-		o.constraint.ForeignKeyDesc(),
-		o.referencedTableDesc,
-		false, /* limitResults */
-	)
+	checkQuery, _, err := nonMatchingRowQuery(o.tableDesc, o.constraint.ForeignKeyDesc(), o.referencedTableDesc,
+		0 /* indexIDForValidation */, false)
 	if err != nil {
 		return err
 	}
