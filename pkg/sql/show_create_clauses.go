@@ -447,7 +447,7 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkTableName.ExplicitSchema = !searchPath.Contains(fkTableName.SchemaName.String())
+		fkTableName.ExplicitSchema = !searchPath.Contains(fkTableName.SchemaName.String(), false /* includeImplicit */)
 		refNames, err = fkTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
 		if err != nil {
 			return err

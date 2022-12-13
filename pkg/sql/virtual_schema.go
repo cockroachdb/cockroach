@@ -196,10 +196,14 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 			privilege.List{},
 			username.NodeUserName(),
 		),
-		nil,                        /* affected */
-		&semaCtx,                   /* semaCtx */
-		nil,                        /* evalCtx */
-		&sessiondata.SessionData{}, /* sessionData */
+		nil,      /* affected */
+		&semaCtx, /* semaCtx */
+		// We explicitly pass in a half-baked EvalContext because we don't need to
+		// evaluate any expressions to initialize virtual tables. We do need to
+		// pass in the cluster settings to make sure that functions can properly
+		// evaluate version gates, though.
+		&eval.Context{Settings: st}, /* evalCtx */
+		&sessiondata.SessionData{},  /* sessionData */
 		tree.PersistencePermanent,
 	)
 	if err != nil {
@@ -323,7 +327,11 @@ func (v virtualSchemaView) initVirtualTableDesc(
 			username.NodeUserName(),
 		),
 		nil, // semaCtx
-		nil, // evalCtx
+		// We explicitly pass in a half-baked EvalContext because we don't need to
+		// evaluate any expressions to initialize virtual tables. We do need to
+		// pass in the cluster settings to make sure that functions can properly
+		// evaluate version gates, though.
+		&eval.Context{Settings: st}, /* evalCtx */
 		st,
 		tree.PersistencePermanent,
 		false, // isMultiRegion

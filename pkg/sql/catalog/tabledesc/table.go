@@ -151,7 +151,7 @@ func MakeColumnDefDescs(
 	if err != nil {
 		return nil, err
 	}
-	if err = colinfo.ValidateColumnDefType(resType); err != nil {
+	if err = colinfo.ValidateColumnDefType(ctx, evalCtx.Settings.Version, resType); err != nil {
 		return nil, err
 	}
 	col.Type = resType
