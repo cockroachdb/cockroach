@@ -348,9 +348,7 @@ type Planner interface {
 	// PrivilegeDescriptor given a SyntheticPrivilegeObject's path
 	// from system.privileges.
 	SynthesizePrivilegeDescriptor(
-		ctx context.Context,
-		privilegeObjectPath string,
-		privilegeObjectType privilege.ObjectType,
+		ctx context.Context, po SyntheticPrivilegeObject,
 	) (*catpb.PrivilegeDescriptor, error)
 
 	// GetMultiregionConfig synthesizes a new multiregion.RegionConfig describing
@@ -363,6 +361,27 @@ type Planner interface {
 	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
 	// statements.
 	IsANSIDML() bool
+}
+
+// PrivilegeObject represents an object that can have privileges. The privileges
+// can either live on the descriptor or in the system.privileges table.
+type PrivilegeObject interface {
+	// GetPrivilegeDescriptor returns the privilege descriptor for the
+	// object. Note that for non-descriptor backed objects, we query the
+	// system.privileges table to synthesize a PrivilegeDescriptor.
+	GetPrivilegeDescriptor(ctx context.Context, planner Planner) (*catpb.PrivilegeDescriptor, error)
+	// GetObjectType returns the privilege.ObjectType of the PrivilegeObject.
+	GetObjectType() privilege.ObjectType
+	// GetName returns the name of the object. For example, the name of a
+	// table, schema or database.
+	GetName() string
+}
+
+// SyntheticPrivilegeObject is used to resolve a privilege descriptor for
+// things which only have synthetic privileges.
+type SyntheticPrivilegeObject interface {
+	PrivilegeObject
+	GetPath() string
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

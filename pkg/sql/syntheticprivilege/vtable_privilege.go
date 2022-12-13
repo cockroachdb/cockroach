@@ -32,9 +32,12 @@ type VirtualTablePrivilege struct {
 // VirtualTablePrivilege.
 const VirtualTablePrivilegeType = "VirtualTable"
 
+// VirtualTablePathPrefix is the prefix used for virtual table privileges in system.privileges.
+const VirtualTablePathPrefix = "vtable"
+
 // GetPath implements the Object interface.
 func (p *VirtualTablePrivilege) GetPath() string {
-	return fmt.Sprintf("/vtable/%s/%s", p.SchemaName, p.TableName)
+	return fmt.Sprintf("/%s/%s/%s", VirtualTablePathPrefix, p.SchemaName, p.TableName)
 }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
@@ -42,7 +45,7 @@ func (p *VirtualTablePrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		return planner.SynthesizePrivilegeDescriptor(ctx, p.GetPath(), p.GetObjectType())
+		return planner.SynthesizePrivilegeDescriptor(ctx, p)
 	}
 	return catpb.NewPrivilegeDescriptor(
 		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, username.NodeUserName(),
