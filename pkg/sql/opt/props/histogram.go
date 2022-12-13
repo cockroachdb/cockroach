@@ -156,12 +156,12 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 	if h.numRange(0) != 0 {
 		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
-	lowerBound := h.upperBound(0)
+	previousUpperBound := h.upperBound(0)
 
 	var count float64
 	for i := range h.buckets {
 		upperBound := h.upperBound(i)
-		rng, ok := maxDistinctValuesInRange(lowerBound, upperBound)
+		rng, ok := maxDistinctValuesInRange(previousUpperBound, upperBound)
 
 		numRange := h.numRange(i)
 		if ok && numRange > rng {
@@ -176,31 +176,41 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 		} else {
 			count += numEq
 		}
-		lowerBound = h.getNextLowerBound(upperBound)
+		previousUpperBound = upperBound
 	}
 	return count
 }
 
 // maxDistinctValuesInRange returns the maximum number of distinct values in
-// the range [lowerBound, upperBound). It returns ok=false when it is not
+// the range (lowerBound, upperBound). It returns ok=false when it is not
 // possible to determine a finite value (which is the case for all types other
 // than integers and dates).
-func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (_ float64, ok bool) {
+func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (n float64, ok bool) {
+	// TODO(mgartner): We should probably use tree.MaxDistinctCount here
+	// instead. We may have to adjust the result by one or two because it
+	// returns a distinct count inclusive of the bounds.
 	switch lowerBound.ResolvedType().Family() {
 	case types.IntFamily:
-		return float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt)), true
+		n = float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt))
 
 	case types.DateFamily:
 		lower := lowerBound.(*tree.DDate)
 		upper := upperBound.(*tree.DDate)
-		if lower.IsFinite() && upper.IsFinite() {
-			return float64(upper.PGEpochDays()) - float64(lower.PGEpochDays()), true
+		if !lower.IsFinite() || !upper.IsFinite() {
+			return 0, false
 		}
-		return 0, false
+		n = float64(upper.PGEpochDays()) - float64(lower.PGEpochDays())
 
 	default:
 		return 0, false
 	}
+
+	// Subtract one to exclude the lower bound value.
+	n = n - 1
+	if n < 0 {
+		n = 0
+	}
+	return n, true
 }
 
 // CanFilter returns true if the given constraint can filter the histogram.
