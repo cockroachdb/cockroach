@@ -23,7 +23,7 @@ import (
 
 func (m *visitor) RemoveSchemaParent(ctx context.Context, op scop.RemoveSchemaParent) error {
 	db, err := m.checkOutDatabase(ctx, op.Parent.ParentDatabaseID)
-	if err != nil || db.Dropped() {
+	if err != nil {
 		return err
 	}
 	for name, info := range db.Schemas {

@@ -113,8 +113,11 @@ upsert descriptor #104
      id: 104
      modificationTime: {}
   ...
-       public:
-         id: 106
+       regionEnumId: 105
+       survivalGoal: REGION_FAILURE
+  -  schemas:
+  -    public:
+  -      id: 106
   -  version: "1"
   +  state: DROP
   +  version: "2"
