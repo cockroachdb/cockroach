@@ -7,18 +7,22 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
 package scbuildstmt
 
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -26,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,6 +45,10 @@ func alterTableAddConstraint(
 	case *tree.CheckConstraintTableDef:
 		if t.ValidationBehavior == tree.ValidationDefault {
 			alterTableAddCheck(b, tn, tbl, t)
+		}
+	case *tree.ForeignKeyConstraintTableDef:
+		if t.ValidationBehavior == tree.ValidationDefault {
+			alterTableAddForeignKey(b, tn, tbl, t)
 		}
 	}
 }
@@ -141,6 +150,248 @@ func getIndexIDForValidationForConstraint(b BuildCtx, tableID catid.DescID) (ret
 	return ret
 }
 
+// alterTableAddForeignKey contains logic for building ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY
+// It assumes `t` is such a command.
+func alterTableAddForeignKey(
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
+) {
+	fkDef := t.ConstraintDef.(*tree.ForeignKeyConstraintTableDef)
+	// fromColsFRNames is fully resolved column names from `fkDef.FromCols`, and is only used
+	// in constructing error messages to be consistent with legacy schema changer.
+	fromColsFRNames := getFullyResolvedColNames(b, tbl.TableID, fkDef.FromCols)
+
+	// 1. If this FK's `ON UPDATE behavior` is not NO ACTION nor RESTRICT, and
+	// any of the originColumns has an `ON UPDATE expr`, panic with error.
+	if fkDef.Actions.Update != tree.NoAction && fkDef.Actions.Update != tree.Restrict {
+		for _, colName := range fkDef.FromCols {
+			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+			colHasOnUpdate := retrieveColumnOnUpdateExpressionElem(b, tbl.TableID, colID) != nil
+			if colHasOnUpdate {
+				panic(pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"cannot specify a foreign key update action and an ON UPDATE"+
+						" expression on the same column",
+				))
+			}
+		}
+	}
+
+	// 2. If this FK has SET NULL action (ON UPDATE or ON DELETE) && any one of
+	// the originColumns is NOT NULL, then panic with error.
+	if fkDef.Actions.Delete == tree.SetNull || fkDef.Actions.Update == tree.SetNull {
+		for i, colName := range fkDef.FromCols {
+			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+			colIsNullable := mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsNullable
+			if !colIsNullable {
+				panic(pgerror.Newf(pgcode.InvalidForeignKey,
+					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", fromColsFRNames[i],
+				))
+			}
+		}
+	}
+
+	// 3. If this FK has SET DEFAULT action (ON UPDATE or ON DELETE) && any one of
+	// the originColumns does not have a default expression (which implies NULL will
+	// be used as the default) && that column is NOT NULL, then panic with error.
+	if fkDef.Actions.Delete == tree.SetDefault || fkDef.Actions.Update == tree.SetDefault {
+		for i, colName := range fkDef.FromCols {
+			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+			colHasDefault := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID) != nil
+			colIsNullable := mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsNullable
+			if !colHasDefault && !colIsNullable {
+				panic(pgerror.Newf(pgcode.InvalidForeignKey,
+					"cannot add a SET DEFAULT cascading action on column %q which has a "+
+						"NOT NULL constraint and a NULL default expression", fromColsFRNames[i],
+				))
+			}
+		}
+	}
+
+	// 4. Check whether each originColumns can be used for an outbound FK constraint, and
+	//    no duplicates exist in originColumns.
+	var originColIDs []catid.ColumnID
+	var originColSet catalog.TableColSet
+	for i, colName := range fkDef.FromCols {
+		colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
+		ensureColCanBeUsedInOutboundFK(b, tbl.TableID, colID)
+		if originColSet.Contains(colID) {
+			panic(pgerror.Newf(pgcode.InvalidForeignKey,
+				"foreign key contains duplicate column %q", fromColsFRNames[i]))
+		}
+		originColSet.Add(colID)
+		originColIDs = append(originColIDs, colID)
+	}
+
+	// 5. Resolve `t.(*ForeignKeyConstraintTableDef).Table` (i.e. referenced table name) and check whether it's in the same
+	//    database as the originTable (i.e. tbl). Cross database FK references is a deprecated feature and is in practice
+	//    no longer supported. We will return an error here directly.
+	referencedTableID := mustGetTableIDFromTableName(b, fkDef.Table)
+	originalTableNamespaceElem := mustRetrieveNamespaceElem(b, tbl.TableID)
+	referencedTableNamespaceElem := mustRetrieveNamespaceElem(b, referencedTableID)
+	if originalTableNamespaceElem.DatabaseID != referencedTableNamespaceElem.DatabaseID {
+		panic(scerrors.NotImplementedErrorf(t, "cross DB FK reference is a deprecating feature and won't be supported"+
+			"in declarative schema changer."))
+	}
+
+	// 6. Check that temporary tables can only reference temporary tables, or, permanent tables can only reference permanent tables.
+	//    In other words, we don't allow it if originTable's temporariness does not match referencedTable's temporariness.
+	referencedTableElem := mustRetrieveTableElem(b, referencedTableID)
+	fkDef.Table.ObjectNamePrefix = b.NamePrefix(referencedTableElem)
+	if tbl.IsTemporary != referencedTableElem.IsTemporary {
+		persistenceType := "permanent"
+		if tbl.IsTemporary {
+			persistenceType = "temporary"
+		}
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"constraints on %s tables may reference only %s tables",
+			persistenceType,
+			persistenceType,
+		))
+	}
+
+	// 7. Compute referencedColumnNames, which is usually provided in `t.(*ForeignKeyConstraintTableDef).ToCols`. But if
+	//    it's empty, then we attempt to add this FK on the PK of the referenced table, excluding implicit columns.
+	if fkDef.ToCols == nil || len(fkDef.ToCols) == 0 {
+		primaryIndexIDInReferencedTable := getCurrentPrimaryIndexID(b, referencedTableID)
+		numImplicitCols := 0
+		primaryIndexPartitioningElemInReferencedTable := maybeRetrieveIndexPartitioningElem(b, referencedTableID, primaryIndexIDInReferencedTable)
+		if primaryIndexPartitioningElemInReferencedTable != nil {
+			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
+		}
+		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndex(b, referencedTableID, primaryIndexIDInReferencedTable)
+		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
+			fkDef.ToCols = append(
+				fkDef.ToCols,
+				tree.Name(mustRetrieveColumnNameElem(b, referencedTableID, keyColIDsOfPrimaryIndexInReferencedTable[i]).Name),
+			)
+		}
+	}
+
+	// 8. Similarly to 4, check whether each referencedColumn can be used for an inbound FK constraint, and the length of
+	//    referencedColumns must be equal to the length of originColumns.
+	var referencedColIDs []catid.ColumnID
+	for _, colName := range fkDef.ToCols {
+		colID := mustGetColumnIDFromColumnName(b, referencedTableID, colName)
+		ensureColCanBeUsedInInboundFK(b, referencedTableID, colID)
+		referencedColIDs = append(referencedColIDs, colID)
+	}
+	if len(originColIDs) != len(referencedColIDs) {
+		panic(pgerror.Newf(pgcode.Syntax,
+			"%d columns must reference exactly %d columns in referenced table (found %d)",
+			len(originColIDs), len(originColIDs), len(referencedColIDs)))
+	}
+
+	// 9. Check whether types of originColumns match types of referencedColumns. Namely, we will panic if their
+	//    column type is not "compatible" (i.e. we do not insist that the column types are of exactly the same type;
+	//    it's okay if they are compatible but not exactly the same. E.g. Two types under the same type family are
+	//    usually compatible).
+	//    If the column types are compatible but not exactly the same, send a notice to the client about this.
+	for i := range originColIDs {
+		originColName := mustRetrieveColumnNameElem(b, tbl.TableID, originColIDs[i]).Name
+		originColType := mustRetrieveColumnTypeElem(b, tbl.TableID, originColIDs[i]).Type
+		referencedColName := mustRetrieveColumnNameElem(b, referencedTableID, referencedColIDs[i]).Name
+		referencedColType := mustRetrieveColumnTypeElem(b, referencedTableID, referencedColIDs[i]).Type
+		if !originColType.Equivalent(referencedColType) {
+			panic(pgerror.Newf(pgcode.DatatypeMismatch,
+				"type of %q (%s) does not match foreign key %q.%q (%s)", originColName, originColType.String(),
+				referencedTableNamespaceElem.Name, referencedColName, referencedColType.String()))
+		}
+		if !originColType.Identical(referencedColType) {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
+				pgnotice.Newf(
+					"type of foreign key column %q (%s) is not identical to referenced column %q.%q (%s)",
+					originColName, originColType.String(),
+					referencedTableNamespaceElem.Name, referencedColName, referencedColType.String()),
+			)
+		}
+	}
+
+	// 10. Check the name of this to-be-added FK constraint hasn't been used; Or, give it one if no name is specified.
+	if skip, err := validateConstraintNameIsNotUsed(b, tn, tbl, t); err != nil {
+		panic(err)
+	} else if skip {
+		return
+	}
+	if fkDef.Name == "" {
+		fkDef.Name = tree.Name(tabledesc.GenerateUniqueName(
+			tabledesc.ForeignKeyConstraintName(tn.Table(), fkDef.FromCols.ToStrings()),
+			func(name string) bool {
+				return constraintNameInUse(b, tbl.TableID, name)
+			},
+		))
+	}
+
+	// 11. Verify that the referencedTable guarantees uniqueness on the referencedColumns.
+	//     In code, this means we need to find either a PRIMARY INDEX, a UNIQUE INDEX, or a
+	//     UNIQUE_WITHOUT_INDEX CONSTRAINT, that covers exactly referencedColumns.
+	if areColsUnique := areColsUniqueInTable(b, referencedTableID, referencedColIDs); !areColsUnique {
+		panic(pgerror.Newf(
+			pgcode.ForeignKeyViolation,
+			"there is no unique constraint matching given keys for referenced table %s",
+			referencedTableNamespaceElem.Name,
+		))
+	}
+
+	// 12. (Finally!) Add a ForeignKey_Constraint, ConstraintName element to builder state.
+	constraintID := b.NextTableConstraintID(tbl.TableID)
+	b.Add(&scpb.ForeignKeyConstraint{
+		TableID:                 tbl.TableID,
+		ConstraintID:            constraintID,
+		ColumnIDs:               originColIDs,
+		ReferencedTableID:       referencedTableID,
+		ReferencedColumnIDs:     referencedColIDs,
+		OnUpdateAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Update],
+		OnDeleteAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Delete],
+		CompositeKeyMatchMethod: tree.CompositeKeyMatchMethodValue[fkDef.Match],
+		IndexIDForValidation:    getIndexIDForValidationForConstraint(b, tbl.TableID),
+	})
+	b.Add(&scpb.ConstraintWithoutIndexName{
+		TableID:      tbl.TableID,
+		ConstraintID: constraintID,
+		Name:         string(fkDef.Name),
+	})
+}
+
+// getFullyResolvedColNames returns fully resolved column names for `colNames`.
+// For each column name in `colNames`, its fully resolved name will be "db.sc.tbl.col".
+// The order of column names in the return is in syc with that in the input `colNames`.
+func getFullyResolvedColNames(
+	b BuildCtx, tableID catid.DescID, colNames tree.NameList,
+) (ret tree.NameList) {
+	ns := mustRetrieveNamespaceElem(b, tableID)
+	tableName := ns.Name
+	schemaName := mustRetrieveNamespaceElem(b, ns.SchemaID).Name
+	databaseName := mustRetrieveNamespaceElem(b, ns.DatabaseID).Name
+
+	for _, colName := range colNames {
+		fullyResolvedColName := strings.Join([]string{databaseName, schemaName, tableName, string(colName)}, ".")
+		ret = append(ret, tree.Name(fullyResolvedColName))
+	}
+	return ret
+}
+
+// areColsUniqueInTable ensures uniqueness on columns is guaranteed on this table.
+func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID) (ret bool) {
+	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if ret {
+			return
+		}
+
+		switch te := e.(type) {
+		case *scpb.PrimaryIndex:
+			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
+		case *scpb.SecondaryIndex:
+			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
+		case *scpb.UniqueWithoutIndexConstraint:
+			if te.Predicate == nil && descpb.ColumnIDs(te.ColumnIDs).PermutationOf(columnIDs) {
+				ret = true
+			}
+		}
+	})
+	return ret
+}
+
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
 // trying to add isn't already used, and, if it is, whether the constraint
 // addition should be skipped:
@@ -159,7 +410,8 @@ func validateConstraintNameIsNotUsed(
 		name = d.Name
 		ifNotExists = d.IfNotExists
 	case *tree.ForeignKeyConstraintTableDef:
-		panic(scerrors.NotImplementedErrorf(t, "FK constraint %v not yet implemented", d.Name))
+		name = d.Name
+		ifNotExists = d.IfNotExists
 	case *tree.UniqueConstraintTableDef:
 		panic(scerrors.NotImplementedErrorf(t, "UNIQUE constraint %v not yet implemented", d.Name))
 	default:
@@ -321,4 +573,112 @@ func iterateColNamesInExpr(
 	if err != nil {
 		panic(err)
 	}
+}
+
+func retrieveColumnDefaultExpressionElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnDefaultExpression {
+	_, _, ret := scpb.FindColumnDefaultExpression(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
+	return ret
+}
+
+func retrieveColumnOnUpdateExpressionElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (columnOnUpdateExpression *scpb.ColumnOnUpdateExpression) {
+	scpb.ForEachColumnOnUpdateExpression(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnOnUpdateExpression,
+	) {
+		if e.ColumnID == columnID {
+			columnOnUpdateExpression = e
+		}
+	})
+	return columnOnUpdateExpression
+}
+
+// ensureColCanBeUsedInOutboundFK ensures the column can be used in an outbound FK reference.
+// Panic if it cannot.
+func ensureColCanBeUsedInOutboundFK(b BuildCtx, tableID catid.DescID, columnID catid.ColumnID) {
+	colNameElem := mustRetrieveColumnNameElem(b, tableID, columnID)
+	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
+	colElem := mustRetrieveColumnElem(b, tableID, columnID)
+
+	if colElem.IsInaccessible {
+		panic(pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot reference a foreign key",
+			colNameElem.Name,
+		))
+	}
+
+	if colTypeElem.IsVirtual {
+		panic(unimplemented.NewWithIssuef(
+			59671, "virtual column %q cannot reference a foreign key",
+			colNameElem.Name,
+		))
+	}
+
+	if colTypeElem.ComputeExpr != nil {
+		panic(unimplemented.NewWithIssuef(
+			46672, "computed column %q cannot reference a foreign key",
+			colNameElem.Name,
+		))
+	}
+}
+
+// ensureColCanBeUsedInInboundFK ensures the column can be used in an inbound FK reference.
+// Panic if it cannot.
+func ensureColCanBeUsedInInboundFK(b BuildCtx, tableID catid.DescID, columnID catid.ColumnID) {
+	colNameElem := mustRetrieveColumnNameElem(b, tableID, columnID)
+	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
+	colElem := mustRetrieveColumnElem(b, tableID, columnID)
+
+	if colElem.IsInaccessible {
+		panic(pgerror.Newf(
+			pgcode.UndefinedColumn,
+			"column %q is inaccessible and cannot be referenced by a foreign key",
+			colNameElem.Name,
+		))
+	}
+	if colTypeElem.IsVirtual {
+		panic(unimplemented.NewWithIssuef(
+			59671, "virtual column %q cannot be referenced by a foreign key",
+			colNameElem.Name,
+		))
+	}
+}
+
+func mustRetrieveTableElem(b BuildCtx, tableID catid.DescID) *scpb.Table {
+	_, _, tblElem := scpb.FindTable(b.QueryByID(tableID))
+	if tblElem == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find a Table element for table %v", tableID))
+	}
+	return tblElem
+}
+
+func mustRetrieveNamespaceElem(b BuildCtx, tableID catid.DescID) *scpb.Namespace {
+	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
+	if ns == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find a Namespace element for table %v", tableID))
+	}
+	return ns
+}
+
+func maybeRetrieveIndexPartitioningElem(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (ret *scpb.IndexPartitioning) {
+	scpb.ForEachIndexPartitioning(b.QueryByID(tableID), func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+		if e.IndexID == indexID {
+			ret = e
+		}
+	})
+	return ret
+}
+
+func getCurrentPrimaryIndexID(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
+	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if pie, ok := e.(*scpb.PrimaryIndex); ok && current == scpb.Status_PUBLIC {
+			ret = pie.IndexID
+		}
+	})
+	return ret
 }
