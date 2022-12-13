@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -586,6 +587,9 @@ func addDependentPrivilegesFromSystemPrivileges(
 	privilegeObjectFormatter *tree.FmtCtx,
 	userNamesToDependentPrivileges map[username.SQLUsername][]objectAndType,
 ) (retErr error) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		return nil
+	}
 	names := make([]string, len(usernames))
 	for i, username := range usernames {
 		names[i] = username.Normalized()
