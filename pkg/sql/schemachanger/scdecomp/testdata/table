@@ -307,7 +307,11 @@ ElementState:
 - ForeignKeyConstraint:
     columnIds:
     - 1
+    compositeKeyMatchMethod: 0
     constraintId: 2
+    indexIdForValidation: 0
+    onDeleteAction: 0
+    onUpdateAction: 0
     referencedColumnIds:
     - 1
     referencedTableId: 104
