@@ -1200,12 +1200,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// startRPCServer (and for the loopback grpc-gw connection).
 	var initServer *initServer
 	{
-		dialOpts, err := s.rpcContext.GRPCDialOptions()
-		if err != nil {
-			return err
-		}
-
-		initConfig := newInitServerConfig(ctx, s.cfg, dialOpts)
+		getDialOpts := s.rpcContext.GRPCDialOptions
+		initConfig := newInitServerConfig(ctx, s.cfg, getDialOpts)
 		inspectedDiskState, err := inspectEngines(
 			ctx,
 			s.engines,

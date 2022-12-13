@@ -1376,20 +1376,8 @@ func (rpcCtx *Context) ConnHealth(
 }
 
 // GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
-// to a server created with `NewServer`.
-//
-// At the time of writing, this is being used for making net.Pipe-based
-// connections, so only those options that affect semantics are included. In
-// particular, performance tuning options are omitted. Decompression is
-// necessarily included to support compression-enabled servers, and compression
-// is included for symmetry. These choices are admittedly subjective.
-func (rpcCtx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
-	return rpcCtx.grpcDialOptions("", DefaultClass)
-}
-
-// grpcDialOptions extends GRPCDialOptions to support a connection class for use
-// with TestingKnobs.
-func (rpcCtx *Context) grpcDialOptions(
+// to a server.
+func (rpcCtx *Context) GRPCDialOptions(
 	target string, class ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
@@ -1732,7 +1720,7 @@ func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
 func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context, target string, class ConnectionClass,
 ) (*grpc.ClientConn, error) {
-	dialOpts, err := rpcCtx.grpcDialOptions(target, class)
+	dialOpts, err := rpcCtx.GRPCDialOptions(target, class)
 	if err != nil {
 		return nil, err
 	}
