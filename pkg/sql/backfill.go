@@ -1523,18 +1523,19 @@ func (e InvalidIndexesError) Error() string {
 	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
 }
 
-// ValidateCheckConstraint validates the check constraint against all rows
-// in index `indexIDForValidation` in table `tableDesc`.
-func ValidateCheckConstraint(
+// ValidateConstraint validates the constraint against all rows
+// in `tbl`.
+//
+// TODO (xiang): Support validating UNIQUE_WITHOUT_INDEX constraint in this function.
+func ValidateConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	checkConstraint catalog.CheckConstraint,
+	constraint catalog.Constraint,
 	indexIDForValidation descpb.IndexID,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 	if err != nil {
 		return err
@@ -1551,10 +1552,38 @@ func ValidateCheckConstraint(
 		semaCtx.TableNameResolver = resolver
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
-		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, checkConstraint.GetExpr(),
-				tableDesc.(*tabledesc.Mutable), ie, indexIDForValidation)
-		})
+		if ck := constraint.AsCheck(); ck != nil {
+			return ie.WithSyntheticDescriptors(
+				[]catalog.Descriptor{tableDesc},
+				func() error {
+					return validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.GetExpr(),
+						tableDesc.(*tabledesc.Mutable), ie, indexIDForValidation)
+				},
+			)
+		} else if fk := constraint.AsForeignKey(); fk != nil {
+			targetTable, err := descriptors.GetImmutableTableByID(ctx, txn, fk.GetReferencedTableID(), tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			if targetTable.GetID() == tableDesc.GetID() {
+				targetTable = tableDesc
+			}
+			return ie.WithSyntheticDescriptors(
+				[]catalog.Descriptor{tableDesc},
+				func() error {
+					return validateForeignKey(ctx, tableDesc.(*tabledesc.Mutable), targetTable, fk.ForeignKeyDesc(),
+						indexIDForValidation, txn, ie)
+				},
+			)
+		} else {
+			return errors.AssertionFailedf("validation of unsupported constraint type")
+		}
 	})
 }
 
@@ -2688,7 +2717,7 @@ func validateFkInTxn(
 	return ie.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
+			return validateForeignKey(ctx, srcTable, targetTable, fk, 0 /* indexIDForValidation */, txn, ie)
 		})
 }
 

@@ -234,10 +234,10 @@ type Validator interface {
 		override sessiondata.InternalExecutorOverride,
 	) error
 
-	ValidateCheckConstraint(
+	ValidateConstraint(
 		ctx context.Context,
 		tbl catalog.TableDescriptor,
-		constraint catalog.CheckConstraint,
+		constraint catalog.Constraint,
 		indexIDForValidation descpb.IndexID,
 		override sessiondata.InternalExecutorOverride,
 	) error
