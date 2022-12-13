@@ -224,6 +224,10 @@ func (s *Scanner) Scan(lval ScanSymType) {
 			s.pos++
 			lval.SetID(plpgsqllexbase.TYPECAST)
 			return
+		case '=':
+			s.pos++
+			lval.SetID(plpgsqllexbase.COLON_EQUALS)
+			return
 		}
 		return
 
