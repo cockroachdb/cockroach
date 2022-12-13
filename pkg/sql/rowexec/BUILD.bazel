@@ -12,6 +12,7 @@ go_library(
         "countrows.go",
         "distinct.go",
         "filterer.go",
+        "hashgroupjoiner.go",
         "hashjoiner.go",
         "indexbackfiller.go",
         "inverted_expr_evaluator.go",

@@ -370,6 +370,12 @@ func NewProcessor(
 		}
 		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl, outputs[0])
 	}
+	if core.HashGroupJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+			return nil, err
+		}
+		return newHashGroupJoiner(ctx, flowCtx, processorID, core.HashGroupJoiner, inputs[0], inputs[1], post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 

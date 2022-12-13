@@ -304,6 +304,11 @@ message LocalOnlySessionData {
   // DescriptorValidationMode indicates whether to validate the descriptors at
   // read and write time, at read time only, or never.
   int64 descriptor_validation_mode = 83 [(gogoproto.casttype) = "DescriptorValidationMode"];
+  // ExperimentalHashGroupJoinEnabled indicates whether the physical planner
+  // will attempt to convert a hash join followed by a hash aggregator into a
+  // single hash group-join operation. At the moment, there is no optimizer
+  // support for this, so some things can be incorrect (e.g. EXPLAIN plans).
+  bool experimental_hash_group_join_enabled = 84;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

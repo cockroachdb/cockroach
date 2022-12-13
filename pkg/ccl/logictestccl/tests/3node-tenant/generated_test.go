@@ -896,6 +896,13 @@ func TestTenantLogic_grant_schema(
 	runLogicTest(t, "grant_schema")
 }
 
+func TestTenantLogic_group_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "group_join")
+}
+
 func TestTenantLogic_hash_join(
 	t *testing.T,
 ) {

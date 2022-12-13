@@ -266,7 +266,18 @@ func newAggregator(
 	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
 		return newOrderedAggregator(ctx, flowCtx, processorID, spec, input, post, output)
 	}
+	return newHashAggregator(ctx, flowCtx, processorID, spec, input, post, output)
+}
 
+func newHashAggregator(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	spec *execinfrapb.AggregatorSpec,
+	input execinfra.RowSource,
+	post *execinfrapb.PostProcessSpec,
+	output execinfra.RowReceiver,
+) (*hashAggregator, error) {
 	ag := &hashAggregator{
 		buckets:                 make(map[string]aggregateFuncs),
 		bucketsLenGrowThreshold: hashAggregatorBucketsInitialLen,
