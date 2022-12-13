@@ -898,6 +898,10 @@ func formatCatalog(descs []catalog.Descriptor) string {
 		"parent\tschema\tname\tid\tkind\tversion\tdropped\tpublic\n",
 	)
 	for _, d := range descs {
+		if d.DescriptorType() != catalog.Database && d.GetParentID() == descpb.InvalidID {
+			// Skip virtual schemas and virtual tables.
+			continue
+		}
 		_, _ = fmt.Fprintf(tr,
 			"%d\t%d\t%s\t%d\t%s\t%d\t%v\t%v\n",
 			d.GetParentID(), d.GetParentSchemaID(), d.GetName(),
