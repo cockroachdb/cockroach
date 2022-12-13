@@ -2011,7 +2011,7 @@ func (rpcCtx *Context) runHeartbeat(
 					} else {
 						buf.Printf("closing connection after: %s", retErr)
 					}
-					log.Health.Infof(ctx, "%s", buf)
+					log.Health.Errorf(ctx, "%s", buf)
 				}
 			}
 		}
