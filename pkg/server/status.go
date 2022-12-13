@@ -431,6 +431,19 @@ func (b *baseStatusServer) localExecutionInsights(
 	return &response, nil
 }
 
+func (b *baseStatusServer) localRecentStatements(
+	ctx context.Context,
+) (*serverpb.ListRecentStatementsResponse, error) {
+	var response serverpb.ListRecentStatementsResponse
+
+	reader := b.sqlServer.pgServer.SQLServer.GetExecutorConfig().RecentStatementsCache
+	reader.IterateRecentStatements(ctx, func(ctx context.Context, stmt *serverpb.ActiveQuery) {
+		response.Statements = append(response.Statements, *stmt)
+	})
+
+	return &response, nil
+}
+
 func (b *baseStatusServer) localTxnIDResolution(
 	req *serverpb.TxnIDResolutionRequest,
 ) *serverpb.TxnIDResolutionResponse {
@@ -3661,4 +3674,64 @@ func (s *statusServer) TransactionContentionEvents(
 	})
 
 	return resp, nil
+}
+
+func (s *statusServer) ListRecentStatements(
+	ctx context.Context, req *serverpb.ListRecentStatementsRequest,
+) (*serverpb.ListRecentStatementsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	localRequest := serverpb.ListRecentStatementsRequest{NodeID: "local"}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return s.localRecentStatements(ctx)
+		}
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.ListRecentStatements(ctx, &localRequest)
+	}
+
+	var response serverpb.ListRecentStatementsResponse
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListRecentStatements(ctx, &localRequest)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	responseFn := func(nodeID roachpb.NodeID, nodeResponse interface{}) {
+		if nodeResponse == nil {
+			return
+		}
+		recentStatementsResponse := nodeResponse.(*serverpb.ListRecentStatementsResponse)
+		response.Statements = append(response.Statements, recentStatementsResponse.Statements...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
+	}
+
+	if err := s.iterateNodes(ctx, "recent statements list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+	return &response, nil
 }

@@ -28,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1059,4 +1061,112 @@ func TestExecutionInsights(t *testing.T) {
 		}
 
 	})
+}
+
+// TestRecentStatements tests that statements are being written correctly to the
+// crdb_internal.cluster_recent_statements table.
+func TestRecentStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const appName = "TestRecentStatements"
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	testCluster := testcluster.StartTestCluster(t, 1, args)
+	defer testCluster.Stopper().Stop(ctx)
+	conn := testCluster.ServerConn(0)
+	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	sqlRunner.Exec(t, "SET SESSION application_name=$1", appName)
+
+	testCases := []struct {
+		name          string
+		expectedPhase serverpb.ActiveQuery_Phase
+		query         string
+		ops           func(*testing.T, *sqlutils.SQLRunner)
+	}{
+		{
+			name:          "completed",
+			expectedPhase: serverpb.ActiveQuery_COMPLETED,
+			query:         "SHOW DATABASES",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				sqlRunner.Exec(t, "SHOW DATABASES")
+			},
+		},
+		{
+			name:          "failed",
+			expectedPhase: serverpb.ActiveQuery_FAILED,
+			query:         "SELECT bad_query",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				sqlRunner.ExpectErr(t, `pq: column "bad_query" does not exist`, "SELECT bad_query")
+			},
+		},
+		{
+			name:          "timed_out",
+			expectedPhase: serverpb.ActiveQuery_TIMED_OUT,
+			query:         "SELECT pg_sleep(1)",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				sqlRunner.Exec(t, "SET statement_timeout = '100ms';")
+
+				sqlRunner.ExpectErr(t, `pq: query execution canceled due to statement timeout`, "SELECT pg_sleep(1)")
+
+				sqlRunner.Exec(t, "RESET statement_timeout;")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.ops(t, sqlRunner)
+
+			row := conn.QueryRowContext(ctx, "SELECT status FROM crdb_internal.cluster_recent_statements "+
+				"WHERE query = $1 AND app_name = $2", tc.query, appName)
+			var status string
+			err := row.Scan(&status)
+			require.NoError(t, err)
+
+			require.Equal(t, tc.expectedPhase.String(), status,
+				"Expected %s phase, got %s\n", tc.expectedPhase.String(), status)
+		})
+	}
+}
+
+// TestRecentStatements tests that canceled statements are being written
+// correctly to the crdb_internal.cluster_recent_statements table.
+func TestRecentStatementsWithCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cancelServerArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
+					if strings.Contains(stmt, "pg_sleep") {
+						cancel()
+					}
+				},
+			},
+		},
+	}
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: cancelServerArgs,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+	conn := testCluster.ServerConn(0)
+
+	// This query gets canceled.
+	var b bool
+	err := conn.QueryRowContext(ctx, "select pg_sleep(5)").Scan(&b)
+	require.EqualError(t, err, "pq: query execution canceled")
+
+	row := conn.QueryRow("SELECT status FROM crdb_internal.cluster_recent_statements")
+	var status string
+	err = row.Scan(&status)
+	require.NoError(t, err)
+
+	require.Equal(t, serverpb.ActiveQuery_CANCELED.String(), status,
+		"Expected %s phase, got %s\n", serverpb.ActiveQuery_CANCELED.String(), status)
 }
