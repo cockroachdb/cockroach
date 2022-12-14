@@ -290,7 +290,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			// populate it after the first split but before the second split.
 			ds := s.DistSenderI().(*kvcoord.DistSender)
 			mockCache := rangecache.NewRangeCache(s.ClusterSettings(), ds,
-				func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer))
+				func() int64 { return 2 << 10 }, s.Stopper())
 			for _, k := range []int{0, split1} {
 				ent, err := ds.RangeDescriptorCache().Lookup(ctx, keys.MustAddr(key(k)))
 				require.NoError(t, err)

@@ -16,14 +16,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnes
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"xor", 7, 10}
 
@@ -39,14 +37,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnes
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"xor", 7, 10}
 
@@ -66,14 +62,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"xor", 9, 12}
 
@@ -89,14 +83,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"", 10, 10}
 
@@ -112,14 +104,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"", 9, 9}
 
@@ -140,14 +130,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'pg_catalog')
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"xor", 20, 23}
 
@@ -164,14 +152,12 @@ WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'PG_CATALOG')
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
 SELECT relname AS completion,
        'relation' AS category,
-       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN system.public.comments sc
-    ON t.oid = sc.object_id AND sc.type = 1
-LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
-    ON t.oid = pc.object_id AND pc.type = 1
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
 --placeholders: []interface {}{"xor", 20, 23}
 

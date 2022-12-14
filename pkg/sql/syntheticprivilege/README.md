@@ -323,14 +323,10 @@ var (
 
 Add privilege checks for your new object type, this depends on where you need the checks.
 
-**IMPORTANT** For 22.2, you **must** version gate the privilege check as we need
-to ensure the `system.privileges` table has been added.
-
-See below for an example of privilege checking + version gating.
+See below for an example of privilege checking.
 
 The example below checks for **either** the `MODIFYCLUSTERSETTING` role option 
-or "global" privilege, we can only check the privilege if we're on at least
-on version `clusterversion.SystemPrivilegesTable`.
+or "global" privilege.
 
 ```go
 		hasAdmin, err := p.HasAdminRole(ctx)
@@ -347,19 +343,12 @@ on version `clusterversion.SystemPrivilegesTable`.
 				return err
 			}
 			if !hasModify && !hasView {
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-					// We check for EITHER the MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING
-					// role option OR the MODIFYCLUSTERSETTING system cluster privilege.
-					// We return the error for "system cluster privilege" due to
-					// the long term goal of moving away from coarse-grained role options.
-					if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err != nil {
-						return err
-					}
-				} else {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-
-						"only users with either %s or %s privileges are allowed to read "+
-							"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+				// We check for EITHER the MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING
+				// role option OR the MODIFYCLUSTERSETTING system cluster privilege.
+				// We return the error for "system cluster privilege" due to
+				// the long term goal of moving away from coarse-grained role options.
+				if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err != nil {
+					return err
 				}
 			}
 		}

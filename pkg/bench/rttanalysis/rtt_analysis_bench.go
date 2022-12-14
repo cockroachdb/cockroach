@@ -33,8 +33,17 @@ import (
 // Reset must drop any remaining objects after the current database is dropped
 // so Setup and Stmt can be run again.
 type RoundTripBenchTestCase struct {
-	Name      string
-	Setup     string
+	Name string
+	// Setup runs before Stmt. The round-trips are not counted. It can consist of
+	// multiple semicolon-separated statements, and they'll all be executed in a
+	// transaction.
+	Setup string
+	// SetupEx is like Setup, but allows the test to separate different statements
+	// in different transactions. This is commonly used to lease descriptors on
+	// new tables so that the test is not bothered by the lease acquisition. The
+	// lease acquisition cannot be done in the same transaction as the one
+	// creating the table.
+	SetupEx   []string
 	Stmt      string
 	Reset     string
 	SkipIssue int
@@ -146,6 +155,9 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 		sql.Exec(b, "DROP TABLE bench.public.__dummy__")
 
 		sql.Exec(b, tc.Setup)
+		for _, s := range tc.SetupEx {
+			sql.Exec(b, s)
+		}
 		for _, statement := range statements {
 			cluster.clearStatementTrace(statement.SQL)
 		}

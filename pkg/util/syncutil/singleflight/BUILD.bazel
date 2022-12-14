@@ -6,7 +6,16 @@ go_library(
     srcs = ["singleflight.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/syncutil"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@io_opentelemetry_go_otel//attribute",
+    ],
 )
 
 go_test(
@@ -15,7 +24,15 @@ go_test(
     srcs = ["singleflight_test.go"],
     args = ["-test.timeout=55s"],
     embed = [":singleflight"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")

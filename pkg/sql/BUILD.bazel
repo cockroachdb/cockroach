@@ -404,6 +404,7 @@ go_library(
         "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/privilege",
+        "//pkg/sql/protoreflect",
         "//pkg/sql/querycache",
         "//pkg/sql/roleoption",
         "//pkg/sql/row",

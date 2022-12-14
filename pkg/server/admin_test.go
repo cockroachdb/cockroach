@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2779,6 +2778,17 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITY")
 	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITYREDACTED")
 	sqlDB.Exec(t, "CREATE USER withoutprivs")
+	sqlDB.Exec(t, "CREATE USER withvaglobalprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaglobalprivilege")
+	sqlDB.Exec(t, "CREATE USER withvaredactedglobalprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedglobalprivilege")
+	sqlDB.Exec(t, "CREATE USER withvaandredactedglobalprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedglobalprivilege")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedglobalprivilege")
+	sqlDB.Exec(t, "CREATE USER withviewclustermetadata")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA TO withviewclustermetadata")
+	sqlDB.Exec(t, "CREATE USER withviewdebug")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
@@ -2812,6 +2822,11 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	require.NoError(t, err)
 	withoutPrivs, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withoutprivs")
 	require.NoError(t, err)
+	withVaGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaglobalprivilege")
+	withVaRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedglobalprivilege")
+	withVaAndRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedglobalprivilege")
+	withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
+	withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
 
 	tests := []struct {
 		name            string
@@ -2823,6 +2838,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			underTest.requireViewActivityPermission,
 			map[username.SQLUsername]bool{
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: false, withoutPrivs: true,
+				withVaGlobalPrivilege: false, withVaRedactedGlobalPrivilege: true, withVaAndRedactedGlobalPrivilege: false,
 			},
 		},
 		{
@@ -2830,6 +2846,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			underTest.requireViewActivityOrViewActivityRedactedPermission,
 			map[username.SQLUsername]bool{
 				withAdmin: false, withVa: false, withVaRedacted: false, withVaAndRedacted: false, withoutPrivs: true,
+				withVaGlobalPrivilege: false, withVaRedactedGlobalPrivilege: false, withVaAndRedactedGlobalPrivilege: false,
 			},
 		},
 		{
@@ -2837,56 +2854,25 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			underTest.requireViewActivityAndNoViewActivityRedactedPermission,
 			map[username.SQLUsername]bool{
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
+				withVaGlobalPrivilege: false, withVaRedactedGlobalPrivilege: true, withVaAndRedactedGlobalPrivilege: true,
 			},
 		},
 		{
 			"requireViewClusterMetadataPermission",
 			underTest.requireViewClusterMetadataPermission,
 			map[username.SQLUsername]bool{
-				withAdmin: false, withoutPrivs: true,
+				withAdmin: false, withoutPrivs: true, withviewclustermetadata: false,
 			},
 		},
 		{
 			"requireViewDebugPermission",
 			underTest.requireViewDebugPermission,
 			map[username.SQLUsername]bool{
-				withAdmin: false, withoutPrivs: true,
+				withAdmin: false, withoutPrivs: true, withViewDebug: false,
 			},
 		},
 	}
-	// test system privileges if valid version
-	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-		sqlDB.Exec(t, "CREATE USER withvaglobalprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaglobalprivilege")
-		sqlDB.Exec(t, "CREATE USER withvaredactedglobalprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaredactedglobalprivilege")
-		sqlDB.Exec(t, "CREATE USER withvaandredactedglobalprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaandredactedglobalprivilege")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO withvaandredactedglobalprivilege")
-		sqlDB.Exec(t, "CREATE USER withviewclustermetadata")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA TO withviewclustermetadata")
-		sqlDB.Exec(t, "CREATE USER withviewdebug")
-		sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
 
-		withVaGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaglobalprivilege")
-		withVaRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaredactedglobalprivilege")
-		withVaAndRedactedGlobalPrivilege := username.MakeSQLUsernameFromPreNormalizedString("withvaandredactedglobalprivilege")
-		withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
-		withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
-
-		tests[0].usernameWantErr[withVaGlobalPrivilege] = false
-		tests[1].usernameWantErr[withVaGlobalPrivilege] = false
-		tests[2].usernameWantErr[withVaGlobalPrivilege] = false
-		tests[0].usernameWantErr[withVaRedactedGlobalPrivilege] = true
-		tests[1].usernameWantErr[withVaRedactedGlobalPrivilege] = false
-		tests[2].usernameWantErr[withVaRedactedGlobalPrivilege] = true
-		tests[0].usernameWantErr[withVaAndRedactedGlobalPrivilege] = false
-		tests[1].usernameWantErr[withVaAndRedactedGlobalPrivilege] = false
-		tests[2].usernameWantErr[withVaAndRedactedGlobalPrivilege] = true
-		tests[3].usernameWantErr[withviewclustermetadata] = false
-		tests[4].usernameWantErr[withViewDebug] = false
-
-	}
 	for _, tt := range tests {
 		for userName, wantErr := range tt.usernameWantErr {
 			t.Run(fmt.Sprintf("%s-%s", tt.name, userName), func(t *testing.T) {
