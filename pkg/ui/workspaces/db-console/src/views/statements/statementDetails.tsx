@@ -20,10 +20,7 @@ import {
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { RouteComponentProps } from "react-router";
-import {
-  nodeDisplayNameByIDSelector,
-  nodeRegionsByIDSelector,
-} from "src/redux/nodes";
+import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { selectDiagnosticsReportsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
 import {
@@ -109,7 +106,6 @@ const mapStateToProps = (
     isLoading: isLoading,
     statementsError: lastError,
     timeScale: selectTimeScale(state),
-    nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
       state,
