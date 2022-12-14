@@ -262,7 +262,7 @@ ap-southeast-2  23
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
-NULL  NULL
+<before:/Table/53>  <after:/Table/110/5>
 
 query TIIII
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
@@ -392,12 +392,12 @@ ALTER TABLE regional_by_row_table SPLIT AT VALUES ('ca-central-1', 0), ('us-east
 ALTER TABLE regional_by_row_table EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX regional_by_row_table@primary]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX regional_by_row_table@primary WITH DETAILS]
 ----
-start_key  end_key    replicas  lease_holder
-NULL       /"\x80"/0  {1}       1
-/"\x80"/0  /"\xc0"/0  {4}       4
-/"\xc0"/0  NULL       {7}       7
+start_key           end_key               replicas  lease_holder
+<before:/Table/53>  …/"\x80"/0            {1}       1
+…/"\x80"/0          …/"\xc0"/0            {4}       4
+…/"\xc0"/0          <after:/Table/110/5>  {7}       7
 
 statement ok
 SET locality_optimized_partitioned_index_scan = false
@@ -640,12 +640,12 @@ ALTER TABLE child SPLIT AT VALUES ('ca-central-1', 0), ('us-east-1', 0);
 ALTER TABLE child EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX child@primary]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX child@primary WITH DETAILS]
 ----
-start_key  end_key    replicas  lease_holder
-NULL       /"\x80"/0  {1}       1
-/"\x80"/0  /"\xc0"/0  {4}       4
-/"\xc0"/0  NULL       {7}       7
+start_key              end_key       replicas  lease_holder
+<before:/Table/110/5>  …/"\x80"/0    {1}       1
+…/"\x80"/0             …/"\xc0"/0    {4}       4
+…/"\xc0"/0             <after:/Max>  {7}       7
 
 statement ok
 SET locality_optimized_partitioned_index_scan = false

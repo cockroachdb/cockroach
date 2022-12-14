@@ -5590,7 +5590,8 @@ value if you rely on the HLC for accuracy.`,
 	// Return statistics about a range.
 	"crdb_internal.range_stats": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+			Category:         builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{

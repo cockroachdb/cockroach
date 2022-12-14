@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -399,11 +400,8 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 	testutils.SucceedsSoon(t, func() error {
 		count := 0
 		if err := conn.QueryRow(
-			"SELECT count(*) "+
-				"FROM crdb_internal.ranges_no_leases "+
-				"WHERE table_name = $1 "+
-				"AND database_name = $2",
-			tableName, dbName).Scan(&count); err != nil {
+			fmt.Sprintf("SELECT count(*) FROM [SHOW RANGES FROM TABLE %s.%s]",
+				tree.NameString(dbName), tree.NameString(tableName))).Scan(&count); err != nil {
 			return err
 		}
 		if count == 0 {
@@ -416,13 +414,13 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 func getTableStartKey(t *testing.T, conn *gosql.DB, tableName, dbName string) roachpb.Key {
 	t.Helper()
 	row := conn.QueryRow(
-		"SELECT start_key "+
-			"FROM crdb_internal.ranges_no_leases "+
-			"WHERE table_name = $1 "+
-			"AND database_name = $2 "+
-			"ORDER BY start_key ASC "+
+		fmt.Sprintf("SELECT r.start_key "+
+			"FROM crdb_internal.ranges_no_leases r,"+
+			"     [SHOW RANGES FROM TABLE %s.%s] sr "+
+			"WHERE r.range_id = sr.range_id "+
+			"ORDER BY r.start_key ASC "+
 			"LIMIT 1",
-		tableName, dbName)
+			tree.NameString(dbName), tree.NameString(tableName)))
 	var startKey roachpb.Key
 	require.NoError(t, row.Scan(&startKey))
 	return startKey

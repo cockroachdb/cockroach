@@ -10,7 +10,7 @@ query error NULL value in relocation array for EXPERIMENTAL_RELOCATE
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[NULL], NULL);
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
@@ -19,7 +19,7 @@ statement ok
 ALTER TABLE t SPLIT AT VALUES (1), (10)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -33,7 +33,7 @@ statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (4, 1, 12)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -44,7 +44,7 @@ statement ok
 ALTER TABLE t SPLIT AT VALUES (5,1), (5,2), (5,3)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -64,7 +64,7 @@ statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (1, 5, 1), (5, 5, 2)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -78,7 +78,7 @@ statement ok
 CREATE INDEX idx ON t(v, w)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idex WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
@@ -87,7 +87,7 @@ statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (100,1), (100,50)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idex WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /100/1   {1}       1
@@ -98,7 +98,7 @@ statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (8), (9)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idex WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /8       {1}       1
@@ -111,7 +111,7 @@ statement ok
 ALTER INDEX t@idx EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX t@idex WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /8       {1}       1

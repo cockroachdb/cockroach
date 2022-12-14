@@ -19,7 +19,7 @@ ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -31,7 +31,7 @@ NULL       /1       {1}       1
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kw]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kw WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {5}       5
