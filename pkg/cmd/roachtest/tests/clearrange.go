@@ -134,7 +134,9 @@ func runClearRange(
 
 		var startHex string
 		if err := conn.QueryRow(
-			`SELECT to_hex(start_key) FROM crdb_internal.ranges_no_leases WHERE database_name = 'bigbank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
+			`SELECT to_hex(raw_start_key)
+FROM [SHOW RANGES FROM TABLE bigbank.bank WITH KEYS]
+ORDER BY raw_start_key ASC LIMIT 1`,
 		).Scan(&startHex); err != nil {
 			t.Fatal(err)
 		}

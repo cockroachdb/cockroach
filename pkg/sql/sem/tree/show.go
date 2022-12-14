@@ -704,22 +704,107 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 
 // ShowRanges represents a SHOW RANGES statement.
 type ShowRanges struct {
-	TableOrIndex TableIndexName
 	DatabaseName Name
+	TableOrIndex TableIndexName
+	Options      *ShowRangesOptions
+	Source       ShowRangesSource
 }
+
+// ShowRangesSource represents the source of a SHOW RANGES statement.
+type ShowRangesSource int8
+
+const (
+	// SHOW RANGES FROM CURRENT_CATALOG
+	ShowRangesCurrentDatabase ShowRangesSource = iota
+	// SHOW RANGES FROM DATABASE
+	ShowRangesDatabase
+	// SHOW RANGES FROM TABLE
+	ShowRangesTable
+	// SHOW RANGES FROM INDEX
+	ShowRangesIndex
+	// SHOW CLUSTER RANGES
+	ShowRangesCluster
+)
+
+// ShowRangesOptions represents the WITH clause in SHOW RANGES.
+type ShowRangesOptions struct {
+	Details bool
+	Explain bool
+	Keys    bool
+	Mode    ShowRangesMode
+}
+
+// ShowRangesMode represents the WITH clause in SHOW RANGES.
+type ShowRangesMode int8
+
+const (
+	// UniqueRanges tells to use just 1 row per range in the output.
+	//
+	// Note: The UniqueRanges constant must have value 0; otherwise,
+	// the parsing logic would become incorrect.
+	UniqueRanges ShowRangesMode = iota
+	// ExpandTables requests one row per table in the output.
+	ExpandTables
+	// ExpandIndexes requests one row per index in the output.
+	ExpandIndexes
+)
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRanges) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW RANGES FROM ")
-	if node.DatabaseName != "" {
-		ctx.WriteString("DATABASE ")
-		ctx.FormatNode(&node.DatabaseName)
-	} else if node.TableOrIndex.Index != "" {
-		ctx.WriteString("INDEX ")
-		ctx.FormatNode(&node.TableOrIndex)
-	} else {
-		ctx.WriteString("TABLE ")
-		ctx.FormatNode(&node.TableOrIndex)
+	ctx.WriteString("SHOW ")
+	if node.Source == ShowRangesCluster {
+		ctx.WriteString("CLUSTER ")
+	}
+	ctx.WriteString("RANGES")
+	if node.Source != ShowRangesCluster {
+		ctx.WriteString(" FROM ")
+		switch node.Source {
+		case ShowRangesCurrentDatabase:
+			ctx.WriteString("CURRENT_CATALOG")
+		case ShowRangesDatabase:
+			ctx.WriteString("DATABASE ")
+			ctx.FormatNode(&node.DatabaseName)
+		case ShowRangesIndex:
+			ctx.WriteString("INDEX ")
+			ctx.FormatNode(&node.TableOrIndex)
+		case ShowRangesTable:
+			ctx.WriteString("TABLE ")
+			ctx.FormatNode(&node.TableOrIndex)
+		}
+	}
+	ctx.FormatNode(node.Options)
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRangesOptions) Format(ctx *FmtCtx) {
+	noOpts := ShowRangesOptions{}
+	if *node == noOpts {
+		return
+	}
+	ctx.WriteString(" WITH ")
+	comma := ""
+	if node.Details {
+		ctx.WriteString("DETAILS")
+		comma = ", "
+	}
+	if node.Keys {
+		ctx.WriteString(comma)
+		ctx.WriteString("KEYS")
+		comma = ", "
+	}
+	if node.Explain {
+		ctx.WriteString(comma)
+		ctx.WriteString("EXPLAIN")
+		comma = ", "
+	}
+	if node.Mode != UniqueRanges {
+		ctx.WriteString(comma)
+		switch node.Mode {
+		case ExpandTables:
+			ctx.WriteString("TABLES")
+		case ExpandIndexes:
+			ctx.WriteString("INDEXES")
+		}
 	}
 }
 

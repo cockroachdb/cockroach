@@ -1,4 +1,7 @@
 show_ranges_stmt ::=
-	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
-	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
-	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name
+	'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name opt_show_ranges_options
+	| 'SHOW' 'RANGES' 'FROM' 'TABLE' table_name opt_show_ranges_options
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name opt_show_ranges_options
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG' opt_show_ranges_options
+	| 'SHOW' 'RANGES' opt_show_ranges_options
+	| 'SHOW' 'CLUSTER' 'RANGES' opt_show_ranges_options
