@@ -55,6 +55,8 @@ var (
 	rewriteIterations = flag.Int("rewrite-iterations", 50,
 		"if re-writing, the number of times to execute each benchmark to "+
 			"determine the range of possible values")
+	allowOffByOne = flag.Bool("allow-off-by-one", true,
+		"if set, expectations that are not a range get a ±1 tolerance")
 )
 
 // RunBenchmarkExpectationTests runs tests to validate or rewrite the contents
@@ -319,10 +321,18 @@ func (b benchmarkExpectations) find(name string) (benchmarkExpectation, bool) {
 }
 
 func (e benchmarkExpectation) matches(roundTrips int) bool {
-	// Either the value falls within the expected range, or
-	return (e.min <= roundTrips && roundTrips <= e.max) ||
-		// the expectation isn't a range, so give it a leeway of one.
-		e.min == e.max && (roundTrips == e.min-1 || roundTrips == e.min+1)
+	// Does the value fall in the range?
+	if e.min <= roundTrips && roundTrips <= e.max {
+		return true
+	}
+
+	// If the expectation isn't a range, it gets a leeway of one because we got
+	// tired of small indeterminism.
+	if (e.min == e.max) && *allowOffByOne && (roundTrips == e.min-1 || roundTrips == e.min+1) {
+		return true
+	}
+
+	return false
 }
 
 func (e benchmarkExpectation) String() string {

@@ -1,14 +1,12 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package cli
+package cliccl
 
 import (
 	"context"
@@ -16,6 +14,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
+	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/spf13/cobra"
@@ -48,9 +47,7 @@ test-directory command will always add the following arguments (in that order):
 
 func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	ctx := context.Background()
-	serverCfg.Stores.Specs = nil
-
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	stopper, err := cli.ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
 	if err != nil {
 		return err
 	}

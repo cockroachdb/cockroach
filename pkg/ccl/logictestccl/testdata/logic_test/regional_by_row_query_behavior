@@ -392,7 +392,7 @@ ALTER TABLE regional_by_row_table SPLIT AT VALUES ('ca-central-1', 0), ('us-east
 ALTER TABLE regional_by_row_table EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE regional_by_row_table]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX regional_by_row_table@primary]
 ----
 start_key  end_key    replicas  lease_holder
 NULL       /"\x80"/0  {1}       1
@@ -640,7 +640,7 @@ ALTER TABLE child SPLIT AT VALUES ('ca-central-1', 0), ('us-east-1', 0);
 ALTER TABLE child EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE child]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX child@primary]
 ----
 start_key  end_key    replicas  lease_holder
 NULL       /"\x80"/0  {1}       1
