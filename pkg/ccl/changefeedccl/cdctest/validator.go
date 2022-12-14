@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -562,6 +563,8 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	// resolved timestamp and this one. We process all row updates belonging to a given
 	// timestamp and then `fingerprint` to ensure the scratch table and the original table
 	// match.
+	var numProcessed int
+	start := timeutil.Now()
 	for len(v.buffer) > 0 {
 		if v.resolved.Less(v.buffer[0].updated) {
 			break
@@ -594,7 +597,15 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			}
 		}
 		v.previousRowUpdateTs = row.updated
+		numProcessed++
 	}
+
+	elapsed := timeutil.Since(start)
+	var avg float64
+	if numProcessed > 0 {
+		avg = float64(elapsed.Milliseconds()) / float64(numProcessed)
+	}
+	fmt.Printf(">> PROCESSED %d EVENTS, AVERAGE = %.2f ms\n", numProcessed, avg)
 
 	if !v.firstRowTimestamp.IsEmpty() && v.firstRowTimestamp.LessEq(resolved) &&
 		lastFingerprintedAt != resolved {

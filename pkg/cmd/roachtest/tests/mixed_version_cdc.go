@@ -251,6 +251,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 						t.Fatal(err)
 					}
 				} else {
+					t.L().Printf("received resolved event!")
 					if err := cmvt.validator.NoteResolved(partitionStr, resolved); err != nil {
 						t.Fatal(err)
 					}

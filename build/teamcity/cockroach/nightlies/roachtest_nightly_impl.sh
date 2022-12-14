@@ -14,6 +14,10 @@ source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
+mkdir $artifacts/binaries
+cp bin/cockroach $artifacts/binaries/tc_cockroach
+cp bin/roachtest $artifacts/binaries/tc_roachtest
+cp bin/workload $artifacts/binaries/tc_workload
 
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \

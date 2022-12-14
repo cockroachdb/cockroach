@@ -249,7 +249,7 @@ type ProjectsVal struct {
 // These are GCP zones available according to this page:
 // https://cloud.google.com/compute/docs/regions-zones#available
 var defaultZones = []string{
-	"us-east1-b",
+	"us-east4-b",
 	"us-west1-b",
 	"europe-west2-b",
 	"us-east1-c",
