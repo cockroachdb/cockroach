@@ -1,0 +1,103 @@
+parse
+DECLARE
+BEGIN
+CASE
+hello
+WHEN
+world
+THEN
+ENDCASE;
+END
+----
+DECLARE
+BEGIN
+CASE hello
+WHEN world
+THEN
+ENDCASE
+END
+
+parse
+DECLARE
+BEGIN
+CASE
+order_cnt
+WHEN
+1, 2, 3
+THEN
+ENDCASE;
+END
+----
+DECLARE
+BEGIN
+CASE order_cnt
+WHEN 1 , 2 , 3
+THEN
+ENDCASE
+END
+
+parse
+DECLARE
+BEGIN
+CASE
+order_cnt
+WHEN
+1, 2, 3
+THEN
+WHEN
+5
+THEN
+ENDCASE;
+END
+----
+DECLARE
+BEGIN
+CASE order_cnt
+WHEN 1 , 2 , 3
+THEN
+WHEN 5
+THEN
+ENDCASE
+END
+
+parse
+DECLARE
+BEGIN
+CASE
+WHEN
+true
+THEN
+ENDCASE;
+END
+----
+DECLARE
+BEGIN
+CASE
+WHEN true
+THEN
+ENDCASE
+END
+
+parse
+DECLARE
+  order_cnt integer := 10;
+BEGIN
+CASE
+WHEN
+order_cnt BETWEEN 0 AND 100
+THEN
+WHEN
+order_cnt > 100
+THEN
+ENDCASE;
+END
+----
+DECLARE
+BEGIN
+CASE
+WHEN order_cnt between 0 and 100
+THEN
+WHEN order_cnt > 100
+THEN
+ENDCASE
+END
