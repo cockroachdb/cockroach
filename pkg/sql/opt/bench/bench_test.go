@@ -322,7 +322,7 @@ var schemas = []string{
 		      {"num_eq": 10, "num_range": 10, "distinct_range": 10, "upper_bound": "abcdefghijklmnopqrstuvwxyz___________________9600"},
 		      {"num_eq": 10, "num_range": 10, "distinct_range": 10, "upper_bound": "abcdefghijklmnopqrstuvwxyz___________________9700"},
 		      {"num_eq": 10, "num_range": 10, "distinct_range": 10, "upper_bound": "abcdefghijklmnopqrstuvwxyz___________________9800"},
-		      {"num_eq": 10, "num_range": 10, "distinct_range": 10, "upper_bound": "abcdefghijklmnopqrstuvwxyz___________________9900"},
+		      {"num_eq": 10, "num_range": 10, "distinct_range": 10, "upper_bound": "abcdefghijklmnopqrstuvwxyz___________________9900"}
 		    ]
 		  }
 		]'
