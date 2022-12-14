@@ -108,23 +108,46 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 // stmt_case
 type PLpgSQLStmtCase struct {
 	PLpgSQLStatementImpl
-	TestExpr     PLpgSQLExpr
+	// TODO: Change to PLpgSQLExpr
+	TestExpr     string
 	Var          PLpgSQLVariable
-	CaseWhenList []PLpgSQLStmtCaseWhenArm
+	CaseWhenList []*PLpgSQLStmtCaseWhenArm
 	HaveElse     bool
 	ElseStmts    []PLpgSQLStatement
 }
 
 func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("CASE")
+	if len(s.TestExpr) > 0 {
+		ctx.WriteString(fmt.Sprintf(" %s", s.TestExpr))
+	}
+	ctx.WriteString("\n")
+	for _, when := range s.CaseWhenList {
+		when.Format(ctx)
+	}
+	if s.HaveElse {
+		ctx.WriteString("ELSE\n")
+		for _, stmt := range s.ElseStmts {
+			stmt.Format(ctx)
+		}
+	}
+	ctx.WriteString("ENDCASE\n")
 }
 
 type PLpgSQLStmtCaseWhenArm struct {
 	LineNo int
-	Expr   PLpgSQLExpr
-	Stmts  []PLpgSQLStatement
+	// TODO: Change to PLpgSQLExpr
+	Expr  string
+	Stmts []PLpgSQLStatement
 }
 
 func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("WHEN %s\n", s.Expr))
+	ctx.WriteString("THEN")
+	for _, stmt := range s.Stmts {
+		stmt.Format(ctx)
+	}
+	ctx.WriteString("\n")
 }
 
 // stmt_loop

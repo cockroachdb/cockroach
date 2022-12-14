@@ -59,6 +59,22 @@ func (u *plpgsqlSymUnion) plpgsqlStmtBlock() *plpgsqltree.PLpgSQLStmtBlock {
     return u.val.(*plpgsqltree.PLpgSQLStmtBlock)
 }
 
+func (u *plpgsqlSymUnion) plpgsqlExpr() plpgsqltree.PLpgSQLExpr {
+    return u.val.(plpgsqltree.PLpgSQLExpr)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlExprs() []plpgsqltree.PLpgSQLExpr {
+    return u.val.([]plpgsqltree.PLpgSQLExpr)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlStmtCaseWhenArm() *plpgsqltree.PLpgSQLStmtCaseWhenArm {
+    return u.val.(*plpgsqltree.PLpgSQLStmtCaseWhenArm)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlStmtCaseWhenArms() []*plpgsqltree.PLpgSQLStmtCaseWhenArm {
+    return u.val.([]*plpgsqltree.PLpgSQLStmtCaseWhenArm)
+}
+
 func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
     return u.val.(plpgsqltree.PLpgSQLStatement)
 }
@@ -233,6 +249,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 %token <str>	WHEN
 %token <str>	WHILE
 %token <str>	ENDIF
+%token <str>	ENDCASE
 
 %union {
   id    int32
@@ -254,6 +271,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 //%type <nsitem>	decl_aliasitem // TODO what is nsitem? looks like namespace item, not sure if we need it.
 
 %type <str>	expr_until_semi
+//%type <plpgsqltree.PLpgSQLExpr>	expr_until_then expr_until_loop opt_expr_until_when
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
 
@@ -284,7 +302,8 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 %type <*plpgsqltree.PLpgSQLCondition>	proc_conditions proc_condition
 
 %type <*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when
-//%type <list>	case_when_list opt_case_else // TODO is this a list of case when arms?
+%type <[]*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when_list
+%type <[]plpgsqltree.PLpgSQLStatement> opt_case_else
 
 %type <bool>	getdiag_area_opt
 %type <plpgsqltree.PLpgSQLStmtGetDiagItemList>	getdiag_list // TODO don't know what this is
@@ -530,7 +549,9 @@ proc_stmt:
 				| stmt_if
 						{ }
 				| stmt_case
-						{ }
+						{
+						  $$.val = $1.plpgsqlStatement()
+						 }
 				| stmt_loop
 						{ }
 				| stmt_while
@@ -731,26 +752,56 @@ stmt_else		:
 					}
 				;
 
-stmt_case		: CASE opt_expr_until_when case_when_list opt_case_else END CASE ';'
+// TODO: ENDCASE should be END CASE
+stmt_case		: CASE opt_expr_until_when case_when_list opt_case_else ENDCASE ';'
 					{
+					  expr := &plpgsqltree.PLpgSQLStmtCase {
+					    TestExpr: $2,
+					    CaseWhenList: $3.plpgsqlStmtCaseWhenArms(),
+					  }
+					  // TODO: Add support for ELSE
+					  /*
+					  if $4.val != nil {
+					     expr.HaveElse = true
+							 expr.ElseStmts = $4.plpgsqlStatements()
+					  }
+					  */
+					  $$.val = expr
 					}
 				;
 
 opt_expr_until_when	:
 					{
+					expr := ""
+					tok := plpgsqllex.(*lexer).Peek()
+					if tok.id != WHEN {
+						 expr = plpgsqllex.(*lexer).ReadSqlExpressionStr(WHEN)
+					}
+					$$ = expr
 					}
 				;
 
 case_when_list	: case_when_list case_when
 					{
+					  stmts := $1.plpgsqlStmtCaseWhenArms()
+					  stmts = append(stmts, $2.plpgsqlStmtCaseWhenArm())
+					  $$.val = stmts
 					}
 				| case_when
 					{
+						stmts := []*plpgsqltree.PLpgSQLStmtCaseWhenArm{}
+					  stmts = append(stmts, $1.plpgsqlStmtCaseWhenArm())
+					  $$.val = stmts
 					}
 				;
 
-case_when		: WHEN expr_until_then proc_sect
+case_when		: WHEN expr_until_then THEN proc_sect
 					{
+						 expr := &plpgsqltree.PLpgSQLStmtCaseWhenArm{
+						   Expr: $2,
+						   Stmts: $4.plpgsqlStatements(),
+						 }
+						 $$.val = expr
 					}
 				;
 
@@ -759,6 +810,7 @@ opt_case_else	:
 					}
 				| ELSE proc_sect
 					{
+						$$.val = $2.plpgsqlStatements()
 					}
 				;
 
@@ -1007,10 +1059,10 @@ expr_until_semi :
 ;
 
 expr_until_then :
-{
-  $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(THEN)
- }
-;
+					{
+					$$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(THEN)
+					}
+				;
 
 expr_until_loop :
 					{ }
@@ -1058,13 +1110,6 @@ any_identifier:
 | unreserved_keyword
   {
   }
-;
-
-d_expr: ICONST {}
-| FCONST {}
-| SCONST {}
-| USCONST {}
-| BCONST {}
 ;
 
 unreserved_keyword:
@@ -1160,6 +1205,7 @@ reserved_keyword:
 | DECLARE
 | ELSE
 | END
+| ENDCASE
 | ENDIF
 | EXECUTE
 | FOR
