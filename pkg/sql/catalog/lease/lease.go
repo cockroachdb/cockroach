@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -135,10 +136,13 @@ func (m *Manager) WaitForOneVersion(
 			// descriptors can be removed or made invalid. For instance, the
 			// descriptor could be a type or a schema which is dropped by a subsequent
 			// concurrent schema change.
-			desc, err = m.storage.makeDirect(ctx).MaybeGetDescriptorByIDUnvalidated(ctx, txn, id)
+			const isDescriptorRequired = false
+			cr := m.storage.newCatalogReader(ctx)
+			c, err := cr.GetByIDs(ctx, txn, []descpb.ID{id}, isDescriptorRequired, catalog.Any)
 			if err != nil {
 				return err
 			}
+			desc = c.LookupDescriptor(id)
 			if desc == nil {
 				return errors.Wrapf(catalog.ErrDescriptorNotFound, "waiting for leases to drain on descriptor %d", id)
 			}
@@ -720,6 +724,7 @@ func NewLeaseManager(
 			internalExecutor: internalExecutor,
 			settings:         settings,
 			codec:            codec,
+			sysDBCache:       catkv.NewSystemDatabaseCache(codec, settings),
 			group:            &singleflight.Group{},
 			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
 			outstandingLeases: metric.NewGauge(metric.Metadata{
@@ -928,6 +933,7 @@ func (m *Manager) resolveName(
 	parentSchemaID descpb.ID,
 	name string,
 ) (id descpb.ID, _ error) {
+	req := []descpb.NameInfo{{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}}
 	if err := m.storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Run the name lookup as high-priority, thereby pushing any intents out of
 		// its way. We don't want schema changes to prevent name resolution/lease
@@ -940,9 +946,14 @@ func (m *Manager) resolveName(
 		if err := txn.SetFixedTimestamp(ctx, timestamp); err != nil {
 			return err
 		}
-		var err error
-		id, err = m.storage.makeDirect(ctx).LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
-		return err
+		c, err := m.storage.newCatalogReader(ctx).GetByNames(ctx, txn, req)
+		if err != nil {
+			return err
+		}
+		if e := c.LookupNamespaceEntry(&req[0]); e != nil {
+			id = e.GetID()
+		}
+		return nil
 	}); err != nil {
 		return id, err
 	}
@@ -1379,9 +1390,14 @@ func (m *Manager) DB() *kv.DB {
 	return m.storage.db
 }
 
-// Codec return the Manager's SQLCodec.
+// Codec returns the Manager's SQLCodec.
 func (m *Manager) Codec() keys.SQLCodec {
 	return m.storage.codec
+}
+
+// SystemDatabaseCache returns the Manager's catkv.SystemDatabaseCache.
+func (m *Manager) SystemDatabaseCache() *catkv.SystemDatabaseCache {
+	return m.storage.sysDBCache
 }
 
 // Metrics contains a pointer to all relevant lease.Manager metrics, for
