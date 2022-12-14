@@ -1899,6 +1899,7 @@ func (s StartReplication) command() string {
 	return "start_replication"
 }
 
+// hat-tip on the naming
 type hackInterface interface {
 	WriteCopyBothFormat(pos CmdPos) error
 	Rd() pgwirebase.BufferedReader
@@ -2151,66 +2152,71 @@ func (ex *connExecutor) execCmd() error {
 				pgwirebase.ReadBufferOptionWithClusterSettings(&ex.planner.execCfg.Settings.SV),
 			)
 			lsn := replicationslot.ParseLSN(tcmd.HighLSN + "/" + tcmd.LowLSN)
-			slot := replicationslot.ReplicationSlots[tcmd.SlotName]
-			if slot == nil {
-				panic(errors.AssertionFailedf("unknown slot %s\n", tcmd.SlotName))
-			}
-			go func() {
-				// TODO: proper session management.
-				for {
-					// Read any incoming message.
-					typ, _, err := readBuf.ReadTypedMsg(c.Rd())
-					if err != nil {
-						log.Errorf(ctx, "error: %s\n", err)
-						return
-					}
-					switch typ {
-					case 'd': // client keep alive
-						log.Infof(ctx, "client sent keepalive")
-					default:
-						panic(errors.AssertionFailedf("unhandled type %c", typ))
-					}
+			found := false
+			for _, slot := range replicationslot.ReplicationSlots {
+				if slot.GetBaseSlotName() != tcmd.SlotName {
+					continue
 				}
-			}()
-			// TODO: figure out exit condition
-			for it := 0; it < int(24*time.Hour/time.Second); it++ {
-				// Keep outputting results every second.
-				time.Sleep(time.Second)
+				go func() {
+					// TODO: proper session management.
+					for {
+						// Read any incoming message.
+						typ, _, err := readBuf.ReadTypedMsg(c.Rd())
+						if err != nil {
+							log.Errorf(ctx, "error: %s\n", err)
+							return
+						}
+						switch typ {
+						case 'd': // client keep alive
+							log.Infof(ctx, "client sent keepalive")
+						default:
+							panic(errors.AssertionFailedf("unhandled type %c", typ))
+						}
+					}
+				}()
+				// TODO: figure out exit condition
+				for it := 0; it < int(24*time.Hour/time.Second); it++ {
+					// Keep outputting results every second.
+					time.Sleep(time.Second)
 
-				// Write any slot info.
-				next := slot.NextTxn(true)
-				if len(next) > 0 {
-					var xid int64
-					for idx, item := range next {
-						log.Infof(ctx, "writing row %s (idx %d/%d)", item.Value, idx, len(next))
-						if idx == 0 || item.XID != xid {
-							if err := c.WriteBegin(pos, item.LSN, item.XID); err != nil {
+					// Write any slot info.
+					next := slot.NextTxn(true)
+					if len(next) > 0 {
+						var xid int64
+						for idx, item := range next {
+							log.Infof(ctx, "writing row %s (idx %d/%d)", item.Value, idx, len(next))
+							if idx == 0 || item.XID != xid {
+								if err := c.WriteBegin(pos, item.LSN, item.XID); err != nil {
+									return err
+								}
+							}
+							if err := c.WriteReplData(item); err != nil {
 								return err
 							}
+							if idx == len(next)-1 || item.XID != next[idx+1].XID {
+								if err := c.WriteCommit(pos, item.LSN+8, item.XID, item.MVCC); err != nil {
+									return err
+								}
+							}
+							lsn = item.LSN
+							xid = item.XID
 						}
-						if err := c.WriteReplData(item); err != nil {
+
+						log.Infof(ctx, "flushing!!!")
+						if err := c.Flush(pos); err != nil {
 							return err
 						}
-						if idx == len(next)-1 || item.XID != next[idx+1].XID {
-							if err := c.WriteCommit(pos, item.LSN+8, item.XID, item.MVCC); err != nil {
-								return err
-							}
+					} else {
+						// Send keep-alive message
+						log.Infof(ctx, "writing keep-alive")
+						if err := c.WriteReplKeepAlive(pos, lsn); err != nil {
+							return err
 						}
-						lsn = item.LSN
-						xid = item.XID
-					}
-
-					log.Infof(ctx, "flushing!!!")
-					if err := c.Flush(pos); err != nil {
-						return err
-					}
-				} else {
-					// Send keep-alive message
-					log.Infof(ctx, "writing keep-alive")
-					if err := c.WriteReplKeepAlive(pos, lsn); err != nil {
-						return err
 					}
 				}
+			}
+			if !found {
+				panic(errors.AssertionFailedf("unknown slot %s\n", tcmd.SlotName))
 			}
 		}
 	case DrainRequest:

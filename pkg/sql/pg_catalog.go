@@ -3997,12 +3997,13 @@ var pgCatalogLargeobjectMetadataTable = virtualSchemaTable{
 }
 
 var pgCatalogReplicationSlotsTable = virtualSchemaTable{
+	// bold comment
 	comment: "pg_replication_slots was created for compatibility and is currently unimplemented",
 	schema:  vtable.PgCatalogReplicationSlots,
 	populate: func(ctx context.Context, p *planner, d catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		for slotName, info := range replicationslot.ReplicationSlots {
+		for _, info := range replicationslot.ReplicationSlots {
 			if err := addRow(
-				tree.NewDString(slotName),
+				tree.NewDString(info.GetBaseSlotName()),
 				tree.NewDString("test_decoding"),
 				tree.NewDString("logical"),
 				dbOid(d.GetID()), // wrong but whatever.

@@ -1,19 +1,27 @@
 package replicationslot
 
 import (
+	"context"
+	gojson "encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
 type Item struct {
-	LSN        uint64
-	XID        int64
-	Key, Value []byte
-	MVCC       hlc.Timestamp
+	FullSlotName string
+	LSN          uint64
+	XID          int64
+	Key, Value   []byte
+	MVCC         hlc.Timestamp
 }
 
 var ReplicationSlots = make(map[string]replicationSlotLooker)
@@ -24,6 +32,35 @@ type replicationSlotLooker interface {
 	LSN() uint64
 	SetDatabase(s string)
 	Database() string
+	SetTableID(id descpb.ID)
+	TableID() descpb.ID
+	SetBaseSlotName(s string)
+	GetBaseSlotName() string
+	SetFullSlotName(s string)
+	GetFullSlotName() string
+	SetDescsCollection(collection *descs.Collection)
+	GetDescsCollection() *descs.Collection
+	SetDB(*kv.DB)
+	DB() *kv.DB
+}
+
+const slotPrefix = "pg_logical"
+const SlotNameSeparator = "."
+
+func BuildFullSlotName(slotName string, tableName string) string {
+	return slotPrefix + SlotNameSeparator + slotName + SlotNameSeparator + tableName
+}
+
+func tableNameFromFullSlotName(fullSlotName string) string {
+	_, sn, f := strings.Cut(fullSlotName, slotPrefix+SlotNameSeparator)
+	if !f {
+		panic(fmt.Sprintf("misformed fullSlotName %s", fullSlotName))
+	}
+	_, tableName, f := strings.Cut(sn, SlotNameSeparator)
+	if !f {
+		panic(fmt.Sprintf("misformed fullSlotName %s", fullSlotName))
+	}
+	return tableName
 }
 
 func FormatLSN(lsn uint64) string {
@@ -47,60 +84,81 @@ func ParseLSN(s string) uint64 {
 	return (upperHalf << 32) + lowerHalf
 }
 
+//type SubEntry struct {
+//	ColName string
+//	Value   string
+//}
+//
+//type Entry struct {
+//	MessageType string
+//	ColValues   map[string]SubEntry
+//}
+
 // Hacking for now. This should probably be changed to use avroDataRecord
 // NOTE: untested
-func ParseJSONValueForPGLogicalPayload(s string) string {
-	// First value found is the record type
-	recordType, colValues, found := strings.Cut(s, ":")
-	if !found {
-		return ""
+func ParseJSONValueForPGLogicalPayload(item Item) string {
+	slot, ok := ReplicationSlots[item.FullSlotName]
+	if !ok {
+		panic("unable to find replication slot")
 	}
-	recordType = strings.Trim(recordType, "{\"")
+	// get table's descriptor to infer types
+	txn := kv.NewTxn(context.Background(), slot.DB(), 0)
+	t, err := slot.GetDescsCollection().GetMutableDescriptorByID(context.Background(), txn, slot.TableID())
+	if err != nil {
+		panic("unable to retrieve table descriptor")
+	}
+	it := t.ImmutableCopy().(catalog.TableDescriptor)
+
+	var message map[string]interface{}
+	if err := gojson.Unmarshal(item.Value, &message); err != nil {
+		panic("unable to marshal CF entry")
+	}
+
+	var payload string
+	tableName := tableNameFromFullSlotName(item.FullSlotName)
 	var recordString string
-	if recordType == "resolved" {
-		// This record can be ignored for pg logical replication
+	_, ok = message["after"]
+	// Explicitly ignore everything that's not an "after" message
+	if !ok {
 		return ""
 	}
-	if recordType == "after" {
-		// Peek ahead to see if this is an INSERT or a DELETE
-		if strings.Contains(recordType, "after:null") {
-			recordString = "DELETE"
-		} else {
-			recordString = "INSERT"
+
+	b, ok := message["after"].(map[string]interface{})
+	if !ok {
+		recordString = "DELETE"
+		idx := it.GetPrimaryIndex()
+		payload = fmt.Sprintf("table %s: %s:", tableName, recordString)
+
+		keyString := string(item.Key)
+		keyString = strings.Trim(keyString, "[]")
+
+		// This won't work for compound primary keys.
+		for i := 0; i < idx.NumKeyColumns(); i++ {
+			for _, col := range it.AllColumns() {
+				if col.GetID() == idx.GetKeyColumnID(i) {
+					payload = fmt.Sprintf("%s %s[%s]:%s", payload, col.GetName(), col.GetType().String(), keyString)
+				}
+			}
 		}
-	} else {
-		// FIXME: still have to handle UPDATE
-		panic("Unhandled log record type")
+		return payload
 	}
 
-	// Because hard coding things is so en vogue these days
-	tableName := "test_table"
-	payload := fmt.Sprintf("table public.%s: %s:", tableName, recordString)
+	recordString = "INSERT"
+	payload = fmt.Sprintf("table %s: %s:", tableName, recordString)
 
-	// Loop through all key values and populate a string based on the trimming/replacing used for keys below
-	colValue, colValues, found := strings.Cut(colValues, ",")
-	for ; found; colValue, colValues, found = strings.Cut(colValues, ",") {
-		// This is ugly and very inefficient.  Fix it!
-		colValue = strings.ReplaceAll(colValue, "{", "")
-		colValue = strings.ReplaceAll(colValue, "}", "")
-		colValue = strings.ReplaceAll(colValue, "\"", "")
-		colValue = strings.ReplaceAll(colValue, " ", "")
-		// And while we're hard coding, hard code the type too
-		// This part is especially bad, and will prevent DMS from working
-		colValue = strings.Replace(colValue, ":", "[int]:", 1)
-		payload = fmt.Sprintf("%s %s", payload, colValue)
+	// FIXME: Using slotName below is still problematic, because on a table rename,
+	//  we may not be able to find the table descriptor.
+	for colName, colValue := range b {
+		var colType string
+		for _, col := range it.AccessibleColumns() {
+			if col.ColName() != tree.Name(colName) {
+				continue
+			}
+			colType = col.GetType().String()
+			break
+		}
+		payload = fmt.Sprintf("%s, %s[%s]:%v", payload, colName, colType, colValue)
 	}
-	// Handle last column
-	// This is ugly and very inefficient.  Fix it!
-	colValue = strings.ReplaceAll(colValue, "{", "")
-	colValue = strings.ReplaceAll(colValue, "}", "")
-	colValue = strings.ReplaceAll(colValue, "\"", "")
-	colValue = strings.ReplaceAll(colValue, " ", "")
-	// And while we're hard coding, hard code the type too
-	colValue = strings.Replace(colValue, ":", "[int]:", 1)
-	payload = fmt.Sprintf("%s %s", payload, colValue)
 
-	// FIXME: need to figure out how to do null handling for DELETE after
-	//  debugging.
 	return payload
 }

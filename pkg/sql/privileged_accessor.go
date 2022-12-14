@@ -13,11 +13,14 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
@@ -27,24 +30,56 @@ import (
 )
 
 func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, error) {
-	// ???? drop again just in case.
-	if err := p.DropSlot(ctx, slotName); err != nil {
-		return 0, err
+	if strings.Contains(slotName, replicationslot.SlotNameSeparator) {
+		return 0, errors.Newf("invalid character \"%s\" found in slot name: %s", replicationslot.SlotNameSeparator, slotName)
 	}
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"crdb-internal-create-slot",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		// i love me some sql injection
-		fmt.Sprintf("CREATE CHANGEFEED FOR TABLE %s.public.test_table INTO $1", p.SessionData().Database),
-		"replication://"+slotName,
-	)
+
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, p.CurrentDatabase(),
+		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return 0, err
 	}
-	replicationslot.ReplicationSlots[slotName].SetDatabase(p.CurrentDatabase())
-	return replicationslot.ReplicationSlots[slotName].LSN(), nil
+	var minLSN uint64 = math.MaxUint64
+	if err = p.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			// ???? drop again just in case.
+			tableSlotName := replicationslot.BuildFullSlotName(slotName, tbDesc.Name)
+			if err := p.DropSlot(ctx, tableSlotName); err != nil {
+				return err
+			}
+			_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+				ctx,
+				"crdb-internal-create-slot",
+				p.txn,
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				// i love me some sql injection
+				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE %s.public.%s INTO $1", p.SessionData().Database, tbDesc.Name),
+				"replication://"+tableSlotName,
+			)
+			if err != nil {
+				return err
+			}
+			slot := replicationslot.ReplicationSlots[tableSlotName]
+			slot.SetDatabase(p.CurrentDatabase())
+			slot.SetTableID(tbDesc.ID)
+			slot.SetBaseSlotName(slotName)
+			slot.SetFullSlotName(tableSlotName)
+			slot.SetDescsCollection(p.descCollection)
+			// Not sure if we want to store the DB in this struct
+			slot.SetDB(p.txn.DB())
+			lsn := slot.LSN()
+			// Not sure if returning the min is the right thing to do here.
+			if lsn < minLSN {
+				minLSN = lsn
+			}
+			return nil
+		},
+	); err != nil {
+		return 0, err
+	}
+	return minLSN, nil
 }
 
 func (p *planner) DropSlot(ctx context.Context, slotName string) error {
@@ -59,7 +94,11 @@ func (p *planner) DropSlot(ctx context.Context, slotName string) error {
 	if err != nil {
 		return err
 	}
-	delete(replicationslot.ReplicationSlots, slotName)
+	for name, s := range replicationslot.ReplicationSlots {
+		if s.GetBaseSlotName() == slotName {
+			delete(replicationslot.ReplicationSlots, name)
+		}
+	}
 	return nil
 }
 

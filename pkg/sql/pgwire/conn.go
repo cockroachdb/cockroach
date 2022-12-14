@@ -1630,7 +1630,7 @@ func (c *conn) WriteReplData(item replicationslot.Item) error {
 	if _, err := c.msgBuilder.Write(buf); err != nil {
 		return err
 	} // serverTime
-	if _, err := c.msgBuilder.Write([]byte(replicationslot.ParseJSONValueForPGLogicalPayload(string(item.Value)))); err != nil {
+	if _, err := c.msgBuilder.Write([]byte(replicationslot.ParseJSONValueForPGLogicalPayload(item))); err != nil {
 		return err
 	}
 

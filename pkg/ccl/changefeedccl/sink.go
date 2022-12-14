@@ -18,7 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/replicationslot"
@@ -176,16 +179,28 @@ func getSink(
 			// Really should be distributed, but maybe not for demo purposes on a single
 			// node cluster.
 			// I believe this is racy so putting a lock on it :)
-			replicationslot.ReplicationSlotsMu.Lock()
-			defer replicationslot.ReplicationSlotsMu.Unlock()
-			if _, ok := replicationslot.ReplicationSlots[name]; !ok {
-				sink := &replicationSink{
-					name: name,
-					// TOTAL HACK ALERT! Putting A in front of everything so
-					// it can be recognised as tree.Name.
-					lsn: 0xAAAAAAAAAA000000,
+			targets := AllTargets(feedCfg)
+			if targets.Size > 1 {
+				return nil, errors.Newf("attempt to setup replication with multiple targets: %d", targets.Size)
+			}
+			// Loop over the exactly one target. Putting this loop in here for
+			// future glory.
+			if err := targets.EachTarget(func(t changefeedbase.Target) error {
+				replicationslot.ReplicationSlotsMu.Lock()
+				defer replicationslot.ReplicationSlotsMu.Unlock()
+				if _, ok := replicationslot.ReplicationSlots[name]; !ok {
+					sink := &replicationSink{
+						name: name,
+						// TOTAL HACK ALERT! Putting A in front of everything so
+						// it can be recognised as tree.Name.
+						// ajstorm: oh, wow!
+						lsn: 0xAAAAAAAAAA000000,
+					}
+					replicationslot.ReplicationSlots[name] = sink
 				}
-				replicationslot.ReplicationSlots[name] = sink
+				return nil
+			}); err != nil {
+				return nil, err
 			}
 			return replicationslot.ReplicationSlots[name].(*replicationSink), nil
 		case isWebhookSink(u):
@@ -489,12 +504,17 @@ func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
 }
 
 type replicationSink struct {
-	name     string
-	lastXID  int64
-	database string
-	lastMVCC hlc.Timestamp
-	lsn      uint64
-	items    []replicationslot.Item
+	name           string
+	lastXID        int64
+	database       string
+	baseSlotName   string
+	fullSlotName   string
+	tableID        descpb.ID
+	descCollection *descs.Collection
+	db             *kv.DB
+	lastMVCC       hlc.Timestamp
+	lsn            uint64
+	items          []replicationslot.Item
 }
 
 func (r *replicationSink) LSN() uint64 {
@@ -520,6 +540,46 @@ func (r *replicationSink) NextTxn(consume bool) []replicationslot.Item {
 	return ret
 }
 
+func (r *replicationSink) SetTableID(id descpb.ID) {
+	r.tableID = id
+}
+
+func (r *replicationSink) TableID() descpb.ID {
+	return r.tableID
+}
+
+func (r *replicationSink) SetBaseSlotName(name string) {
+	r.baseSlotName = name
+}
+
+func (r *replicationSink) GetBaseSlotName() string {
+	return r.baseSlotName
+}
+
+func (r *replicationSink) SetFullSlotName(name string) {
+	r.fullSlotName = name
+}
+
+func (r *replicationSink) GetFullSlotName() string {
+	return r.fullSlotName
+}
+
+func (r *replicationSink) SetDescsCollection(collection *descs.Collection) {
+	r.descCollection = collection
+}
+
+func (r *replicationSink) GetDescsCollection() *descs.Collection {
+	return r.descCollection
+}
+
+func (r *replicationSink) SetDB(db *kv.DB) {
+	r.db = db
+}
+
+func (r *replicationSink) DB() *kv.DB {
+	return r.db
+}
+
 func (r replicationSink) Dial() error {
 	return nil
 }
@@ -543,13 +603,14 @@ func (r *replicationSink) EmitRow(
 		r.lastMVCC = mvcc
 	}
 	item := replicationslot.Item{
-		// TOTAL HACK ALERT! Putting A in front of everything so
+		// TOTAL HACK ALERT! Putting A in front of everything so that
 		// it can be recognised as tree.Name.
-		LSN:   r.lsn,
-		XID:   r.lastXID,
-		Key:   key,
-		Value: value,
-		MVCC:  mvcc,
+		FullSlotName: r.fullSlotName,
+		LSN:          r.lsn,
+		XID:          r.lastXID,
+		Key:          key,
+		Value:        value,
+		MVCC:         mvcc,
 	}
 	r.items = append(r.items, item)
 	return nil

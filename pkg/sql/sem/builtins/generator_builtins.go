@@ -136,10 +136,10 @@ var logicalReplicationSlotStreamType = types.MakeLabeledTuple(
 )
 
 type logicalReplicationSlotStream struct {
-	slotName string
-	items    []replicationslot.Item
-	consume  bool
-	curr     replicationslot.Item
+	slotName   string
+	tableItems map[string][]replicationslot.Item
+	consume    bool
+	curr       replicationslot.Item
 
 	empty         bool
 	showBeginTxn  bool
@@ -151,11 +151,30 @@ func (l logicalReplicationSlotStream) ResolvedType() *types.T {
 }
 
 func (l *logicalReplicationSlotStream) Start(ctx context.Context, txn *kv.Txn) error {
-	if replicationslot.ReplicationSlots[l.slotName] == nil {
+	foundSlot := false
+	foundItems := false
+	l.tableItems = make(map[string][]replicationslot.Item)
+	for _, s := range replicationslot.ReplicationSlots {
+		if l.slotName == s.GetBaseSlotName() {
+			foundSlot = true
+			tableItems, ok := l.tableItems[s.GetFullSlotName()]
+			items := s.NextTxn(l.consume)
+			if len(items) == 0 {
+				continue
+			}
+			foundItems = true
+			if !ok {
+				l.tableItems[s.GetFullSlotName()] = items
+			} else {
+				l.tableItems[s.GetFullSlotName()] = append(tableItems, items...)
+			}
+		}
+	}
+	l.empty = !foundItems
+
+	if !foundSlot {
 		return errors.AssertionFailedf("slot name not found: %s\n", l.slotName)
 	}
-	l.items = replicationslot.ReplicationSlots[l.slotName].NextTxn(l.consume)
-	l.empty = len(l.items) == 0
 	return nil
 }
 
@@ -168,15 +187,26 @@ func (l *logicalReplicationSlotStream) Next(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if len(l.items) == 0 {
+	// we probably want to round-robin through these slots, as transactions
+	// commit.  For now, we drain one table, then the next,
+	// and so on.
+	found := false
+	var slot []replicationslot.Item
+	var fullSlotName string
+	for fullSlotName, slot = range l.tableItems {
+		if len(slot) != 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
 		if !l.showCommitTxn {
 			l.showCommitTxn = true
 			return true, nil
 		}
 		return false, nil
 	}
-
-	if l.curr.XID != l.items[0].XID {
+	if l.curr.XID != slot[0].XID {
 		if !l.showCommitTxn && l.curr.XID != 0 {
 			// Commit the curr txn.
 			l.showCommitTxn = true
@@ -184,12 +214,12 @@ func (l *logicalReplicationSlotStream) Next(ctx context.Context) (bool, error) {
 			// Begin the next txn.
 			l.showCommitTxn = false
 			l.showBeginTxn = true
-			l.curr = l.items[0]
-			l.items = l.items[1:]
+			l.curr = slot[0]
+			l.tableItems[fullSlotName] = slot[1:]
 		}
 	} else {
-		l.curr = l.items[0]
-		l.items = l.items[1:]
+		l.curr = slot[0]
+		l.tableItems[fullSlotName] = slot[1:]
 	}
 	return true, nil
 }
@@ -210,7 +240,7 @@ func (l *logicalReplicationSlotStream) Values() (tree.Datums, error) {
 			tree.NewDString(fmt.Sprintf("BEGIN %d", curr.XID)),
 		}, nil
 	}
-	s := replicationslot.ParseJSONValueForPGLogicalPayload(string(curr.Value))
+	s := replicationslot.ParseJSONValueForPGLogicalPayload(curr)
 	return []tree.Datum{
 		tree.NewDString(replicationslot.FormatLSN(curr.LSN)),
 		tree.NewDInt(tree.DInt(curr.XID)),
