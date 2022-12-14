@@ -179,11 +179,7 @@ INSERT INTO d.t2 VALUES (2);
 		return nil
 	})
 
-	destSQL.Exec(
-		t,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		ingestionJobID, cutoverTime)
-
+	destSQL.Exec(t, `ALTER TENANT "destination-tenant" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, hlc.Timestamp{WallTime: cutoverTime.UnixNano()}.AsOfSystemTime())
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 

@@ -32,7 +32,8 @@ type streamIngestManagerImpl struct {
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
 	ctx context.Context, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(ctx, r.evalCtx, r.txn, ingestionJobID, cutoverTimestamp)
+	jobRegistry := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
+	return completeStreamIngestion(ctx, jobRegistry, r.txn, ingestionJobID, cutoverTimestamp)
 }
 
 // GetStreamIngestionStats implements streaming.StreamIngestManager interface.
