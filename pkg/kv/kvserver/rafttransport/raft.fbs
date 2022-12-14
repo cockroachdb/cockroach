@@ -1,0 +1,19 @@
+namespace rafttransport;
+
+rpc_service RaftTransport {
+  // TODO stream both ways.
+  RaftMessageBatch(RaftMessageBatchRequest):RaftMessageBatchResponse(streaming: "bidi");
+}
+
+table RaftMessageBatchRequest {
+  reqs: [RaftMessageRequest];
+}
+
+table RaftMessageRequest {
+  range_id: int64;
+  data: [ubyte]; // TODO
+}
+
+table RaftMessageBatchResponse {
+  range_id: int64;
+}

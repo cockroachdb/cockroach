@@ -404,7 +404,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golangci/lint-1/com_github_golangci_lint_1-v0.0.0-20181222135242-d2cdd8c08219.zip": "2806ffd1a35b26a29b4cea86eb5ae421636b317e33e261fc1c20f9cf8fec2db5",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gomodule/redigo/com_github_gomodule_redigo-v1.7.1-0.20190724094224-574c33c3df38.zip": "f665942b590c65e87284d681ea2784d0b9873c644756f4716a9972dc0d8e804e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/btree/com_github_google_btree-v1.0.1.zip": "9b9f66ca4eb36bb1867b5ff9134fb2eb9fe9717d44e28836f2e977f9c03b4128",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/flatbuffers/com_github_google_flatbuffers-v2.0.0+incompatible.zip": "0afae89460c24ba56d23f35573ba49713eef3230aeb8c14bf90c771f97efa695",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/flatbuffers/com_github_google_flatbuffers-v22.11.23+incompatible.zip": "fb684f0db1d957f2893552cf4e41c0e81de8fb7a41be1b0bdff8b763c86ed496",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-cmp/com_github_google_go_cmp-v0.5.8.zip": "d17574d5a6ea9f606ed735117170e02aefc2f11f8ae15e3898ed99d255b46f06",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/com_github_google_go_github-v17.0.0+incompatible.zip": "9831222a466bec73a21627e0c3525da9cadd969468e31d10ecae8580b0568d0e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v27/com_github_google_go_github_v27-v27.0.4.zip": "c0bb2e2b9d8b610fd1d4b9fa8a3636a5337f19aecec33e76aecbf32ae4e192bb",

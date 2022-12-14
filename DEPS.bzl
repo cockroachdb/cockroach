@@ -3634,10 +3634,10 @@ def go_deps():
         name = "com_github_google_flatbuffers",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/flatbuffers",
-        sha256 = "0afae89460c24ba56d23f35573ba49713eef3230aeb8c14bf90c771f97efa695",
-        strip_prefix = "github.com/google/flatbuffers@v2.0.0+incompatible",
+        sha256 = "fb684f0db1d957f2893552cf4e41c0e81de8fb7a41be1b0bdff8b763c86ed496",
+        strip_prefix = "github.com/google/flatbuffers@v22.11.23+incompatible",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/flatbuffers/com_github_google_flatbuffers-v2.0.0+incompatible.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/flatbuffers/com_github_google_flatbuffers-v22.11.23+incompatible.zip",
         ],
     )
     go_repository(
