@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
@@ -85,8 +86,18 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 			validateEquivalenceStep := func(str1, str2 *string) versionStep {
 				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 					if *str1 != *str2 {
-						t.Fatal("After upgrading, `USE system; SHOW CREATE ALL TABLES;` " +
-							"does not match expected output after version upgrade.\n")
+						diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+							A:       difflib.SplitLines(*str1),
+							B:       difflib.SplitLines(*str2),
+							Context: 5,
+						})
+						if diffErr != nil {
+							diff = diffErr.Error()
+							t.Errorf("failed to produce diff: %v", diffErr)
+						}
+						t.Fatalf("After upgrading, `USE system; SHOW CREATE ALL TABLES;` "+
+							"does not match expected output after version upgrade."+
+							"\nDiff:\n%s", diff)
 					}
 					t.L().Printf("validating succeeded:\n%v", *str1)
 				}
