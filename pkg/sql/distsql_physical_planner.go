@@ -753,7 +753,7 @@ type PlanningCtx struct {
 	// any PhysicalPlan we generate with this context.
 	nodeStatuses map[base.SQLInstanceID]NodeStatus
 
-	infra physicalplan.PhysicalInfrastructure
+	infra *physicalplan.PhysicalInfrastructure
 
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal  bool
@@ -791,7 +791,7 @@ type PlanningCtx struct {
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
 	// release the resources that are acquired during the physical planning and
-	// are being hold onto throughout the whole flow lifecycle.
+	// are being held onto throughout the whole flow lifecycle.
 	onFlowCleanup []func()
 }
 
@@ -804,7 +804,7 @@ var _ physicalplan.ExprContext = &PlanningCtx{}
 // they have to be part of the final plan.
 func (p *PlanningCtx) NewPhysicalPlan() *PhysicalPlan {
 	return &PhysicalPlan{
-		PhysicalPlan: physicalplan.MakePhysicalPlan(&p.infra),
+		PhysicalPlan: physicalplan.MakePhysicalPlan(p.infra),
 	}
 }
 
@@ -3104,8 +3104,8 @@ func (dsp *DistSQLPlanner) createPhysPlan(
 	ctx context.Context, planCtx *PlanningCtx, plan planMaybePhysical,
 ) (physPlan *PhysicalPlan, cleanup func(), err error) {
 	if plan.isPhysicalPlan() {
-		// TODO(yuzefovich): figure out how to propagate
-		// planCtx.getCleanupFunc() from the experimental DistSQL spec factory.
+		// Note that planCtx.getCleanupFunc() is already set in
+		// plan.physPlan.onClose, so here we return a noop cleanup function.
 		return plan.physPlan.PhysicalPlan, func() {}, nil
 	}
 	physPlan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan.planNode)
@@ -4230,11 +4230,17 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	distributionType DistributionType,
 ) *PlanningCtx {
 	distribute := distributionType == DistributionTypeAlways || (distributionType == DistributionTypeSystemTenantOnly && evalCtx.Codec.ForSystemTenant())
+	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID)
 	planCtx := &PlanningCtx{
 		ExtendedEvalCtx: evalCtx,
-		infra:           physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID),
+		infra:           infra,
 		isLocal:         !distribute,
 		planner:         planner,
+		// Make sure to release the physical infrastructure after the execution
+		// finishes. Note that onFlowCleanup might not be called in some cases
+		// (when DistSQLPlanner.Run is not called), but that is ok since on the
+		// main query path it will get called.
+		onFlowCleanup: []func(){infra.Release},
 	}
 	if !distribute {
 		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) {
