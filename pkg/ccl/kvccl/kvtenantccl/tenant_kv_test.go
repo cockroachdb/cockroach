@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -68,15 +69,15 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	require.NoError(t, err)
 	repl, err := store.GetReplica(roachpb.RangeID(rangeID))
 	require.NoError(t, err)
-
-	qpsBefore, durationBefore := repl.QueriesPerSecond()
-	queriesBefore := qpsBefore * durationBefore.Seconds()
+	// NB: We call directly into the load tracking struct, in order to avoid
+	// flakes due to timing differences affecting the result
+	loadStats := repl.GetLoadStatsForTesting()
+	qpsBefore := loadStats.TestingGetSum(load.Queries)
 	for i := 0; i < 110; i++ {
 		r.Exec(t, `SELECT k FROM foo.qps_test`)
 	}
-	qpsAfter, durationAfter := repl.QueriesPerSecond()
-	queriesAfter := qpsAfter * durationAfter.Seconds()
-	queriesIncrease := int(queriesAfter - queriesBefore)
+	qpsAfter := loadStats.TestingGetSum(load.Queries)
+	queriesIncrease := int(qpsAfter - qpsBefore)
 	// If queries are correctly recorded, we should see increase in query count by
 	// 110. As it is possible due to rounding and conversion from QPS to query count
 	// to get a slightly higher or lower number - we expect the increase to be at

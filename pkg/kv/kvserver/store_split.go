@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -332,15 +333,15 @@ func (s *Store) SplitRange(
 	if rightReplOrNil == nil {
 		// There is no rhs replica, so instead halve the load of the lhs
 		// replica.
-		throwawayRightStats := NewReplicaLoad(s.Clock(), nil)
-		leftRepl.loadStats.split(throwawayRightStats)
+		throwawayRightStats := load.NewReplicaLoad(s.Clock(), nil)
+		leftRepl.loadStats.Split(throwawayRightStats)
 	} else {
 		rightRepl := rightReplOrNil
 		// Split the replica load of the lhs evenly (50:50) with the rhs. NB:
 		// that this ignores the split point and makes as simplifying
 		// assumption that distribution across all tracked load stats is
 		// identical.
-		leftRepl.loadStats.split(rightRepl.loadStats)
+		leftRepl.loadStats.Split(rightRepl.loadStats)
 		if err := s.addReplicaInternalLocked(rightRepl); err != nil {
 			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
 		}
