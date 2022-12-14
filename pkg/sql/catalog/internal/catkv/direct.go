@@ -66,18 +66,6 @@ type Direct interface {
 		ctx context.Context, txn *kv.Txn, id descpb.ID,
 	) (catalog.TableDescriptor, error)
 
-	// GetSchemaDescriptorsFromIDs returns the schema descriptors from an input
-	// list of schema IDs. It will return an error if any one of the IDs is not
-	// a schema.
-	GetSchemaDescriptorsFromIDs(
-		ctx context.Context, txn *kv.Txn, ids []descpb.ID,
-	) ([]catalog.SchemaDescriptor, error)
-
-	// ResolveSchemaID resolves a schema's ID based on db and name.
-	ResolveSchemaID(
-		ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
-	) (descpb.ID, error)
-
 	// LookupDatabaseID is a wrapper around LookupObjectID for databases.
 	LookupDatabaseID(
 		ctx context.Context, txn *kv.Txn, dbName string,
@@ -212,28 +200,6 @@ func (d *direct) MustGetTypeDescByID(
 		return nil, err
 	}
 	return desc.(catalog.TypeDescriptor), nil
-}
-
-// GetSchemaDescriptorsFromIDs is part of the Direct interface.
-func (d *direct) GetSchemaDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
-) ([]catalog.SchemaDescriptor, error) {
-	descs, err := d.mustGetDescriptorsByID(ctx, txn, ids, catalog.Schema)
-	if err != nil {
-		return nil, err
-	}
-	ret := make([]catalog.SchemaDescriptor, len(descs))
-	for i, desc := range descs {
-		ret[i] = desc.(catalog.SchemaDescriptor)
-	}
-	return ret, nil
-}
-
-// ResolveSchemaID is part of the Direct interface.
-func (d *direct) ResolveSchemaID(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
-) (descpb.ID, error) {
-	return d.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, scName)
 }
 
 // LookupObjectID is part of the Direct interface.
