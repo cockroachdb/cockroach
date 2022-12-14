@@ -513,7 +513,7 @@ func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrim
 	}
 	// Check explicit constraint names.
 	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
-	scpb.ForEachConstraintName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+	scpb.ForEachConstraintWithoutIndexName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
 		if e.Name == string(t.Name) {
 			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
 		}

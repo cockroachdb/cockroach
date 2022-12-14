@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -65,7 +66,7 @@ func DequalifyAndTypeCheckExpr(
 	return typedExpr, nil
 }
 
-// DequalifyAndValidateExpr validates that an expression has the given type and
+// DequalifyAndValidateExprImpl validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression, the type of the expression, and
 // the set of column IDs within the expression are returned, if valid.
@@ -74,21 +75,19 @@ func DequalifyAndTypeCheckExpr(
 // tree.TypedExpr would be dangerous. It contains dummyColumns which do not
 // support evaluation and are not useful outside the context of type-checking
 // the expression.
-func DequalifyAndValidateExpr(
+func DequalifyAndValidateExprImpl(
 	ctx context.Context,
-	desc catalog.TableDescriptor,
 	expr tree.Expr,
 	typ *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
 	maxVolatility volatility.V,
 	tn *tree.TableName,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T),
 ) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
-	nonDropColumns := desc.NonDropColumns()
-	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
-	)
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(*tn, getAllNonDropColumnsFn())
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
 		return "", nil, colIDs, err
@@ -96,7 +95,7 @@ func DequalifyAndValidateExpr(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, colIDs, err := replaceColumnVars(desc, expr)
+	replacedExpr, colIDs, err := ReplaceColumnVars(expr, columnLookupByNameFn)
 	if err != nil {
 		return "", nil, colIDs, err
 	}
@@ -120,6 +119,36 @@ func DequalifyAndValidateExpr(
 	}
 
 	return tree.Serialize(typedExpr), typedExpr.ResolvedType(), colIDs, nil
+}
+
+// DequalifyAndValidateExpr is a convenience function to DequalifyAndValidateExprImpl.
+// It delegates to DequalifyAndValidateExprImpl by providing two functions to
+// retrieve column information from `desc`:
+//  1. `getAllNonDropColumnsFn`: get all non-drop columns in `desc`;
+//  2. `columnLookupByNameFn`: look up a column by name in `desc`.
+func DequalifyAndValidateExpr(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	expr tree.Expr,
+	typ *types.T,
+	context string,
+	semaCtx *tree.SemaContext,
+	maxVolatility volatility.V,
+	tn *tree.TableName,
+) (string, *types.T, catalog.TableColSet, error) {
+	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
+		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
+	}
+	columnLookupByNameFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		col, err := desc.FindColumnWithName(columnName)
+		if err != nil || col.Dropped() {
+			return false, false, 0, nil
+		}
+		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+	}
+
+	return DequalifyAndValidateExprImpl(ctx, expr, typ, context, semaCtx, maxVolatility, tn,
+		getAllNonDropColumnsFn, columnLookupByNameFn)
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.

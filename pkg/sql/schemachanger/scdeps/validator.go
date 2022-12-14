@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -57,6 +58,7 @@ type ValidateCheckConstraintFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	constraint catalog.CheckConstraint,
+	indexIDForValidation descpb.IndexID,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -115,9 +117,10 @@ func (vd validator) ValidateCheckConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	constraint catalog.CheckConstraint,
+	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	return vd.validateCheckConstraint(ctx, tbl, constraint, vd.newFakeSessionData(&vd.settings.SV),
+	return vd.validateCheckConstraint(ctx, tbl, constraint, indexIDForValidation, vd.newFakeSessionData(&vd.settings.SV),
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 

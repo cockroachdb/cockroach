@@ -182,6 +182,7 @@ ElementState:
     constraintId: 2
     expr: s::STRING = name
     fromHashShardedColumn: false
+    indexIdForValidation: 0
     referencedColumnIds:
     - 3
     - 5
@@ -526,7 +527,7 @@ ElementState:
     indexId: 2
     tableId: 108
   Status: PUBLIC
-- ConstraintName:
+- ConstraintWithoutIndexName:
     constraintId: 2
     name: mycheck
     tableId: 108

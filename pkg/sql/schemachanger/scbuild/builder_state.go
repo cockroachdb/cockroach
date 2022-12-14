@@ -485,18 +485,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 			}
 		}
 	}
-	cachedDesc, ok := b.descCache[tableID]
-	if !ok {
-		panic(errors.AssertionFailedf("failed to get descriptor for table %d", tableID))
-	}
-	tableDesc, ok := cachedDesc.desc.(catalog.TableDescriptor)
-	if !ok {
-		panic(errors.AssertionFailedf(
-			"descriptor %d should be a table but is %v",
-			tableID, cachedDesc.desc.DescriptorType(),
-		))
-	}
-	ids, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
+	ids, err := scbuildstmt.ExtractColumnIDsInExpr(b, tableID, expr)
 	if err != nil {
 		panic(err)
 	}
@@ -900,7 +889,7 @@ func (b *builderState) ResolveConstraint(
 	c := b.descCache[relationID]
 	rel := c.desc.(catalog.TableDescriptor)
 	var constraintID catid.ConstraintID
-	scpb.ForEachConstraintName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+	scpb.ForEachConstraintWithoutIndexName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
 		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
 			constraintID = e.ConstraintID
 		}
