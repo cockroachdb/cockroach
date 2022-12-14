@@ -41,15 +41,20 @@ SELECT crdb_internal.void_func()
 ----
 ·
 
-# Regression test for #83754. Postgres does not error out, but is inconsistent
+# Regression test for #83754. Note that Postgres is inconsistent
 # in evaluation. For example, `SELECT ''::VOID IS DISTINCT FROM NULL::UNKNOWN;`
 # errors out, but `SELECT ''::VOID IS DISTINCT FROM NULL;` does not.
 # This is due to normalization into an IS NOT NULL op when one operand is NULL.
 # The NULL with type cast is not recognized as NULL.
-# We will stay consistent and have both cases error out to avoid different
-# behavior between normalized and unnormalized expressions.
-statement error pq: unsupported comparison operator: <void> IS DISTINCT FROM <unknown>
+query B
 SELECT ''::VOID IS DISTINCT FROM NULL
+----
+true
+
+query B
+SELECT ''::VOID IS DISTINCT FROM NULL::UNKNOWN
+----
+true
 
 statement ok
 SET vectorize=on
@@ -147,3 +152,24 @@ NULL
 
 statement ok
 RESET vectorize
+
+# Regression test for #93572. This should not fail with an internal error.
+query B
+WITH tab(x) AS (VALUES ('':::VOID)) SELECT x IS NULL FROM tab
+----
+false
+
+query B
+WITH tab(x) AS (VALUES (NULL:::VOID)) SELECT x IS NULL FROM tab
+----
+true
+
+query B
+WITH tab(x) AS (VALUES ('':::VOID)) SELECT x IS NOT NULL FROM tab
+----
+true
+
+query B
+WITH tab(x) AS (VALUES (NULL:::VOID)) SELECT x IS NOT NULL FROM tab
+----
+false
