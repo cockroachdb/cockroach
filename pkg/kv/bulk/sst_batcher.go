@@ -16,9 +16,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -145,7 +145,7 @@ type SSTBatcher struct {
 	// currentStats contain the stats since the last flush. After each flush,
 	// currentStats is reset back to the empty value after being combined into
 	// totalStats.
-	currentStats backuppb.IngestionPerformanceStats
+	currentStats bulkpb.IngestionPerformanceStats
 
 	// span tracks the total span into which this batcher has flushed. It is
 	// only maintained if log.V(1), so if vmodule is upped mid-ingest it may be
@@ -186,7 +186,7 @@ type SSTBatcher struct {
 		// As rows accumulate, the corresponding stats initially start out in
 		// currentStats. After each flush, the contents of currentStats are combined
 		// into totalStats, and currentStats is reset back to the empty value.
-		totalStats  backuppb.IngestionPerformanceStats
+		totalStats  bulkpb.IngestionPerformanceStats
 		lastFlush   time.Time
 		tracingSpan *tracing.Span
 	}
@@ -611,7 +611,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// Here we make a copy currentStats right before the flush so that it could be
 	// combined into totalStats as part of the asynchronous flush. The batcher's
 	// currentStats is reset afterwards in preparation for the next batch.
-	currentBatchStatsCopy := b.currentStats.Identity().(*backuppb.IngestionPerformanceStats)
+	currentBatchStatsCopy := b.currentStats.Identity().(*bulkpb.IngestionPerformanceStats)
 	currentBatchStatsCopy.Combine(&b.currentStats)
 	b.currentStats.Reset()
 
@@ -687,7 +687,7 @@ func (b *SSTBatcher) addSSTable(
 	sstBytes []byte,
 	stats enginepb.MVCCStats,
 	updatesLastRange bool,
-	ingestionPerformanceStats *backuppb.IngestionPerformanceStats,
+	ingestionPerformanceStats *bulkpb.IngestionPerformanceStats,
 ) error {
 	sendStart := timeutil.Now()
 	if ingestionPerformanceStats == nil {
