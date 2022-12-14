@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -249,12 +249,12 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 	b.sink.currentStats.BufferFlushes++
 
-	var before *backuppb.IngestionPerformanceStats
+	var before *bulkpb.IngestionPerformanceStats
 	var beforeSize int64
 	// Get the stats before flush by summing totalStats and currentStats
 	if log.V(3) {
 		b.sink.mu.Lock()
-		before = b.sink.mu.totalStats.Identity().(*backuppb.IngestionPerformanceStats)
+		before = b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		before.Combine(&b.sink.mu.totalStats)
 		before.Combine(&b.sink.currentStats)
 		beforeSize = b.sink.mu.totalRows.DataSize
@@ -310,7 +310,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	if log.V(3) && before != nil {
 		b.sink.mu.Lock()
 		written := b.sink.mu.totalRows.DataSize - beforeSize
-		afterStats := b.sink.mu.totalStats.Identity().(*backuppb.IngestionPerformanceStats)
+		afterStats := b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		afterStats.Combine(&b.sink.mu.totalStats)
 		afterStats.Combine(&b.sink.currentStats)
 		b.sink.mu.Unlock()
