@@ -48,7 +48,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	var cutoverTime time.Time
 	c.destSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 
-	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
+	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, args.destTenantName, cutoverTime)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	cleanupTenant := c.createDestTenantSQL(ctx)
 	defer func() {
