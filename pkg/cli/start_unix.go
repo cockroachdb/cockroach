@@ -28,7 +28,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// drainSignals is the list of signals that trigger the start of a shutdown
+// DrainSignals is the list of signals that trigger the start of a shutdown
 // sequence ("server drain").
 //
 // The first time they're received, both signals initiate a drain just the same.
@@ -36,7 +36,7 @@ import (
 // more generally, after the drain had started):
 // - a second SIGTERM is ignored.
 // - a second SIGINT terminates the process abruptly.
-var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
+var DrainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
 
 // termSignal is the signal that causes an idempotent graceful
 // shutdown (i.e. second occurrence does not incur hard shutdown).
