@@ -3802,3 +3802,115 @@ query I
 SELECT min(a) FROM t2 WHERE (b <= 11 AND c < 50) OR (b = 11 AND c = 50) OR (b >= 11 AND c > 50)
 ----
 0
+
+# Regression test for incorrectly ignoring NULLS LAST in aggregate functions (#91295).
+statement ok
+CREATE TABLE nulls_last_test (
+    id INT NULL,
+    k INT NULL,
+    v VARCHAR(3) NULL
+);
+INSERT INTO nulls_last_test VALUES
+  (1, 1, 'foo'),
+  (2, null, null),
+  (null, null, 'bar'),
+  (3, 3, 'baz');
+
+query T
+SELECT array_agg(id ORDER BY id NULLS LAST) FROM nulls_last_test
+----
+{1,2,3,NULL}
+
+# It should work with tuples too.
+query T
+SELECT array_agg((k, v) ORDER BY (k, v)) FROM nulls_last_test
+----
+{"(,)","(,bar)","(1,foo)","(3,baz)"}
+
+query T
+SELECT array_agg((k, v) ORDER BY (k, v) NULLS LAST) FROM nulls_last_test
+----
+{"(1,foo)","(3,baz)","(,bar)","(,)"}
+
+# Tuples with projections also work.
+query T
+SELECT array_agg((k, v) ORDER BY (k+1, v||'foo')) FROM nulls_last_test;
+----
+{"(,)","(,bar)","(1,foo)","(3,baz)"}
+
+query T
+SELECT array_agg((k, v) ORDER BY (k+1, v||'foo') NULLS LAST) FROM nulls_last_test;
+----
+{"(1,foo)","(3,baz)","(,bar)","(,)"}
+
+# Using the session variable, we should get results that match Postgres.
+statement ok
+SET null_ordered_last = true
+
+query T
+SELECT array_agg(id ORDER BY id) FROM nulls_last_test
+----
+{1,2,3,NULL}
+
+query T
+SELECT array_agg((k, v) ORDER BY (k, v)) FROM nulls_last_test
+----
+{"(1,foo)","(3,baz)","(,bar)","(,)"}
+
+# TODO(#93558): This does not match Postgres.
+# Postgres returns:
+#   {"(1,foo)","(3,baz)","(,bar)","(,)"}
+query T
+SELECT array_agg((k, v) ORDER BY (k, v) NULLS FIRST) FROM nulls_last_test
+----
+{"(,)","(,bar)","(1,foo)","(3,baz)"}
+
+query T
+SELECT array_agg((k, v) ORDER BY (k+1, v||'foo')) FROM nulls_last_test;
+----
+{"(1,foo)","(3,baz)","(,bar)","(,)"}
+
+# TODO(#93558): This does not match Postgres.
+# Postgres returns:
+#   {"(1,foo)","(3,baz)","(,bar)","(,)"}
+query T
+SELECT array_agg((k, v) ORDER BY (k+1, v||'foo') NULLS FIRST) FROM nulls_last_test;
+----
+{"(,)","(,bar)","(1,foo)","(3,baz)"}
+
+# TODO(#93558): This test case is broken and shows the limit of our
+# optimizer-based approach for NULLS LAST.
+# Postgres returns:
+#   {"(1,1)","(1,)","(,)",NULL}
+query T
+WITH t (x, y) AS (
+  VALUES
+    ((1, 1), 1),
+    ((NULL::RECORD), 2),
+    ((1, NULL::INT), 3),
+    ((NULL::INT, NULL::INT), 4)
+)
+SELECT array_agg(x ORDER BY x)
+FROM t;
+----
+{"(1,)","(1,1)",NULL,"(,)"}
+
+# TODO(#93558): This test case is broken and shows the limit of our
+# optimizer-based approach for NULLS LAST.
+# Postgres returns:
+#   {NULL,"(1,1)","(1,)","(,)"}
+query T
+WITH t (x, y) AS (
+  VALUES
+    ((1, 1), 1),
+    ((NULL::RECORD), 2),
+    ((1, NULL::INT), 3),
+    ((NULL::INT, NULL::INT), 4)
+)
+SELECT array_agg(x ORDER BY x NULLS FIRST)
+FROM t;
+----
+{NULL,"(,)","(1,)","(1,1)"}
+
+statement ok
+RESET null_ordered_last

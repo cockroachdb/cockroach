@@ -409,13 +409,34 @@ func (b *Builder) buildWindowOrdering(
 		te := inScope.resolveType(t.Expr, types.Any)
 		cols := flattenTuples([]tree.TypedExpr{te})
 
-		for _, e := range cols {
+		nullsDefaultOrder := b.hasDefaultNullsOrder(t)
+		for k, e := range cols {
+			if !nullsDefaultOrder {
+				expr := tree.NewTypedIsNullExpr(e)
+				col := outScope.findExistingCol(expr, false /* allowSideEffects */)
+				if col == nil {
+					// Use an anonymous name because the column cannot be referenced
+					// in other expressions.
+					colName := scopeColName("").WithMetadataName(
+						fmt.Sprintf("%s_%d_nulls_ordering_%d_%d", funcName, windowIndex+1, j+1, k+1),
+					)
+					col = b.synthesizeColumn(
+						outScope,
+						colName,
+						expr.ResolvedType(),
+						expr,
+						b.buildScalar(expr, inScope, nil, nil, nil),
+					)
+				}
+				ord = append(ord, opt.MakeOrderingColumn(col.id, t.Direction == tree.Descending))
+			}
+
 			col := outScope.findExistingCol(e, false /* allowSideEffects */)
 			if col == nil {
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.
 				colName := scopeColName("").WithMetadataName(
-					fmt.Sprintf("%s_%d_orderby_%d", funcName, windowIndex+1, j+1),
+					fmt.Sprintf("%s_%d_orderby_%d_%d", funcName, windowIndex+1, j+1, k+1),
 				)
 				col = b.synthesizeColumn(
 					outScope,
