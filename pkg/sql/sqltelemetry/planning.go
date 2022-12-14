@@ -132,6 +132,11 @@ var CreateStatisticsUseCounter = telemetry.GetCounterOnce("sql.plan.stats.create
 // FIRST).
 var OrderByNullsNonStandardCounter = telemetry.GetCounterOnce("sql.plan.opt.order-by-nulls-non-standard")
 
+// OrderByNullsStandardCounter is to be incremented whenever a standard
+// ordering of nulls is used for ORDER BY (either ASC NULLS FIRST or DESC NULLS
+// LAST).
+var OrderByNullsStandardCounter = telemetry.GetCounterOnce("sql.plan.opt.order-by-nulls-standard")
+
 // TurnAutoStatsOnUseCounter is to be incremented whenever automatic stats
 // collection is explicitly enabled.
 var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.enabled")
