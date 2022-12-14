@@ -27,14 +27,21 @@ func descIDSequenceForSystemTenant(
 	if !d.Codec.ForSystemTenant() {
 		return nil
 	}
-	mut := tabledesc.NewBuilder(systemschema.DescIDSequence.TableDesc()).BuildCreatedMutableTable()
+	mut := tabledesc.NewBuilder(systemschema.DescIDSequence.TableDesc()).
+		BuildCreatedMutableTable()
 	return d.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		oldEntry, err := txn.GetForUpdate(ctx, keys.LegacyDescIDGenerator)
 		if err != nil {
 			return err
 		}
-		mut.SequenceOpts.Start = oldEntry.ValueInt()
-		_, _, err = CreateSystemTableInTxn(ctx, d.Settings, txn, keys.SystemSQLCodec, mut)
-		return err
+		id, created, err := CreateSystemTableInTxn(
+			ctx, d.Settings, txn, keys.SystemSQLCodec, mut,
+		)
+		if err != nil || !created {
+			return err
+		}
+		// Install the appropriate value for the sequence. Note that we use the
+		// existence of the sequence above to make this transaction idempotent.
+		return txn.Put(ctx, d.Codec.SequenceKey(uint32(id)), oldEntry.ValueInt())
 	})
 }
