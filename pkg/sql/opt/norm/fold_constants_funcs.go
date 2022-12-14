@@ -335,7 +335,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 	var dOid *tree.DOid
 
 	switch typ.Oid() {
-	case oid.T_oid, oid.T_regtype, oid.T_regproc, oid.T_regprocedure:
+	case oid.T_oid, oid.T_regtype, oid.T_regproc, oid.T_regprocedure, oid.T_regnamespace:
 		switch inputFamily {
 		case types.StringFamily, types.OidFamily, types.IntFamily:
 			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
