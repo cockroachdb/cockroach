@@ -2383,7 +2383,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		}
 		select {
 		case rangeCount = <-rangeCountCh:
-			changeCount := int32(math.Ceil(math.Min(float64(lastRangeCount)*0.5, 3)))
+			changeCount := int32(math.Ceil(math.Max(float64(lastRangeCount)*0.5, 10)))
 			diff := rangeCount - (lastRangeCount + changeCount)
 			if diff < -1 || diff > 1 {
 				t.Errorf("gossiped range count %d more than 1 away from expected %d", rangeCount, lastRangeCount+changeCount)
