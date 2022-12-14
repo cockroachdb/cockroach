@@ -170,14 +170,7 @@ func (b *Builder) analyzeOrderByArg(
 
 	// Set NULL order. The default order in Cockroach if null_ordered_last=False
 	// is nulls first for ascending order and nulls last for descending order.
-	nullsDefaultOrder := true
-	if (b.evalCtx.SessionData().NullOrderedLast && order.NullsOrder == tree.DefaultNullsOrder) ||
-		(order.NullsOrder != tree.DefaultNullsOrder &&
-			((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
-				(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending))) {
-		nullsDefaultOrder = false
-		telemetry.Inc(sqltelemetry.OrderByNullsNonStandardCounter)
-	}
+	nullsDefaultOrder := b.hasDefaultNullsOrder(order)
 
 	// Analyze the ORDER BY column(s).
 	start := len(orderByScope.cols)
@@ -281,6 +274,21 @@ func (b *Builder) analyzeExtraArgument(
 		}
 		extraColsScope.addColumn(scopeColName(""), e)
 	}
+}
+
+// hasDefaultNullsOrder returns whether the provided ordering uses the default
+// ordering for NULLs. The default order in Cockroach if null_ordered_last=False
+// is nulls first for ascending order and nulls last for descending order.
+func (b *Builder) hasDefaultNullsOrder(order *tree.Order) bool {
+	if (b.evalCtx.SessionData().NullOrderedLast && order.NullsOrder == tree.DefaultNullsOrder) ||
+		(order.NullsOrder != tree.DefaultNullsOrder &&
+			((order.NullsOrder == tree.NullsFirst && order.Direction == tree.Descending) ||
+				(order.NullsOrder == tree.NullsLast && order.Direction != tree.Descending))) {
+		telemetry.Inc(sqltelemetry.OrderByNullsNonStandardCounter)
+		return false
+	}
+	telemetry.Inc(sqltelemetry.OrderByNullsStandardCounter)
+	return true
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {

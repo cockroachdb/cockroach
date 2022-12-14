@@ -462,7 +462,9 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			orderTypes []*types.T
 		)
 		addOrdCol := func(expr tree.Expr, typ *types.T) {
-			order = append(order, &tree.Order{Expr: expr, Direction: s.randDirection()})
+			order = append(order, &tree.Order{
+				Expr: expr, Direction: s.randDirection(), NullsOrder: s.randNullsOrder(),
+			})
 			orderTypes = append(orderTypes, typ)
 		}
 		s.sample(len(refs)-len(parts), 2, func(i int) {
@@ -523,7 +525,9 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			funcExpr.AggType = tree.GeneralAgg
 			funcExpr.OrderBy = make(tree.OrderBy, len(args))
 			for i := range funcExpr.OrderBy {
-				funcExpr.OrderBy[i] = &tree.Order{Expr: args[i], Direction: s.randDirection()}
+				funcExpr.OrderBy[i] = &tree.Order{
+					Expr: args[i], Direction: s.randDirection(), NullsOrder: s.randNullsOrder(),
+				}
 			}
 		}
 	}
