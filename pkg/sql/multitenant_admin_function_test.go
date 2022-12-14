@@ -167,7 +167,6 @@ func getReplicaState(
 	expectedNumNonVotingReplicas int,
 	message string,
 ) replicaState {
-
 	checkCount := func(kind string, numExpected int, actual []roachpb.NodeID) error {
 		numActual := len(actual)
 		if numExpected != numActual {
@@ -185,7 +184,9 @@ func getReplicaState(
 	)
 	// Actual #replicas can be < expected #replicas even after WaitForFullReplication.
 	testutils.SucceedsSoon(t, func() error {
-		rows, err := db.QueryContext(ctx, "SELECT lease_holder, replicas, voting_replicas, non_voting_replicas FROM [SHOW RANGES FROM INDEX t@primary];")
+		rows, err := db.QueryContext(ctx, `
+SELECT lease_holder, replicas, voting_replicas, non_voting_replicas
+FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
 		require.NoErrorf(t, err, message)
 		rowNestedStrings, err := sqlutils.RowsToStrMatrix(rows)
 		require.NoErrorf(t, err, message)
@@ -460,7 +461,9 @@ func TestTruncateTable(t *testing.T) {
 		_, testServer, cleanup := createTestCluster(t, cfg)
 		defer cleanup()
 		db := createSystemTenantDB(t, testServer)
-		execQueries(db, "system", [][]string{{"NULL", "/1"}, {"/1", "NULL"}})
+		execQueries(db, "system", [][]string{
+			{"<before:/Table/104/1/1>", "…/1"},
+			{"…/1", "<after:/Max>"}})
 	}()
 
 	// Test secondary tenant.
@@ -473,7 +476,10 @@ func TestTruncateTable(t *testing.T) {
 			true,  /* allowSplitAndScatter */
 			false, /* skipSQLSystemTenantCheck */
 		)
-		execQueries(db, "secondary", [][]string{{"NULL", "/104/2/1"}, {"/104/2/1", "NULL"}})
+		execQueries(db, "secondary", [][]string{
+			{"<before:/Tenant/10/Table/104/1/1>", "…/104/2/1"},
+			{"…/104/2/1", "<after:/Max>"},
+		})
 	}()
 }
 

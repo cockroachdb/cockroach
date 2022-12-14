@@ -78,12 +78,12 @@ ALTER TABLE j2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 44), (ARRA
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE j2] ORDER BY lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE j2 WITH DETAILS] ORDER BY lease_holder
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /44      {1}       1
-/44        /88      {2}       2
-/88        NULL     {3}       3
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/1/44        {1}       1
+…/1/44              …/1/88        {2}       2
+…/1/88              <after:/Max>  {3}       3
 
 # This query performs an inverted join.
 query T
@@ -158,12 +158,12 @@ ALTER TABLE a2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 8), (ARRAY
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE a2] ORDER BY lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE a2 WITH DETAILS] ORDER BY lease_holder
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /8       {1}       1
-/8         /16      {2}       2
-/16        NULL     {3}       3
+start_key                 end_key       replicas  lease_holder
+<before:/Table/107/1/88>  …/1/8         {1}       1
+…/1/8                     …/1/16        {2}       2
+…/1/16                    <after:/Max>  {3}       3
 
 # This query performs an inverted join.
 query T

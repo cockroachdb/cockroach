@@ -1233,8 +1233,7 @@ RESET statement_timeout;
 		testutils.SucceedsSoon(t, func() error {
 			if err := db0.QueryRow(
 				fmt.Sprintf(
-					`SELECT array_length(replicas, 1) FROM crdb_internal.ranges
-WHERE table_name = '%s' AND database_name = '%s'`, tableName, dbName),
+					`SELECT array_length(replicas, 1) FROM [SHOW RANGES FROM TABLE %s.%s]`, dbName, tableName),
 			).Scan(&numReplicas); err != nil {
 				return err
 			}

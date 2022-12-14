@@ -52,7 +52,8 @@ func TestShowRangesWithLocality(t *testing.T) {
 	replicas := make([]int, 3)
 
 	// TestClusters get some localities by default.
-	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities, voting_replicas, non_voting_replicas FROM [SHOW RANGES FROM TABLE t]`
+	q := `SELECT lease_holder, lease_holder_locality, replicas, replica_localities, voting_replicas, non_voting_replicas
+FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`
 	result := sqlDB.QueryStr(t, q)
 	for _, row := range result {
 		// Verify the leaseholder localities.
@@ -125,9 +126,9 @@ func TestShowRangesMultipleStores(t *testing.T) {
 	sqlDB.Exec(t, "ALTER TABLE system.jobs SCATTER")
 	// Ensure that the localities line up.
 	for _, q := range []string{
-		"SHOW RANGES FROM DATABASE system",
-		"SHOW RANGES FROM TABLE system.jobs",
-		"SHOW RANGES FROM INDEX system.jobs@jobs_status_created_idx",
+		"SHOW RANGES FROM DATABASE system WITH DETAILS",
+		"SHOW RANGES FROM TABLE system.jobs WITH DETAILS",
+		"SHOW RANGES FROM INDEX system.jobs@jobs_status_created_idx WITH DETAILS",
 		"SHOW RANGE FROM TABLE system.jobs FOR ROW (0)",
 		"SHOW RANGE FROM INDEX system.jobs@jobs_status_created_idx FOR ROW ('running', now(), 0)",
 	} {
