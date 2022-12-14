@@ -2614,6 +2614,13 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 	reps := t.TypeMeta.EnumData.LogicalRepresentations
 	for i := range reps {
 		if reps[i] == logical {
+			// If this enum member is read only, we cannot construct it from the
+			// logical representation. This is to ensure that it will not be
+			// written until all nodes in the cluster are able to decode the
+			// physical representation.
+			if t.TypeMeta.EnumData.IsMemberReadOnly[i] {
+				return 0, errors.Newf("enum value %q is not yet public", logical)
+			}
 			return i, nil
 		}
 	}

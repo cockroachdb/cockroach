@@ -154,7 +154,7 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDecimalDescending(key, scratch[:0])
 		}
 		vecs.DecimalCols[colIdx][rowIdx] = d
-	case types.BytesFamily, types.StringFamily, types.UuidFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily, types.EnumFamily:
 		if dir == catpb.IndexColumn_ASC {
 			// We ask for the deep copy to be made so that scratch doesn't
 			// reference the memory of key - this allows us to return scratch
@@ -163,6 +163,7 @@ func decodeTableKeyToCol(
 			// GCed.
 			rkey, scratch, err = encoding.DecodeBytesAscendingDeepCopy(key, scratch[:0])
 		} else {
+			// DecodeBytesDescending always performs a deep copy.
 			rkey, scratch, err = encoding.DecodeBytesDescending(key, scratch[:0])
 		}
 		// Set() performs a deep copy, so it is safe to return the scratch slice
@@ -259,7 +260,7 @@ func UnmarshalColumnValueToCol(
 		vecs.Float64Cols[colIdx][rowIdx] = v
 	case types.DecimalFamily:
 		err = value.GetDecimalInto(&vecs.DecimalCols[colIdx][rowIdx])
-	case types.BytesFamily, types.StringFamily, types.UuidFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily, types.EnumFamily:
 		var v []byte
 		v, err = value.GetBytes()
 		vecs.BytesCols[colIdx].Set(rowIdx, v)
