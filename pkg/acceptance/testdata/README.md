@@ -12,18 +12,14 @@ dependency on an external package repository into our CI pipeline. That means
 that if you update a language's dependencies (e.g., `node/package.json`), you'll
 need to update the image.
 
-To build a new acceptance image:
+## Updating the `acceptance` image
 
-```bash
-$ docker build -t cockroachdb/acceptance .
+- (One-time setup) Depending on how your Docker instance is configured, you may have to run `docker run --privileged --rm tonistiigi/binfmt --install all`. This will install `qemu` emulators on your system for platforms besides your native one.
+- Build the image for both platforms and publish the cross-platform manifest. Note that the non-native build for your image will be very slow since it will have to emulate.
 ```
-
-To push the just-built acceptance image to the registry:
-
-```bash
-$ version=$(date +%Y%m%d-%H%M%S)
-$ docker tag cockroachdb/acceptance cockroachdb/acceptance:$version
-$ docker push cockroachdb/acceptance:$version
+    TAG=$(date +%Y%m%d-%H%M%S)
+    docker buildx create --use
+    docker buildx build --push --platform linux/amd64,linux/arm64 -t cockroachdb/acceptance:$TAG .
 ```
 
 No need to have your changes reviewed before you push an image, as we pin the
