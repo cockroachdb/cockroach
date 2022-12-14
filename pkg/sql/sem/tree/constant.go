@@ -345,7 +345,7 @@ func (expr *NumVal) ResolveAsType(
 			if strings.EqualFold(expr.origString, "NaN") {
 				// We need to check NaN separately since expr.value is
 				// unknownVal for NaN.
-				// TODO(sql-experience): unknownVal is also used for +Inf and
+				// TODO(sql-sessions): unknownVal is also used for +Inf and
 				// -Inf, so we may need to handle those in the future too.
 				expr.resFloat = DFloat(math.NaN())
 			} else {

@@ -599,7 +599,6 @@ func (d dchSuffix) zeroPad2PlusNeg(val int) int {
 // parseFormat matches parse_format. We do not take in a flags like PG  as we only do
 // datetime related items (the logic here will change if we support numeric types).
 // Taken from https://github.com/postgres/postgres/blob/b0b72c64a0ce7bf5dd78a80b33d85c89c943ad0d/src/backend/utils/adt/formatting.c#L1146.
-// TODO(#sql-experience): consider caching parse formats.
 func parseFormat(f string) []formatNode {
 	var ret []formatNode
 	for len(f) > 0 {
