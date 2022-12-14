@@ -412,7 +412,7 @@ func (r opResult) createDiskBackedSort(
 	// sorter regardless of which sorter variant we have instantiated (i.e.
 	// we don't take advantage of the limits and of partial ordering). We
 	// could improve this.
-	return colexecdisk.NewOneInputDiskSpiller(
+	diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 		input, inMemorySorter.(colexecop.BufferingInMemoryOperator),
 		sorterMemMonitorName,
 		func(input colexecop.Operator) colexecop.Operator {
@@ -447,6 +447,8 @@ func (r opResult) createDiskBackedSort(
 		},
 		args.TestingKnobs.SpillingCallbackFn,
 	)
+	r.ToClose = append(r.ToClose, diskSpiller)
+	return diskSpiller
 }
 
 // makeDiskBackedSorterConstructor creates a colexec.DiskBackedSorterConstructor
@@ -855,6 +857,7 @@ func NewColOperator(
 						ctx, newAggArgs, nil, /* newSpillingQueueArgs */
 						hashTableAllocator, outputUnlimitedAllocator, maxOutputBatchMemSize,
 					)
+					result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 				} else {
 					// We will divide the available memory equally between the
 					// two usages - the hash aggregation itself and the input
@@ -922,7 +925,7 @@ func NewColOperator(
 					// case, the wrapped aggregate functions might hit a memory
 					// error even when used by the external hash aggregator).
 					evalCtx.SingleDatumAggMemAccount = ehaMemAccount
-					result.Root = colexecdisk.NewOneInputDiskSpiller(
+					diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 						inputs[0].Root, inMemoryHashAggregator.(colexecop.BufferingInMemoryOperator),
 						hashAggregatorMemMonitorName,
 						func(input colexecop.Operator) colexecop.Operator {
@@ -951,14 +954,16 @@ func NewColOperator(
 						},
 						args.TestingKnobs.SpillingCallbackFn,
 					)
+					result.Root = diskSpiller
+					result.ToClose = append(result.ToClose, diskSpiller)
 				}
 			} else {
 				evalCtx.SingleDatumAggMemAccount = args.StreamingMemAccount
 				newAggArgs.Allocator = getStreamingAllocator(ctx, args)
 				newAggArgs.MemAccount = args.StreamingMemAccount
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
+				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			}
-			result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 
 		case core.Distinct != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -993,7 +998,7 @@ func NewColOperator(
 				)
 				edOpName := redact.RedactableString("external-distinct")
 				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
-				result.Root = colexecdisk.NewOneInputDiskSpiller(
+				diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
@@ -1015,7 +1020,8 @@ func NewColOperator(
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
-				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+				result.Root = diskSpiller
+				result.ToClose = append(result.ToClose, diskSpiller)
 			}
 
 		case core.Ordinality != nil:
@@ -1090,7 +1096,7 @@ func NewColOperator(
 				} else {
 					opName := redact.RedactableString("external-hash-joiner")
 					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
-					result.Root = colexecdisk.NewTwoInputDiskSpiller(
+					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						hashJoinerMemMonitorName,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
@@ -1111,6 +1117,8 @@ func NewColOperator(
 						},
 						args.TestingKnobs.SpillingCallbackFn,
 					)
+					result.Root = diskSpiller
+					result.ToClose = append(result.ToClose, diskSpiller)
 				}
 			}
 

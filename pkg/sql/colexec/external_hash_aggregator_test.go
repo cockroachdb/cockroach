@@ -112,13 +112,14 @@ func TestExternalHashAggregator(t *testing.T) {
 			}
 			var numExpectedClosers int
 			if cfg.diskSpillingEnabled {
-				// The external sorter, the disk spiller, and the external hash
-				// aggregator should be added as Closers.
-				numExpectedClosers = 3
+				// The external sorter (accounting for two closers), the disk
+				// spiller, and the external hash aggregator should be added as
+				// Closers.
+				numExpectedClosers = 4
 				if len(tc.spec.OutputOrdering.Columns) > 0 {
 					// When the output ordering is required, we also plan
-					// another external sort.
-					numExpectedClosers++
+					// another external sort which accounts for two closers.
+					numExpectedClosers += 2
 				}
 			} else {
 				// Only the in-memory hash aggregator should be added.

@@ -86,9 +86,11 @@ func TestExternalHashJoiner(t *testing.T) {
 						numForcedRepartitions, delegateFDAcquisitions, sem,
 						&monitorRegistry,
 					)
-					// Expect three closers. These are the external hash joiner, and
-					// one external sorter for each input.
-					require.Equal(t, 3, len(closers))
+					// Expect six closers:
+					// - 1 for the disk spiller
+					// - 1 for the external hash joiner
+					// - 2 for each of the external sorts (4 total here).
+					require.Equal(t, 6, len(closers))
 					return hjOp, err
 				})
 				for i, sem := range semsToCheck {
