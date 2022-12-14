@@ -549,11 +549,6 @@ func (sp *Span) UpdateGoroutineIDToCurrent() {
 	sp.i.crdb.setGoroutineID(goid.Get())
 }
 
-// parentFinished makes sp a root.
-func (sp *Span) parentFinished() {
-	sp.i.crdb.parentFinished()
-}
-
 // reset prepares sp for (re-)use.
 //
 // sp might be a re-allocated span that was previously used and Finish()ed. In
@@ -684,13 +679,6 @@ func (sp *Span) reset(
 	// reorderings.
 	atomic.StoreInt32(&sp.finished, 0)
 	sp.finishStack = ""
-}
-
-// visitOpenChildren calls the visitor for every open child. The receiver's lock
-// is held for the duration of the iteration, so the visitor should be quick.
-// The visitor is not allowed to hold on to children after it returns.
-func (sp *Span) visitOpenChildren(visitor func(sp *Span)) {
-	sp.i.crdb.visitOpenChildren(visitor)
 }
 
 // SetOtelStatus sets the status of the OpenTelemetry span (if any).

@@ -370,7 +370,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	defer ch.Finish()
 	children := sp.i.crdb.mu.openChildren
 	require.Len(t, children, 1)
-	require.Equal(t, ch.i.crdb, children[0].spanRef.i.crdb)
+	require.Equal(t, ch.i.crdb, children[0].span())
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child's structured event is in the recording.
 	rec := sp.GetRecording(tracingpb.RecordingStructured)
@@ -1480,4 +1480,33 @@ func TestFinishedChildrenMetadata(t *testing.T) {
 	t.Run("structured-recording", func(t *testing.T) {
 		fn(tracingpb.RecordingStructured)
 	})
+}
+
+// Test races between finishing a span and enabling and getting the recording of
+// a parent. When operating on the parent, the parent descends into its open
+// children. If the child if being finished at the same time, there's a fragile
+// period where the child has been marked as finished, but still linked into the
+// parent. This test checks that a use-after-Finish panic is not triggered by
+// the child in this situation.
+func TestFinishGetRecordingRace(t *testing.T) {
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx,
+		WithTracingMode(TracingModeActiveSpansRegistry),
+		// Scream on use-after-finish. That's how this test would fail if there was
+		// a bug.
+		WithUseAfterFinishOpt(true /* panicOnUseAfterFinish */, false /* debugUseAfterFinish */),
+		// Inhibit span reuse; the reuse make use-after-finish detection less
+		// reliable.
+		WithSpanReusePercent(0),
+	)
+	for i := 0; i < 100; i++ {
+		root := tr.StartSpan("root")
+		child := tr.StartSpan("child", WithParent(root))
+		go func() {
+			child.Finish()
+		}()
+		root.SetRecordingType(tracingpb.RecordingVerbose)
+		root.GetConfiguredRecording()
+		root.Finish()
+	}
 }

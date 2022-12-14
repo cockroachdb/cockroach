@@ -12,6 +12,7 @@ package state
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -25,6 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+// NewShuffler returns a function which will shuffle elements determinstically
+// but without order.
+func NewShuffler(seed int64) func(n int, swap func(i, j int)) {
+	r := rand.New(rand.NewSource(seed))
+	return func(n int, swap func(i, j int)) {
+		r.Shuffle(n, swap)
+	}
+}
 
 // TestingStartTime returns a start time that may be used for tests.
 func TestingStartTime() time.Time {
@@ -127,68 +137,23 @@ func NewTestState(
 	return state
 }
 
-// NewTestStateReplCounts returns a state that may be used for testing, where
-// the stores given are initialized with the specified replica counts and each
-// range may have at most the specified replicas per range, or possibly fewer
-// if it's impossible with the required replica counts.
-func NewTestStateReplCounts(storeReplicas map[StoreID]int, replsPerRange int) State {
-	nextKey := 0
-	freeKeys := []Key{}
-	splitKeys := []Key{}
-	rangeStoreMap := make(map[Key]map[StoreID]bool)
-	replicas := make(map[Key][]StoreID)
-
-	addKey := func() {
-		splitKeys = append(splitKeys, Key(nextKey))
-		freeKeys = append(freeKeys, Key(nextKey))
-		replicas[Key(nextKey)] = make([]StoreID, 0, 1)
-		rangeStoreMap[Key(nextKey)] = make(map[StoreID]bool)
-		nextKey++
+// NewTestStateReplCounts returns a new test state where each store is
+// initialized the given number of replicas. The required number of ranges is
+// inferred from the replication factor and the replica count.
+func NewTestStateReplCounts(replCounts map[StoreID]int, replicationFactor, keyspace int) State {
+	total := 0
+	nStores := len(replCounts)
+	for _, count := range replCounts {
+		total += count
 	}
 
-	for {
-		addReplica := false
-		for storeID := range storeReplicas {
-			if storeReplicas[storeID] > 0 {
-				addReplica = true
-				foundKey := false
-				// Find the first key that is not already associated with the
-				// current store. We then associate the store with this key as
-				// a replica to be created.
-				for i, key := range freeKeys {
-					if ok := rangeStoreMap[key][storeID]; !ok {
-						// The key is not associated with this store, we may
-						// use it.
-						foundKey = true
-						replicas[key] = append(replicas[key], storeID)
-						rangeStoreMap[key][storeID] = true
-						// Check if the number of stores associated with this
-						// key is equal to the replication factor; If so, it is
-						// now full in terms of stores. Remove it  from the
-						// split key list so that other stores don't get added
-						// to it.
-						if len(replicas[key]) == replsPerRange {
-							freeKeys = append(freeKeys[:i], freeKeys[i+1:]...)
-						}
-
-						// The store now requires one less replica, update and move to the next store.
-						storeReplicas[storeID]--
-						break
-					}
-				}
-				// If we were unable to find a key that could go on the current
-				// store, add a new key.
-				if !foundKey {
-					addKey()
-				}
-			}
-		}
-		if !addReplica {
-			break
-		}
+	replDistribution := make([]float64, nStores)
+	ranges := total / replicationFactor
+	for store, count := range replCounts {
+		replDistribution[store-1] = float64(count) / float64(ranges)
 	}
 
-	return NewTestState(len(storeReplicas), 1, splitKeys, replicas, map[Key]StoreID{})
+	return NewTestStateReplDistribution(replDistribution, ranges, replicationFactor, keyspace)
 }
 
 type storeRangeCount struct {
@@ -219,6 +184,11 @@ func NewTestStateReplDistribution(
 		targetRangeCount[i] = storeRangeCount{requestedReplicas: requiredRanges, storeID: StoreID(i + 1)}
 	}
 
+	// If there are no ranges specified, default to 1 range.
+	if ranges == 0 {
+		ranges = 1
+	}
+
 	// There cannot be less keys than there are ranges.
 	if ranges > keyspace {
 		keyspace = ranges
@@ -239,7 +209,37 @@ func NewTestStateReplDistribution(
 		}
 	}
 
-	return NewTestState(len(percentOfReplicas), 1, startKeys, replicas, map[Key]StoreID{})
+	s := NewTestState(len(percentOfReplicas), 1, startKeys, replicas, map[Key]StoreID{})
+	spanconfig := defaultSpanConfig
+	spanconfig.NumVoters = int32(replicationFactor)
+	spanconfig.NumReplicas = int32(replicationFactor)
+	for _, r := range s.Ranges() {
+		s.SetSpanConfig(r.RangeID(), spanconfig)
+	}
+	return s
+}
+
+// NewTestStateEvenDistribution returns a new State that may be used for
+// testing, where the replica count per store is equal.
+func NewTestStateEvenDistribution(stores, ranges, replicationFactor, keyspace int) State {
+	distribution := []float64{}
+	frac := 1.0 / float64(stores)
+	for i := 0; i < stores; i++ {
+		distribution = append(distribution, frac)
+	}
+	return NewTestStateReplDistribution(distribution, ranges, replicationFactor, keyspace)
+}
+
+// NewTestStateSkewedDistribution returns a new State that may be used for
+// testing, where the replica count per store is skewed.
+func NewTestStateSkewedDistribution(stores, ranges, replicationFactor, keyspace int) State {
+	distribution := []float64{}
+	rem := ranges
+	for i := 0; i < stores; i++ {
+		rem /= 2
+		distribution = append(distribution, float64(rem))
+	}
+	return NewTestStateReplDistribution(distribution, ranges, replicationFactor, keyspace)
 }
 
 // TestDistributeQPSCounts distributes QPS evenly among the leaseholder
@@ -251,15 +251,16 @@ func TestDistributeQPSCounts(s State, qpsCounts []float64) {
 		return
 	}
 
-	ranges := s.Ranges()
 	for x, qpsCount := range qpsCounts {
 		storeID := StoreID(x + 1)
 		lhs := []Range{}
-		for rangeID, replicaID := range stores[storeID].Replicas() {
-			if ranges[rangeID].Leaseholder() == replicaID {
-				lhs = append(lhs, ranges[rangeID])
+		for _, replica := range s.Replicas(storeID) {
+			if replica.HoldsLease() {
+				rng, _ := s.Range(replica.Range())
+				lhs = append(lhs, rng)
 			}
 		}
+
 		qpsPerRange := qpsCount / float64(len(lhs))
 		for _, rng := range lhs {
 			rl := s.ReplicaLoad(rng.RangeID(), storeID)

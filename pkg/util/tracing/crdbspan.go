@@ -72,11 +72,15 @@ type crdbSpan struct {
 }
 
 type childRef struct {
-	spanRef
+	_spanRef spanRef
 	// collectRecording is set if this child's recording should be included in the
 	// parent's recording. This is usually the case, except for children created
 	// with the WithDetachedRecording() option.
 	collectRecording bool
+}
+
+func (c childRef) span() *crdbSpan {
+	return c._spanRef.i.crdb
 }
 
 type crdbSpanMu struct {
@@ -609,10 +613,10 @@ func (s *crdbSpan) finish() bool {
 		children = make([]spanRef, len(s.mu.openChildren))
 		for i := range s.mu.openChildren {
 			c := &s.mu.openChildren[i]
-			c.parentFinished()
+			c.span().parentFinished()
 			// Move ownership of the child reference, and also nil out the pointer to
 			// the child, making it available for GC.
-			children[i] = c.spanRef.move()
+			children[i] = c._spanRef.move()
 		}
 		s.mu.openChildren = nil // The children were moved away.
 		s.mu.Unlock()
@@ -734,7 +738,7 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 		openRecordings := make([]Trace, 0, len(s.mu.openChildren))
 		for _, openChild := range s.mu.openChildren {
 			if openChild.collectRecording || includeDetachedChildren {
-				openChildSp := openChild.Span.i.crdb
+				openChildSp := openChild.span()
 				openChildRecording := openChildSp.getVerboseRecording(includeDetachedChildren, false /* finishing */)
 				openRecordings = append(openRecordings, openChildRecording)
 
@@ -1042,7 +1046,7 @@ func (s *crdbSpan) appendStructuredEventsRecursivelyLocked(
 	buffer = s.appendStructuredEventsLocked(buffer)
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
-			sp := c.Span.i.crdb
+			sp := c.span()
 			sp.mu.Lock()
 			buffer = sp.appendStructuredEventsRecursivelyLocked(buffer, includeDetachedChildren)
 			sp.mu.Unlock()
@@ -1080,7 +1084,7 @@ func (s *crdbSpan) getChildrenMetadataRecursivelyLocked(
 	// For each of s' open children, recurse to collect their metadata.
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
-			sp := c.Span.i.crdb
+			sp := c.span()
 			sp.mu.Lock()
 			sp.getChildrenMetadataRecursivelyLocked(childrenMetadata,
 				true /*includeRootMetadata */, includeDetachedChildren)
@@ -1276,7 +1280,7 @@ func (s *crdbSpan) addChildLocked(child *Span, collectChildRec bool) bool {
 
 	s.mu.openChildren = append(
 		s.mu.openChildren,
-		childRef{spanRef: makeSpanRef(child), collectRecording: collectChildRec},
+		childRef{_spanRef: makeSpanRef(child), collectRecording: collectChildRec},
 	)
 	return true
 }
@@ -1299,7 +1303,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	var childIdx int
 	found := false
 	for i, c := range s.mu.openChildren {
-		sp := c.Span.i.crdb
+		sp := c.span()
 		if sp == child {
 			childIdx = i
 			found = true
@@ -1340,7 +1344,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 
 	collectChildRec := s.mu.openChildren[childIdx].collectRecording
 	// Drop the child's reference.
-	if s.mu.openChildren[childIdx].decRef() {
+	if s.mu.openChildren[childIdx]._spanRef.decRef() {
 		// We're going to use the child below, so we don't want it to be
 		// re-allocated yet. It shouldn't be re-allocated, because each span holds a
 		// reference to itself that's only dropped at the end of Span.Finish() (and
@@ -1376,11 +1380,11 @@ func (s *crdbSpan) parentFinished() {
 // visitOpenChildren calls the visitor for every open child. The receiver's lock
 // is held for the duration of the iteration, so the visitor should be quick.
 // The visitor is not allowed to hold on to children after it returns.
-func (s *crdbSpan) visitOpenChildren(visitor func(child *Span)) {
+func (s *crdbSpan) visitOpenChildren(visitor func(child *crdbSpan)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, c := range s.mu.openChildren {
-		visitor(c.spanRef.Span)
+		visitor(c.span())
 	}
 }
 
@@ -1391,7 +1395,7 @@ func (s *crdbSpan) SetRecordingType(to tracingpb.RecordingType) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.mu.openChildren {
-		child.SetRecordingType(to)
+		child.span().SetRecordingType(to)
 	}
 }
 
