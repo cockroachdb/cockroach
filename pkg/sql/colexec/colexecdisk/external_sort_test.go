@@ -112,7 +112,9 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		queueCfg, sem, &monitorRegistry,
 	)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(closers))
+	// We expect the disk spiller as well as the external sorter to be included
+	// into the set of closers.
+	require.Equal(t, 2, len(closers))
 
 	sorter.Init(ctx)
 	for b := sorter.Next(); b.Length() > 0; b = sorter.Next() {
