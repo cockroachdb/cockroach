@@ -45,7 +45,12 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, erro
 		dbDesc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			// ???? drop again just in case.
-			tableSlotName := replicationslot.BuildFullSlotName(slotName, tbDesc.Name)
+			schemaDescriptor, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, tbDesc.GetParentSchemaID(),
+				tree.CommonLookupFlags{Required: true})
+			if err != nil {
+				return err
+			}
+			tableSlotName := replicationslot.BuildFullSlotName(slotName, schemaDescriptor.GetName()+"."+tbDesc.GetName())
 			if err := p.DropSlot(ctx, tableSlotName); err != nil {
 				return err
 			}
