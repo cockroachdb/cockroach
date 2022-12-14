@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -2058,7 +2059,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(sc catalog.SchemaDescriptor) error {
 					ownerOID := tree.DNull
 					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						var err error
@@ -2102,12 +2103,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						return nil, false, err
 					}
 					// Fallback to looking for temporary schemas.
-					schemaNames, err := getSchemaNames(ctx, p, db)
-					if err != nil {
+					var tempSchema catalog.SchemaDescriptor
+					if err := forEachSchema(ctx, p, db, false /* requiresPrivileges */, func(schema catalog.SchemaDescriptor) error {
+						if schema.GetID() != descpb.ID(ooid) {
+							return nil
+						}
+						tempSchema = schema
+						return iterutil.StopIteration()
+					}); err != nil {
 						return nil, false, err
 					}
-					if scName, ok := schemaNames[descpb.ID(ooid)]; ok {
-						return schemadesc.NewTemporarySchema(scName, descpb.ID(ooid), db.GetID()), true, nil
+					if tempSchema != nil {
+						return tempSchema, true, nil
 					}
 					return nil, false, nil
 				}()
@@ -2543,7 +2550,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		}
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, dbDesc, true /* requiresPrivileges */, func(scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
 						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
 							ctx, p.Txn(), overload.ID,

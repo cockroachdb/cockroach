@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
