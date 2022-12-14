@@ -17,7 +17,7 @@ import { cockroach } from "src/js/protos";
 import { API_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
-import { AdminUIState, createAdminUIStore } from "./state";
+import { AdminUIState, AppDispatch, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
@@ -49,6 +49,7 @@ import {
 } from "./apiReducers";
 import Long from "long";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import { loginSuccess } from "./login";
 
 describe("alerts", function () {
   let store: Store<AdminUIState>;
@@ -536,7 +537,8 @@ describe("alerts", function () {
         method: "GET",
         response: () => 500,
       });
-
+      const loginDispatch = dispatch as AppDispatch;
+      loginDispatch(loginSuccess("test"));
       sync = alertDataSync(store);
     });
 
