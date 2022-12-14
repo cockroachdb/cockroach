@@ -70,7 +70,12 @@ func (p *planner) createDatabase(
 	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := p.Descriptors().Direct().MustGetDatabaseDescByID(ctx, p.txn, dbID)
+			flags := tree.DatabaseLookupFlags{
+				AvoidLeased:    true,
+				IncludeDropped: true,
+				IncludeOffline: true,
+			}
+			_, desc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, dbID, flags)
 			if err != nil {
 				return nil, false, err
 			}

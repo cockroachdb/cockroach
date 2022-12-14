@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -109,12 +110,24 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myTableID)
+				myImm, err := col.GetImmutableTableByID(ctx, txn, myTableID, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						AvoidLeased:    true,
+						IncludeDropped: true,
+						IncludeOffline: true,
+					},
+				})
 				if err != nil {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myOtherTableID)
+				myOtherImm, err := col.GetImmutableTableByID(ctx, txn, myOtherTableID, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						AvoidLeased:    true,
+						IncludeDropped: true,
+						IncludeOffline: true,
+					},
+				})
 				if err != nil {
 					return err
 				}
@@ -238,17 +251,32 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myTableID)
+				myImm, err := col.GetImmutableTableByID(ctx, txn, myTableID, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						AvoidLeased:    true,
+						IncludeDropped: true,
+						IncludeOffline: true,
+					},
+				})
+				if err != nil {
+					return err
+				}
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
+				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
+				myOtherImm, err := col.GetImmutableTableByID(ctx, txn, myOtherTableID, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						AvoidLeased:    true,
+						IncludeDropped: true,
+						IncludeOffline: true,
+					},
+				})
 				if err != nil {
 					return err
 				}
-				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")

@@ -1206,14 +1206,6 @@ func (tc *Collection) GetConstraintComment(
 	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(constraintID), catalogkeys.ConstraintCommentType))
 }
 
-// Direct exports the catkv.Direct interface.
-type Direct = catkv.Direct
-
-// Direct provides direct access to the underlying KV-storage.
-func (tc *Collection) Direct() Direct {
-	return catkv.MakeDirect(tc.codec(), tc.version, tc.validationModeProvider)
-}
-
 // MakeTestCollection makes a Collection that can be used for tests.
 func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collection {
 	settings := cluster.MakeTestingClusterSettings()

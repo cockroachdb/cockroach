@@ -196,8 +196,19 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 	ctx context.Context,
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
-	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		typeDesc, err = col.Direct().MustGetTypeDescByID(ctx, txn, t.typeID)
+	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+		}}
+		// Avoid GetImmutableTypeByID, downstream logic relies on
+		// catalog.ErrDescriptorNotFound.
+		desc, err := col.GetImmutableDescriptorByID(ctx, txn, t.typeID, flags.CommonLookupFlags)
+		if err != nil {
+			return err
+		}
+		typeDesc, err = catalog.AsTypeDescriptor(desc)
 		return err
 	}); err != nil {
 		return nil, err

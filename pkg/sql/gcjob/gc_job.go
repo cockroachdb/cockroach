@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -134,7 +135,14 @@ func deleteTableData(
 	for _, droppedTable := range progress.Tables {
 		var table catalog.TableDescriptor
 		if err := sql.DescsTxn(ctx, cfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			table, err = col.Direct().MustGetTableDescByID(ctx, txn, droppedTable.ID)
+			flags := tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				},
+			}
+			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,6 +41,7 @@ func gcTables(
 	if log.V(2) {
 		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
+
 	for _, droppedTable := range progress.Tables {
 		if droppedTable.Status != jobspb.SchemaChangeGCProgress_CLEARING {
 			// Table is not ready to be dropped, or has already been dropped.
@@ -48,7 +50,14 @@ func gcTables(
 
 		var table catalog.TableDescriptor
 		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			table, err = col.Direct().MustGetTableDescByID(ctx, txn, droppedTable.ID)
+			flags := tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				},
+			}
+			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -286,7 +295,14 @@ func deleteTableDescriptorsAfterGC(
 
 		var table catalog.TableDescriptor
 		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			table, err = col.Direct().MustGetTableDescByID(ctx, txn, droppedTable.ID)
+			flags := tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				},
+			}
+			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {

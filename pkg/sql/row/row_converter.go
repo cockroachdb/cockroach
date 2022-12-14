@@ -251,15 +251,15 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	ctx context.Context, evalCtx *eval.Context, cols []catalog.Column,
 ) (map[string]*SequenceMetadata, map[descpb.ID]*SequenceMetadata, error) {
 	// Identify the sequences used in all the columns.
-	sequenceIDs := make(map[descpb.ID]struct{})
+	var sequenceIDs catalog.DescriptorIDSet
 	for _, col := range cols {
 		for i := 0; i < col.NumUsesSequences(); i++ {
 			id := col.GetUsesSequenceID(i)
-			sequenceIDs[id] = struct{}{}
+			sequenceIDs.Add(id)
 		}
 	}
 
-	if len(sequenceIDs) == 0 {
+	if sequenceIDs.Empty() {
 		return nil, nil, nil
 	}
 
@@ -276,8 +276,17 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
 			return err
 		}
-		for seqID := range sequenceIDs {
-			seqDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, seqID)
+		flags := tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+		}
+		seqs, err := descsCol.GetImmutableDescriptorsByID(ctx, txn, flags, sequenceIDs.Ordered()...)
+		if err != nil {
+			return err
+		}
+		for _, desc := range seqs {
+			seqDesc, err := catalog.AsTableDescriptor(desc)
 			if err != nil {
 				return err
 			}
@@ -286,7 +295,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 			}
 			seqMetadata := &SequenceMetadata{SeqDesc: seqDesc}
 			seqNameToMetadata[seqDesc.GetName()] = seqMetadata
-			seqIDToMetadata[seqID] = seqMetadata
+			seqIDToMetadata[seqDesc.GetID()] = seqMetadata
 		}
 		return nil
 	})

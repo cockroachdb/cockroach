@@ -1074,7 +1074,11 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 }
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
-	return r.p.Descriptors().Direct().MustGetSchemaDescByID(r.ctx, r.p.txn, id)
+	return r.p.Descriptors().GetImmutableSchemaByID(r.ctx, r.p.txn, id, tree.SchemaLookupFlags{
+		AvoidLeased:    true,
+		IncludeDropped: true,
+		IncludeOffline: true,
+	})
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through
