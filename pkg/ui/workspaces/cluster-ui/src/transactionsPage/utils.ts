@@ -215,10 +215,9 @@ export const filterTransactions = (
       // and regions list (if the list is not empty).
       if (regions.length == 0 && nodes.length == 0) return true;
       // If the cluster is a tenant cluster we don't care
-      // about node/regions.
-      if (isTenant) return true;
+      // about nodes.
       let foundRegion: boolean = regions.length == 0;
-      let foundNode: boolean = nodes.length == 0;
+      let foundNode: boolean = isTenant || nodes.length == 0;
 
       getStatementsByFingerprintId(
         t.stats_data.statement_fingerprint_ids,
@@ -243,6 +242,38 @@ export const filterTransactions = (
     transactions: filteredTransactions,
     activeFilters,
   };
+};
+
+/**
+ * For each transaction, generate the list of regions all
+ * its statements were executed on.
+ * E.g. of one element of the list: `gcp-us-east1`
+ * @param transaction: list of transactions.
+ * @param statements: list of all statements collected.
+ * @param nodeRegions: object with keys being the node id and the value
+ * which region it belongs to.
+ */
+export const generateRegion = (
+  transaction: Transaction,
+  statements: Statement[],
+  nodeRegions: { [p: string]: string },
+): string[] => {
+  const regions: Set<string> = new Set<string>();
+  // Get the list of statements that were executed on the transaction. Combine all
+  // nodes and regions of all the statements to a single list of `region: nodes`
+  // for the transaction.
+  // E.g. {"gcp-us-east1" : [1,3,4]}
+  getStatementsByFingerprintId(
+    transaction.stats_data.statement_fingerprint_ids,
+    statements,
+  ).forEach(stmt => {
+    stmt.stats.nodes &&
+      stmt.stats.nodes.forEach(n => {
+        regions.add(nodeRegions[n.toString()]);
+      });
+  });
+
+  return Array.from(regions).sort();
 };
 
 /**

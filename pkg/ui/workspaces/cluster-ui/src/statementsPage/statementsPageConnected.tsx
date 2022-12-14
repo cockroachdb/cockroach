@@ -88,9 +88,7 @@ export const ConnectedStatementsPage = withRouter(
         isTenant: selectIsTenant(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         lastReset: selectLastReset(state),
-        nodeRegions: selectIsTenant(state)
-          ? {}
-          : nodeRegionsByIDSelector(state),
+        nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         statements: selectStatements(state, props),
