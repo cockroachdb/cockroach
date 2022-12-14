@@ -914,33 +914,6 @@ func init() {
 		}
 	}
 
-	// Multi-tenancy proxy command flags.
-	{
-		f := mtStartSQLProxyCmd.Flags()
-		cliflagcfg.StringFlag(f, &proxyContext.Denylist, cliflags.DenyList)
-		cliflagcfg.StringFlag(f, &proxyContext.ListenAddr, cliflags.ProxyListenAddr)
-		cliflagcfg.StringFlag(f, &proxyContext.ListenCert, cliflags.ListenCert)
-		cliflagcfg.StringFlag(f, &proxyContext.ListenKey, cliflags.ListenKey)
-		cliflagcfg.StringFlag(f, &proxyContext.MetricsAddress, cliflags.ListenMetrics)
-		cliflagcfg.StringFlag(f, &proxyContext.RoutingRule, cliflags.RoutingRule)
-		cliflagcfg.StringFlag(f, &proxyContext.DirectoryAddr, cliflags.DirectoryAddr)
-		cliflagcfg.BoolFlag(f, &proxyContext.SkipVerify, cliflags.SkipVerify)
-		cliflagcfg.BoolFlag(f, &proxyContext.Insecure, cliflags.InsecureBackend)
-		cliflagcfg.DurationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
-		cliflagcfg.DurationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
-		cliflagcfg.DurationFlag(f, &proxyContext.ThrottleBaseDelay, cliflags.ThrottleBaseDelay)
-		cliflagcfg.BoolFlag(f, &proxyContext.DisableConnectionRebalancing, cliflags.DisableConnectionRebalancing)
-	}
-
-	// Multi-tenancy test directory command flags.
-	{
-		f := mtTestDirectorySvr.Flags()
-		cliflagcfg.IntFlag(f, &testDirectorySvrContext.port, cliflags.TestDirectoryListenPort)
-		cliflagcfg.StringFlag(f, &testDirectorySvrContext.certsDir, cliflags.TestDirectoryTenantCertsDir)
-		cliflagcfg.StringFlag(f, &testDirectorySvrContext.tenantBaseDir, cliflags.TestDirectoryTenantBaseDir)
-		cliflagcfg.StringFlag(f, &testDirectorySvrContext.kvAddrs, cliflags.KVAddrs)
-	}
-
 	// userfile upload command.
 	{
 		cliflagcfg.BoolFlag(userFileUploadCmd.Flags(), &userfileCtx.recursive, cliflags.Recursive)
@@ -1201,3 +1174,9 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	}
 	return nil
 }
+
+// RegisterFlags exists so that other packages can register flags using the
+// Register<Type>FlagDepth functions and end up in a call frame in the cli
+// package rather than the cliccl package to defeat the duplicate envvar
+// registration logic.
+func RegisterFlags(f func()) { f() }
