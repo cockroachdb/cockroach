@@ -710,6 +710,16 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
+// GetAllFromStorageUnvalidated delegates to the catkv.CatalogReader's ScanAll.
+// Nothing is validated or hydrated. This is to be used sparingly and only in
+// situations which warrant it, where an unmediated view of the stored catalog
+// is explicitly desired for some purpose of observability.
+func (tc *Collection) GetAllFromStorageUnvalidated(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.Catalog, error) {
+	return tc.cr.ScanAll(ctx, txn)
+}
+
 // GetAllDatabases is like GetAll but filtered to non-dropped databases.
 func (tc *Collection) GetAllDatabases(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	stored, err := tc.cr.ScanNamespaceForDatabases(ctx, txn)

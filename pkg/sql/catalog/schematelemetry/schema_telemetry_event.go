@@ -53,7 +53,7 @@ func CollectClusterSchemaForTelemetry(
 		if err != nil {
 			return err
 		}
-		raw, err = col.Direct().GetCatalogUnvalidated(ctx, txn)
+		raw, err = col.GetAllFromStorageUnvalidated(ctx, txn)
 		return err
 	}); err != nil {
 		return nil, err
