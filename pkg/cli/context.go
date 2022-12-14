@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
@@ -64,8 +63,6 @@ func initCLIDefaults() {
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
 	setImportContextDefaults()
-	setProxyContextDefaults()
-	setTestDirectorySvrContextDefaults()
 	setUserfileContextDefaults()
 	setCertContextDefaults()
 	setDebugRecoverContextDefaults()
@@ -661,37 +658,6 @@ func setImportContextDefaults() {
 	importCtx.ignoreUnsupported = false
 	importCtx.ignoreUnsupportedLog = ""
 	importCtx.rowLimit = 0
-}
-
-// proxyContext captures the command-line parameters of the `mt start-proxy` command.
-var proxyContext sqlproxyccl.ProxyOptions
-
-func setProxyContextDefaults() {
-	proxyContext.Denylist = ""
-	proxyContext.ListenAddr = "127.0.0.1:46257"
-	proxyContext.ListenCert = ""
-	proxyContext.ListenKey = ""
-	proxyContext.MetricsAddress = "0.0.0.0:8080"
-	proxyContext.RoutingRule = ""
-	proxyContext.DirectoryAddr = ""
-	proxyContext.SkipVerify = false
-	proxyContext.Insecure = false
-	proxyContext.RatelimitBaseDelay = 50 * time.Millisecond
-	proxyContext.ValidateAccessInterval = 30 * time.Second
-	proxyContext.PollConfigInterval = 30 * time.Second
-	proxyContext.ThrottleBaseDelay = time.Second
-	proxyContext.DisableConnectionRebalancing = false
-}
-
-var testDirectorySvrContext struct {
-	port          int
-	certsDir      string
-	kvAddrs       string
-	tenantBaseDir string
-}
-
-func setTestDirectorySvrContextDefaults() {
-	testDirectorySvrContext.port = 36257
 }
 
 // userfileCtx captures the command-line parameters of the

@@ -1,14 +1,12 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package cli
+package cliccl
 
 import (
 	"context"
@@ -19,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
+	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -97,18 +96,10 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 }
 
 func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper, err error) {
-	// Remove the default store, which avoids using it to set up logging.
-	// Instead, we'll default to logging to stderr unless --log-dir is
-	// specified. This makes sense since the standalone SQL server is
-	// at the time of writing stateless and may not be provisioned with
-	// suitable storage.
-	serverCfg.Stores.Specs = nil
-	serverCfg.ClusterName = ""
-
 	ctx = context.Background()
-	stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	stopper, err = cli.ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
 	if err != nil {
-		return
+		return ctx, nil, err
 	}
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 	return ctx, stopper, err
@@ -123,7 +114,7 @@ func waitForSignals(
 ) (returnErr error) {
 	// Need to alias the signals if this has to run on non-unix OSes too.
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, drainSignals...)
+	signal.Notify(signalCh, cli.DrainSignals...)
 
 	select {
 	case err := <-errChan:
