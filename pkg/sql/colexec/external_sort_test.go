@@ -99,8 +99,9 @@ func TestExternalSort(t *testing.T) {
 							numForcedRepartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							&monitorRegistry,
 						)
-						// Check that the sort was added as a Closer.
-						require.Equal(t, 1, len(closers))
+						// Check that the sort as well as the disk spiller were
+						// added as Closers.
+						require.Equal(t, 2, len(closers))
 						return sorter, err
 					})
 				for i, sem := range semsToCheck {
@@ -200,7 +201,7 @@ func TestExternalSortRandomized(t *testing.T) {
 							)
 							// TODO(asubiotto): Explicitly Close when testing.T is passed into
 							//  this constructor and we do a substring match.
-							require.Equal(t, 1, len(closers))
+							require.Equal(t, 2, len(closers))
 							return sorter, err
 						})
 					for i, sem := range semsToCheck {
