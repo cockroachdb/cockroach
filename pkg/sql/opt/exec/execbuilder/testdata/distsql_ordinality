@@ -21,14 +21,14 @@ ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
 
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE xyz]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE xyz WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /2       {1}       1
-/2         /4       {2}       2
-/4         /6       {3}       3
-/6         /7       {4}       4
-/7         NULL     {5}       5
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/1/2         {1}       1
+…/1/2               …/1/4         {2}       2
+…/1/4               …/1/6         {3}       3
+…/1/6               …/1/7         {4}       4
+…/1/7               <after:/Max>  {5}       5
 
 query T
 EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY

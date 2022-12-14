@@ -377,7 +377,9 @@ func TestTruncateTable(t *testing.T) {
 		testServer, cleanup := createTestServer(t)
 		defer cleanup()
 		db := createSystemTenantDB(t, testServer)
-		execQueries(db, "system", [][]string{{"", "/1"}, {"/1", ""}})
+		execQueries(db, "system", [][]string{
+			{"<before:/Table/104/1/1>", "…/1"},
+			{"…/1", "<after:/Max>"}})
 	}()
 
 	// Test secondary tenant.
@@ -390,6 +392,9 @@ func TestTruncateTable(t *testing.T) {
 			true,  /* allowSplitAndScatter */
 			false, /* skipSQLSystemTenantCheck */
 		)
-		execQueries(db, "secondary", [][]string{{"", "/104/2/1"}, {"/104/2/1", ""}})
+		execQueries(db, "secondary", [][]string{
+			{"<before:/Tenant/10/Table/104/1/1>", "…/104/2/1"},
+			{"…/104/2/1", "<after:/Max>"},
+		})
 	}()
 }
