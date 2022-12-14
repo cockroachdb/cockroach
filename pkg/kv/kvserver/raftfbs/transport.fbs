@@ -1,4 +1,4 @@
-namespace rafttransport;
+namespace raftfbs;
 
 rpc_service RaftTransport {
   // TODO stream both ways.

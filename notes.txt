@@ -17,3 +17,23 @@ whenever we need a `raftpb.Entry`, just make one from the `raftfb.Entry` and the
 persist the data slice directly to the log.. it would be nice to skip the `MVCCMetadata` here too; I don't see why we can't, after all a `storage.ReadWriter` lets you do it.
 
 and for the raft transport, use flatbuffers. Getting zero-copy here is hard. The messages come out of raft, and they contain a bunch of `raftfb.Entry` byte slices. Many of them probably small. It probably still makes sense to consolidate them because gRPC is probably more performant this way. But flatbuffers requires a message to be a contiguous byte slice (which would be required in the end anyway). But sort of ideally here we'd hand gRPC a bunch of things that it then puts on the wire one by one. But it doesn't have an API for that at all - a gRPC codec always marshals the message in its entirety.
+
+I tried to transpile to .fbs from our proto:
+
+./flatc -I ./pkg/ -I ./vendor/github.com/cockroachdb/errors -I ./vendor/github.com/gogo/protobuf/protobuf -I ./vendor/github.com/gogo/protobuf --warnings-as-errors --proto ./pkg/kv/kvserver/kvserverpb/proposer_kv.proto
+
+but turns out:
+
+flatc doesn't know "reserved" keyword or "map"
+
+and probably more blockers. It could work if we extract the raft protos and make a at it then.
+It's probably prudent to keep using the protobufs that are mostly not set and to put an encoded
+proto into a fb when necessary, because it doesn't matter for performance anyway. We just need to be optimal for Trivial results (and AddSST).
+So we need to pull out:
+- Delta
+- WriteTimestamp
+- DeprecatedDelta
+- AddSST
+- 
+
+https://github.com/cockroachdb/cockroach/blob/0788ad6fc883049dcc4f152a322d940e050d3448/pkg/kv/kvserver/kvserverpb/proposer_kv.go#L52
