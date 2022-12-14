@@ -2763,7 +2763,7 @@ func TestChangefeedRestartMultiNode(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE test_tab (a INT PRIMARY KEY, b INT UNIQUE NOT NULL)`)
 	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (0, 0)`)
 
-	row := sqlDB.QueryRow(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test_tab] LIMIT 1`)
+	row := sqlDB.QueryRow(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test_tab WITH DETAILS] LIMIT 1`)
 	var rangeID, leaseHolder int
 	row.Scan(&rangeID, &leaseHolder)
 
@@ -2821,7 +2821,7 @@ func TestChangefeedStopPolicyMultiNode(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE test_tab (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (0)`)
 
-	row := sqlDB.QueryRow(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test_tab] LIMIT 1`)
+	row := sqlDB.QueryRow(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test_tab WITH DETAILS] LIMIT 1`)
 	var rangeID, leaseHolder int
 	row.Scan(&rangeID, &leaseHolder)
 

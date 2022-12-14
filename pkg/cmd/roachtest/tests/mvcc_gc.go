@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -264,16 +265,11 @@ func collectTableMVCCStatsOrFatal(
 	t test.Test, conn *gosql.DB, m tableMetadata,
 ) (enginepb.MVCCStats, int) {
 	t.Helper()
-	rows, err := conn.Query(`
-select
-    range_id, start_key, crdb_internal.range_stats(start_key)
-from
-    crdb_internal.ranges_no_leases
-where
-    database_name = $1 and table_name = $2
-order by
-    start_key`,
-		m.databaseName, m.tableName)
+	rows, err := conn.Query(fmt.Sprintf(`
+SELECT range_id, raw_start_key, crdb_internal.range_stats(raw_start_key)
+FROM [SHOW RANGES FROM %s.%s WITH KEYS]
+ORDER BY r.start_key`,
+		tree.NameString(m.databaseName), tree.NameString(m.tableName)))
 	if err != nil {
 		t.Fatalf("failed to run consistency check query on table: %s", err)
 	}
@@ -314,10 +310,11 @@ func collectStatsAndConsistencyOrFail(
 	t.Helper()
 	var startKey, endKey roachpb.Key
 	queryRowOrFatal(t, conn,
-		`select min(start_key), max(end_key) from crdb_internal.ranges_no_leases where database_name = $1 and table_name = $2`,
-		[]interface{}{m.tableName, m.databaseName}, []interface{}{&startKey, &endKey})
+		fmt.Sprintf(`SELECT min(raw_start_key), max(raw_end_key)
+FROM [SHOW RANGES FROM TABLE %s.%s WITH KEYS]`,
+			tree.NameString(m.tableName), tree.NameString(m.databaseName)), nil, []interface{}{&startKey, &endKey})
 
-	rows, err := conn.Query(`select range_id, start_key, status, detail, crdb_internal.range_stats(start_key) from crdb_internal.check_consistency(false, $1, $2) order by start_key`,
+	rows, err := conn.Query(`SELECT range_id, start_key, status, detail, crdb_internal.range_stats(start_key) FROM crdb_internal.check_consistency(false, $1, $2) ORDER BY start_key`,
 		startKey, endKey)
 	if err != nil {
 		t.Fatalf("failed to run consistency check query on table: %s", err)

@@ -831,6 +831,9 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
   return u.val.(*tree.TenantReplicationOptions)
 }
+func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
+    return u.val.(*tree.ShowRangesOptions)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -869,7 +872,7 @@ func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions 
 %token <str> CURRENT_USER CURSOR CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS DEFINER
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -1602,6 +1605,7 @@ func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions 
 
 %type <*tree.LabelSpec> label_spec
 
+%type <*tree.ShowRangesOptions> opt_show_ranges_options show_ranges_options
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -7815,23 +7819,91 @@ show_range_for_row_stmt:
 // %Help: SHOW RANGES - list ranges
 // %Category: Misc
 // %Text:
-// SHOW RANGES FROM TABLE <tablename>
-// SHOW RANGES FROM INDEX [ <tablename> @ ] <indexname>
+// SHOW CLUSTER RANGES                                  [ WITH <options...> ]
+// SHOW RANGES FROM DATABASE <databasename>             [ WITH <options...> ]
+// SHOW RANGES FROM CURRENT_CATALOG                     [ WITH <options...> ]
+// SHOW RANGES FROM TABLE   <tablename>                 [ WITH <options...> ]
+// SHOW RANGES FROM INDEX [ <tablename> @ ] <indexname> [ WITH <options...> ]
+//
+// Options:
+//   INDEXES
+//   TABLES
+//   DETAILS
+//   EXPLAIN
 show_ranges_stmt:
-  SHOW RANGES FROM TABLE table_name
+  SHOW RANGES FROM INDEX table_index_name opt_show_ranges_options
+  {
+    $$.val = &tree.ShowRanges{Source: tree.ShowRangesIndex, TableOrIndex: $5.tableIndexName(), Options: $6.showRangesOpts()}
+  }
+| SHOW RANGES FROM TABLE table_name opt_show_ranges_options
   {
     name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowRanges{TableOrIndex: tree.TableIndexName{Table: name}}
+    $$.val = &tree.ShowRanges{Source: tree.ShowRangesTable, TableOrIndex: tree.TableIndexName{Table: name}, Options: $6.showRangesOpts()}
   }
-| SHOW RANGES FROM INDEX table_index_name
+| SHOW RANGES FROM DATABASE database_name opt_show_ranges_options
   {
-    $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
+    $$.val = &tree.ShowRanges{Source: tree.ShowRangesDatabase, DatabaseName: tree.Name($5), Options: $6.showRangesOpts()}
   }
-| SHOW RANGES FROM DATABASE database_name
+| SHOW RANGES FROM CURRENT_CATALOG opt_show_ranges_options
   {
-    $$.val = &tree.ShowRanges{DatabaseName: tree.Name($5)}
+    $$.val = &tree.ShowRanges{Source: tree.ShowRangesCurrentDatabase, Options: $5.showRangesOpts()}
+  }
+| SHOW RANGES opt_show_ranges_options
+  {
+    $$.val = &tree.ShowRanges{Source: tree.ShowRangesCurrentDatabase, Options: $3.showRangesOpts()}
   }
 | SHOW RANGES error // SHOW HELP: SHOW RANGES
+| SHOW CLUSTER RANGES opt_show_ranges_options
+  {
+    $$.val = &tree.ShowRanges{Source: tree.ShowRangesCluster, Options: $4.showRangesOpts()}
+  }
+| SHOW CLUSTER RANGES error // SHOW HELP: SHOW RANGES
+
+opt_show_ranges_options:
+  /* EMPTY */
+  { $$.val = &tree.ShowRangesOptions{} }
+| WITH show_ranges_options
+  { $$.val = $2.showRangesOpts() }
+
+show_ranges_options:
+  TABLES  {  $$.val = &tree.ShowRangesOptions{Mode: tree.ExpandTables} }
+| INDEXES {  $$.val = &tree.ShowRangesOptions{Mode: tree.ExpandIndexes} }
+| DETAILS {  $$.val = &tree.ShowRangesOptions{Details: true} }
+| KEYS    {  $$.val = &tree.ShowRangesOptions{Keys: true} }
+| EXPLAIN {  $$.val = &tree.ShowRangesOptions{Explain: true} }
+| show_ranges_options ',' TABLES
+  {
+    o := $1.showRangesOpts()
+    if o.Mode != 0 { return setErr(sqllex, errors.New("conflicting modes")) }
+    o.Mode = tree.ExpandTables
+    $$.val = o
+  }
+| show_ranges_options ',' INDEXES
+  {
+    o := $1.showRangesOpts()
+    if o.Mode != 0 { return setErr(sqllex, errors.New("conflicting modes")) }
+    o.Mode = tree.ExpandIndexes
+    $$.val = o
+  }
+| show_ranges_options ',' DETAILS
+  {
+    o := $1.showRangesOpts()
+    o.Details = true
+    $$.val = o
+  }
+| show_ranges_options ',' EXPLAIN
+  {
+    o := $1.showRangesOpts()
+    o.Explain = true
+    $$.val = o
+  }
+| show_ranges_options ',' KEYS
+  {
+    o := $1.showRangesOpts()
+    o.Keys = true
+    $$.val = o
+  }
+
 
 // %Help: SHOW SURVIVAL GOAL - list survival goals
 // %Category: DDL
@@ -15621,6 +15693,7 @@ unreserved_keyword:
 | DEPENDS
 | DESTINATION
 | DETACHED
+| DETAILS
 | DISCARD
 | DOMAIN
 | DOUBLE

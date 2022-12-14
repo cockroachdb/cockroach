@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
+	raft "go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
 )
 
@@ -1316,7 +1316,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	})
 
 	// Move lease 3 -> 5.
-	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges where range_id = $3)", 3, 5, rhsDesc.RangeID)
+	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges_no_leases where range_id = $3)", 3, 5, rhsDesc.RangeID)
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
 }
