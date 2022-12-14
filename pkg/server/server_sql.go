@@ -1511,12 +1511,6 @@ func (s *SQLServer) preStart(
 					sessiondatapb.SessionData{},
 				)
 			},
-			ShouldRunScheduler: func(ctx context.Context, ts hlc.ClockTimestamp) (bool, error) {
-				if s.execCfg.Codec.ForSystemTenant() {
-					return s.isMeta1Leaseholder(ctx, ts)
-				}
-				return true, nil
-			},
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
