@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -136,15 +137,17 @@ func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 // Close closes the underlying SST builder.
 func (b *BufferingAdder) Close(ctx context.Context) {
 	if log.V(1) {
-		if b.sink.stats.bufferFlushes > 0 {
-			b.sink.stats.LogTimings(ctx, b.name, "closing")
+		b.sink.mu.Lock()
+		if b.sink.mu.totalStats.BufferFlushes > 0 {
+			b.sink.mu.totalStats.LogTimings(ctx, b.name, "closing")
 			if log.V(3) {
-				b.sink.stats.LogPerStoreTimings(ctx, b.name)
+				b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
 			}
-			b.sink.stats.LogFlushes(ctx, b.name, "closing", sz(b.memAcc.Used()))
+			b.sink.mu.totalStats.LogFlushes(ctx, b.name, "closing", b.memAcc.Used(), b.sink.span)
 		} else {
 			log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
 		}
+		b.sink.mu.Unlock()
 	}
 	b.sink.Close(ctx)
 
@@ -168,7 +171,7 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 		return b.curBuf.append(key, value)
 	}
 
-	b.sink.stats.flushesDueToSize++
+	b.sink.currentStats.FlushesDueToSize++
 	log.VEventf(ctx, 3, "%s adder triggering flush of %s of KVs in %s buffer",
 		b.name, b.curBuf.KVSize(), b.bufferedMemSize())
 
@@ -231,7 +234,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 }
 
 func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
-	b.sink.stats.fillWait += timeutil.Since(b.lastFlush)
+	b.sink.currentStats.FillWait += timeutil.Since(b.lastFlush)
 
 	if b.bufferedKeys() == 0 {
 		if b.onFlush != nil {
@@ -243,10 +246,19 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	if err := b.sink.Reset(ctx); err != nil {
 		return err
 	}
-	b.sink.stats.bufferFlushes++
+	b.sink.currentStats.BufferFlushes++
 
-	before := b.sink.stats
-	beforeSize := b.sink.mu.totalRows.DataSize
+	var before *backuppb.IngestionPerformanceStats
+	var beforeSize int64
+	// Get the stats before flush by summing totalStats and currentStats
+	if log.V(3) {
+		b.sink.mu.Lock()
+		before = b.sink.mu.totalStats.Identity().(*backuppb.IngestionPerformanceStats)
+		before.Combine(&b.sink.mu.totalStats)
+		before.Combine(&b.sink.currentStats)
+		beforeSize = b.sink.mu.totalRows.DataSize
+		b.sink.mu.Unlock()
+	}
 
 	beforeSort := timeutil.Now()
 
@@ -256,7 +268,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
 
 	beforeFlush := timeutil.Now()
-	b.sink.stats.sortWait += beforeFlush.Sub(beforeSort)
+	b.sink.currentStats.SortWait += beforeFlush.Sub(beforeSort)
 
 	// If this is the first flush and is due to size, if it was unsorted then
 	// create initial splits if requested before flushing.
@@ -271,8 +283,8 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 
 	if log.V(1) {
-		if len(b.sink.stats.span.Key) == 0 || b.curBuf.Key(0).Compare(b.sink.stats.span.Key) < 0 {
-			b.sink.stats.span.Key = b.curBuf.Key(0).Clone()
+		if len(b.sink.span.Key) == 0 || b.curBuf.Key(0).Compare(b.sink.span.Key) < 0 {
+			b.sink.span.Key = b.curBuf.Key(0).Clone()
 		}
 	}
 
@@ -287,18 +299,24 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 
 	if log.V(1) {
-		if b.sink.stats.span.EndKey.Compare(mvccKey.Key) < 0 {
-			b.sink.stats.span.EndKey = mvccKey.Key.Clone()
+		if b.sink.span.EndKey.Compare(mvccKey.Key) < 0 {
+			b.sink.span.EndKey = mvccKey.Key.Clone()
 		}
 	}
 
-	b.sink.stats.flushWait += timeutil.Since(beforeFlush)
+	b.sink.currentStats.FlushWait += timeutil.Since(beforeFlush)
 
-	if log.V(3) {
+	if log.V(3) && before != nil {
+		b.sink.mu.Lock()
 		written := b.sink.mu.totalRows.DataSize - beforeSize
-		files := b.sink.stats.batches - before.batches
-		dueToSplits := b.sink.stats.batchesDueToRange - before.batchesDueToRange
-		dueToSize := b.sink.stats.batchesDueToRange - before.batchesDueToRange
+		afterStats := b.sink.mu.totalStats.Identity().(*backuppb.IngestionPerformanceStats)
+		afterStats.Combine(&b.sink.mu.totalStats)
+		afterStats.Combine(&b.sink.currentStats)
+		b.sink.mu.Unlock()
+
+		files := afterStats.Batches - before.Batches
+		dueToSplits := afterStats.BatchesDueToRange - before.BatchesDueToRange
+		dueToSize := afterStats.BatchesDueToSize - before.BatchesDueToSize
 
 		log.Infof(ctx,
 			"%s adder flushing %s (%s buffered/%0.2gx) wrote %d SSTs (avg: %s) with %d for splits, %d for size, took %v",
@@ -307,7 +325,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 			b.curBuf.MemSize(),
 			float64(b.curBuf.KVSize())/float64(b.curBuf.MemSize()),
 			files,
-			sz(written/int64(files)),
+			sz(written/files),
 			dueToSplits,
 			dueToSize,
 			timing(timeutil.Since(beforeSort)),
@@ -315,14 +333,18 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 
 	if log.V(2) {
-		b.sink.stats.LogTimings(ctx, b.name, "flushed")
+		b.sink.mu.Lock()
+		b.sink.mu.totalStats.LogTimings(ctx, b.name, "flushed")
 		if log.V(3) {
-			b.sink.stats.LogPerStoreTimings(ctx, b.name)
+			b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
 		}
+		b.sink.mu.Unlock()
 	}
 
 	if log.V(3) {
-		b.sink.stats.LogFlushes(ctx, b.name, "flushed", sz(b.memAcc.Used()))
+		b.sink.mu.Lock()
+		b.sink.mu.totalStats.LogFlushes(ctx, b.name, "flushed", b.memAcc.Used(), b.sink.span)
+		b.sink.mu.Unlock()
 	}
 
 	if b.onFlush != nil {
@@ -398,8 +420,8 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	splitsWait := beforeScatters.Sub(beforeSplits)
 	log.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
 		b.name, len(toScatter), timing(splitsWait), b.curBuf.Len(), b.curBuf.MemSize())
-	b.sink.stats.splits += len(toScatter)
-	b.sink.stats.splitWait += splitsWait
+	b.sink.currentStats.Splits += int64(len(toScatter))
+	b.sink.currentStats.SplitWait += splitsWait
 
 	for _, splitKey := range toScatter {
 		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */)
@@ -407,16 +429,15 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			log.Warningf(ctx, "failed to scatter: %v", err)
 			continue
 		}
-		b.sink.stats.scatters++
-		moved := sz(resp.ReplicasScatteredBytes)
-		b.sink.stats.scatterMoved += moved
-		if moved > 0 {
+		b.sink.currentStats.Scatters++
+		b.sink.currentStats.ScatterMoved += resp.ReplicasScatteredBytes
+		if resp.ReplicasScatteredBytes > 0 {
 			log.VEventf(ctx, 1, "pre-split scattered %s in non-empty range %s",
-				moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
+				sz(resp.ReplicasScatteredBytes), resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 		}
 	}
 	scattersWait := timeutil.Since(beforeScatters)
-	b.sink.stats.scatterWait += scattersWait
+	b.sink.currentStats.ScatterWait += scattersWait
 	log.Infof(ctx, "%s adder scattered %d initial split spans in %v",
 		b.name, len(toScatter), timing(scattersWait))
 
