@@ -119,43 +119,27 @@ func (d *defaultDescriptorValidationModeProvider) ValidateDescriptorsOnWrite() b
 	return true
 }
 
-func (d *direct) mustGetDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, ids []descpb.ID, expectedType catalog.DescriptorType,
-) ([]catalog.Descriptor, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	const isRequired = true
-	c, err := d.cr.GetByIDs(ctx, txn, ids, isRequired, expectedType)
-	if err != nil {
-		return nil, err
-	}
-	descs := make([]catalog.Descriptor, len(ids))
-	for i, id := range ids {
-		descs[i] = c.LookupDescriptor(id)
-	}
-	if !d.dvmp.ValidateDescriptorsOnRead() {
-		return descs, nil
-	}
-	vd := NewCatalogReaderBackedValidationDereferencer(d.cr, txn, d.dvmp)
-	ve := validate.Validate(
-		ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...,
-	)
-	if err := ve.CombinedError(); err != nil {
-		return nil, err
-	}
-	return descs, nil
-}
-
 // MustGetDescriptorByID is part of the Direct interface.
 func (d *direct) MustGetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, expectedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
-	descs, err := d.mustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType)
+	const isDescriptorRequired = true
+	c, err := d.cr.GetByIDs(ctx, txn, []descpb.ID{id}, isDescriptorRequired, expectedType)
 	if err != nil {
 		return nil, err
 	}
-	return descs[0], err
+	desc := c.LookupDescriptor(id)
+	if !d.dvmp.ValidateDescriptorsOnRead() {
+		return desc, nil
+	}
+	vd := NewCatalogReaderBackedValidationDereferencer(d.cr, txn, d.dvmp)
+	ve := validate.Validate(
+		ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, desc,
+	)
+	if err := ve.CombinedError(); err != nil {
+		return nil, err
+	}
+	return desc, nil
 }
 
 // MustGetDatabaseDescByID is part of the Direct interface.
