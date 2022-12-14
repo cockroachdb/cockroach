@@ -616,6 +616,18 @@ func (s StatementOptions) GetInitialScanType() (InitialScanType, error) {
 	return NoInitialScan, nil
 }
 
+func (s StatementOptions) IsInitialScanSpecified() bool {
+	_, initialScanSet := s.m[OptInitialScan]
+	_, initialScanOnlySet := s.m[OptInitialScanOnly]
+	_, noInitialScanSet := s.m[OptNoInitialScan]
+
+	if !initialScanSet && !initialScanOnlySet && !noInitialScanSet {
+		return false
+	}
+
+	return true
+}
+
 // ShouldUseFullStatementTimeName returns true if references to the table should be in db.schema.table
 // format (e.g. in Kafka topics).
 func (s StatementOptions) ShouldUseFullStatementTimeName() bool {

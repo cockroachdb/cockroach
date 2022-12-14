@@ -190,11 +190,11 @@ create_stmt ::=
 	create_role_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
-	| create_schedule_for_backup_stmt
 	| create_changefeed_stmt
 	| create_extension_stmt
 	| create_external_connection_stmt
 	| create_tenant_stmt
+	| create_schedule_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -575,9 +575,6 @@ create_ddl_stmt ::=
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
 
-create_schedule_for_backup_stmt ::=
-	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
-
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
 	| 'CREATE' 'CHANGEFEED' opt_changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
@@ -592,6 +589,10 @@ create_external_connection_stmt ::=
 create_tenant_stmt ::=
 	'CREATE' 'TENANT' name
 	| 'CREATE' 'TENANT' name 'FROM' 'REPLICATION' 'OF' name 'ON' string_or_placeholder
+
+create_schedule_stmt ::=
+	create_schedule_for_changefeed_stmt
+	| create_schedule_for_backup_stmt
 
 opt_with_clause ::=
 	with_clause
@@ -1718,23 +1719,6 @@ opt_create_stats_options ::=
 	| 'WITH' 'OPTIONS' create_stats_option_list
 	| 
 
-schedule_label_spec ::=
-	label_spec
-	| 
-
-cron_expr ::=
-	'RECURRING' sconst_or_placeholder
-
-opt_full_backup_clause ::=
-	'FULL' 'BACKUP' sconst_or_placeholder
-	| 'FULL' 'BACKUP' 'ALWAYS'
-	| 
-
-opt_with_schedule_options ::=
-	'WITH' 'SCHEDULE' 'OPTIONS' kv_option_list
-	| 'WITH' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
-	| 
-
 changefeed_targets ::=
 	( changefeed_target ) ( ( ',' changefeed_target ) )*
 
@@ -1750,6 +1734,13 @@ changefeed_target_expr ::=
 label_spec ::=
 	string_or_placeholder
 	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
+create_schedule_for_changefeed_stmt ::=
+	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
+	| 'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause cron_expr opt_with_schedule_options
+
+create_schedule_for_backup_stmt ::=
+	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
 
 with_clause ::=
 	'WITH' cte_list
@@ -1938,6 +1929,7 @@ for_grantee_clause ::=
 opt_schedule_executor_type ::=
 	'FOR' 'BACKUP'
 	| 'FOR' 'SQL' 'STATISTICS'
+	| 'FOR' 'CHANGEFEED'
 
 schedule_state ::=
 	'RUNNING'
@@ -2462,6 +2454,26 @@ target_elem ::=
 	| a_expr bare_col_label
 	| a_expr
 	| '*'
+
+schedule_label_spec ::=
+	label_spec
+	| 
+
+changefeed_sink ::=
+	'INTO' string_or_placeholder
+
+cron_expr ::=
+	'RECURRING' sconst_or_placeholder
+
+opt_with_schedule_options ::=
+	'WITH' 'SCHEDULE' 'OPTIONS' kv_option_list
+	| 'WITH' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
+	| 
+
+opt_full_backup_clause ::=
+	'FULL' 'BACKUP' sconst_or_placeholder
+	| 'FULL' 'BACKUP' 'ALWAYS'
+	| 
 
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*

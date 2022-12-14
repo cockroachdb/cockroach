@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -270,8 +271,8 @@ func loggedSubdirType(subdir string) string {
 // backup schedule.
 func logCreateScheduleTelemetry(
 	ctx context.Context,
-	incRecurrence *scheduleRecurrence,
-	fullRecurrence *scheduleRecurrence,
+	incRecurrence *schedulebase.ScheduleRecurrence,
+	fullRecurrence *schedulebase.ScheduleRecurrence,
 	firstRun *time.Time,
 	ignoreExisting bool,
 	details jobspb.ScheduleDetails,
@@ -284,12 +285,12 @@ func logCreateScheduleTelemetry(
 
 	var recurringCron string
 	if incRecurrence != nil {
-		recurringCron = incRecurrence.cron
+		recurringCron = incRecurrence.Cron
 	}
 
 	var fullCron string
 	if fullRecurrence != nil {
-		fullCron = fullRecurrence.cron
+		fullCron = fullRecurrence.Cron
 	}
 
 	// For events about backup schedule creation, simply append the schedule-only

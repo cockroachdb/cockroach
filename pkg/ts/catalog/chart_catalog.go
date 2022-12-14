@@ -3252,6 +3252,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{Jobs, "Schedules", "Changefeed"}},
+		Charts: []chartDescription{
+			{
+				Title: "Counts",
+				Metrics: []string{
+					"schedules.CHANGEFEED.started",
+					"schedules.CHANGEFEED.succeeded",
+					"schedules.CHANGEFEED.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{Jobs, "Schedules", "SQL Stats"}},
 		Charts: []chartDescription{
 			{
