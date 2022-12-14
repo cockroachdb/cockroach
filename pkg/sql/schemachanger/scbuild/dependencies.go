@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
@@ -133,17 +134,14 @@ type CatalogReader interface {
 		found bool, prefix catalog.ResolvedObjectPrefix, tbl catalog.TableDescriptor, idx catalog.Index,
 	)
 
-	// ReadObjectIDs looks up the IDs of all objects in a schema.
-	ReadObjectIDs(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) catalog.DescriptorIDSet
+	// GetAllSchemasInDatabase gets all schemas in a database.
+	GetAllSchemasInDatabase(ctx context.Context, database catalog.DatabaseDescriptor) nstree.Catalog
+
+	// GetAllObjectsInSchema gets all non-dropped objects in a schema.
+	GetAllObjectsInSchema(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) nstree.Catalog
 
 	// MustReadDescriptor looks up a descriptor by ID.
 	MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor
-
-	// MustGetSchemasForDatabase gets schemas associated with
-	// a database.
-	MustGetSchemasForDatabase(
-		ctx context.Context, database catalog.DatabaseDescriptor,
-	) map[descpb.ID]string
 }
 
 // TableReader implements functions for inspecting tables during the build phase,

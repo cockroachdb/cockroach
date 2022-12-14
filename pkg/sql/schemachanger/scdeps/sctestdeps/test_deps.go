@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -295,42 +296,46 @@ func (s *TestState) MayResolveType(
 // MayResolveIndex implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveIndex(
 	ctx context.Context, tableIndexName tree.TableIndexName,
-) (found bool, _ catalog.ResolvedObjectPrefix, _ catalog.TableDescriptor, _ catalog.Index) {
+) (
+	found bool,
+	prefix catalog.ResolvedObjectPrefix,
+	tbl catalog.TableDescriptor,
+	idx catalog.Index,
+) {
 	if tableIndexName.Table.Object() != "" {
-		prefix, tbl := s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName())
+		prefix, tbl = s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName())
 		if tbl == nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil
 		}
-		idx, err := tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
-		if err != nil {
-			return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		idx, _ = tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+	} else {
+		db, schema := s.mayResolvePrefix(tableIndexName.Table.ObjectNamePrefix)
+		prefix = catalog.ResolvedObjectPrefix{
+			ExplicitDatabase: true,
+			ExplicitSchema:   true,
+			Database:         db.(catalog.DatabaseDescriptor),
+			Schema:           schema.(catalog.SchemaDescriptor),
 		}
+		var objects nstree.Catalog
+		if db != nil && schema != nil {
+			objects = s.GetAllObjectsInSchema(ctx, prefix.Database, prefix.Schema)
+		}
+		_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			var ok bool
+			tbl, ok = desc.(catalog.TableDescriptor)
+			if !ok {
+				return nil
+			}
+			idx, _ = tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+			if idx != nil {
+				return iterutil.StopIteration()
+			}
+			return nil
+		})
+	}
+	if idx != nil {
 		return true, prefix, tbl, idx
 	}
-
-	db, schema := s.mayResolvePrefix(tableIndexName.Table.ObjectNamePrefix)
-	prefix := catalog.ResolvedObjectPrefix{
-		ExplicitDatabase: true,
-		ExplicitSchema:   true,
-		Database:         db.(catalog.DatabaseDescriptor),
-		Schema:           schema.(catalog.SchemaDescriptor),
-	}
-	objectIDs := s.ReadObjectIDs(ctx, prefix.Database, prefix.Schema)
-	for _, objectID := range objectIDs.Ordered() {
-		desc, _ := s.mustReadImmutableDescriptor(objectID)
-		if desc == nil {
-			continue
-		}
-		tbl, ok := desc.(catalog.TableDescriptor)
-		if !ok {
-			continue
-		}
-		idx, _ := tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
-		if idx != nil {
-			return true, prefix, tbl, idx
-		}
-	}
-
 	return false, catalog.ResolvedObjectPrefix{}, nil, nil
 }
 
@@ -436,17 +441,18 @@ func (s *TestState) mayGetByName(
 	return desc
 }
 
-// ReadObjectIDs implements the scbuild.CatalogReader interface.
-func (s *TestState) ReadObjectIDs(
-	_ context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
-) (ret catalog.DescriptorIDSet) {
-	_ = s.uncommitted.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if e.GetParentID() == db.GetID() && e.GetParentSchemaID() == schema.GetID() {
-			ret.Add(e.GetID())
+// GetAllObjectsInSchema implements the scbuild.CatalogReader interface.
+func (s *TestState) GetAllObjectsInSchema(
+	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
+) nstree.Catalog {
+	var ret nstree.MutableCatalog
+	_ = s.uncommitted.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.GetParentSchemaID() == schema.GetID() {
+			ret.UpsertDescriptor(desc)
 		}
 		return nil
 	})
-	return ret
+	return ret.Catalog
 }
 
 // ResolveType implements the scbuild.CatalogReader interface.
@@ -530,19 +536,18 @@ func (s *TestState) CurrentDatabase() string {
 	return s.currentDatabase
 }
 
-// MustGetSchemasForDatabase implements the scbuild.CatalogReader interface.
-func (s *TestState) MustGetSchemasForDatabase(
-	ctx context.Context, database catalog.DatabaseDescriptor,
-) map[descpb.ID]string {
-	schemas := make(map[descpb.ID]string)
-	err := database.ForEachSchema(func(id descpb.ID, name string) error {
-		schemas[id] = name
+// GetAllSchemasInDatabase implements the scbuild.CatalogReader interface.
+func (s *TestState) GetAllSchemasInDatabase(
+	_ context.Context, database catalog.DatabaseDescriptor,
+) nstree.Catalog {
+	var ret nstree.MutableCatalog
+	_ = s.uncommitted.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.GetParentID() == database.GetID() && desc.GetParentSchemaID() == descpb.InvalidID {
+			ret.UpsertDescriptor(desc)
+		}
 		return nil
 	})
-	if err != nil {
-		panic(err)
-	}
-	return schemas
+	return ret.Catalog
 }
 
 // MustReadDescriptor implements the scbuild.CatalogReader interface.

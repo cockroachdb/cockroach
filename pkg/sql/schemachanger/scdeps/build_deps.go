@@ -178,19 +178,15 @@ func (d *buildDeps) MayResolveIndex(
 	return found, prefix, tbl, idx
 }
 
-// ReadObjectIDs implements the scbuild.CatalogReader interface.
-func (d *buildDeps) ReadObjectIDs(
+// GetAllObjectsInSchema implements the scbuild.CatalogReader interface.
+func (d *buildDeps) GetAllObjectsInSchema(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
-) (ret catalog.DescriptorIDSet) {
-	c, err := d.descsCollection.GetObjectNamesAndIDs(ctx, d.txn, db, schema)
+) nstree.Catalog {
+	c, err := d.descsCollection.GetAllObjectsInSchema(ctx, d.txn, db, schema)
 	if err != nil {
 		panic(err)
 	}
-	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		ret.Add(e.GetID())
-		return nil
-	})
-	return ret
+	return c
 }
 
 // ResolveType implements the scbuild.CatalogReader interface.
@@ -247,11 +243,11 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
-// MustGetSchemasForDatabase  implements the scbuild.CatalogReader interface.
-func (d *buildDeps) MustGetSchemasForDatabase(
+// GetAllSchemasInDatabase implements the scbuild.CatalogReader interface.
+func (d *buildDeps) GetAllSchemasInDatabase(
 	ctx context.Context, database catalog.DatabaseDescriptor,
-) map[descpb.ID]string {
-	schemas, err := d.descsCollection.GetSchemasForDatabase(ctx, d.txn, database)
+) nstree.Catalog {
+	schemas, err := d.descsCollection.GetAllSchemasInDatabase(ctx, d.txn, database)
 	if err != nil {
 		panic(err)
 	}
