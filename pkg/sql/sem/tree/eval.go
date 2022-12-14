@@ -2387,6 +2387,15 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 		makeIsFn(types.Time, types.TimeTZ, VolatilityStable),
 		makeIsFn(types.TimeTZ, types.Time, VolatilityStable),
 
+		// Void is unique in that it is not equivalent with itself, so implicit
+		// equivalence with Unknown in function ArgTypes.MatchAt due to the check
+		// `(typ.Family() == types.UnknownFamily || a[i].Typ.Equivalent(typ))` does
+		// not occur. Therefore, to allow the comparison
+		// `''::VOID IS DISTINCT FROM NULL`, an explicit equivalence with Unknown is
+		// added:
+		makeIsFn(types.Void, types.Unknown, VolatilityStable),
+		makeIsFn(types.Unknown, types.Void, VolatilityStable),
+
 		// Tuple comparison.
 		&CmpOp{
 			LeftType:     types.AnyTuple,
@@ -2913,15 +2922,19 @@ func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 // It returns the result of the ANY/SOME/ALL predicate.
 //
 // A NULL result is returned if there exists a NULL element and:
-//   ANY/SOME: no comparisons evaluate to true
-//   ALL: no comparisons evaluate to false
+//
+//	ANY/SOME: no comparisons evaluate to true
+//	ALL: no comparisons evaluate to false
 //
 // For example, given 1 < ANY (SELECT * FROM generate_series(1,3))
 // (right is a DTuple), evalTupleCmp would be called with:
-//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
+//
+//	evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
+//
 // Similarly, given 1 < ANY (ARRAY[1, 2, 3]) (right is a DArray),
 // evalArrayCmp would be called with:
-//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
+//
+//	evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
 	ctx *EvalContext, op, subOp treecmp.ComparisonOperator, fn *CmpOp, left Datum, right Datums,
 ) (Datum, error) {
@@ -5130,15 +5143,18 @@ func LikeEscape(pattern string) (string, error) {
 // For example, suppose we have escape token `\` (e.g. `B` is escaped in
 // `A\BC` and `\` is escaped in `A\\C`).
 // We need to convert
-//    `\` --> ``
-//    `\\` --> `\`
+//
+//	`\` --> ``
+//	`\\` --> `\`
+//
 // We cannot simply use strings.Replace for each conversion since the first
-// conversion will incorrectly replace our escaped escape token `\\` with ``.
+// conversion will incorrectly replace our escaped escape token `\\` with “.
 // Another example is if our escape token is `\\` (e.g. after
 // regexp.QuoteMeta).
 // We need to convert
-//    `\\` --> ``
-//    `\\\\` --> `\\`
+//
+//	`\\` --> ``
+//	`\\\\` --> `\\`
 func unescapePattern(
 	pattern, escapeToken string, emitEscapeCharacterLastError bool,
 ) (string, error) {
@@ -5182,11 +5198,14 @@ func unescapePattern(
 // replaceUnescaped replaces all instances of oldStr that are not escaped (read:
 // preceded) with the specified unescape token with newStr.
 // For example, with an escape token of `\\`
-//    replaceUnescaped("TE\\__ST", "_", ".", `\\`) --> "TE\\_.ST"
-//    replaceUnescaped("TE\\%%ST", "%", ".*", `\\`) --> "TE\\%.*ST"
+//
+//	replaceUnescaped("TE\\__ST", "_", ".", `\\`) --> "TE\\_.ST"
+//	replaceUnescaped("TE\\%%ST", "%", ".*", `\\`) --> "TE\\%.*ST"
+//
 // If the preceding escape token is escaped, then oldStr will be replaced.
 // For example
-//    replaceUnescaped("TE\\\\_ST", "_", ".", `\\`) --> "TE\\\\.ST"
+//
+//	replaceUnescaped("TE\\\\_ST", "_", ".", `\\`) --> "TE\\\\.ST"
 func replaceUnescaped(s, oldStr, newStr string, escapeToken string) string {
 	// We count the number of occurrences of 'oldStr'.
 	// This however can be an overestimate since the oldStr token could be
@@ -5260,20 +5279,23 @@ OldLoop:
 
 // Replaces all custom escape characters in s with `\\` only when they are unescaped.          (1)
 // E.g. original pattern       after QuoteMeta       after replaceCustomEscape with '@' as escape
-//        '@w@w'          ->      '@w@w'        ->        '\\w\\w'
-//        '@\@\'          ->      '@\\@\\'      ->        '\\\\\\\\'
+//
+//	'@w@w'          ->      '@w@w'        ->        '\\w\\w'
+//	'@\@\'          ->      '@\\@\\'      ->        '\\\\\\\\'
 //
 // When an escape character is escaped, we replace it with its single occurrence.              (2)
 // E.g. original pattern       after QuoteMeta       after replaceCustomEscape with '@' as escape
-//        '@@w@w'         ->      '@@w@w'       ->        '@w\\w'
-//        '@@@\'          ->      '@@@\\'       ->        '@\\\\'
+//
+//	'@@w@w'         ->      '@@w@w'       ->        '@w\\w'
+//	'@@@\'          ->      '@@@\\'       ->        '@\\\\'
 //
 // At the same time, we do not want to confuse original backslashes (which
 // after QuoteMeta are '\\') with backslashes that replace our custom escape characters,
 // so we escape these original backslashes again by converting '\\' into '\\\\'.               (3)
 // E.g. original pattern       after QuoteMeta       after replaceCustomEscape with '@' as escape
-//        '@\'            ->      '@\\'         ->        '\\\\\\'
-//        '@\@@@\'        ->      '@\\@@@\\'    ->        '\\\\\\@\\\\\\'
+//
+//	'@\'            ->      '@\\'         ->        '\\\\\\'
+//	'@\@@@\'        ->      '@\\@@@\\'    ->        '\\\\\\@\\\\\\'
 //
 // Explanation of the last example:
 // 1. we replace '@' with '\\' since it's unescaped;
@@ -5704,7 +5726,9 @@ func similarEscapeCustomChar(pattern string, escapeChar rune, isEscapeNonEmpty b
 }
 
 // caseInsensitive surrounds the transformed input string with
-//   (?i: ... )
+//
+//	(?i: ... )
+//
 // which uses a non-capturing set of parens to turn a case sensitive
 // regular expression pattern into a case insensitive regular
 // expression pattern.
@@ -5713,7 +5737,9 @@ func caseInsensitive(pattern string) string {
 }
 
 // anchorPattern surrounds the transformed input string with
-//   ^(?s: ... )$
+//
+//	^(?s: ... )$
+//
 // which requires some explanation.  We need "^" and "$" to force
 // the pattern to match the entire input string as per SQL99 spec.
 // The "(?:" and ")" are a non-capturing set of parens; we have to have
