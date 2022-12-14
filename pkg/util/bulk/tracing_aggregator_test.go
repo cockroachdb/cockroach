@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -94,8 +95,8 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx := context.Background()
 
-	makeEvent := func(v int64, sendWaitByStore map[roachpb.StoreID]time.Duration) *backuppb.IngestionPerformanceStats {
-		return &backuppb.IngestionPerformanceStats{
+	makeEvent := func(v int64, sendWaitByStore map[roachpb.StoreID]time.Duration) *bulkpb.IngestionPerformanceStats {
+		return &bulkpb.IngestionPerformanceStats{
 			DataSize:          v,
 			BufferFlushes:     v,
 			FlushesDueToSize:  v,
@@ -119,12 +120,12 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 		}
 	}
 
-	requireStatsTag := func(aggSp *tracing.Span, expected *backuppb.IngestionPerformanceStats) {
+	requireStatsTag := func(aggSp *tracing.Span, expected *bulkpb.IngestionPerformanceStats) {
 		exportStatsTag, found := aggSp.GetLazyTag(expected.Tag())
 		require.True(t, found)
-		var actual *backuppb.IngestionPerformanceStats
+		var actual *bulkpb.IngestionPerformanceStats
 		var ok bool
-		if actual, ok = exportStatsTag.(*backuppb.IngestionPerformanceStats); !ok {
+		if actual, ok = exportStatsTag.(*bulkpb.IngestionPerformanceStats); !ok {
 			t.Fatal("failed to cast LazyTag to expected type")
 		}
 
