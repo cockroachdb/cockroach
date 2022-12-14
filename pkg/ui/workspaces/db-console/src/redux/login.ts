@@ -183,7 +183,7 @@ interface LoginSuccessAction extends Action {
   loggedInUser: string;
 }
 
-function loginSuccess(loggedInUser: string): LoginSuccessAction {
+export function loginSuccess(loggedInUser: string): LoginSuccessAction {
   return {
     type: LOGIN_SUCCESS,
     loggedInUser,
