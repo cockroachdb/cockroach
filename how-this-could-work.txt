@@ -1,0 +1,19 @@
+status quo: https://gist.github.com/tbg/02cd5d7148c9918193a48fe23ef748dd
+
+how this should work:
+
+make a fb message `raftfb.Entry` that's basically raft encoding version and raftpb.Entry with the RaftCommand inlined
+
+- encoding version
+- entry type
+- term
+- index
+- raftcommand (also a fb message now)
+
+instantiate this at proposal creation time; flatbuffers have enough mutability to make this work
+
+whenever we need a `raftpb.Entry`, just make one from the `raftfb.Entry` and the `Data` slice is the `raftpb.Entry` (remember a fb is just a byte slice)
+
+persist the data slice directly to the log.. it would be nice to skip the `MVCCMetadata` here too; I don't see why we can't, after all a `storage.ReadWriter` lets you do it.
+
+and for the raft transport, use flatbuffers. Getting zero-copy here is hard. The messages come out of raft, and they contain a bunch of `raftfb.Entry` byte slices. Many of them probably small. It probably still makes sense to consolidate them because gRPC is probably more performant this way. But flatbuffers requires a message to be a contiguous byte slice (which would be required in the end anyway). But sort of ideally here we'd hand gRPC a bunch of things that it then puts on the wire one by one. But it doesn't have an API for that at all - a gRPC codec always marshals the message in its entirety.
