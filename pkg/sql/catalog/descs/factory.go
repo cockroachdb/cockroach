@@ -98,7 +98,7 @@ func NewCollectionFactory(
 		leaseMgr:           leaseMgr,
 		virtualSchemas:     virtualSchemas,
 		hydrated:           hydrated,
-		systemDatabase:     catkv.NewSystemDatabaseCache(leaseMgr.Codec(), settings),
+		systemDatabase:     leaseMgr.SystemDatabaseCache(),
 		spanConfigSplitter: spanConfigSplitter,
 		spanConfigLimiter:  spanConfigLimiter,
 		defaultMonitor: mon.NewUnlimitedMonitor(ctx, "CollectionFactoryDefaultUnlimitedMonitor",
