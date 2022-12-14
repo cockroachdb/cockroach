@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -201,7 +202,7 @@ type Replica struct {
 	// Multiple types of throughput are accounted for. Where the localities of
 	// requests are tracked in order in addition to the aggregate, in order to
 	// inform load based lease and replica rebalancing decisions.
-	loadStats *ReplicaLoad
+	loadStats *load.ReplicaLoad
 
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
@@ -2089,7 +2090,7 @@ func init() {
 // requests.
 func (r *Replica) MeasureReqCPUNanos(start time.Duration) {
 	r.measureNanosRunning(start, func(dur float64) {
-		r.loadStats.reqCPUNanos.RecordCount(dur, 0 /* nodeID */)
+		r.loadStats.RecordReqCPUNanos(dur)
 	})
 }
 
@@ -2097,7 +2098,7 @@ func (r *Replica) MeasureReqCPUNanos(start time.Duration) {
 // raft work.
 func (r *Replica) MeasureRaftCPUNanos(start time.Duration) {
 	r.measureNanosRunning(start, func(dur float64) {
-		r.loadStats.raftCPUNanos.RecordCount(dur, 0 /* nodeID */)
+		r.loadStats.RecordRaftCPUNanos(dur)
 	})
 }
 
@@ -2108,6 +2109,12 @@ func (r *Replica) measureNanosRunning(start time.Duration, f func(float64)) {
 	end := grunning.Time()
 	dur := grunning.Difference(start, end).Nanoseconds()
 	f(float64(dur))
+}
+
+// GetLoadStatsForTesting is for use only by tests to read the Replicas' load
+// tracker state.
+func (r *Replica) GetLoadStatsForTesting() *load.ReplicaLoad {
+	return r.loadStats
 }
 
 // ReadProtectedTimestampsForTesting is for use only by tests to read and update
