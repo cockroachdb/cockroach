@@ -62,7 +62,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/cli/exit": {
 						"Code": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb": {
+					"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb": {
 						"sz":     {},
 						"timing": {},
 					},
