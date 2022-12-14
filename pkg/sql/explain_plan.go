@@ -73,7 +73,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		defer func() {
 			planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 		}()
-		physicalPlan, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, plan.main)
+		physicalPlan, cleanup, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, plan.main)
+		defer cleanup()
 		var diagramURL url.URL
 		var diagramJSON string
 		if err != nil {
@@ -256,12 +257,10 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 
 func newPhysPlanForExplainPurposes(
 	ctx context.Context, planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner, plan planMaybePhysical,
-) (*PhysicalPlan, error) {
+) (_ *PhysicalPlan, cleanup func(), _ error) {
 	if plan.isPhysicalPlan() {
-		return plan.physPlan.PhysicalPlan, nil
+		return plan.physPlan.PhysicalPlan, func() {}, nil
 	}
 	physPlan, err := distSQLPlanner.createPhysPlanForPlanNode(ctx, planCtx, plan.planNode)
-	// Release the resources right away since we won't be running the plan.
-	planCtx.getCleanupFunc()()
-	return physPlan, err
+	return physPlan, planCtx.getCleanupFunc(), err
 }
