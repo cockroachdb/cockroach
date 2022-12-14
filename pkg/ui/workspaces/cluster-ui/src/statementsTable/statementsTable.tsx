@@ -72,6 +72,7 @@ export interface AggregateStatistics {
   diagnosticsReports?: StatementDiagnosticsReport[];
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload?: Long;
+  regions?: string[];
   regionNodes?: string[];
 }
 
@@ -250,16 +251,7 @@ export function makeStatementsColumns(
         (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
         totalWorkload,
     },
-    {
-      name: "regionNodes",
-      title: statisticsTableTitles.regionNodes(statType),
-      className: cx("statements-table__col-regions"),
-      cell: (stmt: AggregateStatistics) => {
-        return longListWithTooltip(stmt.regionNodes.sort().join(", "), 50);
-      },
-      sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
-      hideIfTenant: true,
-    },
+    makeRegionsColumn(statType, isTenant),
     {
       name: "lastExecTimestamp",
       title: statisticsTableTitles.lastExecTimestamp(statType),
@@ -302,6 +294,33 @@ export function makeStatementsColumns(
   return columns;
 }
 
+function makeRegionsColumn(
+  statType: StatisticType,
+  isTenant: boolean,
+): ColumnDescriptor<AggregateStatistics> {
+  if (isTenant) {
+    return {
+      name: "regions",
+      title: statisticsTableTitles.regions(statType),
+      className: cx("statements-table__col-regions"),
+      cell: (stmt: AggregateStatistics) => {
+        return longListWithTooltip(stmt.regions.sort().join(", "), 50);
+      },
+      sort: (stmt: AggregateStatistics) => stmt.regions.sort().join(", "),
+    };
+  } else {
+    return {
+      name: "regionNodes",
+      title: statisticsTableTitles.regionNodes(statType),
+      className: cx("statements-table__col-regions"),
+      cell: (stmt: AggregateStatistics) => {
+        return longListWithTooltip(stmt.regionNodes.sort().join(", "), 50);
+      },
+      sort: (stmt: AggregateStatistics) => stmt.regionNodes.sort().join(", "),
+    };
+  }
+}
+
 /**
  * For each statement, generate the list of regions and nodes it was
  * executed on. Each node is assigned to only one region and a region can
@@ -311,19 +330,12 @@ export function makeStatementsColumns(
  * node it was executed on.
  * @param nodeRegions: object with keys being the node id and the value
  * which region it belongs to.
- * @param isTenant: boolean indicating if the cluster is tenant, since
- * node information doesn't need to be populated on this case.
  */
 export function populateRegionNodeForStatements(
   statements: AggregateStatistics[],
   nodeRegions: { [p: string]: string },
-  isTenant: boolean,
 ): void {
   statements.forEach(stmt => {
-    if (isTenant) {
-      stmt.regionNodes = [];
-      return;
-    }
     const regions: { [region: string]: Set<number> } = {};
     // For each region, populate a list of all nodes where the statement was executed.
     // E.g. {"gcp-us-east1" : [1,3,4]}
@@ -350,6 +362,7 @@ export function populateRegionNodeForStatements(
           ")",
       );
     });
+    stmt.regions = Object.keys(regions).sort();
     stmt.regionNodes = regionNodes;
   });
 }

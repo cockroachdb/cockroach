@@ -51,6 +51,7 @@ export const statisticsColumnLabels = {
   executionCount: "Execution Count",
   maxMemUsage: "Max Memory",
   networkBytes: "Network",
+  regions: "Regions",
   regionNodes: "Regions/Nodes",
   retries: "Retries",
   rowsProcessed: "Rows Processed",
@@ -779,6 +780,27 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("workloadPct")}
+      </Tooltip>
+    );
+  },
+  regions: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Regions in which the {contentModifier} was executed.</p>}
+      >
+        {getLabel("regions")}
       </Tooltip>
     );
   },
