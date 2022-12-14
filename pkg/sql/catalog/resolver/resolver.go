@@ -13,12 +13,8 @@ package resolver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -283,68 +278,11 @@ func ResolveTargetObject(
 	return scInfo, prefix, nil
 }
 
-// ResolveSchemaNameByID resolves a schema's name based on db and schema id.
-// Instead, we have to rely on a scan of the kv table.
-// TODO (SQLSchema): The remaining uses of this should be plumbed through
-//
-//	the desc.Collection's ResolveSchemaByID.
-func ResolveSchemaNameByID(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	db catalog.DatabaseDescriptor,
-	schemaID descpb.ID,
-) (string, error) {
-	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
-	staticSchemaMap := catconstants.GetStaticSchemaIDMap()
-	if schemaName, ok := staticSchemaMap[uint32(schemaID)]; ok {
-		return schemaName, nil
-	}
-	schemas, err := GetForDatabase(ctx, txn, codec, db)
-	if err != nil {
-		return "", err
-	}
-	if schema, ok := schemas[schemaID]; ok {
-		return schema.Name, nil
-	}
-	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, db.GetID())
-}
-
 // SchemaEntryForDB entry for an individual schema,
 // which includes the name and modification timestamp.
 type SchemaEntryForDB struct {
 	Name      string
 	Timestamp hlc.Timestamp
-}
-
-// GetForDatabase looks up and returns all available
-// schema ids to SchemaEntryForDB structures for a
-// given database.
-func GetForDatabase(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db catalog.DatabaseDescriptor,
-) (map[descpb.ID]SchemaEntryForDB, error) {
-	log.Eventf(ctx, "fetching all schema descriptor IDs for database %q (%d)", db.GetName(), db.GetID())
-	cr := catkv.NewUncachedCatalogReader(codec)
-	c, err := cr.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
-	if err != nil {
-		return nil, err
-	}
-	ret := make(map[descpb.ID]SchemaEntryForDB)
-	// This is needed at least for the temp system db during restores.
-	if !db.HasPublicSchemaWithDescriptor() {
-		ret[keys.PublicSchemaIDForBackup] = SchemaEntryForDB{
-			Name:      catconstants.PublicSchemaName,
-			Timestamp: txn.ReadTimestamp(),
-		}
-	}
-	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		ret[e.GetID()] = SchemaEntryForDB{
-			Name:      e.GetName(),
-			Timestamp: e.GetMVCCTimestamp(),
-		}
-		return nil
-	})
-	return ret, nil
 }
 
 // ResolveExisting performs name resolution for an object name when
