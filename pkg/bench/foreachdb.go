@@ -57,18 +57,18 @@ func benchmarkTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
-			UseDatabase:              "bench",
 			DisableDefaultTestTenant: true,
 		})
 	defer s.Stopper().Stop(ctx)
 
 	// Create our own test tenant with a known name.
-	_, err := db.Exec("SELECT crdb_internal.create_tenant(10, 'bench_tenant')")
+	tenantName := "benchtenant"
+	_, err := db.Exec("SELECT crdb_internal.create_tenant(10, $1)", tenantName)
 	require.NoError(b, err)
 
 	// Get a SQL connection to the test tenant.
-	sqlAddr := s.(*server.TestServer).TestingGetSQLAddrForTenant(ctx, "bench_tenant")
-	tenantDB := serverutils.OpenDBConn(b, sqlAddr, "defaultdb", false, s.Stopper())
+	sqlAddr := s.(*server.TestServer).TestingGetSQLAddrForTenant(ctx, tenantName)
+	tenantDB := serverutils.OpenDBConn(b, sqlAddr, "bench", false, s.Stopper())
 
 	// The benchmarks sometime hit the default span limit, so we increase it.
 	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
