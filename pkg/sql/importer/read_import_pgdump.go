@@ -877,7 +877,11 @@ func readPostgresStmt(
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				dbDesc, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, parentID)
+				_, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				})
 				if err != nil {
 					return err
 				}

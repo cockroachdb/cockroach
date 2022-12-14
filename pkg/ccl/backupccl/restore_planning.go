@@ -325,7 +325,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing schema with the same name.
-				id, err := col.Direct().LookupSchemaID(ctx, txn, parentID, sc.Name)
+				id, err := col.LookupSchemaID(ctx, txn, parentID, sc.Name)
 				if err != nil {
 					return err
 				}
@@ -335,7 +335,11 @@ func allocateDescriptorRewrites(
 				} else {
 					// If we found an existing schema, then we need to remap all references
 					// to this schema to the existing one.
-					desc, err := col.Direct().MustGetSchemaDescByID(ctx, txn, id)
+					desc, err := col.GetImmutableSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
+						AvoidLeased:    true,
+						IncludeDropped: true,
+						IncludeOffline: true,
+					})
 					if err != nil {
 						return err
 					}
@@ -384,7 +388,11 @@ func allocateDescriptorRewrites(
 				}
 
 				// Check privileges.
-				parentDB, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, parentID)
+				_, parentDB, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				})
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -449,7 +457,11 @@ func allocateDescriptorRewrites(
 						targetDB, typ.Name)
 				}
 				// Check privileges on the parent DB.
-				parentDB, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, parentID)
+				_, parentDB, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				})
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -697,7 +709,11 @@ func getDatabaseIDAndDesc(
 		return dbID, nil, errors.Errorf("a database named %q needs to exist", targetDB)
 	}
 	// Check privileges on the parent DB.
-	dbDesc, err = col.Direct().MustGetDatabaseDescByID(ctx, txn, dbID)
+	_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidLeased:    true,
+		IncludeDropped: true,
+		IncludeOffline: true,
+	})
 	if err != nil {
 		return 0, nil, errors.Wrapf(err,
 			"failed to lookup parent DB %d", errors.Safe(dbID))
