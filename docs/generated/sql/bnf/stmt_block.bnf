@@ -867,9 +867,12 @@ show_statements_stmt ::=
 	| 'SHOW' 'ALL' opt_cluster statements_or_queries
 
 show_ranges_stmt ::=
-	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
-	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
-	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name
+	'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name opt_show_ranges_options
+	| 'SHOW' 'RANGES' 'FROM' 'TABLE' table_name opt_show_ranges_options
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name opt_show_ranges_options
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG' opt_show_ranges_options
+	| 'SHOW' 'RANGES' opt_show_ranges_options
+	| 'SHOW' 'CLUSTER' 'RANGES' opt_show_ranges_options
 
 show_range_for_row_stmt ::=
 	'SHOW' 'RANGE' 'FROM' 'TABLE' table_name 'FOR' 'ROW' '(' expr_list ')'
@@ -1077,6 +1080,7 @@ unreserved_keyword ::=
 	| 'DEPENDS'
 	| 'DESTINATION'
 	| 'DETACHED'
+	| 'DETAILS'
 	| 'DISCARD'
 	| 'DOMAIN'
 	| 'DOUBLE'
@@ -1950,6 +1954,9 @@ statements_or_queries ::=
 	'STATEMENTS'
 	| 'QUERIES'
 
+opt_show_ranges_options ::=
+	'WITH' show_ranges_options
+
 opt_compact ::=
 	'COMPACT'
 	| 
@@ -2644,6 +2651,9 @@ targets_roles ::=
 	| 'SCHEMA' schema_wildcard
 	| 'TYPE' type_name_list
 	| grant_targets
+
+show_ranges_options ::=
+	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
 
 partition ::=
 	'PARTITION' partition_name

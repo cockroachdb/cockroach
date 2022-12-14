@@ -15,6 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -59,8 +62,16 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 
 	const query = `
 SELECT
-	CASE WHEN r.start_key < x'%[5]s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
-	CASE WHEN r.end_key >= x'%[6]s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
+	CASE
+    WHEN r.start_key = crdb_internal.table_span(%[1]d)[1] THEN '…/<TableMin>'
+    WHEN r.start_key < crdb_internal.table_span(%[1]d)[1] THEN '<before:'||crdb_internal.pretty_key(r.start_key,-1)||'>'
+    ELSE '…'||crdb_internal.pretty_key(r.start_key, 2)
+  END AS start_key,
+	CASE
+    WHEN r.end_key = crdb_internal.table_span(%[1]d)[2] THEN '…/<TableMax>'
+    WHEN r.end_key < crdb_internal.table_span(%[1]d)[2] THEN '<after:'||crdb_internal.pretty_key(r.end_key,-1)||'>'
+    ELSE '…'||crdb_internal.pretty_key(r.end_key, 2)
+  END AS end_key,
 	range_id,
 	lease_holder,
 	replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
@@ -84,4 +95,23 @@ WHERE (r.start_key <= crdb_internal.encode_key(%[1]d, %[2]d, %[3]s))
 			idxSpanEnd,
 		),
 	)
+}
+
+func checkPrivilegesForShowRanges(d *delegator, table cat.Table) error {
+	// Basic requirement is SELECT priviliges
+	if err := d.catalog.CheckPrivilege(d.ctx, table, privilege.SELECT); err != nil {
+		return err
+	}
+	hasAdmin, err := d.catalog.HasAdminRole(d.ctx)
+	if err != nil {
+		return err
+	}
+	// User needs to either have admin access or have the correct ZONECONFIG privilege
+	if hasAdmin {
+		return nil
+	}
+	if err := d.catalog.CheckPrivilege(d.ctx, table, privilege.ZONECONFIG); err != nil {
+		return pgerror.Wrapf(err, pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can use SHOW RANGES on %s", table.Name())
+	}
+	return nil
 }

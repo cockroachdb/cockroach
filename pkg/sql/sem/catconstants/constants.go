@@ -127,6 +127,7 @@ const (
 	CrdbInternalGossipNetworkTableID
 	CrdbInternalTransactionContentionEvents
 	CrdbInternalIndexColumnsTableID
+	CrdbInternalIndexSpansTableID
 	CrdbInternalIndexUsageStatisticsTableID
 	CrdbInternalInflightTraceSpanTableID
 	CrdbInternalJobsTableID
@@ -153,6 +154,7 @@ const (
 	CrdbInternalStmtStatsTableID
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
+	CrdbInternalTableSpansTableID
 	CrdbInternalTablesTableID
 	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTransactionStatsTableID

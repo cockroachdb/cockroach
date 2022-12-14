@@ -46,6 +46,7 @@ crdb_internal  gossip_liveness                  table  admin  NULL  NULL
 crdb_internal  gossip_network                   table  admin  NULL  NULL
 crdb_internal  gossip_nodes                     table  admin  NULL  NULL
 crdb_internal  index_columns                    table  admin  NULL  NULL
+crdb_internal  index_spans                      table  admin  NULL  NULL
 crdb_internal  index_usage_statistics           table  admin  NULL  NULL
 crdb_internal  invalid_objects                  table  admin  NULL  NULL
 crdb_internal  jobs                             table  admin  NULL  NULL
@@ -85,6 +86,7 @@ crdb_internal  system_jobs                      table  admin  NULL  NULL
 crdb_internal  table_columns                    table  admin  NULL  NULL
 crdb_internal  table_indexes                    table  admin  NULL  NULL
 crdb_internal  table_row_statistics             table  admin  NULL  NULL
+crdb_internal  table_spans                      table  admin  NULL  NULL
 crdb_internal  tables                           table  admin  NULL  NULL
 crdb_internal  tenant_usage_details             view   admin  NULL  NULL
 crdb_internal  transaction_contention_events    table  admin  NULL  NULL
@@ -446,15 +448,15 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-query ITTTTITTTTTTTTTTTI colnames
+query ITTTTITTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  table_id  database_name  schema_name  table_name  index_name  replicas  replica_localities voting_replicas non_voting_replicas  learner_replicas  split_enforced_until  lease_holder range_size
+range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  lease_holder  range_size
 
-query ITTTTITTTTTTTTTT colnames
+query ITTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  table_id  database_name  schema_name  table_name  index_name  replicas  replica_localities voting_replicas non_voting_replicas learner_replicas  split_enforced_until
+range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
 statement ok
 CREATE SCHEMA schema; CREATE TABLE schema.bar (y INT PRIMARY KEY)
@@ -596,38 +598,27 @@ start_pretty    end_pretty  split_enforced_until
 /Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_key, end_key, split_enforced_until FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+start_key  end_key       split_enforced_until
+…/1/2      <after:/Max>  2262-04-11 23:47:16.854776 +0000 +0000
 
 statement ok
 ALTER TABLE foo UNSPLIT AT VALUES(2)
 
 query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty  end_pretty
-
-query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
-----
-start_pretty  end_pretty
+start_key  end_key
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES(2) WITH EXPIRATION '2200-01-01 00:00:00.0'
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_key, end_key, split_enforced_until FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
-
-query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
-----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+start_key  end_key       split_enforced_until
+…/1/2      <after:/Max>  2200-01-01 00:00:00 +0000 +0000
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
@@ -638,12 +629,12 @@ ALTER TABLE foo UNSPLIT ALL
 query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty   end_pretty
+start_pretty  end_pretty
 
 query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty   end_pretty
+start_pretty  end_pretty
 
 # Make sure that the cluster id isn't unset.
 query B
@@ -671,6 +662,9 @@ select * from crdb_internal.node_runtime_info
 
 query error pq: only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 select * from crdb_internal.ranges
+
+query error pq: only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+SHOW RANGES FROM TABLE foo
 
 query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
 select * from crdb_internal.gossip_nodes
@@ -883,8 +877,9 @@ node_id  store_id
 
 # Do the compaction.
 query B colnames
-SELECT crdb_internal.compact_engine_span(1, 1, start_key, end_key)
-FROM crdb_internal.ranges_no_leases WHERE table_name = 'foo' LIMIT 1
+SELECT crdb_internal.compact_engine_span(1, 1, raw_start_key, raw_end_key)
+FROM [SHOW RANGES FROM TABLE foo WITH KEYS]
+LIMIT 1
 ----
 crdb_internal.compact_engine_span
 true

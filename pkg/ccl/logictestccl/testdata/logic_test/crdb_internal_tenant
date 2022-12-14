@@ -54,6 +54,7 @@ crdb_internal  gossip_liveness                  table  admin  NULL  NULL
 crdb_internal  gossip_network                   table  admin  NULL  NULL
 crdb_internal  gossip_nodes                     table  admin  NULL  NULL
 crdb_internal  index_columns                    table  admin  NULL  NULL
+crdb_internal  index_spans                      table  admin  NULL  NULL
 crdb_internal  index_usage_statistics           table  admin  NULL  NULL
 crdb_internal  invalid_objects                  table  admin  NULL  NULL
 crdb_internal  jobs                             table  admin  NULL  NULL
@@ -93,6 +94,7 @@ crdb_internal  system_jobs                      table  admin  NULL  NULL
 crdb_internal  table_columns                    table  admin  NULL  NULL
 crdb_internal  table_indexes                    table  admin  NULL  NULL
 crdb_internal  table_row_statistics             table  admin  NULL  NULL
+crdb_internal  table_spans                      table  admin  NULL  NULL
 crdb_internal  tables                           table  admin  NULL  NULL
 crdb_internal  tenant_usage_details             view   admin  NULL  NULL
 crdb_internal  transaction_contention_events    table  admin  NULL  NULL

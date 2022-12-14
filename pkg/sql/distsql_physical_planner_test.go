@@ -418,14 +418,16 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		))
 	}
 	r.CheckQueryResults(t,
-		"SELECT start_key, end_key, lease_holder, replicas FROM [SHOW RANGES FROM TABLE t]",
+		`SELECT IF(substring(start_key for 1)='…',start_key,NULL),
+            IF(substring(end_key for 1)='…',end_key,NULL),
+            lease_holder, replicas FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`,
 		[][]string{
-			{"NULL", "/0", "1", "{1}"},
-			{"/0", "/20", "1", "{1,2,3}"},
-			{"/20", "/40", "2", "{2,3,4}"},
-			{"/40", "/60", "3", "{1,3,4}"},
-			{"/60", "/80", "4", "{1,2,4}"},
-			{"/80", "NULL", "5", "{2,3,5}"},
+			{"NULL", "…/1/0", "1", "{1}"},
+			{"…/1/0", "…/1/20", "1", "{1,2,3}"},
+			{"…/1/20", "…/1/40", "2", "{2,3,4}"},
+			{"…/1/40", "…/1/60", "3", "{1,3,4}"},
+			{"…/1/60", "…/1/80", "4", "{1,2,4}"},
+			{"…/1/80", "NULL", "5", "{2,3,5}"},
 		},
 	)
 

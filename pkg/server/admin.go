@@ -1051,14 +1051,11 @@ func (s *adminServer) tableDetailsHelper(
 	row, cols, err = s.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-show-mvcc-garbage-info", nil,
 		sessiondata.InternalExecutorOverride{User: userName},
-		`WITH
+		fmt.Sprintf(
+			`WITH
 			range_stats AS (
-				SELECT
-					crdb_internal.range_stats(start_key) AS d
-				FROM
-					crdb_internal.ranges_no_leases
-				WHERE
-					table_id = $1::REGCLASS
+				SELECT crdb_internal.range_stats(raw_start_key) AS d
+				FROM [SHOW RANGES FROM TABLE %s WITH KEYS]
 			),
 			aggregated AS (
 				SELECT
@@ -1077,7 +1074,7 @@ func (s *adminServer) tableDetailsHelper(
 				COALESCE(live, 0)::INT8 as live_bytes,
 				COALESCE(live / NULLIF(total,0), 0)::FLOAT8 as live_percentage
 			FROM aggregated`,
-		escQualTable,
+			escQualTable),
 	)
 	if err != nil {
 		return nil, err
