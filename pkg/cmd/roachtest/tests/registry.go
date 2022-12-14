@@ -94,6 +94,7 @@ func RegisterTests(r registry.Registry) {
 	registerPsycopg(r)
 	registerQueue(r)
 	registerQuitTransfersLeases(r)
+	registerRangeDensity(r)
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)
 	registerRestart(r)
