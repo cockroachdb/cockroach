@@ -68,7 +68,7 @@ EXPLAIN (VEC) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN da
 ----
 │
 └ Node 1
-  └ *rowexec.hashGroupJoiner
+  └ *colexec.hashGroupJoiner
     ├ *colfetcher.ColBatchScan
     └ *colfetcher.ColBatchScan
 
