@@ -378,7 +378,7 @@ func allocateDescriptorRewrites(
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
 				tableName := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
-				err := col.Direct().CheckObjectCollision(ctx, txn, parentID, table.GetParentSchemaID(), tableName)
+				err := descs.CheckObjectNameCollision(ctx, col, txn, parentID, table.GetParentSchemaID(), tableName)
 				if err != nil {
 					return err
 				}
@@ -464,8 +464,9 @@ func allocateDescriptorRewrites(
 					}
 					return
 				}
-				desc, err := col.Direct().GetDescriptorCollidingWithObject(
+				desc, err := descs.GetDescriptorCollidingWithObjectName(
 					ctx,
+					col,
 					txn,
 					parentID,
 					getParentSchemaID(typ),
@@ -492,7 +493,7 @@ func allocateDescriptorRewrites(
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
 					typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
-					err = col.Direct().CheckObjectCollision(ctx, txn, parentID, getParentSchemaID(typ), typeName)
+					err = descs.CheckObjectNameCollision(ctx, col, txn, parentID, getParentSchemaID(typ), typeName)
 					if err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}

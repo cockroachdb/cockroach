@@ -160,8 +160,9 @@ func getCreateTypeParams(
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
-	err = params.p.Descriptors().Direct().CheckObjectCollision(
+	err = descs.CheckObjectNameCollision(
 		params.ctx,
+		params.p.Descriptors(),
 		params.p.txn,
 		db.GetID(),
 		schema.GetID(),

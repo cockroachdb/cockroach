@@ -553,8 +553,9 @@ func prepareNewTablesForIngestion(
 	// collisions with any importing tables.
 	for i := range newMutableTableDescriptors {
 		tbl := newMutableTableDescriptors[i]
-		err := descsCol.Direct().CheckObjectCollision(
+		err := descs.CheckObjectNameCollision(
 			ctx,
+			descsCol,
 			txn,
 			tbl.GetParentID(),
 			tbl.GetParentSchemaID(),

@@ -19,9 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/errors"
 )
 
 // Direct provides access to the underlying key-value store directly. A key
@@ -80,22 +77,6 @@ type Direct interface {
 	ResolveSchemaID(
 		ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
 	) (descpb.ID, error)
-
-	// GetDescriptorCollidingWithObject looks up the object ID and returns the
-	// corresponding descriptor if it exists.
-	GetDescriptorCollidingWithObject(
-		ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
-	) (catalog.Descriptor, error)
-
-	// CheckObjectCollision returns an error if an object already exists with the
-	// same parentID, parentSchemaID and name.
-	CheckObjectCollision(
-		ctx context.Context,
-		txn *kv.Txn,
-		parentID descpb.ID,
-		parentSchemaID descpb.ID,
-		name tree.ObjectName,
-	) error
 
 	// LookupDatabaseID is a wrapper around LookupObjectID for databases.
 	LookupDatabaseID(
@@ -253,54 +234,6 @@ func (d *direct) ResolveSchemaID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
 	return d.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, scName)
-}
-
-// GetDescriptorCollidingWithObject is part of the Direct interface.
-func (d *direct) GetDescriptorCollidingWithObject(
-	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
-) (catalog.Descriptor, error) {
-	id, err := d.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
-	if err != nil || id == descpb.InvalidID {
-		return nil, err
-	}
-	// ID is already in use by another object.
-	// Look it up without any validation to make sure the error returned is not a
-	// validation error.
-	const isDescriptorRequired = false
-	c, err := d.cr.GetByIDs(ctx, txn, []descpb.ID{id}, isDescriptorRequired, catalog.Any)
-	if err != nil {
-		return nil, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-	} else if c.LookupDescriptor(id) == nil {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(
-			catalog.ErrDescriptorNotFound,
-			"parentID=%d parentSchemaID=%d name=%q has ID=%d",
-			parentID, parentSchemaID, name, id)
-	}
-	// Look up and return the colliding object. This should already be in the
-	// cache.
-	return d.MustGetDescriptorByID(ctx, txn, id, catalog.Any)
-}
-
-// CheckObjectCollision is part of the Direct interface.
-func (d *direct) CheckObjectCollision(
-	ctx context.Context,
-	txn *kv.Txn,
-	parentID descpb.ID,
-	parentSchemaID descpb.ID,
-	name tree.ObjectName,
-) error {
-	desc, err := d.GetDescriptorCollidingWithObject(ctx, txn, parentID, parentSchemaID, name.Object())
-	if err != nil {
-		return err
-	}
-	if desc != nil {
-		maybeQualifiedName := name.Object()
-		if name.Catalog() != "" && name.Schema() != "" {
-			maybeQualifiedName = name.FQString()
-		}
-		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), maybeQualifiedName)
-	}
-	return nil
 }
 
 // LookupObjectID is part of the Direct interface.
