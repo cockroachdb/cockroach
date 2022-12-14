@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -69,18 +70,27 @@ type schemaResolver struct {
 // GetObjectNamesAndIDs implements the resolver.SchemaResolver interface.
 func (sr *schemaResolver) GetObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
-) (tableNames tree.TableNames, tableIDs descpb.IDs, _ error) {
-	c, err := sr.descCollection.GetObjectNamesAndIDs(ctx, sr.txn, db, sc)
+) (objectNames tree.TableNames, objectIDs descpb.IDs, _ error) {
+	c, err := sr.descCollection.GetAllObjectsInSchema(ctx, sr.txn, db, sc)
 	if err != nil {
 		return nil, nil, err
 	}
-	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		tn := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(e.GetName()))
-		tableNames = append(tableNames, tn)
-		tableIDs = append(tableIDs, e.GetID())
+	var mc nstree.MutableCatalog
+	_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if !desc.SkipNamespace() && !desc.Dropped() {
+			mc.UpsertNamespaceEntry(desc, desc.GetID(), hlc.Timestamp{})
+		}
 		return nil
 	})
-	return tableNames, tableIDs, nil
+	_ = mc.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		tn := tree.MakeTableNameWithSchema(
+			tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(e.GetName()),
+		)
+		objectNames = append(objectNames, tn)
+		objectIDs = append(objectIDs, e.GetID())
+		return nil
+	})
+	return objectNames, objectIDs, nil
 }
 
 // MustGetCurrentSessionDatabase implements the resolver.SchemaResolver interface.

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -230,7 +229,7 @@ func cleanupTempSchemaObjects(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 ) error {
-	c, err := descsCol.GetObjectNamesAndIDs(ctx, txn, db, sc)
+	objects, err := descsCol.GetAllObjectsInSchema(ctx, txn, db, sc)
 	if err != nil {
 		return err
 	}
@@ -247,27 +246,28 @@ func cleanupTempSchemaObjects(
 
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor)
 	tblNamesByID := make(map[descpb.ID]tree.TableName)
-	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, e.GetID())
-		if err != nil {
-			return err
+	_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok || desc.Dropped() {
+			return nil
 		}
-
-		tblDescsByID[desc.GetID()] = desc
-		tblNamesByID[desc.GetID()] = tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(e.GetName()))
+		tblDescsByID[desc.GetID()] = tbl
+		tblNamesByID[desc.GetID()] = tree.MakeTableNameWithSchema(
+			tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(tbl.GetName()),
+		)
 
 		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
 		// If a sequence is owned by a table column, it is dropped when the owner
 		// table/column is dropped. So here we want to only drop sequences not
 		// owned.
-		if desc.IsSequence() &&
-			desc.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
-			desc.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
+		if tbl.IsSequence() &&
+			tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
+			tbl.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
 			sequences = append(sequences, desc.GetID())
-		} else if desc.GetViewQuery() != "" {
+		} else if tbl.GetViewQuery() != "" {
 			views = append(views, desc.GetID())
-		} else if !desc.IsSequence() {
+		} else if !tbl.IsSequence() {
 			tables = append(tables, desc.GetID())
 		}
 		return nil

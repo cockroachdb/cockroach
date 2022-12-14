@@ -20,7 +20,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -980,7 +980,7 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(sc catalog.SchemaDescriptor) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
 						tree.NewDString(sc.GetName()), // schema_name
@@ -1075,7 +1075,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(sc catalog.SchemaDescriptor) error {
 					privs := sc.GetPrivileges().Show(privilege.Schema, true /* showImplicitOwnerPrivs */)
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.GetName())
@@ -2247,69 +2247,57 @@ var informationSchemaViewTableUsageTable = virtualSchemaTable{
 func forEachSchema(
 	ctx context.Context,
 	p *planner,
-	db catalog.DatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
+	requiresPrivileges bool,
 	fn func(sc catalog.SchemaDescriptor) error,
 ) error {
-	schemaNames, err := getSchemaNames(ctx, p, db)
-	if err != nil {
-		return err
-	}
-
-	vtableEntries := p.getVirtualTabler().getSchemas()
-	schemas := make([]catalog.SchemaDescriptor, 0, len(schemaNames)+len(vtableEntries))
-	var userDefinedSchemaIDs []descpb.ID
-	for id, name := range schemaNames {
-		switch {
-		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
-			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
-		case name == tree.PublicSchema:
-			// TODO(richardjcai): Remove this in 22.2. In 22.2, only the system
-			// public schema will continue to use keys.PublicSchemaID (29).
-			if id == keys.PublicSchemaID {
-				schemas = append(schemas, schemadesc.GetPublicSchema())
-			} else {
-				// The default case is a user defined schema. Collect the ID to get the
-				// descriptor later.
-				userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
-			}
-		default:
-			// The default case is a user defined schema. Collect the ID to get the
-			// descriptor later.
-			userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
-		}
-	}
-
-	userDefinedSchemas, err := p.Descriptors().Direct().GetSchemaDescriptorsFromIDs(ctx, p.txn, userDefinedSchemaIDs)
-	if err != nil {
-		return err
-	}
-	for i := range userDefinedSchemas {
-		desc := userDefinedSchemas[i]
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, db, false /* allowAdding */)
+	forEachDatabase := func(db catalog.DatabaseDescriptor) error {
+		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db)
 		if err != nil {
 			return err
 		}
-		if !canSeeDescriptor {
-			continue
-		}
-		schemas = append(schemas, desc)
-	}
-
-	for _, schema := range vtableEntries {
-		schemas = append(schemas, schema.Desc())
-	}
-
-	sort.Slice(schemas, func(i int, j int) bool {
-		return schemas[i].GetName() < schemas[j].GetName()
-	})
-
-	for _, sc := range schemas {
-		if err := fn(sc); err != nil {
+		var schemas []catalog.SchemaDescriptor
+		if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			if requiresPrivileges {
+				canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, db, false /* allowAdding */)
+				if err != nil {
+					return err
+				}
+				if !canSeeDescriptor {
+					return nil
+				}
+			}
+			sc, err := catalog.AsSchemaDescriptor(desc)
+			schemas = append(schemas, sc)
+			return err
+		}); err != nil {
 			return err
 		}
+		sort.Slice(schemas, func(i int, j int) bool {
+			return schemas[i].GetName() < schemas[j].GetName()
+		})
+		for _, sc := range schemas {
+			if err := fn(sc); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	return nil
+	if dbContext != nil {
+		return iterutil.Map(forEachDatabase(dbContext))
+	}
+	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
+	if err != nil {
+		return err
+	}
+	return c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		db, err := catalog.AsDatabaseDescriptor(desc)
+		if err != nil {
+			return err
+		}
+		return forEachDatabase(db)
+	})
 }
 
 // forEachDatabaseDesc calls a function for the given DatabaseDescriptor, or if
@@ -2499,32 +2487,6 @@ func forEachTableDescWithTableLookup(
 	)
 }
 
-func getSchemaNames(
-	ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor,
-) (map[descpb.ID]string, error) {
-	if dbContext != nil {
-		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext)
-	}
-	ret := make(map[descpb.ID]string)
-	allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
-	if err != nil {
-		return nil, err
-	}
-	for _, db := range allDbDescs {
-		if db == nil {
-			return nil, catalog.ErrDescriptorNotFound
-		}
-		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db)
-		if err != nil {
-			return nil, err
-		}
-		for id, name := range schemas {
-			ret[id] = name
-		}
-	}
-	return ret, nil
-}
-
 // forEachTableDescWithTableLookupInternal is the logic that supports
 // forEachTableDescWithTableLookup.
 //
@@ -2655,27 +2617,21 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 				// missing temporary schema name. Temporary schemas have namespace
 				// entries. The below code will go and lookup schema names from the
 				// namespace table if needed to qualify the name of a temporary table.
-				namesForSchema, err := getSchemaNames(ctx, p, dbDesc)
-				if err != nil {
-					return errors.Wrapf(err, "failed to look up schema id %d", table.GetParentSchemaID())
-				}
-				for id, n := range namesForSchema {
-					if id != table.GetParentSchemaID() {
-						continue
+				if err := forEachSchema(ctx, p, dbDesc, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
+					if schema.GetID() != table.GetParentSchemaID() {
+						return nil
 					}
-					_, exists, err := lCtx.GetSchemaName(ctx, id, dbDesc.GetID(), p.ExecCfg().Settings.Version)
-					if err != nil {
+					_, exists, err := lCtx.GetSchemaName(ctx, schema.GetID(), dbDesc.GetID(), p.ExecCfg().Settings.Version)
+					if err != nil || exists {
 						return err
 					}
-					if exists {
-						continue
-					}
-					if strings.HasPrefix(n, catconstants.PgTempSchemaName) {
-						sc = schemadesc.NewTemporarySchema(n, id, dbDesc.GetID())
-						lCtx.schemaNames[id] = n
-						lCtx.schemaDescs[id] = sc
-						lCtx.schemaIDs = append(lCtx.schemaIDs, id)
-					}
+					sc = schema
+					lCtx.schemaNames[sc.GetID()] = sc.GetName()
+					lCtx.schemaDescs[sc.GetID()] = sc
+					lCtx.schemaIDs = append(lCtx.schemaIDs, sc.GetID())
+					return nil
+				}); err != nil {
+					return errors.Wrapf(err, "failed to look up schema id %d", table.GetParentSchemaID())
 				}
 				if sc == nil {
 					sc = schemadesc.NewTemporarySchema(catconstants.PgTempSchemaName, table.GetParentSchemaID(), dbDesc.GetID())

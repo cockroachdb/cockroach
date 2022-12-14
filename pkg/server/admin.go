@@ -2085,6 +2085,33 @@ func (s *adminServer) Cluster(
 	}, nil
 }
 
+// Health returns whether this sql tenant is ready to receive
+// traffic.
+//
+// See the docstring for HealthRequest for more details about
+// what this function precisely reports.
+//
+// Note: Health is non-privileged and non-authenticated and thus
+// must not report privileged information.
+func (s *adminServer) Health(
+	ctx context.Context, req *serverpb.HealthRequest,
+) (*serverpb.HealthResponse, error) {
+	telemetry.Inc(telemetryHealthCheck)
+
+	resp := &serverpb.HealthResponse{}
+	// If Ready is not set, the client doesn't want to know whether this node is
+	// ready to receive client traffic.
+	if !req.Ready {
+		return resp, nil
+	}
+
+	if !s.sqlServer.isReady.Get() {
+		return nil, grpcstatus.Errorf(codes.Unavailable, "node is not accepting SQL clients")
+	}
+
+	return resp, nil
+}
+
 // Health returns liveness for the node target of the request.
 //
 // See the docstring for HealthRequest for more details about
