@@ -1017,15 +1017,11 @@ func (p *pebbleMVCCScanner) backwardLatestVersion(key []byte, i int) bool {
 // "current" key directly).
 func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 	for i := 0; i < p.itersBeforeSeek; i++ {
-		peekedKey, ok := p.iterPeekPrev()
-		if !ok {
-			return false
-		}
-		if !bytes.Equal(peekedKey, key) {
-			return p.backwardLatestVersion(peekedKey, i+1)
-		}
 		if !p.iterPrev() {
 			return false
+		}
+		if !bytes.Equal(p.curUnsafeKey.Key, key) {
+			return p.backwardLatestVersion(p.curUnsafeKey.Key, i+1)
 		}
 	}
 
@@ -1433,23 +1429,20 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 	p.parentReverse = false
 	if p.reverse && p.peeked {
 		// If we have peeked at the previous entry, we need to advance the iterator
-		// twice.
+		// to get back to the current entry.
 		p.peeked = false
 		if !p.iterValid() {
 			// We were peeked off the beginning of iteration. Seek to the first
-			// entry, and then advance one step.
+			// entry, since that is the current entry.
 			p.parent.SeekGE(MVCCKey{Key: p.start})
-			if !p.iterValid() {
-				return false
-			}
+		} else {
 			p.parent.Next()
-			return p.updateCurrent()
 		}
-		p.parent.Next()
 		if !p.iterValid() {
 			return false
 		}
 	}
+	// Step forward from the current entry.
 	p.parent.Next()
 	return p.updateCurrent()
 }
@@ -1459,9 +1452,9 @@ func (p *pebbleMVCCScanner) iterPrev() bool {
 	p.parentReverse = true
 	if p.peeked {
 		p.peeked = false
-		return p.updateCurrent()
+	} else {
+		p.parent.Prev()
 	}
-	p.parent.Prev()
 	return p.updateCurrent()
 }
 
