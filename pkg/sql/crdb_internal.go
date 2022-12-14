@@ -849,8 +849,11 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 }
 
 const (
-	jobsQSelect      = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
-	jobsQFrom        = ` FROM system.jobs`
+	jobsQSelect = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
+	// Note that we are querying crdb_internal.system_jobs() instead of system.jobs directly.
+	// crdb_internal.system_jobs() has access control built in and will filter out jobs that the
+	// user is not allowed to see.
+	jobsQFrom        = ` FROM crdb_internal.system_jobs()`
 	jobsBackoffArgs  = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
 	jobsStatusFilter = ` WHERE status = $3`
 	jobsQuery        = jobsQSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
@@ -908,22 +911,8 @@ func makeJobsTableRows(
 	query string,
 	params ...interface{},
 ) (matched bool, err error) {
-	// Beware: we're querying system.jobs as root; we need to be careful to filter
-	// out results that the current user is not able to see.
-	currentUser := p.SessionData().User()
-	isAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return matched, err
-	}
-
-	hasControlJob, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
-	if err != nil {
-		return matched, err
-	}
-
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 		ctx, "crdb-internal-jobs-table", p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		query, params...)
 	if err != nil {
 		return matched, err
@@ -997,14 +986,9 @@ func makeJobsTableRows(
 
 		// We filter out masked rows before we allocate all the
 		// datums. Needless allocate when not necessary.
-		ownedByAdmin := false
 		var sqlUsername username.SQLUsername
 		if payload != nil {
 			sqlUsername = payload.UsernameProto.Decode()
-			ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
-			if err != nil {
-				errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
-			}
 		}
 		if sessionID, ok := sessionIDBytes.(*tree.DBytes); ok {
 			if isAlive, err := p.EvalContext().SQLLivenessReader.IsAlive(
@@ -1014,10 +998,6 @@ func makeJobsTableRows(
 			} else if instanceID, ok := instanceID.(*tree.DInt); ok && isAlive {
 				coordinatorID = instanceID
 			}
-		}
-
-		if !builtins.UserHasJobAccess(currentUser, isAdmin, hasControlJob, sqlUsername, ownedByAdmin) {
-			continue
 		}
 
 		if err != nil {
@@ -1080,7 +1060,7 @@ func makeJobsTableRows(
 				traceID = tree.NewDInt(tree.DInt(progress.TraceID))
 			}
 		}
-		if payload != nil {
+		if payload != nil && len(payload.RetriableExecutionFailureLog) > 0 {
 			executionErrors = jobs.FormatRetriableExecutionErrorLogToStringArray(
 				ctx, payload.RetriableExecutionFailureLog,
 			)
