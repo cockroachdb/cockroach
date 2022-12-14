@@ -218,6 +218,10 @@ const (
 	// In this case, if the interval is not synthetic, its value has to be positive
 	// and last longer than a nanosecond.
 	Split
+
+	// ReplicationCutover is when the DatumToHLC() is used for an
+	// ALTER TENANT ... COMPLETE REPLICATION statement.
+	ReplicationCutover
 )
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.

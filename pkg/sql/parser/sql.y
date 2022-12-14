@@ -6062,6 +6062,7 @@ set_csetting_stmt:
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
+
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
 // %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING
@@ -6075,6 +6076,8 @@ alter_tenant_stmt:
 // %Text:
 // ALTER TENANT '<tenant_name>' PAUSE REPLICATION
 // ALTER TENANT '<tenant_name>' RESUME REPLICATION
+// ALTER TENANT '<tenant_name>' COMPLETE REPLICATION TO LATEST
+// ALTER TENANT '<tenant_name>' COMPLETE REPLICATION TO SYSTEM TIME 'time'
 alter_tenant_replication_stmt:
   ALTER TENANT d_expr PAUSE REPLICATION
   {
@@ -6090,6 +6093,26 @@ alter_tenant_replication_stmt:
     $$.val = &tree.AlterTenantReplication{
       TenantName: $3.expr(),
       Command: tree.ResumeJob,
+    }
+  }
+| ALTER TENANT d_expr COMPLETE REPLICATION TO SYSTEM TIME a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantName: $3.expr(),
+      Cutover: &tree.ReplicationCutoverTime{
+        Timestamp: $9.expr(),
+      },
+    }
+  }
+| ALTER TENANT d_expr COMPLETE REPLICATION TO LATEST
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantName: $3.expr(),
+      Cutover: &tree.ReplicationCutoverTime{
+        Latest: true,
+      },
     }
   }
 

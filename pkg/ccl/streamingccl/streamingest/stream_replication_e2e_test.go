@@ -151,11 +151,45 @@ func (c *tenantStreamingClusters) waitUntilHighWatermark(
 	})
 }
 
+// Waits for the ingestion job high watermark to reach the recorded start time of the job.
+func (c *tenantStreamingClusters) waitUntilStartTimeReached(ingestionJobID jobspb.JobID) {
+	waitUntilStartTimeReached(c.t, c.destSysSQL, ingestionJobID)
+}
+
+func waitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID) {
+	testutils.SucceedsSoon(t, func() error {
+		payload := jobutils.GetJobPayload(t, db, ingestionJobID)
+		details, ok := payload.Details.(*jobspb.Payload_StreamIngestion)
+		if !ok {
+			return errors.New("job does not appear to be a stream ingestion job")
+		}
+		if details.StreamIngestion == nil {
+			return errors.New("no stream ingestion details")
+		}
+		startTime := details.StreamIngestion.ReplicationStartTime
+		if startTime.IsEmpty() {
+			return errors.New("ingestion start time not yet recorded")
+		}
+
+		progress := jobutils.GetJobProgress(t, db, ingestionJobID)
+		if progress.GetHighWater() == nil {
+			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
+				startTime.String())
+		}
+		highwater := *progress.GetHighWater()
+		if highwater.Less(startTime) {
+			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
+				highwater.String(), startTime.String())
+		}
+		return nil
+	})
+}
+
 func (c *tenantStreamingClusters) cutover(
 	producerJobID, ingestionJobID int, cutoverTime time.Time,
 ) {
 	// Cut over the ingestion job and the job will stop eventually.
-	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
+	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, c.args.destTenantName, cutoverTime)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 }
@@ -356,6 +390,8 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 		tenantSQL.Exec(t, "IMPORT INTO d.x CSV DATA ($1)", dataSrv.URL)
 	})
 
+	c.waitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
 	var cutoverTime time.Time
 	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
@@ -366,9 +402,6 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	// <-time.NewTimer(2 * time.Second).C
 	// _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
 	// require.Error(t, err)
-	require.Equal(t, "running the SQL flow for the stream ingestion job",
-		runningStatus(t, c.destSysSQL, ingestionJobID))
-
 	c.cutover(producerJobID, ingestionJobID, cutoverTime)
 
 	require.Equal(t, "stream ingestion finished successfully",
@@ -653,11 +686,9 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToRun(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
-	var cutoverTime time.Time
-	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-	})
-	c.cutover(producerJobID, ingestionJobID, cutoverTime)
+	cutoverTime := c.destSysServer.Clock().Now()
+	c.waitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
+	c.cutover(producerJobID, ingestionJobID, cutoverTime.GoTime())
 
 	// Clients should never be started prior to a checkpointed timestamp
 	for _, clientStartTime := range lastClientStart {
@@ -881,7 +912,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	var cutoverTime time.Time
 	alternateSrcSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 
-	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime)
+	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, c.args.destTenantName, cutoverTime)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
 	// The destroyed address should have been removed from the topology
@@ -916,6 +947,8 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 
 	c.srcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
 
+	c.waitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
 	cutoverTime := c.srcCluster.Server(0).Clock().Now()
 	c.waitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
 
@@ -926,7 +959,7 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	// Destroy the source cluster
 	c.srcCleanup()
 
-	c.destSysSQL.Exec(c.t, `SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, ingestionJobID, cutoverTime.GoTime())
+	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, c.args.destTenantName, cutoverTime.AsOfSystemTime())
 
 	// Resume ingestion.
 	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
@@ -1052,12 +1085,10 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
 	})
 
-	var cutoverTime time.Time
-	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-	})
+	c.waitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 
-	c.cutover(producerJobID, ingestionJobID, cutoverTime)
+	cutoverTime := c.destSysServer.Clock().Now()
+	c.cutover(producerJobID, ingestionJobID, cutoverTime.GoTime())
 
 	cleanupTenant := c.createDestTenantSQL(ctx)
 	defer func() {
