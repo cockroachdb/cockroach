@@ -8,7 +8,7 @@ docker pull $BASE_IMAGE && docker pull $BAZEL_IMAGE
 LATEST_BASE_IMAGE_CREATE_DT="$(docker inspect $BASE_IMAGE -f '{{.Created}}')"
 LATEST_BAZEL_IMAGE_CREATE_DT="$(docker inspect $BAZEL_IMAGE -f '{{.Created}}')"
 
-if [[ LATEST_BASE_IMAGE_CREATE_DT < LATEST_BAZEL_IMAGE_CREATE_DT ]]; then
+if [[ $LATEST_BASE_IMAGE_CREATE_DT < $LATEST_BAZEL_IMAGE_CREATE_DT ]]; then
     echo "Base image is up to date. No-op."
     exit 0
 fi
