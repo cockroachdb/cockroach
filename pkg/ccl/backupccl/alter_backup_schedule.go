@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -254,7 +255,7 @@ func processScheduleOptions(
 	for k, v := range scheduleOptions {
 		switch k {
 		case optOnExecFailure:
-			if err := parseOnError(v, fullDetails); err != nil {
+			if err := schedulebase.ParseOnError(v, fullDetails); err != nil {
 				return err
 			}
 			// Set the schedule to mark the column as dirty.
@@ -262,12 +263,12 @@ func processScheduleOptions(
 			if incDetails == nil {
 				continue
 			}
-			if err := parseOnError(v, incDetails); err != nil {
+			if err := schedulebase.ParseOnError(v, incDetails); err != nil {
 				return err
 			}
 			s.incJob.SetScheduleDetails(*incDetails)
 		case optOnPreviousRunning:
-			if err := parseWaitBehavior(v, fullDetails); err != nil {
+			if err := schedulebase.ParseWaitBehavior(v, fullDetails); err != nil {
 				return err
 			}
 
@@ -275,7 +276,7 @@ func processScheduleOptions(
 			if incDetails == nil {
 				continue
 			}
-			if err := parseWaitBehavior(v, incDetails); err != nil {
+			if err := schedulebase.ParseWaitBehavior(v, incDetails); err != nil {
 				return err
 			}
 			s.incJob.SetScheduleDetails(*incDetails)
@@ -417,7 +418,7 @@ func processFullBackupRecurrence(
 		s.incStmt.AppendToLatest = true
 
 		rec := s.fullJob.ScheduleExpr()
-		incRecurrence, err := computeScheduleRecurrence(env.Now(), &rec)
+		incRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), &rec)
 		if err != nil {
 			return scheduleDetails{}, err
 		}

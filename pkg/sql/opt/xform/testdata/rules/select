@@ -9807,3 +9807,32 @@ select
  │    └── columns: col2:3!null col3:4!null col4:5!null
  └── filters
       └── col2:3 < 4 [outer=(3), constraints=(/3: (/NULL - /3]; tight)]
+
+# Reproduction for #83976. Do not split disjunctions with trivial columns.
+exec-ddl
+CREATE TABLE table83976 (c INT AS (5) STORED NOT NULL, UNIQUE INDEX (c));
+----
+
+opt expect-not=SplitDisjunction
+SELECT * FROM table83976 WHERE c IS NULL OR rowid IS NULL
+----
+project
+ ├── columns: c:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: c:1!null rowid:2!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan table83976
+      │    ├── columns: c:1!null rowid:2!null
+      │    ├── computed column expressions
+      │    │    └── c:1
+      │    │         └── 5
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(1,2)
+      └── filters
+           └── (c:1 IS NULL) OR (rowid:2 IS NULL) [outer=(1,2)]

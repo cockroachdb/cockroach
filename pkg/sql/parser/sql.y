@@ -1106,7 +1106,8 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> copy_from_stmt
 
 %type <tree.Statement> create_stmt
-%type <tree.Statement> create_changefeed_stmt
+%type <tree.Statement> create_schedule_stmt
+%type <tree.Statement> create_changefeed_stmt create_schedule_for_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
@@ -1464,7 +1465,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
-%type <tree.Expr> opt_changefeed_sink
+%type <tree.Expr> opt_changefeed_sink changefeed_sink
 %type <str> opt_changefeed_family
 
 %type <str> explain_option_name
@@ -3282,7 +3283,7 @@ create_schedule_for_backup_stmt:
         ScheduleOptions:      $12.kvOptions(),
       }
   }
- | CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE FOR BACKUP
+ | CREATE SCHEDULE schedule_label_spec FOR BACKUP error // SHOW HELP: CREATE SCHEDULE FOR BACKUP
 
 // %Help: ALTER BACKUP SCHEDULE - alter an existing backup schedule
 // %Category: CCL
@@ -4120,16 +4121,16 @@ comment_text:
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
-// CREATE ROLE, CREATE TYPE, CREATE EXTENSION, CREATE TENANT
+// CREATE ROLE, CREATE TYPE, CREATE EXTENSION, CREATE TENANT, CREATE SCHEDULE
 create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
-| create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_changefeed_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
 | create_tenant_stmt // EXTEND WITH HELP: CREATE TENANT
+| create_schedule_stmt
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
@@ -4150,6 +4151,16 @@ create_tenant_stmt:
     }
   }
 | CREATE TENANT error // SHOW HELP: CREATE TENANT
+
+// %Help: CREATE SCHEDULE
+// %Category: Group
+// %Text:
+// CREATE SCHEDULE FOR BACKUP,
+// CREATE SCHEDULE FOR CHANGEFEED
+create_schedule_stmt:
+  create_schedule_for_changefeed_stmt // EXTEND WITH HELP: CREATE SCHEDULE FOR CHANGEFEED
+| create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
+| CREATE SCHEDULE error // SHOW HELP: CREATE SCHEDULE
 
 // %Help: CREATE EXTENSION - pseudo-statement for PostgreSQL compatibility
 // %Category: Cfg
@@ -4781,6 +4792,76 @@ create_changefeed_stmt:
     }
   }
 
+// %Help: CREATE SCHEDULE FOR CHANGEFEED - create changefeed periodically
+// %Category: CCL
+// %Text:
+// CREATE SCHEDULE [IF NOT EXISTS]
+// [<description>]
+// FOR CHANGEFEED
+// <targets> INTO <sink> [WITH <options>]
+// RECURRING [crontab|NEVER]
+// [WITH EXPERIMENTAL SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
+//
+// All changefeeds run in UTC timezone.
+//
+// Description:
+//   Optional description (or name) for this schedule
+//
+// RECURRING <crontab>:
+//   The RECURRING expression specifies when export runs
+//   Schedule specified as a string in crontab format.
+//   All times in UTC.
+//     "5 0 * * *": run schedule 5 minutes past midnight.
+//     "@daily": run daily, at midnight
+//   See https://en.wikipedia.org/wiki/Cron
+//
+// sink: data capture stream destination (Enterprise only)
+// %SeeAlso: CREATE CHANGEFEED
+create_schedule_for_changefeed_stmt:
+  CREATE SCHEDULE /*$3=*/schedule_label_spec FOR CHANGEFEED
+  /* $6=*/changefeed_targets /*$7=*/changefeed_sink
+  /*$8=*/opt_with_options /*$9=*/cron_expr /*$10=*/opt_with_schedule_options
+  {
+     $$.val = &tree.ScheduledChangefeed{
+        CreateChangefeed:   &tree.CreateChangefeed{
+          Targets:    $6.changefeedTargets(),
+          SinkURI:    $7.expr(),
+          Options:    $8.kvOptions(),
+        },
+        ScheduleLabelSpec:  *($3.scheduleLabelSpec()),
+        Recurrence:         $9.expr(),
+				ScheduleOptions:    $10.kvOptions(),
+     }
+  }
+| CREATE SCHEDULE /*$3=*/schedule_label_spec FOR CHANGEFEED /*$6=*/changefeed_sink
+  /*$7=*/opt_with_options AS SELECT /*$10=*/target_list FROM /*$12=*/changefeed_target_expr /*$13=*/opt_where_clause
+  /*$14=*/cron_expr /*$15=*/opt_with_schedule_options
+  {
+    target, err := tree.ChangefeedTargetFromTableExpr($12.tblExpr())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+
+    createChangefeedNode := &tree.CreateChangefeed{
+      SinkURI: $6.expr(),
+      Options: $7.kvOptions(),
+      Targets: tree.ChangefeedTargets{target},
+      Select:  &tree.SelectClause{
+         Exprs: $10.selExprs(),
+         From:  tree.From{Tables: tree.TableExprs{$12.tblExpr()}},
+         Where: tree.NewWhere(tree.AstWhere, $13.expr()),
+      },
+    }
+
+    $$.val = &tree.ScheduledChangefeed{
+			CreateChangefeed:  	createChangefeedNode,
+			ScheduleLabelSpec:  *($3.scheduleLabelSpec()),
+			Recurrence:         $14.expr(),
+			ScheduleOptions:    $15.kvOptions(),
+	 }
+  }
+ | CREATE SCHEDULE schedule_label_spec FOR CHANGEFEED error  // SHOW HELP: CREATE SCHEDULE FOR CHANGEFEED
+
 changefeed_targets:
   changefeed_target
   {
@@ -4829,6 +4910,11 @@ opt_changefeed_sink:
     $$.val = nil
   }
 
+changefeed_sink:
+  INTO string_or_placeholder
+  {
+    $$.val = $2.expr()
+  }
 // %Help: DELETE - delete rows from a table
 // %Category: DML
 // %Text: DELETE FROM <tablename> [WHERE <expr>]
@@ -7211,6 +7297,10 @@ opt_schedule_executor_type:
   {
     $$.val = tree.ScheduledSQLStatsCompactionExecutor
   }
+| FOR CHANGEFEED
+	{
+		$$.val = tree.ScheduledChangefeedExecutor
+	}
 
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc
