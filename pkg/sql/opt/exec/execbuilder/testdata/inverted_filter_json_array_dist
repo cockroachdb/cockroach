@@ -66,12 +66,12 @@ ALTER INDEX json_inv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10),
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX json_inv] ORDER BY lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX json_inv WITH DETAILS] ORDER BY lease_holder
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /10      {1}       1
-/10        /20      {2}       2
-/20        NULL     {3}       3
+start_key     end_key               replicas  lease_holder
+…/<IndexMin>  …/10                  {1}       1
+…/10          …/20                  {2}       2
+…/20          <after:/Table/107/2>  {3}       3
 
 statement ok
 ALTER TABLE json_tab VALIDATE CONSTRAINT check_c
@@ -352,12 +352,12 @@ ALTER INDEX arr_inv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), 
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX arr_inv] ORDER BY lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX arr_inv WITH DETAILS] ORDER BY lease_holder
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /10      {1}       1
-/10        /20      {2}       2
-/20        NULL     {3}       3
+start_key     end_key       replicas  lease_holder
+…/<IndexMin>  …/10          {1}       1
+…/10          …/20          {2}       2
+…/20          <after:/Max>  {3}       3
 
 query T
 EXPLAIN (DISTSQL)

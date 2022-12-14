@@ -132,6 +132,10 @@ type virtualSchemaTable struct {
 	// will be queryable but return no rows. Otherwise querying the table will
 	// return an unimplemented error.
 	unimplemented bool
+
+	// resultColumns is optional; if present, it will be checked for coherency
+	// with schema.
+	resultColumns colinfo.ResultColumns
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -210,6 +214,25 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	if err != nil {
 		err = errors.Wrapf(err, "initVirtualDesc problem with schema: \n%s", t.schema)
 		return descpb.TableDescriptor{}, err
+	}
+
+	if t.resultColumns != nil {
+		if len(mutDesc.Columns) != len(t.resultColumns) {
+			return descpb.TableDescriptor{}, errors.AssertionFailedf(
+				"virtual table %s.%s declares incorrect number of columns: %d vs %d",
+				sc.GetName(), mutDesc.GetName(),
+				len(mutDesc.Columns), len(t.resultColumns))
+		}
+		for i := range mutDesc.Columns {
+			if mutDesc.Columns[i].Name != t.resultColumns[i].Name ||
+				mutDesc.Columns[i].Hidden != t.resultColumns[i].Hidden ||
+				mutDesc.Columns[i].Type.String() != t.resultColumns[i].Typ.String() {
+				return descpb.TableDescriptor{}, errors.AssertionFailedf(
+					"virtual table %s.%s declares incorrect column metadata: %#v vs %#v",
+					sc.GetName(), mutDesc.GetName(),
+					mutDesc.Columns[i], t.resultColumns[i])
+			}
+		}
 	}
 
 	if t.generator != nil {

@@ -87,7 +87,7 @@ func TestEndToEndGC(t *testing.T) {
 
 	getTableRangeIDs := func(t *testing.T, db *gosql.DB) ids {
 		t.Helper()
-		rows, err := db.Query("with r as (show ranges from table kv) select range_id from r order by start_key")
+		rows, err := db.Query("WITH r AS (SHOW RANGES FROM TABLE kv) SELECT range_id FROM r ORDER BY start_key")
 		require.NoError(t, err, "failed to query ranges")
 		var rangeIDs []int64
 		for rows.Next() {
@@ -113,7 +113,7 @@ func TestEndToEndGC(t *testing.T) {
 
 	getRangeInfo := func(t *testing.T, rangeID int64, db *gosql.DB) (startKey, endKey []byte) {
 		t.Helper()
-		row := db.QueryRow("select start_key, end_key from crdb_internal.ranges_no_leases where range_id=$1",
+		row := db.QueryRow("SELECT start_key, end_key FROM crdb_internal.ranges_no_leases WHERE range_id=$1",
 			rangeID)
 		require.NoError(t, row.Err(), "failed to query range info")
 		require.NoError(t, row.Scan(&startKey, &endKey), "failed to scan range info")
