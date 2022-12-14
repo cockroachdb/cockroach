@@ -32,8 +32,7 @@ proto into a fb when necessary, because it doesn't matter for performance anyway
 So we need to pull out:
 - Delta
 - WriteTimestamp
-- DeprecatedDelta
 - AddSST
-- 
+- ...
 
 https://github.com/cockroachdb/cockroach/blob/0788ad6fc883049dcc4f152a322d940e050d3448/pkg/kv/kvserver/kvserverpb/proposer_kv.go#L52

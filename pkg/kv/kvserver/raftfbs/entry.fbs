@@ -1,0 +1,26 @@
+namespace raftfbs;
+
+table Timestamp {
+  wall: int64;
+  logical: int32;
+}
+
+table Command {
+  // TODO: - Delta
+  // TODO: - WriteTimestamp
+  // TODO: - AddSST
+  // TODO: - LogicalOpLog
+  // TODO: - TraceData
+  lease_seq: int64;
+  mlai: uint64;
+  ct: Timestamp;
+  replicated_eval_result_pb: [ubyte]; // trivial most of the time, so not present
+  write_batch: [ubyte];
+}
+
+table Entry {
+  version: ubyte; // raft cmd type (sideloaded or not) and raft type (conf change or not)
+  term: uint64;
+  index: uint64;
+  cmd: Command;
+}

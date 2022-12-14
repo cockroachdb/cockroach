@@ -13,8 +13,11 @@ package kvserverpb
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	flatbuffers "github.com/google/flatbuffers/go"
 )
 
 var maxRaftCommandFooterSize = (&RaftCommandFooter{
@@ -77,4 +80,44 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
 	return allowlist.IsZero()
+}
+
+func (r *RaftCommand) Build(b *flatbuffers.Builder) flatbuffers.UOffsetT {
+	var optCT flatbuffers.UOffsetT
+	if r.ClosedTimestamp != nil {
+		raftfbs.TimestampStart(b)
+		raftfbs.TimestampAddWall(b, r.ClosedTimestamp.WallTime)
+		raftfbs.TimestampAddLogical(b, r.ClosedTimestamp.Logical)
+	}
+
+	var optRER flatbuffers.UOffsetT
+	if !r.ReplicatedEvalResult.IsTrivial() {
+		sl, err := protoutil.Marshal(r)
+		if err != nil {
+			panic(err)
+		}
+		optRER = b.CreateByteVector(sl)
+	}
+
+	wb := b.CreateByteVector(r.WriteBatch.Data)
+
+	raftfbs.CommandStart(b)
+	raftfbs.CommandAddLeaseSeq(b, int64(r.ProposerLeaseSequence))
+	raftfbs.CommandAddMlai(b, r.MaxLeaseIndex)
+	if optCT != 0 {
+		raftfbs.CommandAddCt(b, optCT)
+	}
+	if optRER != 0 {
+		raftfbs.CommandAddReplicatedEvalResultPb(b, optRER)
+	}
+	raftfbs.CommandAddWriteBatch(b, wb)
+	cmd := raftfbs.CommandEnd(b)
+
+	raftfbs.EntryStart(b)
+	raftfbs.EntryAddVersion(b, 0) // TODO - 0 will be the norm
+	// TODO(tbg): do I need to "add" them here to be able to mutate them later?
+	raftfbs.EntryAddIndex(b, 0)
+	raftfbs.EntryAddTerm(b, 0)
+	raftfbs.EntryAddCmd(b, cmd)
+	return raftfbs.EntryEnd(b)
 }
