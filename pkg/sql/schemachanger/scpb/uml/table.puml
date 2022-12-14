@@ -83,6 +83,7 @@ CheckConstraint :  ConstraintID
 CheckConstraint : []ColumnIDs
 CheckConstraint :  Expression
 CheckConstraint :  FromHashShardedColumn
+CheckConstraint :  IndexIDForValidation
 
 object ForeignKeyConstraint
 
@@ -215,11 +216,11 @@ object IndexData
 IndexData :  TableID
 IndexData :  IndexID
 
-object ConstraintName
+object ConstraintWithoutIndexName
 
-ConstraintName :  TableID
-ConstraintName :  ConstraintID
-ConstraintName :  Name
+ConstraintWithoutIndexName :  TableID
+ConstraintWithoutIndexName :  ConstraintID
+ConstraintWithoutIndexName :  Name
 
 object ConstraintComment
 
@@ -331,9 +332,9 @@ Column <|-- IndexColumn
 PrimaryIndex <|-- IndexData
 SecondaryIndex <|-- IndexData
 TemporaryIndex <|-- IndexData
-UniqueWithoutIndexConstraint <|-- ConstraintName
-CheckConstraint <|-- ConstraintName
-ForeignKeyConstraint <|-- ConstraintName
+UniqueWithoutIndexConstraint <|-- ConstraintWithoutIndexName
+CheckConstraint <|-- ConstraintWithoutIndexName
+ForeignKeyConstraint <|-- ConstraintWithoutIndexName
 PrimaryIndex <|-- ConstraintComment
 SecondaryIndex <|-- ConstraintComment
 UniqueWithoutIndexConstraint <|-- ConstraintComment

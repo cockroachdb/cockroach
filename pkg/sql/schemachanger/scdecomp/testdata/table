@@ -572,7 +572,7 @@ ElementState:
     indexId: 2
     tableId: 105
   Status: PUBLIC
-- ConstraintName:
+- ConstraintWithoutIndexName:
     constraintId: 2
     name: myfk
     tableId: 105

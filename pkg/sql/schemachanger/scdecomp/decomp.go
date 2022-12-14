@@ -591,7 +591,7 @@ func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 		ConstraintID: c.GetConstraintID(),
 		ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
 	})
-	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintName{
+	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
 		Name:         c.GetName(),
@@ -619,7 +619,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		Expression:            *expr,
 		FromHashShardedColumn: c.IsHashShardingConstraint(),
 	})
-	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintName{
+	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
 		Name:         c.GetName(),
@@ -644,7 +644,7 @@ func (w *walkCtx) walkForeignKeyConstraint(
 		ReferencedTableID:   c.GetReferencedTableID(),
 		ReferencedColumnIDs: c.ForeignKeyDesc().ReferencedColumnIDs,
 	})
-	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintName{
+	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
 		Name:         c.GetName(),

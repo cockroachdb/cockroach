@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -59,121 +58,6 @@ func (m *visitor) RemoveSequenceOwner(ctx context.Context, op scop.RemoveSequenc
 	ids.Remove(op.OwnedSequenceID)
 	col.ColumnDesc().OwnsSequenceIds = ids.Ordered()
 	return nil
-}
-
-func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheckConstraint) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil || tbl.Dropped() {
-		return err
-	}
-	var found bool
-	for i, c := range tbl.Checks {
-		if c.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
-			found = true
-			break
-		}
-	}
-	for i, m := range tbl.Mutations {
-		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
-			c.Check.ConstraintID == op.ConstraintID {
-			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
-			found = true
-			break
-		}
-	}
-	if !found {
-		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
-			op.ConstraintID, tbl.GetName(), tbl.GetID())
-	}
-	return nil
-}
-
-func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
-	ctx context.Context, op scop.MakeAbsentCheckConstraintWriteOnly,
-) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil || tbl.Dropped() {
-		return err
-	}
-	if op.ConstraintID >= tbl.NextConstraintID {
-		tbl.NextConstraintID = op.ConstraintID + 1
-	}
-
-	// We should have already validated that the check constraint
-	// is syntactically valid in the builder, so we just need to
-	// enqueue it to the descriptor's mutation slice.
-	ck := &descpb.TableDescriptor_CheckConstraint{
-		Expr:                  string(op.Expr),
-		Name:                  tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
-		Validity:              descpb.ConstraintValidity_Validating,
-		ColumnIDs:             op.ColumnIDs,
-		FromHashShardedColumn: op.FromHashShardedColumn,
-		ConstraintID:          op.ConstraintID,
-	}
-	return enqueueAddCheckConstraintMutation(tbl, ck)
-}
-
-func (m *visitor) MakeValidatedCheckConstraintPublic(
-	ctx context.Context, op scop.MakeValidatedCheckConstraintPublic,
-) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil || tbl.Dropped() {
-		return err
-	}
-
-	var found bool
-	for idx, mutation := range tbl.Mutations {
-		if c := mutation.GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
-			c.Check.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks, &c.Check)
-
-			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will also mark the above added check as VALIDATED.
-			// If this is a rollback of a drop, we are trying to add the check constraint
-			// back, so swap the direction before making it complete.
-			mutation.Direction = descpb.DescriptorMutation_ADD
-			err = tbl.MakeMutationComplete(mutation)
-			if err != nil {
-				return err
-			}
-			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
-
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
-			op.ConstraintID, tbl.GetName(), tbl.GetID())
-	}
-
-	if len(tbl.Mutations) == 0 {
-		tbl.Mutations = nil
-	}
-
-	return nil
-}
-
-func (m *visitor) MakePublicCheckConstraintValidated(
-	ctx context.Context, op scop.MakePublicCheckConstraintValidated,
-) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	for i, ck := range tbl.Checks {
-		if ck.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
-			ck.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropCheckConstraintMutation(tbl, ck)
-		}
-	}
-
-	return errors.AssertionFailedf("failed to find check constraint %d in descriptor %v", op.ConstraintID, tbl)
 }
 
 func (m *visitor) RemoveForeignKeyBackReference(
@@ -231,31 +115,6 @@ func (m *visitor) RemoveForeignKeyBackReference(
 			name, in.GetName(), in.GetID())
 	}
 	return nil
-}
-
-func (m *visitor) RemoveForeignKeyConstraint(
-	ctx context.Context, op scop.RemoveForeignKeyConstraint,
-) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil || out.Dropped() {
-		return err
-	}
-	for i, fk := range out.OutboundFKs {
-		if fk.ConstraintID == op.ConstraintID {
-			out.OutboundFKs = append(out.OutboundFKs[:i], out.OutboundFKs[i+1:]...)
-			return nil
-		}
-	}
-	for i, m := range out.Mutations {
-		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType != descpb.ConstraintToUpdate_FOREIGN_KEY &&
-			c.ForeignKey.ConstraintID == op.ConstraintID {
-			out.Mutations = append(out.Mutations[:i], out.Mutations[i+1:]...)
-			return nil
-		}
-	}
-	return errors.AssertionFailedf("foreign key with ID %d not found in origin table %q (%d)",
-		op.ConstraintID, out.GetName(), out.GetID())
 }
 
 func (m *visitor) UpdateTableBackReferencesInTypes(
@@ -374,6 +233,10 @@ func (m *visitor) UpdateBackReferencesInSequences(
 	return nil
 }
 
+// Look through `seqID`'s dependedOnBy slice, find the back-reference to `tblID`,
+// and update it to either
+//   - upsert `colID` to ColumnIDs field of that back-reference, if `forwardRefs` contains `seqID`; or
+//   - remove `colID` from ColumnIDs field of that back-reference, if `forwardRefs` does not contain `seqID`.
 func updateBackReferencesInSequences(
 	ctx context.Context,
 	m *visitor,
@@ -399,7 +262,9 @@ func updateBackReferencesInSequences(
 			return nil
 		}
 		updated.UnionWith(current)
-		updated.Add(colID)
+		if colID != 0 {
+			updated.Add(colID)
+		}
 	} else {
 		if !current.Contains(colID) {
 			return nil

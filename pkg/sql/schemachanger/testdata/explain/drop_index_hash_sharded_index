@@ -8,28 +8,28 @@ EXPLAIN (ddl) DROP INDEX idx CASCADE;
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE; 
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 5 elements transitioning toward ABSENT
+ │         ├── 6 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
  │         │    ├── PUBLIC → ABSENT     IndexName:{DescID: 104, Name: idx, IndexID: 2}
- │         │    └── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, ConstraintID: 2}
- │         └── 6 Mutation operations
+ │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+ │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
+ │         └── 7 Mutation operations
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
+ │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
  │              ├── LogEvent {"TargetStatus":1}
  │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 4 elements transitioning toward ABSENT
+ │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
  │         │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
- │         │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
- │         │    └── PUBLIC → ABSENT ConstraintName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
- │         └── 3 Mutation operations
- │              ├── NotImplemented {"ElementType":"scpb.ConstraintN..."}
+ │         │    └── PUBLIC → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+ │         └── 2 Mutation operations
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
@@ -37,7 +37,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    ├── 3 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 104, ColumnID: 3}
       │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, ConstraintID: 2}
+      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
       │    └── 5 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}

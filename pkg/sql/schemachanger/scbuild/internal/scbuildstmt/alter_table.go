@@ -14,7 +14,6 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,9 +51,27 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
 	) bool {
-		d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
-		return ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault
-	}, minSupportedClusterVersion: clusterversion.V22_2Start},
+		// Support ALTER TABLE ... ADD PRIMARY KEY
+		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		// Support ALTER TABLE ... ADD CONSTRAINT CHECK
+		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		return false
+	}},
+}
+
+// alterTableAddConstraintMinSupportedClusterVersion tracks the minimal supported cluster version
+// for each supported ALTER TABLE ADD CONSTRAINT command.
+// They key is constructed as "ADD" + constraint type + validation behavior, joined with "_".
+// E.g. "ADD_PRIMARY_KEY_DEFAULT", "ADD_CHECK_SKIP", "ADD_FOREIGN_KEY_DEFAULT", etc.
+var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
+	"ADD_PRIMARY_KEY_DEFAULT": clusterversion.V22_2Start,
+	"ADD_CHECK_DEFAULT":       clusterversion.V23_1Start,
 }
 
 func init() {
@@ -119,33 +135,48 @@ func alterTableIsSupported(n *tree.AlterTable, mode sessiondatapb.NewSchemaChang
 // in this `ALTER TABLE` statement are supported under the current cluster version.
 func alterTableAllCmdsSupportedInCurrentClusterVersion(b BuildCtx, n *tree.AlterTable) bool {
 	for _, cmd := range n.Cmds {
-		minSupportedClusterVersion := supportedAlterTableStatements[reflect.TypeOf(cmd)].minSupportedClusterVersion
-		if !b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion) {
-			return false
+		if addConstraint, isAddConstraint := cmd.(*tree.AlterTableAddConstraint); isAddConstraint {
+			if !alterTableAddConstraintSupportedInCurrentClusterVersion(b, addConstraint) {
+				return false
+			}
+		} else {
+			minSupportedClusterVersion := supportedAlterTableStatements[reflect.TypeOf(cmd)].minSupportedClusterVersion
+			if !b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion) {
+				return false
+			}
 		}
 	}
 	return true
 }
 
+// alterTableAddConstraintSupportedInCurrentClusterVersion determines if a particular
+// AlterTableAddConstraint command is supported under the current cluster version.
+func alterTableAddConstraintSupportedInCurrentClusterVersion(
+	b BuildCtx, constraint *tree.AlterTableAddConstraint,
+) bool {
+	var cmdKey string
+	// Figure out alter table add constraint command type: PRIMARY_KEY, CHECK, FOREIGN_KEY, or UNIQUE
+	switch d := constraint.ConstraintDef.(type) {
+	case *tree.UniqueConstraintTableDef:
+		if d.PrimaryKey {
+			cmdKey = "ADD_PRIMARY_KEY"
+		}
+	case *tree.CheckConstraintTableDef:
+		cmdKey = "ADD_CHECK"
+	}
+	// Figure out command validation behavior: DEFAULT or SKIP
+	if constraint.ValidationBehavior == tree.ValidationDefault {
+		cmdKey += "_DEFAULT"
+	} else {
+		cmdKey += "_SKIP"
+	}
+
+	minSupportedClusterVersion := alterTableAddConstraintMinSupportedClusterVersion[cmdKey]
+	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
+}
+
 // AlterTable implements ALTER TABLE.
 func AlterTable(b BuildCtx, n *tree.AlterTable) {
-	// Hoist the constraints to separate clauses because other code assumes that
-	// that is how the commands will look.
-	n.HoistAddColumnConstraints(func() {
-		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
-	})
-
-	// We already confirmed the command is supported, but run the extra checks for
-	// it now.
-	for _, cmd := range n.Cmds {
-		// Run the extraChecks to see if we should avoid even resolving the
-		// descriptor.
-		info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-		if info.on && info.extraChecks != nil && !reflect.ValueOf(info.extraChecks).
-			Call([]reflect.Value{reflect.ValueOf(cmd)})[0].Bool() {
-			panic(scerrors.NotImplementedError(cmd))
-		}
-	}
 	tn := n.Table.ToTableName()
 	elts := b.ResolveTable(n.Table, ResolveParams{
 		IsExistenceOptional: n.IfExists,
