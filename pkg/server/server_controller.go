@@ -469,7 +469,7 @@ func (s *Server) newServerForTenant(
 	datums, err := ie.QueryRow(ctx, "get-tenant-id", nil, /* txn */
 		`SELECT id, active FROM system.tenants WHERE name = $1 LIMIT 1`, tenantName)
 	if err != nil {
-		return nil, errors.Mark(err, ErrInvalidTenant)
+		return nil, err
 	}
 	if datums == nil {
 		return nil, errors.Mark(errors.Newf("no tenant found with name %q", tenantName), ErrInvalidTenant)
