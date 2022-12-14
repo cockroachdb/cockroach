@@ -20,10 +20,10 @@ key                   pretty  split_enforced_until
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /"d"     {1}       1
-/"d"       /"r"     {1}       1
-/"r"       NULL     {1}       1
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/1/"d"       {1}       1
+…/1/"d"             …/1/"r"       {1}       1
+…/1/"r"             <after:/Max>  {1}       1
 
 # Also create an additional user with VIEWACTIVITYREDACTED, with only permissions on t
 statement ok
@@ -66,13 +66,13 @@ let $txn2
 SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_id = '$testuser_session'
 
 let $r1
-SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key='/"d"'
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key LIKE '%/"d"'
 
 let $r2
-SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key='/"r"'
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key LIKE '%/"r"'
 
 let $r3
-SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key IS NULL
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key LIKE '%Max%'
 
 user testuser
 

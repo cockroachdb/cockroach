@@ -11,7 +11,6 @@
 package delegate
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -43,6 +42,25 @@ func checkPrivilegesForShowRanges(d *delegator, table cat.Table) error {
 	return nil
 }
 
+// The following columns are rendered for all the syntax forms of
+// SHOW RANGES, regardless of whether WITH DETAILS is specified.
+// It must be able to compute with just crdb_internal.ranges_no_leases.
+const commonShowRangesRenderColumnsEnd = `
+	replicas,
+	replica_localities,
+	voting_replicas,
+	non_voting_replicas
+`
+
+// The following columns are rendered for all the syntax forms of
+// SHOW RANGES, only when WITH DETAILS is specified.
+// This relies on crdb_internal.ranges (expensive) under the hood.
+const commonShowRangesRenderColumnsEndDetails = `
+	range_size / 1000000 as range_size_mb,
+	lease_holder,
+	replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
+`
+
 // delegateShowRanges implements the SHOW RANGES statement:
 //
 //	SHOW RANGES FROM TABLE t
@@ -53,36 +71,155 @@ func checkPrivilegesForShowRanges(d *delegator, table cat.Table) error {
 // along with the list of replicas and the lease holder.
 func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Ranges)
-	if n.DatabaseName != "" {
-		const dbQuery = `
-		SELECT
-			table_name,
-			CASE
-				WHEN crdb_internal.pretty_key(r.start_key, 2) = '' THEN NULL
-				ELSE crdb_internal.pretty_key(r.start_key, 2)
-			END AS start_key,
-			CASE
-				WHEN crdb_internal.pretty_key(r.end_key, 2) = '' THEN NULL
-				ELSE crdb_internal.pretty_key(r.end_key, 2)
-			END AS end_key,
-			range_id,
-			range_size / 1000000 as range_size_mb,
-			lease_holder,
-			replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
-			replicas,
-			replica_localities,
-			voting_replicas,
-			non_voting_replicas
-		FROM %[1]s.crdb_internal.ranges AS r
-		WHERE database_name=%[2]s
-		ORDER BY table_name, r.start_key
-		`
-		// Note: n.DatabaseName.String() != string(n.DatabaseName)
-		return parse(fmt.Sprintf(dbQuery, n.DatabaseName.String(), lexbase.EscapeSQLString(string(n.DatabaseName))))
+
+	switch n.Source {
+	case tree.ShowRangesDatabase, tree.ShowRangesCurrentDatabase, tree.ShowRangesCluster:
+		return d.delegateShowRangesFromDatabase(n)
+	case tree.ShowRangesTable, tree.ShowRangesIndex:
+		return d.delegateShowRangesFromTableOrIndex(n)
+	default:
+		return nil, errors.AssertionFailedf("programming error: unsupported SHOW RANGES source %d", n.Source)
+	}
+}
+
+func (d *delegator) delegateShowRangesFromDatabase(n *tree.ShowRanges) (tree.Statement, error) {
+	var dbName tree.Name
+	var joinMode string
+	switch n.Source {
+	case tree.ShowRangesCluster:
+		// This selects "".crdb_internal.table_spans, which gathers spans
+		// over all databases.
+		dbName = ""
+		// However, some ranges do not correspond to any table (tsd, etc).
+		// For those, we still want the range entry but we will need
+		// to leave the table/index details as NULL.
+		joinMode = "LEFT OUTER JOIN"
+	case tree.ShowRangesDatabase:
+		dbName = n.DatabaseName
+		joinMode = "JOIN"
+	case tree.ShowRangesCurrentDatabase:
+		// SHOW RANGES FROM CURRENT_CATALOG.
+		dbName = tree.Name(d.evalCtx.SessionData().Database)
+		joinMode = "JOIN"
 	}
 
-	// Remember the original syntax: Resolve below modifies the TableOrIndex struct in-place.
-	noIndexSpecified := n.TableOrIndex.Index == ""
+	// Are we producing details?
+	detailColumns := ""
+	rangeSource := "crdb_internal.ranges_no_leases"
+	if n.Options.Details {
+		rangeSource = "crdb_internal.ranges"
+		detailColumns = ", range_size, lease_holder"
+	}
+
+	// Filter the list of ranges to include only those ranges
+	// that contain spans from the target database.
+	filterTable := `table_spans`
+	extraColumn := ``
+	if n.Options.Mode == tree.ExpandIndexes {
+		filterTable = `index_spans`
+		extraColumn = `s.index_id,`
+	}
+	rangesQ := fmt.Sprintf(`
+  SELECT range_id,
+         r.start_key     AS range_start_key,
+         r.end_key       AS range_end_key,
+         s.descriptor_id AS table_id, %[3]s
+         s.start_key,
+         s.end_key,
+         replicas, replica_localities, voting_replicas,	non_voting_replicas
+         %[5]s
+    FROM "".%[6]s r
+   %[4]s %[1]s.crdb_internal.%[2]s s
+      ON s.start_key < r.end_key
+     AND s.end_key > r.start_key`,
+		// Note: dbName.String() != string(dbName)
+		dbName.String(), filterTable, extraColumn, joinMode, detailColumns, rangeSource)
+
+	// Expand table/index names if requested.
+	var expandedRangesQ string
+	switch n.Options.Mode {
+	case tree.UniqueRanges:
+		// One row per range: we can't compute table/index names.
+		expandedRangesQ = fmt.Sprintf(`
+SELECT DISTINCT range_id, range_start_key, range_end_key,
+                replicas, replica_localities,	voting_replicas, non_voting_replicas
+                %[1]s
+FROM ranges`, detailColumns)
+
+	case tree.ExpandTables:
+		// One row per range-table intersection. We can compute
+		// schema/table names.
+		expandedRangesQ = fmt.Sprintf(`
+   SELECT r.*, t.schema_name, t.name AS table_name
+     FROM ranges r
+ LEFT OUTER JOIN %[1]s.crdb_internal.tables t
+       ON r.table_id = t.table_id`,
+			// Note: dbName.String() != string(dbName)
+			dbName.String())
+
+	case tree.ExpandIndexes:
+		// One row per range-index intersection. We can compute
+		// schema/table and index names.
+		expandedRangesQ = fmt.Sprintf(`
+   SELECT r.*, t.schema_name, t.name AS table_name, ti.index_name
+     FROM ranges r
+ LEFT OUTER JOIN %[1]s.crdb_internal.table_indexes ti
+       ON r.table_id = ti.descriptor_id
+      AND r.index_id = ti.index_id
+ LEFT OUTER JOIN %[1]s.crdb_internal.tables t
+       ON r.table_id = t.table_id`,
+			// Note: dbName.String() != string(dbName)
+			dbName.String())
+	}
+
+	// Finally choose what to render.
+	extraColumns := ``
+	extraSort := ``
+	switch n.Options.Mode {
+	case tree.ExpandTables:
+		extraColumns = `schema_name, table_name, table_id,
+  crdb_internal.pretty_key(start_key, -1) AS table_start_key,
+  crdb_internal.pretty_key(end_key, -1) AS table_end_key,`
+		extraSort = `, table_start_key`
+
+	case tree.ExpandIndexes:
+		extraColumns = `schema_name, table_name, table_id, index_name, index_id,
+  crdb_internal.pretty_key(start_key, -1) AS index_start_key,
+  crdb_internal.pretty_key(end_key, -1) AS index_end_key,`
+		extraSort = `, index_start_key`
+	}
+
+	renderRangeDetails := commonShowRangesRenderColumnsEnd
+	if n.Options.Details {
+		renderRangeDetails = commonShowRangesRenderColumnsEndDetails + renderRangeDetails
+	}
+
+	renderQ := fmt.Sprintf(`
+SELECT
+  crdb_internal.pretty_key(range_start_key, -1) AS start_key,
+  crdb_internal.pretty_key(range_end_key, -1) AS end_key,
+	range_id,
+  %[1]s
+  %[2]s
+FROM named_ranges r
+ORDER BY r.range_start_key %[3]s
+		`,
+		extraColumns,
+		renderRangeDetails,
+		extraSort)
+
+	fullQuery := `WITH ranges AS (` + rangesQ + `), named_ranges AS (` + expandedRangesQ + `) ` + renderQ
+	if n.Options.Explain {
+		fullQuery = fmt.Sprintf(`SELECT %s AS query`, lexbase.EscapeSQLString(fullQuery))
+	}
+	return parse(fullQuery)
+}
+
+func (d *delegator) delegateShowRangesFromTableOrIndex(n *tree.ShowRanges) (tree.Statement, error) {
+	fromTable := n.TableOrIndex.Index == ""                                     // SHOW RANGES FROM TABLE, regardless of WITH clause.
+	fromIndex := !fromTable                                                     // SHOW RANGES FROM INDEX
+	fromTableUniqueRanges := fromTable && n.Options.Mode == tree.UniqueRanges   // SHOW RANGES FROM TABLE
+	fromTableExpandIndexes := fromTable && n.Options.Mode == tree.ExpandIndexes // SHOW RANGES FROM TABLE WITH INDEXES
 
 	idx, resName, err := cat.ResolveTableIndex(
 		d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, &n.TableOrIndex,
@@ -91,45 +228,151 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 		return nil, err
 	}
 
-	if err := checkPrivilegesForShowRanges(d, idx.Table()); err != nil {
-		return nil, err
-	}
-
 	if idx.Table().IsVirtualTable() {
 		return nil, errors.New("SHOW RANGES may not be called on a virtual table")
 	}
 
-	var startKey, endKey string
-	if noIndexSpecified {
-		// All indexes.
-		tableID := idx.Table().ID()
-		prefix := d.evalCtx.Codec.TablePrefix(uint32(tableID))
-		startKey = hex.EncodeToString(prefix)
-		endKey = hex.EncodeToString(prefix.PrefixEnd())
-	} else {
-		// Just one index.
-		span := idx.Span()
-		startKey = hex.EncodeToString(span.Key)
-		endKey = hex.EncodeToString(span.EndKey)
+	tabID := idx.Table().ID()
+	idxID := idx.ID()
+
+	// Filter the list of ranges to include only those ranges
+	// that contain spans from within this table or index.
+	var filterTable, extraColumn, extraFilter string
+	switch {
+	case fromTableUniqueRanges:
+		filterTable = `table_spans`
+	case fromIndex:
+		filterTable = `index_spans`
+		extraColumn = `s.descriptor_id AS table_id,`
+		extraFilter = fmt.Sprintf(`AND s.index_id = %d`, idxID)
+	case fromTableExpandIndexes:
+		filterTable = `index_spans`
+		extraColumn = `s.descriptor_id AS table_id, s.index_id,`
+	}
+	rangesQ := fmt.Sprintf(`
+  SELECT range_id,
+         r.start_key     AS range_start_key,
+         r.end_key       AS range_end_key,
+         %[5]s
+         s.start_key,
+         s.end_key,
+         range_size, lease_holder, replicas, replica_localities,
+	voting_replicas,
+	non_voting_replicas
+    FROM "".crdb_internal.ranges r,
+         %[1]s.crdb_internal.%[2]s s
+   WHERE s.start_key < r.end_key
+     AND s.end_key > r.start_key
+     AND s.descriptor_id = %[3]d %[4]s
+`,
+		// Note: dbName.String() != string(dbName)
+		resName.CatalogName.String(),
+		filterTable,
+		tabID,
+		extraFilter,
+		extraColumn)
+
+	// Expand index names if requested.
+	var expandedRangesQ string
+	switch {
+	case fromTableUniqueRanges:
+		// One row per range: we can't compute table/index names.
+		expandedRangesQ = `
+SELECT DISTINCT range_id, range_start_key, range_end_key, start_key, end_key,
+                range_size, lease_holder, replicas, replica_localities,
+	voting_replicas,
+	non_voting_replicas
+FROM ranges`
+
+	case fromTableExpandIndexes:
+		// One row per range-index intersection. We can compute
+		// index names.
+		expandedRangesQ = fmt.Sprintf(`
+   SELECT r.*, ti.index_name
+     FROM ranges r
+     JOIN %[1]s.crdb_internal.table_indexes ti
+       ON r.table_id = ti.descriptor_id
+      AND r.index_id = ti.index_id`,
+			// Note: dbName.String() != string(dbName)
+			resName.CatalogName.String(),
+		)
+
+	case fromIndex:
+		// The index name is already known. No need to report it.
+		expandedRangesQ = `TABLE ranges`
+
+	default:
+		return nil, errors.AssertionFailedf("programming error: missing case for %#v", n)
 	}
 
-	return parse(fmt.Sprintf(`
-SELECT 
-  CASE WHEN r.start_key <= x'%[1]s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
-  CASE WHEN r.end_key >= x'%[2]s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
-  index_name,
-  range_id,
-  range_size / 1000000 as range_size_mb,
-  lease_holder,
-  replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
-  replicas,
-  replica_localities,
-  voting_replicas,
-  non_voting_replicas
-FROM %[3]s.crdb_internal.ranges AS r
-WHERE (r.start_key < x'%[2]s')
-  AND (r.end_key   > x'%[1]s') ORDER BY index_name, r.start_key
-`,
-		startKey, endKey, resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
-	))
+	// Finally choose what to render.
+	var renderColumnsStart, extraSort string
+	switch {
+	case fromTableUniqueRanges:
+		renderColumnsStart = `
+CASE
+  WHEN range_start_key = start_key THEN '…/<TableMin>'
+  WHEN range_start_key < start_key THEN '<before:'||crdb_internal.pretty_key(range_start_key,-1)||'>'
+  ELSE '…'||crdb_internal.pretty_key(range_start_key, 1)
+END AS start_key,
+CASE
+  WHEN range_end_key = end_key THEN '…/<TableMax>'
+  WHEN range_end_key > end_key THEN '<after:'||crdb_internal.pretty_key(range_end_key,-1)||'>'
+  ELSE '…'||crdb_internal.pretty_key(range_end_key, 1)
+END AS end_key,
+range_id,`
+		extraSort = ``
+
+	case fromTableExpandIndexes:
+		renderColumnsStart = `
+CASE
+  WHEN range_start_key = start_key THEN '…/<IndexMin>'
+  WHEN range_start_key = crdb_internal.table_span(table_id)[1] THEN '…/<TableMin>'
+  WHEN range_start_key < crdb_internal.table_span(table_id)[1] THEN '<before:'||crdb_internal.pretty_key(range_start_key,-1)||'>'
+  ELSE '…'||crdb_internal.pretty_key(range_start_key, 1)
+END AS start_key,
+CASE
+  WHEN range_end_key = end_key THEN '…/…/<IndexMax>'
+  WHEN range_end_key = crdb_internal.table_span(table_id)[2] THEN '…/<TableMax>'
+  WHEN range_end_key > crdb_internal.table_span(table_id)[2] THEN '<after:'||crdb_internal.pretty_key(range_end_key,-1)||'>'
+  ELSE '…'||crdb_internal.pretty_key(range_end_key, 1)
+END AS end_key,
+  range_id, index_name, index_id,
+  '…'||crdb_internal.pretty_key(start_key, 1) AS index_start_key,
+  '…'||crdb_internal.pretty_key(end_key, 1) AS index_end_key,`
+		extraSort = `, index_start_key`
+
+	case fromIndex:
+		renderColumnsStart = `
+CASE
+  WHEN range_start_key = start_key THEN '…/<IndexMin>'
+  WHEN range_start_key = crdb_internal.table_span(table_id)[1] THEN '…/TableMin'
+  WHEN range_start_key < start_key THEN '<before:'||crdb_internal.pretty_key(range_start_key,-1)||'>'
+  ELSE '…'||crdb_internal.pretty_key(range_start_key, 2)
+END AS start_key,
+CASE
+  WHEN range_end_key = end_key THEN '…/<IndexMax>'
+  WHEN range_end_key = crdb_internal.table_span(table_id)[2] THEN '…/<TableMax>'
+  WHEN range_end_key > end_key THEN '<after:'||crdb_internal.pretty_key(range_end_key,-1)||'>'
+  ELSE '…'||crdb_internal.pretty_key(range_end_key, 2)
+END AS end_key,
+  range_id,`
+		extraSort = ``
+	}
+	renderQ := fmt.Sprintf(`
+SELECT
+  %[1]s
+  %[2]s
+FROM named_ranges r
+ORDER BY r.range_start_key %[3]s
+		`,
+		renderColumnsStart,
+		commonShowRangesRenderColumnsEnd,
+		extraSort)
+
+	fullQuery := `WITH ranges AS (` + rangesQ + `), named_ranges AS (` + expandedRangesQ + `) ` + renderQ
+	if n.Options.Explain {
+		fullQuery = fmt.Sprintf(`SELECT %s AS query`, lexbase.EscapeSQLString(fullQuery))
+	}
+	return parse(fullQuery)
 }

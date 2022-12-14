@@ -15,12 +15,12 @@ ALTER INDEX t@v EXPERIMENTAL_RELOCATE
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM INDEX t@v]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /10      {1}       1
-/10        /20      {2}       2
-/20        /30      {3}       3
-/30        /40      {4}       4
-/40        NULL     {5}       5
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/10          {1}       1
+…/10                …/20          {2}       2
+…/20                …/30          {3}       3
+…/30                …/40          {4}       4
+…/40                <after:/Max>  {5}       5
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50

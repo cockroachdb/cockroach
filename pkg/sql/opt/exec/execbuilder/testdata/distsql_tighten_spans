@@ -96,11 +96,11 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p1]
 ORDER BY lease_holder, start_key
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /2       {1}       1
-/2         /0       {3}       3
-/0         /2       {4}       4
-/2         NULL     {5}       5
+start_key           end_key                   replicas  lease_holder
+<before:/Table/53>  …/1/2                     {1}       1
+…/1/2               …/2/0                     {3}       3
+…/2/0               …/2/2                     {4}       4
+…/2/2               <after:/Table/107/1/2/1>  {5}       5
 
 # Indexes
 
@@ -108,21 +108,21 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM INDEX b]
 ORDER BY lease_holder, start_key
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /0       {3}       3
-/0         /2       {4}       4
-/2         NULL     {5}       5
+start_key                end_key                   replicas  lease_holder
+<before:/Table/106/1/2>  …/0                       {3}       3
+…/0                      …/2                       {4}       4
+…/2                      <after:/Table/107/1/2/1>  {5}       5
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p2]
 ORDER BY lease_holder, start_key
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /0       {1}       1
-·          /2       {1}       1
-/0         /2       {1}       1
-/2         NULL     {1}       1
-/2         ·        {3}       3
+start_key                  end_key       replicas  lease_holder
+<before:/Table/107/1/2/1>  …/1/0         {1}       1
+…/1/0                      …/1/2         {1}       1
+…/2                        …/2/2         {1}       1
+…/2/2                      <after:/Max>  {1}       1
+…/1/2                      …/2           {3}       3
 
 ###############
 # Query tests #

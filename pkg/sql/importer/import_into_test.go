@@ -120,11 +120,11 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 
 	time.Sleep(3 * time.Second) // Wait for the data to definitely be expired and GC to run.
 	gcTable := func(skipShouldQueue bool) (traceStr string) {
-		rows := runner.Query(t, "SELECT start_key"+
-			" FROM crdb_internal.ranges_no_leases"+
-			" WHERE table_name = $1"+
-			" AND database_name = current_database()"+
-			" ORDER BY start_key ASC", "foo")
+		rows := runner.Query(t, "SELECT r.start_key"+
+			" FROM [SHOW RANGES FROM CURRENT_CATALOG WITH TABLES] sr,"+
+			" crdb_internal.ranges_no_leases r"+
+			" WHERE r.range_id = sr.range_id AND table_name = $1"+
+			" ORDER BY r.start_key ASC", "foo")
 		var traceBuf strings.Builder
 		for rows.Next() {
 			var startKey roachpb.Key

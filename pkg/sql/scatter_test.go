@@ -132,8 +132,7 @@ func TestScatterResponse(t *testing.T) {
 	// the actual split boundaries. Wait until the table itself is split off
 	// into its own range.
 	testutils.SucceedsSoon(t, func() error {
-		row := r.QueryRow(t, `SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = $1`,
-			tableDesc.GetID())
+		row := r.QueryRow(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE test.t] WHERE start_key LIKE '%TableMin%'`)
 		var nRanges int
 		row.Scan(&nRanges)
 		if nRanges != 1 {

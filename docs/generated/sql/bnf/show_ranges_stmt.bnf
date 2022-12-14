@@ -1,4 +1,10 @@
 show_ranges_stmt ::=
-	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
-	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
+	'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
+	| 'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
+	| 'SHOW' 'RANGES' 'FROM' 'TABLE' table_name 'WITH' 'INDEXES'
 	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG'
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name 'WITH' 'TABLES'
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG' 'WITH' 'TABLES'
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name 'WITH' 'INDEXES'
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG' 'WITH' 'INDEXES'

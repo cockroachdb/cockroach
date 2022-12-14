@@ -867,9 +867,15 @@ show_statements_stmt ::=
 	| 'SHOW' 'ALL' opt_cluster statements_or_queries
 
 show_ranges_stmt ::=
-	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
-	| 'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
+	'SHOW' 'RANGES' 'FROM' 'INDEX' table_index_name
+	| 'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
+	| 'SHOW' 'RANGES' 'FROM' 'TABLE' table_name 'WITH' 'INDEXES'
 	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG'
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name 'WITH' 'TABLES'
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG' 'WITH' 'TABLES'
+	| 'SHOW' 'RANGES' 'FROM' 'DATABASE' database_name 'WITH' 'INDEXES'
+	| 'SHOW' 'RANGES' 'FROM' 'CURRENT_CATALOG' 'WITH' 'INDEXES'
 
 show_range_for_row_stmt ::=
 	'SHOW' 'RANGE' 'FROM' 'TABLE' table_name 'FOR' 'ROW' '(' expr_list ')'
