@@ -881,8 +881,9 @@ func readPostgresStmt(
 				if err != nil {
 					return err
 				}
-				err = col.Direct().CheckObjectCollision(
+				err = descs.CheckObjectNameCollision(
 					ctx,
+					col,
 					txn,
 					parentID,
 					dbDesc.GetSchemaID(tree.PublicSchema),
