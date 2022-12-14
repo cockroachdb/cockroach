@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -672,7 +671,7 @@ func (rq *replicateQueue) shouldQueue(
 			conf,
 			voterReplicas,
 			repl,
-			repl.loadStats.batchRequests.SnapshotRatedSummary(),
+			repl.loadStats.RequestLocalityInfo(),
 		) {
 		log.KvDistribution.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
@@ -1541,7 +1540,7 @@ func (rq *replicateQueue) maybeTransferLeaseAwayTarget(
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
-		repl.loadStats.batchRequests.SnapshotRatedSummary(),
+		repl.loadStats.RequestLocalityInfo(),
 		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
 			Goal: allocator.LeaseCountConvergence,
@@ -1980,7 +1979,7 @@ func (rq *replicateQueue) shedLease(
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
-		repl.loadStats.batchRequests.SnapshotRatedSummary(),
+		repl.loadStats.RequestLocalityInfo(),
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)
@@ -1988,10 +1987,7 @@ func (rq *replicateQueue) shedLease(
 		return allocator.NoSuitableTarget, nil
 	}
 
-	avgQPS, qpsMeasurementDur := repl.loadStats.batchRequests.AverageRatePerSecond()
-	if qpsMeasurementDur < replicastats.MinStatsDuration {
-		avgQPS = 0
-	}
+	avgQPS := repl.LoadStats().QueriesPerSecond
 	if err := rq.TransferLease(ctx, repl, repl.store.StoreID(), target.StoreID, avgQPS); err != nil {
 		return allocator.TransferErr, err
 	}
@@ -2165,11 +2161,9 @@ func rangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 	info := allocator.RangeUsageInfo{
 		LogicalBytes: repl.GetMVCCStats().Total(),
 	}
-	if queriesPerSecond, dur := repl.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
-		info.QueriesPerSecond = queriesPerSecond
-	}
-	if writesPerSecond, dur := repl.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
-		info.WritesPerSecond = writesPerSecond
-	}
+
+	loadStats := repl.LoadStats()
+	info.QueriesPerSecond = loadStats.QueriesPerSecond
+	info.WritesPerSecond = loadStats.WriteKeysPerSecond
 	return info
 }

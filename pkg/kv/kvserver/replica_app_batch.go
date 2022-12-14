@@ -279,7 +279,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
 		}
 		if added := res.Delta.KeyCount; added > 0 {
-			b.r.loadStats.writeKeys.RecordCount(float64(added), 0)
+			b.r.loadStats.RecordWriteKeys(float64(added))
 		}
 		if res.AddSSTable.AtWriteTimestamp {
 			b.r.handleSSTableRaftMuLocked(
@@ -610,9 +610,8 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	deltaStats.Subtract(prevStats)
 	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, deltaStats)
 
-	// Record the write activity, passing a 0 nodeID because replica.writeStats
-	// intentionally doesn't track the origin of the writes.
-	b.r.loadStats.writeKeys.RecordCount(float64(b.ab.numMutations), 0)
+	// Record the number of keys written to the replica.
+	b.r.loadStats.RecordWriteKeys(float64(b.ab.numMutations))
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {

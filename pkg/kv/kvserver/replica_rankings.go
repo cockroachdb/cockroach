@@ -92,7 +92,7 @@ func (cr candidateReplica) Repl() *Replica {
 
 // Stats returns the QPS replica load stats.
 func (cr candidateReplica) Stats() *replicastats.RatedSummary {
-	return cr.Replica.loadStats.batchRequests.SnapshotRatedSummary()
+	return cr.Replica.loadStats.RequestLocalityInfo()
 }
 
 // ReplicaRankings maintains top-k orderings of the replicas in a store by QPS.

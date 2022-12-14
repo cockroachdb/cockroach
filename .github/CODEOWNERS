@@ -226,6 +226,7 @@
 /pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvstorage/             @cockroachdb/repl-prs
 /pkg/kv/kvserver/liveness/              @cockroachdb/kv-prs
+/pkg/kv/kvserver/load/                  @cockroachdb/kv-prs
 /pkg/kv/kvserver/logstore/              @cockroachdb/repl-prs
 /pkg/kv/kvserver/loqrecovery/           @cockroachdb/repl-prs
 /pkg/kv/kvserver/multiqueue/            @cockroachdb/kv-prs

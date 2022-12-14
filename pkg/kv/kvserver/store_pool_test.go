@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,16 +87,17 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		ValBytes: 4,
 	}
 	replica.mu.Unlock()
-	replica.loadStats = NewReplicaLoad(clock, nil)
+	replica.loadStats = load.NewReplicaLoad(clock, nil)
 	for _, store := range stores {
-		replica.loadStats.batchRequests.RecordCount(1, store.Node.NodeID)
-		replica.loadStats.writeKeys.RecordCount(1, store.Node.NodeID)
+		replica.loadStats.RecordBatchRequests(1, store.Node.NodeID)
+		replica.loadStats.RecordWriteKeys(1)
 	}
 	manual.Advance(replicastats.MinStatsDuration + time.Second)
 
 	rangeUsageInfo := rangeUsageInfoForRepl(&replica)
-	QPS, _ := replica.loadStats.batchRequests.AverageRatePerSecond()
-	WPS, _ := replica.loadStats.writeKeys.AverageRatePerSecond()
+	stats := replica.LoadStats()
+	QPS := stats.QueriesPerSecond
+	WPS := stats.WriteKeysPerSecond
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeUsageInfo, roachpb.ADD_VOTER)
 	desc, ok := sp.GetStoreDescriptor(roachpb.StoreID(1))
@@ -225,7 +227,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)
 	}
-	replica.loadStats = NewReplicaLoad(store.Clock(), nil)
+	replica.loadStats = load.NewReplicaLoad(store.Clock(), nil)
 
 	rangeUsageInfo := rangeUsageInfoForRepl(replica)
 
