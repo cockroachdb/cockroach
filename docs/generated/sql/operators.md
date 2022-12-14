@@ -457,9 +457,11 @@
 <tr><td>tsvector <code>IS NOT DISTINCT FROM</code> tsvector</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>IS NOT DISTINCT FROM</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>unknown <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>unknown <code>IS NOT DISTINCT FROM</code> void</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>IS NOT DISTINCT FROM</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>IS NOT DISTINCT FROM</code> <a href="uuid.html">uuid[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>varbit <code>IS NOT DISTINCT FROM</code> varbit</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>void <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>LIKE</code></td><td>Return</td></tr>
