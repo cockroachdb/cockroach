@@ -69,14 +69,15 @@ func TestExternalDistinct(t *testing.T) {
 			var outputOrdering execinfrapb.Ordering
 			verifier := colexectestutils.UnorderedVerifier
 			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort were added as Closers.
-			numExpectedClosers := 3
+			// disk-backed sort (which includes both the disk spiller and the
+			// sort) were added as Closers.
+			numExpectedClosers := 4
 			if tc.isOrderedOnDistinctCols {
 				outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 				verifier = colexectestutils.OrderedVerifier
-				// The final disk-backed sort must also be added as a
-				// Closer.
-				numExpectedClosers++
+				// The disk spiller and the sort included in the final
+				// disk-backed sort must also be added as Closers.
+				numExpectedClosers += 2
 			}
 			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				// A sorter should never exceed ExternalSorterMinPartitions, even
@@ -193,8 +194,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			)
 			require.NoError(t, err)
 			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort were added as Closers.
-			numExpectedClosers := 3
+			// disk-backed sort (which accounts for two) were added as Closers.
+			numExpectedClosers := 4
 			require.Equal(t, numExpectedClosers, len(closers))
 			numRuns++
 			return distinct, nil
