@@ -133,7 +133,6 @@ export interface StatementDetailsStateProps {
   isLoading: boolean;
   statementsError: Error | null;
   timeScale: TimeScale;
-  nodeNames: { [nodeId: string]: string };
   nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: StatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
