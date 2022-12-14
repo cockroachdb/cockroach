@@ -428,14 +428,6 @@ func makeSpanFromInvertedSpan(invSpan inverted.Span) *constraint.Span {
 	return &span
 }
 
-func (h *Histogram) getNextLowerBound(currentUpperBound tree.Datum) tree.Datum {
-	nextLowerBound, ok := currentUpperBound.Next(h.evalCtx)
-	if !ok {
-		nextLowerBound = currentUpperBound
-	}
-	return nextLowerBound
-}
-
 func (h *Histogram) getPrevUpperBound(
 	currentLowerBound constraint.Key, boundary constraint.SpanBoundary, colOffset int,
 ) tree.Datum {
@@ -537,7 +529,7 @@ func (hi *histogramIter) next() (ok bool) {
 		if hi.idx == 0 {
 			lb = ub
 		} else {
-			lb = hi.h.getNextLowerBound(hi.h.upperBound(hi.idx - 1))
+			lb = hi.h.upperBound(hi.idx - 1)
 		}
 		return lb, ub
 	}
@@ -560,11 +552,21 @@ func (hi *histogramIter) next() (ok bool) {
 }
 
 func makeSpanFromBucket(iter *histogramIter, prefix []tree.Datum) (span constraint.Span) {
+	startBoundary := constraint.ExcludeBoundary
+	endBoundary := constraint.IncludeBoundary
+	if iter.desc {
+		startBoundary = constraint.IncludeBoundary
+		endBoundary = constraint.ExcludeBoundary
+	}
+	if iter.lb.Compare(iter.h.evalCtx, iter.ub) == 0 {
+		startBoundary = constraint.IncludeBoundary
+		endBoundary = constraint.IncludeBoundary
+	}
 	span.Init(
 		constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], iter.lb)...),
-		constraint.IncludeBoundary,
+		startBoundary,
 		constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], iter.ub)...),
-		constraint.IncludeBoundary,
+		endBoundary,
 	)
 	return span
 }
@@ -626,6 +628,24 @@ func getFilteredBucket(
 	rangeBefore, rangeAfter, ok := getRangesBeforeAndAfter(
 		bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound, iter.desc,
 	)
+	// Decrement rangeBefore by one because one of bucketLowerBound or
+	// bucketUpperBound is always exclusive.
+	rangeBefore--
+	if !iter.desc && filteredSpan.StartBoundary() == constraint.ExcludeBoundary {
+		// Decrement rangeAfter by one if spanLowerBound is exclusive.
+		rangeAfter--
+	}
+	if iter.desc && filteredSpan.EndBoundary() == constraint.ExcludeBoundary {
+		// Decrement rangeAfter by one if spanUpperBound is exclusive.
+		rangeAfter--
+	}
+	// Make sure ranges are non-negative.
+	if rangeBefore < 0 {
+		rangeBefore = 0
+	}
+	if rangeAfter < 0 {
+		rangeAfter = 0
+	}
 
 	// Determine whether this span represents an equality condition.
 	isEqualityCondition := spanLowerBound.Compare(keyCtx.EvalCtx, spanUpperBound) == 0
@@ -768,6 +788,7 @@ func getRangesBeforeAndAfter(
 	}
 
 	// The calculations below assume that all bounds are inclusive.
+	// TODO(mgartner): This statement above is not true.
 	// TODO(rytaft): handle more types here.
 	switch beforeLowerBound.ResolvedType().Family() {
 	case types.IntFamily:

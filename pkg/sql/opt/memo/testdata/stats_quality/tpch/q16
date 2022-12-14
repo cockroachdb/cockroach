@@ -88,8 +88,8 @@ sort
       │         │    │    ├── save-table-name: q16_select_6
       │         │    │    ├── columns: p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
       │         │    │    ├── stats: [rows=10658.85, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11,13)=199.999, null(11,13)=0, distinct(11-13)=10639.6, null(11-13)=0]
-      │         │    │    │   histogram(11)=  0    407.17    7376.2      0       0         0         2446    429.55
-      │         │    │    │                 <--- 'Brand#11' -------- 'Brand#45' --- e'Brand#45\x00' ------ 'Brand#55'
+      │         │    │    │   histogram(11)=  0    407.17    7376.2      0       0         0         2445.9    429.55
+      │         │    │    │                 <--- 'Brand#11' -------- 'Brand#45' --- e'Brand#45\x00' -------- 'Brand#55'
       │         │    │    │   histogram(13)=  0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4
       │         │    │    │                 <---- 3 ------ 9 ------ 14 ----- 19 ----- 23 ----- 36 ----- 45 ----- 49 -
       │         │    │    ├── key: (8)

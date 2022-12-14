@@ -829,16 +829,16 @@ SELECT * FROM hist WHERE (d >= 5 AND d < 12) OR d >= 40
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float!null) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=131, distinct(4)=8.5, null(4)=0]
- │   histogram(4)=  0          0          45   10   36          0           0   40
+ ├── stats: [rows=120, distinct(4)=8.11111, null(4)=0]
+ │   histogram(4)=  0          0          50   10   20          0           0   40
  │                <--- 4.999999999999999 ---- 10.0 ---- 11.999999999999998 --- 40.0
  └── scan hist@idx_d
       ├── columns: d:4(float!null) rowid:8(int!null)
       ├── constraint: /4/8
       │    ├── [/5.0 - /11.999999999999998]
       │    └── [/40.0 - ]
-      ├── stats: [rows=131, distinct(4)=8.5, null(4)=0]
-      │   histogram(4)=  0          0          45   10   36          0           0   40
+      ├── stats: [rows=120, distinct(4)=8.11111, null(4)=0]
+      │   histogram(4)=  0          0          50   10   20          0           0   40
       │                <--- 4.999999999999999 ---- 10.0 ---- 11.999999999999998 --- 40.0
       ├── key: (8)
       └── fd: (8)-->(4)
@@ -1091,16 +1091,16 @@ project
  ├── fd: ()-->(6)
  ├── index-join t47742
  │    ├── columns: a:1(int) t47742.b:2(bool!null)
- │    ├── stats: [rows=3063.5, distinct(2)=1.0025, null(2)=0]
- │    │   histogram(2)=  0    0    0.0024693 3063.5
- │    │                <--- false ----------- true
+ │    ├── stats: [rows=3063.5, distinct(2)=1, null(2)=0]
+ │    │   histogram(2)=  0 3063.5
+ │    │                <--- true
  │    ├── fd: ()-->(2)
  │    └── scan t47742@b_idx
  │         ├── columns: t47742.b:2(bool!null) rowid:3(int!null)
  │         ├── constraint: /-2/3: [/true - /true]
- │         ├── stats: [rows=3063.5, distinct(2)=11, null(2)=0]
- │         │   histogram(2)=  0   0    0.0024693 3063.5
- │         │                <--- NULL ----------- true
+ │         ├── stats: [rows=3063.5, distinct(2)=1, null(2)=0]
+ │         │   histogram(2)=  0 3063.5
+ │         │                <--- true
  │         ├── key: (3)
  │         └── fd: ()-->(2)
  └── projections

@@ -1988,8 +1988,8 @@ SELECT * FROM data WHERE name >= 'bbb'
 ----
 select
  ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
- ├── stats: [rows=3090.897, distinct(2)=309.433, null(2)=0]
- │   histogram(2)=  0    0    3089.9   1
+ ├── stats: [rows=3078.921, distinct(2)=308.238, null(2)=0]
+ │   histogram(2)=  0    0    3077.9   1
  │                <--- 'bbb' -------- 'c'
  ├── scan data
  │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)

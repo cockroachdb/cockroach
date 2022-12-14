@@ -1052,8 +1052,8 @@ project
       ├── stats: [rows=46.67789, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │   histogram(4)=  0   23.339   0   23.339
       │                <--- 'banana' --- 'cherry'
-      │   histogram(7)=  0        46.678        2.7762e-16          0
-      │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
+      │   histogram(7)=  0        46.678        0          0
+      │                <--- '\x376700012a0e00' --- '\x376700012a0e01'
       └── key: (1)
 
 opt
@@ -1075,8 +1075,8 @@ index-join inv_hist
       ├── stats: [rows=46.67789, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │   histogram(4)=  0   23.339   0   23.339
       │                <--- 'banana' --- 'cherry'
-      │   histogram(7)=  0        46.678        2.7762e-16          0
-      │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
+      │   histogram(7)=  0        46.678        0          0
+      │                <--- '\x376700012a0e00' --- '\x376700012a0e01'
       └── key: (1)
 
 opt
@@ -1108,8 +1108,8 @@ project
       │         ├── stats: [rows=46.67789, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │         │   histogram(4)=  0   23.339   0   23.339
       │         │                <--- 'banana' --- 'cherry'
-      │         │   histogram(7)=  0        46.678        2.7762e-16          0
-      │         │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
+      │         │   histogram(7)=  0        46.678        0          0
+      │         │                <--- '\x376700012a0e00' --- '\x376700012a0e01'
       │         └── key: (1)
       └── filters
            └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
@@ -1138,8 +1138,8 @@ select
  │         ├── stats: [rows=46.67789, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
  │         │   histogram(4)=  0   23.339   0   23.339
  │         │                <--- 'banana' --- 'cherry'
- │         │   histogram(7)=  0        46.678        2.7762e-16          0
- │         │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
+ │         │   histogram(7)=  0        46.678        0          0
+ │         │                <--- '\x376700012a0e00' --- '\x376700012a0e01'
  │         └── key: (1)
  └── filters
       └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
@@ -1170,8 +1170,8 @@ select
  │         ├── stats: [rows=46.67789, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
  │         │   histogram(4)=  0   23.339   0   23.339
  │         │                <--- 'banana' --- 'cherry'
- │         │   histogram(7)=  0        46.678        2.7762e-16          0
- │         │                <--- '\x376700012a0e00' ------------ '\x376700012a0e01'
+ │         │   histogram(7)=  0        46.678        0          0
+ │         │                <--- '\x376700012a0e00' --- '\x376700012a0e01'
  │         └── key: (1)
  └── filters
       └── (i:2 > 0) AND (i:2 <= 100) [type=bool, outer=(2), constraints=(/2: [/1 - /100]; tight)]
