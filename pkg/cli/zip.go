@@ -278,7 +278,10 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 	{
 		s := zc.clusterPrinter.start("hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
-find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
+for stat in "queries" "writes" "reads" "write_bytes" "read_bytes"; do
+	echo "$stat"
+	find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
+done
 `)); err != nil {
 			return err
 		}
@@ -288,7 +291,11 @@ find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort
 	{
 		s := zc.clusterPrinter.start("tenant hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
-find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20`)); err != nil {
+for stat in "queries" "writes" "reads" "write_bytes" "read_bytes"; do
+    echo "$stat"_per_second
+    find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
+done
+`)); err != nil {
 			return err
 		}
 	}
