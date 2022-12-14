@@ -12,7 +12,6 @@ package scbuild
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -988,13 +986,21 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		// Handle special case of database children, which may include temporary
 		// schemas, which aren't explicitly referenced in the database's schemas
 		// map.
-		childSchemas := b.cr.MustGetSchemasForDatabase(b.ctx, d)
-		for schemaID, schemaName := range childSchemas {
-			c.backrefs.Add(schemaID)
-			if strings.HasPrefix(schemaName, catconstants.PgTempSchemaName) {
-				b.tempSchemas[schemaID] = schemadesc.NewTemporarySchema(schemaName, schemaID, d.GetID())
+		childSchemas := b.cr.GetAllSchemasInDatabase(b.ctx, d)
+		_ = childSchemas.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			sc, err := catalog.AsSchemaDescriptor(desc)
+			if err != nil {
+				panic(err)
 			}
-		}
+			switch sc.SchemaKind() {
+			case catalog.SchemaVirtual:
+				return nil
+			case catalog.SchemaTemporary:
+				b.tempSchemas[sc.GetID()] = sc
+			}
+			c.backrefs.Add(sc.GetID())
+			return nil
+		})
 	case catalog.SchemaDescriptor:
 		b.ensureDescriptor(c.desc.GetParentID())
 		db := b.descCache[c.desc.GetParentID()].desc
@@ -1003,13 +1009,11 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		// Handle special case of schema children, which have to be added to
 		// the back-referenced ID set but which aren't explicitly referenced in
 		// the schema descriptor itself.
-		b.cr.ReadObjectIDs(b.ctx, db.(catalog.DatabaseDescriptor), d).ForEach(c.backrefs.Add)
-		if err := d.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-			c.backrefs.Add(overload.ID)
+		objects := b.cr.GetAllObjectsInSchema(b.ctx, db.(catalog.DatabaseDescriptor), d)
+		_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			c.backrefs.Add(desc.GetID())
 			return nil
-		}); err != nil {
-			panic(err)
-		}
+		})
 	default:
 		b.ensureDescriptor(c.desc.GetParentID())
 		db := b.descCache[c.desc.GetParentID()].desc
