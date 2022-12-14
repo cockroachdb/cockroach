@@ -1111,25 +1111,6 @@ func (tc *Collection) GetSchemasForDatabase(
 	return ret, nil
 }
 
-// GetObjectNamesAndIDs returns the names and IDs of all objects in a schema.
-// Deprecated: prefer GetAllObjectsInSchema.
-func (tc *Collection) GetObjectNamesAndIDs(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
-) (nstree.Catalog, error) {
-	c, err := tc.GetAllObjectsInSchema(ctx, txn, db, sc)
-	if err != nil {
-		return nstree.Catalog{}, err
-	}
-	var ret nstree.MutableCatalog
-	_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if !desc.Dropped() {
-			ret.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
-		}
-		return nil
-	})
-	return ret.Catalog, nil
-}
-
 // SetSyntheticDescriptors sets the provided descriptors as the synthetic
 // descriptors to override all other matching descriptors during immutable
 // access. An immutable copy is made if the descriptor is mutable. See the
