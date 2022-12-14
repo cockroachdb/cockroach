@@ -126,8 +126,8 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 // and ensure they are identical to what Postgres produces. Regenerate that
 // file by:
 //
-//	Starting a postgres server on :5432 then running:
-//	cd pkg/cmd/generate-binary; go run main.go > ../../sql/pgwire/testdata/encodings.json
+//	Starting a postgres server with PostGIS installed on :5432 then running:
+//	bazel run pkg/cmd/generate-binary > ../../sql/pgwire/testdata/encodings.json
 func TestEncodings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cmd/cmp-protocol/pgconnect",
+        "//pkg/sql/oidext",
         "//pkg/sql/pgwire/pgwirebase",
     ],
 )
