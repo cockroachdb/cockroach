@@ -677,6 +677,34 @@ func ColVecToDatumAndDeselect(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.EnumFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.Bytes()
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v := typedCol.Get(srcIdx)
+						e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, v)
+						if err != nil {
+							colexecerror.InternalError(err)
+						}
+						_converted := da.NewDEnum(e)
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 			default:
 				switch ct.Width() {
@@ -1039,6 +1067,29 @@ func ColVecToDatumAndDeselect(
 						_ = true
 						v := typedCol.Get(srcIdx)
 						_converted := da.NewDInterval(tree.DInterval{Duration: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
+			case types.EnumFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.Bytes()
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						v := typedCol.Get(srcIdx)
+						e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, v)
+						if err != nil {
+							colexecerror.InternalError(err)
+						}
+						_converted := da.NewDEnum(e)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -1479,6 +1530,33 @@ func ColVecToDatum(
 							_ = true
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDInterval(tree.DInterval{Duration: v})
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EnumFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							if nulls.NullAt(srcIdx) {
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v := typedCol.Get(srcIdx)
+							e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, v)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+							_converted := da.NewDEnum(e)
 							converted[destIdx] = _converted
 						}
 					}
@@ -1930,6 +2008,33 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.EnumFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							if nulls.NullAt(srcIdx) {
+								//gcassert:bce
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v := typedCol.Get(srcIdx)
+							e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, v)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+							_converted := da.NewDEnum(e)
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 				default:
 					switch ct.Width() {
@@ -2296,6 +2401,29 @@ func ColVecToDatum(
 							converted[destIdx] = _converted
 						}
 					}
+				case types.EnumFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							v := typedCol.Get(srcIdx)
+							e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, v)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+							_converted := da.NewDEnum(e)
+							converted[destIdx] = _converted
+						}
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 				default:
 					switch ct.Width() {
@@ -2656,6 +2784,28 @@ func ColVecToDatum(
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDInterval(tree.DInterval{Duration: v})
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EnumFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							v := typedCol.Get(srcIdx)
+							e, err := tree.MakeDEnumFromPhysicalRepresentation(ct, v)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+							_converted := da.NewDEnum(e)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}

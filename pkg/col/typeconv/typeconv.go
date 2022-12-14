@@ -36,7 +36,13 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 	switch family {
 	case types.BoolFamily:
 		return types.BoolFamily
-	case types.BytesFamily, types.StringFamily, types.UuidFamily, types.EncodedKeyFamily:
+	case types.BytesFamily, types.StringFamily, types.UuidFamily, types.EncodedKeyFamily, types.EnumFamily:
+		// Note that by using Bytes family as the canonical one for other type
+		// families we allow the execution engine to evaluate invalid operations
+		// (e.g. the concat binary operation between a UUID and an enum "has"
+		// the execution engine support). However, it's not a big deal since the
+		// type-checking for validity of operations is done before the query
+		// reaches the execution engine.
 		return types.BytesFamily
 	case types.DecimalFamily:
 		return types.DecimalFamily

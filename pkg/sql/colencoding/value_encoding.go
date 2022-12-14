@@ -60,7 +60,7 @@ func DecodeTableValueToCol(
 		// original buffer.
 		buf, b, err = encoding.DecodeBoolValue(origBuf)
 		vecs.BoolCols[colIdx][rowIdx] = b
-	case types.BytesFamily, types.StringFamily:
+	case types.BytesFamily, types.StringFamily, types.EnumFamily:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
 		vecs.BytesCols[colIdx].Set(rowIdx, data)
