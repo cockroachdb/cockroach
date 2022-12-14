@@ -668,7 +668,8 @@ func init() {
 // BenchmarkPhases measures the time that each of the optimization phases takes
 // to run. See the comments for the Phase enumeration for more details
 // on what each phase includes.
-func BenchmarkPhases(b *testing.B) {
+// TODO: unskip once #93565 is resolved.
+func Skip_BenchmarkPhases(b *testing.B) {
 	for _, query := range queriesToTest(b) {
 		h := newHarness(b, query, schemas)
 		b.Run(query.name, func(b *testing.B) {
