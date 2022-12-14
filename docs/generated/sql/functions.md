@@ -379,11 +379,11 @@
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
 <tr><td><a name="crypt"></a><code>crypt(password: <a href="string.html">string</a>, salt: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.</p>
-</span></td><td>Volatile</td></tr>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
-</span></td><td>Leakproof</td></tr>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using the default number of rounds.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>, iter_count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using <code>iter_count</code> number of rounds.</p>
@@ -391,7 +391,7 @@
 <tr><td><a name="hmac"></a><code>hmac(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates hashed MAC for <code>data</code> with key <code>key</code>. <code>type</code> is the same as in <code>digest()</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="hmac"></a><code>hmac(data: <a href="string.html">string</a>, key: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates hashed MAC for <code>data</code> with key <code>key</code>. <code>type</code> is the same as in <code>digest()</code>.</p>
-</span></td><td>Leakproof</td></tr></tbody>
+</span></td><td>Immutable</td></tr></tbody>
 </table>
 
 ### DECIMAL functions
