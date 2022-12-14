@@ -14838,7 +14838,7 @@ interval_value:
     $$.val = &tree.CastExpr{
       Expr: tree.NewStrVal($2),
       Type: t,
-      // TODO(#sql-experience): This should be CastPrepend, but
+      // TODO(#sql-sessions): This should be CastPrepend, but
       // that does not work with parenthesized expressions
       // (using FmtAlwaysGroupExprs).
       SyntaxMode: tree.CastShort,
@@ -14856,7 +14856,7 @@ interval_value:
       Type: types.MakeInterval(
         types.IntervalTypeMetadata{Precision: prec, PrecisionIsSet: true},
       ),
-      // TODO(#sql-experience): This should be CastPrepend, but
+      // TODO(#sql-sessions): This should be CastPrepend, but
       // that does not work with parenthesized expressions
       // (using FmtAlwaysGroupExprs).
       SyntaxMode: tree.CastShort,
