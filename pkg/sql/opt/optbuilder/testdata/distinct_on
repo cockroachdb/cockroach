@@ -488,3 +488,49 @@ distinct-on
  └── aggregations
       └── first-agg [as=z:3]
            └── z:3
+
+# Regression test for #90763. Ensure NULLS LAST works with DISTINCT ON.
+exec-ddl
+CREATE TABLE author (
+  id INT PRIMARY KEY,
+  name TEXT,
+  genre TEXT
+)
+----
+
+build
+SELECT
+  DISTINCT ON ("genre") *
+FROM
+  "public"."author"
+ORDER BY
+  "genre" ASC NULLS LAST,
+  "id" ASC NULLS LAST
+----
+sort
+ ├── columns: id:1!null name:2 genre:3  [hidden: nulls_ordering_genre:8!null nulls_ordering_id:9!null]
+ ├── ordering: +8,+3,+9,+1
+ └── project
+      ├── columns: nulls_ordering_genre:8!null nulls_ordering_id:9!null id:1!null name:2 genre:3
+      ├── distinct-on
+      │    ├── columns: id:1!null name:2 genre:3
+      │    ├── grouping columns: genre:3
+      │    ├── internal-ordering: +6,+7,+1 opt(3)
+      │    ├── sort
+      │    │    ├── columns: id:1!null name:2 genre:3 nulls_ordering_genre:6!null nulls_ordering_id:7!null
+      │    │    ├── ordering: +7,+1 opt(3,6)
+      │    │    └── project
+      │    │         ├── columns: nulls_ordering_genre:6!null nulls_ordering_id:7!null id:1!null name:2 genre:3
+      │    │         ├── scan author
+      │    │         │    └── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    │         └── projections
+      │    │              ├── genre:3 IS NULL [as=nulls_ordering_genre:6]
+      │    │              └── id:1 IS NULL [as=nulls_ordering_id:7]
+      │    └── aggregations
+      │         ├── first-agg [as=id:1]
+      │         │    └── id:1
+      │         └── first-agg [as=name:2]
+      │              └── name:2
+      └── projections
+           ├── genre:3 IS NULL [as=nulls_ordering_genre:8]
+           └── id:1 IS NULL [as=nulls_ordering_id:9]

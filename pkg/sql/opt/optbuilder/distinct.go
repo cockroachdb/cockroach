@@ -61,7 +61,8 @@ func (b *Builder) buildDistinctOn(
 ) (outScope *scope) {
 	// When there is a DISTINCT ON clause, the ORDER BY clause is restricted to either:
 	//  1. Contain a subset of columns from the ON list, or
-	//  2. Start with a permutation of all columns from the ON list.
+	//  2. Start with a permutation of all columns from the ON list, or
+	//  3. Contain col IS NULL expressions, where col is from the ON list.
 	//
 	// In case 1, the ORDER BY simply specifies an output ordering as usual.
 	// Example:
@@ -76,13 +77,31 @@ func (b *Builder) buildDistinctOn(
 	//   This means: for each value of a, choose the (b, c) from the row with the
 	//   smallest e value, and order these results by a.
 	//
-	// Note: this behavior is consistent with PostgreSQL.
+	// Case 3 is needed to support using NULLS LAST with DISTINCT ON. Since we
+	// synthesize an ORDER BY column such as (col IS NULL) to support NULLS LAST,
+	// we need to make sure that we allow this column to exist.
+	//
+	// Note: Cases 1 and 2 are consistent with PostgreSQL. Case 3 is more
+	// permissive but does not affect correctness.
 
 	// Check that the DISTINCT ON expressions match the initial ORDER BY
 	// expressions.
 	var seen opt.ColSet
 	for _, col := range inScope.ordering {
 		if !distinctOnCols.Contains(col.ID()) {
+			scopeCol := inScope.getColumn(col.ID())
+			if scopeCol != nil {
+				if isExpr, ok := scopeCol.scalar.(*memo.IsExpr); ok {
+					if _, ok := isExpr.Right.(*memo.NullExpr); ok {
+						if v, ok := isExpr.Left.(*memo.VariableExpr); ok {
+							if distinctOnCols.Contains(v.Col) {
+								// We have a col IS NULL expression (case 3 above).
+								continue
+							}
+						}
+					}
+				}
+			}
 			panic(pgerror.Newf(
 				pgcode.InvalidColumnReference,
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
