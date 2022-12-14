@@ -106,7 +106,11 @@ const (
 	// some buffer for other messages, primarily heartbeats.
 	replicaQueueExtraSize = 10
 
-	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
+	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the
+	// last gossiped store capacity values which need be exceeded before the
+	// store will gossip immediately without waiting for the periodic gossip
+	// interval.
+	defaultGossipWhenCapacityDeltaExceedsFraction = 0.05
 
 	// systemDataGossipInterval is the interval at which range lease
 	// holders verify that the most recent system data is gossiped.
@@ -2610,14 +2614,20 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
 
-	// Set countdown target for re-gossiping capacity earlier than
-	// the usual periodic interval. Re-gossip more rapidly for RangeCount
-	// changes because allocators with stale information are much more
-	// likely to make bad decisions.
+	// Set countdown target for re-gossiping capacity to be large enough that
+	// it would only occur when there has been significant changes. We
+	// currently gossip every 10 seconds, meaning that unless significant
+	// redistribution occurs we do not wish to gossip again to avoid wasting
+	// bandwidth and racing with local storepool estimations.
+	// TODO(kvoli): Reconsider what triggers gossip here and possibly limit to
+	// only significant workload changes (load), rather than lease or range
+	// count. Previoulsy, this was not as much as an issue as the gossip
+	// interval was 60 seconds, such that gossiping semi-frequently on changes
+	// was required.
 	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
-	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
+	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 10))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
-	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
+	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 10))))
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, storeDesc.Capacity.QueriesPerSecond)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
 
