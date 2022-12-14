@@ -929,6 +929,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   isTenant: false,
   hasViewActivityRedactedRole: false,
   dismissAlertMessage: noop,
+  refreshDatabases: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshStatements: noop,
   refreshUserSQLRoles: noop,

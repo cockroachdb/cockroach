@@ -15,6 +15,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import {
   refreshNodes,
+  refreshDatabases,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
   refreshUserSQLRoles,
@@ -217,21 +218,16 @@ export const selectApps = createSelector(
   },
 );
 
-// selectDatabases returns the array of all databases with statement statistics present
-// in the data.
+// selectDatabases returns the array of all databases in the cluster,
+// regardless of whether they have statement statistics present in the data.
 export const selectDatabases = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
+  (state: AdminUIState) => state.cachedData.databases,
+  (state: CachedDataReducerState<clusterUiApi.DatabasesListResponse>) => {
     if (!state.data) {
       return [];
     }
-    return Array.from(
-      new Set(
-        state.data.statements.map(s =>
-          s.key.key_data.database ? s.key.key_data.database : unset,
-        ),
-      ),
-    )
+
+    return state.data.databases
       .filter((dbName: string) => dbName !== null && dbName.length > 0)
       .sort();
   },
@@ -287,6 +283,7 @@ export const searchLocalSetting = new LocalSetting(
 );
 
 const fingerprintsPageActions = {
+  refreshDatabases,
   refreshStatements,
   onTimeScaleChange: setGlobalTimeScaleAction,
   refreshStatementDiagnosticsRequests,
