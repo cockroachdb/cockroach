@@ -54,11 +54,12 @@ func testMakeLeaseTransferChange(rangeKey Key, target StoreID) func(s State) Cha
 }
 
 func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
-	state := NewTestStateReplCounts(replCounts, 3 /* replsPerRange */)
-	// The first range has ID 1, this is the initial range in the keyspace.
-	// We split that and use the rhs, range 2.
+	numReplicas := 0
+	for _, count := range replCounts {
+		numReplicas += count
+	}
+	state := NewTestStateReplCounts(replCounts, numReplicas, 50 /* keyspace */)
 	rng, _ := state.Range(RangeID(2))
-	state.TransferLease(rng.RangeID(), 1)
 	return state, rng
 }
 
@@ -67,7 +68,8 @@ func testGetAllReplLocations(
 ) (map[int64][]int, map[int64][]int) {
 	rmapView := make(map[int64][]int)
 	storeView := make(map[int64][]int)
-	for rangeID, rng := range state.Ranges() {
+	for _, rng := range state.Ranges() {
+		rangeID := rng.RangeID()
 		if _, ok := excludedRanges[rangeID]; ok {
 			continue
 		}
@@ -81,7 +83,8 @@ func testGetAllReplLocations(
 
 func testGetLHLocations(state State, excludedRanges map[RangeID]bool) map[int64]int {
 	leases := make(map[int64]int)
-	for rangeID := range state.Ranges() {
+	for _, rng := range state.Ranges() {
+		rangeID := rng.RangeID()
 		if _, ok := excludedRanges[rangeID]; ok {
 			continue
 		}
@@ -95,14 +98,14 @@ func testGetLHLocations(state State, excludedRanges map[RangeID]bool) map[int64]
 func testGetReplLocations(state State, r Range) ([]int, []int) {
 	storeView := []int{}
 	for _, store := range state.Stores() {
-		if _, ok := store.Replicas()[r.RangeID()]; ok {
+		if _, ok := store.Replica(r.RangeID()); ok {
 			storeView = append(storeView, int(store.StoreID()))
 		}
 	}
 
 	rmapView := []int{}
-	for storeID := range r.Replicas() {
-		rmapView = append(rmapView, int(storeID))
+	for _, replica := range r.Replicas() {
+		rmapView = append(rmapView, int(replica.StoreID()))
 	}
 
 	sort.Ints(rmapView)
@@ -185,9 +188,9 @@ func TestReplicaChange(t *testing.T) {
 			change.Apply(state)
 			replLocations, _ := testGetReplLocations(state, r)
 			leaseholder := -1
-			for storeID, repl := range r.Replicas() {
+			for _, repl := range r.Replicas() {
 				if repl.HoldsLease() {
-					leaseholder = int(storeID)
+					leaseholder = int(repl.StoreID())
 				}
 			}
 			require.Equal(t, tc.expectedReplicas, replLocations)

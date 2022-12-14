@@ -82,7 +82,7 @@ func TestLeaseTransferOp(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
-			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: tc.ranges + 1, 2: tc.ranges + 1, 3: tc.ranges + 1}, 3)
+			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: tc.ranges + 1, 2: tc.ranges + 1, 3: tc.ranges + 1}, 3, 1000 /* keyspace */)
 			settings := config.DefaultSimulationSettings()
 			changer := state.NewReplicaChanger()
 			controller := NewController(changer, allocatorimpl.Allocator{}, settings)
@@ -267,7 +267,7 @@ func TestRelocateRangeOp(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
-			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 3, 2: 3, 3: 3, 4: 0, 5: 0, 6: 0}, 3)
+			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 3, 2: 3, 3: 3, 4: 0, 5: 0, 6: 0}, 3, 1000 /* keyspace */)
 			changer := state.NewReplicaChanger()
 			allocator := s.MakeAllocator(state.StoreID(1))
 			controller := NewController(changer, allocator, settings)
@@ -291,7 +291,8 @@ func TestRelocateRangeOp(t *testing.T) {
 			// Update the storepool for informing allocator decisions.
 			storeDescriptors := s.StoreDescriptors()
 			exchange.Put(state.OffsetTick(start, 0), storeDescriptors...)
-			for storeID := range s.Stores() {
+			for _, store := range s.Stores() {
+				storeID := store.StoreID()
 				s.UpdateStorePool(storeID, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(storeID)))
 			}
 
@@ -342,8 +343,8 @@ func TestRelocateRangeOp(t *testing.T) {
 						leaseholder: int64(leaseholderStore.StoreID()),
 						voters:      []int64{},
 					}
-					for storeID := range rng.Replicas() {
-						rState.voters = append(rState.voters, int64(storeID))
+					for _, repl := range rng.Replicas() {
+						rState.voters = append(rState.voters, int64(repl.StoreID()))
 					}
 					sort.Slice(rState.voters, func(i, j int) bool {
 						return rState.voters[i] < rState.voters[j]

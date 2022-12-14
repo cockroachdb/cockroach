@@ -57,6 +57,7 @@ type Simulator struct {
 	state    state.State
 	changer  state.Changer
 	exchange state.Exchange
+	shuffler func(n int, swap func(i, j int))
 
 	metrics *MetricsTracker
 }
@@ -77,7 +78,8 @@ func NewSimulator(
 	sqs := make(map[state.StoreID]queue.RangeQueue)
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
 	controllers := make(map[state.StoreID]op.Controller)
-	for storeID := range initialState.Stores() {
+	for _, store := range initialState.Stores() {
+		storeID := store.StoreID()
 		allocator := initialState.MakeAllocator(storeID)
 		// TODO(kvoli): Instead of passing in individual settings to construct
 		// the each ticking component, pass a pointer to the simulation
@@ -102,6 +104,7 @@ func NewSimulator(
 			settings.PacerLoopInterval,
 			settings.PacerMinIterInterval,
 			settings.PacerMaxIterIterval,
+			settings.Seed,
 		)
 		controllers[storeID] = op.NewController(
 			changer,
@@ -133,6 +136,7 @@ func NewSimulator(
 		pacers:      pacers,
 		exchange:    exchange,
 		metrics:     metrics,
+		shuffler:    state.NewShuffler(settings.Seed),
 	}
 }
 
@@ -204,6 +208,10 @@ func (s *Simulator) RunSim(ctx context.Context) {
 // tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
+		s.shuffler(
+			len(s.generators),
+			func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
+		)
 		for _, generator := range s.generators {
 			event := generator.Tick(tick)
 			s.state.ApplyLoad(event)
@@ -216,8 +224,10 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 // transfers.
 func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
 	s.changer.Tick(tick, s.state)
-	for _, controller := range s.controllers {
-		controller.Tick(ctx, tick, s.state)
+	stores := s.state.Stores()
+	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
+	for _, store := range stores {
+		s.controllers[store.StoreID()].Tick(ctx, tick, s.state)
 	}
 }
 
@@ -225,12 +235,14 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
 // exchange. It then updates the exchanged descriptors for each store's store
 // pool.
 func (s *Simulator) tickStateExchange(tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		storeDescriptors := s.state.StoreDescriptors()
-		s.exchange.Put(tick, storeDescriptors...)
-		for storeID := range s.state.Stores() {
-			s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
-		}
+	if s.bgLastTick.Add(s.bgInterval).After(tick) {
+		return
+	}
+	storeDescriptors := s.state.StoreDescriptors()
+	s.exchange.Put(tick, storeDescriptors...)
+	for _, store := range s.state.Stores() {
+		storeID := store.StoreID()
+		s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
 	}
 }
 
@@ -242,7 +254,10 @@ func (s *Simulator) tickStoreClocks(tick time.Time) {
 // consider. It then enqueues each of these and ticks the replicate queue for
 // processing.
 func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.State) {
-	for storeID := range state.Stores() {
+	stores := s.state.Stores()
+	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
+	for _, store := range stores {
+		storeID := store.StoreID()
 
 		// Tick the split queue.
 		s.sqs[storeID].Tick(ctx, tick, state)
@@ -284,8 +299,10 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 // tickStoreRebalancers iterates over the store rebalancers in the cluster and
 // ticks their control loop.
 func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, state state.State) {
-	for _, sr := range s.srs {
-		sr.Tick(ctx, tick, state)
+	stores := s.state.Stores()
+	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
+	for _, store := range stores {
+		s.srs[store.StoreID()].Tick(ctx, tick, state)
 	}
 }
 

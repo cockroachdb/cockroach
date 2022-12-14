@@ -121,12 +121,10 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 	// the following missing fields: capacity, available, used, l0sublevels,
 	// bytesperreplica, writesperreplica.
 	capacity := roachpb.StoreCapacity{}
-	store, ok := state.Store(storeID)
-	if !ok {
-		return capacity
-	}
 
-	for rangeID, replicaID := range store.Replicas() {
+	for _, repl := range state.Replicas(storeID) {
+		rangeID := repl.Range()
+		replicaID := repl.ReplicaID()
 		rng, _ := state.Range(rangeID)
 		if rng.Leaseholder() == replicaID {
 			// TODO(kvoli): We currently only consider load on the leaseholder
