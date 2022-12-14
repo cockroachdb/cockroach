@@ -1045,7 +1045,7 @@ func TestHydrateCatalog(t *testing.T) {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) error {
-				cat, err := descriptors.Direct().GetCatalogUnvalidated(ctx, txn)
+				cat, err := descriptors.GetAllFromStorageUnvalidated(ctx, txn)
 				if err != nil {
 					return err
 				}
@@ -1061,7 +1061,7 @@ func TestHydrateCatalog(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			cat, err := descriptors.Direct().GetCatalogUnvalidated(ctx, txn)
+			cat, err := descriptors.GetAllFromStorageUnvalidated(ctx, txn)
 			if err != nil {
 				return err
 			}
