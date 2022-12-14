@@ -80,7 +80,7 @@ func CollectClusterSchemaForTelemetry(
 	}
 	// Redact the descriptors.
 	redacted := make(map[descpb.ID]*eventpb.SchemaDescriptor, descIDsInSnapshot.Len())
-	_ = raw.ForEachDescriptorEntry(func(rd catalog.Descriptor) error {
+	_ = raw.ForEachDescriptor(func(rd catalog.Descriptor) error {
 		if !descIDsInSnapshot.Contains(rd.GetID()) {
 			return nil
 		}
@@ -146,7 +146,7 @@ func truncatedCatalogKeys(
 			})
 			return nil
 		})
-		_ = raw.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		_ = raw.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			if !idsInNamespace.Contains(desc.GetID()) {
 				keys = append(keys, joinedRecordKey{id: desc.GetID()})
 			}

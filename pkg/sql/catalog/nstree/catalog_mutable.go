@@ -72,23 +72,12 @@ func (mc *MutableCatalog) ensureForName(key catalog.NameKey) *byNameEntry {
 	return newEntry
 }
 
-// UpsertDescriptorEntry adds a descriptor to the MutableCatalog.
-func (mc *MutableCatalog) UpsertDescriptorEntry(desc catalog.Descriptor) {
-	if desc == nil || desc.GetID() == descpb.InvalidID {
+// DeleteByName removes all by-name mappings from the MutableCatalog.
+func (mc *MutableCatalog) DeleteByName(key catalog.NameKey) {
+	if key == nil || !mc.IsInitialized() {
 		return
 	}
-	e := mc.ensureForID(desc.GetID())
-	mc.byteSize -= e.ByteSize()
-	e.desc = desc
-	mc.byteSize += e.ByteSize()
-}
-
-// DeleteDescriptorEntry removes a descriptor from the MutableCatalog.
-func (mc *MutableCatalog) DeleteDescriptorEntry(id descpb.ID) {
-	if id == descpb.InvalidID || !mc.IsInitialized() {
-		return
-	}
-	if removed := mc.byID.delete(id); removed != nil {
+	if removed := mc.byName.delete(key); removed != nil {
 		mc.byteSize -= removed.(catalogEntry).ByteSize()
 	}
 }
@@ -105,14 +94,25 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(
 	e.timestamp = mvccTimestamp
 }
 
-// DeleteNamespaceEntry removes a name -> id mapping from the MutableCatalog.
-func (mc *MutableCatalog) DeleteNamespaceEntry(key catalog.NameKey) {
-	if key == nil || !mc.IsInitialized() {
+// DeleteByID removes all by-ID mappings from the MutableCatalog.
+func (mc *MutableCatalog) DeleteByID(id descpb.ID) {
+	if !mc.IsInitialized() {
 		return
 	}
-	if removed := mc.byName.delete(key); removed != nil {
+	if removed := mc.byID.delete(id); removed != nil {
 		mc.byteSize -= removed.(catalogEntry).ByteSize()
 	}
+}
+
+// UpsertDescriptor adds a descriptor to the MutableCatalog.
+func (mc *MutableCatalog) UpsertDescriptor(desc catalog.Descriptor) {
+	if desc == nil || desc.GetID() == descpb.InvalidID {
+		return
+	}
+	e := mc.ensureForID(desc.GetID())
+	mc.byteSize -= e.ByteSize()
+	e.desc = desc
+	mc.byteSize += e.ByteSize()
 }
 
 // UpsertComment upserts a ((ObjectID, SubID, CommentType) -> Comment) mapping
@@ -139,40 +139,6 @@ func (mc *MutableCatalog) UpsertZoneConfig(
 	mc.byteSize -= e.ByteSize()
 	e.zc = zone.NewZoneConfigWithRawBytes(zoneConfig, rawBytes)
 	mc.byteSize += e.ByteSize()
-}
-
-// FilterByIDs returns a subset of the catalog only for the desired IDs.
-func (mc *MutableCatalog) FilterByIDs(ids []descpb.ID) Catalog {
-	if !mc.IsInitialized() {
-		return Catalog{}
-	}
-	var ret MutableCatalog
-	for _, id := range ids {
-		found := mc.byID.get(id)
-		if found == nil {
-			continue
-		}
-		e := ret.ensureForID(id)
-		*e = *found.(*byIDEntry)
-	}
-	return ret.Catalog
-}
-
-// FilterByNames returns a subset of the catalog only for the desired names.
-func (mc *MutableCatalog) FilterByNames(nameInfos []descpb.NameInfo) Catalog {
-	if !mc.IsInitialized() {
-		return Catalog{}
-	}
-	var ret MutableCatalog
-	for _, ni := range nameInfos {
-		found := mc.byName.getByName(ni.ParentID, ni.ParentSchemaID, ni.Name)
-		if found == nil {
-			continue
-		}
-		e := ret.ensureForName(&ni)
-		*e = *found.(*byNameEntry)
-	}
-	return ret.Catalog
 }
 
 // AddAll adds the contents of the provided catalog to this one.

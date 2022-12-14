@@ -58,7 +58,7 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 	)
 	var warm nstree.MutableCatalog
 	_ = ms.ForEachCatalogDescriptor(func(desc catalog.Descriptor) error {
-		if desc.GetID() < keys.MaxReservedDescID {
+		if desc.GetID() < keys.MaxReservedDescID && !desc.SkipNamespace() {
 			key := descpb.NameInfo{
 				ParentID:       desc.GetParentID(),
 				ParentSchemaID: desc.GetParentSchemaID(),

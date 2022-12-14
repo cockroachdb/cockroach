@@ -97,7 +97,7 @@ ORDER BY id`)
 			t.TypeDescriptor.ModificationTime = hlc.Timestamp{}
 		}
 
-		cb.UpsertDescriptorEntry(desc)
+		cb.UpsertDescriptor(desc)
 	}
 	return cb
 }
@@ -143,7 +143,7 @@ func ReadZoneConfigsFromDB(
 	t *testing.T, tdb *sqlutils.SQLRunner, descCatalog nstree.Catalog,
 ) map[catid.DescID]catalog.ZoneConfig {
 	zoneCfgMap := make(map[catid.DescID]catalog.ZoneConfig)
-	require.NoError(t, descCatalog.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	require.NoError(t, descCatalog.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		zoneCfgRow := tdb.Query(t, `
 SELECT config FROM system.zones WHERE id=$1
 `,
