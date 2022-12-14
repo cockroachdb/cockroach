@@ -267,14 +267,14 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()
-		cb.UpsertDescriptorEntry(desc)
+		cb.UpsertDescriptor(desc)
 		test.multiRegionEnum.Privileges = privilege
-		cb.UpsertDescriptorEntry(typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable())
+		cb.UpsertDescriptor(typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable())
 		for _, schemaDesc := range test.schemaDescs {
 			schemaDesc.Privileges = privilege
-			cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&schemaDesc).BuildImmutable())
+			cb.UpsertDescriptor(schemadesc.NewBuilder(&schemaDesc).BuildImmutable())
 		}
-		_ = cb.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		_ = cb.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			cb.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
 			return nil
 		})

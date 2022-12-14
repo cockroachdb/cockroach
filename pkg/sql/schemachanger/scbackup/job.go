@@ -39,7 +39,7 @@ func CreateDeclarativeSchemaChangeJobs(
 	allMut nstree.Catalog,
 ) error {
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
-	_ = allMut.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
+	_ = allMut.ForEachDescriptor(func(d catalog.Descriptor) error {
 		if s := d.GetDeclarativeSchemaChangerState(); s != nil {
 			byJobID[s.JobID] = append(byJobID[s.JobID], d.(catalog.MutableDescriptor))
 		}

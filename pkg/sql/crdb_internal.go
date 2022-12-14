@@ -597,7 +597,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 	scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
 	// Record database descriptors for name lookups.
 	dbID := db.GetID()
-	_ = descs.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	_ = descs.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.GetParentID() != dbID {
 			return nil
 		}
@@ -608,7 +608,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 	})
 	rf := makeCrdbInternalTablesAddRowFn(p, addRow)
 	var seenAny bool
-	if err := descs.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	if err := descs.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.GetParentID() != dbID {
 			return nil
 		}
@@ -5176,7 +5176,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 		{
 			lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
 
-			if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 				switch d := desc.(type) {
 				case catalog.DatabaseDescriptor:
 					if dbContext != nil && d.GetID() != dbContext.GetID() {
@@ -5486,7 +5486,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		// shouldCheck returns true iff we expect no data to exist with that
 		// table ID prefix.
 		shouldCheck := func(id descpb.ID) bool {
-			return minID <= id && id < maxID && c.LookupDescriptorEntry(id) == nil
+			return minID <= id && id < maxID && c.LookupDescriptor(id) == nil
 		}
 		// hasData returns true iff there exists at least one row with a prefix for
 		// a table ID in [startID, endID[.

@@ -704,7 +704,7 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 					if len(hydratedDescriptors) == 0 {
 						var c nstree.MutableCatalog
 						for _, desc := range descriptors {
-							c.UpsertDescriptorEntry(desc)
+							c.UpsertDescriptor(desc)
 						}
 						if err := descs.HydrateCatalog(ctx, c); err != nil {
 							return "", err

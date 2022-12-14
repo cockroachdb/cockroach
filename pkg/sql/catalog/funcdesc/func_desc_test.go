@@ -55,24 +55,24 @@ func TestValidateFuncDesc(t *testing.T) {
 	funcDescID := descpb.ID(bootstrap.TestingUserDescID(0))
 
 	var cb nstree.MutableCatalog
-	cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
+	cb.UpsertDescriptor(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   dbID,
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+	cb.UpsertDescriptor(schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ID:       schemaID,
 		ParentID: dbID,
 		Name:     "schema",
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(typedesc.NewBuilder(&descpb.TypeDescriptor{
+	cb.UpsertDescriptor(typedesc.NewBuilder(&descpb.TypeDescriptor{
 		ID:   typeID,
 		Name: "type",
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(tabledesc.NewBuilder(&descpb.TableDescriptor{
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
 		ID:   tableID,
 		Name: "tbl",
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+	cb.UpsertDescriptor(schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ID:       schemaWithFuncRefID,
 		ParentID: dbID,
 		Name:     "schema",
@@ -80,17 +80,17 @@ func TestValidateFuncDesc(t *testing.T) {
 			"f": {Overloads: []descpb.SchemaDescriptor_FunctionOverload{{ID: funcDescID}}},
 		},
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(typedesc.NewBuilder(&descpb.TypeDescriptor{
+	cb.UpsertDescriptor(typedesc.NewBuilder(&descpb.TypeDescriptor{
 		ID:                       typeWithFuncRefID,
 		Name:                     "type",
 		ReferencingDescriptorIDs: []descpb.ID{funcDescID},
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(tabledesc.NewBuilder(&descpb.TableDescriptor{
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
 		ID:           tableWithFuncBackRefID,
 		Name:         "tbl",
 		DependedOnBy: []descpb.TableDescriptor_Reference{{ID: funcDescID}},
 	}).BuildImmutable())
-	cb.UpsertDescriptorEntry(tabledesc.NewBuilder(&descpb.TableDescriptor{
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
 		ID:        tableWithFuncForwardRefID,
 		Name:      "tbl",
 		DependsOn: []descpb.ID{funcDescID},

@@ -72,7 +72,7 @@ func runDecomposeTest(
 		name := fields[0]
 		var desc catalog.Descriptor
 		allDescs := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)
-		_ = allDescs.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
+		_ = allDescs.ForEachDescriptor(func(d catalog.Descriptor) error {
 			if d.GetName() == name {
 				desc = d
 			}
@@ -86,7 +86,7 @@ func runDecomposeTest(
 		testDeps := sctestdeps.NewTestDependencies(
 			sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 			sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, allDescs.Catalog)))
-		backRefs := scdecomp.WalkDescriptor(ctx, desc, allDescs.LookupDescriptorEntry, visitor, testDeps, testDeps)
+		backRefs := scdecomp.WalkDescriptor(ctx, desc, allDescs.LookupDescriptor, visitor, testDeps, testDeps)
 		return marshalResult(t, m, backRefs)
 
 	default:

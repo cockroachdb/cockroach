@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -403,6 +404,21 @@ func (vs *VirtualSchemaHolder) GetVirtualObjectByID(id descpb.ID) (catalog.Virtu
 		return nil, false
 	}
 	return entry, true
+}
+
+// Visit makes VirtualSchemaHolder implement catalog.VirtualSchemas.
+func (vs *VirtualSchemaHolder) Visit(fn func(desc catalog.Descriptor, comment string) error) error {
+	for _, sc := range vs.schemasByID {
+		if err := fn(sc.desc, "" /* comment */); err != nil {
+			return iterutil.Map(err)
+		}
+		for _, def := range sc.defs {
+			if err := fn(def.desc, def.comment); err != nil {
+				return iterutil.Map(err)
+			}
+		}
+	}
+	return nil
 }
 
 var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)

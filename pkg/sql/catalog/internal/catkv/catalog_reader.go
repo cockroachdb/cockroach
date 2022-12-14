@@ -242,7 +242,7 @@ func (cr catalogReader) GetByIDs(
 	}
 	if isDescriptorRequired {
 		for _, id := range ids {
-			if mc.LookupDescriptorEntry(id) == nil {
+			if mc.LookupDescriptor(id) == nil {
 				return nstree.Catalog{}, wrapError(expectedType, id, requiredError(expectedType, id))
 			}
 		}

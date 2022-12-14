@@ -228,9 +228,9 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
-		cb.UpsertDescriptorEntry(desc)
+		cb.UpsertDescriptor(desc)
 		test.dbDesc.Privileges = privilege
-		cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&test.dbDesc).BuildImmutable())
+		cb.UpsertDescriptor(dbdesc.NewBuilder(&test.dbDesc).BuildImmutable())
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelBackReferences &^ catalog.ValidationLevelSelfOnly
 		results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
