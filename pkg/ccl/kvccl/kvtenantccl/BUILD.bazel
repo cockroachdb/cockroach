@@ -70,6 +70,7 @@ go_test(
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/load",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",

@@ -2055,7 +2055,8 @@ func (s *systemStatusServer) rangesHelper(
 				WaitingWriters: lm.WaitingWriters,
 			})
 		}
-		qps, _ := rep.QueriesPerSecond()
+
+		loadStats := rep.LoadStats()
 		locality := serverpb.Locality{}
 		for _, tier := range rep.GetNodeLocality().Tiers {
 			locality.Tiers = append(locality.Tiers, serverpb.Tier{
@@ -2071,12 +2072,12 @@ func (s *systemStatusServer) rangesHelper(
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
 			Stats: serverpb.RangeStatistics{
-				QueriesPerSecond:    qps,
-				RequestsPerSecond:   rep.RequestsPerSecond(),
-				WritesPerSecond:     rep.WritesPerSecond(),
-				ReadsPerSecond:      rep.ReadsPerSecond(),
-				WriteBytesPerSecond: rep.WriteBytesPerSecond(),
-				ReadBytesPerSecond:  rep.ReadBytesPerSecond(),
+				QueriesPerSecond:    loadStats.QueriesPerSecond,
+				RequestsPerSecond:   loadStats.RequestsPerSecond,
+				WritesPerSecond:     loadStats.WriteKeysPerSecond,
+				ReadsPerSecond:      loadStats.ReadKeysPerSecond,
+				WriteBytesPerSecond: loadStats.WriteKeysPerSecond,
+				ReadBytesPerSecond:  loadStats.ReadBytesPerSecond,
 			},
 			Problems: serverpb.RangeProblems{
 				Unavailable:            metrics.Unavailable,
