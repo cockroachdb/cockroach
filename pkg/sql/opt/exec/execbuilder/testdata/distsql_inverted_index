@@ -63,22 +63,22 @@ ALTER TABLE json_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10),
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW RANGES FROM INDEX json_tab@primary] ORDER BY lease_holder, start_key
+FROM [SHOW RANGES FROM INDEX json_tab@primary WITH DETAILS] ORDER BY lease_holder, start_key
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /10      {1}       1
-/10        /20      {2}       2
-/20        NULL     {3}       3
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/10          {1}       1
+…/10                …/20          {2}       2
+…/20                …/<IndexMax>  {3}       3
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW RANGES FROM TABLE json_tab] ORDER BY lease_holder, start_key
+FROM [SHOW RANGES FROM TABLE json_tab WITH DETAILS] ORDER BY lease_holder, start_key
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /10      {1}       1
-·          NULL     {1}       1
-/10        /20      {2}       2
-/20        ·        {3}       3
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/1/10        {1}       1
+…/2                 <after:/Max>  {1}       1
+…/1/10              …/1/20        {2}       2
+…/1/20              …/2           {3}       3
 
 # Filter with a fully-specified array. This should use a zigzag join.
 query T
@@ -203,20 +203,20 @@ ALTER TABLE array_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 3),
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW RANGES FROM INDEX array_tab@primary] ORDER BY lease_holder, start_key
+FROM [SHOW RANGES FROM INDEX array_tab@primary WITH DETAILS] ORDER BY lease_holder, start_key
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /3       {1}       1
-/3         NULL     {3}       3
+start_key              end_key       replicas  lease_holder
+<before:/Table/106/2>  …/3           {1}       1
+…/3                    …/<IndexMax>  {3}       3
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder
-FROM [SHOW RANGES FROM TABLE array_tab] ORDER BY lease_holder
+FROM [SHOW RANGES FROM TABLE array_tab WITH DETAILS] ORDER BY lease_holder
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /3       {1}       1
-·          NULL     {1}       1
-/3         ·        {3}       3
+start_key              end_key       replicas  lease_holder
+<before:/Table/106/2>  …/1/3         {1}       1
+…/2                    <after:/Max>  {1}       1
+…/1/3                  …/2           {3}       3
 
 # This should use a zigzag join.
 query T
