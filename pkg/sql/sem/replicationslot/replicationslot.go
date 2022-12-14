@@ -157,7 +157,7 @@ func ParseJSONValueForPGLogicalPayload(item Item) string {
 			colType = col.GetType().String()
 			break
 		}
-		payload = fmt.Sprintf("%s, %s[%s]:%v", payload, colName, colType, colValue)
+		payload = fmt.Sprintf("%s %s[%s]:%v", payload, colName, colType, colValue)
 	}
 
 	return payload
