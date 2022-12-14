@@ -1727,6 +1727,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.TimestampTZ, types.Timestamp, volatility.Stable),
 		makeIsFn(types.Time, types.TimeTZ, volatility.Stable),
 		makeIsFn(types.TimeTZ, types.Time, volatility.Stable),
+		makeIsFn(types.Void, types.Unknown, volatility.Stable),
+		makeIsFn(types.Unknown, types.Void, volatility.Stable),
 
 		// Tuple comparison.
 		{
