@@ -1229,23 +1229,20 @@ func checkPrivilegesForRestore(
 		requiresRestoreSystemPrivilege := restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
 			restoreStmt.Targets.TenantID.IsSet()
 
-		var hasRestoreSystemPrivilege bool
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
-				privilege.RESTORE, p.User())
-			hasRestoreSystemPrivilege = err == nil
-		}
-
-		if requiresRestoreSystemPrivilege && hasRestoreSystemPrivilege {
+		if requiresRestoreSystemPrivilege {
+			if err := p.CheckPrivilegeForUser(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User(),
+			); err != nil {
+				return pgerror.Wrapf(
+					err,
+					pgcode.InsufficientPrivilege,
+					"only users with the admin role or the RESTORE system privilege are allowed to perform"+
+						" a cluster restore")
+			}
 			return checkRestoreDestinationPrivileges(ctx, p, from)
-		} else if requiresRestoreSystemPrivilege && !hasRestoreSystemPrivilege {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with the admin role or the RESTORE system privilege are allowed to perform"+
-					" a cluster restore")
 		}
 	}
 
-	var hasRestoreSystemPrivilege bool
 	// If running a database restore, check that the user has the `RESTORE` system
 	// privilege.
 	//
@@ -1253,15 +1250,10 @@ func checkPrivilegesForRestore(
 	// error. In 22.2 we continue to check for old style privileges and role
 	// options.
 	if len(restoreStmt.Targets.Databases) > 0 {
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
-				privilege.RESTORE, p.User())
-			hasRestoreSystemPrivilege = err == nil
+		hasRestoreSystemPrivilege := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User()) == nil
+		if hasRestoreSystemPrivilege {
+			return checkRestoreDestinationPrivileges(ctx, p, from)
 		}
-	}
-
-	if hasRestoreSystemPrivilege {
-		return checkRestoreDestinationPrivileges(ctx, p, from)
 	}
 
 	// The following checks are to maintain compatability with pre-22.2 privilege

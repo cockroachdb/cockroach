@@ -49,6 +49,10 @@ crdb_internal  index_columns                    table  admin  NULL  NULL
 crdb_internal  index_usage_statistics           table  admin  NULL  NULL
 crdb_internal  invalid_objects                  table  admin  NULL  NULL
 crdb_internal  jobs                             table  admin  NULL  NULL
+crdb_internal  kv_catalog_comments              table  admin  NULL  NULL
+crdb_internal  kv_catalog_descriptor            table  admin  NULL  NULL
+crdb_internal  kv_catalog_namespace             table  admin  NULL  NULL
+crdb_internal  kv_catalog_zones                 table  admin  NULL  NULL
 crdb_internal  kv_node_liveness                 table  admin  NULL  NULL
 crdb_internal  kv_node_status                   table  admin  NULL  NULL
 crdb_internal  kv_store_status                  table  admin  NULL  NULL
@@ -69,7 +73,6 @@ crdb_internal  node_transactions                table  admin  NULL  NULL
 crdb_internal  node_txn_stats                   table  admin  NULL  NULL
 crdb_internal  partitions                       table  admin  NULL  NULL
 crdb_internal  pg_catalog_table_is_implemented  table  admin  NULL  NULL
-crdb_internal  predefined_comments              table  admin  NULL  NULL
 crdb_internal  ranges                           view   admin  NULL  NULL
 crdb_internal  ranges_no_leases                 table  admin  NULL  NULL
 crdb_internal  regions                          table  admin  NULL  NULL

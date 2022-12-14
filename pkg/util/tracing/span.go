@@ -290,9 +290,9 @@ func (sp *Span) FinishAndGetConfiguredRecording() tracingpb.Recording {
 	rec := tracingpb.Recording(nil)
 	recType := sp.RecordingType()
 	if recType != tracingpb.RecordingOff {
+		// Reach directly into sp.i to pass the finishing argument.
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
-	// Reach directly into sp.i to pass the finishing argument.
 	sp.finishInternal()
 	return rec
 }
@@ -352,28 +352,67 @@ func (sp *Span) GetConfiguredRecording() tracingpb.Recording {
 	return sp.i.GetRecording(recType, false /* finishing */)
 }
 
+// GetTraceRecording returns the span's recording as a Trace.
+//
+// See also GetRecording(), which returns a tracingpb.Recording.
+func (sp *Span) GetTraceRecording(recType tracingpb.RecordingType) Trace {
+	if sp.detectUseAfterFinish() {
+		return Trace{}
+	}
+	return sp.i.GetTraceRecording(recType, false /* finishing */)
+}
+
+// FinishAndGetTraceRecording finishes the span and returns its recording as a
+// Trace.
+//
+// See also FinishAndGetRecording(), which returns a tracingpb.Recording.
+func (sp *Span) FinishAndGetTraceRecording(recType tracingpb.RecordingType) Trace {
+	if sp.detectUseAfterFinish() {
+		return Trace{}
+	}
+	rec := sp.i.GetTraceRecording(recType, true /* finishing */)
+	sp.Finish()
+	return rec
+}
+
 // ImportRemoteRecording adds the spans in remoteRecording as children of the
 // receiver. As a result of this, the imported recording will be a part of the
-// GetRecording() output for the receiver.
+// GetRecording() output for the receiver. All the structured events from the
+// trace are passed to the receiver's event listeners.
 //
 // This function is used to import a recording from another node.
 func (sp *Span) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
-	if !sp.detectUseAfterFinish() {
-		// Handle recordings coming from 22.2 nodes that don't have the
-		// StructuredRecordsSizeBytes field set.
-		// TODO(andrei): remove this in 23.2.
-		for i := range remoteRecording {
-			if len(remoteRecording[i].StructuredRecords) != 0 && remoteRecording[i].StructuredRecordsSizeBytes == 0 {
-				size := int64(0)
-				for _, rec := range remoteRecording[i].StructuredRecords {
-					size += int64(rec.MemorySize())
-				}
-				remoteRecording[i].StructuredRecordsSizeBytes = size
-			}
-		}
-
-		sp.i.ImportRemoteRecording(remoteRecording)
+	if sp.detectUseAfterFinish() {
+		return
 	}
+	// Handle recordings coming from 22.2 nodes that don't have the
+	// StructuredRecordsSizeBytes field set.
+	// TODO(andrei): remove this in 23.2.
+	for i := range remoteRecording {
+		if len(remoteRecording[i].StructuredRecords) != 0 && remoteRecording[i].StructuredRecordsSizeBytes == 0 {
+			size := int64(0)
+			for _, rec := range remoteRecording[i].StructuredRecords {
+				size += int64(rec.MemorySize())
+			}
+			remoteRecording[i].StructuredRecordsSizeBytes = size
+		}
+	}
+
+	sp.ImportTrace(treeifyRecording(remoteRecording))
+}
+
+// ImportTrace takes a trace recording and, depending on the receiver's
+// recording mode, adds it as a child to sp. All the structured events from the
+// trace are passed to the receiver's event listeners.
+//
+// ImportTrace takes ownership of trace; the caller should not use it anymore.
+// The caller can call Trace.PartialClone() to make a sufficient copy for
+// passing into ImportTrace.
+func (sp *Span) ImportTrace(trace Trace) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.ImportTrace(trace)
 }
 
 // Meta returns the information which needs to be propagated across process

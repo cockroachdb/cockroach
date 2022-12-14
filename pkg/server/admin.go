@@ -24,7 +24,6 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1989,12 +1988,8 @@ func (s *adminServer) Settings(
 		// Non-root access cannot see the values in any case.
 		lookupPurpose = settings.LookupForReporting
 
-		hasView := false
-		hasModify := false
-		if s.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			hasView = s.checkHasGlobalPrivilege(ctx, user, privilege.VIEWCLUSTERSETTING)
-			hasModify = s.checkHasGlobalPrivilege(ctx, user, privilege.MODIFYCLUSTERSETTING)
-		}
+		hasView := s.checkHasGlobalPrivilege(ctx, user, privilege.VIEWCLUSTERSETTING)
+		hasModify := s.checkHasGlobalPrivilege(ctx, user, privilege.MODIFYCLUSTERSETTING)
 		if !hasModify && !hasView {
 			hasView, err := s.hasRoleOption(ctx, user, roleoption.VIEWCLUSTERSETTING)
 			if err != nil {
@@ -3679,10 +3674,7 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Contex
 		return serverError(ctx, err)
 	}
 	if !isAdmin {
-		hasView := false
-		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			hasView = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
-		}
+		hasView := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
 		if !hasView {
 			hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 			if err != nil {
@@ -3707,12 +3699,8 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 		return serverError(ctx, err)
 	}
 	if !isAdmin {
-		hasView := false
-		hasViewRedacted := false
-		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			hasView = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
-			hasViewRedacted = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
-		}
+		hasView := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
+		hasViewRedacted := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
 		if !hasView && !hasViewRedacted {
 			hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 			if err != nil {
@@ -3744,10 +3732,7 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 	}
 
 	if !isAdmin {
-		hasViewRedacted := false
-		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			hasViewRedacted = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
-		}
+		hasViewRedacted := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
 		if !hasViewRedacted {
 			hasViewRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
 			if err != nil {
@@ -3778,14 +3763,10 @@ func (c *adminPrivilegeChecker) requireViewClusterMetadataPermission(
 		return serverError(ctx, err)
 	}
 	if !isAdmin {
-		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			if hasViewClusterMetadata := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); !hasViewClusterMetadata {
-				return grpcstatus.Errorf(
-					codes.PermissionDenied, "this operation requires the %s system privilege",
-					privilege.VIEWCLUSTERMETADATA)
-			}
-		} else {
-			return grpcstatus.Error(codes.PermissionDenied, "this operation requires admin privilege")
+		if hasViewClusterMetadata := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); !hasViewClusterMetadata {
+			return grpcstatus.Errorf(
+				codes.PermissionDenied, "this operation requires the %s system privilege",
+				privilege.VIEWCLUSTERMETADATA)
 		}
 	}
 	return nil
@@ -3799,14 +3780,10 @@ func (c *adminPrivilegeChecker) requireViewDebugPermission(ctx context.Context) 
 		return serverError(ctx, err)
 	}
 	if !isAdmin {
-		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			if hasViewDebug := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWDEBUG); !hasViewDebug {
-				return grpcstatus.Errorf(
-					codes.PermissionDenied, "this operation requires the %s system privilege",
-					privilege.VIEWDEBUG)
-			}
-		} else {
-			return grpcstatus.Error(codes.PermissionDenied, "this operation requires admin privilege")
+		if hasViewDebug := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWDEBUG); !hasViewDebug {
+			return grpcstatus.Errorf(
+				codes.PermissionDenied, "this operation requires the %s system privilege",
+				privilege.VIEWDEBUG)
 		}
 	}
 	return nil

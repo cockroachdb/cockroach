@@ -11,7 +11,6 @@
 package delegate
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -27,19 +26,17 @@ func (d *delegator) delegateShowClusterSettingList(
 	// First check system privileges.
 	hasModify := false
 	hasView := false
-	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.V22_2SystemPrivilegesTable) {
-		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
-			hasModify = true
+	if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
+		hasModify = true
+		hasView = true
+	} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+		return nil, err
+	}
+	if !hasView {
+		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err == nil {
 			hasView = true
 		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 			return nil, err
-		}
-		if !hasView {
-			if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err == nil {
-				hasView = true
-			} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
-				return nil, err
-			}
 		}
 	}
 

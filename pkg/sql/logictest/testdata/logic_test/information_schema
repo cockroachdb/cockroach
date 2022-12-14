@@ -427,6 +427,10 @@ crdb_internal       index_columns
 crdb_internal       index_usage_statistics
 crdb_internal       invalid_objects
 crdb_internal       jobs
+crdb_internal       kv_catalog_comments
+crdb_internal       kv_catalog_descriptor
+crdb_internal       kv_catalog_namespace
+crdb_internal       kv_catalog_zones
 crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
@@ -447,7 +451,6 @@ crdb_internal       node_transactions
 crdb_internal       node_txn_stats
 crdb_internal       partitions
 crdb_internal       pg_catalog_table_is_implemented
-crdb_internal       predefined_comments
 crdb_internal       ranges
 crdb_internal       ranges_no_leases
 crdb_internal       regions
@@ -753,6 +756,10 @@ index_columns
 index_usage_statistics
 invalid_objects
 jobs
+kv_catalog_comments
+kv_catalog_descriptor
+kv_catalog_namespace
+kv_catalog_zones
 kv_node_liveness
 kv_node_status
 kv_store_status
@@ -773,7 +780,6 @@ node_transactions
 node_txn_stats
 partitions
 pg_catalog_table_is_implemented
-predefined_comments
 ranges
 ranges_no_leases
 regions
@@ -1118,6 +1124,10 @@ system         crdb_internal       index_columns                          SYSTEM
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_catalog_comments                    SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_catalog_descriptor                  SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_catalog_namespace                   SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_catalog_zones                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
@@ -1138,7 +1148,6 @@ system         crdb_internal       node_transactions                      SYSTEM
 system         crdb_internal       node_txn_stats                         SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                             SYSTEM VIEW  NO                  1
 system         crdb_internal       pg_catalog_table_is_implemented        SYSTEM VIEW  NO                  1
-system         crdb_internal       predefined_comments                    SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges_no_leases                       SYSTEM VIEW  NO                  1
 system         crdb_internal       regions                                SYSTEM VIEW  NO                  1
@@ -2808,6 +2817,10 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_comments                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_descriptor                  SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_namespace                   SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_zones                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
@@ -2828,7 +2841,6 @@ NULL     public   system         crdb_internal       node_transactions          
 NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NO            YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NO            YES
 NULL     public   system         crdb_internal       pg_catalog_table_is_implemented        SELECT          NO            YES
-NULL     public   system         crdb_internal       predefined_comments                    SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NO            YES
 NULL     public   system         crdb_internal       regions                                SELECT          NO            YES
@@ -3390,6 +3402,10 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_comments                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_descriptor                  SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_namespace                   SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_catalog_zones                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
@@ -3410,7 +3426,6 @@ NULL     public   system         crdb_internal       node_transactions          
 NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NO            YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NO            YES
 NULL     public   system         crdb_internal       pg_catalog_table_is_implemented        SELECT          NO            YES
-NULL     public   system         crdb_internal       predefined_comments                    SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NO            YES
 NULL     public   system         crdb_internal       regions                                SELECT          NO            YES

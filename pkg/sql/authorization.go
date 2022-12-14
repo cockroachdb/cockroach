@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -45,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // MembershipCache is a shared cache for role membership information.
@@ -57,15 +55,16 @@ type MembershipCache struct {
 	userCache map[username.SQLUsername]userRoleMembership
 	// populateCacheGroup ensures that there is at most one request in-flight
 	// for each key.
-	populateCacheGroup singleflight.Group
+	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
 }
 
 // NewMembershipCache initializes a new MembershipCache.
 func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *MembershipCache {
 	return &MembershipCache{
-		boundAccount: account,
-		stopper:      stopper,
+		boundAccount:       account,
+		populateCacheGroup: singleflight.NewGroup("lookup role membership", "key"),
+		stopper:            stopper,
 	}
 }
 
@@ -510,31 +509,24 @@ func MemberOfWithAdminOption(
 	// in-flight for each user. The role_memberships table version is also part
 	// of the request key so that we don't read data from an old version of the
 	// table.
-	ch, _ := roleMembersCache.populateCacheGroup.DoChan(
+	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
 		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
-		func() (interface{}, error) {
-			// Use a different context to fetch, so that it isn't possible for
-			// one query to timeout and cause all the goroutines that are waiting
-			// to get a timeout error.
-			ctx, cancel := roleMembersCache.stopper.WithCancelOnQuiesce(
-				logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
-			defer cancel()
+		singleflight.DoOpts{
+			Stop:               roleMembersCache.stopper,
+			InheritCancelation: false,
+		},
+		func(ctx context.Context) (interface{}, error) {
 			return resolveMemberOfWithAdminOption(
 				ctx, member, ie, txn,
 				useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
 			)
-		},
-	)
+		})
 	var memberships map[username.SQLUsername]bool
-	select {
-	case res := <-ch:
-		if res.Err != nil {
-			return nil, res.Err
-		}
-		memberships = res.Val.(map[username.SQLUsername]bool)
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	res := future.WaitForResult(ctx)
+	if res.Err != nil {
+		return nil, res.Err
 	}
+	memberships = res.Val.(map[username.SQLUsername]bool)
 
 	func() {
 		// Update membership if the table version hasn't changed.
@@ -894,12 +886,8 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 		return hasAdmin, err
 	}
 	if !hasAdmin {
-		hasView := false
-		hasViewRedacted := false
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-			hasViewRedacted = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
-		}
+		hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
+		hasViewRedacted := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
 		if !hasView && !hasViewRedacted {
 			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
 			if err != nil {

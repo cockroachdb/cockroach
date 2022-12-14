@@ -201,7 +201,7 @@ type NodeLiveness struct {
 	metrics               Metrics
 	onNodeDecommissioned  func(livenesspb.Liveness)  // noop if nil
 	onNodeDecommissioning OnNodeDecommissionCallback // noop if nil
-	engineSyncs           singleflight.Group
+	engineSyncs           *singleflight.Group
 
 	mu struct {
 		syncutil.RWMutex
@@ -302,6 +302,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		heartbeatToken:        make(chan struct{}, 1),
 		onNodeDecommissioned:  opts.OnNodeDecommissioned,
 		onNodeDecommissioning: opts.OnNodeDecommissioning,
+		engineSyncs:           singleflight.NewGroup("engine sync", "engine"),
 	}
 	nl.metrics = Metrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -1270,24 +1271,23 @@ func (nl *NodeLiveness) updateLiveness(
 		nl.mu.RLock()
 		engines := nl.mu.engines
 		nl.mu.RUnlock()
-		resultCs := make([]<-chan singleflight.Result, len(engines))
+		resultCs := make([]singleflight.Future, len(engines))
 		for i, eng := range engines {
 			eng := eng // pin the loop variable
-			resultCs[i], _ = nl.engineSyncs.DoChan(strconv.Itoa(i), func() (interface{}, error) {
-				return nil, nl.stopper.RunTaskWithErr(ctx, "liveness-hb-diskwrite",
-					func(ctx context.Context) error {
-						return storage.WriteSyncNoop(eng)
-					})
-			})
+			resultCs[i], _ = nl.engineSyncs.DoChan(ctx,
+				strconv.Itoa(i),
+				singleflight.DoOpts{
+					Stop:               nl.stopper,
+					InheritCancelation: false,
+				},
+				func(ctx context.Context) (interface{}, error) {
+					return nil, storage.WriteSyncNoop(eng)
+				})
 		}
 		for _, resultC := range resultCs {
-			select {
-			case r := <-resultC:
-				if r.Err != nil {
-					return Record{}, errors.Wrapf(r.Err, "disk write failed while updating node liveness")
-				}
-			case <-ctx.Done():
-				return Record{}, ctx.Err()
+			r := resultC.WaitForResult(ctx)
+			if r.Err != nil {
+				return Record{}, errors.Wrapf(r.Err, "disk write failed while updating node liveness")
 			}
 		}
 

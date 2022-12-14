@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -721,38 +721,31 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 		}
 
 		// Asynchronously attempt to nudge the closed timestamp in case it's stuck.
-		key := fmt.Sprintf(`rangefeed-slow-closed-timestamp-nudge-r%d`, r.RangeID)
+		key := fmt.Sprintf(`r%d`, r.RangeID)
 		// Ignore the result of DoChan since, to keep this all async, it always
 		// returns nil and any errors are logged by the closure passed to the
 		// `DoChan` call.
-		taskCtx, sp := tracing.EnsureForkSpan(ctx, r.AmbientContext.Tracer, key)
-		_, leader := m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
-			defer sp.Finish()
-			// Also ignore the result of RunTask, since it only returns errors when
-			// the task didn't start because we're shutting down.
-			_ = r.store.stopper.RunTask(taskCtx, key, func(ctx context.Context) {
+		_, _ = r.store.rangeFeedSlowClosedTimestampNudge.DoChan(ctx,
+			key,
+			singleflight.DoOpts{
+				Stop:               r.store.stopper,
+				InheritCancelation: false,
+			},
+			func(ctx context.Context) (interface{}, error) {
 				// Limit the amount of work this can suddenly spin up. In particular,
 				// this is to protect against the case of a system-wide slowdown on
 				// closed timestamps, which would otherwise potentially launch a huge
 				// number of lease acquisitions all at once.
 				select {
-				case <-ctx.Done():
-					// Don't need to do this anymore.
-					return
 				case m.RangeFeedSlowClosedTimestampNudgeSem <- struct{}{}:
+				case <-ctx.Done():
 				}
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
 					log.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
 				}
+				return nil, nil
 			})
-			return nil, nil
-		})
-		if !leader {
-			// In the leader case, we've passed ownership of sp to the task. If the
-			// task was not triggered, though, it's up to us to Finish() it.
-			sp.Finish()
-		}
 	}
 
 	// If the closed timestamp is not empty, inform the Processor.

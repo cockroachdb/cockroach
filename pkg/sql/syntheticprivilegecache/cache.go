@@ -71,11 +71,6 @@ func New(
 func (c *Cache) Get(
 	ctx context.Context, txn *kv.Txn, col *descs.Collection, spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	if !c.settings.Version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
-		// Fall back to defaults if the version gate is not active yet.
-		return spo.GetFallbackPrivileges(), nil
-	}
-
 	_, desc, err := col.GetImmutableTableByName(
 		ctx,
 		txn,

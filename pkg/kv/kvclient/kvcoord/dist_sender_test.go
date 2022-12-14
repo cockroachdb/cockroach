@@ -5047,7 +5047,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				getRangeDescCacheSize := func() int64 {
 					return 1 << 20
 				}
-				rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper, tr)
+				rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper)
 				rc.Insert(ctx, roachpb.RangeInfo{
 					Desc: tc.initialDesc,
 					Lease: roachpb.Lease{

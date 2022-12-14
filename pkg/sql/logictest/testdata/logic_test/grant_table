@@ -62,6 +62,10 @@ test           crdb_internal       index_columns                          public
 test           crdb_internal       index_usage_statistics                 public   SELECT          false
 test           crdb_internal       invalid_objects                        public   SELECT          false
 test           crdb_internal       jobs                                   public   SELECT          false
+test           crdb_internal       kv_catalog_comments                    public   SELECT          false
+test           crdb_internal       kv_catalog_descriptor                  public   SELECT          false
+test           crdb_internal       kv_catalog_namespace                   public   SELECT          false
+test           crdb_internal       kv_catalog_zones                       public   SELECT          false
 test           crdb_internal       kv_node_liveness                       public   SELECT          false
 test           crdb_internal       kv_node_status                         public   SELECT          false
 test           crdb_internal       kv_store_status                        public   SELECT          false
@@ -82,7 +86,6 @@ test           crdb_internal       node_transactions                      public
 test           crdb_internal       node_txn_stats                         public   SELECT          false
 test           crdb_internal       partitions                             public   SELECT          false
 test           crdb_internal       pg_catalog_table_is_implemented        public   SELECT          false
-test           crdb_internal       predefined_comments                    public   SELECT          false
 test           crdb_internal       ranges                                 public   SELECT          false
 test           crdb_internal       ranges_no_leases                       public   SELECT          false
 test           crdb_internal       regions                                public   SELECT          false

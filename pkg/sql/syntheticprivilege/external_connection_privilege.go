@@ -13,7 +13,6 @@ package syntheticprivilege
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -30,11 +29,6 @@ var _ Object = &ExternalConnectionPrivilege{}
 // GetPath implements the Object interface.
 func (e *ExternalConnectionPrivilege) GetPath() string {
 	return fmt.Sprintf("/externalconn/%s", e.ConnectionName)
-}
-
-// SystemPrivilegesTableVersionGate implements the Object interface.
-func (p *ExternalConnectionPrivilege) SystemPrivilegesTableVersionGate() clusterversion.Key {
-	return clusterversion.V22_2SystemPrivilegesTable
 }
 
 // GetFallbackPrivileges implements the Object interface.

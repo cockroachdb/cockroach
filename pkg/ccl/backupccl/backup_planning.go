@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -388,19 +387,16 @@ func checkPrivilegesForBackup(
 		requiresBackupSystemPrivilege := backupStmt.Coverage() == tree.AllDescriptors ||
 			(backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet())
 
-		var hasBackupSystemPrivilege bool
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
-				privilege.BACKUP, p.User())
-			hasBackupSystemPrivilege = err == nil
-		}
-
-		if requiresBackupSystemPrivilege && hasBackupSystemPrivilege {
+		if requiresBackupSystemPrivilege {
+			if err := p.CheckPrivilegeForUser(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.BACKUP, p.User(),
+			); err != nil {
+				return pgerror.Wrapf(
+					err,
+					pgcode.InsufficientPrivilege,
+					"only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups")
+			}
 			return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
-		} else if requiresBackupSystemPrivilege && !hasBackupSystemPrivilege {
-			return pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				"only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups")
 		}
 	}
 

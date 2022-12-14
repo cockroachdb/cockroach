@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // Cache is a shared cache for hashed passwords and other information used
@@ -32,7 +31,7 @@ type Cache struct {
 	tableVersions []descpb.DescriptorVersion
 	// TODO(richardjcai): In go1.18 we can use generics.
 	cache              map[interface{}]interface{}
-	populateCacheGroup singleflight.Group
+	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
 }
 
@@ -42,9 +41,10 @@ type Cache struct {
 func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables int) *Cache {
 	tableVersions := make([]descpb.DescriptorVersion, numSystemTables)
 	return &Cache{
-		tableVersions: tableVersions,
-		boundAccount:  account,
-		stopper:       stopper,
+		tableVersions:      tableVersions,
+		boundAccount:       account,
+		populateCacheGroup: singleflight.NewGroup("load-value", "key"),
+		stopper:            stopper,
 	}
 }
 
@@ -61,25 +61,19 @@ func (c *Cache) GetValueLocked(key interface{}) (interface{}, bool) {
 func (c *Cache) LoadValueOutsideOfCacheSingleFlight(
 	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
 ) (interface{}, error) {
-	ch, _ := c.populateCacheGroup.DoChan(requestKey, func() (interface{}, error) {
-		// Use a different context to fetch, so that it isn't possible for
-		// one query to timeout and cause all the goroutines that are waiting
-		// to get a timeout error.
-		loadCtx, cancel := c.stopper.WithCancelOnQuiesce(
-			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
-		)
-		defer cancel()
-		return fn(loadCtx)
-	})
-	select {
-	case res := <-ch:
-		if res.Err != nil {
-			return nil, res.Err
-		}
-		return res.Val, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	future, _ := c.populateCacheGroup.DoChan(ctx,
+		requestKey,
+		singleflight.DoOpts{
+			Stop:               c.stopper,
+			InheritCancelation: false,
+		},
+		fn,
+	)
+	res := future.WaitForResult(ctx)
+	if res.Err != nil {
+		return nil, res.Err
 	}
+	return res.Val, nil
 }
 
 // MaybeWriteBackToCache tries to put the key, value into the

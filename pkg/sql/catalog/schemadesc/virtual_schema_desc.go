@@ -55,22 +55,18 @@ type virtual struct {
 var _ catalog.SchemaDescriptor = virtual{}
 var _ privilege.Object = virtual{}
 
-func (p virtual) GetID() descpb.ID       { return p.id }
-func (p virtual) GetName() string        { return p.name }
-func (p virtual) GetParentID() descpb.ID { return descpb.InvalidID }
-func (p virtual) GetPrivileges() *catpb.PrivilegeDescriptor {
-	return catpb.NewVirtualSchemaPrivilegeDescriptor()
-}
-func (p virtual) GetRawBytesInStorage() []byte { return nil }
-
-// GetObjectType implements the Object interface.
-func (p virtual) GetObjectType() privilege.ObjectType {
-	return privilege.Schema
-}
+func (p virtual) GetID() descpb.ID                     { return p.id }
+func (p virtual) GetName() string                      { return p.name }
+func (p virtual) GetParentID() descpb.ID               { return descpb.InvalidID }
+func (p virtual) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
+func (p virtual) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
 
 type virtualBase struct{}
 
 var _ syntheticBase = virtualBase{}
 
-func (v virtualBase) kindName() string                 { return "virtual" }
-func (v virtualBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaVirtual }
+func (virtualBase) kindName() string                 { return "virtual" }
+func (virtualBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaVirtual }
+func (virtualBase) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewVirtualSchemaPrivilegeDescriptor()
+}
