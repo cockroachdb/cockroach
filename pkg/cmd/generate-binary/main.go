@@ -32,9 +32,11 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmp-protocol/pgconnect"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 )
 
@@ -58,7 +60,7 @@ func main() {
 	var data []entry
 	ctx := context.Background()
 
-	stmts := os.Args[1:]
+	stmts := flag.Args()
 
 	if len(stmts) == 0 {
 		// Sort hard coded inputs by key name.
@@ -91,6 +93,13 @@ func main() {
 		id, err := pgconnect.Connect(ctx, sql, *postgresAddr, *postgresUser, pgwirebase.FormatText)
 		if err != nil {
 			log.Fatalf("oid: %s: %v", sql, err)
+		}
+		// Hardcode OIDs for geometry and geography.
+		if strings.HasSuffix(expr, "::geometry") {
+			id = []byte(fmt.Sprintf("%d", oidext.T_geometry))
+		}
+		if strings.HasSuffix(expr, "::geography") {
+			id = []byte(fmt.Sprintf("%d", oidext.T_geography))
 		}
 		data = append(data, entry{
 			SQL:          expr,
@@ -362,6 +371,15 @@ var inputs = map[string][]string{
 		"00:00:00",
 		"12:00:00.000001",
 		"23:59:59.999999",
+	},
+
+	"'%s'::geometry": {
+		"SRID=4326;POINT EMPTY",
+		"GEOMETRYCOLLECTION(POINT(0 0), LINESTRING(1 1, 2 2))",
+	},
+	"'%s'::geography": {
+		"SRID=4326;POINT EMPTY",
+		"GEOMETRYCOLLECTION(POINT(0 0), LINESTRING(1 1, 2 2))",
 	},
 
 	"'%s'::interval": {
