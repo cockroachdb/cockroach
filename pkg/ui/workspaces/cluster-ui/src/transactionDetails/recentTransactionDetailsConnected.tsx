@@ -45,3 +45,11 @@ const mapDispatchToProps = (
 export const RecentTransactionDetailsPageConnected = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(RecentTransactionDetails),
 );
+
+// Prior to 23.1, this component was called
+// ActiveTransactionDetailsPageConnected. We keep the alias here to avoid
+// breaking the multi-version support in managed-service's console code.
+// When managed-service drops support for 22.2 (around the end of 2024?),
+// we can remove this code.
+export const ActiveTransactionDetailsPageConnected =
+  RecentTransactionDetailsPageConnected;
