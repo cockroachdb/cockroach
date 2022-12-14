@@ -434,7 +434,9 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 
 	dbID := desc.GetParentID()
-	dbDesc, err := oc.planner.Descriptors().Direct().MustGetDatabaseDescByID(ctx, txn, dbID)
+	_, dbDesc, err := oc.planner.Descriptors().GetImmutableDatabaseByID(
+		ctx, txn, dbID, tree.DatabaseLookupFlags{AvoidLeased: true},
+	)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
@@ -444,7 +446,9 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if scID == keys.PublicSchemaID {
 		scName = tree.PublicSchemaName
 	} else {
-		scDesc, err := oc.planner.Descriptors().Direct().MustGetSchemaDescByID(ctx, txn, scID)
+		scDesc, err := oc.planner.Descriptors().GetImmutableSchemaByID(
+			ctx, txn, scID, tree.SchemaLookupFlags{AvoidLeased: true},
+		)
 		if err != nil {
 			return cat.DataSourceName{}, err
 		}

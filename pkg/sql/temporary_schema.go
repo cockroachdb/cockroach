@@ -307,11 +307,13 @@ func cleanupTempSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					dTableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, d.ID)
+					flags := tree.CommonLookupFlags{AvoidLeased: true}
+					dTableDesc, err := descsCol.GetImmutableTableByID(
+						ctx, txn, d.ID, tree.ObjectLookupFlags{CommonLookupFlags: flags})
 					if err != nil {
 						return err
 					}
-					db, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
+					_, db, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dTableDesc.GetParentID(), flags)
 					if err != nil {
 						return err
 					}

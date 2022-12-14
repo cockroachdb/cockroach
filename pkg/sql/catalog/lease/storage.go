@@ -290,9 +290,7 @@ func (s storage) mustGetDescriptorByID(
 		return nil, err
 	}
 	desc := c.LookupDescriptor(id)
-	vd := catkv.NewCatalogReaderBackedValidationDereferencer(
-		cr, txn, catkv.DefaultDescriptorValidationModeProvider,
-	)
+	vd := catkv.NewCatalogReaderBackedValidationDereferencer(cr, txn, nil /* dvmpMaybe */)
 	ve := validate.Validate(
 		ctx,
 		s.settings.Version.ActiveVersion(ctx),
