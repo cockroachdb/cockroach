@@ -700,7 +700,7 @@ func addResultColumns(
 		if colTyp.Family() == types.UnknownFamily {
 			colTyp = types.String
 		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colTyp}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colTyp, Hidden: colRes.Hidden}
 		// Nullability constraints do not need to exist on the view, since they are
 		// already enforced on the source data.
 		columnTableDef.Nullable.Nullability = tree.SilentNull
