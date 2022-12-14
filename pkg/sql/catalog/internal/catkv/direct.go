@@ -32,12 +32,6 @@ import (
 // it, pause, and consider the decision very carefully.
 type Direct interface {
 
-	// MaybeGetDescriptorByIDUnvalidated looks up the descriptor given its ID if
-	// it exists. No attempt is made at validation.
-	MaybeGetDescriptorByIDUnvalidated(
-		ctx context.Context, txn *kv.Txn, id descpb.ID,
-	) (catalog.Descriptor, error)
-
 	// MustGetDescriptorByID looks up the descriptor given its ID and expected
 	// type, returning an error if the descriptor is not found or of the wrong
 	// type.
@@ -156,35 +150,30 @@ func (d *defaultDescriptorValidationModeProvider) ValidateDescriptorsOnWrite() b
 	return true
 }
 
-// MaybeGetDescriptorByIDUnvalidated is part of the Direct interface.
-func (d *direct) MaybeGetDescriptorByIDUnvalidated(
-	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) (catalog.Descriptor, error) {
-	const isNotRequired = false
-	descs, err := d.readDescriptorsForDirectAccess(ctx, txn, []descpb.ID{id}, isNotRequired, catalog.Any)
-	if err != nil {
-		return nil, err
-	}
-	return descs[0], nil
-}
-
-// MustGetDescriptorsByID is part of the Direct interface.
-func (d *direct) MustGetDescriptorsByID(
+func (d *direct) mustGetDescriptorsByID(
 	ctx context.Context, txn *kv.Txn, ids []descpb.ID, expectedType catalog.DescriptorType,
 ) ([]catalog.Descriptor, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
 	const isRequired = true
-	descs, err := d.readDescriptorsForDirectAccess(ctx, txn, ids, isRequired, expectedType)
+	c, err := d.cr.GetByIDs(ctx, txn, ids, isRequired, expectedType)
 	if err != nil {
 		return nil, err
 	}
-	if d.dvmp.ValidateDescriptorsOnRead() {
-		vd := NewCatalogReaderBackedValidationDereferencer(d.cr, txn, d.dvmp)
-		ve := validate.Validate(
-			ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...,
-		)
-		if err := ve.CombinedError(); err != nil {
-			return nil, err
-		}
+	descs := make([]catalog.Descriptor, len(ids))
+	for i, id := range ids {
+		descs[i] = c.LookupDescriptor(id)
+	}
+	if !d.dvmp.ValidateDescriptorsOnRead() {
+		return descs, nil
+	}
+	vd := NewCatalogReaderBackedValidationDereferencer(d.cr, txn, d.dvmp)
+	ve := validate.Validate(
+		ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...,
+	)
+	if err := ve.CombinedError(); err != nil {
+		return nil, err
 	}
 	return descs, nil
 }
@@ -193,36 +182,11 @@ func (d *direct) MustGetDescriptorsByID(
 func (d *direct) MustGetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, expectedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
-	descs, err := d.MustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType)
+	descs, err := d.mustGetDescriptorsByID(ctx, txn, []descpb.ID{id}, expectedType)
 	if err != nil {
 		return nil, err
 	}
 	return descs[0], err
-}
-
-func (d *direct) readDescriptorsForDirectAccess(
-	ctx context.Context,
-	txn *kv.Txn,
-	ids []descpb.ID,
-	isRequired bool,
-	expectedType catalog.DescriptorType,
-) ([]catalog.Descriptor, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	c, err := d.cr.GetByIDs(ctx, txn, ids, isRequired, expectedType)
-	if err != nil {
-		return nil, err
-	}
-	descs := make([]catalog.Descriptor, len(ids))
-	for i, id := range ids {
-		desc := c.LookupDescriptor(id)
-		if desc == nil {
-			continue
-		}
-		descs[i] = desc
-	}
-	return descs, nil
 }
 
 // MustGetDatabaseDescByID is part of the Direct interface.
@@ -273,7 +237,7 @@ func (d *direct) MustGetTypeDescByID(
 func (d *direct) GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
 ) ([]catalog.SchemaDescriptor, error) {
-	descs, err := d.MustGetDescriptorsByID(ctx, txn, ids, catalog.Schema)
+	descs, err := d.mustGetDescriptorsByID(ctx, txn, ids, catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -302,9 +266,11 @@ func (d *direct) GetDescriptorCollidingWithObject(
 	// ID is already in use by another object.
 	// Look it up without any validation to make sure the error returned is not a
 	// validation error.
-	if unvalidated, err := d.MaybeGetDescriptorByIDUnvalidated(ctx, txn, id); err != nil {
+	const isDescriptorRequired = false
+	c, err := d.cr.GetByIDs(ctx, txn, []descpb.ID{id}, isDescriptorRequired, catalog.Any)
+	if err != nil {
 		return nil, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-	} else if unvalidated == nil {
+	} else if c.LookupDescriptor(id) == nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			catalog.ErrDescriptorNotFound,
 			"parentID=%d parentSchemaID=%d name=%q has ID=%d",
