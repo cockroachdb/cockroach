@@ -6,6 +6,7 @@ table Timestamp {
 }
 
 table Command {
+  id: [ubyte]; // NB: [ubyte:8] not supported yet in Go
   // TODO: - Delta
   // TODO: - WriteTimestamp
   // TODO: - AddSST
@@ -14,7 +15,7 @@ table Command {
   lease_seq: int64;
   mlai: uint64;
   ct: Timestamp;
-  replicated_eval_result_pb: [ubyte]; // trivial most of the time, so not present
+  raft_command_pb: [ubyte]; // for proof of concept
   write_batch: [ubyte];
 }
 

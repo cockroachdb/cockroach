@@ -82,33 +82,35 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	return allowlist.IsZero()
 }
 
-func (r *RaftCommand) Build(b *flatbuffers.Builder) flatbuffers.UOffsetT {
-	var optCT flatbuffers.UOffsetT
-	if r.ClosedTimestamp != nil {
-		raftfbs.TimestampStart(b)
-		raftfbs.TimestampAddWall(b, r.ClosedTimestamp.WallTime)
-		raftfbs.TimestampAddLogical(b, r.ClosedTimestamp.Logical)
-	}
+func (r *RaftCommand) BuildEntry(b *flatbuffers.Builder, cmdID string) flatbuffers.UOffsetT {
+	id := b.CreateByteVector([]byte(cmdID))
 
-	var optRER flatbuffers.UOffsetT
-	if !r.ReplicatedEvalResult.IsTrivial() {
+	// Fill blanks so we can mutate later.
+	raftfbs.TimestampStart(b)
+	raftfbs.TimestampAddWall(b, 0)
+	raftfbs.TimestampAddLogical(b, 0)
+	ct := raftfbs.TimestampEnd(b)
+
+	var cmdPB flatbuffers.UOffsetT
+	{
 		sl, err := protoutil.Marshal(r)
 		if err != nil {
 			panic(err)
 		}
-		optRER = b.CreateByteVector(sl)
+		cmdPB = b.CreateByteVector(sl)
 	}
 
 	wb := b.CreateByteVector(r.WriteBatch.Data)
 
 	raftfbs.CommandStart(b)
+	raftfbs.CommandAddId(b, id)
 	raftfbs.CommandAddLeaseSeq(b, int64(r.ProposerLeaseSequence))
 	raftfbs.CommandAddMlai(b, r.MaxLeaseIndex)
-	if optCT != 0 {
-		raftfbs.CommandAddCt(b, optCT)
+	if ct != 0 {
+		raftfbs.CommandAddCt(b, ct)
 	}
-	if optRER != 0 {
-		raftfbs.CommandAddReplicatedEvalResultPb(b, optRER)
+	if cmdPB != 0 {
+		raftfbs.CommandAddRaftCommandPb(b, cmdPB)
 	}
 	raftfbs.CommandAddWriteBatch(b, wb)
 	cmd := raftfbs.CommandEnd(b)

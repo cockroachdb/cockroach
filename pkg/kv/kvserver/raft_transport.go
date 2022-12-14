@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -135,6 +136,10 @@ type RaftMessageHandler interface {
 		req *kvserverpb.DelegateSnapshotRequest,
 		stream DelegateSnapshotResponseStream,
 	) error
+}
+
+type Msg interface {
+	*kvserverpb.RaftCommand | *raftfbs.Entry
 }
 
 // RaftTransport handles the rpc messages for raft.

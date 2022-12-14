@@ -33,8 +33,42 @@ func (rcv *Command) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *Command) LeaseSeq() int64 {
+func (rcv *Command) Id(j int) byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		a := rcv._tab.Vector(o)
+		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
+	}
+	return 0
+}
+
+func (rcv *Command) IdLength() int {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		return rcv._tab.VectorLen(o)
+	}
+	return 0
+}
+
+func (rcv *Command) IdBytes() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
+func (rcv *Command) MutateId(j int, n byte) bool {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		a := rcv._tab.Vector(o)
+		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
+	}
+	return false
+}
+
+func (rcv *Command) LeaseSeq() int64 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.GetInt64(o + rcv._tab.Pos)
 	}
@@ -42,11 +76,11 @@ func (rcv *Command) LeaseSeq() int64 {
 }
 
 func (rcv *Command) MutateLeaseSeq(n int64) bool {
-	return rcv._tab.MutateInt64Slot(4, n)
+	return rcv._tab.MutateInt64Slot(6, n)
 }
 
 func (rcv *Command) Mlai() uint64 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		return rcv._tab.GetUint64(o + rcv._tab.Pos)
 	}
@@ -54,11 +88,11 @@ func (rcv *Command) Mlai() uint64 {
 }
 
 func (rcv *Command) MutateMlai(n uint64) bool {
-	return rcv._tab.MutateUint64Slot(6, n)
+	return rcv._tab.MutateUint64Slot(8, n)
 }
 
 func (rcv *Command) Ct(obj *Timestamp) *Timestamp {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
 		x := rcv._tab.Indirect(o + rcv._tab.Pos)
 		if obj == nil {
@@ -70,8 +104,8 @@ func (rcv *Command) Ct(obj *Timestamp) *Timestamp {
 	return nil
 }
 
-func (rcv *Command) ReplicatedEvalResultPb(j int) byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+func (rcv *Command) RaftCommandPb(j int) byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -79,24 +113,24 @@ func (rcv *Command) ReplicatedEvalResultPb(j int) byte {
 	return 0
 }
 
-func (rcv *Command) ReplicatedEvalResultPbLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+func (rcv *Command) RaftCommandPbLength() int {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
 	return 0
 }
 
-func (rcv *Command) ReplicatedEvalResultPbBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+func (rcv *Command) RaftCommandPbBytes() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
 	return nil
 }
 
-func (rcv *Command) MutateReplicatedEvalResultPb(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+func (rcv *Command) MutateRaftCommandPb(j int, n byte) bool {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -105,7 +139,7 @@ func (rcv *Command) MutateReplicatedEvalResultPb(j int, n byte) bool {
 }
 
 func (rcv *Command) WriteBatch(j int) byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -114,7 +148,7 @@ func (rcv *Command) WriteBatch(j int) byte {
 }
 
 func (rcv *Command) WriteBatchLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -122,7 +156,7 @@ func (rcv *Command) WriteBatchLength() int {
 }
 
 func (rcv *Command) WriteBatchBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -130,7 +164,7 @@ func (rcv *Command) WriteBatchBytes() []byte {
 }
 
 func (rcv *Command) MutateWriteBatch(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -139,25 +173,31 @@ func (rcv *Command) MutateWriteBatch(j int, n byte) bool {
 }
 
 func CommandStart(builder *flatbuffers.Builder) {
-	builder.StartObject(5)
+	builder.StartObject(6)
+}
+func CommandAddId(builder *flatbuffers.Builder, id flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(id), 0)
+}
+func CommandStartIdVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+	return builder.StartVector(1, numElems, 1)
 }
 func CommandAddLeaseSeq(builder *flatbuffers.Builder, leaseSeq int64) {
-	builder.PrependInt64Slot(0, leaseSeq, 0)
+	builder.PrependInt64Slot(1, leaseSeq, 0)
 }
 func CommandAddMlai(builder *flatbuffers.Builder, mlai uint64) {
-	builder.PrependUint64Slot(1, mlai, 0)
+	builder.PrependUint64Slot(2, mlai, 0)
 }
 func CommandAddCt(builder *flatbuffers.Builder, ct flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(ct), 0)
+	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(ct), 0)
 }
-func CommandAddReplicatedEvalResultPb(builder *flatbuffers.Builder, replicatedEvalResultPb flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(replicatedEvalResultPb), 0)
+func CommandAddRaftCommandPb(builder *flatbuffers.Builder, raftCommandPb flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(raftCommandPb), 0)
 }
-func CommandStartReplicatedEvalResultPbVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+func CommandStartRaftCommandPbVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)
 }
 func CommandAddWriteBatch(builder *flatbuffers.Builder, writeBatch flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(writeBatch), 0)
+	builder.PrependUOffsetTSlot(5, flatbuffers.UOffsetT(writeBatch), 0)
 }
 func CommandStartWriteBatchVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)

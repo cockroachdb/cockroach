@@ -16,8 +16,10 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	flatbuffers "github.com/google/flatbuffers/go"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -462,13 +465,14 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// reassign the closed timestamp: we could, in principle, but we'd have to
 		// make a copy of the encoded command as to not modify the copy that's
 		// already stored in the local replica's raft entry cache.
+		var bldr *flatbuffers.Builder
 		if !reproposal {
 			lai, closedTimestamp, err := b.allocateLAIAndClosedTimestampLocked(ctx, p, closedTSTarget)
 			if err != nil {
 				firstErr = err
 				continue
 			}
-			err = b.marshallLAIAndClosedTimestampToProposalLocked(ctx, p, lai, closedTimestamp)
+			bldr, err = b.marshallLAIAndClosedTimestampToProposalLocked(ctx, p, lai, closedTimestamp)
 			if err != nil {
 				firstErr = err
 				continue
@@ -531,9 +535,33 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// dropped the uncommitted portion of the Raft log would already
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
-			})
+			if !p.command.ReplicatedEvalResult.IsTrivial() {
+				ents = append(ents, raftpb.Entry{
+					Data: p.encodedCommand,
+				})
+			} else {
+				// We haven't prepended our raft command version, etc, to this yet.
+				// We just need an extra byte in front basically. Hopefully there's room!
+				bldr.PrependByte(byte(kvserverbase.RaftVersionFlatBuffer))
+				data := bldr.FinishedBytes()
+
+				// Verify that we produced something that works at least a wee bit.
+				{
+					// Need to ignore the first byte which is the cmd version.
+					fbCmd := raftfbs.GetRootAsEntry(data[1:], 0).Cmd(nil /* TODO this allocs */)
+					id := kvserverbase.CmdIDKey(fbCmd.IdBytes())
+					log.Infof(ctx, "XXX proposing as flatbuffer id=%s", id)
+					pbBytes := fbCmd.RaftCommandPbBytes()
+					var cmd kvserverpb.RaftCommand
+					if err := protoutil.Unmarshal(pbBytes, &cmd); err != nil {
+						panic(err)
+					}
+				}
+
+				ents = append(ents, raftpb.Entry{
+					Data: data,
+				})
+			}
 		}
 	}
 	if firstErr != nil {
@@ -860,7 +888,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 // adding the LAI and closed timestamp.
 func (b *propBuf) marshallLAIAndClosedTimestampToProposalLocked(
 	ctx context.Context, p *ProposalData, lai uint64, closedTimestamp hlc.Timestamp,
-) error {
+) (*flatbuffers.Builder, error) {
 	buf := &b.scratchFooter
 	buf.MaxLeaseIndex = lai
 	// Also assign MaxLeaseIndex to the in-memory copy. The in-memory copy is
@@ -884,7 +912,14 @@ func (b *propBuf) marshallLAIAndClosedTimestampToProposalLocked(
 	preLen := len(p.encodedCommand)
 	p.encodedCommand = p.encodedCommand[:preLen+buf.Size()]
 	_, err := protoutil.MarshalTo(buf, p.encodedCommand[preLen:])
-	return err
+
+	// `p` is finally complete so we can marshal to flatbuffer. We
+	// could also do this incrementally but let's keep it simple for
+	// now.
+	bldr := flatbuffers.NewBuilder(0)
+	bldr.Finish(p.command.BuildEntry(bldr, string(p.idKey)))
+
+	return bldr, err
 }
 
 func (b *propBuf) forwardAssignedLAILocked(v uint64) {

@@ -36,3 +36,15 @@ So we need to pull out:
 - ...
 
 https://github.com/cockroachdb/cockroach/blob/0788ad6fc883049dcc4f152a322d940e050d3448/pkg/kv/kvserver/kvserverpb/proposer_kv.go#L52
+
+# prototyping:
+
+make `raftpb.Entry.Data` a flatbuffer wrapping the encoded `kvserverpb.RaftCommand` - so not a useful change, but gets the plumbing out of the way:
+
+- make new RaftCommandEncodingVersion
+- need to create the flatbuffer near `(*Replica).propose`
+- encode it into `raftpb.Entry` with the new raft cmd encoding version
+- raft will hand it back to us for log append -> but luckily nothing changes since the payload is opaque here
+- message sending: hopefully OK since payload is opaque
+- during apply: need to decode the entry -> replica decoder calls raftlog.Decode, need to fill the proto here.
+

@@ -29,6 +29,7 @@ const (
 	// but when retrieved from the local Raft log it necessary to inline the
 	// payload first as it has usually been sideloaded.
 	RaftVersionSideloaded RaftCommandEncodingVersion = 1
+	RaftVersionFlatBuffer RaftCommandEncodingVersion = 2
 	// RaftCommandIDLen is the length for each command ID.
 	RaftCommandIDLen = 8
 	// RaftCommandPrefixLen is the prescribed length of each encoded command's prefix.
@@ -72,7 +73,7 @@ func EncodeRaftCommandPrefix(b []byte, version RaftCommandEncodingVersion, comma
 // but is exported for use by debugging tools.
 func DecodeRaftCommand(data []byte) (CmdIDKey, []byte) {
 	v := RaftCommandEncodingVersion(data[0] & RaftCommandNoSplitMask)
-	if v != RaftVersionStandard && v != RaftVersionSideloaded {
+	if false && v != RaftVersionStandard && v != RaftVersionSideloaded {
 		panic(fmt.Sprintf("unknown command encoding version %v", data[0]))
 	}
 	return CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]

@@ -16,13 +16,16 @@
 package raftlog
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -101,7 +104,14 @@ func (e *Entry) load() error {
 	var payload []byte
 	switch e.Type {
 	case raftpb.EntryNormal:
-		e.ID, payload = kvserverbase.DecodeRaftCommand(e.Data)
+		if usesFB := kvserverbase.RaftCommandEncodingVersion(e.Data[0]) == kvserverbase.RaftVersionFlatBuffer; usesFB {
+			fbCmd := raftfbs.GetRootAsEntry(e.Data[1:], 0).Cmd(nil /* TODO this allocs */)
+			payload = fbCmd.RaftCommandPbBytes()
+			e.ID = kvserverbase.CmdIDKey(fbCmd.IdBytes())
+			log.Infof(context.Background(), "XXX loaded %s from flatbuffer", e.ID)
+		} else {
+			e.ID, payload = kvserverbase.DecodeRaftCommand(e.Data)
+		}
 	case raftpb.EntryConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
 		if err := protoutil.Unmarshal(e.Data, e.ConfChangeV1); err != nil {

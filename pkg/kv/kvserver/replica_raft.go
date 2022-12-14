@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	flatbuffers "github.com/google/flatbuffers/go"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3/tracker"
@@ -327,17 +325,6 @@ func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
 ) (pErr *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
-
-	b := flatbuffers.NewBuilder(0)
-	b.Finish(p.command.Build(b))
-
-	{
-		ent := raftfbs.GetRootAsEntry(b.FinishedBytes(), 0)
-		var cmd raftfbs.Command
-		ent.Cmd(&cmd)
-		n := len(cmd.WriteBatchBytes())
-		log.Infof(ctx, "XXX %d", n)
-	}
 
 	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
 	// Failure to propose will propagate to the client. An invariant of this
@@ -1577,6 +1564,16 @@ func (r *Replica) sendRaftMessageRequest(
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
+
+	if req.Message.Type == raftpb.MsgApp {
+		for _, ent := range req.Message.Entries {
+			if ent.Type == raftpb.EntryNormal && len(ent.Data) > 1 &&
+				kvserverbase.RaftCommandEncodingVersion(ent.Data[0]) == kvserverbase.RaftVersionFlatBuffer {
+				log.Infof(ctx, "XXX send flatbuffer msg")
+			}
+		}
+	}
+
 	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
 }
 

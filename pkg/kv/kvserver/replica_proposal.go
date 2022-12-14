@@ -713,6 +713,7 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's WriteBatch, which is the serialized representation of
 		// the proposals effect on RocksDB.
 		res.WriteBatch = &kvserverpb.WriteBatch{
+			// TODO(tbg): if we had a way to teach `storage.Batch` to allocate
 			Data: batch.Repr(),
 		}
 
