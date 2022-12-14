@@ -154,6 +154,7 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 	fe := FrontendAdmit(srv, nil)
 	require.NoError(t, fe.Err)
 	require.NotNil(t, fe.Conn)
+	require.NotNil(t, fe.CancelRequest)
 	require.Nil(t, fe.Msg)
 }
 
@@ -187,11 +188,9 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 	tlsConfig, err := tlsConfig()
 	require.NoError(t, err)
 	fe := FrontendAdmit(srv, tlsConfig)
-	require.EqualError(t, fe.Err,
-		"codeUnexpectedStartupMessage: "+
-			"unsupported post-TLS startup message: *pgproto3.CancelRequest",
-	)
+	require.NoError(t, fe.Err)
 	require.NotNil(t, fe.Conn)
+	require.NotNil(t, fe.CancelRequest)
 	require.Nil(t, fe.Msg)
 }
 
