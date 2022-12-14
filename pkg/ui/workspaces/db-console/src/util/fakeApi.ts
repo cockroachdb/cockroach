@@ -14,6 +14,8 @@ import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
 
 const {
   DatabaseDetailsResponse,
@@ -51,6 +53,12 @@ const {
 //     });
 //   });
 
+const duration = "200";
+
+const timestamp = new protos.google.protobuf.Timestamp({
+  seconds: new Long(Date.parse("Dec 14 2022 01:00:00 GMT") * 1e-3),
+});
+
 export function restore() {
   fetchMock.restore();
 }
@@ -63,6 +71,97 @@ export function stubClusterSettings(
     SettingsResponse.encode(response),
     API_PREFIX,
   );
+}
+
+const blockingTxnExecutionIDs = [
+  "9b7d1e63-840b-481b-a9c0-e7ef6ca7b783",
+  "b45364c7-8cbe-4a35-b2a1-dcbdfc2f4f5c",
+  "9b7d1e63-840b-481b-a9c0-e7ef6ca7b783",
+  "b45364c7-8cbe-4a35-b2a1-dcbdfc2f4f5c",
+  "9b7d1e63-840b-481b-a9c0-e7ef6ca7b783",
+];
+
+const waitingTxnExecutionIDs = [
+  "c66f7c81-290d-42f5-b689-db893a70379b",
+  "669bf5c3-23a9-4aba-a71b-0cef75221488",
+  "c66f7c81-290d-42f5-b689-db893a70379b",
+  "669bf5c3-23a9-4aba-a71b-0cef75221488",
+  "c66f7c81-290d-42f5-b689-db893a70379b",
+];
+
+export function buildTxnContentionResponse() {
+  const rows: clusterUiApi.ContentionEventResponseColumns[] = Array.from(
+    Array(blockingTxnExecutionIDs.length).keys(),
+  ).map(index => {
+    return {
+      collection_ts: String(timestamp),
+      blocking_txn_id: blockingTxnExecutionIDs[index],
+      waiting_txn_id: waitingTxnExecutionIDs[index],
+      blocking_txn_fingerprint_id: "0000000000000000",
+      waiting_txn_fingerprint_id: "0000000000000000",
+      contention_duration: duration,
+      contending_key: "",
+      query: "",
+    };
+  });
+
+  return {
+    num_statements: 1,
+    execution: {
+      txn_results: [
+        {
+          statement: 1,
+          tag: "SHOW DATABASES",
+          start: "2022-10-27T17:42:05.582744Z",
+          end: "2022-10-27T17:42:05.588454Z",
+          rows_affected: 0,
+          columns: [
+            {
+              name: "collection_ts",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "blocking_txn_id",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "blocking_txn_fingerprint_id",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "waiting_txn_id",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "waiting_txn_fingerprint_id",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "contention_duration",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "key",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+            {
+              name: "query",
+              type: "STRING",
+              oid: 11, // Unsure.
+            },
+          ],
+          rows: rows,
+        },
+      ],
+    },
+  };
 }
 
 export function buildSQLApiDatabasesResponse(databases: string[]) {
@@ -183,6 +282,27 @@ export function stubDatabases(databases: string[]) {
     response: (_url: string, requestObj: RequestInit) => {
       expect(JSON.parse(requestObj.body.toString())).toEqual(
         clusterUiApi.databasesRequest,
+      );
+      return {
+        body: JSON.stringify(response),
+      };
+    },
+  });
+}
+
+export function stubContentionEvents() {
+  const response = buildTxnContentionResponse();
+  fetchMock.mock({
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Cockroach-API-Session": "cookie",
+    },
+    matcher: clusterUiApi.SQL_API_PATH,
+    method: "POST",
+    response: (_url: string, requestObj: RequestInit) => {
+      expect(JSON.parse(requestObj.body.toString())).toEqual(
+        clusterUiApi.transactionContentionRequest,
       );
       return {
         body: JSON.stringify(response),

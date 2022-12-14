@@ -23,7 +23,7 @@ export type ContentionDebugStateProps = {
 };
 
 export type ContentionDebugDispatchProps = {
-  refreshContentionEvents: () => void;
+  refreshTxnContentionEvents: () => void;
 };
 
 export type ContentionDebugPageProps = ContentionDebugStateProps &
@@ -35,17 +35,17 @@ export const ContentionDebugPage: React.FC<ContentionDebugPageProps> = (
   const {
     contentionEvents,
     contentionError,
-    refreshContentionEvents
+    refreshTxnContentionEvents
   } = props;
 
   useEffect(() => {
     // Refresh every 10 seconds.
-    refreshContentionEvents();
-    const interval = setInterval(refreshContentionEvents, 10 * 1000);
+    refreshTxnContentionEvents();
+    const interval = setInterval(refreshTxnContentionEvents, 10 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshContentionEvents]);
+  }, [refreshTxnContentionEvents]);
 
   return (
     <div>

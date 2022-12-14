@@ -74,6 +74,6 @@ const contentionEventsResponse: ContentionEventsResponse = [
 export const contentionDebugPageTestProps: ContentionDebugPageProps = {
   contentionEvents: contentionEventsResponse,
   contentionError: error,
-  refreshContentionEvents:  () => null,
+  refreshTxnContentionEvents: () => null,
 };
 
