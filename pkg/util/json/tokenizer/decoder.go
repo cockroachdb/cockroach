@@ -45,6 +45,14 @@ import (
 type Decoder struct {
 	scanner Scanner
 	state   func(*Decoder) ([]byte, error)
+
+	// mustHaveValue is set when decoder processes
+	// array or object -- as indicated by stack state.
+	// In those cases, when we see a comma, there *must*
+	// be either an array value or a string object key following
+	// it; and if array/object terminates without seeing
+	// this value, return an error.
+	mustHaveValue bool
 	stack
 }
 
@@ -119,6 +127,11 @@ func (d *Decoder) stateObjectString() ([]byte, error) {
 	}
 	switch tok[0] {
 	case '}':
+		if d.mustHaveValue {
+			d.scanner.offset -= len(tok) + 1 // Rewind to point to comma.
+			return nil, fmt.Errorf("stateObjectString: missing string key")
+		}
+
 		inObj := d.pop()
 		switch {
 		case d.len() == 0:
@@ -171,7 +184,7 @@ func (d *Decoder) stateObjectValue() ([]byte, error) {
 	}
 }
 
-func (d *Decoder) stateObjectComma() ([]byte, error) {
+func (d *Decoder) stateObjectComma() (_ []byte, err error) {
 	tok := d.scanner.Next()
 	if len(tok) < 1 {
 		return nil, io.ErrUnexpectedEOF
@@ -189,8 +202,10 @@ func (d *Decoder) stateObjectComma() ([]byte, error) {
 		}
 		return tok, nil
 	case Comma:
-		d.state = (*Decoder).stateObjectString
-		return d.NextToken()
+		d.mustHaveValue = true
+		tok, err = d.stateObjectString()
+		d.mustHaveValue = false
+		return tok, err
 	default:
 		return tok, fmt.Errorf("stateObjectComma: expecting comma")
 	}
@@ -211,6 +226,10 @@ func (d *Decoder) stateArrayValue() ([]byte, error) {
 		d.push(false)
 		return tok, nil
 	case ']':
+		if d.mustHaveValue {
+			d.scanner.offset -= len(tok) + 1 // Rewind to point to comma.
+			return nil, fmt.Errorf("stateArrayValue: unexpected comma")
+		}
 		inObj := d.pop()
 		switch {
 		case d.len() == 0:
@@ -221,7 +240,7 @@ func (d *Decoder) stateArrayValue() ([]byte, error) {
 			d.state = (*Decoder).stateArrayComma
 		}
 		return tok, nil
-	case ',':
+	case Comma:
 		return nil, fmt.Errorf("stateArrayValue: unexpected comma")
 	default:
 		d.state = (*Decoder).stateArrayComma
@@ -229,7 +248,7 @@ func (d *Decoder) stateArrayValue() ([]byte, error) {
 	}
 }
 
-func (d *Decoder) stateArrayComma() ([]byte, error) {
+func (d *Decoder) stateArrayComma() (_ []byte, err error) {
 	tok := d.scanner.Next()
 	if len(tok) < 1 {
 		return nil, io.ErrUnexpectedEOF
@@ -247,8 +266,10 @@ func (d *Decoder) stateArrayComma() ([]byte, error) {
 		}
 		return tok, nil
 	case Comma:
-		d.state = (*Decoder).stateArrayValue
-		return d.NextToken()
+		d.mustHaveValue = true
+		tok, err = d.stateArrayValue()
+		d.mustHaveValue = false
+		return tok, err
 	default:
 		return nil, fmt.Errorf("stateArrayComma: expected comma, %v", d.stack)
 	}

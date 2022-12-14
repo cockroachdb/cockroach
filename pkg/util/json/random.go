@@ -11,6 +11,7 @@
 package json
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -190,5 +191,153 @@ func doRandomJSON(rng *rand.Rand, cfg randConfig) interface{} {
 		encoding, _ := EncodeJSON(nil, j)
 		encoded, _ := newEncodedFromRoot(encoding)
 		return encoded
+	}
+}
+
+// AsStringWithErrorChance returns string representation of JSON object,
+// but allows up to specified chance that the returned string will contain
+// errors -- i.e. the string should not be parse-able back into JSON.
+func AsStringWithErrorChance(j JSON, rng *rand.Rand, p float32) string {
+	ej := &errJSON{
+		JSON:    j,
+		errProb: p,
+		rng:     rng,
+	}
+	return asString(ej)
+}
+
+// garbage is array of strings that will be appended (or prepended) to the
+// JSON string to produce invalid JSON string.
+var garbage = []string{
+	" [", " ]", " []", "[1]", " {", " }", "{}", `{"garbage": "in"}`, "-", " garbage", " 0", `" 0"`,
+}
+
+// numericGarbage are numeric garbage tokens that will be added
+// to the number string to make it invalid.
+var numericGarbage = []string{
+	"0", // okay to append, but prepending should produce an error
+	"=", "-", "e", "E", "e+", "E+",
+}
+
+type errJSON struct {
+	JSON
+	errProb float32
+	rng     *rand.Rand
+}
+
+func (j *errJSON) injectErr() bool {
+	r := j.rng.Float32() < j.errProb
+	j.errProb /= 2 // decay
+	return r
+}
+
+func (j *errJSON) writeGarbage(pile []string, buf *bytes.Buffer) {
+	if j.injectErr() {
+		buf.WriteString(pile[j.rng.Intn(len(pile))])
+	}
+}
+
+func (j *errJSON) errJSON(other JSON) JSON {
+	return &errJSON{
+		JSON:    other,
+		errProb: j.errProb,
+		rng:     j.rng,
+	}
+}
+
+// Format implements JSON, and overrides underlying JSON object
+// implementation in order to inject errors.
+func (j *errJSON) Format(buf *bytes.Buffer) {
+	j.writeGarbage(garbage, buf) // Possibly prefix with garbage data.
+	defer func() {
+		j.writeGarbage(garbage, buf) // Possibly append garbage data.
+	}()
+
+	switch t := j.JSON.(type) {
+	default:
+		j.JSON.Format(buf)
+	case jsonObject:
+		if j.injectErr() {
+			buf.WriteByte('[') // Oops, array instead of object.
+		} else {
+			buf.WriteByte('{')
+		}
+		for i := range t {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			// Skip element (which results in trailing or extra ",")
+			// if injectErr is true.
+			if !j.injectErr() {
+				ek := j.errJSON(t[i].k)
+				ev := j.errJSON(t[i].v)
+				buf.WriteString(asString(ek))
+				buf.WriteString(": ")
+				ev.Format(buf)
+			}
+		}
+		if j.injectErr() {
+			buf.WriteByte(']') // Oops, array instead of object.
+		} else {
+			buf.WriteByte('}')
+		}
+	case jsonArray:
+		if j.injectErr() {
+			buf.WriteByte('{') // Oops, object instead of array.
+		} else {
+			buf.WriteByte('[')
+		}
+		for i := range t {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			// Skip element (which results in trailing or extra ",")
+			// if injectErr is true.
+			if !j.injectErr() {
+				j.errJSON(t[i]).Format(buf)
+			}
+		}
+		if j.injectErr() {
+			buf.WriteByte('}') // Oops, object instead of array.
+		} else {
+			buf.WriteByte(']')
+		}
+	case jsonString:
+		t.Format(buf)
+		if j.injectErr() {
+			// Drop terminating quote.
+			buf.Truncate(1)
+		}
+	case jsonNumber:
+		if j.injectErr() {
+			n := j.rng.Int31n(3) // 0 -> prefix, 1 -> prefix & suffix, 2 -> suffix only
+			if n <= 1 {
+				j.writeGarbage(numericGarbage, buf) // Prefix
+			}
+			t.Format(buf)
+			if n >= 1 {
+				j.writeGarbage(numericGarbage, buf)
+			}
+		} else {
+			t.Format(buf)
+		}
+	case jsonNull:
+		if j.injectErr() {
+			buf.WriteString("nil")
+		} else {
+			buf.WriteString("null")
+		}
+	case jsonTrue:
+		if j.injectErr() {
+			buf.WriteString("truish")
+		} else {
+			buf.WriteString("true")
+		}
+	case jsonFalse:
+		if j.injectErr() {
+			buf.WriteString("falsy")
+		} else {
+			buf.WriteString("false")
+		}
 	}
 }
