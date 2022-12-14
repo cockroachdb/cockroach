@@ -42,9 +42,7 @@ go_library(
         "log_flags.go",
         "mt.go",
         "mt_cert.go",
-        "mt_proxy.go",
         "mt_start_sql.go",
-        "mt_test_directory.go",
         "node.go",
         "nodelocal.go",
         "prefixer.go",
@@ -101,8 +99,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/ccl/sqlproxyccl",
-        "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/cli/clicfg",
         "//pkg/cli/clientflags",
         "//pkg/cli/clienturl",

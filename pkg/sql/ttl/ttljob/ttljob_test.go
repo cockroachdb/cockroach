@@ -506,11 +506,11 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 
 			// Split table
 			ranges := sqlDB.QueryStr(t, fmt.Sprintf(
-				`SHOW RANGES FROM TABLE %s`,
+				`SELECT lease_holder FROM [SHOW RANGES FROM INDEX %s@primary]`,
 				tableName,
 			))
 			require.Equal(t, 1, len(ranges))
-			leaseHolderNodeIDInt, err := strconv.Atoi(ranges[0][4])
+			leaseHolderNodeIDInt, err := strconv.Atoi(ranges[0][0])
 			leaseHolderNodeID := roachpb.NodeID(leaseHolderNodeIDInt)
 			require.NoError(t, err)
 			leaseHolderServerIdx := -1
@@ -559,7 +559,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 			)
 			testCluster.SplitTable(t, tableDesc, splitPoints)
 			newRanges := sqlDB.QueryStr(t, fmt.Sprintf(
-				`SHOW RANGES FROM TABLE %s`,
+				`SHOW RANGES FROM INDEX %s@primary`,
 				tableName,
 			))
 			require.Equal(t, numRanges, len(newRanges))

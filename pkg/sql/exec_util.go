@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -93,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -1334,7 +1334,7 @@ type ExecutorConfig struct {
 	DescIDGenerator eval.DescIDGenerator
 
 	// SyntheticPrivilegeCache stores synthetic privileges in an in-memory cache.
-	SyntheticPrivilegeCache *cacheutil.Cache
+	SyntheticPrivilegeCache *syntheticprivilegecache.Cache
 
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher eval.RangeStatsFetcher

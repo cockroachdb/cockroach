@@ -174,7 +174,7 @@ func runSyncer(
 	}
 
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, drainSignals...)
+	signal.Notify(ch, DrainSignals...)
 
 	write := func() (_ int64, err error) {
 		defer func() {

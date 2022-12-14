@@ -134,8 +134,14 @@ var serverCmds = append(StartCmds, mtStartSQLCmd)
 // customLoggingSetupCmds lists the commands that call setupLogging()
 // after other types of configuration.
 var customLoggingSetupCmds = append(
-	serverCmds, debugCheckLogConfigCmd, demoCmd, mtStartSQLProxyCmd, mtTestDirectorySvr, statementBundleRecreateCmd,
+	serverCmds, debugCheckLogConfigCmd, demoCmd, statementBundleRecreateCmd,
 )
+
+// RegisterCommandWithCustomLogging is used by cliccl to note commands which
+// want to suppress default logging setup.
+func RegisterCommandWithCustomLogging(cmd *cobra.Command) {
+	customLoggingSetupCmds = append(customLoggingSetupCmds, cmd)
+}
 
 func initBlockProfile() {
 	// Enable the block profile for a sample of mutex and channel operations.
@@ -442,7 +448,7 @@ func runStartInternal(
 	// the buffers in the signal handler below. If we started capturing
 	// signals later, some startup logging might be lost.
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, drainSignals...)
+	signal.Notify(signalCh, DrainSignals...)
 
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
@@ -1269,8 +1275,9 @@ disk space exhaustion may result in node loss.`, ballastPathsStr)
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
 // Prior to this however it determines suitable defaults for the
 // logging output directory and the verbosity level of stderr logging.
-// We only do this for the "start" and "start-sql" commands which is why this work
-// occurs here and not in an OnInitialize function.
+// We only do this for special commands which do not use default logging like
+// "start" and "start-sql" commands which is why this work occurs here and not
+// in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command, isServerCmd bool,
 ) (stopper *stop.Stopper, err error) {

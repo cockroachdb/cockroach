@@ -20,6 +20,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/geo",
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",

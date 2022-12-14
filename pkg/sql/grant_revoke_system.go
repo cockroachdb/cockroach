@@ -16,20 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -270,176 +266,17 @@ func (p *planner) getPrivilegeDescriptor(
 				SchemaName: vs.GetName(),
 				TableName:  d.GetName(),
 			}
-			return synthesizePrivilegeDescriptor(
-				ctx, p.ExecCfg(), p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), vDesc,
+			return p.ExecCfg().SyntheticPrivilegeCache.Get(
+				ctx, p.Txn(), p.Descriptors(), vDesc,
 			)
 		}
 		return d.GetPrivileges(), nil
 	case catalog.Descriptor:
 		return d.GetPrivileges(), nil
 	case syntheticprivilege.Object:
-		return synthesizePrivilegeDescriptor(
-			ctx, p.ExecCfg(), p.ExecCfg().InternalExecutor, p.Descriptors(), p.Txn(), d,
+		return p.ExecCfg().SyntheticPrivilegeCache.Get(
+			ctx, p.Txn(), p.Descriptors(), d,
 		)
 	}
 	return nil, errors.AssertionFailedf("unknown privilege.Object type %T", po)
-}
-
-// synthesizePrivilegeDescriptor returns the synthetic privilege descriptor
-// for the object. We query the system.privileges table to synthesize a
-// PrivilegeDescriptor.
-func synthesizePrivilegeDescriptor(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ie sqlutil.InternalExecutor,
-	descsCol *descs.Collection,
-	txn *kv.Txn,
-	spo syntheticprivilege.Object,
-) (*catpb.PrivilegeDescriptor, error) {
-	if !execCfg.Settings.Version.IsActive(ctx, spo.SystemPrivilegesTableVersionGate()) {
-		// Fall back to defaults if the version gate is not active yet.
-		return spo.GetFallbackPrivileges(), nil
-	}
-	_, desc, err := descsCol.GetImmutableTableByName(
-		ctx,
-		txn,
-		syntheticprivilege.SystemPrivilegesTableName,
-		tree.ObjectLookupFlagsWithRequired(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	if desc.IsUncommittedVersion() {
-		return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, ie, txn, spo)
-	}
-	var tableVersions []descpb.DescriptorVersion
-	cache := execCfg.SyntheticPrivilegeCache
-	found, privileges, retErr := func() (bool, catpb.PrivilegeDescriptor, error) {
-		cache.Lock()
-		defer cache.Unlock()
-		version := desc.GetVersion()
-		tableVersions = []descpb.DescriptorVersion{version}
-
-		if isEligibleForCache := cache.ClearCacheIfStaleLocked(ctx, tableVersions); isEligibleForCache {
-			val, ok := cache.GetValueLocked(spo.GetPath())
-			if ok {
-				return true, val.(catpb.PrivilegeDescriptor), nil
-			}
-		}
-		return false, catpb.PrivilegeDescriptor{}, nil
-	}()
-
-	if found {
-		return &privileges, retErr
-	}
-
-	val, err := cache.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
-		func(loadCtx context.Context) (_ interface{}, retErr error) {
-			return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, ie, txn, spo)
-		})
-	if err != nil {
-		return nil, err
-	}
-	privDesc := val.(*catpb.PrivilegeDescriptor)
-	// Only write back to the cache if the table version is
-	// committed.
-	cache.MaybeWriteBackToCache(ctx, tableVersions, spo.GetPath(), *privDesc)
-	return privDesc, nil
-}
-
-// synthesizePrivilegeDescriptorFromSystemPrivilegesTable reads from the
-// system.privileges table to create the PrivilegeDescriptor from the
-// corresponding privilege object. This is only used if the we cannot
-// resolve the PrivilegeDescriptor from the cache.
-func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, spo syntheticprivilege.Object,
-) (privileges *catpb.PrivilegeDescriptor, retErr error) {
-
-	query := fmt.Sprintf(
-		`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
-		catconstants.SystemPrivilegeTableName,
-		spo.GetPath())
-
-	it, err := ie.QueryIteratorEx(
-		ctx, `get-system-privileges`, txn, sessiondata.NodeUserSessionDataOverride, query,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, it.Close())
-	}()
-
-	privileges = &catpb.PrivilegeDescriptor{}
-	for {
-		ok, err := it.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			break
-		}
-
-		user := tree.MustBeDString(it.Cur()[0])
-		privArr := tree.MustBeDArray(it.Cur()[1])
-		var privilegeStrings []string
-		for _, elem := range privArr.Array {
-			privilegeStrings = append(privilegeStrings, string(tree.MustBeDString(elem)))
-		}
-
-		grantOptionArr := tree.MustBeDArray(it.Cur()[2])
-		var grantOptionStrings []string
-		for _, elem := range grantOptionArr.Array {
-			grantOptionStrings = append(grantOptionStrings, string(tree.MustBeDString(elem)))
-		}
-		privs, err := privilege.ListFromStrings(privilegeStrings)
-		if err != nil {
-			return nil, err
-		}
-		grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
-		if err != nil {
-			return nil, err
-		}
-		privsWithGrantOption := privilege.ListFromBitField(
-			privs.ToBitField()&grantOptions.ToBitField(),
-			spo.GetObjectType(),
-		)
-		privsWithoutGrantOption := privilege.ListFromBitField(
-			privs.ToBitField()&^privsWithGrantOption.ToBitField(),
-			spo.GetObjectType(),
-		)
-		privileges.Grant(
-			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-			privsWithGrantOption,
-			true, /* withGrantOption */
-		)
-		privileges.Grant(
-			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
-			privsWithoutGrantOption,
-			false, /* withGrantOption */
-		)
-	}
-
-	// To avoid having to insert a row for public for each virtual
-	// table into system.privileges, we assume that if there is
-	// NO entry for public in the PrivilegeDescriptor, Public has
-	// grant. If there is an empty row for Public, then public
-	// does not have grant.
-	if spo.GetObjectType() == privilege.VirtualTable {
-		if _, found := privileges.FindUser(username.PublicRoleName()); !found {
-			privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
-		}
-	}
-
-	// We use InvalidID to skip checks on the root/admin roles having
-	// privileges.
-	if err := privileges.Validate(
-		descpb.InvalidID,
-		spo.GetObjectType(),
-		spo.GetPath(),
-		privilege.GetValidPrivilegesForObject(spo.GetObjectType()),
-	); err != nil {
-		return nil, err
-	}
-	return privileges, err
 }

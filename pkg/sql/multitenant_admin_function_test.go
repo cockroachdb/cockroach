@@ -367,7 +367,7 @@ func TestTruncateTable(t *testing.T) {
 		require.NoErrorf(t, err, "tenant=%s", tenant)
 		_, err = db.ExecContext(ctx, "TRUNCATE TABLE t;")
 		require.NoErrorf(t, err, "tenant=%s", tenant)
-		rows, err := db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM TABLE t];")
+		rows, err := db.QueryContext(ctx, "SELECT start_key, end_key from [SHOW RANGES FROM INDEX t@primary];")
 		require.NoErrorf(t, err, "tenant=%s", tenant)
 		verifyResults(t, tenant, rows, expectedResults)
 	}
@@ -390,7 +390,6 @@ func TestTruncateTable(t *testing.T) {
 			true,  /* allowSplitAndScatter */
 			false, /* skipSQLSystemTenantCheck */
 		)
-		// TODO(ewall): Retain splits after `TRUNCATE` for secondary tenants.
-		execQueries(db, "secondary", [][]string{{"", ""}})
+		execQueries(db, "secondary", [][]string{{"", "/104/2/1"}, {"/104/2/1", ""}})
 	}()
 }

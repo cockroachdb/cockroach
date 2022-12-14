@@ -17,10 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -30,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -403,23 +400,13 @@ func (p *planner) copySplitPointsToNewIndexes(
 	oldIndexIDs []descpb.IndexID,
 	newIndexIDs []descpb.IndexID,
 ) error {
-	if !p.EvalContext().Codec.ForSystemTenant() {
-		// Can't do any of this direct manipulation of ranges in multi-tenant mode.
-		return nil
-	}
-
-	preservedSplitsMultiple := int(PreservedSplitCountMultiple.Get(p.execCfg.SV()))
+	execCfg := p.ExecCfg()
+	preservedSplitsMultiple := int(PreservedSplitCountMultiple.Get(execCfg.SV()))
 	if preservedSplitsMultiple <= 0 {
 		return nil
 	}
-	row, err := p.execCfg.InternalExecutor.QueryRowEx(
-		// Run as Root, since ordinary users can't select from this table.
-		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"SELECT count(*) FROM crdb_internal.kv_node_status")
-	if err != nil || row == nil {
-		return err
-	}
-	nNodes := int(tree.MustBeDInt(row[0]))
+
+	nNodes := execCfg.NodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 
 	log.Infof(ctx, "making %d new truncate split points (%d * %d)", nSplits, preservedSplitsMultiple, nNodes)
@@ -427,10 +414,10 @@ func (p *planner) copySplitPointsToNewIndexes(
 	// Re-split the new set of indexes along the same split points as the old
 	// indexes.
 	var b kv.Batch
-	tablePrefix := p.execCfg.Codec.TablePrefix(uint32(tableID))
+	tablePrefix := execCfg.Codec.TablePrefix(uint32(tableID))
 
 	// Fetch all of the range descriptors for this index.
-	ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "truncate-copy-splits"), roachpb.Span{
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, roachpb.Span{
 		Key:    tablePrefix,
 		EndKey: tablePrefix.PrefixEnd(),
 	})
@@ -440,18 +427,16 @@ func (p *planner) copySplitPointsToNewIndexes(
 
 	// Shift the range split points from the old keyspace into the new keyspace,
 	// filtering out any ranges that we can't translate.
-	var desc roachpb.RangeDescriptor
-	splitPoints := make([][]byte, 0, len(ranges))
-	for i := range ranges {
-		if err := ranges[i].ValueProto(&desc); err != nil {
-			return err
-		}
+	var splitPoints [][]byte
+	for rangeDescIterator.Valid() {
+		rangeDesc := rangeDescIterator.CurRangeDescriptor()
+		rangeDescIterator.Next()
 		// For every range's start key, translate the start key into the keyspace
 		// of the replacement index. We'll split the replacement index along this
 		// same boundary later.
-		startKey := desc.StartKey
+		startKey := rangeDesc.StartKey
 
-		restOfKey, foundTable, foundIndex, err := p.execCfg.Codec.DecodeIndexPrefix(roachpb.Key(startKey))
+		restOfKey, foundTable, foundIndex, err := execCfg.Codec.DecodeIndexPrefix(roachpb.Key(startKey))
 		if err != nil {
 			// If we get an error here, it means that either our key didn't contain
 			// an index ID (because it was the first range in a table) or the key
@@ -484,7 +469,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 			continue
 		}
 
-		newStartKey := append(p.execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexID)), restOfKey...)
+		newStartKey := append(execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexID)), restOfKey...)
 		splitPoints = append(splitPoints, newStartKey)
 	}
 
@@ -498,7 +483,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	if step < 1 {
 		step = 1
 	}
-	expirationTime := kvserverbase.SplitByLoadMergeDelay.Get(p.execCfg.SV()).Nanoseconds()
+	expirationTime := kvserverbase.SplitByLoadMergeDelay.Get(execCfg.SV()).Nanoseconds()
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
 		// returned.
@@ -519,7 +504,8 @@ func (p *planner) copySplitPointsToNewIndexes(
 				Key: sp,
 			},
 			SplitKey:       sp,
-			ExpirationTime: p.execCfg.Clock.Now().Add(expirationTime, 0),
+			ExpirationTime: execCfg.Clock.Now().Add(expirationTime, 0),
+			Class:          oppurpose.SplitTruncate,
 		})
 	}
 
@@ -533,8 +519,8 @@ func (p *planner) copySplitPointsToNewIndexes(
 		// Scatter all of the data between the start key of the first new index, and
 		// the PrefixEnd of the last new index.
 		RequestHeader: roachpb.RequestHeader{
-			Key:    p.execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexIDs[0])),
-			EndKey: p.execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexIDs[len(newIndexIDs)-1])).PrefixEnd(),
+			Key:    execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexIDs[0])),
+			EndKey: execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexIDs[len(newIndexIDs)-1])).PrefixEnd(),
 		},
 		RandomizeLeases: true,
 		Class:           oppurpose.ScatterTruncate,
