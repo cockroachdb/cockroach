@@ -12,6 +12,15 @@ SELECT crdb_internal.create_tenant(5)
 ----
 5
 
+query error invalid tenant name
+SELECT crdb_internal.create_tenant(10, 'ABC')
+
+query error invalid tenant name
+SELECT crdb_internal.create_tenant(10, 'invalid_name')
+
+query error invalid tenant name
+SELECT crdb_internal.create_tenant(10, 'invalid.name')
+
 query I
 SELECT crdb_internal.create_tenant(10, 'tenant-number-ten')
 ----
@@ -54,6 +63,21 @@ query I
 SELECT crdb_internal.rename_tenant(5, 'my-new-tenant-name')
 ----
 5
+
+query error invalid tenant name
+SELECT crdb_internal.rename_tenant(5, 'AAA')
+
+query error invalid tenant name
+SELECT crdb_internal.rename_tenant(5, '-a-')
+
+query error invalid tenant name
+SELECT crdb_internal.rename_tenant(5, '11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111')
+
+query error invalid tenant name
+SELECT crdb_internal.rename_tenant(5, 'invalid_name')
+
+query error invalid tenant name
+SELECT crdb_internal.rename_tenant(5, 'invalid.name')
 
 # Check for duplicate names.
 query error name "tenant-number-ten" is already taken

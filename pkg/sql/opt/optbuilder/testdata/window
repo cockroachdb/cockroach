@@ -1473,3 +1473,66 @@ ORDER BY
   rank() OVER()
 ----
 error (42P20): rank(): window functions are not allowed in ORDER BY
+
+# Regression test for incorrectly ignoring NULLS LAST in window functions (#91295).
+exec-ddl
+CREATE TABLE nulls_last_test (
+    id INT NULL,
+    k INT NULL,
+    v STRING NULL
+)
+----
+
+build
+SELECT
+  id,
+  row_number() OVER (ORDER BY id NULLS LAST),
+  rank() OVER (ORDER BY k NULLS FIRST, v NULLS LAST),
+  row_number() OVER (ORDER BY (k, v) NULLS LAST)
+FROM
+  nulls_last_test
+----
+project
+ ├── columns: id:1 row_number:7 rank:8 row_number:9
+ └── window partition=() ordering=+12,+2,+11,+3
+      ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 row_number:7 rank:8 row_number:9 row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null
+      ├── window partition=() ordering=+2,+11,+3
+      │    ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 row_number:7 rank:8 row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null
+      │    ├── window partition=() ordering=+10,+1
+      │    │    ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 row_number:7 row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null
+      │    │    ├── project
+      │    │    │    ├── columns: row_number_1_nulls_ordering_1_1:10!null rank_2_nulls_ordering_2_1:11!null row_number_3_nulls_ordering_1_1:12!null id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    │    │    ├── scan nulls_last_test
+      │    │    │    │    └── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    │    │    └── projections
+      │    │    │         ├── id:1 IS NULL [as=row_number_1_nulls_ordering_1_1:10]
+      │    │    │         ├── v:3 IS NULL [as=rank_2_nulls_ordering_2_1:11]
+      │    │    │         └── k:2 IS NULL [as=row_number_3_nulls_ordering_1_1:12]
+      │    │    └── windows
+      │    │         └── row-number [as=row_number:7]
+      │    └── windows
+      │         └── rank [as=rank:8]
+      └── windows
+           └── row-number [as=row_number:9]
+
+build
+SELECT
+  rank() OVER w
+FROM nulls_last_test WINDOW w as (PARTITION BY k ORDER BY v NULLS LAST)
+ORDER BY rank() OVER w
+----
+sort
+ ├── columns: rank:7
+ ├── ordering: +7
+ └── project
+      ├── columns: rank:7
+      └── window partition=(2) ordering=+8,+3
+           ├── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 rank:7 rank_1_nulls_ordering_1_1:8!null
+           ├── project
+           │    ├── columns: rank_1_nulls_ordering_1_1:8!null id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    ├── scan nulls_last_test
+           │    │    └── columns: id:1 k:2 v:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    └── projections
+           │         └── v:3 IS NULL [as=rank_1_nulls_ordering_1_1:8]
+           └── windows
+                └── rank [as=rank:7]

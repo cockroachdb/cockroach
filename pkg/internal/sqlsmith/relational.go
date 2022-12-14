@@ -515,6 +515,16 @@ func (s *Smither) randDirection() tree.Direction {
 	return orderDirections[s.rnd.Intn(len(orderDirections))]
 }
 
+var nullsOrders = []tree.NullsOrder{
+	tree.DefaultNullsOrder,
+	tree.NullsFirst,
+	tree.NullsLast,
+}
+
+func (s *Smither) randNullsOrder() tree.NullsOrder {
+	return nullsOrders[s.rnd.Intn(len(nullsOrders))]
+}
+
 var nullabilities = []tree.Nullability{
 	tree.NotNull,
 	tree.Null,
@@ -772,7 +782,8 @@ func makeSelect(s *Smither) (tree.Statement, bool) {
 			}
 			order[i] = &tree.Order{
 				Expr:       expr,
-				NullsOrder: tree.NullsFirst,
+				Direction:  s.randDirection(),
+				NullsOrder: s.randNullsOrder(),
 			}
 		}
 		stmt = &tree.Select{
@@ -1277,8 +1288,9 @@ func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 			continue
 		}
 		ob = append(ob, &tree.Order{
-			Expr:      ref.item,
-			Direction: s.randDirection(),
+			Expr:       ref.item,
+			Direction:  s.randDirection(),
+			NullsOrder: s.randNullsOrder(),
 		})
 	}
 	return ob

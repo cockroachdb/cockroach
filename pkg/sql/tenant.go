@@ -88,6 +88,11 @@ func CreateTenantRecord(
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
+	if info.Name != "" {
+		if err := info.Name.IsValid(); err != nil {
+			return roachpb.TenantID{}, pgerror.WithCandidateCode(err, pgcode.Syntax)
+		}
+	}
 
 	tenID := info.ID
 	if tenID == 0 {
@@ -789,6 +794,10 @@ func TestingUpdateTenantRecord(
 func (p *planner) RenameTenant(
 	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
 ) error {
+	if err := tenantName.IsValid(); err != nil {
+		return pgerror.WithCandidateCode(err, pgcode.Syntax)
+	}
+
 	if err := p.RequireAdminRole(ctx, "rename tenant"); err != nil {
 		return err
 	}
