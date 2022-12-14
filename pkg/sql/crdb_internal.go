@@ -5192,7 +5192,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 	) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
-		c, err := p.Descriptors().Direct().GetCatalogUnvalidated(ctx, p.txn)
+		c, err := p.Descriptors().GetAllFromStorageUnvalidated(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -5582,7 +5582,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		}
 		// Get all descriptors which will be used to determine
 		// which ones are missing.
-		c, err := p.Descriptors().Direct().GetCatalogUnvalidated(ctx, p.txn)
+		c, err := p.Descriptors().GetAllFromStorageUnvalidated(ctx, p.txn)
 		if err != nil {
 			return err
 		}

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -32,13 +31,6 @@ import (
 // Note: If you are tempted to use this in a place which is not currently using
 // it, pause, and consider the decision very carefully.
 type Direct interface {
-	// GetCatalogUnvalidated looks up and returns all available descriptors and
-	// namespace system table entries but does not validate anything.
-	// It is exported solely to be used by functions which want to perform explicit
-	// validation to detect corruption.
-	GetCatalogUnvalidated(
-		ctx context.Context, txn *kv.Txn,
-	) (nstree.Catalog, error)
 
 	// MaybeGetDescriptorByIDUnvalidated looks up the descriptor given its ID if
 	// it exists. No attempt is made at validation.
@@ -231,11 +223,6 @@ func (d *direct) readDescriptorsForDirectAccess(
 		descs[i] = desc
 	}
 	return descs, nil
-}
-
-// GetCatalogUnvalidated is part of the Direct interface.
-func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return d.cr.ScanAll(ctx, txn)
 }
 
 // MustGetDatabaseDescByID is part of the Direct interface.
