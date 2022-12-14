@@ -377,3 +377,32 @@ query I
 SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
 ----
 1
+
+# Regression test for #90763. Ensure NULLS LAST works with DISTINCT ON.
+statement ok
+CREATE TABLE author (
+  id INT PRIMARY KEY,
+  name TEXT,
+  genre TEXT
+);
+INSERT INTO author VALUES
+  (1, 'Alice', 'Action'),
+  (2, 'Bob', 'Biography'),
+  (3, 'Carol', 'Crime'),
+  (4, 'Dave', 'Action'),
+  (5, 'Eve', 'Crime'),
+  (6, 'Bart', null);
+
+query ITT
+SELECT
+  DISTINCT ON ("genre") *
+FROM
+  "public"."author"
+ORDER BY
+  "genre" ASC NULLS LAST,
+  "id" ASC NULLS LAST
+----
+1  Alice  Action
+2  Bob    Biography
+3  Carol  Crime
+6  Bart   NULL
