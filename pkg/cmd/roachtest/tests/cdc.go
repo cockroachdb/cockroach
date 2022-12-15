@@ -483,7 +483,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_ENABLE_PER_CHANGEFEED_METRICS=true")
+	settings.Env = append(settings.Env, "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
 
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
