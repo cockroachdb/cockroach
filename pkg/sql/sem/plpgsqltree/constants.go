@@ -10,6 +10,8 @@
 
 package plpgsqltree
 
+import "github.com/cockroachdb/errors"
+
 type DatumType int
 
 const (
@@ -82,6 +84,37 @@ const (
 	PlpgsqlGetdiagTableName
 	PlpgsqlGetdiagSchemaName
 )
+
+func (k PLpgSQLGetDiagKind) String() string {
+	switch k {
+	case PlpgsqlGetdiagRowCount:
+		return "ROW_COUNT"
+	case PlpgsqlGetdiagContext:
+		return "PG_CONTEXT"
+	case PlpgsqlGetdiagErrorContext:
+		return "PG_EXCEPTION_CONTEXT"
+	case PlpgsqlGetdiagErrorDetail:
+		return "PG_EXCEPTION_DETAIL"
+	case PlpgsqlGetdiagErrorHint:
+		return "PG_EXCEPTION_HINT"
+	case PlpgsqlGetdiagReturnedSqlstate:
+		return "RETURNED_SQLSTATE"
+	case PlpgsqlGetdiagColumnName:
+		return "COLUMN_NAME"
+	case PlpgsqlGetdiagConstraintName:
+		return "CONSTRAINT_NAME"
+	case PlpgsqlGetdiagDatatypeName:
+		return "PG_DATATYPE_NAME"
+	case PlpgsqlGetdiagMessageText:
+		return "MESSAGE_TEXT"
+	case PlpgsqlGetdiagTableName:
+		return "TABLE_NAME"
+	case PlpgsqlGetdiagSchemaName:
+		return "SCHEMA_NAME"
+	}
+	panic(errors.AssertionFailedf("no Annotations unknown getDiagnistics kind"))
+
+}
 
 type PLpgSQLFetchDirection int
 
