@@ -204,24 +204,22 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 //
 // It is possible for a lookup join to supply an ordering that references index
 // columns if the ordering consists of a series of input columns that form a key
-// over the input, followed by the index columns in index order. Due to
-// implementation details, currently the ordering columns from the index must be
-// ASC. The following is a case where a lookup join could maintain an ordering
-// over both input and index columns:
+// over the input, followed by the index columns in index order. The following
+// is a case where a lookup join could maintain an ordering over both input and
+// index columns:
 //
 //	CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b));
-//	CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY(x, y, z DESC));
-//	SELECT * FROM ab INNER LOOKUP JOIN xy ON a = x ORDER BY a, b, x, y;
+//	CREATE TABLE xy (x INT, y INT, PRIMARY KEY(x, y DESC));
+//	SELECT * FROM ab INNER LOOKUP JOIN xy ON a = x ORDER BY a, b, x, y DESC;
 //
 // Note that in this example the 'a' and 'b' columns form a key over the
 // input of the lookup join. Additionally, the 'x' column alone is not a key
 // for the 'xy' table, so each lookup may return multiple rows (which need
-// to be ordered among themselves). Since the postfix of the ordering that
-// references index columns is in index order (x, y) and has no DESC
-// columns, the lookup join in the example can supply the ordering itself.
-// On the other hand, switching 'b' and 'y' in the ordering, removing 'b',
-// or adding the 'z' column to the required order would mean the query would
-// require a sort.
+// to be ordered among themselves). Since the suffix of the ordering that
+// references index columns is in index order (x, y DESC), the lookup join in
+// the example can supply the ordering itself. On the other hand, switching
+// 'b' and 'y' in the ordering, removing 'b', or changing the ordering on 'y' to
+// ASC would mean the query would require a sort.
 //
 // Note that the Columns field of the required OrderingChoice should reflect the
 // postfix of the required ordering that cannot be satisfied by input columns,
@@ -236,11 +234,13 @@ func getLookupOrdCols(
 		// joins can only maintain the index ordering for each individual input
 		// row, so we need to disallow cases where different input rows may sort
 		// the same on the input ordering.
-		// TODO(drewk): it is possible to take advantage of the index ordering
-		//  when the input ordering does not form a key over the input. In this
-		//  case, we would require that the index ordering columns for a given
-		//  input row are functionally determined by the input ordering columns.
-		//  This would disqualify IN constraints and inequalities.
+		//
+		// Note that it would be technically correct to use the index ordering when
+		// the input ordering does not form a key over the input iff the input
+		// ordering columns functionally determined the index ordering columns.
+		// However, in this case the addition of the index ordering columns would be
+		// trivial, since the ordering could be simplified to just include the input
+		// ordering columns (see OrderingChoice.Simplify).
 		return nil, false
 	}
 	// The columns from the prefix of the required ordering satisfied by the
@@ -271,11 +271,6 @@ func getLookupOrdCols(
 			// that the prefix of the index ordering we have reached so far can
 			// satisfy the required ordering, so break instead of returning.
 			break
-		}
-		if idx.Column(i).Descending {
-			// The index ordering columns must be ASC in order for lookups to be
-			// returned in index order.
-			return nil, false
 		}
 		indexOrder = append(indexOrder, opt.MakeOrderingColumn(idxColID, idx.Column(i).Descending))
 	}

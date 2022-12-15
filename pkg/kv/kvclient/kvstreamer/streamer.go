@@ -429,11 +429,7 @@ func (s *Streamer) Init(
 //
 // In InOrder operation mode, responses will be delivered in reqs order. When
 // more than one row is returned for a given request, the rows for that request
-// will be sorted in the order of the lookup index if the index contains only
-// ascending columns.
-// TODO(drewk): lift the restriction that index columns must be ASC in order to
-//
-//	return results in lookup order.
+// will be sorted in the order of the lookup index.
 //
 // It is the caller's responsibility to ensure that the memory footprint of reqs
 // (i.e. roachpb.Spans inside of the requests) is reasonable. Enqueue will
