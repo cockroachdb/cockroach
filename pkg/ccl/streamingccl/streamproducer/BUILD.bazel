@@ -51,13 +51,14 @@ go_library(
 
 go_test(
     name = "streamproducer_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "producer_job_test.go",
         "replication_manager_test.go",
         "replication_stream_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     embed = [":streamproducer"],
     deps = [
         "//pkg/base",
