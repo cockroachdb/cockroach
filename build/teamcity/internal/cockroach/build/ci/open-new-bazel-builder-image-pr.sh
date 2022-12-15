@@ -8,10 +8,11 @@ set -xeuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-common-support.sh"
+ssh_key_dir="$(pwd)"
 
 git_ssh() {
   # $@ passes all arguments to this function to the command
-  GIT_SSH_COMMAND="ssh -i $dir/.cockroach-teamcity-key" git "$@"
+  GIT_SSH_COMMAND="ssh -i $ssh_key_dir/.cockroach-teamcity-key" git "$@"
 }
 
 # Install `gh` tool.
@@ -24,7 +25,7 @@ export PATH=$PWD/bin:$PATH
 git config --global user.email "teamcity@cockroachlabs.com"
 git config --global user.name "cockroach-teamcity"
 configure_git_ssh_key
-trap "rm -f $dir/.cockroach-teamcity-key" EXIT
+trap "rm -f $ssh_key_dir/.cockroach-teamcity-key" EXIT
 WORKDIR="$(mktemp -d ./workdir.XXXXXX)"
 
 git_ssh clone "ssh://git@github.com/cockroachdb/cockroach.git" "$WORKDIR/cockroach" && cd "$WORKDIR/cockroach"
