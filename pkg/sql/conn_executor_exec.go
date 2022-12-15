@@ -1561,6 +1561,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
+			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
 			// Query diagnostics can change the Context; make sure we are using the
 			// same one.
 			// TODO(radu): consider removing this if/when #46164 is addressed.
