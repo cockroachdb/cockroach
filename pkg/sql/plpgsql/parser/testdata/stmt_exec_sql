@@ -65,14 +65,3 @@ DECLARE
 BEGIN
 EXECUTE bare sql query
 END
-
-parse
-DECLARE
-BEGIN
-  CREATE TABLE t1 (a int);
-END
-----
-DECLARE
-BEGIN
-EXECUTE bare sql query
-END
