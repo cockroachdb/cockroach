@@ -243,7 +243,11 @@ enum TransactionRetryReason {
 // retried, usually with an increased transaction timestamp.
 message TransactionRetryError {
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
+  // Note: Deprecated. `extra_msg_redactable` takes precedence if present.
+  // Both fields will be populated in 23.1.
+  // TODO(davidh): Remove in 23.2
   optional string extra_msg = 2 [(gogoproto.nullable) = false];
+  optional string extra_msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -253,6 +257,9 @@ message TransactionRetryError {
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 message TransactionStatusError {
+  // Note: Deprecated. `msg_redactable` takes precedence if present.
+  // Both fields will be populated in 23.1.
+  // TODO(davidh): Remove in 23.2
   optional string msg = 1 [(gogoproto.nullable) = false];
 
   // Reason specifies what caused the error.
@@ -265,6 +272,7 @@ message TransactionStatusError {
     reserved 1;
   }
   optional Reason reason = 2 [(gogoproto.nullable) = false];
+  optional string msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // A WriteIntentError indicates that one or more write intents belonging
@@ -449,6 +457,9 @@ message UnhandledRetryableError {
 // client.Sender() interface).
 message TransactionRetryWithProtoRefreshError {
   // A user-readable message.
+  // Note: Deprecated in favor of `msg_redactable` below. Both fields will be
+  // populated in 23.1. Presence of `msg_redactable` will take precedence.
+  // TODO(davidh): Remove in 23.2
   optional string msg = 1 [(gogoproto.nullable) = false];
 
   // The ID of the transaction being restarted. The client is supposed to check
@@ -464,6 +475,9 @@ message TransactionRetryWithProtoRefreshError {
   // before, but with an incremented epoch and timestamp, or a completely new
   // Transaction.
   optional roachpb.Transaction transaction = 3 [(gogoproto.nullable) = false];
+
+  // A user-readable message containing redaction markers.
+  optional string msg_redactable = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a

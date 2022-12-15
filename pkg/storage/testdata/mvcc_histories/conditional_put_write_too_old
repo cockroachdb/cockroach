@@ -16,7 +16,7 @@ cput ts=1 k=k v=v2
 ----
 >> at end:
 data: "k"/10.000000000,0 -> /BYTES/v1
-error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v1" timestamp:<wall_time:10000000000 > 
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v1" timestamp:<wall_time:10000000000 >
 
 # Now do a non-transactional put @t=1 with expectation of value1; will "succeed" @t=10,1 with WriteTooOld.
 run error

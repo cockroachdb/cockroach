@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/testutils"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,7 +86,7 @@ func TestFlatten(t *testing.T) {
 			},
 		},
 		{
-			errors.Wrap(&roachpb.TransactionRetryWithProtoRefreshError{Msg: "woo"}, ""),
+			errors.Wrap(&roachpb.TransactionRetryWithProtoRefreshError{MsgRedactable: "woo"}, ""),
 			func(t testutils.T, e *pgerror.Error) {
 				t.CheckRegexpEqual(e.Message, "restart transaction: .* woo")
 				t.CheckEqual(pgcode.MakeCode(e.Code), pgcode.SerializationFailure)
@@ -114,7 +115,7 @@ func TestFlatten(t *testing.T) {
 		{
 			errors.Wrap(
 				roachpb.NewTransactionRetryWithProtoRefreshError(
-					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil).Error(),
+					redact.Sprint(roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil)),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
 				),
@@ -127,7 +128,7 @@ func TestFlatten(t *testing.T) {
 		{
 			errors.Wrap(
 				roachpb.NewTransactionRetryWithProtoRefreshError(
-					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "").Error(),
+					redact.Sprint(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
 				),
@@ -140,7 +141,7 @@ func TestFlatten(t *testing.T) {
 		{
 			errors.Wrap(
 				roachpb.NewTransactionRetryWithProtoRefreshError(
-					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED).Error(),
+					redact.Sprint(roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED)),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
 				),

@@ -13,13 +13,13 @@ package batcheval
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ErrTransactionUnsupported is returned when a non-transactional command is
@@ -50,7 +50,7 @@ func VerifyTransaction(
 			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
 		}
 		return roachpb.NewTransactionStatusError(reason,
-			fmt.Sprintf("cannot perform %s with txn status %v", args.Method(), h.Txn.Status))
+			redact.Sprintf("cannot perform %s with txn status %v", args.Method(), h.Txn.Status))
 	}
 	return nil
 }

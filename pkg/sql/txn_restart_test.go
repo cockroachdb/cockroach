@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -1639,7 +1640,7 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 			if req, ok := args.Req.(*roachpb.GetRequest); ok {
 				if bytes.Contains(req.Key, retriedStmtKey) && retryCount < numRetries {
 					return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN,
-						fmt.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
+						redact.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
 				}
 			}
 			return nil

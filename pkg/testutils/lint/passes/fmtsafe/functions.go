@@ -154,6 +154,8 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.l":                 true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.logLogger).Logf": true,
 
+	"(github.com/cockroachdb/cockroach/pkg/roachpb.TestPrinter).Printf": true,
+
 	// Error things are populated in the init() message.
 }
 

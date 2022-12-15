@@ -12,7 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 )
 
@@ -778,7 +778,7 @@ func (tp *txnPipeliner) adjustError(
 	if ime, ok := pErr.GetDetail().(*roachpb.IntentMissingError); ok {
 		log.VEventf(ctx, 2, "transforming intent missing error into retry: %v", ime)
 		err := roachpb.NewTransactionRetryError(
-			roachpb.RETRY_ASYNC_WRITE_FAILURE, fmt.Sprintf("missing intent on: %s", ime.Key))
+			roachpb.RETRY_ASYNC_WRITE_FAILURE, redact.Sprintf("missing intent on: %s", ime.Key))
 		retryErr := roachpb.NewErrorWithTxn(err, pErr.GetTxn())
 		retryErr.Index = pErr.Index
 		return retryErr
