@@ -76,6 +76,7 @@ UniqueWithoutIndexConstraint :  TableID
 UniqueWithoutIndexConstraint :  ConstraintID
 UniqueWithoutIndexConstraint : []ColumnIDs
 UniqueWithoutIndexConstraint :  Predicate
+UniqueWithoutIndexConstraint :  IndexIDForValidation
 
 object CheckConstraint
 
