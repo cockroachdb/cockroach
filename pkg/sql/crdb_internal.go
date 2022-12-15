@@ -635,7 +635,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 }
 
 var crdbInternalPgCatalogTableIsImplementedTable = virtualSchemaTable{
-	comment: `table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)`,
+	comment: `which entries of pg_catalog are implemented in this version of CockroachDB`,
 	schema: `
 CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
   name                     STRING NOT NULL,
