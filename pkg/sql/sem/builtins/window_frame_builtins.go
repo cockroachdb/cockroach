@@ -37,7 +37,7 @@ type indexedValue struct {
 // It assumes that the frame bounds will never go back, i.e. non-decreasing
 // sequences of frame start and frame end indices.
 type slidingWindow struct {
-	values  ring.Buffer
+	values  ring.Buffer[*indexedValue]
 	evalCtx *eval.Context
 	cmp     func(*eval.Context, tree.Datum, tree.Datum) int
 }
@@ -58,7 +58,7 @@ func makeSlidingWindow(
 // largest idx).
 func (sw *slidingWindow) add(iv *indexedValue) {
 	for i := sw.values.Len() - 1; i >= 0; i-- {
-		if sw.cmp(sw.evalCtx, sw.values.Get(i).(*indexedValue).value, iv.value) > 0 {
+		if sw.cmp(sw.evalCtx, sw.values.Get(i).value, iv.value) > 0 {
 			break
 		}
 		sw.values.RemoveLast()
@@ -70,7 +70,7 @@ func (sw *slidingWindow) add(iv *indexedValue) {
 // indices smaller than given 'idx'. This operation corresponds to shifting the
 // start of the frame up to 'idx'.
 func (sw *slidingWindow) removeAllBefore(idx int) {
-	for sw.values.Len() > 0 && sw.values.Get(0).(*indexedValue).idx < idx {
+	for sw.values.Len() > 0 && sw.values.Get(0).idx < idx {
 		sw.values.RemoveFirst()
 	}
 }
@@ -78,7 +78,7 @@ func (sw *slidingWindow) removeAllBefore(idx int) {
 func (sw *slidingWindow) string() string {
 	var builder strings.Builder
 	for i := 0; i < sw.values.Len(); i++ {
-		builder.WriteString(fmt.Sprintf("(%v, %v)\t", sw.values.Get(i).(*indexedValue).value, sw.values.Get(i).(*indexedValue).idx))
+		builder.WriteString(fmt.Sprintf("(%v, %v)\t", sw.values.Get(i).value, sw.values.Get(i).idx))
 	}
 	return builder.String()
 }
@@ -175,7 +175,7 @@ func (w *slidingWindowFunc) Compute(
 
 	// The datum with "highest priority" within the frame is at the very front
 	// of the deque.
-	return w.sw.values.GetFirst().(*indexedValue).value, nil
+	return w.sw.values.GetFirst().value, nil
 }
 
 func max(a, b int) int {

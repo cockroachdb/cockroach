@@ -146,7 +146,7 @@ type recordingState struct {
 	// but its 'swap' method requires the mutex.
 	recordingType atomicRecordingType
 
-	logs sizeLimitedBuffer // of *tracingpb.LogRecords
+	logs sizeLimitedBuffer[*tracingpb.LogRecord]
 	// structured accumulates StructuredRecord's.
 	//
 	// Note that structured events that originally belonged to child spans but
@@ -154,7 +154,7 @@ type recordingState struct {
 	// this span was not recording verbosely, or children that were dropped from a
 	// verbose recording because of the span limit) are not part of this buffer;
 	// they're in finishedChildren.Root.StructuredRecords.
-	structured sizeLimitedBuffer
+	structured sizeLimitedBuffer[*tracingpb.StructuredRecord]
 
 	// notifyParentOnStructuredEvent is true if the span's parent has asked to be
 	// notified of every StructuredEvent recording on this span.
@@ -200,8 +200,8 @@ type recordingState struct {
 // scratch, if not nil, represents pre-allocated space that the Buffer takes
 // ownership of. The whole backing array of the provided slice is taken over,
 // included elements and available capacity.
-func makeSizeLimitedBuffer(limit int64, scratch []interface{}) sizeLimitedBuffer {
-	return sizeLimitedBuffer{
+func makeSizeLimitedBuffer[T any](limit int64, scratch []T) sizeLimitedBuffer[T] {
+	return sizeLimitedBuffer[T]{
 		bytesLimit: limit,
 		Buffer:     ring.MakeBuffer(scratch),
 	}
@@ -209,8 +209,8 @@ func makeSizeLimitedBuffer(limit int64, scratch []interface{}) sizeLimitedBuffer
 
 // sizeLimitedBuffer is a wrapper on top of ring.Buffer that keeps track of the
 // memory size of its elements.
-type sizeLimitedBuffer struct {
-	ring.Buffer
+type sizeLimitedBuffer[T any] struct {
+	ring.Buffer[T]
 	bytesSize  int64
 	bytesLimit int64
 }
@@ -539,8 +539,8 @@ func (t *Trace) PartialClone() Trace {
 // Note that Discard does not modify the backing storage (i.e. it does not nil
 // out the elements). So, if anyone still has a reference to the storage, then
 // the elements cannot be GCed.
-func (buf *sizeLimitedBuffer) Discard() {
-	*buf = sizeLimitedBuffer{}
+func (buf *sizeLimitedBuffer[T]) Discard() {
+	*buf = sizeLimitedBuffer[T]{}
 }
 
 // finish marks the span as finished. Further operations on the span are not
@@ -994,12 +994,10 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 		return
 	}
 
-	logRecord := &tracingpb.LogRecord{
+	recordInternal(s, &tracingpb.LogRecord{
 		Time:    s.tracer.now(),
 		Message: msg,
-	}
-
-	s.recordInternal(logRecord, &s.mu.recording.logs)
+	}, &s.mu.recording.logs)
 }
 
 // recordStructured includes a structured event in s' recording.
@@ -1019,7 +1017,7 @@ func (s *crdbSpan) recordStructured(item Structured) {
 		Time:    s.tracer.now(),
 		Payload: p,
 	}
-	s.recordInternal(sr, &s.mu.recording.structured)
+	recordInternal(s, sr, &s.mu.recording.structured)
 
 	// If there are any listener's registered with this span, notify them of the
 	// Structured event being recorded.
@@ -1037,13 +1035,9 @@ type memorySizable interface {
 	MemorySize() int
 }
 
-func (s *crdbSpan) recordInternal(payload memorySizable, buffer *sizeLimitedBuffer) {
+func recordInternal[PL memorySizable](s *crdbSpan, payload PL, buffer *sizeLimitedBuffer[PL]) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.recordInternalLocked(payload, buffer)
-}
-
-func (s *crdbSpan) recordInternalLocked(payload memorySizable, buffer *sizeLimitedBuffer) {
 	size := int64(payload.MemorySize())
 	if size > buffer.bytesLimit {
 		// The incoming payload alone blows past the memory limit. Let's just
@@ -1057,7 +1051,7 @@ func (s *crdbSpan) recordInternalLocked(payload memorySizable, buffer *sizeLimit
 		s.mu.recording.droppedLogs = true
 	}
 	for buffer.bytesSize > buffer.bytesLimit {
-		first := buffer.GetFirst().(memorySizable)
+		first := buffer.GetFirst()
 		buffer.RemoveFirst()
 		buffer.bytesSize -= int64(first.MemorySize())
 	}
@@ -1125,7 +1119,7 @@ func (s *crdbSpan) appendStructuredEventsLocked(
 ) []tracingpb.StructuredRecord {
 	numEvents := s.mu.recording.structured.Len()
 	for i := 0; i < numEvents; i++ {
-		event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
+		event := s.mu.recording.structured.Get(i)
 		buffer = append(buffer, *event)
 	}
 	return buffer
@@ -1194,7 +1188,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	if numEvents := s.mu.recording.structured.Len(); numEvents != 0 {
 		rs.StructuredRecords = make([]tracingpb.StructuredRecord, 0, numEvents)
 		for i := 0; i < numEvents; i++ {
-			event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
+			event := s.mu.recording.structured.Get(i)
 			rs.AddStructuredRecord(*event)
 		}
 	}
@@ -1230,7 +1224,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	if numLogs := s.mu.recording.logs.Len(); numLogs != 0 {
 		rs.Logs = make([]tracingpb.LogRecord, numLogs)
 		for i := 0; i < numLogs; i++ {
-			lr := s.mu.recording.logs.Get(i).(*tracingpb.LogRecord)
+			lr := s.mu.recording.logs.Get(i)
 			rs.Logs[i] = *lr
 		}
 	}

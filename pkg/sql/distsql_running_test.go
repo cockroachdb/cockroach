@@ -483,7 +483,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 		require.GreaterOrEqual(t, numNodes-1, c.mu.deadFlowsByNode.Len())
 		seen := make(map[base.SQLInstanceID]struct{})
 		for i := 0; i < c.mu.deadFlowsByNode.Len(); i++ {
-			deadFlows := c.mu.deadFlowsByNode.Get(i).(*deadFlowsOnNode)
+			deadFlows := c.mu.deadFlowsByNode.Get(i)
 			require.NotEqual(t, gatewaySQLInstanceID, deadFlows.sqlInstanceID)
 			_, ok := seen[deadFlows.sqlInstanceID]
 			require.False(t, ok)
