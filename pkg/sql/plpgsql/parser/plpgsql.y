@@ -4,10 +4,16 @@ package parser
 import (
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+  "github.com/cockroachdb/errors"
 )
 %}
 
 %{
+func setErr(plpgsqllex plpgsqlLexer, err error) int {
+    plpgsqllex.(*lexer).setErr(err)
+    return 1
+}
+
 //functions to cast plpgsqlSymType/sqlSymUnion to other types.
 var _ scanner.ScanSymType = &plpgsqlSymType{}
 
@@ -64,6 +70,32 @@ func (u *plpgsqlSymUnion) plpgsqlDeclareheader() *declareHeader {
 func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
     return u.val.([]plpgsqltree.PLpgSQLStatement)
 }
+
+func (u *plpgsqlSymUnion) plWDatum() *plWDatum {
+    return u.val.(*plWDatum)
+}
+
+func (u *plpgsqlSymUnion) int32() int32 {
+    return u.val.(int32)
+}
+
+func (u *plpgsqlSymUnion) bool() bool {
+    return u.val.(bool)
+}
+
+func (u *plpgsqlSymUnion) pLpgSQLGetDiagKind() plpgsqltree.PLpgSQLGetDiagKind {
+    return u.val.(plpgsqltree.PLpgSQLGetDiagKind)
+}
+
+func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItem() *plpgsqltree.PLpgSQLStmtGetDiagItem {
+    return u.val.(*plpgsqltree.PLpgSQLStmtGetDiagItem)
+}
+
+func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGetDiagItemList {
+    return u.val.(plpgsqltree.PLpgSQLStmtGetDiagItemList)
+}
+
+
 
 %}
 /*
@@ -221,7 +253,7 @@ func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
 //%type <list>	decl_cursor_arglist // TODO a list of what?
 //%type <nsitem>	decl_aliasitem // TODO what is nsitem? looks like namespace item, not sure if we need it.
 
-%type <plpgsqltree.PLpgSQLExpr>	expr_until_semi
+%type <str>	expr_until_semi
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
 
@@ -255,10 +287,10 @@ func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
 //%type <list>	case_when_list opt_case_else // TODO is this a list of case when arms?
 
 %type <bool>	getdiag_area_opt
-//%type <list>	getdiag_list // TODO don't know what this is
-//%type <diagitem> getdiag_list_item // TODO don't know what this is
+%type <plpgsqltree.PLpgSQLStmtGetDiagItemList>	getdiag_list // TODO don't know what this is
+%type <*plpgsqltree.PLpgSQLStmtGetDiagItem> getdiag_list_item // TODO don't know what this is
 //%type <plpgsqltree.PLpgSQLDatum>	getdiag_target // TODO don't know what this is
-//%type <*tree.NumVal>	getdiag_item // TODO don't know what this is
+%type <int32> getdiag_item // TODO don't know what this is
 
 %type <*tree.NumVal>	opt_scrollable
 %type <*plpgsqltree.PLpgSQLStmtFetch>	opt_fetch_direction
@@ -573,46 +605,96 @@ call_cmd:
 }
 ;
 
-stmt_assign		: T_DATUM
+stmt_assign		: IDENT assign_operator expr_until_semi ';'
 					{
+					$$.val = &plpgsqltree.PLpgSQLStmtAssign{
+					Var: $1,
+					Value: $3,
+					}
 					}
 				;
 
 stmt_getdiag	: GET getdiag_area_opt DIAGNOSTICS getdiag_list ';'
 					{
+					$$.val = &plpgsqltree.PLpgSQLStmtGetDiag{
+						IsStacked: $2.bool(),
+						DiagItems: $4.pLpgSQLStmtGetDiagItemList(),
+					}
+					// TODO(jane): Check information items are valid for area option.
 					}
 				;
 
 getdiag_area_opt :
 					{
+					$$.val = false
 					}
 				| CURRENT
 					{
+					$$.val = false
 					}
 				| STACKED
 					{
+					$$.val = true
 					}
 				;
 
 getdiag_list : getdiag_list ',' getdiag_list_item
 					{
+					$$.val = append($1.pLpgSQLStmtGetDiagItemList(), $3.pLpgSQLStmtGetDiagItem())
 					}
 				| getdiag_list_item
 					{
+					$$.val = plpgsqltree.PLpgSQLStmtGetDiagItemList{$1.pLpgSQLStmtGetDiagItem()}
 					}
 				;
 
-getdiag_list_item : getdiag_target assign_operator getdiag_item
+getdiag_list_item : IDENT assign_operator getdiag_item
 					{
+					$$.val = &plpgsqltree.PLpgSQLStmtGetDiagItem{
+					Kind : $3.pLpgSQLGetDiagKind(),
+					TargetName: $1,
+					// TODO(jane): set the target from $1.
+					}
 					}
 				;
 
-getdiag_item :
-					{
-					}
-				;
+getdiag_item : unreserved_keyword {
+    switch $1 {
+      case "row_count":
+        $$.val = plpgsqltree.PlpgsqlGetdiagRowCount;
+      case "pg_context":
+        $$.val = plpgsqltree.PlpgsqlGetdiagContext;
+      case "pg_exception_detail":
+        $$.val = plpgsqltree.PlpgsqlGetdiagErrorDetail;
+      case "pg_exception_hint":
+        $$.val = plpgsqltree.PlpgsqlGetdiagErrorHint;
+      case "pg_exception_context":
+        $$.val = plpgsqltree.PlpgsqlGetdiagErrorContext;
+      case "column_name":
+        $$.val = plpgsqltree.PlpgsqlGetdiagColumnName;
+      case "constraint_name":
+        $$.val = plpgsqltree.PlpgsqlGetdiagConstraintName;
+      case "pg_datatype_name":
+        $$.val = plpgsqltree.PlpgsqlGetdiagDatatypeName;
+      case "message_text":
+        $$.val = plpgsqltree.PlpgsqlGetdiagMessageText;
+      case "table_name":
+        $$.val = plpgsqltree.PlpgsqlGetdiagTableName;
+      case "schema_name":
+        $$.val = plpgsqltree.PlpgsqlGetdiagSchemaName;
+      case "returned_sqlstate":
+        $$.val = plpgsqltree.PlpgsqlGetdiagReturnedSqlstate;
+      default:
+        setErr(plpgsqllex, errors.New("unrecognized GET DIAGNOSTICS item " + $1 ))
+    }
+			}
+		;
 
-getdiag_target	: T_DATUM
+
+getdiag_target	:
+        // TODO(jane): remove ident.
+				IDENT |
+				T_DATUM
 					{
 					}
 				| T_WORD
@@ -920,7 +1002,7 @@ proc_condition	: any_identifier
 
 expr_until_semi :
 {
-  plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+  $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
 }
 ;
 
