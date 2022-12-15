@@ -1728,6 +1728,15 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.Time, types.TimeTZ, volatility.Stable),
 		makeIsFn(types.TimeTZ, types.Time, volatility.Stable),
 
+		// Void is unique in that it is not equivalent with itself, so implicit
+		// equivalence with Unknown in function ArgTypes.MatchAt due to the check
+		// `(typ.Family() == types.UnknownFamily || a[i].Typ.Equivalent(typ))` does
+		// not occur. Therefore, to allow the comparison
+		// `''::VOID IS DISTINCT FROM NULL`, an explicit equivalence with Unknown is
+		// added:
+		makeIsFn(types.Void, types.Unknown, volatility.Stable),
+		makeIsFn(types.Unknown, types.Void, volatility.Stable),
+
 		// Tuple comparison.
 		{
 			LeftType:          types.AnyTuple,
