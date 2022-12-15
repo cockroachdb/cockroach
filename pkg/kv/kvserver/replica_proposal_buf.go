@@ -114,6 +114,8 @@ type propBuf struct {
 		allowLeaseProposalWhenNotLeader bool
 		// dontCloseTimestamps inhibits the closing of timestamps.
 		dontCloseTimestamps bool
+		// Use RaftVersionFlatbuffer for `entry.Data` instead of proto-based encoding.
+		experimentalUseRaftVersionFlatBuffer bool
 	}
 }
 

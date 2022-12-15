@@ -477,6 +477,9 @@ type StoreTestingKnobs struct {
 	// DisableMergeWaitForReplicasInit skips the waitForReplicasInit calls
 	// during merges. Useful for testContext tests that want to use merges.
 	DisableMergeWaitForReplicasInit bool
+
+	// ExperimentalUseRaftVersionFlatBuffer toggles the use of kvserverpb.RaftVersionFlatBuffer.
+	ExperimentalUseRaftVersionFlatBuffer bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
