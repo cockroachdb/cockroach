@@ -2393,8 +2393,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 		// not occur. Therefore, to allow the comparison
 		// `''::VOID IS DISTINCT FROM NULL`, an explicit equivalence with Unknown is
 		// added:
-		makeIsFn(types.Void, types.Unknown, VolatilityStable),
-		makeIsFn(types.Unknown, types.Void, VolatilityStable),
+		makeIsFn(types.Void, types.Unknown, VolatilityLeakProof),
+		makeIsFn(types.Unknown, types.Void, VolatilityLeakProof),
 
 		// Tuple comparison.
 		&CmpOp{
