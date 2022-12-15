@@ -1,0 +1,19 @@
+namespace raftfbs;
+
+table Command {
+  id: [ubyte];
+  // For now, we simply wrap the encoded kvserverpb.RaftCommand in the
+  // FlatBuffer. This doesn't yield any benefits but allows introducing them in
+  // the least disruptive way and gauging the changes necessary to go further.
+  // We can them progressively lift fields out of the protobuf (first supporting
+  // simple commands only), until there's nothing left, akin to the Strangler
+  // Fig Pattern[^1].
+  //
+  // NB: the command ID is always 8 bytes, but [ubyte:8] not supported yet by
+  // flatc's Go codegen. We could use an int64 instead which would be slightly
+  // more efficient but also more annoying.
+  //
+  // [^1]: https://martinfowler.com/bliki/StranglerFigApplication.html
+  raft_command_pb: [ubyte];
+}
+

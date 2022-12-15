@@ -1,0 +1,57 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rafttransport",
+    srcs = [
+        "RaftMessageBatchRequest.go",
+        "RaftMessageBatchResponse.go",
+        "RaftMessageRequest.go",
+        "RaftTransport_grpc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttransport",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_google_flatbuffers//go",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "rafttransport_test",
+    srcs = ["transport_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":rafttransport"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_google_flatbuffers//go",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//credentials/insecure",
+        "@org_golang_google_grpc//encoding",
+    ],
+)
+
+go_library(
+    name = "raftfbs",
+    srcs = ["command.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_google_flatbuffers//go"],
+)
+
+go_test(
+    name = "raftfbs_test",
+    srcs = ["command_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":raftfbs"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_google_flatbuffers//go",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
