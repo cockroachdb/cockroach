@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -50,7 +50,7 @@ import (
 // TODO(ajwerner): Sort out the hydration mess; define clearly what is
 // hydrated where and test the API boundary accordingly.
 func (tc *Collection) hydrateDescriptors(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
+	ctx context.Context, txn *kv.Txn, flags getterFlags, descs []catalog.Descriptor,
 ) error {
 
 	var hydratableMutableIndexes, hydratableImmutableIndexes intsets.Fast
@@ -129,10 +129,7 @@ func makeMutableTypeLookupFunc(
 		// descriptor for the system database. We only want it for the name, so
 		// let the caller have the immutable copy.
 		if id == catconstants.PublicSchemaID {
-			return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+			return schemadesc.GetPublicSchema(), nil
 		}
 		return tc.GetMutableDescriptorByID(ctx, txn, id)
 	}
@@ -140,7 +137,7 @@ func makeMutableTypeLookupFunc(
 }
 
 func makeImmutableTypeLookupFunc(
-	tc *Collection, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
+	tc *Collection, txn *kv.Txn, flags getterFlags, descs []catalog.Descriptor,
 ) typedesc.TypeLookupFunc {
 	var imm nstree.MutableCatalog
 	for _, desc := range descs {
@@ -152,15 +149,12 @@ func makeImmutableTypeLookupFunc(
 		}
 		imm.UpsertDescriptor(desc)
 	}
-	immutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
-		return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
-			Required:       true,
-			AvoidLeased:    flags.AvoidLeased,
-			IncludeOffline: flags.IncludeOffline,
-			AvoidSynthetic: true,
-		})
-	}
-	return hydrateddesc.MakeTypeLookupFuncForHydration(imm.Catalog, immutableLookupFunc)
+	flags.layerFilters.withoutSynthetic = true
+	flags.layerFilters.withoutStorage = false
+	flags.descFilters.withoutDropped = true
+	flags.descFilters.withoutCommittedAdding = false
+	g := ByIDGetter(makeGetterBase(txn, tc, flags))
+	return hydrateddesc.MakeTypeLookupFuncForHydration(imm.Catalog, g.Desc)
 }
 
 // HydrateCatalog installs type metadata in the type.T objects present for all

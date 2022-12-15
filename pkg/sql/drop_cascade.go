@@ -120,7 +120,7 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			tbDesc, ok := desc.(*tabledesc.Mutable)
 			if !ok {
 				return errors.AssertionFailedf(
-					"descriptor for %q is not Mutable",
+					"table descriptor for %q is not Mutable",
 					objName.Object(),
 				)
 			}
@@ -178,7 +178,7 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			typDesc, ok := desc.(*typedesc.Mutable)
 			if !ok {
 				return errors.AssertionFailedf(
-					"descriptor for %q is not Mutable",
+					"type descriptor for %q is not Mutable",
 					objName.Object(),
 				)
 			}
