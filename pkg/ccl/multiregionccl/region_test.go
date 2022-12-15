@@ -424,7 +424,7 @@ func TestSettingPlacementAmidstAddDrop(t *testing.T) {
 ALTER TABLE db.public.global CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	global_reads = true,
 	num_replicas = 5,
 	num_voters = 3,
@@ -440,7 +440,7 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 ALTER TABLE db.public.global CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	global_reads = true,
 	num_replicas = 3,
 	num_voters = 3,

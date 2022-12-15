@@ -35,40 +35,40 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.t;
 ----
 DATABASE mr1  ALTER DATABASE mr1 CONFIGURE ZONE USING
-              range_min_bytes = 134217728,
-              range_max_bytes = 536870912,
-              gc.ttlseconds = 90000,
-              num_replicas = 5,
-              num_voters = 3,
-              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-              voter_constraints = '[+region=ca-central-1]',
-              lease_preferences = '[[+region=ca-central-1]]'
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 5,
+                num_voters = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                voter_constraints = '[+region=ca-central-1]',
+                lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.t2
 ----
 DATABASE mr1  ALTER DATABASE mr1 CONFIGURE ZONE USING
-              range_min_bytes = 134217728,
-              range_max_bytes = 536870912,
-              gc.ttlseconds = 90000,
-              num_replicas = 5,
-              num_voters = 3,
-              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-              voter_constraints = '[+region=ca-central-1]',
-              lease_preferences = '[[+region=ca-central-1]]'
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 5,
+                num_voters = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                voter_constraints = '[+region=ca-central-1]',
+                lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr1.t2
 ----
 PARTITION "us-east-1" OF TABLE mr1.public.t2  ALTER PARTITION "us-east-1" OF TABLE mr1.public.t2 CONFIGURE ZONE USING
-                                              range_min_bytes = 134217728,
-                                              range_max_bytes = 536870912,
-                                              gc.ttlseconds = 90000,
-                                              num_replicas = 4,
-                                              num_voters = 3,
-                                              constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                              voter_constraints = '[+region=us-east-1]',
-                                              lease_preferences = '[[+region=us-east-1]]'
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 4,
+                                                num_voters = 3,
+                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                voter_constraints = '[+region=us-east-1]',
+                                                lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 DROP TABLE mr1.t;
@@ -86,37 +86,37 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.t;
 ----
 DATABASE mr1  ALTER DATABASE mr1 CONFIGURE ZONE USING
-              range_min_bytes = 134217728,
-              range_max_bytes = 536870912,
-              gc.ttlseconds = 90000,
-              num_replicas = 5,
-              num_voters = 3,
-              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-              voter_constraints = '[+region=ca-central-1]',
-              lease_preferences = '[[+region=ca-central-1]]'
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 5,
+                num_voters = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                voter_constraints = '[+region=ca-central-1]',
+                lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr1.t2
 ----
 PARTITION "us-east-1" OF TABLE mr1.public.t2  ALTER PARTITION "us-east-1" OF TABLE mr1.public.t2 CONFIGURE ZONE USING
-                                              range_min_bytes = 134217728,
-                                              range_max_bytes = 536870912,
-                                              gc.ttlseconds = 90000,
-                                              num_replicas = 4,
-                                              num_voters = 3,
-                                              constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                              voter_constraints = '[+region=us-east-1]',
-                                              lease_preferences = '[[+region=us-east-1]]'
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 4,
+                                                num_voters = 3,
+                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                voter_constraints = '[+region=us-east-1]',
+                                                lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.t2
 ----
 DATABASE mr1  ALTER DATABASE mr1 CONFIGURE ZONE USING
-              range_min_bytes = 134217728,
-              range_max_bytes = 536870912,
-              gc.ttlseconds = 90000,
-              num_replicas = 5,
-              num_voters = 3,
-              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-              voter_constraints = '[+region=ca-central-1]',
-              lease_preferences = '[[+region=ca-central-1]]'
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 5,
+                num_voters = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                voter_constraints = '[+region=ca-central-1]',
+                lease_preferences = '[[+region=ca-central-1]]'

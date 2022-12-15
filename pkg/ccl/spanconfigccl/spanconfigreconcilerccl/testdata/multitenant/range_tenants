@@ -11,9 +11,9 @@ mutations discard
 initialize tenant=10
 ----
 
-# Muck with the RANGE TENANTS zone config; lower the GC TTL to 4h.
+# Muck with the RANGE TENANTS zone config; lower the GC TTL to 5h.
 exec-sql
-ALTER RANGE TENANTS CONFIGURE ZONE USING gc.ttlseconds = 14400;
+ALTER RANGE TENANTS CONFIGURE ZONE USING gc.ttlseconds = 18000;
 ----
 
 query-sql
@@ -22,7 +22,7 @@ SHOW ZONE CONFIGURATION FOR RANGE TENANTS;
 RANGE tenants ALTER RANGE tenants CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 14400,
+	gc.ttlseconds = 18000,
 	num_replicas = 3,
 	constraints = '[]',
 	lease_preferences = '[]'
@@ -45,7 +45,7 @@ state offset=47
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
-/Tenant/11{-\x00}                          ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
 # Start the reconciliation loop for the tenant=10. It should have the vanilla
 # RANGE DEFAULT. Check against the underlying KV state, the SQL view of the
@@ -104,7 +104,7 @@ state offset=47
 /Tenant/10/Table/5{1-2}                    database system (tenant)
 /Tenant/10/Table/5{2-3}                    database system (tenant)
 /Tenant/10/Table/5{3-4}                    database system (tenant)
-/Tenant/11{-\x00}                          ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
 query-sql tenant=10
 SHOW ZONE CONFIGURATION FOR RANGE DEFAULT
@@ -112,7 +112,7 @@ SHOW ZONE CONFIGURATION FOR RANGE DEFAULT
 RANGE default ALTER RANGE default CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	num_replicas = 3,
 	constraints = '[]',
 	lease_preferences = '[]'
@@ -153,45 +153,45 @@ state offset=81
 /Tenant/10/Table/5{3-4}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   range default
 /Tenant/10/Table/10{7-8}                   range default
-/Tenant/11{-/Table/4}                      ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/{4-5}                     ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/{5-6}                     ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/{6-7}                     ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/{7-8}                     ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/1{1-2}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/1{2-3}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/1{3-4}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/1{4-5}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/1{5-6}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/{19-20}                   ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{0-1}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{1-2}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{3-4}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{4-5}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{5-6}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{6-7}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{7-8}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/2{8-9}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/NamespaceTable/{30-Max}         ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/{NamespaceTable/Max-Table/32}   ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/3{2-3}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/3{3-4}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/3{4-5}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/3{5-6}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/3{6-7}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/3{7-8}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/{39-40}                   ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{0-1}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{1-2}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{2-3}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{3-4}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{4-5}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{6-7}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/4{8-9}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/5{0-1}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/5{1-2}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/5{2-3}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
-/Tenant/11/Table/5{3-4}                    ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11{-/Table/4}                      ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/{4-5}                     ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/{5-6}                     ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/{6-7}                     ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/{7-8}                     ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/1{1-2}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/1{2-3}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/1{3-4}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/1{4-5}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/1{5-6}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/{19-20}                   ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{0-1}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{1-2}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{3-4}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{4-5}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{5-6}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{6-7}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{7-8}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/2{8-9}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/NamespaceTable/{30-Max}         ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/{NamespaceTable/Max-Table/32}   ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/3{2-3}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/3{3-4}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/3{4-5}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/3{5-6}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/3{6-7}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/3{7-8}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/{39-40}                   ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{0-1}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{1-2}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{2-3}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{3-4}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{4-5}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{6-7}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/4{8-9}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/5{0-1}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/5{1-2}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/5{2-3}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/5{3-4}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
 query-sql tenant=11
 SHOW ZONE CONFIGURATION FOR RANGE DEFAULT
@@ -199,7 +199,7 @@ SHOW ZONE CONFIGURATION FOR RANGE DEFAULT
 RANGE default ALTER RANGE default CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 14400,
+	gc.ttlseconds = 18000,
 	num_replicas = 3,
 	constraints = '[]',
 	lease_preferences = '[]'
@@ -212,5 +212,5 @@ CREATE TABLE db.t2();
 
 mutations tenant=11
 ----
-upsert /Tenant/11/Table/10{6-7}            ttl_seconds=14400
-upsert /Tenant/11/Table/10{7-8}            ttl_seconds=14400
+upsert /Tenant/11/Table/10{6-7}            ttl_seconds=18000
+upsert /Tenant/11/Table/10{7-8}            ttl_seconds=18000
