@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
@@ -215,11 +216,16 @@ func raftDescribeMessage(m raftpb.Message, f raft.EntryFormatter) string {
 }
 
 func raftEntryFormatter(data []byte) string {
-	if len(data) == 0 {
+	// NB: a raft.EntryFormatter is only invoked for EntryNormal by convention
+	d, err := raftlog.DecomposeEntryData(raftpb.EntryNormal, data)
+	if err != nil {
+		return err.Error()
+	}
+
+	if len(d.RaftCommandBytes) == 0 {
 		return "[empty]"
 	}
-	_, commandID, _ := kvserverbase.DecodeRaftCommand(data)
-	return fmt.Sprintf("[%x] [%d]", commandID, len(data))
+	return fmt.Sprintf("[%x] [%d]", d.CmdID, len(data))
 }
 
 var raftMessageRequestPool = sync.Pool{
@@ -264,9 +270,10 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 // in ents to ids and returns the result.
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
-		if e.Type == raftpb.EntryNormal && len(e.Data) > 0 {
-			_, id, _ := kvserverbase.DecodeRaftCommand(e.Data)
-			ids = append(ids, id)
+		// NB: this won't work for ConfChange entries since the command ID is buried inside
+		// nested marshaled protobufs.
+		if d, err := raftlog.DecomposeEntryData(e.Type, e.Data); err == nil && d.CmdID != "" {
+			ids = append(ids, d.CmdID)
 		}
 	}
 	return ids

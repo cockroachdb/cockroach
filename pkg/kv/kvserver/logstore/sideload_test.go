@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -43,16 +44,25 @@ import (
 )
 
 func entryEq(l, r raftpb.Entry) error {
-	if reflect.DeepEqual(l, r) {
-		return nil
+	d1, err := raftlog.DecomposeEntryData(l.Type, l.Data)
+	if err != nil {
+		return err
 	}
-	_, _, lData := kvserverbase.DecodeRaftCommand(l.Data)
-	_, _, rData := kvserverbase.DecodeRaftCommand(r.Data)
+	d2, err := raftlog.DecomposeEntryData(r.Type, r.Data)
+	if err != nil {
+		return err
+	}
+
+	// This helper was only written to compare regular entries, not ConfChanges.
+	if d1.Type != raftpb.EntryNormal || d2.Type != raftpb.EntryNormal {
+		return errors.Errorf("comparing %s and %s is unsupported", d1.Type, d2.Type)
+	}
+
 	var lc, rc kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(lData, &lc); err != nil {
+	if err := protoutil.Unmarshal(d1.RaftCommandBytes, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
 	}
-	if err := protoutil.Unmarshal(rData, &rc); err != nil {
+	if err := protoutil.Unmarshal(d2.RaftCommandBytes, &rc); err != nil {
 		return errors.Wrap(err, "unmarshalling RHS")
 	}
 	if !reflect.DeepEqual(lc, rc) {
@@ -561,9 +571,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 				expNumSideloaded = 1
 			}
 			require.Equal(t, expNumSideloaded, numSideloaded)
-			if !reflect.DeepEqual(postEnts, test.postEnts) {
-				t.Fatalf("result differs from expected: %s", pretty.Diff(postEnts, test.postEnts))
-			}
+			require.Equal(t, test.postEnts, postEnts)
 			if test.size != size {
 				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}

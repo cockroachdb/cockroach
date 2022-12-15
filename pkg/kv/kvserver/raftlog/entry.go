@@ -28,6 +28,69 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+// EntryData reflects the information returned by DecomposeEntryData.
+type EntryData struct {
+	Type raftpb.EntryType
+
+	// ConfChangeBytes is a marshaled raftpb.ConfChange{,V2}.
+	// Non-nil if and only if Type is EntryConfChange{,V2}
+	ConfChangeBytes []byte // raftpb.ConfChange{,V2}
+
+	// The fields below are set if and only if Type is EntryNormal.
+	// For EntryConfChange{,V2} these have to be pulled out of the unmarshaled
+	// ConfChangeBytes.
+
+	RaftCommandBytes []byte // kvserverpb.RaftCommand
+	Version          kvserverbase.RaftCommandEncodingVersion
+	CmdID            kvserverbase.CmdIDKey
+}
+
+// DecomposeEntryData takes a raftpb.Entry's Type and Data fields and extracts
+// EntryData from it. This method does not perform any unmarshaling nor does it
+// allocate, so it should be considered relatively cheap.
+//
+// For regular entries (raftpb.EntryNormal), reads out the
+// RaftCommandEncodingVersion and CmdID. For configuration changes, these are
+// wrapped in two layers of protobuf marshaling, so if the caller needs to know
+// them they need to fully load the entry (using raftlog.NewEntry).
+func DecomposeEntryData(typ raftpb.EntryType, data []byte) (EntryData, error) {
+	if len(data) == 0 {
+		// An empty command.
+		return EntryData{}, nil
+	}
+
+	switch typ {
+	case raftpb.EntryNormal:
+	case raftpb.EntryConfChange:
+		return EntryData{
+			Type:            typ,
+			ConfChangeBytes: data,
+		}, nil
+	case raftpb.EntryConfChangeV2:
+		return EntryData{
+			Type:            typ,
+			ConfChangeBytes: data,
+		}, nil
+	default:
+		return EntryData{}, errors.AssertionFailedf("unknown EntryType %d", typ)
+	}
+
+	v := kvserverbase.RaftCommandEncodingVersion(data[0])
+	switch v {
+	case kvserverbase.RaftVersionStandard:
+	case kvserverbase.RaftVersionSideloaded:
+	default:
+		return EntryData{}, errors.AssertionFailedf("unknown command encoding version %d", v)
+	}
+
+	return EntryData{
+		Type:             typ,
+		RaftCommandBytes: data[1+kvserverbase.RaftCommandIDLen:],
+		Version:          v,
+		CmdID:            kvserverbase.CmdIDKey(data[1 : 1+kvserverbase.RaftCommandIDLen]),
+	}, nil
+}
+
 // Entry contains data related to a raft log entry. This is the raftpb.Entry
 // itself but also all encapsulated data relevant for command application.
 type Entry struct {
@@ -98,34 +161,44 @@ func (e *Entry) load() error {
 		return nil
 	}
 
-	var payload []byte
-	switch e.Type {
+	d, err := DecomposeEntryData(e.Type, e.Data)
+	if err != nil {
+		return err
+	}
+
+	var ccTarget interface {
+		protoutil.Message
+		AsV2() raftpb.ConfChangeV2
+	}
+	switch d.Type {
 	case raftpb.EntryNormal:
-		_, e.ID, payload = kvserverbase.DecodeRaftCommand(e.Data)
+		// Nothing to do.
 	case raftpb.EntryConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
-		if err := protoutil.Unmarshal(e.Data, e.ConfChangeV1); err != nil {
+		ccTarget = e.ConfChangeV1
+	case raftpb.EntryConfChangeV2:
+		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
+		ccTarget = e.ConfChangeV2
+	default:
+		return errors.AssertionFailedf("unknown entry type %d", e.Type)
+	}
+
+	var payload []byte
+	if ccTarget == nil {
+		// Regular entry - can just read off the data we need from `d`.
+		e.ID = d.CmdID
+		payload = d.RaftCommandBytes
+	} else {
+		// Conf change - need to get payload and command ID from ConfChangeContext.
+		if err := protoutil.Unmarshal(d.ConfChangeBytes, ccTarget); err != nil {
 			return errors.Wrap(err, "unmarshalling ConfChange")
 		}
 		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
-		if err := protoutil.Unmarshal(e.ConfChangeV1.Context, e.ConfChangeContext); err != nil {
+		if err := protoutil.Unmarshal(ccTarget.AsV2().Context, e.ConfChangeContext); err != nil {
 			return errors.Wrap(err, "unmarshalling ConfChangeContext")
 		}
-		payload = e.ConfChangeContext.Payload
 		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
-	case raftpb.EntryConfChangeV2:
-		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
-		if err := protoutil.Unmarshal(e.Data, e.ConfChangeV2); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChangeV2")
-		}
-		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
-		if err := protoutil.Unmarshal(e.ConfChangeV2.Context, e.ConfChangeContext); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChangeContext")
-		}
 		payload = e.ConfChangeContext.Payload
-		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
-	default:
-		return errors.AssertionFailedf("unknown entry type %d", e.Type)
 	}
 
 	// TODO(tbg): can len(payload)==0 if we propose an empty command to wake up leader?
