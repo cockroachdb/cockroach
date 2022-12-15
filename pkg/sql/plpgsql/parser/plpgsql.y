@@ -415,9 +415,10 @@ opt_scrollable :
 				;
 
 decl_cursor_query :
-					{
-					}
-				;
+{
+  plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+}
+;
 
 decl_cursor_args :
 					{
@@ -488,16 +489,19 @@ decl_notnull	:
 				;
 
 decl_defval		: ';'
-					{ }
-				| decl_defkey
-					{
-					}
-				;
+{}
+| decl_defkey ';'
+{}
+;
 
-decl_defkey: assign_operator d_expr ';'
-{}
-| DEFAULT d_expr ';'
-{}
+decl_defkey: assign_operator
+{
+  plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+}
+| DEFAULT
+{
+  plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+}
 ;
 
 /*
@@ -805,11 +809,19 @@ stmt_raise		: RAISE
 					}
 				;
 
-stmt_assert		: ASSERT  ';'
-					{
-					  $$.val = &plpgsqltree.PLpgSQLStmtAssert{}
-					}
-				;
+stmt_assert		: ASSERT assert_cond ';'
+{
+  $$.val = &plpgsqltree.PLpgSQLStmtAssert{}
+}
+;
+
+assert_cond:
+{
+  _, terminator := plpgsqllex.(*lexer).ReadSqlExpressionStr2(',', ';')
+  if terminator == ',' {
+    plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+  }
+}
 
 loop_body		: proc_sect END LOOP opt_label ';'
 					{
@@ -947,10 +959,10 @@ expr_until_semi :  ';'
 				;
 
 expr_until_then :
-					{
-					$$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(THEN)
-					 }
-				;
+{
+  $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(THEN)
+ }
+;
 
 expr_until_loop :
 					{ }
