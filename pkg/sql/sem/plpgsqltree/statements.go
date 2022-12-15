@@ -82,13 +82,15 @@ func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
 // stmt_if
 type PLpgSQLStmtIf struct {
 	PLpgSQLStatementImpl
-	Condition  PLpgSQLExpr
+	// TODO(jane): It should be PLpgSQLExpr.
+	Condition  string
 	ThenBody   []PLpgSQLStatement
 	ElseIfList []*PLpgSQLStmtIfElseIfArm
 	ElseBody   []PLpgSQLStatement
 }
 
 func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("IF %s THEN ENDIF\n", s.Condition))
 }
 
 type PLpgSQLStmtIfElseIfArm struct {
