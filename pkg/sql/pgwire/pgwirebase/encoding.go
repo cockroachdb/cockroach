@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -787,6 +788,18 @@ func DecodeDatum(
 			}
 			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
 			return &tree.DBitArray{BitArray: ba}, err
+		case oidext.T_geometry:
+			ret, err := geo.ParseGeometryFromEWKB(b)
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDGeometry(ret), nil
+		case oidext.T_geography:
+			ret, err := geo.ParseGeographyFromEWKB(b)
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDGeography(ret), nil
 		default:
 			if typ.Family() == types.ArrayFamily {
 				return decodeBinaryArray(evalCtx, typ.ArrayContents(), b, code)
