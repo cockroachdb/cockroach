@@ -815,12 +815,6 @@ export const getStatementDetailsPropsFixture = (
   statementFingerprintID: "4705782015019656142",
   statementDetails: withData ? statementDetailsData : statementDetailsNoData,
   statementsError: null,
-  nodeNames: {
-    "1": "127.0.0.1:55529 (n1)",
-    "2": "127.0.0.1:55532 (n2)",
-    "3": "127.0.0.1:55538 (n3)",
-    "4": "127.0.0.1:55546 (n4)",
-  },
   nodeRegions: {
     "1": "gcp-us-east1",
     "2": "gcp-us-east1",
