@@ -1,0 +1,8 @@
+parse
+DECLARE
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END

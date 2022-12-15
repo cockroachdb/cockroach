@@ -22,12 +22,10 @@ import (
 func TestParseDeclareSection(t *testing.T) {
 	fn := `
 DECLARE
+  ASSERT 1 > 2;
+  ASSERT 1 > 2 'error message' ;
 BEGIN
-  IMPORT TABLE employees
-  FROM PGDUMP 's3://{BUCKET NAME}/{employees-full.sql}?AWS_ACCESS_KEY_ID={ACCESS KEY}&AWS_SECRET_ACCESS_KEY={SECRET ACCESS KEY}'
-  WITH skip_foreign_keys WITH ignore_unsupported_statements;
-END
-`
+END`
 	stmt, err := parser.Parse(fn)
 	require.NoError(t, err)
 	require.Equal(t, "DECLARE\nBEGIN\nEND\n", stmt.String())
