@@ -140,7 +140,7 @@ require (
 	github.com/go-swagger/go-swagger v0.26.1
 	github.com/gogo/status v1.1.0
 	github.com/golang-commonmark/markdown v0.0.0-20180910011815-a8f139058164
-	github.com/google/flatbuffers v2.0.0+incompatible
+	github.com/google/flatbuffers v22.11.23+incompatible
 	github.com/google/go-cmp v0.5.8
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-github/v42 v42.0.0
