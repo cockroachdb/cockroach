@@ -440,6 +440,9 @@ type Constraint interface {
 	// GetName returns the name of this constraint update mutation.
 	GetName() string
 
+	// GetConstraintType returns the constraint type.
+	GetConstraintType() descpb.ConstraintType
+
 	// IsConstraintValidated returns true iff the constraint is enforced for
 	// all writes to the table data and has also been validated on the table's
 	// existing data prior to the addition of the constraint, if there was any.

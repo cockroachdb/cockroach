@@ -475,6 +475,15 @@ func (w index) IsEnforced() bool {
 	return !w.IsMutation() || w.WriteAndDeleteOnly()
 }
 
+// GetConstraintType implements the catalog.Constraint interface.
+func (w index) GetConstraintType() descpb.ConstraintType {
+	if w.desc.EncodingType == descpb.PrimaryIndexEncoding {
+		return descpb.ConstraintTypePK
+	} else {
+		return descpb.ConstraintTypeUnique
+	}
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *catpb.PartitioningDescriptor

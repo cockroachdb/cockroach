@@ -112,6 +112,11 @@ func (c checkConstraint) GetName() string {
 	return c.desc.Name
 }
 
+// GetConstraintType implements the catalog.Constraint interface.
+func (c checkConstraint) GetConstraintType() descpb.ConstraintType {
+	return descpb.ConstraintTypeCheck
+}
+
 // AsCheck implements the catalog.ConstraintProvider interface.
 func (c checkConstraint) AsCheck() catalog.CheckConstraint {
 	return &c
@@ -203,6 +208,11 @@ func (c uniqueWithoutIndexConstraint) IsConstraintUnvalidated() bool {
 // GetName implements the catalog.Constraint interface.
 func (c uniqueWithoutIndexConstraint) GetName() string {
 	return c.desc.Name
+}
+
+// GetConstraintType implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetConstraintType() descpb.ConstraintType {
+	return descpb.ConstraintTypeUniqueWithoutIndex
 }
 
 // AsUniqueWithoutIndex implements the catalog.ConstraintProvider interface.
@@ -315,6 +325,11 @@ func (c foreignKeyConstraint) IsConstraintUnvalidated() bool {
 // GetName implements the catalog.Constraint interface.
 func (c foreignKeyConstraint) GetName() string {
 	return c.desc.Name
+}
+
+// GetConstraintType implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetConstraintType() descpb.ConstraintType {
+	return descpb.ConstraintTypeFK
 }
 
 // AsForeignKey implements the catalog.ConstraintProvider interface.

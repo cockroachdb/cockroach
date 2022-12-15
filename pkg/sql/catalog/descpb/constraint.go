@@ -80,4 +80,6 @@ const (
 	ConstraintTypeUnique ConstraintType = "UNIQUE"
 	// ConstraintTypeCheck identifies a CHECK constraint.
 	ConstraintTypeCheck ConstraintType = "CHECK"
+	// ConstraintTypeUniqueWithoutIndex identifies a UNIQUE WITHOUT INDEX constraint.
+	ConstraintTypeUniqueWithoutIndex ConstraintType = "UNIQUE WITHOUT INDEX"
 )
