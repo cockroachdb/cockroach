@@ -22,9 +22,8 @@ import (
 func TestParseDeclareSection(t *testing.T) {
 	fn := `
 DECLARE
-  ASSERT 1 > 2;
-  ASSERT 1 > 2 'error message' ;
 BEGIN
+  EXECUTE 'any command' INTO x1 USING x2;
 END`
 	stmt, err := parser.Parse(fn)
 	require.NoError(t, err)
