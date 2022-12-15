@@ -1359,10 +1359,30 @@ func (cf *changeFrontier) deprecatedMaybeReleaseProtectedTimestamp(
 	if progress.ProtectedTimestampRecord == uuid.Nil {
 		return nil
 	}
+
 	if !cf.frontier.schemaChangeBoundaryReached() && cf.isBehind() {
 		log.VEventf(ctx, 2, "not releasing protected timestamp because changefeed is behind")
+
+		// isBehind may be true for a very long time, so try updating the PTS record
+		// to the highwater every so often.
+		ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+		if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
+			return nil
+		}
+		cf.lastProtectedTimestampUpdate = timeutil.Now()
+		recordID := progress.ProtectedTimestampRecord
+		highWater := cf.frontier.Frontier()
+		if highWater.Less(cf.highWaterAtStart) {
+			highWater = cf.highWaterAtStart
+		}
+		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
+		if err := pts.UpdateTimestamp(ctx, txn, recordID, highWater); err != nil {
+			return err
+		}
+
 		return nil
 	}
+
 	log.VEventf(ctx, 2, "releasing protected timestamp %v",
 		progress.ProtectedTimestampRecord)
 	if err := pts.Release(ctx, txn, progress.ProtectedTimestampRecord); err != nil {
