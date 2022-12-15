@@ -362,6 +362,13 @@ const (
 	// column in the system.jobs table.
 	V23_1BackfillTypeColumnInJobsTable
 
+	// V23_1PinExistingGCTTL explicitly sets the default GC TTL to 25h if it
+	// wasn't already by the user. We're doing this as part of lowering the
+	// default from 25h to 4h, without having that change implicitly for
+	// existing clusters (newly instantiated clusters will start with the 4h
+	// default).
+	V23_1PinExistingGCTTL
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -627,6 +634,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1BackfillTypeColumnInJobsTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 20},
+	},
+	{
+		Key:     V23_1PinExistingGCTTL,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
 	},
 
 	// *************************************************
