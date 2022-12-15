@@ -2880,7 +2880,7 @@ func TestTxnManualRefresh(t *testing.T) {
 					r.respCh <- resp{pErr: pErr}
 				}
 				require.Regexp(t, "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive "+
-					"refresh due to a conflict: committed value on key \"a\"\\)", <-errCh)
+					"refresh due to a conflict: committed value on key ‹\"a\"›\\)", <-errCh)
 			},
 		},
 	}
