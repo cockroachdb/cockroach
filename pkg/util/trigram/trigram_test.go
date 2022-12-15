@@ -38,6 +38,10 @@ func TestMakeTrigrams(t *testing.T) {
 		{"bcaabc",
 			[]string{"  b", " bc", "aab", "abc", "bc ", "bca", "caa"},
 			[]string{"aab", "abc", "bca", "caa"}},
+		{"Приветhi",
+			[]string{"  п", " пр", "hi ", "вет", "етh", "иве", "при", "рив", "тhi"},
+			[]string{"вет", "етh", "иве", "при", "рив", "тhi"},
+		},
 	} {
 		padded := MakeTrigrams(tc.s, true)
 		unpadded := MakeTrigrams(tc.s, false)
