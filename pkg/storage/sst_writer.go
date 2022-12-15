@@ -310,6 +310,11 @@ func (fw *SSTWriter) put(key MVCCKey, value []byte) error {
 	return fw.fw.Set(fw.scratch, value)
 }
 
+// EstimatedSize returns the value of sstable.Writer.EstimatedSize.
+func (fw *SSTWriter) EstimatedSize() int64 {
+	return int64(fw.fw.EstimatedSize())
+}
+
 // ApplyBatchRepr implements the Writer interface.
 func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("unimplemented")

@@ -154,7 +154,12 @@ type SSTBatcher struct {
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
-	sstWriter         storage.SSTWriter
+	sstWriter storage.SSTWriter
+	sizes     struct {
+		predictedFileSize sz
+		addedDataSize     sz
+		targetDataSize    sz
+	}
 	sstFile           *storage.MemFile
 	batchStartKey     []byte
 	batchEndKey       []byte
@@ -316,6 +321,23 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	// Update the range currently represented in this batch, as necessary.
 	if len(b.batchStartKey) == 0 {
 		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
+		// We'll limit the sent files based on their estimated compressed file size
+		// later, to stay within request size limits, but we'll additionally want to
+		// limit the amount of logical data we'll add to not exceed the capacity
+		// remaining in the range to which we will add this batch, if we know that.
+		const maxTargetSize = 64 << 20
+		b.sizes.targetDataSize = maxTargetSize
+		// If this batch is starting in the same range we last added to, then we
+		// want to add no more than just under what is remaining, so if that less
+		// than the maxTargetSize, use it instead.
+		if b.lastRange.span.ContainsKey(b.batchStartKey) && b.lastRange.remaining > 0 {
+			// Aim for just under the remaining capacity since we won't flush until a
+			// row boundary and want a little room to go over target before splitting.
+			target := b.lastRange.remaining - 8<<20
+			if target < b.sizes.targetDataSize {
+				b.sizes.targetDataSize = target
+			}
+		}
 	}
 
 	b.batchEndTimestamp = key.Timestamp
@@ -345,6 +367,8 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	// nodes can support. MakeIngestionSSTWriter will handle cluster version
 	// gating using b.settings.
 	b.sstWriter = storage.MakeIngestionSSTWriter(ctx, b.settings, b.sstFile)
+	b.sizes.addedDataSize = 0
+	b.sizes.predictedFileSize = 0
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -406,7 +430,17 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return b.Reset(ctx)
 	}
 
-	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
+	const estimateFileSizeEvery = 128 << 10
+
+	// If we have added enough logical data since the last file check, ask writer
+	// for a new estimate of its physical file size.
+	if sz(b.sstWriter.DataSize)-b.sizes.addedDataSize > estimateFileSizeEvery {
+		b.sizes.predictedFileSize = sz(b.sstWriter.EstimatedSize())
+		b.sizes.addedDataSize = sz(b.sstWriter.DataSize)
+	}
+
+	if int64(b.sizes.predictedFileSize) >= ingestFileSize(b.settings) ||
+		b.sstWriter.DataSize > int64(b.sizes.targetDataSize) {
 		// We're at/over size target, so we want to flush, but first check if we are
 		// at a new row boundary. Having row-aligned boundaries is not actually
 		// required by anything, but has the nice property of meaning a split will
@@ -487,13 +521,16 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// currently the largest key in the batch. Increment it.
 	end := roachpb.Key(append([]byte(nil), b.batchEndKey...)).Next()
 
-	size := sz(b.sstWriter.DataSize)
+	data := b.sstFile.Data()
+	dataSize := sz(b.sstWriter.DataSize)
+	fileSize := sz(len(data))
 
 	if reason == sizeFlush {
-		log.VEventf(ctx, 3, "%s flushing %s SST due to size > %s", b.name, size, sz(ingestFileSize(b.settings)))
+		log.VEventf(ctx, 3, "%s flushing %s SST (%s logical) due to size > %s",
+			fileSize, dataSize, b.name, sz(ingestFileSize(b.settings)))
 		b.currentStats.BatchesDueToSize++
 	} else if reason == rangeFlush {
-		log.VEventf(ctx, 3, "%s flushing %s SST due to range boundary", b.name, size)
+		log.VEventf(ctx, 3, "%s flushing %s SST due to range boundary", b.name, fileSize)
 		b.currentStats.BatchesDueToRange++
 	}
 
@@ -501,7 +538,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// than the size that range had when we last added to it, then we should split
 	// off the suffix of that range where this file starts and add it to that new
 	// range after scattering it.
-	if b.lastRange.span.ContainsKey(start) && size >= b.lastRange.remaining {
+	if b.lastRange.span.ContainsKey(start) && dataSize >= b.lastRange.remaining {
 		log.VEventf(ctx, 2, "%s batcher splitting full range before adding file starting at %s",
 			b.name, start)
 
@@ -574,7 +611,6 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 	stats := b.ms
 	summary := b.rowCounter.BulkOpSummary
-	data := b.sstFile.Data()
 	batchTS := b.batchTS
 
 	res, err := b.limiter.Begin(ctx)
@@ -624,8 +660,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		summary.DataSize += int64(size)
-		currentBatchStatsCopy.DataSize += int64(size)
+		summary.DataSize += int64(dataSize)
+		currentBatchStatsCopy.DataSize += int64(dataSize)
 		b.mu.totalRows.Add(summary)
 
 		afterFlush := timeutil.Now()
