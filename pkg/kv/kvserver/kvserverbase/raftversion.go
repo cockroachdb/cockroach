@@ -54,7 +54,7 @@ func EncodeRaftCommandPrefix(b []byte, version RaftCommandEncodingVersion, comma
 		panic(fmt.Sprintf("invalid command prefix length; %d != %d", len(b), RaftCommandPrefixLen))
 	}
 	b[0] = byte(version)
-	copy(b[1:], []byte(commandID))
+	copy(b[1:], commandID)
 }
 
 // DecodeRaftCommand splits a raftpb.Entry.Data into its commandID and
