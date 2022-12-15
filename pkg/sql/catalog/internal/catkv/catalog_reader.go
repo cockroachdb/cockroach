@@ -99,8 +99,8 @@ type CatalogReader interface {
 	) (nstree.Catalog, error)
 }
 
-// NewUncachedCatalogReader is the constructor for the default CatalogReader
-// implementation without a SystemDatabaseCache.
+// NewUncachedCatalogReader is the constructor for the default
+// CatalogReader implementation without a SystemDatabaseCache.
 func NewUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
 	return &catalogReader{
 		codec: codec,

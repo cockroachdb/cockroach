@@ -710,6 +710,16 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
+// GetAllFromStorageUnvalidated delegates to an uncached catkv.CatalogReader's
+// ScanAll method. Nothing is cached, validated or hydrated. This is to be used
+// sparingly and only in situations which warrant it, where an unmediated view
+// of the stored catalog is explicitly desired for observability.
+func (tc *Collection) GetAllFromStorageUnvalidated(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.Catalog, error) {
+	return catkv.NewUncachedCatalogReader(tc.codec()).ScanAll(ctx, txn)
+}
+
 // GetAllDatabases is like GetAll but filtered to non-dropped databases.
 func (tc *Collection) GetAllDatabases(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	stored, err := tc.cr.ScanNamespaceForDatabases(ctx, txn)
@@ -1194,14 +1204,6 @@ func (tc *Collection) GetConstraintComment(
 	tableID descpb.ID, constraintID catid.ConstraintID,
 ) (comment string, ok bool) {
 	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(constraintID), catalogkeys.ConstraintCommentType))
-}
-
-// Direct exports the catkv.Direct interface.
-type Direct = catkv.Direct
-
-// Direct provides direct access to the underlying KV-storage.
-func (tc *Collection) Direct() Direct {
-	return catkv.MakeDirect(tc.codec(), tc.version, tc.validationModeProvider)
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.

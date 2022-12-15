@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -79,7 +80,9 @@ func (p *planner) prepareSetSchema(
 		return desiredSchemaID, nil
 	}
 
-	err = p.Descriptors().Direct().CheckObjectCollision(ctx, p.txn, db.GetID(), desiredSchemaID, objectName)
+	err = descs.CheckObjectNameCollision(
+		ctx, p.Descriptors(), p.txn, db.GetID(), desiredSchemaID, objectName,
+	)
 	if err != nil {
 		return descpb.InvalidID, err
 	}

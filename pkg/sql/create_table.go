@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -168,8 +169,9 @@ func getSchemaForCreateTable(
 		return nil, err
 	}
 
-	desc, err := params.p.Descriptors().Direct().GetDescriptorCollidingWithObject(
+	desc, err := descs.GetDescriptorCollidingWithObjectName(
 		params.ctx,
+		params.p.Descriptors(),
 		params.p.txn,
 		db.GetID(),
 		schema.GetID(),

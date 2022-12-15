@@ -133,7 +133,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.Direct().MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
+		_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, tbDesc.GetParentID(), tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+		})
 		return err
 	}))
 
@@ -299,7 +303,11 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.Direct().MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
+		_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, tbDesc.GetParentID(), tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+		})
 		return err
 	}))
 
@@ -868,7 +876,13 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
 	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		tbl, err := col.Direct().MustGetTableDescByID(ctx, txn, tableDesc.ID)
+		tbl, err := col.GetImmutableTableByID(ctx, txn, tableDesc.ID, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased:    true,
+				IncludeDropped: true,
+				IncludeOffline: true,
+			},
+		})
 		if err != nil {
 			return err
 		}
@@ -1212,7 +1226,13 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	tdb.QueryRow(t, query).Scan(&tableID)
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, tableID)
+			tableDesc, err = col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				},
+			})
 			return err
 		}))
 	shardIdx, err := tableDesc.FindIndexWithName("idx")
@@ -1230,7 +1250,13 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	// Assert that the index is dropped but the shard column remains after dropping the index.
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, tableID)
+			tableDesc, err = col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				},
+			})
 			return err
 		}))
 	_, err = tableDesc.FindIndexWithName("idx")

@@ -115,7 +115,11 @@ func getIngestingPrivilegesForTableOrSchema(
 				privilege.ListFromBitField(u.Privileges, privilegeType).ToBitField()
 		}
 	} else if descCoverage == tree.RequestedDescriptors {
-		parentDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
+		_, parentDB, err := descsCol.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+			AvoidLeased:    true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}
@@ -141,8 +145,11 @@ func getIngestingPrivilegesForTableOrSchema(
 			} else {
 				// If we are restoring into an existing schema, resolve it, and fetch
 				// its default privileges.
-				parentSchema, err := descsCol.Direct().MustGetSchemaDescByID(ctx, txn,
-					desc.GetParentSchemaID())
+				parentSchema, err := descsCol.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{
+					AvoidLeased:    true,
+					IncludeDropped: true,
+					IncludeOffline: true,
+				})
 				if err != nil {
 					return nil,
 						errors.Wrapf(err, "failed to lookup parent schema %d", errors.Safe(desc.GetParentSchemaID()))

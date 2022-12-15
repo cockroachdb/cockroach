@@ -96,8 +96,8 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 		WHERE
 			database_name=$1 AND table_name=$2 AND index_name=$3 AND split_enforced_until IS NOT NULL
 	`
-	dbDesc, err := params.p.Descriptors().Direct().MustGetDatabaseDescByID(
-		params.ctx, params.p.txn, n.tableDesc.GetParentID(),
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.GetParentID(), tree.DatabaseLookupFlags{AvoidLeased: true},
 	)
 	if err != nil {
 		return err

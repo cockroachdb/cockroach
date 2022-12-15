@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -191,8 +192,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	err := p.Descriptors().Direct().CheckObjectCollision(
+	err := descs.CheckObjectNameCollision(
 		params.ctx,
+		p.Descriptors(),
 		params.p.txn,
 		targetDbDesc.GetID(),
 		targetSchemaDesc.GetID(),
