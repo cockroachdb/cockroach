@@ -16,7 +16,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE db
 DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	num_replicas = 7,
 	constraints = '[]',
 	lease_preferences = '[]'
@@ -27,7 +27,7 @@ SHOW ZONE CONFIGURATION FOR TABLE db.t
 DATABASE db ALTER DATABASE db CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	num_replicas = 7,
 	constraints = '[]',
 	lease_preferences = '[]'
@@ -38,7 +38,7 @@ SHOW ZONE CONFIGURATION FOR INDEX db.t@idx
 INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	num_replicas = 7,
 	num_voters = 5,
 	constraints = '[]',

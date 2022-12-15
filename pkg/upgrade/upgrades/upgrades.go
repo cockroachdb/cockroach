@@ -240,6 +240,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillJobTypeColumn,
 	),
+	upgrade.NewTenantUpgrade("explicitly set the default GC TTL to 25h if unset",
+		toCV(clusterversion.V23_1PinExistingGCTTL),
+		upgrade.NoPrecondition,
+		pinExistingGCTTL,
+	),
 }
 
 func init() {

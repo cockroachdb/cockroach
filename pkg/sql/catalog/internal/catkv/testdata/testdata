@@ -134,7 +134,7 @@ get_by_ids id=0
 ----
 catalog:
   "000":
-    zone: gc.ttlseconds=90000
+    zone: gc.ttlseconds=14400
 trace:
 - Get /Table/3/1/0/2/1
 - Scan /Table/24/1/0/0
@@ -219,11 +219,11 @@ scan_all
 ----
 catalog:
   "000":
-    zone: gc.ttlseconds=90000
+    zone: gc.ttlseconds=14400
   "001":
     descriptor: database
     namespace: (0, 0, "system")
-    zone: gc.ttlseconds=90000
+    zone: gc.ttlseconds=14400
   "003":
     descriptor: relation
     namespace: (1, 29, "descriptor")
@@ -260,7 +260,7 @@ catalog:
   "016":
     zone: gc.ttlseconds=3600
   "017":
-    zone: gc.ttlseconds=90000
+    zone: gc.ttlseconds=14400
   "019":
     descriptor: relation
     namespace: (1, 29, "web_sessions")

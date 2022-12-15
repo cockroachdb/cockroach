@@ -10,12 +10,12 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 134217728,
-   range_max_bytes = 536870912,
-   gc.ttlseconds = 90000,
-   num_replicas = 1,
-   constraints = '[]',
-   lease_preferences = '[]'
+     range_min_bytes = 134217728,
+     range_max_bytes = 536870912,
+     gc.ttlseconds = 14400,
+     num_replicas = 1,
+     constraints = '[]',
+     lease_preferences = '[]'
 
 # Check that we can reset the default zone config to defaults.
 
@@ -26,12 +26,12 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 134217728,
-   range_max_bytes = 536870912,
-   gc.ttlseconds = 90000,
-   num_replicas = 3,
-   constraints = '[]',
-   lease_preferences = '[]'
+     range_min_bytes = 134217728,
+     range_max_bytes = 536870912,
+     gc.ttlseconds = 14400,
+     num_replicas = 3,
+     constraints = '[]',
+     lease_preferences = '[]'
 
 # Make an override for the tests below
 
@@ -47,12 +47,12 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 1234567,
-   range_max_bytes = 536870912,
-   gc.ttlseconds = 90000,
-   num_replicas = 3,
-   constraints = '[]',
-   lease_preferences = '[]'
+     range_min_bytes = 1234567,
+     range_max_bytes = 536870912,
+     gc.ttlseconds = 14400,
+     num_replicas = 3,
+     constraints = '[]',
+     lease_preferences = '[]'
 
 # Once USING DEFAULT has been used, we get the default config
 # but with our own zone config ID.
@@ -64,12 +64,12 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
-     range_min_bytes = 1234567,
-     range_max_bytes = 536870912,
-     gc.ttlseconds = 90000,
-     num_replicas = 3,
-     constraints = '[]',
-     lease_preferences = '[]'
+       range_min_bytes = 1234567,
+       range_max_bytes = 536870912,
+       gc.ttlseconds = 14400,
+       num_replicas = 3,
+       constraints = '[]',
+       lease_preferences = '[]'
 
 # Check that configurations can be adjusted with USING.
 statement ok
@@ -187,12 +187,12 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
-     range_min_bytes = 1234567,
-     range_max_bytes = 536870912,
-     gc.ttlseconds = 90000,
-     num_replicas = 3,
-     constraints = '[]',
-     lease_preferences = '[]'
+       range_min_bytes = 1234567,
+       range_max_bytes = 536870912,
+       gc.ttlseconds = 14400,
+       num_replicas = 3,
+       constraints = '[]',
+       lease_preferences = '[]'
 
 # Check that we can drop a configuration to get back to inherinting
 # the defaults.
@@ -231,12 +231,12 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
-     range_min_bytes = 1234567,
-     range_max_bytes = 536870912,
-     gc.ttlseconds = 90000,
-     num_replicas = 3,
-     constraints = '[]',
-     lease_preferences = '[]'
+       range_min_bytes = 1234567,
+       range_max_bytes = 536870912,
+       gc.ttlseconds = 14400,
+       num_replicas = 3,
+       constraints = '[]',
+       lease_preferences = '[]'
 
 statement ok
 ALTER TABLE a CONFIGURE ZONE USING num_voters = 1;
@@ -245,14 +245,14 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
-     range_min_bytes = 1234567,
-     range_max_bytes = 536870912,
-     gc.ttlseconds = 90000,
-     num_replicas = 3,
-     num_voters = 1,
-     constraints = '[]',
-     voter_constraints = '[]',
-     lease_preferences = '[]'
+       range_min_bytes = 1234567,
+       range_max_bytes = 536870912,
+       gc.ttlseconds = 14400,
+       num_replicas = 3,
+       num_voters = 1,
+       constraints = '[]',
+       voter_constraints = '[]',
+       lease_preferences = '[]'
 
 # 3. Sanity check that `voter_constraints` can be reset.
 statement ok
@@ -265,14 +265,14 @@ query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
-     range_min_bytes = 1234567,
-     range_max_bytes = 536870912,
-     gc.ttlseconds = 90000,
-     num_replicas = 3,
-     num_voters = 1,
-     constraints = '[]',
-     voter_constraints = '{+region=test: 1}',
-     lease_preferences = '[]'
+       range_min_bytes = 1234567,
+       range_max_bytes = 536870912,
+       gc.ttlseconds = 14400,
+       num_replicas = 3,
+       num_voters = 1,
+       constraints = '[]',
+       voter_constraints = '{+region=test: 1}',
+       lease_preferences = '[]'
 
 # Different error based on if the test is being run in the system tenant or
 # a secondary tenant.

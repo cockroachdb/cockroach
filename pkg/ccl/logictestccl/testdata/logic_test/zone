@@ -524,12 +524,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION x1 OF TABLE t35756
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 134217728,
-               range_max_bytes = 536870912,
-               gc.ttlseconds = 90000,
-               num_replicas = 3,
-               constraints = '[]',
-               lease_preferences = '[]'
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 3,
+                 constraints = '[]',
+                 lease_preferences = '[]'
 
 # Regression test for #38391: verify that altering an index's partition really
 # modifies the partition.
@@ -1165,13 +1165,13 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE global
 ----
 TABLE global  ALTER TABLE global CONFIGURE ZONE USING
-              range_min_bytes = 134217728,
-              range_max_bytes = 536870912,
-              gc.ttlseconds = 90000,
-              global_reads = true,
-              num_replicas = 7,
-              constraints = '[]',
-              lease_preferences = '[]'
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                global_reads = true,
+                num_replicas = 7,
+                constraints = '[]',
+                lease_preferences = '[]'
 
 # Ensure the global_reads field has correct inheritance semantics for index
 # subzones.
@@ -1186,13 +1186,13 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX i_69647
 ----
 TABLE test.public.t_69647  ALTER TABLE test.public.t_69647 CONFIGURE ZONE USING
-                           range_min_bytes = 134217728,
-                           range_max_bytes = 536870912,
-                           gc.ttlseconds = 90000,
-                           global_reads = true,
-                           num_replicas = 7,
-                           constraints = '[]',
-                           lease_preferences = '[]'
+                             range_min_bytes = 134217728,
+                             range_max_bytes = 536870912,
+                             gc.ttlseconds = 14400,
+                             global_reads = true,
+                             num_replicas = 7,
+                             constraints = '[]',
+                             lease_preferences = '[]'
 
 statement ok
 ALTER INDEX i_69647 CONFIGURE ZONE USING num_replicas=5
@@ -1201,13 +1201,13 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX i_69647
 ----
 INDEX test.public.t_69647@i_69647  ALTER INDEX test.public.t_69647@i_69647 CONFIGURE ZONE USING
-                                   range_min_bytes = 134217728,
-                                   range_max_bytes = 536870912,
-                                   gc.ttlseconds = 90000,
-                                   global_reads = true,
-                                   num_replicas = 5,
-                                   constraints = '[]',
-                                   lease_preferences = '[]'
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     global_reads = true,
+                                     num_replicas = 5,
+                                     constraints = '[]',
+                                     lease_preferences = '[]'
 
 statement ok
 ALTER INDEX i_69647 CONFIGURE ZONE USING global_reads = false
@@ -1216,13 +1216,13 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX i_69647
 ----
 INDEX test.public.t_69647@i_69647  ALTER INDEX test.public.t_69647@i_69647 CONFIGURE ZONE USING
-                                   range_min_bytes = 134217728,
-                                   range_max_bytes = 536870912,
-                                   gc.ttlseconds = 90000,
-                                   global_reads = false,
-                                   num_replicas = 5,
-                                   constraints = '[]',
-                                   lease_preferences = '[]'
+                                     range_min_bytes = 134217728,
+                                     range_max_bytes = 536870912,
+                                     gc.ttlseconds = 14400,
+                                     global_reads = false,
+                                     num_replicas = 5,
+                                     constraints = '[]',
+                                     lease_preferences = '[]'
 
 
 # Same test as above, but this time for partitions instead of indexes.
@@ -1234,10 +1234,10 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "one" OF TABLE t_69647
 ----
 PARTITION one OF TABLE t_69647  ALTER PARTITION one OF TABLE t_69647 CONFIGURE ZONE USING
-                                range_min_bytes = 134217728,
-                                range_max_bytes = 536870912,
-                                gc.ttlseconds = 90000,
-                                global_reads = true,
-                                num_replicas = 3,
-                                constraints = '[]',
-                                lease_preferences = '[]'
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  global_reads = true,
+                                  num_replicas = 3,
+                                  constraints = '[]',
+                                  lease_preferences = '[]'
