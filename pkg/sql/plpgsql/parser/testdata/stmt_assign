@@ -1,0 +1,12 @@
+parse
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+END
+----
+DECLARE
+BEGIN
+ASSIGN johnny := null
+ASSIGN gyro := 7 + 7
+END
