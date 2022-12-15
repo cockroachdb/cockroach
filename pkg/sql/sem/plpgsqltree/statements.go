@@ -12,6 +12,7 @@ package plpgsqltree
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -305,9 +306,10 @@ func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
 }
 
 // stmt_dynexecute
+// TODO(chengxiong): query should be a better expression type.
 type PLpgSQLStmtDynamicExecute struct {
 	PLpgSQLStatementImpl
-	Query  PLpgSQLExpr
+	Query  string
 	Into   bool
 	Strict bool
 	Target PLpgSQLVariable
@@ -315,7 +317,17 @@ type PLpgSQLStmtDynamicExecute struct {
 }
 
 func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("EXECUTE a dynamic command\n")
+	ctx.WriteString("EXECUTE a dynamic command")
+	if s.Into {
+		ctx.WriteString(" WITH INTO")
+		if s.Strict {
+			ctx.WriteString(" STRICT")
+		}
+	}
+	if s.Params != nil {
+		ctx.WriteString(" WITH USING")
+	}
+	ctx.WriteString("\n")
 }
 
 // stmt_perform
