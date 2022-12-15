@@ -323,6 +323,10 @@ message UniqueWithoutIndexConstraint {
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   // Predicate, if non-nil, means a partial uniqueness constraint.
   Expression predicate = 4 [(gogoproto.customname) = "Predicate"];
+  // IndexIDForValidation is the index id to hint to the unique_without_index
+  // constraint validation SQL query about which index to validate against.
+  // It is used exclusively by sql.validateUniqueConstraint.
+  uint32 index_id_for_validation = 5 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message CheckConstraint {

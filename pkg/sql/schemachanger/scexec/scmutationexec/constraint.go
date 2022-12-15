@@ -199,6 +199,43 @@ func (m *visitor) RemoveForeignKeyConstraint(
 	return nil
 }
 
+func (m *visitor) RemoveUniqueWithoutIndexConstraint(
+	ctx context.Context, op scop.RemoveUniqueWithoutIndexConstraint,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	var found bool
+	for i, c := range tbl.UniqueWithoutIndexConstraints {
+		if c.ConstraintID == op.ConstraintID {
+			tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints[:i], tbl.UniqueWithoutIndexConstraints[i+1:]...)
+			if len(tbl.UniqueWithoutIndexConstraints) == 0 {
+				tbl.UniqueWithoutIndexConstraints = nil
+			}
+			found = true
+			break
+		}
+	}
+	for i, m := range tbl.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX &&
+			c.UniqueWithoutIndexConstraint.ConstraintID == op.ConstraintID {
+			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
+			if len(tbl.Mutations) == 0 {
+				tbl.Mutations = nil
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.AssertionFailedf("failed to find unnique_without_index constraint %d in table %q (%d)",
+			op.ConstraintID, tbl.GetName(), tbl.GetID())
+	}
+	return nil
+}
+
 func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentForeignKeyConstraintWriteOnly,
 ) error {
@@ -296,4 +333,98 @@ func (m *visitor) MakePublicForeignKeyConstraintValidated(
 	}
 
 	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, tbl)
+}
+
+func (m *visitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
+	ctx context.Context, op scop.MakeAbsentUniqueWithoutIndexConstraintWriteOnly,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	if op.ConstraintID >= tbl.NextConstraintID {
+		tbl.NextConstraintID = op.ConstraintID + 1
+	}
+
+	uwi := &descpb.UniqueWithoutIndexConstraint{
+		TableID:      op.TableID,
+		ColumnIDs:    op.ColumnIDs,
+		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
+		Validity:     descpb.ConstraintValidity_Validating,
+		ConstraintID: op.ConstraintID,
+	}
+	if op.Predicate != nil {
+		uwi.Predicate = string(op.Predicate.Expr)
+	}
+	if err = enqueueAddUniqueWithoutIndexConstraintMutation(tbl, uwi); err != nil {
+		return err
+	}
+	// Fast-forward the mutation state to WRITE_ONLY because this constraint
+	// is now considered as enforced.
+	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	return nil
+}
+
+func (m *visitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
+	ctx context.Context, op scop.MakeValidatedUniqueWithoutIndexConstraintPublic,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	var found bool
+	for idx, mutation := range tbl.Mutations {
+		if c := mutation.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX &&
+			c.UniqueWithoutIndexConstraint.ConstraintID == op.ConstraintID {
+			tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, c.UniqueWithoutIndexConstraint)
+
+			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
+			// call will also mark the above added unique_without_index as VALIDATED.
+			// If this is a rollback of a drop, we are trying to add the
+			// unique_without_index constraint back, so swap the direction before
+			// making it complete.
+			mutation.Direction = descpb.DescriptorMutation_ADD
+			err = tbl.MakeMutationComplete(mutation)
+			if err != nil {
+				return err
+			}
+			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
+			if len(tbl.Mutations) == 0 {
+				tbl.Mutations = nil
+			}
+
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.AssertionFailedf("failed to find unique_without_index constraint %d in table %q (%d)",
+			op.ConstraintID, tbl.GetName(), tbl.GetID())
+	}
+
+	return nil
+}
+
+func (m *visitor) MakePublicUniqueWithoutIndexConstraintValidated(
+	ctx context.Context, op scop.MakePublicUniqueWithoutIndexConstraintValidated,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	for i, uwi := range tbl.UniqueWithoutIndexConstraints {
+		if uwi.ConstraintID == op.ConstraintID {
+			tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints[:i], tbl.UniqueWithoutIndexConstraints[i+1:]...)
+			if len(tbl.UniqueWithoutIndexConstraints) == 0 {
+				tbl.UniqueWithoutIndexConstraints = nil
+			}
+			uwi.Validity = descpb.ConstraintValidity_Dropping
+			return enqueueDropUniqueWithoutIndexConstraintMutation(tbl, &uwi)
+		}
+	}
+
+	return errors.AssertionFailedf("failed to find unique_without_index constraint %d in descriptor %v", op.ConstraintID, tbl)
 }
