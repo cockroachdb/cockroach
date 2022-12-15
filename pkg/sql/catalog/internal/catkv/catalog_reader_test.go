@@ -64,7 +64,7 @@ func TestDataDriven(t *testing.T) {
 		v := execCfg.Settings.Version.ActiveVersion(ctx)
 		sdc := catkv.NewSystemDatabaseCache(execCfg.Codec, execCfg.Settings)
 		ccr := catkv.NewCatalogReader(execCfg.Codec, v, sdc, nil /* maybeMonitor */)
-		ucr := catkv.NewTestingUncachedCatalogReader(execCfg.Codec)
+		ucr := catkv.NewUncachedCatalogReader(execCfg.Codec)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (ret string) {
 			h := testHelper{

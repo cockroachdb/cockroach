@@ -99,10 +99,9 @@ type CatalogReader interface {
 	) (nstree.Catalog, error)
 }
 
-// NewTestingUncachedCatalogReader is the constructor for the default
+// NewUncachedCatalogReader is the constructor for the default
 // CatalogReader implementation without a SystemDatabaseCache.
-// This should not be used outside of testing purposes.
-func NewTestingUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
+func NewUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
 	return &catalogReader{
 		codec: codec,
 	}
