@@ -168,12 +168,32 @@ func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSq
 // between the starting index (included) to the terminator (not included).
 // TODO(plpgsql-team): pass the output to the sql parser
 // (i.e. sqlParserImpl.Parse()).
-func (l *lexer) ReadSqlExpressionStr(terminator int) string {
+func (l *lexer) ReadSqlExpressionStr(terminator int) (sqlStr string) {
+	sqlStr, _ = l.ReadSqlConstruct(terminator, 0, 0)
+	return sqlStr
+}
+
+func (l *lexer) ReadSqlExpressionStr2(
+	terminator1 int, terminator2 int,
+) (sqlStr string, terminatorMet int) {
+	return l.ReadSqlConstruct(terminator1, terminator2, 0)
+}
+
+func (l *lexer) ReadSqlConstruct(
+	terminator1 int, terminator2 int, terminator3 int,
+) (sqlStr string, terminatorMet int) {
 	exprTokenStrs := make([]string, 0)
 	parenLevel := 0
 	for l.lastPos < len(l.tokens) {
 		tok := l.Peek()
-		if int(tok.id) == terminator {
+		if int(tok.id) == terminator1 && parenLevel == 0 {
+			terminatorMet = terminator1
+			break
+		} else if int(tok.id) == terminator2 && parenLevel == 0 {
+			terminatorMet = terminator2
+			break
+		} else if int(tok.id) == terminator3 && parenLevel == 0 {
+			terminatorMet = terminator3
 			break
 		} else if tok.id == '(' || tok.id == '[' {
 			parenLevel++
@@ -194,7 +214,7 @@ func (l *lexer) ReadSqlExpressionStr(terminator int) string {
 		panic("there should be at least one token for sql expression")
 	}
 
-	return strings.Join(exprTokenStrs, " ")
+	return strings.Join(exprTokenStrs, " "), terminatorMet
 }
 
 // Peek peeks
