@@ -84,8 +84,14 @@ func MaybeSideloadEntries(
 
 	cow := false
 	for i := range entriesToAppend {
-		if !SniffSideloadedRaftCommand(entriesToAppend[i].Data) {
-			otherEntriesSize += int64(len(entriesToAppend[i].Data))
+		ent := &entriesToAppend[i]
+		if ent.Type != raftpb.EntryNormal {
+			otherEntriesSize += int64(len(ent.Data))
+			continue
+		}
+		v, cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data) // cheap
+		if v != kvserverbase.RaftVersionSideloaded {
+			otherEntriesSize += int64(len(ent.Data))
 			continue
 		}
 		log.Event(ctx, "sideloading command in append")
@@ -96,9 +102,6 @@ func MaybeSideloadEntries(
 			cow = true
 			entriesToAppend = append([]raftpb.Entry(nil), entriesToAppend...)
 		}
-
-		ent := &entriesToAppend[i]
-		_, cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data) // cheap
 
 		// Unmarshal the command into an object that we can mutate.
 		var strippedCmd kvserverpb.RaftCommand
@@ -139,12 +142,6 @@ func MaybeSideloadEntries(
 	return entriesToAppend, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
 }
 
-// SniffSideloadedRaftCommand returns whether the entry data indicates a
-// sideloaded entry.
-func SniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
-	return len(data) > 0 && data[0] == byte(kvserverbase.RaftVersionSideloaded)
-}
-
 // MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
 // command encoding version indicates a sideloaded entry, it uses the entryCache
 // or SideloadStorage to inline the payload, returning a new entry (which must
@@ -159,7 +156,8 @@ func MaybeInlineSideloadedRaftCommand(
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
-	if !SniffSideloadedRaftCommand(ent.Data) {
+	v, cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data)
+	if v != kvserverbase.RaftVersionSideloaded {
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
@@ -180,8 +178,7 @@ func MaybeInlineSideloadedRaftCommand(
 	ent = entCpy
 
 	log.Event(ctx, "inlined entry not cached")
-	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
-	_, cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data)
+	// (Bad) luck, for whatever reason the inlined proposal isn't in the cache.
 
 	var command kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(data, &command); err != nil {
@@ -222,12 +219,12 @@ func MaybeInlineSideloadedRaftCommand(
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	if !SniffSideloadedRaftCommand(ent.Data) {
+	v, _, data := kvserverbase.DecodeRaftCommand(ent.Data)
+	if v != kvserverbase.RaftVersionSideloaded {
 		return
 	}
 
 	var command kvserverpb.RaftCommand
-	_, _, data := kvserverbase.DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
