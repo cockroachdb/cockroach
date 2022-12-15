@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -96,9 +97,15 @@ func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	}
 	// Decode and save all the commands.
 	for _, e := range msg.Entries {
-		_, _, encodedCommand := kvserverbase.DecodeRaftCommand(e.Data)
+		d, err := raftlog.DecomposeEntryData(e.Type, e.Data)
+		if err != nil {
+			return err
+		}
+		if d.Type != raftpb.EntryNormal {
+			return errors.Errorf("testProposer doesn't understand ConfChange entries")
+		}
 		t.proposals = append(t.proposals, kvserverpb.RaftCommand{})
-		if err := protoutil.Unmarshal(encodedCommand, &t.proposals[len(t.proposals)-1]); err != nil {
+		if err := protoutil.Unmarshal(d.RaftCommandBytes, &t.proposals[len(t.proposals)-1]); err != nil {
 			return err
 		}
 	}

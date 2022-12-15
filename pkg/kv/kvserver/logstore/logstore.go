@@ -325,7 +325,11 @@ func LoadTerm(
 		// sideloaded entries here to keep the term fetching cheap.
 		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
 		// makes any difference.
-		if v, _, _ := kvserverbase.DecodeRaftCommand(entry.Data); v != kvserverbase.RaftVersionSideloaded {
+		d, err := raftlog.DecomposeEntryData(entry.Type, entry.Data)
+		if err != nil {
+			return 0, err
+		}
+		if d.Version != kvserverbase.RaftVersionSideloaded {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
 		return entry.Term, nil
@@ -398,7 +402,11 @@ func LoadEntries(
 		}
 		expectedIndex++
 
-		if v, _, _ := kvserverbase.DecodeRaftCommand(ent.Data); v == kvserverbase.RaftVersionSideloaded {
+		d, err := raftlog.DecomposeEntryData(ent.Type, ent.Data)
+		if err != nil {
+			return err
+		}
+		if d.Version == kvserverbase.RaftVersionSideloaded {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
 			)
