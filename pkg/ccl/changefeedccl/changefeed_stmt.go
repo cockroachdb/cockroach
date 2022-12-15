@@ -262,16 +262,14 @@ func changefeedPlanHook(
 		{
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
-
-			activeTimestampProtection := changefeedbase.ActiveProtectedTimestampsEnabled.Get(&p.ExecCfg().Settings.SV)
-			initialScanType, err := opts.GetInitialScanType()
-			if err != nil {
-				return err
-			}
-			shouldProtectTimestamp := activeTimestampProtection || (initialScanType != changefeedbase.NoInitialScan)
-			if shouldProtectTimestamp {
-				ptr = createProtectedTimestampRecord(ctx, codec, jobID, AllTargets(details), details.StatementTime, progress.GetChangefeed())
-			}
+			ptr = createProtectedTimestampRecord(
+				ctx,
+				codec,
+				jobID,
+				AllTargets(details),
+				details.StatementTime,
+				progress.GetChangefeed(),
+			)
 
 			jr.Progress = *progress.GetChangefeed()
 
