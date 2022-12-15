@@ -256,6 +256,7 @@ type Context struct {
 type ReplicationSlotManager interface {
 	CreateSlot(ctx context.Context, slotName string) (uint64, error)
 	DropSlot(ctx context.Context, slotName string) error
+	DColl() interface{}
 }
 
 // DescIDGenerator generates unique descriptor IDs.

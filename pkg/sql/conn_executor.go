@@ -1903,7 +1903,7 @@ func (s StartReplication) command() string {
 type hackInterface interface {
 	WriteCopyBothFormat(pos CmdPos) error
 	Rd() pgwirebase.BufferedReader
-	WriteReplData(item replicationslot.Item) error
+	WriteReplData(item replicationslot.Item, d string) error
 	WriteReplKeepAlive(pos CmdPos, lsn uint64) error
 	Flush(pos CmdPos) error
 	WriteBegin(pos CmdPos, lsn uint64, xid int64) error
@@ -2182,6 +2182,8 @@ func (ex *connExecutor) execCmd() error {
 					// Write any slot info.
 					next := slot.NextTxn(true)
 					if len(next) > 0 {
+
+						txn := ex.server.cfg.DB.NewTxn(ctx, "replication-loop")
 						var xid int64
 						for idx, item := range next {
 							log.Infof(ctx, "writing row %s (idx %d/%d)", item.Value, idx, len(next))
@@ -2190,7 +2192,9 @@ func (ex *connExecutor) execCmd() error {
 									return err
 								}
 							}
-							if err := c.WriteReplData(item); err != nil {
+
+							d := replicationslot.ParseJSONValueForPGLogicalPayload(item, txn, ex.extraTxnState.descCollection)
+							if err := c.WriteReplData(item, d); err != nil {
 								return err
 							}
 							if idx == len(next)-1 || item.XID != next[idx+1].XID {

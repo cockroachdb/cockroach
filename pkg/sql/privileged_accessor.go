@@ -40,10 +40,16 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, erro
 		return 0, err
 	}
 	var minLSN uint64 = math.MaxUint64
+	if err := p.DropSlot(ctx, slotName); err != nil {
+		return 0, err
+	}
 	if err = p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			if strings.Contains(tbDesc.GetName(), "awsdms") {
+				return nil
+			}
 			// ???? drop again just in case.
 			schemaDescriptor, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, tbDesc.GetParentSchemaID(),
 				tree.CommonLookupFlags{Required: true})
@@ -51,16 +57,13 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, erro
 				return err
 			}
 			tableSlotName := replicationslot.BuildFullSlotName(slotName, schemaDescriptor.GetName()+"."+tbDesc.GetName())
-			if err := p.DropSlot(ctx, tableSlotName); err != nil {
-				return err
-			}
 			_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 				ctx,
 				"crdb-internal-create-slot",
 				p.txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				// i love me some sql injection
-				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE %s.public.%s INTO $1", p.SessionData().Database, tbDesc.Name),
+				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE %s.%s.%s INTO $1", p.SessionData().Database, scName, tbDesc.Name),
 				"replication://"+tableSlotName,
 			)
 			if err != nil {
@@ -71,9 +74,6 @@ func (p *planner) CreateSlot(ctx context.Context, slotName string) (uint64, erro
 			slot.SetTableID(tbDesc.ID)
 			slot.SetBaseSlotName(slotName)
 			slot.SetFullSlotName(tableSlotName)
-			slot.SetDescsCollection(p.descCollection)
-			// Not sure if we want to store the DB in this struct
-			slot.SetDB(p.txn.DB())
 			lsn := slot.LSN()
 			// Not sure if returning the min is the right thing to do here.
 			if lsn < minLSN {
@@ -93,8 +93,8 @@ func (p *planner) DropSlot(ctx context.Context, slotName string) error {
 		"crdb-internal-drop-slot",
 		p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"cancel jobs select job_id from [show changefeed jobs] where sink_uri = $1 and status = 'running'",
-		"replication://"+slotName,
+		"cancel jobs select job_id from [show changefeed jobs] where sink_uri LIKE $1 and status = 'running'",
+		"replication://%"+slotName+"%",
 	)
 	if err != nil {
 		return err
@@ -105,6 +105,11 @@ func (p *planner) DropSlot(ctx context.Context, slotName string) error {
 		}
 	}
 	return nil
+}
+
+// Another no-no.
+func (p *planner) DColl() interface{} {
+	return p.descCollection
 }
 
 // LookupNamespaceID implements tree.PrivilegedAccessor.

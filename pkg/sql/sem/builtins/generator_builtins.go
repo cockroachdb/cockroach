@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -141,6 +142,8 @@ type logicalReplicationSlotStream struct {
 	consume    bool
 	curr       replicationslot.Item
 
+	txn           *kv.Txn
+	coll          *descs.Collection
 	empty         bool
 	showBeginTxn  bool
 	showCommitTxn bool
@@ -240,7 +243,7 @@ func (l *logicalReplicationSlotStream) Values() (tree.Datums, error) {
 			tree.NewDString(fmt.Sprintf("BEGIN %d", curr.XID)),
 		}, nil
 	}
-	s := replicationslot.ParseJSONValueForPGLogicalPayload(curr)
+	s := replicationslot.ParseJSONValueForPGLogicalPayload(curr, l.txn, l.coll)
 	return []tree.Datum{
 		tree.NewDString(replicationslot.FormatLSN(curr.LSN)),
 		tree.NewDInt(tree.DInt(curr.XID)),
@@ -281,7 +284,12 @@ var generators = map[string]builtinDefinition{
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				// TODO(XXX): check plugin for test_decoding.
 				slotName := string(tree.MustBeDString(args[0]))
-				return &logicalReplicationSlotStream{slotName: slotName, consume: true}, nil
+				return &logicalReplicationSlotStream{
+					slotName: slotName,
+					consume:  true,
+					txn:      evalCtx.Txn,
+					coll:     evalCtx.ReplicationSlotManager.DColl().(*descs.Collection),
+				}, nil
 			},
 			"This function makes adam's dreams come true.",
 			volatility.Volatile,
@@ -294,7 +302,12 @@ var generators = map[string]builtinDefinition{
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				// TODO(XXX): check plugin for test_decoding.
 				slotName := string(tree.MustBeDString(args[0]))
-				return &logicalReplicationSlotStream{slotName: slotName, consume: false}, nil
+				return &logicalReplicationSlotStream{
+					slotName: slotName,
+					consume:  false,
+					txn:      evalCtx.Txn,
+					coll:     evalCtx.ReplicationSlotManager.DColl().(*descs.Collection),
+				}, nil
 			},
 			"This function makes adam's dreams come true.",
 			volatility.Volatile,

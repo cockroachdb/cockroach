@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,10 +37,6 @@ type replicationSlotLooker interface {
 	GetBaseSlotName() string
 	SetFullSlotName(s string)
 	GetFullSlotName() string
-	SetDescsCollection(collection *descs.Collection)
-	GetDescsCollection() *descs.Collection
-	SetDB(*kv.DB)
-	DB() *kv.DB
 }
 
 const slotPrefix = "pg_logical"
@@ -96,18 +91,15 @@ func ParseLSN(s string) uint64 {
 
 // Hacking for now. This should probably be changed to use avroDataRecord
 // NOTE: untested
-func ParseJSONValueForPGLogicalPayload(item Item) string {
+func ParseJSONValueForPGLogicalPayload(item Item, txn *kv.Txn, coll *descs.Collection) string {
 	slot, ok := ReplicationSlots[item.FullSlotName]
 	if !ok {
 		panic("unable to find replication slot")
 	}
-	// get table's descriptor to infer types
-	txn := kv.NewTxn(context.Background(), slot.DB(), 0)
-	t, err := slot.GetDescsCollection().GetMutableDescriptorByID(context.Background(), txn, slot.TableID())
+	it, err := coll.GetImmutableTableByID(context.Background(), txn, slot.TableID(), tree.ObjectLookupFlagsWithRequired())
 	if err != nil {
 		panic("unable to retrieve table descriptor")
 	}
-	it := t.ImmutableCopy().(catalog.TableDescriptor)
 
 	var message map[string]interface{}
 	if err := gojson.Unmarshal(item.Value, &message); err != nil {
@@ -136,7 +128,7 @@ func ParseJSONValueForPGLogicalPayload(item Item) string {
 		for i := 0; i < idx.NumKeyColumns(); i++ {
 			for _, col := range it.AllColumns() {
 				if col.GetID() == idx.GetKeyColumnID(i) {
-					payload = fmt.Sprintf("%s %s[%s]:%s", payload, col.GetName(), col.GetType().String(), keyString)
+					payload = fmt.Sprintf("%s %s[%s]:%s", payload, col.GetName(), col.GetType().SQLStandardName(), keyString)
 				}
 			}
 		}

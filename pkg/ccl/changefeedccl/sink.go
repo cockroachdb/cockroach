@@ -564,22 +564,6 @@ func (r *replicationSink) GetFullSlotName() string {
 	return r.fullSlotName
 }
 
-func (r *replicationSink) SetDescsCollection(collection *descs.Collection) {
-	r.descCollection = collection
-}
-
-func (r *replicationSink) GetDescsCollection() *descs.Collection {
-	return r.descCollection
-}
-
-func (r *replicationSink) SetDB(db *kv.DB) {
-	r.db = db
-}
-
-func (r *replicationSink) DB() *kv.DB {
-	return r.db
-}
-
 func (r replicationSink) Dial() error {
 	return nil
 }

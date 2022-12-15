@@ -1613,7 +1613,7 @@ func (c *conn) WriteCopyBothFormat(pos sql.CmdPos) error {
 	return c.Flush(pos)
 }
 
-func (c *conn) WriteReplData(item replicationslot.Item) error {
+func (c *conn) WriteReplData(item replicationslot.Item, d string) error {
 	c.msgBuilder.initMsg('d')
 
 	c.msgBuilder.writeByte('w')
@@ -1630,7 +1630,7 @@ func (c *conn) WriteReplData(item replicationslot.Item) error {
 	if _, err := c.msgBuilder.Write(buf); err != nil {
 		return err
 	} // serverTime
-	if _, err := c.msgBuilder.Write([]byte(replicationslot.ParseJSONValueForPGLogicalPayload(item))); err != nil {
+	if _, err := c.msgBuilder.Write([]byte(d)); err != nil {
 		return err
 	}
 
