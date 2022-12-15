@@ -44,7 +44,7 @@ var GlobalPrivilegeObject = &GlobalPrivilege{}
 func (p *GlobalPrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
-	return planner.SynthesizePrivilegeDescriptor(ctx, p.GetPath(), p.GetObjectType())
+	return planner.SynthesizePrivilegeDescriptor(ctx, p)
 }
 
 // GetObjectType implements the PrivilegeObject interface.

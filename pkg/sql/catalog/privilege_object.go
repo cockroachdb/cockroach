@@ -10,24 +10,7 @@
 
 package catalog
 
-import (
-	"context"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-)
-
-// PrivilegeObject represents an object that can have privileges. The privileges
-// can either live on the descriptor or in the system.privileges table.
-type PrivilegeObject interface {
-	// GetPrivilegeDescriptor returns the privilege descriptor for the
-	// object. Note that for non-descriptor backed objects, we query the
-	// system.privileges table to synthesize a PrivilegeDescriptor.
-	GetPrivilegeDescriptor(ctx context.Context, planner eval.Planner) (*catpb.PrivilegeDescriptor, error)
-	// GetObjectType returns the privilege.ObjectType of the PrivilegeObject.
-	GetObjectType() privilege.ObjectType
-	// GetName returns the name of the object. For example, the name of a
-	// table, schema or database.
-	GetName() string
-}
+// PrivilegeObject forwards the definition from eval.
+type PrivilegeObject = eval.PrivilegeObject

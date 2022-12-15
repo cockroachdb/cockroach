@@ -11,22 +11,18 @@
 package syntheticprivilege
 
 import (
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
 
 // Object represents an object that has its privileges stored
 // in system.privileges.
-type Object interface {
-	catalog.PrivilegeObject
-	// GetPath returns the path used to identify the object in
-	// system.privileges.
-	GetPath() string
-}
+type Object = eval.SyntheticPrivilegeObject
 
 // Metadata for system privileges.
 type Metadata struct {
@@ -42,8 +38,8 @@ var registry = []*Metadata{
 		val:    reflect.TypeOf((*GlobalPrivilege)(nil)),
 	},
 	{
-		prefix: "/vtable",
-		regex:  regexp.MustCompile(`(/vtable/((?P<SchemaName>.*))/((?P<TableName>.*)))$`),
+		prefix: fmt.Sprintf("/%s", VirtualTablePathPrefix),
+		regex:  regexp.MustCompile(fmt.Sprintf(`(/%s/((?P<SchemaName>.*))/((?P<TableName>.*)))$`, VirtualTablePathPrefix)),
 		val:    reflect.TypeOf((*VirtualTablePrivilege)(nil)),
 	},
 	{

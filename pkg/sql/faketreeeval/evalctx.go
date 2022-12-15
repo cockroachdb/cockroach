@@ -298,7 +298,7 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 
 // SynthesizePrivilegeDescriptor is part of the Planner interface.
 func (*DummyEvalPlanner) SynthesizePrivilegeDescriptor(
-	ctx context.Context, privilegeObjectPath string, privilegeObjectType privilege.ObjectType,
+	ctx context.Context, po eval.SyntheticPrivilegeObject,
 ) (privileges *catpb.PrivilegeDescriptor, retErr error) {
 	return nil, nil
 }
