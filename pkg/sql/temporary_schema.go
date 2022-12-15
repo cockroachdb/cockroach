@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -307,21 +307,17 @@ func cleanupTempSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					dTableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, d.ID)
+					flags := tree.CommonLookupFlags{AvoidLeased: true}
+					dTableDesc, err := descsCol.GetImmutableTableByID(
+						ctx, txn, d.ID, tree.ObjectLookupFlags{CommonLookupFlags: flags})
 					if err != nil {
 						return err
 					}
-					db, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
+					_, db, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dTableDesc.GetParentID(), flags)
 					if err != nil {
 						return err
 					}
-					schema, err := resolver.ResolveSchemaNameByID(
-						ctx,
-						txn,
-						codec,
-						db,
-						dTableDesc.GetParentSchemaID(),
-					)
+					sc, err := descsCol.GetImmutableSchemaByID(ctx, txn, dTableDesc.GetParentSchemaID(), flags)
 					if err != nil {
 						return err
 					}
@@ -333,7 +329,7 @@ func cleanupTempSchemaObjects(
 						if dependentColIDs.Contains(int(col.GetID())) {
 							tbName := tree.MakeTableNameWithSchema(
 								tree.Name(db.GetName()),
-								tree.Name(schema),
+								tree.Name(sc.GetName()),
 								tree.Name(dTableDesc.GetName()),
 							)
 							_, err = ie.ExecEx(
@@ -530,43 +526,48 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	// Only see temporary schemas after some delay as safety
 	// mechanism.
 	waitTimeForCreation := TempObjectWaitInterval.Get(&c.settings.SV)
-	// Build a set of all databases with temporary objects.
-	var allDbDescs []catalog.DatabaseDescriptor
 	descsCol := c.collectionFactory.NewCollection(ctx)
-	if err := retryFunc(ctx, func() error {
-		var err error
-		allDbDescs, err = descsCol.GetAllDatabaseDescriptors(ctx, txn)
+	// Build a set of all databases with temporary objects.
+	var dbs nstree.Catalog
+	if err := retryFunc(ctx, func() (err error) {
+		dbs, err = descsCol.GetAllDatabases(ctx, txn)
 		return err
 	}); err != nil {
 		return err
 	}
 
 	sessionIDs := make(map[clusterunique.ID]struct{})
-	for _, dbDesc := range allDbDescs {
-		var schemaEntries map[descpb.ID]resolver.SchemaEntryForDB
-		if err := retryFunc(ctx, func() error {
-			var err error
-			schemaEntries, err = resolver.GetForDatabase(ctx, txn, c.codec, dbDesc)
+	if err := dbs.ForEachDescriptor(func(dbDesc catalog.Descriptor) error {
+		db, err := catalog.AsDatabaseDescriptor(dbDesc)
+		if err != nil {
+			return err
+		}
+		var schemas nstree.Catalog
+		if err := retryFunc(ctx, func() (err error) {
+			schemas, err = descsCol.GetAllSchemasInDatabase(ctx, txn, db)
 			return err
 		}); err != nil {
 			return err
 		}
-		for _, scEntry := range schemaEntries {
+		return schemas.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+			if e.GetParentSchemaID() != descpb.InvalidID {
+				return nil
+			}
 			// Skip over any temporary objects that are not old enough,
 			// we intentionally use a delay to avoid problems.
-			if !scEntry.Timestamp.Less(txn.ReadTimestamp().Add(-waitTimeForCreation.Nanoseconds(), 0)) {
-				continue
+			if !e.GetMVCCTimestamp().Less(txn.ReadTimestamp().Add(-waitTimeForCreation.Nanoseconds(), 0)) {
+				return nil
 			}
-			isTempSchema, sessionID, err := temporarySchemaSessionID(scEntry.Name)
-			if err != nil {
+			if isTempSchema, sessionID, err := temporarySchemaSessionID(e.GetName()); err != nil {
 				// This should not cause an error.
-				log.Warningf(ctx, "could not parse %q as temporary schema name", scEntry)
-				continue
-			}
-			if isTempSchema {
+				log.Warningf(ctx, "could not parse %q as temporary schema name", e.GetName())
+			} else if isTempSchema {
 				sessionIDs[sessionID] = struct{}{}
 			}
-		}
+			return nil
+		})
+	}); err != nil {
+		return err
 	}
 	log.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
 

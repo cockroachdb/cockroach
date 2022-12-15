@@ -11,6 +11,7 @@ go_library(
         "errors.go",
         "factory.go",
         "function.go",
+        "helpers.go",
         "hydrate.go",
         "leased_descriptors.go",
         "object.go",

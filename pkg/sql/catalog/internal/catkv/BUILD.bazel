@@ -7,7 +7,6 @@ go_library(
         "catalog_query.go",
         "catalog_reader.go",
         "catalog_reader_cached.go",
-        "direct.go",
         "system_database_cache.go",
         "validate.go",
     ],

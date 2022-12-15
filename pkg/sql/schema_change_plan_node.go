@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -135,11 +136,14 @@ func (p *planner) waitForDescriptorIDGeneratorMigration(ctx context.Context) err
 			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			desc, err := descriptors.Direct().MaybeGetDescriptorByIDUnvalidated(ctx, txn, keys.DescIDSequenceID)
+			k := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, keys.DescIDSequenceID)
+			result, err := txn.Get(ctx, k)
 			if err != nil {
 				return err
 			}
-			blocked = desc == nil
+			if result.Exists() {
+				blocked = false
+			}
 			return nil
 		}); err != nil {
 			return err

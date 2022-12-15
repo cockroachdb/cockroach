@@ -207,11 +207,11 @@ func (tc *Collection) MarkUncommittedCommentDeletedForTable(tblID descpb.ID) {
 //
 // The Required flag is ignored and always overridden.
 func (tc *Collection) getDescriptorByID(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
+	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, id descpb.ID,
 ) (catalog.Descriptor, error) {
 	var arr [1]catalog.Descriptor
 	if err := getDescriptorsByID(
-		ctx, tc, txn, flags, arr[:], ids...,
+		ctx, tc, txn, flags, arr[:], id,
 	); err != nil {
 		return nil, err
 	}
