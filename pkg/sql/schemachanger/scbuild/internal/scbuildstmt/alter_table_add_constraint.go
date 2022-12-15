@@ -41,6 +41,8 @@ func alterTableAddConstraint(
 	case *tree.UniqueConstraintTableDef:
 		if d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
 			alterTableAddPrimaryKey(b, tn, tbl, t)
+		} else if d.WithoutIndex && t.ValidationBehavior == tree.ValidationDefault {
+			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
 		}
 	case *tree.CheckConstraintTableDef:
 		if t.ValidationBehavior == tree.ValidationDefault {
@@ -373,9 +375,110 @@ func alterTableAddForeignKey(
 	})
 }
 
-// getFullyResolvedColNames returns fully resolved column names.
-// For each name in `colNames`, its fully resolved name will be "db.sc.tbl.col".
-// The order of column names in the return is in syc with the input `colNames`.
+// alterTableAddUniqueWithoutIndex contains logic for building ALTER TABLE ... ADD CONSTRAINT ... UNIQUE WITHOUT INDEX.
+// It assumes `t` is such a command.
+func alterTableAddUniqueWithoutIndex(
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
+) {
+	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
+
+	// 1. A bunch of checks.
+	if !b.SessionData().EnableUniqueWithoutIndexConstraints {
+		panic(pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index are not yet supported",
+		))
+	}
+	if len(d.Storing) > 0 {
+		panic(pgerror.New(pgcode.FeatureNotSupported,
+			"unique constraints without an index cannot store columns",
+		))
+	}
+	if d.PartitionByIndex.ContainsPartitions() {
+		panic(pgerror.New(pgcode.FeatureNotSupported,
+			"partitioned unique constraints without an index are not supported",
+		))
+	}
+	if d.NotVisible {
+		// Theoretically, this should never happen because this is not supported by
+		// the parser. This is just a safe check.
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"creating a unique constraint using UNIQUE WITH NOT VISIBLE INDEX is not supported",
+		))
+	}
+
+	// 2. Check that columns that we want to have uniqueness should have no duplicate.
+	var colSet catalog.TableColSet
+	var colIDs []catid.ColumnID
+	var colNames []string
+	for _, col := range d.Columns {
+		colID := getColumnIDFromColumnName(b, tbl.TableID, col.Column)
+		if colSet.Contains(colID) {
+			panic(pgerror.Newf(pgcode.DuplicateColumn,
+				"column %q appears twice in unique constraint", col.Column))
+		}
+		colSet.Add(colID)
+		colIDs = append(colIDs, colID)
+		colNames = append(colNames, string(col.Column))
+	}
+
+	// 3. If a name is provided, check that this name is not used; Otherwise, generate
+	// a unique name for it.
+	if skip, err := validateConstraintNameIsNotUsed(b, tn, tbl, t); err != nil {
+		panic(err)
+	} else if skip {
+		return
+	}
+	if d.Name == "" {
+		d.Name = tree.Name(tabledesc.GenerateUniqueName(
+			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
+			func(name string) bool {
+				return constraintNameInUse(b, tbl.TableID, name)
+			},
+		))
+	}
+
+	// 4. If there is a predicate, validate it.
+	if d.Predicate != nil {
+		predicate, _, _, err := schemaexpr.DequalifyAndValidateExprImpl(b, d.Predicate, types.Bool, "unique without index predicate", b.SemaCtx(), volatility.Immutable, tn,
+			func() colinfo.ResultColumns {
+				return getNonDropResultColumns(b, tbl.TableID)
+			},
+			func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+				return columnLookupFn(b, tbl.TableID, columnName)
+			},
+		)
+		if err != nil {
+			panic(err)
+		}
+		typedPredicate, err := parser.ParseExpr(predicate)
+		if err != nil {
+			panic(err)
+		}
+		d.Predicate = typedPredicate
+	}
+
+	// 5. (Finally!) Add a UniqueWithoutIndex, ConstraintName element to builder state.
+	constraintID := b.NextTableConstraintID(tbl.TableID)
+	uwi := &scpb.UniqueWithoutIndexConstraint{
+		TableID:              tbl.TableID,
+		ConstraintID:         constraintID,
+		ColumnIDs:            colIDs,
+		IndexIDForValidation: getIndexIDForValidationForConstraint(b, tbl.TableID),
+	}
+	if d.Predicate != nil {
+		uwi.Predicate = b.WrapExpression(tbl.TableID, d.Predicate)
+	}
+	b.Add(uwi)
+	b.Add(&scpb.ConstraintWithoutIndexName{
+		TableID:      tbl.TableID,
+		ConstraintID: constraintID,
+		Name:         string(d.Name),
+	})
+}
+
+// getFullyResolvedColNames returns fully resolved column names for `colNames`.
+// For each column name in `colNames`, its fully resolved name will be "db.sc.tbl.col".
+// The order of column names in the return is in syc with that in the input `colNames`.
 func getFullyResolvedColNames(
 	b BuildCtx, tableID catid.DescID, colNames tree.NameList,
 ) (ret tree.NameList) {
@@ -433,7 +536,8 @@ func validateConstraintNameIsNotUsed(
 		name = d.Name
 		ifNotExists = d.IfNotExists
 	case *tree.UniqueConstraintTableDef:
-		panic(scerrors.NotImplementedErrorf(t, "UNIQUE constraint %v not yet implemented", d.Name))
+		name = d.Name
+		ifNotExists = d.IfNotExists
 	default:
 		return false, errors.AssertionFailedf(
 			"unsupported constraint: %T", t.ConstraintDef)
