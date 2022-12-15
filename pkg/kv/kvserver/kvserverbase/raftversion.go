@@ -29,6 +29,10 @@ const (
 	// but when retrieved from the local Raft log it necessary to inline the
 	// payload first as it has usually been sideloaded.
 	RaftVersionSideloaded RaftCommandEncodingVersion = 1
+	// RaftVersionFlatBuffer is an experimental entry encoding in which a FlatBuffer
+	// is used instead of a protobuf. This support is incomplete and gated behind
+	// testing knobs.
+	RaftVersionFlatBuffer RaftCommandEncodingVersion = 2
 	// RaftCommandIDLen is the length for each command ID.
 	RaftCommandIDLen = 8
 	// RaftCommandPrefixLen is the prescribed length of each encoded command's prefix.

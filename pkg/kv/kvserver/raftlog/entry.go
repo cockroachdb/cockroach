@@ -79,6 +79,7 @@ func DecomposeEntryData(typ raftpb.EntryType, data []byte) (EntryData, error) {
 	switch v {
 	case kvserverbase.RaftVersionStandard:
 	case kvserverbase.RaftVersionSideloaded:
+	case kvserverbase.RaftVersionFlatBuffer:
 	default:
 		return EntryData{}, errors.AssertionFailedf("unknown command encoding version %d", v)
 	}
