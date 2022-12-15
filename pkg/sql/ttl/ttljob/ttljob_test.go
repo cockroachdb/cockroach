@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -67,11 +65,7 @@ type rowLevelTTLTestJobTestHelper struct {
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T,
-	testingKnobs *sql.TTLTestingKnobs,
-	testMultiTenant bool,
-	numNodes int,
-	version clusterversion.Key,
+	t *testing.T, testingKnobs *sql.TTLTestingKnobs, testMultiTenant bool, numNodes int,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -81,16 +75,7 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
-	var serverTestingKnobs base.ModuleTestingKnobs
-	if version != 0 {
-		serverTestingKnobs = &server.TestingKnobs{
-			BinaryVersionOverride:          clusterversion.ByKey(version),
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-		}
-	}
-
 	baseTestingKnobs := base.TestingKnobs{
-		Server: serverTestingKnobs,
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
@@ -304,7 +289,6 @@ func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
 		nil,  /* SQLTestingKnobs */
 		true, /* testMultiTenant */
 		1,    /* numNodes */
-		0,    /* version */
 	)
 	defer cleanupFunc()
 
@@ -366,7 +350,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				},
 				false, /* testMultiTenant */
 				1,     /* numNodes */
-				0,     /* version */
 			)
 			defer cleanupFunc()
 			th.sqlDB.Exec(t, createTable)
@@ -418,7 +401,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				},
 				true, /* testMultiTenant */
 				1,    /* numNodes */
-				0,    /* version */
 			)
 			defer cleanupFunc()
 
@@ -441,23 +423,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	testCases := []struct {
 		desc     string
 		splitAts []int
-		version  clusterversion.Key
 	}{
-		{
-			desc:     "no split 22_1",
-			splitAts: []int{},
-			version:  clusterversion.V22_1,
-		},
-		{
-			desc:     "1 split 22_1",
-			splitAts: []int{10_000},
-			version:  clusterversion.V22_1,
-		},
-		{
-			desc:     "2 splits 22_1",
-			splitAts: []int{10_000, 20_000},
-			version:  clusterversion.V22_1,
-		},
 		{
 			desc:     "no split",
 			splitAts: []int{},
@@ -477,7 +443,6 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 			const numNodes = 5
 			splitAts := tc.splitAts
 			numRanges := len(splitAts) + 1
-			version := tc.version
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
 				&sql.TTLTestingKnobs{
@@ -487,7 +452,6 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 				},
 				false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
 				numNodes,
-				version,
 			)
 			defer cleanupFunc()
 
@@ -829,7 +793,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				},
 				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 				1, /* numNodes */
-				0, /* version */
 			)
 			defer cleanupFunc()
 
