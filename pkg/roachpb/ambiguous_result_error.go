@@ -78,10 +78,6 @@ func (e *AmbiguousResultError) unwrapOrDefault() error {
 	return cause
 }
 
-func (e *AmbiguousResultError) message(_ *Error) string {
-	return fmt.Sprintf("result is ambiguous: %v", e.unwrapOrDefault())
-}
-
 // Type is part of the ErrorDetailInterface.
 func (e *AmbiguousResultError) Type() ErrorDetailType {
 	return AmbiguousResultErrType

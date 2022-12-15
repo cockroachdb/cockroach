@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/redact"
 )
 
 // TxnType specifies whether a transaction is the root (parent)
@@ -255,7 +256,7 @@ type TxnSender interface {
 	// PrepareRetryableError generates a
 	// TransactionRetryWithProtoRefreshError with a payload initialized
 	// from this txn.
-	PrepareRetryableError(ctx context.Context, msg string) error
+	PrepareRetryableError(ctx context.Context, msg redact.RedactableString) error
 
 	// TestingCloneTxn returns a clone of the transaction's current
 	// proto. This is for use by tests only. Use
