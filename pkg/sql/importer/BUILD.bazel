@@ -198,6 +198,7 @@ go_test(
         "//pkg/sql/gcjob",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",

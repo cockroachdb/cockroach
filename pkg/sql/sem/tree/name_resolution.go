@@ -158,24 +158,20 @@ func newInvTableNameError(n fmt.Stringer) error {
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.
 type CommonLookupFlags struct {
-	// if required is set, lookup will return an error if the item is not found.
+	// Required specifies that the lookup will return an error if the item is
+	// not found.
 	Required bool
 	// RequireMutable specifies whether to return a mutable descriptor.
 	RequireMutable bool
 	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
 	// descriptor. It must be set when callers want consistent reads.
 	AvoidLeased bool
-	// AvoidCommittedAdding specifies if committed descriptors in the adding state
-	// will be ignored.
-	AvoidCommittedAdding bool
 	// IncludeOffline specifies if offline descriptors should be visible.
 	IncludeOffline bool
 	// IncludeOffline specifies if dropped descriptors should be visible.
 	IncludeDropped bool
 	// AvoidSynthetic specifies if the synthetic descriptors will be ignored.
 	AvoidSynthetic bool
-	// AvoidStorage specifies if the descriptors in storage will be ignored.
-	AvoidStorage bool
 	// ParentID enforces that the resolved descriptor exist with this parent
 	// ID if non-zero.
 	ParentID catid.DescID

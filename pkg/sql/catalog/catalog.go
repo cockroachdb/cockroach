@@ -67,7 +67,7 @@ type VirtualSchema interface {
 	Desc() SchemaDescriptor
 	NumTables() int
 	VisitTables(func(object VirtualObject))
-	GetObjectByName(name string, flags tree.ObjectLookupFlags) (VirtualObject, error)
+	GetObjectByName(name string, kind tree.DesiredObjectKind) (VirtualObject, error)
 }
 
 // VirtualObject is a virtual schema object.

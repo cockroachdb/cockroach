@@ -212,13 +212,14 @@ func GetZoneConfigInTxn(
 	partition string,
 	getInheritedDefault bool,
 ) (descpb.ID, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
+	zcHelper := descs.AsZoneConfigHydrationHelper(descriptors)
 	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
-		ctx, id, txn, descriptors, getInheritedDefault, true, /* mayBeTable */
+		ctx, id, txn, zcHelper, getInheritedDefault, true, /* mayBeTable */
 	)
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	if err = completeZoneConfig(ctx, zone, txn, descriptors, zoneID); err != nil {
+	if err = completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return 0, nil, nil, err
 	}
 	var subzone *zonepb.Subzone
@@ -266,13 +267,14 @@ func GetHydratedZoneConfigForNamedZone(
 	if !found {
 		return nil, errors.AssertionFailedf("id %d does not belong to a named zone", id)
 	}
+	zcHelper := descs.AsZoneConfigHydrationHelper(descriptors)
 	zoneID, zone, _, _, err := getZoneConfig(
-		ctx, descpb.ID(id), txn, descriptors, false /* getInheritedDefault */, false, /* mayBeTable */
+		ctx, descpb.ID(id), txn, zcHelper, false /* getInheritedDefault */, false, /* mayBeTable */
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(ctx, zone, txn, descriptors, zoneID); err != nil {
+	if err := completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return nil, err
 	}
 	return zone, nil
@@ -283,13 +285,14 @@ func GetHydratedZoneConfigForNamedZone(
 func GetHydratedZoneConfigForTable(
 	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
+	zcHelper := descs.AsZoneConfigHydrationHelper(descriptors)
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		ctx, id, txn, descriptors, false /* getInheritedDefault */, true, /* mayBeTable */
+		ctx, id, txn, zcHelper, false /* getInheritedDefault */, true, /* mayBeTable */
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(ctx, zone, txn, descriptors, zoneID); err != nil {
+	if err := completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return nil, err
 	}
 
@@ -339,13 +342,14 @@ func GetHydratedZoneConfigForTable(
 func GetHydratedZoneConfigForDatabase(
 	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
+	zcHelper := descs.AsZoneConfigHydrationHelper(descriptors)
 	zoneID, zone, _, _, err := getZoneConfig(
-		ctx, id, txn, descriptors, false /* getInheritedDefault */, false, /* mayBeTable */
+		ctx, id, txn, zcHelper, false /* getInheritedDefault */, false, /* mayBeTable */
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(ctx, zone, txn, descriptors, zoneID); err != nil {
+	if err := completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return nil, err
 	}
 

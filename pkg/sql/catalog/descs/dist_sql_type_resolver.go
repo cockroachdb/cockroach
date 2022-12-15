@@ -28,15 +28,13 @@ import (
 // DistSQLTypeResolver is a TypeResolver that accesses TypeDescriptors through
 // a given descs.Collection and transaction.
 type DistSQLTypeResolver struct {
-	descriptors *Collection
-	txn         *kv.Txn
+	g ByIDGetter
 }
 
 // NewDistSQLTypeResolver creates a new DistSQLTypeResolver.
 func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) DistSQLTypeResolver {
 	return DistSQLTypeResolver{
-		descriptors: descs,
-		txn:         txn,
+		g: descs.ByID(txn).Immutable(),
 	}
 }
 
@@ -62,30 +60,29 @@ func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 	return desc.MakeTypesT(ctx, &name, dt)
 }
 
-// GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
+// GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.
 func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	descs, err := dt.descriptors.getDescriptorsByID(ctx, dt.txn, tree.CommonLookupFlags{}, id)
+	desc, err := dt.g.Desc(ctx, id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	var typeDesc catalog.TypeDescriptor
-	switch t := descs[0].(type) {
+	name := tree.MakeUnqualifiedTypeName(desc.GetName())
+	switch t := desc.(type) {
 	case catalog.TypeDescriptor:
 		// User-defined type.
-		typeDesc = t
+		return name, t, nil
 	case catalog.TableDescriptor:
-		typeDesc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
+		typ, err := typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
+		return name, typ, nil
 	default:
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
 			"descriptor %d is a %s not a %s", id, t.DescriptorType(), catalog.Type)
 	}
-	name := tree.MakeUnqualifiedTypeName(typeDesc.GetName())
-	return name, typeDesc, nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
