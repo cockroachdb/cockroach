@@ -393,16 +393,15 @@ INSERT INTO author VALUES
   (5, 'Eve', 'Crime'),
   (6, 'Bart', null);
 
-query ITT
+query T
 SELECT
-  DISTINCT ON ("genre") *
+  DISTINCT ON ("genre") genre
 FROM
   "public"."author"
 ORDER BY
-  "genre" ASC NULLS LAST,
-  "id" ASC NULLS LAST
+  "genre" ASC NULLS LAST
 ----
-1  Alice  Action
-2  Bob    Biography
-3  Carol  Crime
-6  Bart   NULL
+Action
+Biography
+Crime
+NULL
