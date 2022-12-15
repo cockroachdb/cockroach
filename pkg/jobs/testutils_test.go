@@ -141,7 +141,7 @@ func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	row, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(
 			"SELECT * FROM %s WHERE schedule_id = %d",
 			h.env.ScheduledJobsTableName(), id),
@@ -175,7 +175,7 @@ func addFakeJob(
 ) jobspb.JobID {
 	payload := []byte("fake payload")
 	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(`
 INSERT INTO %s (created_by_type, created_by_id, status, payload)
 VALUES ($1, $2, $3, $4)

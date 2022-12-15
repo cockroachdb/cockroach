@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -58,7 +57,7 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 	// Also, performing this under the same transaction as the scan loop is not ideal
 	// since a single failure would result in rollback for all of the changes.
 	_, err := cfg.InternalExecutor.ExecEx(ctx, "inline-exec", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		sqlArgs.Statement,
 	)
 

@@ -237,7 +237,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -319,7 +319,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestJobControlByType(t *testing.T) {
 			context.Background(),
 			"test-invalid-type",
 			nil,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			invalidTypeQuery,
 		)
 		require.Error(t, err)
@@ -434,7 +434,7 @@ func TestJobControlByType(t *testing.T) {
 					context.Background(),
 					"test-num-effected",
 					nil,
-					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+					sessiondata.RootUserSessionDataOverride,
 					commandQuery,
 				)
 				require.NoError(t, err)

@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
@@ -74,7 +73,7 @@ func (s *InternalExecutorWriter) WriteRangeLogEvent(
 	}
 
 	rows, err := s.ie.ExecEx(ctx, "log-range-event", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		s.insertQuery, args...)
 	if err != nil {
 		return err

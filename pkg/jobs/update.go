@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -155,7 +154,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		var row tree.Datums
 		row, err = j.registry.ex.QueryRowEx(
 			ctx, "select-job", txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			getSelectStmtForJobUpdate(j.session != nil, useReadLock), j.ID(),
 		)
 		if err != nil {

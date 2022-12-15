@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -120,7 +119,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 			ctx,
 			"poll-show-jobs",
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			query,
 		)
 		if err != nil {

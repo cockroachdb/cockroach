@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,7 +71,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
 				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */
-					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+					sessiondata.RootUserSessionDataOverride,
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
 					log.Errorf(ctx, "error when finalizing cluster version upgrade: %v", err)
@@ -158,7 +157,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	// SET CLUSTER SETTING.
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "read-downgrade", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
 	if err != nil {
@@ -182,7 +181,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "show-version", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"SHOW CLUSTER SETTING version;",
 	)
 	if err != nil {

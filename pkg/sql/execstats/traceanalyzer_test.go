@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -121,7 +120,7 @@ func TestTraceAnalyzer(t *testing.T) {
 			execCtx,
 			t.Name(),
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			testStmt,
 		)
 		require.NoError(t, err)
