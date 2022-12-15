@@ -1,0 +1,50 @@
+parse
+DECLARE
+  var1 integer := 30;
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END
+
+parse
+DECLARE
+  var1 CONSTANT INTEGER COLLATE collation_name NOT NULL := 30;
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END
+
+parse
+DECLARE
+  var1 CONSTANT INTEGER COLLATE collation_name NOT NULL DEFAULT 30;
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END
+
+parse
+DECLARE
+  var1 integer := 30;
+  var2 ALIAS FOR quantity;
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END
+
+parse
+DECLARE
+  var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END
+----
+DECLARE
+BEGIN
+END
