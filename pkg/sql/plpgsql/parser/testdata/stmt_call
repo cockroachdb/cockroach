@@ -1,0 +1,12 @@
+parse
+DECLARE
+BEGIN
+  CALL fn(1);
+  DO $$ this is a code block $$;
+END
+----
+DECLARE
+BEGIN
+CALL a function/procedure
+DO a code block
+END
