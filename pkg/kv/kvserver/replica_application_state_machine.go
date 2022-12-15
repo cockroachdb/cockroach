@@ -106,7 +106,6 @@ func replicaApplyTestingFilters(
 			}
 			var newRej int
 			newRej, newForcedErr = filter(args)
-			cmd.ForcedErr = newForcedErr
 			if rejection == 0 {
 				newRejection = kvserverbase.ProposalRejectionType(newRej)
 			}
