@@ -1296,7 +1296,7 @@ func insertJSONStatistic(
 		name = s.Name
 	}
 
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol) {
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
 
 		if s.PartialPredicate != "" {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)
@@ -1334,6 +1334,11 @@ func insertJSONStatistic(
 		predicateValue = s.PartialPredicate
 	}
 
+	var fullStatisticIDValue interface{}
+	if s.FullStatisticID != 0 {
+		fullStatisticIDValue = s.FullStatisticID
+	}
+
 	_ /* rows */, err := ie.Exec(
 		ctx,
 		"insert-stats",
@@ -1348,8 +1353,9 @@ func insertJSONStatistic(
 					"nullCount",
 					"avgSize",
 					histogram,
-					"partialPredicate"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+					"partialPredicate",
+					"fullStatisticID"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		tableID,
 		name,
 		columnIDs,
@@ -1360,6 +1366,7 @@ func insertJSONStatistic(
 		s.AvgSize,
 		histogram,
 		predicateValue,
+		fullStatisticIDValue,
 	)
 	return err
 }

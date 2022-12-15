@@ -54,6 +54,11 @@ message SketchSpec {
   // PartialPredicate is a string representing the predicate for a partial statistic,
   // and is the empty string for a full table statistic.
   optional string partial_predicate = 7 [(gogoproto.nullable) = false];
+
+  // FullStatisticID is non-zero for partial statistics and 0 for full
+  // statistics. It is the statistic id of the full statistic that this partial
+  // statistic was derived from.
+  optional uint64 full_statistic_id = 8 [(gogoproto.customname) = "FullStatisticID", (gogoproto.nullable) = false];
 }
 
 // SamplerSpec is the specification of a "sampler" processor which

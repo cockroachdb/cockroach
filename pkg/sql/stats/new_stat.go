@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // InsertNewStats inserts a slice of statistics at the current time into the
@@ -48,6 +49,7 @@ func InsertNewStats(
 			int64(statistic.AvgSize),
 			statistic.HistogramData,
 			statistic.PartialPredicate,
+			statistic.FullStatisticID,
 		)
 		if err != nil {
 			return err
@@ -71,6 +73,7 @@ func InsertNewStat(
 	rowCount, distinctCount, nullCount, avgSize int64,
 	h *HistogramData,
 	partialPredicate string,
+	fullStatisticID uint64,
 ) error {
 	// We must pass a nil interface{} if we want to insert a NULL.
 	var nameVal, histogramVal interface{}
@@ -92,7 +95,12 @@ func InsertNewStat(
 		}
 	}
 
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol) {
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
+
+		if partialPredicate != "" {
+			return errors.New("unable to insert new partial statistic as cluster version is from before V23.1.")
+		}
+
 		_, err := executor.Exec(
 			ctx, "insert-statistic", txn,
 			`INSERT INTO system.table_statistics (
@@ -135,8 +143,9 @@ func InsertNewStat(
 					"nullCount",
 					"avgSize",
 					histogram,
-					"partialPredicate"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+					"partialPredicate",
+					"fullStatisticID"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		tableID,
 		nameVal,
 		columnIDsVal,
@@ -146,6 +155,7 @@ func InsertNewStat(
 		avgSize,
 		histogramVal,
 		predicateValue,
+		fullStatisticID,
 	)
 	return err
 }
