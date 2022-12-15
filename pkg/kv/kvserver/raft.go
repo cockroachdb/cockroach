@@ -218,7 +218,7 @@ func raftEntryFormatter(data []byte) string {
 	if len(data) == 0 {
 		return "[empty]"
 	}
-	commandID, _ := kvserverbase.DecodeRaftCommand(data)
+	_, commandID, _ := kvserverbase.DecodeRaftCommand(data)
 	return fmt.Sprintf("[%x] [%d]", commandID, len(data))
 }
 
@@ -265,7 +265,7 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
 		if e.Type == raftpb.EntryNormal && len(e.Data) > 0 {
-			id, _ := kvserverbase.DecodeRaftCommand(e.Data)
+			_, id, _ := kvserverbase.DecodeRaftCommand(e.Data)
 			ids = append(ids, id)
 		}
 	}

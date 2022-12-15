@@ -98,7 +98,7 @@ func MaybeSideloadEntries(
 		}
 
 		ent := &entriesToAppend[i]
-		cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data) // cheap
+		_, cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data) // cheap
 
 		// Unmarshal the command into an object that we can mutate.
 		var strippedCmd kvserverpb.RaftCommand
@@ -181,7 +181,7 @@ func MaybeInlineSideloadedRaftCommand(
 
 	log.Event(ctx, "inlined entry not cached")
 	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
-	cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data)
+	_, cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data)
 
 	var command kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(data, &command); err != nil {
@@ -227,7 +227,7 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	}
 
 	var command kvserverpb.RaftCommand
-	_, data := kvserverbase.DecodeRaftCommand(ent.Data)
+	_, _, data := kvserverbase.DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

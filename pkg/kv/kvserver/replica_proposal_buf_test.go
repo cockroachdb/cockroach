@@ -96,7 +96,7 @@ func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	}
 	// Decode and save all the commands.
 	for _, e := range msg.Entries {
-		_ /* idKey */, encodedCommand := kvserverbase.DecodeRaftCommand(e.Data)
+		_, _, encodedCommand := kvserverbase.DecodeRaftCommand(e.Data)
 		t.proposals = append(t.proposals, kvserverpb.RaftCommand{})
 		if err := protoutil.Unmarshal(encodedCommand, &t.proposals[len(t.proposals)-1]); err != nil {
 			return err

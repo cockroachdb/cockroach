@@ -101,7 +101,7 @@ func (e *Entry) load() error {
 	var payload []byte
 	switch e.Type {
 	case raftpb.EntryNormal:
-		e.ID, payload = kvserverbase.DecodeRaftCommand(e.Data)
+		_, e.ID, payload = kvserverbase.DecodeRaftCommand(e.Data)
 	case raftpb.EntryConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
 		if err := protoutil.Unmarshal(e.Data, e.ConfChangeV1); err != nil {
