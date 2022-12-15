@@ -1618,6 +1618,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
+			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
 			return &factoryEvalCtx
 		}
 	}

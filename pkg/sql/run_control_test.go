@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -401,6 +402,18 @@ func TestCancelIfExists(t *testing.T) {
 	}
 }
 
+func TestCancelWithSubquery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, conn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	_, err := conn.Exec("CANCEL SESSION (SELECT session_id FROM [SHOW session_id]);")
+	require.EqualError(t, err, "driver: bad connection")
+}
+
 func TestIdleInSessionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -588,8 +601,8 @@ func TestTransactionTimeout(t *testing.T) {
 	_, err = conn.ExecContext(ctx, `ROLLBACK`)
 	require.NoError(t, err)
 
-	//Ensure the transaction times out when transaction is open and no statement
-	//is executed.
+	// Ensure the transaction times out when transaction is open and no statement
+	// is executed.
 	_, err = conn.ExecContext(ctx, `BEGIN`)
 	require.NoError(t, err)
 
