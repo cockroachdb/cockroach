@@ -851,6 +851,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [IndexData:{DescID: 109, IndexID: 2}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+  to:   [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index no longer public before index name
 - from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence

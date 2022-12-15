@@ -217,6 +217,7 @@ ALTER TABLE t DROP CONSTRAINT foo
 statement ok
 DROP INDEX foo CASCADE
 
+onlyif config local-legacy-schema-changer
 query TTTTRT retry
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -226,6 +227,21 @@ LIMIT 2
 ----
 SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    0  ·
 SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
+
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTTRT retry
+SELECT job_type, description, user_name, status, fraction_completed, error
+FROM crdb_internal.jobs
+WHERE job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
+ORDER BY created DESC
+LIMIT 2
+----
+SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@foo CASCADE  node  running    0  ·
+NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
+
+
 
 query TTBITTBBB colnames
 SHOW INDEXES FROM t
@@ -302,6 +318,7 @@ INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECI
 statement ok
 DROP INDEX t@t_f_idx
 
+onlyif config local-legacy-schema-changer
 query TTTTRT retry
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -311,6 +328,20 @@ LIMIT 2
 ----
 SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    0  ·
 SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTTRT retry
+SELECT job_type, description, user_name, status, fraction_completed, error
+FROM crdb_internal.jobs
+WHERE job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
+ORDER BY created DESC
+LIMIT 2
+----
+SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@t_f_idx  node  running    0  ·
+NEW SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
+
+
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -2073,6 +2104,7 @@ statement ok
 ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
 query TT
 SHOW CREATE TABLE t
 ----

@@ -25,26 +25,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO (xiang): To enable full support for DROP INDEX, we still need to
+// TODO (xiang): To remove fallbacks for DROP INDEX we still need to:
 //   1. Model adding and dropping FK constraints correctly
 //      for dropping an index with dependent FK constraint;
-//   2. Fix the "revertibility bug" in the planner as it currently
-//      seems to ignore non-revertible operations and plan
-//      them to happen in a much early phase (say, stmt phase);
-//   2.a. Once the above two are done, add a test where
-//        we drop an index with a dependent FK constraint and a
-//        dependent view to end-to-end test, scbuild test, scplan test.
-//   2.b. Answer the question "Are there any CCL required `DROP INDEX` usage?"
-//        If yes, add a end-to-end test in `pkg/ccl/schemachangerccl`.
+//   2. Once the above two are done, add a test where
+//      we drop an index with a dependent FK constraint and a
+//      dependent view to end-to-end test, scbuild test, scplan test.
 //   3. Check if requires CCL binary for eventual zone config removal.
-//   4. Make all existing unit tests and logic tests pass using this
-//      new `DROP INDEX` implementation. This will likely involve
-//      rewriting expected output since there are the legacy and declarative
-//      schema changer exhibits minor behavior difference. Ideally, we
-//      should modify the tests in a way such that if we turn off the
-//      declarative schema changer for `DROP INDEX`, the legacy schema
-//      changer's `DROP INDEX` will be able to pass all the tests as well.
-//   5. Set `DROP INDEX` to be fully-supported in `process.go`.
 
 // DropIndex implements DROP INDEX.
 // It resolves the to-be-dropped index into elements and inform `BuildCtx`
@@ -59,9 +46,9 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are dropped concurrently"))
 	}
 
+	var anyIndexesDropped bool
 	for _, index := range n.IndexList {
-		dropAnIndex(b, index, n.IfExists, n.DropBehavior)
-
+		anyIndexesDropped = dropAnIndex(b, index, n.IfExists, n.DropBehavior) || anyIndexesDropped
 		// Increment subwork ID so we know exactly which portion in
 		// a `DROP INDEX index1, index2, ...` statement is responsible
 		// for the creation of the targets.
@@ -69,20 +56,22 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 		b.IncrementSchemaChangeDropCounter("index")
 
 	}
-	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
-		b,
-		errors.WithHint(
-			pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),
-			"The reclamation delay can be customized in the zone configuration for the table.",
-		),
-	)
+	if anyIndexesDropped {
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+			b,
+			errors.WithHint(
+				pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),
+				"The reclamation delay can be customized in the zone configuration for the table.",
+			),
+		)
+	}
 }
 
 // dropAnIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
 func dropAnIndex(
 	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
-) {
+) (indexDropped bool) {
 	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
 		IsExistenceOptional: ifExists,
 		RequiredPrivilege:   privilege.CREATE,
@@ -90,7 +79,7 @@ func dropAnIndex(
 	if toBeDroppedIndexElms == nil {
 		// Attempt to resolve this index failed but `IF EXISTS` is set.
 		b.MarkNameAsNonExistent(&indexName.Table)
-		return
+		return false
 	}
 	// Panic if dropping primary index.
 	_, _, pie := scpb.FindPrimaryIndex(toBeDroppedIndexElms)
@@ -113,11 +102,12 @@ func dropAnIndex(
 	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"index %q is in use as unique constraint", indexName.String()),
+				"index %q is in use as unique constraint", indexName.Index.String()),
 			"use CASCADE if you really want to drop it.",
 		))
 	}
 	dropSecondaryIndex(b, indexName, dropBehavior, sie)
+	return true
 }
 
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
@@ -128,29 +118,31 @@ func dropSecondaryIndex(
 	dropBehavior tree.DropBehavior,
 	sie *scpb.SecondaryIndex,
 ) {
-	// Maybe drop dependent views.
-	// If CASCADE and there are "dependent" views (i.e. views that use this
-	// to-be-dropped index), then we will drop all dependent views and their
-	// dependents.
-	maybeDropDependentViews(b, sie, indexName.String(), dropBehavior)
+	{
+		next := b.WithNewSourceElementID()
+		// Maybe drop dependent views.
+		// If CASCADE and there are "dependent" views (i.e. views that use this
+		// to-be-dropped index), then we will drop all dependent views and their
+		// dependents.
+		maybeDropDependentViews(next, sie, indexName.Index.String(), dropBehavior)
 
-	// Maybe drop dependent FK constraints.
-	// A PK or unique constraint is required to serve an inbound FK constraint.
-	// It is possible that there is an inbound FK constraint 'fk' and it's
-	// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
-	// In this case, if we were to drop 'ui' and no other unique constraint can be
-	// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
-	//and drop 'fk' as well.
-	maybeDropDependentFKConstraints(b, sie, indexName, dropBehavior)
+		// Maybe drop dependent FK constraints.
+		// A PK or unique constraint is required to serve an inbound FK constraint.
+		// It is possible that there is an inbound FK constraint 'fk' and it's
+		// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
+		// In this case, if we were to drop 'ui' and no other unique constraint can be
+		// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
+		//and drop 'fk' as well.
+		maybeDropDependentFKConstraints(next, sie, indexName, dropBehavior)
 
-	// If shard index, also drop the shard column and all check constraints that
-	// uses this shard column if no other index uses the shard column.
-	maybeDropAdditionallyForShardedIndex(b, sie, indexName.String(), dropBehavior)
+		// If shard index, also drop the shard column and all check constraints that
+		// uses this shard column if no other index uses the shard column.
+		maybeDropAdditionallyForShardedIndex(next, sie, indexName.Index.String(), dropBehavior)
 
-	// If expression index, also drop the expression column if no other index is
-	// using the expression column.
-	dropAdditionallyForExpressionIndex(b, sie)
-
+		// If expression index, also drop the expression column if no other index is
+		// using the expression column.
+		dropAdditionallyForExpressionIndex(next, sie)
+	}
 	// Finally, drop the index's public elements and trigger a GC job.
 	b.QueryByID(sie.TableID).
 		Filter(hasIndexIDAttrFilter(sie.IndexID)).

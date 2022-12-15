@@ -18,7 +18,8 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
       │    │    ├── PUBLIC     → ABSENT      SecondaryIndexPartial:{DescID: 106, IndexID: 3}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-      │    └── 6 Mutation operations
+      │    └── 7 Mutation operations
+      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":106}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
@@ -32,10 +33,9 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 2}
            │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 3}
-           └── 8 Mutation operations
+           └── 7 Mutation operations
                 ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
-                ├── LogEvent {"TargetStatus":1}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}

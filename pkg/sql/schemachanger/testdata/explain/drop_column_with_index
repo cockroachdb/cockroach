@@ -14,14 +14,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         ├── 2 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
- │         ├── 4 elements transitioning toward ABSENT
+ │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: j, ColumnID: 2}
- │         │    ├── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
- │         │    └── PUBLIC → ABSENT        IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
- │         └── 9 Mutation operations
+ │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+ │         └── 8 Mutation operations
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
- │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
@@ -87,7 +85,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
       │    │    └── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-      │    ├── 8 elements transitioning toward ABSENT
+      │    ├── 9 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY → DELETE_ONLY           Column:{DescID: 104, ColumnID: 2}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
@@ -95,14 +93,17 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-      │    │    └── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-      │    └── 9 Mutation operations
+      │    │    ├── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+      │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
+      │    └── 11 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
+      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -112,8 +113,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    ├── 2 elements transitioning toward ABSENT
       │    │    ├── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    │    └── DELETE_ONLY           → ABSENT           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-      │    └── 6 Mutation operations
-      │         ├── LogEvent {"TargetStatus":1}
+      │    └── 5 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}

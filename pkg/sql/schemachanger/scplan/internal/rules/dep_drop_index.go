@@ -46,6 +46,21 @@ func init() {
 			}
 		},
 	)
+
+	// This rule helps us to have the index name inside event log entries.
+	registerDepRuleForDrop(
+		"index no longer public before index name",
+		scgraph.Precedence,
+		"index", "name",
+		scpb.Status_DELETE_ONLY, scpb.Status_ABSENT,
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.IndexName)(nil)),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+			}
+		},
+	)
 }
 
 // Special cases of the above.
@@ -104,4 +119,73 @@ func init() {
 		},
 	)
 
+}
+
+func init() {
+	// TODO(fqazi): We need to model these rules better to use indexes,
+	// since they may perform terrible in scenarios where we are dropping
+	// a large number of views and indexes (i.e. O(views * indexes) ).
+	registerDepRuleForDrop(
+		"dependent view no longer public before secondary index",
+		scgraph.Precedence,
+		"view", "index",
+		scpb.Status_DROPPED, scpb.Status_VALIDATED,
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.View)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil)),
+				filterElements("viewReferencesIndex", from, to, func(from *scpb.View, to *scpb.SecondaryIndex) bool {
+					for _, ref := range from.ForwardReferences {
+						if ref.ToID == to.TableID &&
+							ref.IndexID == to.IndexID {
+							return true
+						}
+					}
+					return false
+				}),
+			}
+		},
+	)
+	registerDepRuleForDrop(
+		"secondary index should be validated before dependent view can be absent",
+		scgraph.Precedence,
+		"index", "view",
+		scpb.Status_VALIDATED, scpb.Status_ABSENT,
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.View)(nil)),
+				filterElements("viewReferencesIndex", from, to, func(from *scpb.SecondaryIndex, to *scpb.View) bool {
+					for _, ref := range to.ForwardReferences {
+						if ref.ToID == from.TableID &&
+							ref.IndexID == from.IndexID {
+							return true
+						}
+					}
+					return false
+				}),
+			}
+		},
+	)
+	registerDepRuleForDrop(
+		"dependent view absent before secondary index",
+		scgraph.Precedence,
+		"view", "index",
+		scpb.Status_ABSENT, scpb.Status_ABSENT,
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.View)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil)),
+				filterElements("viewReferencesIndex", from, to, func(from *scpb.View, to *scpb.SecondaryIndex) bool {
+					for _, ref := range from.ForwardReferences {
+						if ref.ToID == to.TableID &&
+							ref.IndexID == to.IndexID {
+							return true
+						}
+					}
+					return false
+				}),
+			}
+		},
+	)
 }

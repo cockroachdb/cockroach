@@ -39,7 +39,12 @@ skipif config local-legacy-schema-changer
 statement error must be owner of table t45707 or have CREATE privilege on table t45707
 COMMENT ON COLUMN d45707.t45707.x IS 'x45707'
 
+onlyif config local-legacy-schema-changer
 statement error user testuser does not have CREATE privilege on relation t45707
+COMMENT ON INDEX d45707.t45707@t45707_pkey IS 'p45707'
+
+skipif config local-legacy-schema-changer
+statement error must be owner of table t45707 or have CREATE privilege on table t45707
 COMMENT ON INDEX d45707.t45707@t45707_pkey IS 'p45707'
 
 # Verify that the user can view the comments

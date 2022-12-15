@@ -239,7 +239,7 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 			collectDependentViewNames = true
 			collectDependentTables = true
 			collectDependentSequences = true
-		case *eventpb.DropView, *eventpb.DropTable:
+		case *eventpb.DropView, *eventpb.DropTable, *eventpb.DropIndex:
 			// Drop view and drop tables only cares about
 			// dependent views
 			collectDependentViewNames = true
@@ -270,6 +270,8 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 			ev.CascadeDroppedViews = dependentObjects
 		case *eventpb.DropDatabase:
 			ev.DroppedSchemaObjects = dependentObjects
+		case *eventpb.DropIndex:
+			ev.CascadeDroppedViews = dependentObjects
 		}
 		// Generate event log entries for the source event only. The dependent
 		// events will be ignored.

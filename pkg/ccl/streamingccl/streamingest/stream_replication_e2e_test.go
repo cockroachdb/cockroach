@@ -1280,26 +1280,30 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
-	testStartTime := timeutil.Now()
 	producerJobID, ingestionJobID := c.startStreamReplication()
 
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	highWatermark := c.srcCluster.Server(0).Clock().Now()
 	c.waitUntilHighWatermark(highWatermark, jobspb.JobID(ingestionJobID))
+	destRegistry := c.destCluster.Server(0).JobRegistry().(*jobs.Registry)
+	details, err := destRegistry.LoadJob(ctx, jobspb.JobID(ingestionJobID))
+	require.NoError(t, err)
+	replicationDetails := details.Details().(jobspb.StreamIngestionDetails)
 
 	var (
-		id            int
-		dest          string
-		status        string
-		source        string
-		sourceUri     string
-		jobId         int
-		maxReplTime   time.Time
-		protectedTime time.Time
+		id                   int
+		dest                 string
+		status               string
+		source               string
+		sourceUri            string
+		jobId                int
+		maxReplTime          time.Time
+		protectedTime        time.Time
+		replicationStartTime time.Time
 	)
 	row := c.destSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.destTenantName))
-	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime)
+	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &replicationStartTime)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "ADD", status)
@@ -1309,6 +1313,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.Less(t, maxReplTime, timeutil.Now())
 	require.Less(t, protectedTime, timeutil.Now())
 	require.GreaterOrEqual(t, maxReplTime, highWatermark.GoTime())
-	// TODO(lidor): replace this start time with the actual replication start time when we have it.
-	require.GreaterOrEqual(t, protectedTime, testStartTime)
+	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
+	require.Equal(t, replicationStartTime.UnixMicro(),
+		timeutil.Unix(0, replicationDetails.ReplicationStartTime.WallTime).UnixMicro())
 }
