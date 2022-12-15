@@ -3404,7 +3404,9 @@ func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
 		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 		s := tc.store
 
-		action, _, _, err := s.AllocatorCheckRange(ctx, tc.repl.Desc(), nil /* overrideStorePool */)
+		action, _, _, err := s.AllocatorCheckRange(ctx, tc.repl.Desc(),
+			false /* collectTraces */, nil, /* overrideStorePool */
+		)
 		require.Error(t, err)
 
 		if confAvailable {
@@ -3554,7 +3556,9 @@ func TestAllocatorCheckRange(t *testing.T) {
 			}
 
 			// Execute actual allocator range repair check.
-			action, target, recording, err := s.AllocatorCheckRange(ctx, desc, storePoolOverride)
+			action, target, recording, err := s.AllocatorCheckRange(ctx, desc,
+				true /* collectTraces */, storePoolOverride,
+			)
 
 			// Validate expectations from test case.
 			if tc.expectErr || tc.expectAllocatorErr {
