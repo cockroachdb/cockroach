@@ -72,12 +72,14 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 // stmt_assign
 type PLpgSQLStmtAssign struct {
 	PLpgSQLStatement
-	Var   PLpgSQLVariable
-	Value PLpgSQLExpr
+	// TODO(jane): It should be PLpgSQLVariable.
+	Var string
+	// TODO(jane): It should be PLpgSQLExpr.
+	Value string
 }
 
 func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
-
+	ctx.WriteString(fmt.Sprintf("ASSIGN %s := %s\n", s.Var, s.Value))
 }
 
 // stmt_if
@@ -359,19 +361,36 @@ func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
 type PLpgSQLStmtGetDiag struct {
 	PLpgSQLStatementImpl
 	IsStacked bool
-	DiagItems []PLpgSQLStmtGetDiagItem // TODO what is this?
+	DiagItems PLpgSQLStmtGetDiagItemList // TODO what is this?
 }
 
 func (s *PLpgSQLStmtGetDiag) Format(ctx *tree.FmtCtx) {
+	if s.IsStacked {
+		ctx.WriteString("GET STACKED DIAGNOSTICS ")
+	} else {
+		ctx.WriteString("GET DIAGNOSTICS ")
+	}
+	for idx, i := range s.DiagItems {
+		i.Format(ctx)
+		if idx != len(s.DiagItems)-1 {
+			ctx.WriteString(" ")
+		}
+	}
+	ctx.WriteString("\n")
 }
 
 type PLpgSQLStmtGetDiagItem struct {
-	Kind   PLpgSQLGetDiagKind
-	Target int // where to assign it?
+	Kind PLpgSQLGetDiagKind
+	// TODO(jane): TargetName is temporary -- should be removed and use Target.
+	TargetName string
+	Target     int // where to assign it?
 }
 
 func (s *PLpgSQLStmtGetDiagItem) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("%s := %s", s.TargetName, s.Kind.String()))
 }
+
+type PLpgSQLStmtGetDiagItemList []*PLpgSQLStmtGetDiagItem
 
 // stmt_open
 type PLpgSQLStmtOpen struct {
