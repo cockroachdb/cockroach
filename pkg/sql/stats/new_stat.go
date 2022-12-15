@@ -48,6 +48,7 @@ func InsertNewStats(
 			int64(statistic.AvgSize),
 			statistic.HistogramData,
 			statistic.PartialPredicate,
+			statistic.FullStatisticsID,
 		)
 		if err != nil {
 			return err
@@ -71,6 +72,7 @@ func InsertNewStat(
 	rowCount, distinctCount, nullCount, avgSize int64,
 	h *HistogramData,
 	partialPredicate string,
+	fullStatisticsID uint64,
 ) error {
 	// We must pass a nil interface{} if we want to insert a NULL.
 	var nameVal, histogramVal interface{}
@@ -92,7 +94,7 @@ func InsertNewStat(
 		}
 	}
 
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol) {
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
 		_, err := executor.Exec(
 			ctx, "insert-statistic", txn,
 			`INSERT INTO system.table_statistics (
@@ -135,8 +137,9 @@ func InsertNewStat(
 					"nullCount",
 					"avgSize",
 					histogram,
-					"partialPredicate"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+					"partialPredicate",
+          "fullStatisticsID"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		tableID,
 		nameVal,
 		columnIDsVal,
@@ -146,6 +149,7 @@ func InsertNewStat(
 		avgSize,
 		histogramVal,
 		predicateValue,
+		fullStatisticsID,
 	)
 	return err
 }
