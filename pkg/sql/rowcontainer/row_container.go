@@ -650,7 +650,7 @@ type DiskBackedIndexedRowContainer struct {
 	firstCachedRowPos int
 	nextPosToCache    int
 	// indexedRowsCache is the cache of up to maxCacheSize contiguous rows.
-	indexedRowsCache ring.Buffer
+	indexedRowsCache ring.Buffer[eval.IndexedRow]
 	// maxCacheSize indicates the maximum number of rows to be cached. It is
 	// initialized to maxIndexedRowsCacheSize and dynamically adjusted if OOM
 	// error is encountered.
@@ -783,7 +783,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 		if pos >= f.firstCachedRowPos && pos < f.nextPosToCache {
 			requestedRowCachePos := pos - f.firstCachedRowPos
 			f.hitCount++
-			return f.indexedRowsCache.Get(requestedRowCachePos).(eval.IndexedRow), nil
+			return f.indexedRowsCache.Get(requestedRowCachePos), nil
 		}
 		f.missCount++
 		if f.diskRowIter == nil {
@@ -860,7 +860,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 					return nil, errors.Errorf("unexpected last column type: should be DInt but found %T", idx)
 				}
 				if f.idxRowIter == pos {
-					return f.indexedRowsCache.GetLast().(eval.IndexedRow), nil
+					return f.indexedRowsCache.GetLast(), nil
 				}
 			}
 			f.idxRowIter++

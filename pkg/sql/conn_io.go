@@ -97,7 +97,7 @@ type StmtBuf struct {
 		cond *sync.Cond
 
 		// data contains the elements of the buffer.
-		data ring.Buffer // []Command
+		data ring.Buffer[Command]
 
 		// startPos indicates the index of the first command currently in data
 		// relative to the start of the connection.
@@ -459,7 +459,7 @@ func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 		}
 		len := buf.mu.data.Len()
 		if cmdIdx < len {
-			return buf.mu.data.Get(cmdIdx).(Command), curPos, nil
+			return buf.mu.data.Get(cmdIdx), curPos, nil
 		}
 		if cmdIdx != len {
 			return nil, 0, errors.AssertionFailedf(

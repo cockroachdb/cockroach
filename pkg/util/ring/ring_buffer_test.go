@@ -21,7 +21,7 @@ import (
 func TestRingBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const operationCount = 100
-	var buffer Buffer
+	var buffer Buffer[int]
 	naiveBuffer := make([]interface{}, 0, operationCount)
 	for i := 0; i < operationCount; i++ {
 		switch rand.Intn(5) {
@@ -53,14 +53,17 @@ func TestRingBuffer(t *testing.T) {
 		default:
 			t.Fatal("unexpected")
 		}
-
-		require.Equal(t, naiveBuffer, buffer.all())
+		contents := make([]interface{}, 0, buffer.Len())
+		for _, v := range buffer.all() {
+			contents = append(contents, v)
+		}
+		require.Equal(t, naiveBuffer, contents)
 	}
 }
 
 func TestRingBufferCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var b Buffer
+	var b Buffer[string]
 
 	require.Panics(t, func() { b.Reserve(-1) })
 	require.Equal(t, 0, b.Len())
