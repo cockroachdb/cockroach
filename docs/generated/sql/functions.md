@@ -3440,6 +3440,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list of a function, in the form it would need to appear in within CREATE FUNCTION.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_identity_arguments"></a><code>pg_get_function_identity_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (without defaults) necessary to identify a function, in the form it would need to appear in within ALTER FUNCTION, for instance.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_result"></a><code>pg_get_function_result(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the types of the result of the specified function.</p>

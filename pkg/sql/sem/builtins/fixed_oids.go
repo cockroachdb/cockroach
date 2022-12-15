@@ -1218,6 +1218,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`pg_get_expr(pg_node_tree: string, relation_oid: oid) -> string`:                                    1403,
 	`pg_get_expr(pg_node_tree: string, relation_oid: oid, pretty_bool: bool) -> string`:                 1404,
 	`pg_get_functiondef(func_oid: oid) -> string`:                                                       2035,
+	`pg_get_function_arguments(func_oid: oid) -> string`:                                                2058,
 	`pg_get_function_identity_arguments(func_oid: oid) -> string`:                                       1409,
 	`pg_get_function_result(func_oid: oid) -> string`:                                                   1408,
 	`pg_get_indexdef(index_oid: oid) -> string`:                                                         1410,
