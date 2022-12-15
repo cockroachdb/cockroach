@@ -45,12 +45,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE global_table
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 134217728,
-               range_max_bytes = 536870912,
-               gc.ttlseconds = 90000,
-               num_replicas = 3,
-               constraints = '[]',
-               lease_preferences = '[]'
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 3,
+                 constraints = '[]',
+                 lease_preferences = '[]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE global_table_custom_gc_ttl
@@ -72,12 +72,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 134217728,
-               range_max_bytes = 536870912,
-               gc.ttlseconds = 90000,
-               num_replicas = 3,
-               constraints = '[]',
-               lease_preferences = '[]'
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 3,
+                 constraints = '[]',
+                 lease_preferences = '[]'
 
 statement ok
 ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING gc.ttlseconds = 10;
@@ -757,12 +757,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 134217728,
-               range_max_bytes = 536870912,
-               gc.ttlseconds = 90000,
-               num_replicas = 3,
-               constraints = '[]',
-               lease_preferences = '[]'
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 3,
+                 constraints = '[]',
+                 lease_preferences = '[]'
 
 statement ok
 ALTER INDEX regional_by_row@regional_by_row_pkey CONFIGURE ZONE DISCARD
@@ -904,15 +904,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX tbl1@tbl1_i_idx
 ----
 TABLE tbl1  ALTER TABLE tbl1 CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 3,
-            num_voters = 3,
-            constraints = '{+region=us-east-1: 1}',
-            voter_constraints = '[+region=us-east-1]',
-            lease_preferences = '[[+region=us-east-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 3,
+              num_voters = 3,
+              constraints = '{+region=us-east-1: 1}',
+              voter_constraints = '[+region=us-east-1]',
+              lease_preferences = '[[+region=us-east-1]]'
 
 # Confirm that the zone configuration was wiped above by changing the locality
 # again, this time without an override.
@@ -1086,14 +1086,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX tbl3@tbl3_i_idx
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 # DISCARDing a partition's zone configuration on a RBR table should fail.
 statement error attempting to discard the zone configuration of a multi-region entity
@@ -1138,14 +1138,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl3
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 DROP TABLE tbl3
@@ -1193,14 +1193,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX tbl4@tbl4_i_idx
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 ALTER TABLE tbl4 CONFIGURE ZONE USING gc.ttlseconds=10
@@ -1234,14 +1234,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl4
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 # Test all cases where DISCARD is used to remove a zone configuration from a
 # REGIONAL BY TABLE IN REGION <region> table.
@@ -1286,14 +1286,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX tbl5@tbl5_i_idx
 ----
 TABLE tbl5  ALTER TABLE tbl5 CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            num_replicas = 3,
-            num_voters = 3,
-            constraints = '{+region=us-east-1: 1}',
-            voter_constraints = '[+region=us-east-1]',
-            lease_preferences = '[[+region=us-east-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              num_replicas = 3,
+              num_voters = 3,
+              constraints = '{+region=us-east-1: 1}',
+              voter_constraints = '[+region=us-east-1]',
+              lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 ALTER TABLE tbl5 CONFIGURE ZONE USING gc.ttlseconds=10
@@ -1332,14 +1332,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl5
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 DROP TABLE tbl5
@@ -1389,15 +1389,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX tbl6@tbl6_i_idx
 ----
 TABLE tbl6  ALTER TABLE tbl6 CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 3,
-            num_voters = 3,
-            constraints = '{+region=us-east-1: 1}',
-            voter_constraints = '[+region=us-east-1]',
-            lease_preferences = '[[+region=us-east-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 3,
+              num_voters = 3,
+              constraints = '{+region=us-east-1: 1}',
+              voter_constraints = '[+region=us-east-1]',
+              lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 ALTER TABLE tbl6 CONFIGURE ZONE USING gc.ttlseconds=10
@@ -1438,14 +1438,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl6
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 DROP TABLE tbl6
@@ -1483,14 +1483,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@tbl8_pkey
 ----
 PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey  ALTER PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey CONFIGURE ZONE USING
-                                             range_min_bytes = 134217728,
-                                             range_max_bytes = 536870912,
-                                             gc.ttlseconds = 90000,
-                                             num_replicas = 3,
-                                             num_voters = 3,
-                                             constraints = '{+region=us-east-1: 1}',
-                                             voter_constraints = '[+region=us-east-1]',
-                                             lease_preferences = '[[+region=us-east-1]]'
+                                                 range_min_bytes = 134217728,
+                                                 range_max_bytes = 536870912,
+                                                 gc.ttlseconds = 14400,
+                                                 num_replicas = 3,
+                                                 num_voters = 3,
+                                                 constraints = '{+region=us-east-1: 1}',
+                                                 voter_constraints = '[+region=us-east-1]',
+                                                 lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 SET override_multi_region_zone_config = true;
@@ -1501,14 +1501,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@tbl8_pkey
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 statement error missing zone configuration for partition "us-east-1" of tbl8@tbl8_pkey
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -1523,14 +1523,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" of INDEX tbl8@tbl8_pkey
 ----
 PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey  ALTER PARTITION "us-east-1" OF INDEX tbl8@tbl8_pkey CONFIGURE ZONE USING
-                                             range_min_bytes = 134217728,
-                                             range_max_bytes = 536870912,
-                                             gc.ttlseconds = 90000,
-                                             num_replicas = 3,
-                                             num_voters = 3,
-                                             constraints = '{+region=us-east-1: 1}',
-                                             voter_constraints = '[+region=us-east-1]',
-                                             lease_preferences = '[[+region=us-east-1]]'
+                                                 range_min_bytes = 134217728,
+                                                 range_max_bytes = 536870912,
+                                                 gc.ttlseconds = 14400,
+                                                 num_replicas = 3,
+                                                 num_voters = 3,
+                                                 constraints = '{+region=us-east-1: 1}',
+                                                 voter_constraints = '[+region=us-east-1]',
+                                                 lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -1635,14 +1635,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl10
 ----
 DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 3,
-                                 num_voters = 3,
-                                 constraints = '{+region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 3,
+                                   num_voters = 3,
+                                   constraints = '{+region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 statement error zone configuration for table tbl10 contains incorrectly configured field "num_voters"
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -1657,14 +1657,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl10
 ----
 TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 90000,
-             num_replicas = 3,
-             num_voters = 3,
-             constraints = '{+region=us-east-1: 1}',
-             voter_constraints = '[+region=us-east-1]',
-             lease_preferences = '[[+region=us-east-1]]'
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 3,
+               num_voters = 3,
+               constraints = '{+region=us-east-1: 1}',
+               voter_constraints = '[+region=us-east-1]',
+               lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -1678,14 +1678,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl10
 ----
 TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 90000,
-             num_replicas = 5,
-             num_voters = 3,
-             constraints = '{+region=us-east-1: 1}',
-             voter_constraints = '[+region=us-east-1]',
-             lease_preferences = '[[+region=us-east-1]]'
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 5,
+               num_voters = 3,
+               constraints = '{+region=us-east-1: 1}',
+               voter_constraints = '[+region=us-east-1]',
+               lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 SELECT crdb_internal.reset_multi_region_zone_configs_for_table($tbl10_id)
@@ -1694,14 +1694,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl10
 ----
 TABLE tbl10  ALTER TABLE tbl10 CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 90000,
-             num_replicas = 3,
-             num_voters = 3,
-             constraints = '{+region=us-east-1: 1}',
-             voter_constraints = '[+region=us-east-1]',
-             lease_preferences = '[[+region=us-east-1]]'
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 3,
+               num_voters = 3,
+               constraints = '{+region=us-east-1: 1}',
+               voter_constraints = '[+region=us-east-1]',
+               lease_preferences = '[[+region=us-east-1]]'
 
 # Ensure that built-in no-ops on non-multi-region tables.
 statement ok
@@ -1724,12 +1724,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl11
 ----
 TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 90000,
-             num_replicas = 10,
-             constraints = '[]',
-             lease_preferences = '[]'
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 10,
+               constraints = '[]',
+               lease_preferences = '[]'
 
 let $tbl11_id
 select table_id from crdb_internal.tables where name = 'tbl11'
@@ -1741,12 +1741,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl11
 ----
 TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 90000,
-             num_replicas = 10,
-             constraints = '[]',
-             lease_preferences = '[]'
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 14400,
+               num_replicas = 10,
+               constraints = '[]',
+               lease_preferences = '[]'
 
 query error pq: crdb_internal\.reset_multi_region_zone_configs_for_table\(\): error resolving referenced table ID 1: relation "\[1\]" does not exist
 SELECT crdb_internal.reset_multi_region_zone_configs_for_table(1)
@@ -1762,15 +1762,15 @@ USE "rebuild_zc_db"
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
 ----
-DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
- range_min_bytes = 134217728,
- range_max_bytes = 536870912,
- gc.ttlseconds = 90000,
- num_replicas = 5,
- num_voters = 3,
- constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
- voter_constraints = '[+region=ca-central-1]',
- lease_preferences = '[[+region=ca-central-1]]'
+DATABASE rebuild_zc_db  ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 5,
+                          num_voters = 3,
+                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                          voter_constraints = '[+region=ca-central-1]',
+                          lease_preferences = '[[+region=ca-central-1]]'
 
 
 statement ok
@@ -1781,15 +1781,15 @@ SET override_multi_region_zone_config = false
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
 ----
-DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
- range_min_bytes = 134217728,
- range_max_bytes = 536870912,
- gc.ttlseconds = 90000,
- num_replicas = 10,
- num_voters = 3,
- constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
- voter_constraints = '[+region=ca-central-1]',
- lease_preferences = '[[+region=ca-central-1]]'
+DATABASE rebuild_zc_db  ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 10,
+                          num_voters = 3,
+                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                          voter_constraints = '[+region=ca-central-1]',
+                          lease_preferences = '[[+region=ca-central-1]]'
 
 let $rebuild_db_id
 select id from crdb_internal.databases where name = 'rebuild_zc_db'
@@ -1800,15 +1800,15 @@ SELECT crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
 ----
-DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
- range_min_bytes = 134217728,
- range_max_bytes = 536870912,
- gc.ttlseconds = 90000,
- num_replicas = 5,
- num_voters = 3,
- constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
- voter_constraints = '[+region=ca-central-1]',
- lease_preferences = '[[+region=ca-central-1]]'
+DATABASE rebuild_zc_db  ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 5,
+                          num_voters = 3,
+                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                          voter_constraints = '[+region=ca-central-1]',
+                          lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -1821,13 +1821,13 @@ SET override_multi_region_zone_config = false
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
 ----
-RANGE default ALTER RANGE default CONFIGURE ZONE USING
- range_min_bytes = 134217728,
- range_max_bytes = 536870912,
- gc.ttlseconds = 90000,
- num_replicas = 3,
- constraints = '[]',
- lease_preferences = '[]'
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 3,
+                 constraints = '[]',
+                 lease_preferences = '[]'
 
 statement ok
 SELECT crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id)
@@ -1835,15 +1835,15 @@ SELECT crdb_internal.reset_multi_region_zone_configs_for_database($rebuild_db_id
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "rebuild_zc_db"
 ----
-DATABASE rebuild_zc_db ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
- range_min_bytes = 134217728,
- range_max_bytes = 536870912,
- gc.ttlseconds = 90000,
- num_replicas = 5,
- num_voters = 3,
- constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
- voter_constraints = '[+region=ca-central-1]',
- lease_preferences = '[[+region=ca-central-1]]'
+DATABASE rebuild_zc_db  ALTER DATABASE rebuild_zc_db CONFIGURE ZONE USING
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 5,
+                          num_voters = 3,
+                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                          voter_constraints = '[+region=ca-central-1]',
+                          lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
