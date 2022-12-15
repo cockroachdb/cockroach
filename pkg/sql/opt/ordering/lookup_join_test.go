@@ -137,15 +137,15 @@ func TestLookupJoinProvided(t *testing.T) {
 			input:    "+5",
 			provided: "+1,+2",
 		},
-		{ // case 8: the lookup join preserves the input ordering but cannot provide
-			// the entire required ordering because the index has a descending column.
+		{ // case 8: the lookup join preserves the input ordering and maintains the
+			// ordering of the descending index on lookups. Joining on c1 = c5.
 			index:    descendingIndex,
 			keyCols:  opt.ColList{5},
 			inputKey: c(5, 6),
 			outCols:  c(2, 3, 4, 5, 6),
 			required: "+(1|5),+6,-2",
 			input:    "+5,+6",
-			provided: "+5,+6",
+			provided: "+5,+6,-2",
 		},
 	}
 
@@ -317,14 +317,13 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(1|5),+6,-2",
 			canProvide: false,
 		},
-		{ // Case 11: the ordering cannot be satisfied because the lookup index has
-			// a descending column.
+		{ // Case 11: an ordering with a descending column can be satisfied..
 			idx:        descendingIndex,
 			keyCols:    opt.ColList{5},
 			outCols:    c(1, 2, 5, 6),
 			inputKey:   c(5, 6),
 			required:   "+(1|5),+6,-2",
-			canProvide: false,
+			canProvide: true,
 		},
 		{ // Case 12: the ordering cannot be satisfied because the required ordering
 			// is missing index column c1.
