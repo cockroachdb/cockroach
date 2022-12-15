@@ -9,31 +9,42 @@ load("@io_bazel_rules_go//go:def.bzl", "GoLibrary")
 _DepsInfo = provider(
     fields = {
         "cdeps": "dictionary with imported cdep names",
-        "deps": "depset of targets",
         "dep_pkgs": "dictionary with package names",
+        "deps": "depset of targets",
     },
 )
 
-def _deps_aspect_impl(target, ctx):
-    cdeps = {}
-    for cdep in ctx.rule.attr.cdeps:
-        cdeps[cdep.label] = True
-    dep_pkgs = {ctx.rule.attr.importpath: True}
-    for dep in ctx.rule.attr.deps:
+def _update_with_targets(attrs, attr_name, cdeps, dep_pkgs):
+    if not hasattr(attrs, attr_name):
+        return []
+    dep_list = getattr(attrs, attr_name)
+    for dep in dep_list:
         dep_pkgs.update(dep[_DepsInfo].dep_pkgs)
         cdeps.update(dep[_DepsInfo].cdeps)
+    return dep_list
+
+def _deps_aspect_impl(target, ctx):
+    cdeps = {}
+    if hasattr(ctx.rule.attr, "cdeps"):
+        cdeps = {cdep.label: True for cdep in ctx.rule.attr.cdeps}
+    dep_pkgs = {}
+    if hasattr(ctx.rule.attr, "importpath"):
+        dep_pkgs = {ctx.rule.attr.importpath: True}
+    all_deps = []
+    all_deps += _update_with_targets(ctx.rule.attr, "deps", cdeps, dep_pkgs)
+    all_deps += _update_with_targets(ctx.rule.attr, "embed", cdeps, dep_pkgs)
     return [_DepsInfo(
         cdeps = cdeps,
+        dep_pkgs = dep_pkgs,
         deps = depset(
             [target],
-            transitive = [dep[_DepsInfo].deps for dep in ctx.rule.attr.deps],
+            transitive = [dep[_DepsInfo].deps for dep in all_deps],
         ),
-        dep_pkgs = dep_pkgs,
     )]
 
 _deps_aspect = aspect(
     implementation = _deps_aspect_impl,
-    attr_aspects = ["deps"],
+    attr_aspects = ["deps", "embed"],
     provides = [_DepsInfo],
 )
 
@@ -51,14 +62,15 @@ def _deps_rule_impl(ctx):
     )
     deps = {k: None for k in ctx.attr.src[_DepsInfo].deps.to_list()}
     if ctx.attr.allowlist:
-        failed = [p for p in deps if p not in ctx.attr.allowlist and p.label != ctx.attr.src.label]
+        failed = [p for p in deps if p not in ctx.attr.allowlist and
+                                     p.label != ctx.attr.src.label]
     else:
         failed = [p for p in ctx.attr.disallowed_list if p in deps]
     failures = []
     if failed_prefixes:
         failures.extend([
             """\
-echo >&2 "ERROR: {0} depends on {1} with disallowed prefix {2}"
+echo >&2 "ERROR: {0} depends on {1} with disallowed prefix {2}"\
 """.format(ctx.attr.src.label, p[0], p[1])
             for p in failed_prefixes
         ])
@@ -73,9 +85,9 @@ echo >&2 "ERROR: {0} imports {1}
     if ctx.attr.disallow_cdeps:
         for cdep in ctx.attr.src[_DepsInfo].cdeps:
             failures.extend([
-                """
-      echo >&2 "ERROR: {0} depends on a c-dep {1}, which is disallowed"
-      """.format(ctx.attr.src.label, cdep),
+                """\
+echo >&2 "ERROR: {0} depends on a c-dep {1}, which is disallowed"\
+""".format(ctx.attr.src.label, cdep),
             ])
     if failures:
         data = "\n".join(failures + ["exit 1"])
@@ -123,7 +135,8 @@ def disallowed_imports_test(
         disallow_cdeps = False,
         allowlist = []):
     if (disallowed_list and allowlist) or (disallowed_prefixes and allowlist):
-        fail("allowlist or (disallowed_list or disallowed_prefixes) can be provided, but not both")
+        fail("allowlist or (disallowed_list or disallowed_prefixes) can be " +
+             "provided, but not both")
     disallowed_prefixes = _validate_disallowed_prefixes(disallowed_prefixes)
     script = src.strip(":") + "_disallowed_imports_script"
     _deps_rule(

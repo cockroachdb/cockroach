@@ -78,7 +78,7 @@ func NewOneInputDiskSpiller(
 	inMemoryMemMonitorName redact.RedactableString,
 	diskBackedOpConstructor func(input colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
-) colexecop.Operator {
+) colexecop.ClosableOperator {
 	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
 	return &diskSpillerBase{
 		inputs:                 []colexecop.Operator{input},
@@ -145,7 +145,7 @@ func NewTwoInputDiskSpiller(
 	inMemoryMemMonitorName redact.RedactableString,
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
-) colexecop.Operator {
+) colexecop.ClosableOperator {
 	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
 	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
 	return &diskSpillerBase{
