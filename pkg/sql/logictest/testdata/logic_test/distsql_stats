@@ -2070,6 +2070,19 @@ xy_x             NULL                                               4          0
 xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 
+# Verify that the full_histogram_id of the partial statistic
+# is the statistics_id (or the histogram_id which is the same
+# as the statistics_id) of the full statistic it was built from.
+let $statistics_id
+SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE xy] WHERE "statistics_name" = 'xy_x'
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE xy] WHERE full_histogram_id = '$statistics_id'
+----
+statistics_name  partial_predicate                                  row_count  null_count
+xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+
 # Test null values.
 statement ok
 CREATE TABLE a_null (a INT, INDEX (a));

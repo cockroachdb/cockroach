@@ -41,7 +41,7 @@ var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "histogram_id", Typ: types.Int},
 }
 
-var showTableStatsColumnsPartialPredVer = colinfo.ResultColumns{
+var showTableStatsColumnsPartialStatisticsVer = colinfo.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.StringArray},
 	{Name: "created", Typ: types.Timestamp},
@@ -51,6 +51,7 @@ var showTableStatsColumnsPartialPredVer = colinfo.ResultColumns{
 	{Name: "avg_size", Typ: types.Int},
 	{Name: "partial_predicate", Typ: types.String},
 	{Name: "histogram_id", Typ: types.Int},
+	{Name: "full_histogram_id", Typ: types.Int},
 }
 
 var showTableStatsJSONColumns = colinfo.ResultColumns{
@@ -82,9 +83,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
-	partialPredColVerActive := p.ExtendedEvalContext().ExecCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol)
-	columns := showTableStatsColumnsPartialPredVer
-	if !partialPredColVerActive {
+	partialStatsVerActive := p.ExtendedEvalContext().ExecCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns)
+	columns := showTableStatsColumnsPartialStatisticsVer
+	if !partialStatsVerActive {
 		columns = showTableStatsColumns
 	}
 	if n.UsingJSON {
@@ -101,10 +102,14 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
-			var partialPred string
-			if partialPredColVerActive {
-				partialPred = `
+			var partialPredicateCol string
+			var fullStatisticIDCol string
+			if partialStatsVerActive {
+				partialPredicateCol = `
 "partialPredicate",`
+				fullStatisticIDCol = `
+,"fullStatisticID"
+`
 			}
 			stmt := fmt.Sprintf(`SELECT
 							"tableID",
@@ -118,9 +123,10 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 							"avgSize",
 							%s
 							histogram
+							%s
 						FROM system.table_statistics
 						WHERE "tableID" = $1
-						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialPred)
+						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialPredicateCol, fullStatisticIDCol)
 			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 				ctx,
 				"read-table-stats",
@@ -144,14 +150,15 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				avgSizeIdx
 				partialPredicateIdx
 				histogramIdx
+				fullStatisticIDIdx
 				numCols
 			)
 
 			histIdx := histogramIdx
 			nCols := numCols
-			if !partialPredColVerActive {
+			if !partialStatsVerActive {
 				histIdx = histogramIdx - 1
-				nCols = numCols - 1
+				nCols = numCols - 2
 			}
 
 			// Guard against crashes in the code below (e.g. #56356).
@@ -191,7 +198,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					if ignoreStatsRowWithDroppedColumn {
 						continue
 					}
-					stat, err := stats.NewTableStatisticProto(row, partialPredColVerActive)
+					stat, err := stats.NewTableStatisticProto(row, partialStatsVerActive)
 					if err != nil {
 						return nil, err
 					}
@@ -214,7 +221,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 				// Iterate in reverse order to match the ORDER BY "columnIDs".
 				for i := len(forecasts) - 1; i >= 0; i-- {
-					forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto)
+					forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto, partialStatsVerActive)
 					if err != nil {
 						return nil, err
 					}
@@ -248,8 +255,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					if r[nameIdx] != tree.DNull {
 						statsRow.Name = string(*r[nameIdx].(*tree.DString))
 					}
-					if partialPredColVerActive && r[partialPredicateIdx] != tree.DNull {
+					if partialStatsVerActive && r[partialPredicateIdx] != tree.DNull && r[fullStatisticIDIdx] != tree.DNull {
 						statsRow.PartialPredicate = string(*r[partialPredicateIdx].(*tree.DString))
+						statsRow.FullStatisticID = (uint64)(*r[fullStatisticIDIdx].(*tree.DInt))
 					}
 					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
@@ -303,7 +311,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				var res tree.Datums
-				if partialPredColVerActive {
+				if partialStatsVerActive {
 					res = tree.Datums{
 						r[nameIdx],
 						colNames,
@@ -314,6 +322,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						r[avgSizeIdx],
 						r[partialPredicateIdx],
 						histogramID,
+						r[fullStatisticIDIdx],
 					}
 				} else {
 					res = tree.Datums{
@@ -348,14 +357,20 @@ func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) (colName s
 	return colDesc.GetName(), nil
 }
 
-func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, error) {
+func tableStatisticProtoToRow(
+	stat *stats.TableStatisticProto, partialStatsVerActive bool,
+) (tree.Datums, error) {
 	name := tree.DNull
 	if stat.Name != "" {
 		name = tree.NewDString(stat.Name)
 	}
 	partialPredicate := tree.DNull
+	FullStatisticID := tree.DNull
 	if stat.PartialPredicate != "" {
 		partialPredicate = tree.NewDString(stat.PartialPredicate)
+	}
+	if stat.FullStatisticID != 0 {
+		FullStatisticID = tree.NewDInt(tree.DInt(stat.FullStatisticID))
 	}
 	columnIDs := tree.NewDArray(types.Int)
 	for _, c := range stat.ColumnIDs {
@@ -373,8 +388,12 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 		tree.NewDInt(tree.DInt(stat.DistinctCount)),
 		tree.NewDInt(tree.DInt(stat.NullCount)),
 		tree.NewDInt(tree.DInt(stat.AvgSize)),
-		partialPredicate,
 	}
+
+	if partialStatsVerActive {
+		row = append(row, partialPredicate)
+	}
+
 	if stat.HistogramData == nil {
 		row = append(row, tree.DNull)
 	} else {
@@ -383,6 +402,9 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 			return nil, err
 		}
 		row = append(row, tree.NewDBytes(tree.DBytes(histogram)))
+	}
+	if partialStatsVerActive {
+		row = append(row, FullStatisticID)
 	}
 	return row, nil
 }

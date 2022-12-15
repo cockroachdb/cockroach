@@ -58,5 +58,9 @@ message TableStatisticProto {
   uint64 avg_size = 10;
   // A predicate representing the range of a partial statistic,
   // and the empty string for a full table statistic.
-  string partial_predicate = 11 [(gogoproto.nullable) = true];
+  string partial_predicate = 11;
+  // If this statistic is partial, this is the ID for full statistic
+  // that it was created from. It is 0 for full statistics which will be
+  // NULL when stored in system.table_statistics.
+  uint64 full_statistic_id = 12 [(gogoproto.customname) = "FullStatisticID"];
 }
