@@ -1505,8 +1505,6 @@ func (e InvalidIndexesError) Error() string {
 
 // ValidateConstraint validates the constraint against all rows
 // in `tbl`.
-//
-// TODO (xiang): Support validating UNIQUE_WITHOUT_INDEX constraint in this function.
 func ValidateConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
@@ -1556,6 +1554,15 @@ func ValidateConstraint(
 				func() error {
 					return validateForeignKey(ctx, tableDesc.(*tabledesc.Mutable), targetTable, fk.ForeignKeyDesc(),
 						indexIDForValidation, txn, ie)
+				},
+			)
+		case catconstants.ConstraintTypeUniqueWithoutIndex:
+			uwi := constraint.AsUniqueWithoutIndex()
+			return ie.WithSyntheticDescriptors(
+				[]catalog.Descriptor{tableDesc},
+				func() error {
+					return validateUniqueConstraint(ctx, tableDesc, uwi.GetName(), uwi.CollectKeyColumnIDs().Ordered(),
+						uwi.GetPredicate(), indexIDForValidation, ie, txn, sessionData.User(), false)
 				},
 			)
 		default:
@@ -2049,6 +2056,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 					idx.GetName(),
 					idx.IndexDesc().KeyColumnIDs[idx.ImplicitPartitioningColumnCount():],
 					idx.GetPredicate(),
+					0, /* indexIDForValidation */
 					ie,
 					txn,
 					username.NodeUserName(),
@@ -2737,6 +2745,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 				uc.Name,
 				uc.ColumnIDs,
 				uc.Predicate,
+				0, /* indexIDForValidation */
 				ie,
 				txn,
 				user,

@@ -368,8 +368,15 @@ func validateForeignKey(
 // The pred argument is a partial unique constraint predicate, which filters the
 // subset of rows that are guaranteed unique by the constraint. If the unique
 // constraint is not partial, pred should be empty.
+//
+// `indexIDForValidation`, if non-zero, will be used to force the sql query to
+// use this particular index by hinting the query.
 func duplicateRowQuery(
-	srcTbl catalog.TableDescriptor, columnIDs []descpb.ColumnID, pred string, limitResults bool,
+	srcTbl catalog.TableDescriptor,
+	columnIDs []descpb.ColumnID,
+	pred string,
+	indexIDForValidation descpb.IndexID,
+	limitResults bool,
 ) (sql string, colNames []string, _ error) {
 	colNames, err := srcTbl.NamesForColumnIDs(columnIDs)
 	if err != nil {
@@ -397,13 +404,24 @@ func duplicateRowQuery(
 	if limitResults {
 		limit = " LIMIT 1"
 	}
-	return fmt.Sprintf(
+	query := fmt.Sprintf(
 		`SELECT %[1]s FROM [%[2]d AS tbl] WHERE %[3]s GROUP BY %[1]s HAVING count(*) > 1 %[4]s`,
 		strings.Join(srcCols, ", "),     // 1
 		srcTbl.GetID(),                  // 2
 		strings.Join(srcWhere, " AND "), // 3
 		limit,                           // 4
-	), colNames, nil
+	)
+	if indexIDForValidation != 0 {
+		query = fmt.Sprintf(
+			`SELECT %[1]s FROM [%[2]d AS tbl]@[%[3]d] WHERE %[4]s GROUP BY %[1]s HAVING count(*) > 1 %[5]s`,
+			strings.Join(srcCols, ", "),     // 1
+			srcTbl.GetID(),                  // 2
+			indexIDForValidation,            // 3
+			strings.Join(srcWhere, " AND "), // 4
+			limit,                           // 5
+		)
+	}
+	return query, colNames, nil
 }
 
 // RevalidateUniqueConstraintsInCurrentDB verifies that all unique constraints
@@ -473,6 +491,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					index.GetName(),
 					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 					index.GetPredicate(),
+					0, /* indexIDForValidation */
 					p.ExecCfg().InternalExecutor,
 					p.Txn(),
 					p.User(),
@@ -493,6 +512,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
+				0, /* indexIDForValidation */
 				p.ExecCfg().InternalExecutor,
 				p.Txn(),
 				p.User(),
@@ -557,6 +577,7 @@ func RevalidateUniqueConstraintsInTable(
 				index.GetName(),
 				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 				index.GetPredicate(),
+				0, /* indexIDForValidation */
 				ie,
 				txn,
 				user,
@@ -577,6 +598,7 @@ func RevalidateUniqueConstraintsInTable(
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
+				0, /* indexIDForValidation */
 				ie,
 				txn,
 				user,
@@ -595,6 +617,11 @@ func RevalidateUniqueConstraintsInTable(
 // validateUniqueConstraint verifies that all the rows in the srcTable
 // have unique values for the given columns.
 //
+// `indexIDForValidation`, if non-zero, will be used to force validation
+// against this particular index. This is used to facilitate the declarative
+// schema changer when the validation should be against a yet non-public
+// primary index.
+//
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 //
@@ -606,13 +633,14 @@ func validateUniqueConstraint(
 	constraintName string,
 	columnIDs []descpb.ColumnID,
 	pred string,
+	indexIDForValidation descpb.IndexID,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	user username.SQLUsername,
 	preExisting bool,
 ) error {
 	query, colNames, err := duplicateRowQuery(
-		srcTable, columnIDs, pred, true, /* limitResults */
+		srcTable, columnIDs, pred, indexIDForValidation, true, /* limitResults */
 	)
 	if err != nil {
 		return err
