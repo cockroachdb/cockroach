@@ -18,44 +18,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/errors"
 )
 
 // GetMutableTableByName returns a mutable table descriptor with properties
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetMutableTableByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, objectFlags tree.ObjectLookupFlags,
 ) (found bool, _ *tabledesc.Mutable, _ error) {
-	flags.RequireMutable = true
-	found, desc, err := tc.getTableByName(ctx, txn, name, flags)
-	if err != nil || !found {
+	b := tc.ByName(txn).WithObjFlags(objectFlags)
+	p, err := getObjectPrefix(ctx, b.Immutable(), name.Catalog(), name.Schema())
+	if err != nil || p.Schema == nil {
 		return false, nil, err
 	}
-	return true, desc.(*tabledesc.Mutable), nil
+	tbl, err := b.Mutable().Table(ctx, p.Database, p.Schema, name.Object())
+	return tbl != nil, tbl, err
 }
 
 // GetImmutableTableByName returns a immutable table descriptor with properties
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableTableByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, objectFlags tree.ObjectLookupFlags,
 ) (found bool, _ catalog.TableDescriptor, _ error) {
-	flags.RequireMutable = false
-	return tc.getTableByName(ctx, txn, name, flags)
-}
-
-// getTableByName returns a table descriptor with properties according to the
-// provided lookup flags.
-func (tc *Collection) getTableByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ catalog.TableDescriptor, err error) {
-	flags.DesiredObjectKind = tree.TableObject
-	_, desc, err := tc.GetObjectByName(
-		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
-	if err != nil || desc == nil {
+	g := tc.ByName(txn).WithObjFlags(objectFlags).Immutable()
+	p, err := getObjectPrefix(ctx, g, name.Catalog(), name.Schema())
+	if err != nil || p.Schema == nil {
 		return false, nil, err
 	}
-	return true, desc.(catalog.TableDescriptor), nil
+	tbl, err := g.Table(ctx, p.Database, p.Schema, name.Object())
+	return tbl != nil, tbl, err
 }
 
 // GetLeasedImmutableTableByID returns a leased immutable table descriptor by
@@ -68,7 +58,7 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 		return nil, err
 	}
 	descs := []catalog.Descriptor{desc}
-	err = tc.hydrateDescriptors(ctx, txn, tree.CommonLookupFlags{}, descs)
+	err = tc.hydrateDescriptors(ctx, txn, defaultFlags(), descs)
 	if err != nil {
 		return nil, err
 	}
@@ -104,28 +94,17 @@ func (tc *Collection) GetUncommittedMutableTableByID(
 func (tc *Collection) GetMutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Mutable, error) {
-	flags.RequireMutable = true
-	desc, err := tc.getTableByID(ctx, txn, tableID, flags)
-	if err != nil {
-		return nil, err
-	}
-	return desc.(*tabledesc.Mutable), nil
+	return tc.ByID(txn).WithObjFlags(flags).Mutable().Table(ctx, tableID)
 }
 
 // GetMutableTableVersionByID is a variant of sqlbase.getTableDescFromID which returns a mutable
 // table descriptor of the table modified in the same transaction.
-// Deprecated in favor of GetMutableTableByID.
 // TODO (lucy): Usages should be replaced with GetMutableTableByID, but this
 // needs a careful look at what flags should be passed in at each call site.
 func (tc *Collection) GetMutableTableVersionByID(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
 ) (*tabledesc.Mutable, error) {
-	return tc.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			IncludeOffline: true,
-			IncludeDropped: true,
-		},
-	})
+	return tc.ByID(txn).Mutable().Table(ctx, tableID)
 }
 
 // GetImmutableTableByID returns an immutable table descriptor with
@@ -135,29 +114,5 @@ func (tc *Collection) GetMutableTableVersionByID(
 func (tc *Collection) GetImmutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (catalog.TableDescriptor, error) {
-	flags.RequireMutable = false
-	desc, err := tc.getTableByID(ctx, txn, tableID, flags)
-	if err != nil {
-		return nil, err
-	}
-	return desc, nil
-}
-
-func (tc *Collection) getTableByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (catalog.TableDescriptor, error) {
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags.CommonLookupFlags, tableID)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlerrors.NewUndefinedRelationError(
-				&tree.TableRef{TableID: int64(tableID)})
-		}
-		return nil, err
-	}
-	table, ok := descs[0].(catalog.TableDescriptor)
-	if !ok {
-		return nil, sqlerrors.NewUndefinedRelationError(
-			&tree.TableRef{TableID: int64(tableID)})
-	}
-	return table, nil
+	return tc.ByID(txn).WithObjFlags(flags).Immutable().Table(ctx, tableID)
 }

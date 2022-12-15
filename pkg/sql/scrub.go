@@ -180,16 +180,19 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		_, objDesc, err := p.descCollection.GetObjectByName(
-			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(),
+		_, objDesc, err := p.GetObjectByName(
+			ctx, tableName.Catalog(), tableName.Schema(), tableName.Table(),
 			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
 		)
-		if err != nil {
-			return err
-		}
 		// Skip over descriptors that are not tables (like types).
 		// Note: We are asking for table objects above, so It's valid to only
 		// get a prefix, and no descriptor.
+		if errors.Is(err, catalog.ErrDescriptorWrongType) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		if objDesc == nil || objDesc.DescriptorType() != catalog.Table {
 			continue
 		}

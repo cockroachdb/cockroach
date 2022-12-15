@@ -592,13 +592,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We need to inherit zone configuration information from the correct zone,
 		// not completeZone.
 		{
+			zcHelper := descs.AsZoneConfigHydrationHelper(params.p.Descriptors())
 			if index == nil {
 				// If we are operating on a zone, get all fields that the zone would
 				// inherit from its parent. We do this by using an empty zoneConfig
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
 				if err := completeZoneConfig(
-					params.ctx, &zoneInheritedFields, params.p.Txn(), params.p.Descriptors(), targetID,
+					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
 				}
@@ -608,7 +609,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
 				if err := completeZoneConfig(
-					params.ctx, &zoneInheritedFields, params.p.Txn(), params.p.Descriptors(), targetID,
+					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
 				}

@@ -18,46 +18,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 // GetImmutableFunctionByID returns a immutable function descriptor.
 func (tc *Collection) GetImmutableFunctionByID(
 	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
 ) (catalog.FunctionDescriptor, error) {
-	flags.RequireMutable = false
-	desc, err := tc.getFunctionByID(ctx, txn, fnID, flags)
-	if err != nil {
-		return nil, err
-	}
-	return desc, nil
+	return tc.ByID(txn).WithObjFlags(flags).Immutable().Function(ctx, fnID)
 }
 
 // GetMutableFunctionByID returns a mutable function descriptor.
 func (tc *Collection) GetMutableFunctionByID(
 	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*funcdesc.Mutable, error) {
-	flags.RequireMutable = true
-	desc, err := tc.getFunctionByID(ctx, txn, fnID, flags)
-	if err != nil {
-		return nil, err
-	}
-	return desc.(*funcdesc.Mutable), nil
-}
-
-func (tc *Collection) getFunctionByID(
-	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
-) (catalog.FunctionDescriptor, error) {
-	desc, err := tc.getDescriptorByID(ctx, txn, flags.CommonLookupFlags, fnID)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
-		}
-		return nil, err
-	}
-	fn, ok := desc.(catalog.FunctionDescriptor)
-	if !ok {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
-	}
-	return fn, nil
+	return tc.ByID(txn).WithObjFlags(flags).Mutable().Function(ctx, fnID)
 }

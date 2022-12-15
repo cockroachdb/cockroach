@@ -96,7 +96,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		rowLevelTTL := desc.GetRowLevelTTL()
 		labelMetrics = rowLevelTTL.LabelMetrics
 
-		tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, desc)
+		tn, err := descs.GetObjectName(ctx, txn, descsCol, desc)
 		if err != nil {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}

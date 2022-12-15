@@ -377,12 +377,9 @@ func DescriptorsMatchingTargets(
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
 			desc := r.DescByID[dbID]
 			// Verify that the database is in the correct state.
-			doesNotExistErr := errors.Errorf(`database %q does not exist`, d)
-			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{},
-			); err != nil {
+			if desc == nil || !desc.Public() {
 				// Return a does not exist error if explicitly asking for this database.
-				return ret, doesNotExistErr
+				return ret, errors.Errorf(`database %q does not exist`, d)
 			}
 			ret.Descs = append(ret.Descs, desc)
 			ret.RequestedDBs = append(ret.RequestedDBs, desc.(catalog.DatabaseDescriptor))
@@ -401,15 +398,14 @@ func DescriptorsMatchingTargets(
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
-			if err := catalog.FilterDescriptorState(
-				schemaDesc, tree.CommonLookupFlags{IncludeOffline: !requirePublic},
-			); err != nil {
+			if schemaDesc == nil || !schemaDesc.Public() {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
+				} else if schemaDesc == nil || !schemaDesc.Offline() {
+					// If the schema is not public, but we don't require it to be, ignore
+					// it.
+					return nil
 				}
-				// If the schema is not public, but we don't require it to be, ignore
-				// it.
-				return nil
 			}
 			alreadyRequestedSchemas[id] = struct{}{}
 			ret.Descs = append(ret.Descs, r.DescByID[id])
@@ -485,16 +481,8 @@ func DescriptorsMatchingTargets(
 			}
 			tableDesc, isTable := descI.(catalog.TableDescriptor)
 			// If the type assertion didn't work, then we resolved a type instead, so
-			// error out.
-			if !isTable {
-				return ret, doesNotExistErr
-			}
-
-			// Verify that the table is in the correct state.
-			if err := catalog.FilterDescriptorState(
-				tableDesc, tree.CommonLookupFlags{},
-			); err != nil {
-				// Return a does not exist error if explicitly asking for this table.
+			// error out. Otherwise verify that the table is in the correct state.
+			if !isTable || tableDesc == nil || !tableDesc.Public() {
 				return ret, doesNotExistErr
 			}
 
@@ -591,9 +579,7 @@ func DescriptorsMatchingTargets(
 	addObjectDescsInSchema := func(objectsIDs *catalog.DescriptorIDSet) error {
 		for _, id := range objectsIDs.Ordered() {
 			desc := r.DescByID[id]
-			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{IncludeOffline: true},
-			); err != nil {
+			if desc == nil || (!desc.Public() && !desc.Offline()) {
 				// Don't include this object in the expansion since it's not in a valid
 				// state. Silently fail since this object was not directly requested,
 				// but was just part of an expansion.

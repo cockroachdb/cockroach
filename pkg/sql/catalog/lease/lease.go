@@ -818,13 +818,9 @@ func (m *Manager) AcquireByName(
 	// This logic will release the lease (the lease manager will still
 	// cache it), and generate the offline descriptor error.
 	validateDescriptorForReturn := func(desc LeasedDescriptor) (LeasedDescriptor, error) {
-		if desc.Underlying().Offline() {
-			if err := catalog.FilterDescriptorState(
-				desc.Underlying(), tree.CommonLookupFlags{},
-			); err != nil {
-				desc.Release(ctx)
-				return nil, err
-			}
+		if err := catalog.FilterOfflineDescriptor(desc.Underlying()); err != nil {
+			desc.Release(ctx)
+			return nil, err
 		}
 		return desc, nil
 	}

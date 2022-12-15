@@ -215,6 +215,10 @@ func NewMutableAccessToVirtualSchemaError(schema SchemaDescriptor) error {
 // NewMutableAccessToVirtualObjectError is returned when trying to mutably
 // access a virtual schema object.
 func NewMutableAccessToVirtualObjectError(schema VirtualSchema, object VirtualObject) error {
+	if schema == nil {
+		return errors.AssertionFailedf("virtual object %q (%d) does not have a virtual parent schema",
+			object.Desc().GetName(), object.Desc().GetID())
+	}
 	switch schema.Desc().GetName() {
 	case "pg_catalog":
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
