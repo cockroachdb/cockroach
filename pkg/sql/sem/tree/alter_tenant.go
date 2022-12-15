@@ -10,10 +10,17 @@
 
 package tree
 
+// ReplicationCutoverTime represent the user-specified cutover time
+type ReplicationCutoverTime struct {
+	Timestamp Expr
+	Latest    bool
+}
+
 // AlterTenantReplication represents an ALTER TENANT REPLICATION statement.
 type AlterTenantReplication struct {
 	TenantName Expr
 	Command    JobCommand
+	Cutover    *ReplicationCutoverTime
 }
 
 var _ Statement = &AlterTenantReplication{}
@@ -23,9 +30,16 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER TENANT ")
 	ctx.FormatNode(n.TenantName)
 	ctx.WriteByte(' ')
-	if n.Command == PauseJob || n.Command == ResumeJob {
+	if n.Cutover != nil {
+		ctx.WriteString("COMPLETE REPLICATION TO ")
+		if n.Cutover.Latest {
+			ctx.WriteString("LATEST")
+		} else {
+			ctx.WriteString("SYSTEM TIME ")
+			ctx.FormatNode(n.Cutover.Timestamp)
+		}
+	} else if n.Command == PauseJob || n.Command == ResumeJob {
 		ctx.WriteString(JobCommandToStatement[n.Command])
-		ctx.WriteByte(' ')
+		ctx.WriteString(" REPLICATION")
 	}
-	ctx.WriteString("REPLICATION")
 }

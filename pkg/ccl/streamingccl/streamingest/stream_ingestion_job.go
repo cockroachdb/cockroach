@@ -39,12 +39,11 @@ import (
 // completeStreamIngestion terminates the stream as of specified time.
 func completeStreamIngestion(
 	ctx context.Context,
-	evalCtx *eval.Context,
+	jobRegistry *jobs.Registry,
 	txn *kv.Txn,
 	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
-	jobRegistry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
 	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false, /* useReadLock */
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// TODO(adityamaru): This should change in the future, a user should be
@@ -63,7 +62,23 @@ func completeStreamIngestion(
 		})
 }
 
-func getStreamIngestionStats(
+func getStreamHighWater(
+	ctx context.Context, jobRegistry *jobs.Registry, txn *kv.Txn, ingestionJobID jobspb.JobID,
+) (*hlc.Timestamp, error) {
+	j, err := jobRegistry.LoadJobWithTxn(ctx, ingestionJobID, txn)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := j.Details().(jobspb.StreamIngestionDetails); !ok {
+		return nil, errors.Errorf("job with id %d is not a stream ingestion job", ingestionJobID)
+	}
+
+	progress := j.Progress()
+	return progress.GetHighWater(), nil
+
+}
+
+func getStreamIngestionStatsNoHeartbeat(
 	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
@@ -102,12 +117,21 @@ func getStreamIngestionStats(
 		lagInfo.ReplicationLag = timeutil.Since(highwater.GoTime())
 		stats.ReplicationLagInfo = lagInfo
 	}
+	return stats, nil
+}
 
-	client, err := streamclient.GetFirstActiveClient(ctx, progress.GetStreamIngest().StreamAddresses)
+func getStreamIngestionStats(
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
+	stats, err := getStreamIngestionStatsNoHeartbeat(ctx, evalCtx, txn, ingestionJobID)
 	if err != nil {
 		return nil, err
 	}
-	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(details.StreamID), hlc.MaxTimestamp)
+	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
+	if err != nil {
+		return nil, err
+	}
+	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(stats.IngestionDetails.StreamID), hlc.MaxTimestamp)
 	if err != nil {
 		stats.ProducerError = err.Error()
 	} else {
