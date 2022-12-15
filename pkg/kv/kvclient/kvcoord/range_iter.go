@@ -174,7 +174,8 @@ func (ri *RangeIterator) Next(ctx context.Context) {
 
 // Seek positions the iterator at the specified key.
 func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir ScanDirection) {
-	if log.HasSpanOrEvent(ctx) {
+	logEvents := log.HasSpanOrEvent(ctx)
+	if logEvents {
 		rev := ""
 		if scanDir == Descending {
 			rev = " (rev)"
@@ -211,8 +212,8 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			}
 			continue
 		}
-		if log.V(2) {
-			log.Infof(ctx, "key: %s, desc: %s", ri.key, rngInfo.Desc())
+		if logEvents {
+			log.Eventf(ctx, "key: %s, desc: %s", ri.key, rngInfo.Desc())
 		}
 
 		ri.token = rngInfo
