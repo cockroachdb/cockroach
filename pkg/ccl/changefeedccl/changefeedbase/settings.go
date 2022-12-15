@@ -211,15 +211,6 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-// ActiveProtectedTimestampsEnabled enables always having protected timestamps
-// laid down that are periodically advanced to the highwater mark.
-var ActiveProtectedTimestampsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"changefeed.active_protected_timestamps.enabled",
-	"if set, rather than only protecting changefeed targets from garbage collection during backfills, data will always be protected up to the changefeed's frontier",
-	true,
-)
-
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
