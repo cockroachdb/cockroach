@@ -124,7 +124,8 @@ func (o *sqlUniqueConstraintCheckOperation) Start(params runParams) error {
 		asOf = fmt.Sprintf("AS OF SYSTEM TIME '%s'", o.asOf.AsOfSystemTime())
 	}
 	tableName := fmt.Sprintf("%s.%s", o.tableName.Catalog(), o.tableName.Table())
-	dup, _, err := duplicateRowQuery(o.tableDesc, o.cols, o.predicate, false /* limitResults */)
+	dup, _, err := duplicateRowQuery(o.tableDesc, o.cols, o.predicate,
+		0 /* indexIDForValidation */, false /* limitResults */)
 	if err != nil {
 		return err
 	}
