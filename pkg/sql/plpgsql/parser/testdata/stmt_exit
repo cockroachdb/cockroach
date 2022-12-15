@@ -1,0 +1,12 @@
+parse
+DECLARE
+BEGIN
+  EXIT some_label;
+  EXIT some_label WHEN some_condition;
+END
+----
+DECLARE
+BEGIN
+EXIT
+EXIT
+END
