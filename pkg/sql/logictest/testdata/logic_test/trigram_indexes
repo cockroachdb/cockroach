@@ -29,7 +29,8 @@ CREATE INDEX ON a USING GIST(t gist_trgm_ops)
 statement ok
 INSERT INTO a VALUES (1, 'foozoopa'),
                      (2, 'Foo'),
-                     (3, 'blah')
+                     (3, 'blah'),
+                     (4, 'Приветhi')
 
 query IT rowsort
 SELECT * FROM a@a_t_idx WHERE t ILIKE '%Foo%'
@@ -83,6 +84,31 @@ SELECT * FROM a@a_t_idx WHERE t LIKE 'blahf'
 query IT
 SELECT * FROM a@a_t_idx WHERE t LIKE 'fblah'
 ----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'Приветhi'
+----
+4  Приветhi
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'Привет%'
+----
+4  Приветhi
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'Приве%'
+----
+4  Приветhi
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%иве%'
+----
+4  Приветhi
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%тhi%'
+----
+4  Приветhi
 
 # Test the acceleration of the % similarity operator.
 # By default, the threshold for searching is .3.
