@@ -313,7 +313,7 @@ type Tracer struct {
 		// snapshots stores the activeSpansRegistry snapshots taken during the
 		// Tracer's lifetime. The ring buffer will contain snapshots with contiguous
 		// IDs, from the oldest one to <oldest id> + maxSnapshots - 1.
-		snapshots ring.Buffer // snapshotWithID
+		snapshots ring.Buffer[snapshotWithID]
 	}
 
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
@@ -967,7 +967,7 @@ type spanAllocHelper struct {
 	// Pre-allocated buffers for the span.
 	tagsAlloc             [3]attribute.KeyValue
 	childrenAlloc         [4]childRef
-	structuredEventsAlloc [3]interface{}
+	structuredEventsAlloc [3]*tracingpb.StructuredRecord
 	childrenMetadataAlloc map[string]tracingpb.OperationMetadata
 }
 
@@ -1039,7 +1039,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	h := sp.helper
 	h.tagsAlloc = [3]attribute.KeyValue{}
 	h.childrenAlloc = [4]childRef{}
-	h.structuredEventsAlloc = [3]interface{}{}
+	h.structuredEventsAlloc = [3]*tracingpb.StructuredRecord{}
 	for op := range h.childrenMetadataAlloc {
 		delete(h.childrenMetadataAlloc, op)
 	}

@@ -17,8 +17,8 @@ package ring
 //
 // Note: it is backed by a slice (unlike container/ring which is backed by a
 // linked list).
-type Buffer struct {
-	buffer []interface{}
+type Buffer[T any] struct {
+	buffer []T
 	head   int // the index of the front of the buffer
 	tail   int // the index of the first position after the end of the buffer
 
@@ -32,12 +32,12 @@ type Buffer struct {
 // scratch, if not nil, represents pre-allocated space that the Buffer takes
 // ownership of. The whole backing array of the provided slice is taken over,
 // included elements and available capacity.
-func MakeBuffer(scratch []interface{}) Buffer {
-	return Buffer{buffer: scratch}
+func MakeBuffer[T any](scratch []T) Buffer[T] {
+	return Buffer[T]{buffer: scratch}
 }
 
 // Len returns the number of elements in the Buffer.
-func (r *Buffer) Len() int {
+func (r *Buffer[T]) Len() int {
 	if !r.nonEmpty {
 		return 0
 	}
@@ -51,12 +51,12 @@ func (r *Buffer) Len() int {
 }
 
 // Cap returns the capacity of the Buffer.
-func (r *Buffer) Cap() int {
+func (r *Buffer[T]) Cap() int {
 	return cap(r.buffer)
 }
 
 // Get returns an element at position pos in the Buffer (zero-based).
-func (r *Buffer) Get(pos int) interface{} {
+func (r *Buffer[T]) Get(pos int) T {
 	if !r.nonEmpty || pos < 0 || pos >= r.Len() {
 		panic("index out of bounds")
 	}
@@ -64,7 +64,7 @@ func (r *Buffer) Get(pos int) interface{} {
 }
 
 // GetFirst returns an element at the front of the Buffer.
-func (r *Buffer) GetFirst() interface{} {
+func (r *Buffer[T]) GetFirst() T {
 	if !r.nonEmpty {
 		panic("getting first from empty ring buffer")
 	}
@@ -72,14 +72,14 @@ func (r *Buffer) GetFirst() interface{} {
 }
 
 // GetLast returns an element at the front of the Buffer.
-func (r *Buffer) GetLast() interface{} {
+func (r *Buffer[T]) GetLast() T {
 	if !r.nonEmpty {
 		panic("getting last from empty ring buffer")
 	}
 	return r.buffer[(cap(r.buffer)+r.tail-1)%cap(r.buffer)]
 }
 
-func (r *Buffer) resize(n int) {
+func (r *Buffer[T]) resize(n int) {
 	if n < r.Len() {
 		panic("resizing to fewer elements than current length")
 	}
@@ -89,7 +89,7 @@ func (r *Buffer) resize(n int) {
 		return
 	}
 
-	newBuffer := make([]interface{}, n)
+	newBuffer := make([]T, n)
 	r.copyTo(newBuffer)
 	r.tail = r.Len() % cap(newBuffer)
 	r.head = 0
@@ -98,7 +98,7 @@ func (r *Buffer) resize(n int) {
 
 // copyTo copies elements from r to dst. If len(dst) < r.Len(), only the first
 // len(dst) elements are copied.
-func (r *Buffer) copyTo(dst []interface{}) {
+func (r *Buffer[T]) copyTo(dst []T) {
 	if !r.nonEmpty {
 		return
 	}
@@ -115,7 +115,7 @@ func (r *Buffer) copyTo(dst []interface{}) {
 	}
 }
 
-func (r *Buffer) maybeGrow() {
+func (r *Buffer[T]) maybeGrow() {
 	if r.Len() != cap(r.buffer) {
 		return
 	}
@@ -128,7 +128,7 @@ func (r *Buffer) maybeGrow() {
 
 // AddFirst add element to the front of the Buffer and doubles it's underlying
 // slice if necessary.
-func (r *Buffer) AddFirst(element interface{}) {
+func (r *Buffer[T]) AddFirst(element T) {
 	r.maybeGrow()
 	r.head = (cap(r.buffer) + r.head - 1) % cap(r.buffer)
 	r.buffer[r.head] = element
@@ -137,7 +137,7 @@ func (r *Buffer) AddFirst(element interface{}) {
 
 // AddLast adds element to the end of the Buffer and doubles it's underlying
 // slice if necessary.
-func (r *Buffer) AddLast(element interface{}) {
+func (r *Buffer[T]) AddLast(element T) {
 	r.maybeGrow()
 	r.buffer[r.tail] = element
 	r.tail = (r.tail + 1) % cap(r.buffer)
@@ -145,11 +145,12 @@ func (r *Buffer) AddLast(element interface{}) {
 }
 
 // RemoveFirst removes a single element from the front of the Buffer.
-func (r *Buffer) RemoveFirst() {
+func (r *Buffer[T]) RemoveFirst() {
 	if r.Len() == 0 {
 		panic("removing first from empty ring buffer")
 	}
-	r.buffer[r.head] = nil
+	var zero T
+	r.buffer[r.head] = zero
 	r.head = (r.head + 1) % cap(r.buffer)
 	if r.head == r.tail {
 		r.nonEmpty = false
@@ -157,12 +158,13 @@ func (r *Buffer) RemoveFirst() {
 }
 
 // RemoveLast removes a single element from the end of the Buffer.
-func (r *Buffer) RemoveLast() {
+func (r *Buffer[T]) RemoveLast() {
 	if r.Len() == 0 {
 		panic("removing last from empty ring buffer")
 	}
 	lastPos := (cap(r.buffer) + r.tail - 1) % cap(r.buffer)
-	r.buffer[lastPos] = nil
+	var zero T
+	r.buffer[lastPos] = zero
 	r.tail = lastPos
 	if r.tail == r.head {
 		r.nonEmpty = false
@@ -173,7 +175,7 @@ func (r *Buffer) RemoveLast() {
 // to reserve a size less than the r.Len().
 //
 // If the Buffer already has a capacity of n or larger, this is a no-op.
-func (r *Buffer) Reserve(n int) {
+func (r *Buffer[T]) Reserve(n int) {
 	if n < r.Len() {
 		panic("reserving fewer elements than current length")
 	}
@@ -191,7 +193,7 @@ func (r *Buffer) Reserve(n int) {
 // Note that, if n != r.Len(), Resize always allocates new storage, even when n
 // is less than the current capacity. This can be useful to make the storage for
 // a buffer that used to be large available for GC, but it can also be wasteful.
-func (r *Buffer) Resize(n int) {
+func (r *Buffer[T]) Resize(n int) {
 	if n < r.Len() {
 		panic("resizing to fewer elements than current length")
 	}
@@ -207,7 +209,7 @@ func (r *Buffer) Resize(n int) {
 // available to GC.
 //
 // See also Discard.
-func (r *Buffer) Reset() {
+func (r *Buffer[T]) Reset() {
 	r.head = 0
 	r.tail = 0
 	r.nonEmpty = false
@@ -219,13 +221,13 @@ func (r *Buffer) Reset() {
 // but *r will be reassigned.
 //
 // See also Reset and Resize.
-func (r *Buffer) Discard() {
-	*r = Buffer{}
+func (r *Buffer[T]) Discard() {
+	*r = Buffer[T]{}
 }
 
 // all a slice with returns all the elements in the buffer.
-func (r *Buffer) all() []interface{} {
-	buf := make([]interface{}, r.Len())
+func (r *Buffer[T]) all() []T {
+	buf := make([]T, r.Len())
 	r.copyTo(buf)
 	return buf
 }

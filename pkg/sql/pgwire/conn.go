@@ -1255,21 +1255,10 @@ type cmdIdx struct {
 	idx int
 }
 
-var cmdIdxPool = sync.Pool{
-	New: func() interface{} {
-		return &cmdIdx{}
-	},
-}
-
-func (c *cmdIdx) release() {
-	*c = cmdIdx{}
-	cmdIdxPool.Put(c)
-}
-
 type cmdIdxBuffer struct {
 	// We intentionally do not just embed ring.Buffer in order to restrict the
 	// methods that can be called on cmdIdxBuffer.
-	buffer ring.Buffer
+	buffer ring.Buffer[cmdIdx]
 }
 
 func (b *cmdIdxBuffer) empty() bool {
@@ -1277,29 +1266,23 @@ func (b *cmdIdxBuffer) empty() bool {
 }
 
 func (b *cmdIdxBuffer) addLast(pos sql.CmdPos, idx int) {
-	cmdIdx := cmdIdxPool.Get().(*cmdIdx)
-	cmdIdx.pos = pos
-	cmdIdx.idx = idx
-	b.buffer.AddLast(cmdIdx)
+	b.buffer.AddLast(cmdIdx{pos: pos, idx: idx})
 }
 
 // removeLast removes the last cmdIdx from the buffer and will panic if the
 // buffer is empty.
 func (b *cmdIdxBuffer) removeLast() {
-	b.getLast().release()
 	b.buffer.RemoveLast()
 }
 
 // getLast returns the last cmdIdx in the buffer and will panic if the buffer is
 // empty.
-func (b *cmdIdxBuffer) getLast() *cmdIdx {
-	return b.buffer.GetLast().(*cmdIdx)
+func (b *cmdIdxBuffer) getLast() cmdIdx {
+	return b.buffer.GetLast()
 }
 
 func (b *cmdIdxBuffer) clear() {
-	for !b.empty() {
-		b.removeLast()
-	}
+	b.buffer.Discard()
 }
 
 // registerCmd updates cmdStarts buffer when the first result for a new command

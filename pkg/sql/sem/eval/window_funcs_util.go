@@ -38,7 +38,7 @@ type peerGroup struct {
 // offsets if we have OFFSET_FOLLOWING type of bound (both F and O are
 // upper-bounded by total number of peer groups).
 type PeerGroupsIndicesHelper struct {
-	groups               ring.Buffer // queue of peer groups
+	groups               ring.Buffer[*peerGroup]
 	peerGrouper          PeerGroupChecker
 	headPeerGroupNum     int  // number of the peer group at the head of the queue
 	allPeerGroupsSkipped bool // in GROUP mode, indicates whether all peer groups were skipped during Init
@@ -161,7 +161,7 @@ func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
 
 	// nextPeerGroupStartIdx is the index of the first row that we haven't
 	// computed peer group for.
-	lastPeerGroup := p.groups.GetLast().(*peerGroup)
+	lastPeerGroup := p.groups.GetLast()
 	nextPeerGroupStartIdx := lastPeerGroup.firstPeerIdx + lastPeerGroup.rowCount
 
 	if (wfr.Frame == nil || wfr.Frame.Mode == treewindow.ROWS || wfr.Frame.Mode == treewindow.RANGE) ||
@@ -211,7 +211,7 @@ func (p *PeerGroupsIndicesHelper) GetFirstPeerIdx(peerGroupNum int) int {
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
 	}
-	return p.groups.Get(posInBuffer).(*peerGroup).firstPeerIdx
+	return p.groups.Get(posInBuffer).firstPeerIdx
 }
 
 // GetRowCount returns the number of rows within peer group of number
@@ -221,7 +221,7 @@ func (p *PeerGroupsIndicesHelper) GetRowCount(peerGroupNum int) int {
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
 	}
-	return p.groups.Get(posInBuffer).(*peerGroup).rowCount
+	return p.groups.Get(posInBuffer).rowCount
 }
 
 // GetLastPeerGroupNum returns the number of the last peer group in the queue.
