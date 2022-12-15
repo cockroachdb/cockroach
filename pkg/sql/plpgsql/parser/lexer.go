@@ -163,6 +163,52 @@ func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSq
 	}
 }
 
+func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute {
+	cmdStr, _ := l.ReadSqlConstruct(INTO, USING, ';')
+	ret := &plpgsqltree.PLpgSQLStmtDynamicExecute{
+		Query: cmdStr,
+	}
+
+	var lval plpgsqlSymType
+	l.Lex(&lval)
+	for {
+		if lval.id == INTO {
+			if ret.Into {
+				panic("seen multiple INTO")
+			}
+			ret.Into = true
+			nextTok := l.Peek()
+			if nextTok.id == int32(STRICT) {
+				l.Lex(&lval)
+				ret.Strict = true
+			}
+			// TODO we need to read each "INTO" variable name instead of just a
+			// string.
+			l.ReadSqlExpressionStr2(USING, ';')
+			l.Lex(&lval)
+		} else if lval.id == USING {
+			if ret.Params != nil {
+				panic("seen multiple USINGs")
+			}
+			ret.Params = make([]plpgsqltree.PLpgSQLExpr, 0)
+			for {
+				l.ReadSqlConstruct(',', ';', INTO)
+				ret.Params = append(ret.Params, nil)
+				l.Lex(&lval)
+				if lval.id == ';' {
+					break
+				}
+			}
+		} else if lval.id == ';' {
+			break
+		} else {
+			panic("syntax error")
+		}
+	}
+
+	return ret
+}
+
 // ReadSqlExpressionStr returns the string from the l.lastPos till it sees
 // the terminator for the first time. The returned string is made by tokens
 // between the starting index (included) to the terminator (not included).

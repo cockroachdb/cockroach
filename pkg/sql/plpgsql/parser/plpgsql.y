@@ -237,7 +237,7 @@ func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
 %type <[]plpgsqltree.PLpgSQLStatement> proc_sect
 %type <[]plpgsqltree.PLpgSQLStatement> stmt_elsifs stmt_else // TODO is this a list of statement?
 %type <loopBody> loop_body
-%type <plpgsqltree.PLpgSQLStatement> pl_block
+%type <plpgsqltree.PLpgSQLStatement>  pl_block
 %type <plpgsqltree.PLpgSQLStatement>	proc_stmt
 %type <plpgsqltree.PLpgSQLStatement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit
 %type <plpgsqltree.PLpgSQLStatement>	stmt_return stmt_raise stmt_assert stmt_execsql
@@ -558,15 +558,20 @@ stmt_perform	: PERFORM
 					}
 				;
 
-stmt_call		: CALL  ';'
+stmt_call		: CALL call_cmd ';'
 					{
 					  $$.val = &plpgsqltree.PLpgSQLStmtCall{IsCall: true}
 					}
-				| DO  ';'
+				| DO call_cmd ';'
 					{
 					  $$.val = &plpgsqltree.PLpgSQLStmtCall{IsCall: false}
 					}
 				;
+call_cmd:
+{
+  plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+}
+;
 
 stmt_assign		: T_DATUM
 					{
@@ -820,14 +825,10 @@ stmt_execsql	: IMPORT
 					}
 				;
 
-// TODO(chengxiong): we should parse a valid expression, INTO and USING keywords
-// instead of just match random symbols.
-stmt_dynexecute : EXECUTE  ';'
-					{
-					  $$.val = &plpgsqltree.PLpgSQLStmtDynamicExecute{}
-					}
-				;
-
+stmt_dynexecute : EXECUTE
+{
+  $$.val = plpgsqllex.(*lexer).MakeDynamicExecuteStmt()}
+;
 
 stmt_open		: OPEN cursor_variable
 					{
@@ -917,9 +918,11 @@ proc_condition	: any_identifier
 						}
 				;
 
-expr_until_semi :  ';'
-					{ }
-				;
+expr_until_semi :
+{
+  plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+}
+;
 
 expr_until_then :
 {
@@ -959,7 +962,7 @@ opt_label	:
 
 opt_exitcond	: ';'
 					{ }
-				| WHEN expr_until_semi
+				| WHEN expr_until_semi ';'
 					{ }
 				;
 
