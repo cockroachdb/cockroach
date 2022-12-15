@@ -550,3 +550,13 @@ WHERE
   t.oid
   NOT IN (SELECT (ARRAY[704, 11676, 10005, 3912, 11765, 59410, 11397])[i] FROM generate_series(1, 376) AS i)
 ----
+
+# Regression test for SHOW session_id in a subquery.
+# See https://github.com/cockroachdb/cockroach/issues/93739
+let $session_id
+SHOW session_id
+
+query B
+select lower((select session_id from [show session_id])) = lower('$session_id')
+----
+true
