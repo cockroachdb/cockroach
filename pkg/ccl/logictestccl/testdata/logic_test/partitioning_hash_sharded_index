@@ -102,7 +102,7 @@ CREATE TABLE t_to_be_hashed (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -120,7 +120,7 @@ statement ok
 CREATE INDEX ON t_to_be_hashed (c) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -140,7 +140,7 @@ statement ok
 CREATE UNIQUE INDEX ON t_to_be_hashed (c) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -161,7 +161,7 @@ statement ok
 ALTER TABLE t_to_be_hashed ALTER PRIMARY KEY USING COLUMNS (a) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -192,7 +192,7 @@ CREATE TABLE t_idx_pk_hashed_1 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_idx_pk_hashed_1];
+SELECT create_statement FROM [SHOW CREATE TABLE t_idx_pk_hashed_1];
 ----
 CREATE TABLE public.t_idx_pk_hashed_1 (
   crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
@@ -223,7 +223,7 @@ CREATE TABLE t_idx_pk_hashed_2 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_idx_pk_hashed_2];
+SELECT create_statement FROM [SHOW CREATE TABLE t_idx_pk_hashed_2];
 ----
 CREATE TABLE public.t_idx_pk_hashed_2 (
   a INT8 NOT NULL,

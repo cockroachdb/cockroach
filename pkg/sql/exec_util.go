@@ -3381,6 +3381,10 @@ func (m *sessionDataMutator) SetExperimentalHashGroupJoinEnabled(val bool) {
 	m.data.ExperimentalHashGroupJoinEnabled = val
 }
 
+func (m *sessionDataMutator) SetAllowOrdinalColumnReference(val bool) {
+	m.data.AllowOrdinalColumnReferences = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

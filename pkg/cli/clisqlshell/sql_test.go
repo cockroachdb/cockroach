@@ -57,7 +57,7 @@ func Example_sql() {
 	// growing capacity starting at 1 (the batch sizes will be 1, 2, 4, ...),
 	// and with the query below the division by zero error will occur after the
 	// first batch consisting of 1 row has been returned to the client.
-	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
+	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(i-2) from generate_series(1,3) g(i)`})
 	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
 	c.RunWithArgs([]string{`sql`, `-e`, `CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;`})
 	c.RunWithArgs([]string{`sql`, `-e`, `\du my_user`})
@@ -116,7 +116,7 @@ func Example_sql() {
 	// CREATE TABLE
 	// x
 	// sql -e copy t.f from stdin
-	// sql -e select 1/(@1-2) from generate_series(1,3)
+	// sql -e select 1/(i-2) from generate_series(1,3) g(i)
 	// ?column?
 	// -1.0000000000000000000
 	// (error encountered after some results were delivered)

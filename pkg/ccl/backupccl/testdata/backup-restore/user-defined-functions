@@ -50,7 +50,7 @@ db1 sc2 tbl2 table false
 db1 sc2 f2 function false
 
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	RETURNS INT8
@@ -85,7 +85,7 @@ USE db1_new
 # 2. db name in qualified name is rewritten.
 # 3. sequence id is rewritten so that sequence name is deserialized correctly.
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
 	RETURNS INT8
@@ -200,7 +200,7 @@ db1 sc2 tbl2 table true
 db1 sc2 f2 function true
 
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	RETURNS INT8
@@ -236,7 +236,7 @@ USE db1
 # 2. db name in qualified name is rewritten.
 # 3. sequence id is rewritten so that sequence name is deserialized correctly.
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	RETURNS INT8

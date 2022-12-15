@@ -573,7 +573,7 @@ statement ok
 $create_statement
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t]
+SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
    crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,

@@ -640,7 +640,7 @@ ANALYZE system.role_options
 statement OK
 ANALYZE system.role_members
 
-query T retry 
+query T retry
 EXPLAIN SHOW USERS
 ----
 distribution: local
@@ -709,14 +709,13 @@ vectorized: true
   estimated row count: 1
 
 query T
-EXPLAIN (VERBOSE) SELECT @1 FROM select_test
+EXPLAIN (VERBOSE) SELECT last_value FROM select_test
 ----
 distribution: local
 vectorized: true
 ·
-• render
-│ columns: ("?column?")
-│ render ?column?: last_value
+• project
+│ columns: (last_value)
 │
 └── • sequence select
       columns: (last_value, log_cnt, is_called)

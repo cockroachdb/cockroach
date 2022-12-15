@@ -41,20 +41,19 @@ SHOW CREATE TABLE ";--notbetter"
 
 # Check that view creates handle strange things properly.
 statement ok
-CREATE VIEW ";--alsoconcerning" AS SELECT @1 AS a, @2 AS b, @3 AS c FROM ";--notbetter"
+CREATE VIEW ";--alsoconcerning" AS SELECT x AS a, y AS b FROM ";--notbetter"
 
 query TT
 SHOW CREATE VIEW ";--alsoconcerning"
 ----
 ";--alsoconcerning"  CREATE VIEW public.";--alsoconcerning" (
                        a,
-                       b,
-                       c
-                     ) AS SELECT @1 AS a, @2 AS b, @3 AS c FROM test.public.";--notbetter"
+                       b
+                     ) AS SELECT x AS a, y AS b FROM test.public.";--notbetter"
 
 # Check that "create table as" handles strange things properly.
 statement ok
-CREATE TABLE ";--dontask" AS SELECT @1 AS a, @2 AS b, @3 AS c FROM ";--notbetter"
+CREATE TABLE ";--dontask" AS SELECT x AS a, y AS b FROM ";--notbetter"
 
 query TT
 SHOW CREATE TABLE ";--dontask"
@@ -62,7 +61,6 @@ SHOW CREATE TABLE ";--dontask"
 ";--dontask"  CREATE TABLE public.";--dontask" (
                 a INT8 NULL,
                 b INT8 NULL,
-                c INT8 NULL,
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT ";--dontask_pkey" PRIMARY KEY (rowid ASC)
               )
