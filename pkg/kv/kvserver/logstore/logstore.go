@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -308,7 +309,7 @@ func LoadTerm(
 		// sideloaded entries here to keep the term fetching cheap.
 		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
 		// makes any difference.
-		if !SniffSideloadedRaftCommand(entry.Data) {
+		if v, _, _ := kvserverbase.DecodeRaftCommand(entry.Data); v != kvserverbase.RaftVersionSideloaded {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
 		return entry.Term, nil
@@ -381,7 +382,7 @@ func LoadEntries(
 		}
 		expectedIndex++
 
-		if SniffSideloadedRaftCommand(ent.Data) {
+		if v, _, _ := kvserverbase.DecodeRaftCommand(ent.Data); v == kvserverbase.RaftVersionSideloaded {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
 			)
