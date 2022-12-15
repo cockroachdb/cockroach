@@ -29,7 +29,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
-	producerJobID, ingestionJobID := c.startStreamReplication()
+	producerJobID, ingestionJobID := c.startStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
@@ -48,7 +48,10 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	var cutoverTime time.Time
 	c.destSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 
-	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, args.destTenantName, cutoverTime)
+	var cutoverOutput time.Time
+	c.destSysSQL.QueryRow(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		args.destTenantName, cutoverTime).Scan(&cutoverOutput)
+	require.Equal(t, cutoverTime, cutoverOutput)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	cleanupTenant := c.createDestTenantSQL(ctx)
 	defer func() {

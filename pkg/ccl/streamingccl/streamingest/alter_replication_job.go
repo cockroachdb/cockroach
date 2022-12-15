@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -25,13 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 const alterReplicationJobOp = "ALTER TENANT REPLICATION"
 
-var alterReplicationJobHeader = colinfo.ResultColumns{
-	{Name: "replication_job_id", Typ: types.Int},
+var alterReplicationCutoverHeader = colinfo.ResultColumns{
+	{Name: "cutover_time", Typ: types.TimestampTZ},
 }
 
 func alterReplicationJobTypeCheck(
@@ -56,8 +58,9 @@ func alterReplicationJobTypeCheck(
 				return false, nil, err
 			}
 		}
+		return true, alterReplicationCutoverHeader, nil
 	}
-	return true, alterReplicationJobHeader, nil
+	return true, nil, nil
 }
 
 func alterReplicationJobHook(
@@ -159,6 +162,8 @@ func alterReplicationJobHook(
 			if err := jobRegistry.Unpause(ctx, p.Txn(), tenInfo.TenantReplicationJobID); err != nil {
 				return err
 			}
+			cutoverTimestamp, _ := tree.MakeDTimestampTZ(timeutil.Unix(0, cutoverTime.WallTime), time.Nanosecond)
+			resultsCh <- tree.Datums{cutoverTimestamp}
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
@@ -174,10 +179,12 @@ func alterReplicationJobHook(
 				return errors.New("unsupported job command in ALTER TENANT REPLICATION")
 			}
 		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(tenInfo.TenantReplicationJobID))}
 		return nil
 	}
-	return fn, alterReplicationJobHeader, nil, false, nil
+	if alterTenantStmt.Cutover != nil {
+		return fn, alterReplicationCutoverHeader, nil, false, nil
+	}
+	return fn, nil, nil, false, nil
 }
 
 func typeCheckCutoverTime(

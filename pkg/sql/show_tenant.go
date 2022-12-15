@@ -209,11 +209,11 @@ func (n *showTenantNode) Values() tree.Datums {
 		if n.replicationInfo.ReplicationLagInfo != nil {
 			minIngested := n.replicationInfo.ReplicationLagInfo.MinIngestedTimestamp.WallTime
 			// The latest fully replicated time.
-			replicatedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, minIngested), time.Nanosecond)
+			replicatedTimestamp, _ = tree.MakeDTimestampTZ(timeutil.Unix(0, minIngested), time.Nanosecond)
 		}
 		// The protected timestamp on the destination cluster.
-		retainedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, n.protectedTimestamp.WallTime), time.Nanosecond)
-		replicationStartTimestamp, _ = tree.MakeDTimestamp(
+		retainedTimestamp, _ = tree.MakeDTimestampTZ(timeutil.Unix(0, n.protectedTimestamp.WallTime), time.Nanosecond)
+		replicationStartTimestamp, _ = tree.MakeDTimestampTZ(
 			timeutil.Unix(0, n.replicationInfo.IngestionDetails.ReplicationStartTime.WallTime), time.Nanosecond)
 	}
 

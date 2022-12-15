@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -90,4 +91,49 @@ func streamIngestionStats(
 	stats, err := getStreamIngestionStats(ctx, *details, progress)
 	require.NoError(t, err)
 	return stats
+}
+
+func streamIngestionStatsNoHeartbeat(
+	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
+) *streampb.StreamIngestionStats {
+	var payloadBytes []byte
+	var progressBytes []byte
+	var payload jobspb.Payload
+	var progress jobspb.Progress
+	sqlRunner.QueryRow(t, "SELECT payload, progress FROM system.jobs WHERE id = $1",
+		ingestionJobID).Scan(&payloadBytes, &progressBytes)
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	details := payload.GetStreamIngestion()
+	stats, err := getStreamIngestionStatsNoHeartbeat(ctx, *details, progress)
+	require.NoError(t, err)
+	return stats
+}
+
+// getStreamJobIds returns the jod ids of the producer and ingestion jobs.
+func getStreamJobIds(
+	t *testing.T,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	destTenantName roachpb.TenantName,
+) (producer int, consumer int) {
+	var tenantInfoBytes []byte
+	var tenantInfo descpb.TenantInfo
+	sqlRunner.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
+		destTenantName).Scan(&tenantInfoBytes)
+	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
+
+	stats := streamIngestionStatsNoHeartbeat(t, ctx, sqlRunner, int(tenantInfo.TenantReplicationJobID)) //TODO avoid the int..
+	return int(stats.IngestionDetails.StreamID), int(tenantInfo.TenantReplicationJobID)
+}
+
+// getStreamIngestionJon returns the ingestion job id running on the destination tenant.
+func getStreamIngestionJobId(
+	t *testing.T, sqlRunner *sqlutils.SQLRunner, destTenantName roachpb.TenantName,
+) int {
+	var tenantInfoBytes []byte
+	var tenantInfo descpb.TenantInfo
+	sqlRunner.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1", destTenantName).Scan(&tenantInfoBytes)
+	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
+	return int(tenantInfo.TenantReplicationJobID)
 }
