@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -205,7 +204,7 @@ func (r *Reporter) CreateReport(
 	// flattened for quick reads, but we'd rather only report the non-defaults.
 	if it, err := r.InternalExec.QueryIteratorEx(
 		ctx, "read-setting", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
@@ -230,7 +229,7 @@ func (r *Reporter) CreateReport(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"SELECT id, config FROM system.zones",
 	); err != nil {
 		log.Warningf(ctx, "%v", err)

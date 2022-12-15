@@ -111,7 +111,7 @@ func DeleteSchedule(
 		ctx,
 		"delete-schedule",
 		txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),

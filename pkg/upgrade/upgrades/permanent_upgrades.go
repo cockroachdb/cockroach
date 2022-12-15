@@ -141,7 +141,7 @@ func updateSystemLocationData(
 	// If so, we don't want to do anything.
 	row, err := deps.InternalExecutor.QueryRowEx(ctx, "update-system-locations",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err

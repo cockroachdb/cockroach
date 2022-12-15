@@ -330,7 +330,7 @@ func (s *authenticationServer) UserLogout(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
@@ -380,7 +380,7 @@ WHERE id = $1`
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
@@ -509,7 +509,7 @@ RETURNING id
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		insertSessionStmt,
 		hashedSecret,
 		userName.Normalized(),

@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -52,7 +51,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		datums, columns, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 			params.ctx,
 			"load-schedules",
-			params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			params.p.Txn(), sessiondata.RootUserSessionDataOverride,
 			fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = $1", env.ScheduledJobsTableName()),
 			tree.NewDInt(tree.DInt(sjID)))
 		if err != nil {
@@ -64,7 +63,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		datums, columns, err := params.ExecCfg().InternalExecutor.QueryBufferedExWithCols(
 			params.ctx,
 			"load-schedules",
-			params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			params.p.Txn(), sessiondata.RootUserSessionDataOverride,
 			fmt.Sprintf("SELECT * FROM %s", env.ScheduledJobsTableName()))
 		if err != nil {
 			return nil, err

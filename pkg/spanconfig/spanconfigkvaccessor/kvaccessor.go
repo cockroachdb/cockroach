@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -223,7 +222,7 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 		targetsBatch := targets[startIdx:endIdx]
 		getStmt, getQueryArgs := k.constructGetStmtAndArgs(targetsBatch)
 		it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			getStmt, getQueryArgs...,
 		)
 		if err != nil {
@@ -309,7 +308,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			toDeleteBatch := toDelete[startIdx:endIdx]
 			deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDeleteBatch)
 			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				deleteStmt, deleteQueryArgs...,
 			)
 			if err != nil {
@@ -335,7 +334,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			return err
 		}
 		if n, err := k.ie.ExecEx(ctx, "upsert-span-cfgs", txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			upsertStmt, upsertQueryArgs...,
 		); err != nil {
 			return err
@@ -345,7 +344,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 
 		validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsertBatch)
 		if datums, err := k.ie.QueryRowEx(ctx, "validate-span-cfgs", txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			validationStmt, validationQueryArgs...,
 		); err != nil {
 			return err

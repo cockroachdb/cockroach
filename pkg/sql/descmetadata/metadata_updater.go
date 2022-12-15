@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -65,7 +64,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 	rowsDeleted, err := ie.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(
 			`DELETE FROM %s WHERE database_id = $1`,
 			sessioninit.DatabaseRoleSettingsTableName,
@@ -105,7 +104,7 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 		ctx,
 		"delete-schedule",
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,
 	)

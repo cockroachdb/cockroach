@@ -102,7 +102,7 @@ func LoadScheduledJob(
 	txn *kv.Txn,
 ) (*ScheduledJob, error) {
 	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), id))
 
@@ -378,7 +378,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	row, retCols, err := ex.QueryRowExWithCols(ctx, "sched-create", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
@@ -415,7 +415,7 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	n, err := ex.ExecEx(ctx, "sched-update", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("UPDATE %s SET (%s) = (%s) WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","),
 			generatePlaceholders(len(qargs)), j.ScheduleID()),
@@ -440,7 +440,7 @@ func (j *ScheduledJob) Delete(ctx context.Context, ex sqlutil.InternalExecutor, 
 		return errors.New("cannot delete schedule: missing schedule id")
 	}
 	_, err := ex.ExecEx(ctx, "sched-delete", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("DELETE FROM %s WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), j.ScheduleID()),
 	)
