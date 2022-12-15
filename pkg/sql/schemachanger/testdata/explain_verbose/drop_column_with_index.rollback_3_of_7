@@ -11,7 +11,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 4 elements transitioning toward PUBLIC
+    │   ├── • 3 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -34,23 +34,20 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
     │   │   │     ABSENT → PUBLIC
     │   │   │
-    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │ VALIDATED → PUBLIC
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-    │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-    │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │
-    │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
-    │   │   │         rule: "index dependents exist before index becomes public"
-    │   │   │
-    │   │   └── • IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
-    │   │         ABSENT → PUBLIC
+    │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │       │ VALIDATED → PUBLIC
+    │   │       │
+    │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+    │   │       │     rule: "index dependents exist before index becomes public"
+    │   │       │
+    │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+    │   │       │     rule: "index dependents exist before index becomes public"
+    │   │       │
+    │   │       ├── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │       │
+    │   │       └── • Precedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
+    │   │             rule: "index dependents exist before index becomes public"
     │   │
     │   ├── • 4 elements transitioning toward ABSENT
     │   │   │
@@ -84,35 +81,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
     │   │
-    │   └── • 11 Mutation operations
+    │   └── • 10 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 2
     │       │     Name: j
-    │       │     TableID: 104
-    │       │
-    │       ├── • SetIndexName
-    │       │     IndexID: 2
-    │       │     Name: t_j_idx
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 4
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeWriteOnlyColumnPublic
-    │       │     ColumnID: 2
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TableID: 104
-    │       │
-    │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
@@ -135,6 +108,25 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeWriteOnlyColumnPublic
+    │       │     ColumnID: 2
+    │       │     EventBase:
+    │       │       Authorization:
+    │       │         UserName: root
+    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›
+    │       │       StatementTag: ALTER TABLE
+    │       │       TargetMetadata:
+    │       │         SourceElementID: 1
+    │       │         SubWorkID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent

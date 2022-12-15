@@ -1,24 +1,28 @@
 setup
-CREATE TABLE t (i INT PRIMARY KEY, j INT);
-CREATE INDEX idx ON t(j)
+CREATE TABLE t1(i INT PRIMARY KEY, j INT);
+CREATE MATERIALIZED VIEW v2 AS SELECT i, j FROM t1;
+CREATE INDEX idx ON v2(j);
+CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t1} -> 104
++object {100 101 v2} -> 105
++object {100 101 v3} -> 106
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
-INSERT INTO t (i, j) VALUES($stageKey, $stageKey);
-INSERT INTO t (i, j) VALUES($stageKey + 1, $stageKey + 1);
+INSERT INTO t1 (i, j) VALUES($stageKey, $stageKey);
+INSERT INTO t1 (i, j) VALUES($stageKey + 1, $stageKey + 1);
 ----
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
-DELETE FROM t WHERE j=$stageKey+1;
-INSERT INTO t (i, j) VALUES($stageKey + 1, $stageKey + 1);
+DELETE FROM t1 WHERE j=$stageKey+1;
+INSERT INTO t1 (i, j) VALUES($stageKey + 1, $stageKey + 1);
 ----
 
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t;
+SELECT count(*)=$successfulStageCount*2 FROM t1;
 ----
 true
 
@@ -30,10 +34,53 @@ begin transaction #1
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
 ## StatementPhase stage 1 of 1 with 1 MutationType op
-upsert descriptor #104
+add synthetic descriptor #106:
+  ...
+     id: 106
+     isMaterializedView: true
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v3
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+     version: "2"
+  ...
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 13 MutationType ops
+delete all comments for table descriptor 106
+delete object namespace entry {100 101 v3} -> 106
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 106
+  -    indexId: 2
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     dependsOn:
+     - 104
   ...
      formatVersion: 3
-     id: 104
+     id: 105
   -  indexes:
   -  - createdAtNanos: "1640995200000000000"
   -    createdExplicitly: true
@@ -48,12 +95,13 @@ upsert descriptor #104
   -    keyColumnNames:
   -    - j
   -    keySuffixColumnIds:
-  -    - 1
+  -    - 3
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
   -    version: 4
   +  indexes: []
+     isMaterializedView: true
      modificationTime: {}
   +  mutations:
   +  - direction: DROP
@@ -71,24 +119,22 @@ upsert descriptor #104
   +      keyColumnNames:
   +      - j
   +      keySuffixColumnIds:
-  +      - 1
+  +      - 3
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
-     name: t
-     nextColumnId: 3
+     name: v2
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
-upsert descriptor #104
+  -  version: "10"
+  +  version: "11"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+upsert descriptor #106
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -99,20 +145,23 @@ upsert descriptor #104
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
   +        statement: DROP INDEX idx CASCADE
   +        statementTag: DROP INDEX
   +    targetRanks: <redacted>
   +    targets: <redacted>
-     families:
-     - columnIds:
+     dependsOn:
+     - 105
   ...
+     replacementOf:
        time: {}
+  +  state: DROP
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
-create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
-  descriptor IDs: [104]
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT j FROM defaultdb.public.v2@idx
+create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.v2@idx CASCADE"
+  descriptor IDs: [105 106]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -120,11 +169,11 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
-upsert descriptor #104
+## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
+upsert descriptor #105
   ...
          keySuffixColumnIds:
-         - 1
+         - 3
   -      name: idx
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
@@ -133,19 +182,25 @@ upsert descriptor #104
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-     name: t
-     nextColumnId: 3
+     name: v2
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "9"
-  +  version: "10"
-write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  -  version: "11"
+  +  version: "12"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
+  descriptor IDs: [106]
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to [105]
 commit transaction #3
+notified job registry to adopt jobs: [2]
 begin transaction #4
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #105
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -156,15 +211,15 @@ upsert descriptor #104
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
   -        statement: DROP INDEX idx CASCADE
   -        statementTag: DROP INDEX
   -    targetRanks: <redacted>
   -    targets: <redacted>
-     families:
-     - columnIds:
+     dependsOn:
+     - 104
   ...
-     indexes: []
+     isMaterializedView: true
      modificationTime: {}
   -  mutations:
   -  - direction: DROP
@@ -182,7 +237,7 @@ upsert descriptor #104
   -      keyColumnNames:
   -      - j
   -      keySuffixColumnIds:
-  -      - 1
+  -      - 3
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
@@ -190,19 +245,20 @@ upsert descriptor #104
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
-     name: t
-     nextColumnId: 3
+     name: v2
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "10"
-  +  version: "11"
+  -  version: "12"
+  +  version: "13"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
 write *eventpb.FinishSchemaChange to event log
-create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
-  descriptor IDs: [104]
+create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
+  descriptor IDs: [105]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
-updated schema change job #1 descriptor IDs to []
+updated schema change job #1 descriptor IDs to [106]
 commit transaction #4
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase

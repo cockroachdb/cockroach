@@ -156,6 +156,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	replicationJobId := tree.NewDInt(tree.DInt(n.tenantInfo.TenantReplicationJobID))
 	replicatedTimestamp := tree.DNull
 	retainedTimestamp := tree.DNull
+	replicationStartTimestamp := tree.DNull
 
 	if n.replicationInfo != nil {
 		sourceTenantName = tree.NewDString(string(n.replicationInfo.IngestionDetails.SourceTenantName))
@@ -167,6 +168,8 @@ func (n *showTenantNode) Values() tree.Datums {
 		}
 		// The protected timestamp on the destination cluster.
 		retainedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, n.protectedTimestamp.WallTime), time.Nanosecond)
+		replicationStartTimestamp, _ = tree.MakeDTimestamp(
+			timeutil.Unix(0, n.replicationInfo.IngestionDetails.ReplicationStartTime.WallTime), time.Nanosecond)
 	}
 
 	return tree.Datums{
@@ -178,6 +181,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		replicationJobId,
 		replicatedTimestamp,
 		retainedTimestamp,
+		replicationStartTimestamp,
 	}
 }
 

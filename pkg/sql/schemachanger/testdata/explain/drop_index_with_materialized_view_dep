@@ -1,0 +1,91 @@
+/* setup */
+CREATE TABLE t1(i INT PRIMARY KEY, j INT);
+CREATE MATERIALIZED VIEW v2 AS SELECT i, j FROM t1;
+CREATE INDEX idx ON v2(j);
+CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx;
+
+/* test */
+EXPLAIN (ddl) DROP INDEX idx CASCADE;
+----
+Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE; 
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 6 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → TXN_DROPPED View:{DescID: 106}
+ │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 106, ColumnID: 1}
+ │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 106, ColumnID: 2}
+ │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 106, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 106, ColumnID: 4294967294}
+ │         │    └── PUBLIC → VALIDATED   PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+ │         └── 1 Mutation operation
+ │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":106}
+ ├── PreCommitPhase
+ │    └── Stage 1 of 1 in PreCommitPhase
+ │         ├── 27 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
+ │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
+ │         │    ├── PUBLIC      → VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+ │         │    ├── PUBLIC      → ABSENT    Namespace:{DescID: 106, Name: v3, ReferencedDescID: 100}
+ │         │    ├── PUBLIC      → ABSENT    Owner:{DescID: 106}
+ │         │    ├── PUBLIC      → ABSENT    UserPrivileges:{DescID: 106, Name: admin}
+ │         │    ├── PUBLIC      → ABSENT    UserPrivileges:{DescID: 106, Name: root}
+ │         │    ├── TXN_DROPPED → DROPPED   View:{DescID: 106}
+ │         │    ├── PUBLIC      → ABSENT    ObjectParent:{DescID: 106, ReferencedDescID: 101}
+ │         │    ├── PUBLIC      → ABSENT    ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
+ │         │    ├── WRITE_ONLY  → ABSENT    Column:{DescID: 106, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT    ColumnName:{DescID: 106, Name: j, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT    ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── WRITE_ONLY  → ABSENT    Column:{DescID: 106, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT    ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT    ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT    ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+ │         │    ├── WRITE_ONLY  → ABSENT    Column:{DescID: 106, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT    ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT    ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── WRITE_ONLY  → ABSENT    Column:{DescID: 106, ColumnID: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT    ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT    ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+ │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+ │         │    ├── VALIDATED   → ABSENT    PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+ │         │    └── PUBLIC      → ABSENT    IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
+ │         └── 13 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":106}
+ │              ├── RemoveAllTableComments {"TableID":106}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
+ │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":106}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 5 elements transitioning toward ABSENT
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+      │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 105, Name: idx, IndexID: 2}
+      │    │    ├── DROPPED   → ABSENT      View:{DescID: 106}
+      │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106, IndexID: 1}
+      │    │    └── PUBLIC    → ABSENT      TableData:{DescID: 106, ReferencedDescID: 100}
+      │    └── 8 Mutation operations
+      │         ├── LogEvent {"TargetStatus":1}
+      │         ├── CreateGCJobForTable {"DatabaseID":100,"TableID":106}
+      │         ├── LogEvent {"TargetStatus":1}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":105}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":105}
+      │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 105, IndexID: 2}
+           └── 4 Mutation operations
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":105}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
