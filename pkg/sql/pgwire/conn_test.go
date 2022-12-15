@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -537,7 +536,7 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 // waitForClientConn blocks until a client connects and performs the pgwire
 // handshake. This emulates what pgwire.Server does.
 func waitForClientConn(ln net.Listener) (*conn, error) {
-	conn, _, err := getSessionArgs(ln, false /* trustRemoteAddr */)
+	conn, _, err := getSessionArgs(ln, false)
 	if err != nil {
 		return nil, err
 	}
@@ -549,29 +548,38 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 
 // getSessionArgs blocks until a client connects and returns the connection
 // together with session arguments or an error.
-func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.SessionArgs, error) {
-	conn, err := ln.Accept()
-	if err != nil {
-		return nil, sql.SessionArgs{}, err
-	}
+func getSessionArgs(
+	ln net.Listener, trustRemoteAddr bool,
+) (conn net.Conn, _ sql.SessionArgs, err error) {
+	for {
+		conn, err = ln.Accept()
+		if err != nil {
+			return nil, sql.SessionArgs{}, err
+		}
 
-	buf := pgwirebase.MakeReadBuffer()
-	_, err = buf.ReadUntypedMsg(conn)
-	if err != nil {
-		return nil, sql.SessionArgs{}, err
-	}
-	version, err := buf.GetUint32()
-	if err != nil {
-		return nil, sql.SessionArgs{}, err
-	}
-	if version != version30 {
-		return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
-	}
+		buf := pgwirebase.MakeReadBuffer()
+		_, err = buf.ReadUntypedMsg(conn)
+		if err != nil {
+			return nil, sql.SessionArgs{}, err
+		}
+		version, err := buf.GetUint32()
+		if err != nil {
+			return nil, sql.SessionArgs{}, err
+		}
+		if version == versionCancel {
+			// The pgx driver can send a cancel message asynchronously if the
+			// context expired, but these test should ignore it.
+			continue
+		}
+		if version != version30 {
+			return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
+		}
 
-	args, err := parseClientProvidedSessionParameters(
-		context.Background(), nil, &buf, conn.RemoteAddr(), trustRemoteAddr,
-	)
-	return conn, args, err
+		args, err := parseClientProvidedSessionParameters(
+			context.Background(), nil, &buf, conn.RemoteAddr(), trustRemoteAddr,
+		)
+		return conn, args, err
+	}
 }
 
 func makeTestingConvCfg() (sessiondatapb.DataConversionConfig, *time.Location) {
@@ -1337,7 +1345,6 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 
 func TestParseClientProvidedSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 93469, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// Start a pgwire "server".
@@ -1346,6 +1353,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = ln.Close() }()
 	serverAddr := ln.Addr()
 	log.Infof(context.Background(), "started listener on %s", serverAddr)
 	testCases := []struct {
@@ -1565,13 +1573,14 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
-			var connErr error
+			wg := sync.WaitGroup{}
+			wg.Add(1)
 			go func(query string) {
+				defer wg.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				defer cancel()
 				url := fmt.Sprintf("%s&%s", baseURL, query)
-				var c *pgx.Conn
-				c, connErr = pgx.Connect(ctx, url)
+				c, connErr := pgx.Connect(ctx, url)
 				if connErr != nil {
 					return
 				}
@@ -1583,6 +1592,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			}(tc.query)
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
+			wg.Wait()
 			tc.assert(t, args, err)
 		})
 	}
