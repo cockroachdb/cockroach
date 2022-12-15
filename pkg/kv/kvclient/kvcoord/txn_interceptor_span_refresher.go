@@ -12,7 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -474,15 +474,16 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	if txn.WriteTooOld {
 		reason = roachpb.RETRY_WRITE_TOO_OLD
 	}
-	msg := "failed preemptive refresh"
+	msg := redact.StringBuilder{}
+	msg.SafeString("failed preemptive refresh")
 	if refreshErr != nil {
 		if refreshErr, ok := refreshErr.GetDetail().(*roachpb.RefreshFailedError); ok {
-			msg = fmt.Sprintf("%s due to a conflict: %s on key %s", msg, refreshErr.FailureReason(), refreshErr.Key)
+			msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
 		} else {
-			msg = fmt.Sprintf("%s - unknown error: %s", msg, refreshErr)
+			msg.Printf(" - unknown error: %s", refreshErr)
 		}
 	}
-	retryErr := roachpb.NewTransactionRetryError(reason, msg)
+	retryErr := roachpb.NewTransactionRetryError(reason, msg.RedactableString())
 	return roachpb.NewErrorWithTxn(retryErr, txn)
 }
 

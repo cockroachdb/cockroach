@@ -13,7 +13,6 @@ package roachpb
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,6 +24,17 @@ import (
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
 )
+
+// Printer is an interface that lets us use what's common between the
+// errors.Printer interface and redact.SafePrinter so we can write functions
+// that both SafeFormatError and SafeFormat can share.
+type Printer interface {
+	// Print appends args to the message output.
+	Print(args ...interface{})
+
+	// Printf writes a formatted string.
+	Printf(format string, args ...interface{})
+}
 
 // ClientVisibleRetryError is to be implemented by errors visible by
 // layers above and that can be handled by retrying the transaction.
@@ -43,6 +53,11 @@ func (e *UnhandledRetryableError) Error() string {
 }
 
 var _ error = &UnhandledRetryableError{}
+
+func (e *UnhandledRetryableError) SafeFormatError(p errors.Printer) (next error) {
+	p.Print(e.PErr)
+	return nil
+}
 
 // SafeFormat implements redact.SafeFormatter.
 func (e *UnhandledRetryableError) SafeFormat(s redact.SafePrinter, r rune) {
@@ -187,6 +202,20 @@ func (e *Error) SafeFormat(s redact.SafePrinter, _ rune) {
 		s.SafeString(": ")
 		s.Print(txn)
 	}
+}
+
+func (e *Error) SafeFormatError(p errors.Printer) (next error) {
+	if e == nil {
+		p.Print(nil)
+		return
+	}
+
+	p.Print(errors.DecodeError(context.Background(), e.EncodedError))
+
+	if txn := e.GetTxn(); txn != nil {
+		p.Printf(": %s", txn)
+	}
+	return nil
 }
 
 // String implements fmt.Stringer.
@@ -380,6 +409,11 @@ func (e *NodeUnavailableError) Error() string {
 	return e.message(nil)
 }
 
+func (e *NodeUnavailableError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 // Type is part of the ErrorDetailInterface.
 func (e *NodeUnavailableError) Type() ErrorDetailType {
 	return NodeUnavailableErrType
@@ -401,26 +435,35 @@ func (e *NotLeaseHolderError) Type() ErrorDetailType {
 }
 
 func (e *NotLeaseHolderError) message(_ *Error) string {
-	var buf strings.Builder
-	buf.WriteString("[NotLeaseHolderError] ")
+	var buf redact.StringBuilder
+	e.printError(&buf)
+	return buf.String()
+}
+
+func (e *NotLeaseHolderError) printError(s Printer) {
+	s.Printf("[NotLeaseHolderError] ")
 	if e.CustomMsg != "" {
-		buf.WriteString(e.CustomMsg)
-		buf.WriteString("; ")
+		s.Print(e.CustomMsg)
+		s.Printf("; ")
 	}
-	fmt.Fprintf(&buf, "r%d: ", e.RangeID)
+	s.Printf("r%d: ", e.RangeID)
 	if e.Replica != (ReplicaDescriptor{}) {
-		fmt.Fprintf(&buf, "replica %s not lease holder; ", e.Replica)
+		s.Printf("replica %s not lease holder; ", e.Replica)
 	} else {
-		fmt.Fprint(&buf, "replica not lease holder; ")
+		s.Printf("replica not lease holder; ")
 	}
 	if e.Lease != nil {
-		fmt.Fprintf(&buf, "current lease is %s", e.Lease)
+		s.Printf("current lease is %s", e.Lease)
 	} else if e.DeprecatedLeaseHolder != nil {
-		fmt.Fprintf(&buf, "replica %s is", *e.DeprecatedLeaseHolder)
+		s.Printf("replica %s is", *e.DeprecatedLeaseHolder)
 	} else {
-		fmt.Fprint(&buf, "lease holder unknown")
+		s.Printf("lease holder unknown")
 	}
-	return buf.String()
+}
+
+func (e *NotLeaseHolderError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
 }
 
 var _ ErrorDetailInterface = &NotLeaseHolderError{}
@@ -436,6 +479,11 @@ func (e *LeaseRejectedError) Error() string {
 
 func (e *LeaseRejectedError) message(_ *Error) string {
 	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested.String(), e.Message)
+}
+
+func (e *LeaseRejectedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
 }
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
@@ -454,11 +502,21 @@ func (e *RangeNotFoundError) Error() string {
 }
 
 func (e *RangeNotFoundError) message(_ *Error) string {
-	msg := fmt.Sprintf("r%d was not found", e.RangeID)
+	var buf redact.StringBuilder
+	e.printError(&buf)
+	return buf.String()
+}
+
+func (e *RangeNotFoundError) printError(s Printer) {
+	s.Printf("r%d was not found", e.RangeID)
 	if e.StoreID != 0 {
-		msg += fmt.Sprintf(" on s%d", e.StoreID)
+		s.Printf(" on s%d", e.StoreID)
 	}
-	return msg
+}
+
+func (e *RangeNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
 }
 
 // Type is part of the ErrorDetailInterface.
@@ -538,12 +596,23 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 func (e *RangeKeyMismatchError) message(_ *Error) string {
+	var buf redact.StringBuilder
+	e.printError(&buf)
+	return buf.String()
+}
+
+func (e *RangeKeyMismatchError) printError(s Printer) {
 	mr, err := e.MismatchedRange()
 	if err != nil {
-		return err.Error()
+		s.Printf("%s", err)
 	}
-	return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s; suggested ranges: %s",
+	s.Printf("key range %s-%s outside of bounds of range %s-%s; suggested ranges: %s",
 		e.RequestStartKey, e.RequestEndKey, mr.Desc.StartKey, mr.Desc.EndKey, e.Ranges)
+}
+
+func (e *RangeKeyMismatchError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
 }
 
 // Type is part of the ErrorDetailInterface.
@@ -632,6 +701,11 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 	}
 }
 
+func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("TransactionAbortedError(%s)", redact.SafeString(TransactionAbortedReason_name[int32(e.Reason)]))
+	return nil
+}
+
 // NewTransactionRetryWithProtoRefreshError initializes a new TransactionRetryWithProtoRefreshError.
 //
 // txnID is the ID of the transaction being restarted.
@@ -642,13 +716,18 @@ func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbo
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg string, txnID uuid.UUID, txn Transaction,
+	msg redact.RedactableString, txnID uuid.UUID, txn Transaction,
 ) *TransactionRetryWithProtoRefreshError {
 	return &TransactionRetryWithProtoRefreshError{
 		Msg:         msg,
 		TxnID:       txnID,
 		Transaction: txn,
 	}
+}
+
+func (e *TransactionRetryWithProtoRefreshError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("TransactionRetryWithProtoRefreshError: %s", e.Msg)
+	return nil
 }
 
 // PrevTxnAborted returns true if this error originated from a
@@ -677,6 +756,10 @@ func (e *TransactionPushError) message(pErr *Error) string {
 	}
 	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
 }
+func (e *TransactionPushError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("failed to push %s", e.PusheeTxn)
+	return nil
+}
 
 func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
@@ -692,7 +775,7 @@ var _ transactionRestartError = &TransactionPushError{}
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 func NewTransactionRetryError(
-	reason TransactionRetryReason, extraMsg string,
+	reason TransactionRetryReason, extraMsg redact.RedactableString,
 ) *TransactionRetryError {
 	return &TransactionRetryError{
 		Reason:   reason,
@@ -701,15 +784,24 @@ func NewTransactionRetryError(
 }
 
 func (e *TransactionRetryError) Error() string {
-	msg := ""
+	var msg redact.RedactableString = ""
 	if e.ExtraMsg != "" {
-		msg = " - " + e.ExtraMsg
+		msg = redact.Sprintf(" - %s", e.ExtraMsg)
 	}
 	return fmt.Sprintf("TransactionRetryError: retry txn (%s%s)", e.Reason, msg)
 }
 
 func (e *TransactionRetryError) message(pErr *Error) string {
 	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
+}
+
+func (e *TransactionRetryError) SafeFormatError(p errors.Printer) (next error) {
+	var msg redact.RedactableString = ""
+	if e.ExtraMsg != "" {
+		msg = redact.Sprintf(" - %s", e.ExtraMsg)
+	}
+	p.Printf("TransactionRetryError: retry txn (%s%s)", redact.SafeString(TransactionRetryReason_name[int32(e.Reason)]), msg)
+	return nil
 }
 
 // Type is part of the ErrorDetailInterface.
@@ -727,7 +819,7 @@ var _ transactionRestartError = &TransactionRetryError{}
 // NewTransactionStatusError initializes a new TransactionStatusError with
 // the given message and reason.
 func NewTransactionStatusError(
-	reason TransactionStatusError_Reason, msg string,
+	reason TransactionStatusError_Reason, msg redact.RedactableString,
 ) *TransactionStatusError {
 	return &TransactionStatusError{
 		Msg:    msg,
@@ -748,6 +840,11 @@ func (e *TransactionStatusError) message(pErr *Error) string {
 	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
 }
 
+func (e *TransactionStatusError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("TransactionStatusError: %s (%s)", e.Msg, redact.Safe(e.Reason))
+	return nil
+}
+
 var _ ErrorDetailInterface = &TransactionStatusError{}
 
 func (e *WriteIntentError) Error() string {
@@ -755,8 +852,18 @@ func (e *WriteIntentError) Error() string {
 }
 
 func (e *WriteIntentError) message(_ *Error) string {
-	var buf strings.Builder
-	buf.WriteString("conflicting intents on ")
+	var buf redact.StringBuilder
+	e.printError(&buf)
+	return buf.String()
+}
+
+func (e *WriteIntentError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
+}
+
+func (e *WriteIntentError) printError(buf Printer) {
+	buf.Printf("conflicting intents on ")
 
 	// If we have a lot of intents, we only want to show the first and the last.
 	const maxBegin = 5
@@ -771,17 +878,17 @@ func (e *WriteIntentError) message(_ *Error) string {
 
 	for i := range begin {
 		if i > 0 {
-			buf.WriteString(", ")
+			buf.Printf(", ")
 		}
-		buf.WriteString(begin[i].Key.String())
+		buf.Print(begin[i].Key)
 	}
 	if end != nil {
-		buf.WriteString(" ... ")
+		buf.Printf(" ... ")
 		for i := range end {
 			if i > 0 {
-				buf.WriteString(", ")
+				buf.Printf(", ")
 			}
-			buf.WriteString(end[i].Key.String())
+			buf.Print(end[i].Key)
 		}
 	}
 
@@ -789,15 +896,14 @@ func (e *WriteIntentError) message(_ *Error) string {
 	case WriteIntentError_REASON_UNSPECIFIED:
 		// Nothing to say.
 	case WriteIntentError_REASON_WAIT_POLICY:
-		buf.WriteString(" [reason=wait_policy]")
+		buf.Printf(" [reason=wait_policy]")
 	case WriteIntentError_REASON_LOCK_TIMEOUT:
-		buf.WriteString(" [reason=lock_timeout]")
+		buf.Printf(" [reason=lock_timeout]")
 	case WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
-		buf.WriteString(" [reason=lock_wait_queue_max_length_exceeded]")
+		buf.Printf(" [reason=lock_wait_queue_max_length_exceeded]")
 	default:
 		// Could panic, better to silently ignore in case new reasons are added.
 	}
-	return buf.String()
 }
 
 // Type is part of the ErrorDetailInterface.
@@ -823,6 +929,17 @@ func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key Key) *WriteToo
 		ActualTimestamp: actualTS,
 		Key:             key,
 	}
+}
+
+func (e *WriteTooOldError) SafeFormatError(p errors.Printer) (next error) {
+	if len(e.Key) > 0 {
+		p.Printf("WriteTooOldError: write for key %s at timestamp %s too old; wrote at %s",
+			e.Key, e.Timestamp, e.ActualTimestamp)
+		return nil
+	}
+	p.Printf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
+		e.Timestamp, e.ActualTimestamp)
+	return nil
 }
 
 func (e *WriteTooOldError) Error() string {
@@ -879,20 +996,29 @@ func NewReadWithinUncertaintyIntervalError(
 
 // SafeFormat implements redact.SafeFormatter.
 func (e *ReadWithinUncertaintyIntervalError) SafeFormat(s redact.SafePrinter, _ rune) {
-	s.Printf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
+	e.printError(s)
+}
+
+func (e *ReadWithinUncertaintyIntervalError) printError(p Printer) {
+	p.Printf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
 		"previous write with future timestamp %s within uncertainty interval `t <= "+
 		"(local=%v, global=%v)`; "+
 		"observed timestamps: ",
 		e.ReadTimestamp, e.ExistingTimestamp, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
 
-	s.SafeRune('[')
+	p.Printf("[")
 	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
 		if i > 0 {
-			s.SafeRune(' ')
+			p.Printf(" ")
 		}
-		s.Printf("{%d %v}", ot.NodeID, ot.Timestamp)
+		p.Printf("{%d %v}", ot.NodeID, ot.Timestamp)
 	}
-	s.SafeRune(']')
+	p.Printf("]")
+}
+
+func (e *ReadWithinUncertaintyIntervalError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
 }
 
 func (e *ReadWithinUncertaintyIntervalError) String() string {
@@ -960,6 +1086,11 @@ func (e *OpRequiresTxnError) message(_ *Error) string {
 	return "the operation requires transactional context"
 }
 
+func (e *OpRequiresTxnError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 // Type is part of the ErrorDetailInterface.
 func (e *OpRequiresTxnError) Type() ErrorDetailType {
 	return OpRequiresTxnErrType
@@ -975,6 +1106,11 @@ func (e *ConditionFailedError) message(_ *Error) string {
 	return fmt.Sprintf("unexpected value: %s", e.ActualValue)
 }
 
+func (e *ConditionFailedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 // Type is part of the ErrorDetailInterface.
 func (e *ConditionFailedError) Type() ErrorDetailType {
 	return ConditionFailedErrType
@@ -984,6 +1120,11 @@ var _ ErrorDetailInterface = &ConditionFailedError{}
 
 func (e *RaftGroupDeletedError) Error() string {
 	return e.message(nil)
+}
+
+func (e *RaftGroupDeletedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
 }
 
 func (*RaftGroupDeletedError) message(_ *Error) string {
@@ -1015,6 +1156,14 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 	return msg
 }
 
+func (e *ReplicaCorruptionError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("replica corruption (processed=%t)", e.Processed)
+	if e.ErrorMsg != "" {
+		p.Printf(": %s", e.ErrorMsg)
+	}
+	return nil
+}
+
 // Type is part of the ErrorDetailInterface.
 func (e *ReplicaCorruptionError) Type() ErrorDetailType {
 	return ReplicaCorruptionErrType
@@ -1031,6 +1180,11 @@ func NewReplicaTooOldError(replicaID ReplicaID) *ReplicaTooOldError {
 
 func (e *ReplicaTooOldError) Error() string {
 	return e.message(nil)
+}
+
+func (e *ReplicaTooOldError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
 }
 
 func (*ReplicaTooOldError) message(_ *Error) string {
@@ -1055,6 +1209,11 @@ func (e *StoreNotFoundError) Error() string {
 	return e.message(nil)
 }
 
+func (e *StoreNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 func (e *StoreNotFoundError) message(_ *Error) string {
 	return fmt.Sprintf("store %d was not found", e.StoreID)
 }
@@ -1068,6 +1227,14 @@ var _ ErrorDetailInterface = &StoreNotFoundError{}
 
 func (e *TxnAlreadyEncounteredErrorError) Error() string {
 	return e.message(nil)
+}
+
+func (e *TxnAlreadyEncounteredErrorError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(
+		"txn already encountered an error; cannot be used anymore (previous err: %s)",
+		e.PrevError,
+	)
+	return nil
 }
 
 func (e *TxnAlreadyEncounteredErrorError) message(_ *Error) string {
@@ -1086,6 +1253,13 @@ var _ ErrorDetailInterface = &TxnAlreadyEncounteredErrorError{}
 
 func (e *IntegerOverflowError) Error() string {
 	return e.message(nil)
+}
+
+func (e *IntegerOverflowError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(
+		"key %s with value %d incremented by %d results in overflow",
+		e.Key, e.CurrentValue, e.IncrementValue)
+	return nil
 }
 
 func (e *IntegerOverflowError) message(_ *Error) string {
@@ -1109,6 +1283,11 @@ func (e *UnsupportedRequestError) message(_ *Error) string {
 	return "unsupported request"
 }
 
+func (e *UnsupportedRequestError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 // Type is part of the ErrorDetailInterface.
 func (e *UnsupportedRequestError) Type() ErrorDetailType {
 	return UnsupportedRequestErrType
@@ -1118,6 +1297,11 @@ var _ ErrorDetailInterface = &UnsupportedRequestError{}
 
 func (e *BatchTimestampBeforeGCError) Error() string {
 	return e.message(nil)
+}
+
+func (e *BatchTimestampBeforeGCError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
 }
 
 func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
@@ -1133,6 +1317,11 @@ var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
 
 func (e *MVCCHistoryMutationError) Error() string {
 	return e.message(nil)
+}
+
+func (e *MVCCHistoryMutationError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("unexpected MVCC history mutation in span %s", e.Span)
+	return nil
 }
 
 func (e *MVCCHistoryMutationError) message(_ *Error) string {
@@ -1156,6 +1345,14 @@ func NewIntentMissingError(key Key, wrongIntent *Intent) *IntentMissingError {
 
 func (e *IntentMissingError) Error() string {
 	return e.message(nil)
+}
+
+func (e *IntentMissingError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("intent missing")
+	if e.WrongIntent != nil {
+		p.Printf("; found intent %v at key instead", e.WrongIntent)
+	}
+	return nil
 }
 
 func (e *IntentMissingError) message(_ *Error) string {
@@ -1182,6 +1379,11 @@ func (e *MergeInProgressError) Error() string {
 	return e.message(nil)
 }
 
+func (e *MergeInProgressError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 func (e *MergeInProgressError) message(_ *Error) string {
 	return "merge in progress"
 }
@@ -1204,6 +1406,11 @@ func (e *RangeFeedRetryError) Error() string {
 	return e.message(nil)
 }
 
+func (e *RangeFeedRetryError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 func (e *RangeFeedRetryError) message(pErr *Error) string {
 	return fmt.Sprintf("retry rangefeed (%s)", e.Reason)
 }
@@ -1222,6 +1429,11 @@ func NewIndeterminateCommitError(txn Transaction) *IndeterminateCommitError {
 
 func (e *IndeterminateCommitError) Error() string {
 	return e.message(nil)
+}
+
+func (e *IndeterminateCommitError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("found txn in indeterminate STAGING state %s", e.StagingTxn)
+	return nil
 }
 
 func (e *IndeterminateCommitError) message(pErr *Error) string {
@@ -1243,6 +1455,11 @@ func (e *InvalidLeaseError) Error() string {
 	return e.message(nil)
 }
 
+func (e *InvalidLeaseError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
+}
+
 func (e *InvalidLeaseError) message(_ *Error) string {
 	return "invalid lease"
 }
@@ -1262,6 +1479,11 @@ func NewOptimisticEvalConflictsError() *OptimisticEvalConflictsError {
 
 func (e *OptimisticEvalConflictsError) Error() string {
 	return e.message(nil)
+}
+
+func (e *OptimisticEvalConflictsError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
 }
 
 func (e *OptimisticEvalConflictsError) message(pErr *Error) string {
@@ -1288,6 +1510,11 @@ func NewMinTimestampBoundUnsatisfiableError(
 
 func (e *MinTimestampBoundUnsatisfiableError) Error() string {
 	return e.message(nil)
+}
+
+func (e *MinTimestampBoundUnsatisfiableError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf(e.message(nil))
+	return nil
 }
 
 func (e *MinTimestampBoundUnsatisfiableError) message(pErr *Error) string {
@@ -1320,9 +1547,14 @@ func (e *RefreshFailedError) Error() string {
 	return e.message(nil)
 }
 
+func (e *RefreshFailedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
+	return nil
+}
+
 // FailureReason returns the failure reason as a string.
-func (e *RefreshFailedError) FailureReason() string {
-	var r string
+func (e *RefreshFailedError) FailureReason() redact.SafeString {
+	var r redact.SafeString
 	switch e.Reason {
 	case RefreshFailedError_REASON_COMMITTED_VALUE:
 		r = "committed value"
@@ -1399,3 +1631,38 @@ func NewNotLeaseHolderErrorWithSpeculativeLease(
 	}
 	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
+
+var _ errors.SafeFormatter = &NotLeaseHolderError{}
+var _ errors.SafeFormatter = &RangeNotFoundError{}
+var _ errors.SafeFormatter = &RangeKeyMismatchError{}
+var _ errors.SafeFormatter = &ReadWithinUncertaintyIntervalError{}
+var _ errors.SafeFormatter = &TransactionAbortedError{}
+var _ errors.SafeFormatter = &TransactionPushError{}
+var _ errors.SafeFormatter = &TransactionRetryError{}
+var _ errors.SafeFormatter = &TransactionStatusError{}
+var _ errors.SafeFormatter = &WriteIntentError{}
+var _ errors.SafeFormatter = &WriteTooOldError{}
+var _ errors.SafeFormatter = &OpRequiresTxnError{}
+var _ errors.SafeFormatter = &ConditionFailedError{}
+var _ errors.SafeFormatter = &LeaseRejectedError{}
+var _ errors.SafeFormatter = &NodeUnavailableError{}
+var _ errors.SafeFormatter = &RaftGroupDeletedError{}
+var _ errors.SafeFormatter = &ReplicaCorruptionError{}
+var _ errors.SafeFormatter = &ReplicaTooOldError{}
+var _ errors.SafeFormatter = &AmbiguousResultError{}
+var _ errors.SafeFormatter = &StoreNotFoundError{}
+var _ errors.SafeFormatter = &TransactionRetryWithProtoRefreshError{}
+var _ errors.SafeFormatter = &IntegerOverflowError{}
+var _ errors.SafeFormatter = &UnsupportedRequestError{}
+var _ errors.SafeFormatter = &BatchTimestampBeforeGCError{}
+var _ errors.SafeFormatter = &TxnAlreadyEncounteredErrorError{}
+var _ errors.SafeFormatter = &IntentMissingError{}
+var _ errors.SafeFormatter = &MergeInProgressError{}
+var _ errors.SafeFormatter = &RangeFeedRetryError{}
+var _ errors.SafeFormatter = &IndeterminateCommitError{}
+var _ errors.SafeFormatter = &InvalidLeaseError{}
+var _ errors.SafeFormatter = &OptimisticEvalConflictsError{}
+var _ errors.SafeFormatter = &MinTimestampBoundUnsatisfiableError{}
+var _ errors.SafeFormatter = &RefreshFailedError{}
+var _ errors.SafeFormatter = &MVCCHistoryMutationError{}
+var _ errors.SafeFormatter = &UnhandledRetryableError{}

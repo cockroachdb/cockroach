@@ -243,7 +243,7 @@ enum TransactionRetryReason {
 // retried, usually with an increased transaction timestamp.
 message TransactionRetryError {
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
-  optional string extra_msg = 2 [(gogoproto.nullable) = false];
+  optional string extra_msg = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -253,7 +253,7 @@ message TransactionRetryError {
 // regression in transaction epoch or timestamp, both of which may
 // only monotonically increase.
 message TransactionStatusError {
-  optional string msg = 1 [(gogoproto.nullable) = false];
+  optional string msg = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 
   // Reason specifies what caused the error.
   enum Reason {
@@ -449,7 +449,7 @@ message UnhandledRetryableError {
 // client.Sender() interface).
 message TransactionRetryWithProtoRefreshError {
   // A user-readable message.
-  optional string msg = 1 [(gogoproto.nullable) = false];
+  optional string msg = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 
   // The ID of the transaction being restarted. The client is supposed to check
   // this against the ID of its transaction and make sure the retryable error
