@@ -368,6 +368,39 @@ type RemoveForeignKeyBackReference struct {
 	OriginConstraintID descpb.ConstraintID
 }
 
+// MakeAbsentUniqueWithoutIndexConstraintWriteOnly adds a non-existent
+// unique_without_index constraint to the table in the WRITE_ONLY state.
+type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	ColumnIDs    []descpb.ColumnID
+	Predicate    *scpb.Expression
+}
+
+// MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index
+// constraint from mutation to public.
+type MakeValidatedUniqueWithoutIndexConstraintPublic struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakePublicUniqueWithoutIndexConstraintValidated moves a public
+// unique_without_index constraint to VALIDATED.
+type MakePublicUniqueWithoutIndexConstraintValidated struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveUniqueWithoutIndexConstraint removes a unique_without_index from the origin table.
+type RemoveUniqueWithoutIndexConstraint struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
 // RemoveSchemaParent removes the schema - parent database relationship.
 type RemoveSchemaParent struct {
 	mutationOp
