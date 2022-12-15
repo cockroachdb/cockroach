@@ -142,7 +142,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
-		tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, desc)
+		tn, err := descs.GetObjectName(ctx, txn, descsCol, desc)
 		if err != nil {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}

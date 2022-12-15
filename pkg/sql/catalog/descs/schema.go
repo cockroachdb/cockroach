@@ -12,7 +12,6 @@ package descs
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -20,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/errors"
 )
 
 // GetMutableSchemaByName resolves the schema and returns a mutable descriptor
@@ -37,12 +34,7 @@ func (tc *Collection) GetMutableSchemaByName(
 	schemaName string,
 	flags tree.SchemaLookupFlags,
 ) (*schemadesc.Mutable, error) {
-	flags.RequireMutable = true
-	sc, err := tc.getSchemaByName(ctx, txn, db, schemaName, flags)
-	if err != nil || sc == nil {
-		return nil, err
-	}
-	return sc.(*schemadesc.Mutable), nil
+	return tc.ByName(txn).WithFlags(flags).Mutable().Schema(ctx, db, schemaName)
 }
 
 // GetImmutableSchemaByName returns a catalog.SchemaDescriptor object if the
@@ -58,37 +50,7 @@ func (tc *Collection) GetImmutableSchemaByName(
 	scName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	flags.RequireMutable = false
-	return tc.getSchemaByName(ctx, txn, db, scName, flags)
-}
-
-// getSchemaByName resolves the schema and, if applicable, returns a descriptor
-// usable by the transaction.
-func (tc *Collection) getSchemaByName(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	schemaName string,
-	flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	desc, err := tc.getDescriptorByName(ctx, txn, db, nil /* sc */, schemaName, flags, catalog.Schema)
-	if err != nil {
-		return nil, err
-	}
-	if desc == nil {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
-		}
-		return nil, nil
-	}
-	schema, ok := desc.(catalog.SchemaDescriptor)
-	if !ok {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
-		}
-		return nil, nil
-	}
-	return schema, nil
+	return tc.ByName(txn).WithFlags(flags).Immutable().Schema(ctx, db, scName)
 }
 
 // GetImmutableSchemaByID returns a ResolvedSchema wrapping an immutable
@@ -98,8 +60,7 @@ func (tc *Collection) getSchemaByName(
 func (tc *Collection) GetImmutableSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	flags.RequireMutable = false
-	return tc.getSchemaByID(ctx, txn, schemaID, flags)
+	return tc.ByID(txn).WithFlags(flags).Immutable().Schema(ctx, schemaID)
 }
 
 // GetMutableSchemaByID returns a mutable schema descriptor with the given
@@ -107,32 +68,7 @@ func (tc *Collection) GetImmutableSchemaByID(
 func (tc *Collection) GetMutableSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (*schemadesc.Mutable, error) {
-	flags.RequireMutable = true
-	desc, err := tc.getSchemaByID(ctx, txn, schemaID, flags)
-	if err != nil {
-		return nil, err
-	}
-	return desc.(*schemadesc.Mutable), nil
-}
-
-func (tc *Collection) getSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, schemaID)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
-			}
-			return nil, nil
-		}
-		return nil, err
-	}
-	schemaDesc, ok := descs[0].(catalog.SchemaDescriptor)
-	if !ok {
-		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
-	}
-	return schemaDesc, nil
+	return tc.ByID(txn).WithFlags(flags).Mutable().Schema(ctx, schemaID)
 }
 
 // InsertDescriptorlessPublicSchemaToBatch adds the creation of a new descriptorless public

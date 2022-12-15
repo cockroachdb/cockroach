@@ -928,46 +928,38 @@ type FunctionDescriptor interface {
 	ToCreateExpr() (*tree.CreateFunction, error)
 }
 
-// FilterDescriptorState inspects the state of a given descriptor and returns an
-// error if the state is anything but public. The error describes the state of
-// the descriptor.
-func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error {
-	if flags.ParentID != 0 {
-		parent := desc.GetParentID()
-		if parent != 0 && parent != flags.ParentID {
-			return ErrDescriptorNotFound
-		}
-	}
+// FilterDroppedDescriptor returns an error if the descriptor state is DROP.
+func FilterDroppedDescriptor(desc Descriptor) error {
+	if !desc.Dropped() {
+		return nil
 
-	switch {
-	case desc.Dropped() && !flags.IncludeDropped:
-		return NewInactiveDescriptorError(ErrDescriptorDropped)
-	case desc.Offline() && !flags.IncludeOffline:
-		err := errors.Errorf("%s %q is offline", desc.DescriptorType(), desc.GetName())
-		if desc.GetOfflineReason() != "" {
-			err = errors.Errorf("%s %q is offline: %s", desc.DescriptorType(), desc.GetName(), desc.GetOfflineReason())
-		}
-		return NewInactiveDescriptorError(err)
-	case desc.Adding() &&
-		// The ADD state is special.
-		// We don't want adding descriptors to be visible to DML queries, but we
-		// want them to be visible to schema changes:
-		//   - when uncommitted we want them to be accessible by name for other
-		//     schema changes, e.g.
-		//       BEGIN; CREATE TABLE t ... ; ALTER TABLE t RENAME TO ...;
-		//     should be possible.
-		//   - when committed we want them to be accessible to their own schema
-		//     change job, where they're referenced by ID.
-		//
-		// The AvoidCommittedAdding is set if and only if the lookup is by-name
-		// and prevents them from seeing committed adding descriptors.
-		!(flags.AvoidCommittedAdding && desc.IsUncommittedVersion() && (flags.AvoidLeased || flags.RequireMutable)) &&
-		!(!flags.AvoidCommittedAdding && (desc.IsUncommittedVersion() || flags.AvoidLeased || flags.RequireMutable)):
-		// For the time being, only table descriptors can be in the adding state.
-		return pgerror.WithCandidateCode(newAddingTableError(desc.(TableDescriptor)),
-			pgcode.ObjectNotInPrerequisiteState)
 	}
-	return nil
+	return NewInactiveDescriptorError(ErrDescriptorDropped)
+}
+
+// FilterOfflineDescriptor returns an error if the descriptor state is OFFLINE.
+func FilterOfflineDescriptor(desc Descriptor) error {
+	if !desc.Offline() {
+		return nil
+	}
+	err := errors.Errorf("%s %q is offline", desc.DescriptorType(), desc.GetName())
+	if desc.GetOfflineReason() != "" {
+		err = errors.Errorf("%s %q is offline: %s", desc.DescriptorType(), desc.GetName(), desc.GetOfflineReason())
+	}
+	return NewInactiveDescriptorError(err)
+}
+
+// FilterAddingDescriptor returns an error if the descriptor state is ADD.
+func FilterAddingDescriptor(desc Descriptor) error {
+	if !desc.Adding() {
+		return nil
+	}
+	// For the time being, only table descriptors can be in the adding state.
+	tbl, err := AsTableDescriptor(desc)
+	if err != nil {
+		return errors.HandleAsAssertionFailure(err)
+	}
+	return pgerror.WithCandidateCode(newAddingTableError(tbl), pgcode.ObjectNotInPrerequisiteState)
 }
 
 // TableLookupFn is used to resolve a table from an ID, particularly when
