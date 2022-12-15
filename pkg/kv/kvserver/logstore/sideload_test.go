@@ -46,8 +46,8 @@ func entryEq(l, r raftpb.Entry) error {
 	if reflect.DeepEqual(l, r) {
 		return nil
 	}
-	_, lData := kvserverbase.DecodeRaftCommand(l.Data)
-	_, rData := kvserverbase.DecodeRaftCommand(r.Data)
+	_, _, lData := kvserverbase.DecodeRaftCommand(l.Data)
+	_, _, rData := kvserverbase.DecodeRaftCommand(r.Data)
 	var lc, rc kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
