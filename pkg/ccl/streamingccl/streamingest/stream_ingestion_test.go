@@ -219,8 +219,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	//
 	// Pick a cutover time just before the latest resolved timestamp.
 	cutoverTime := timeutil.Unix(0, highwater.WallTime).UTC().Add(-1 * time.Microsecond).Round(time.Microsecond)
-	_, err = conn.Exec(`SELECT crdb_internal.complete_stream_ingestion_job ($1, $2)`,
-		ingestionJobID, cutoverTime)
+	_, err = conn.Exec(`ALTER TENANT "30" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, cutoverTime)
 	require.NoError(t, err)
 
 	// Wait for the job to issue a revert request.

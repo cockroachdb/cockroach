@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -41,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -163,27 +161,9 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	// Pick a cutover time, then wait for the job to reach that time.
+	waitUntilStartTimeReached(t, destSQL, jobspb.JobID(ingestionJobID))
 	cutoverTime := timeutil.Now().Round(time.Microsecond)
-	testutils.SucceedsSoon(t, func() error {
-		progress := jobutils.GetJobProgress(t, destSQL, jobspb.JobID(ingestionJobID))
-		if progress.GetHighWater() == nil {
-			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
-				cutoverTime.String())
-		}
-		highwater := timeutil.Unix(0, progress.GetHighWater().WallTime)
-		if highwater.Before(cutoverTime) {
-			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
-				highwater.String(), cutoverTime.String())
-		}
-		return nil
-	})
-
-	destSQL.Exec(
-		t,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		ingestionJobID, cutoverTime)
-
+	destSQL.Exec(t, `ALTER TENANT "destination-tenant" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, hlc.Timestamp{WallTime: cutoverTime.UnixNano()}.AsOfSystemTime())
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 
