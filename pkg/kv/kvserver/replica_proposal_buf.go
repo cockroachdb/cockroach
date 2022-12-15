@@ -16,8 +16,11 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	flatbuffers "github.com/google/flatbuffers/go"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -524,6 +528,22 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 		} else {
+			ent := raftpb.Entry{
+				Data: p.encodedCommand,
+			}
+			if b.testing.experimentalUseRaftVersionFlatBuffer {
+				bldr := flatbuffers.NewBuilder(0)
+				// Pull the RaftCommandBytes out of the encoded data to avoid re-marshaling.
+				d, err := raftlog.DecomposeEntryData(ent.Type, ent.Data)
+				if err != nil {
+					firstErr = err
+					continue
+				}
+				bldr.Finish(raftfbs.BuildCommand(bldr, []byte(p.idKey), d.RaftCommandBytes))
+				bldr.PrependByte(byte(kvserverbase.RaftVersionFlatBuffer))
+				ent.Data = bldr.FinishedBytes()
+			}
+
 			// Add to the batch of entries that will soon be proposed. It is
 			// possible that this batching can cause the batched MsgProp to grow
 			// past the size limit where etcd/raft will drop the entire thing
@@ -533,9 +553,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// dropped the uncommitted portion of the Raft log would already
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
-			})
+			ents = append(ents, ent)
 		}
 	}
 	if firstErr != nil {

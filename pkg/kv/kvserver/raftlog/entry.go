@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftfbs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -173,7 +174,12 @@ func (e *Entry) load() error {
 	}
 	switch d.Type {
 	case raftpb.EntryNormal:
-		// Nothing to do.
+		if d.Version == kvserverbase.RaftVersionFlatBuffer {
+			// NB: this allocs, can inline to do better.
+			fbCmd := raftfbs.GetRootAsCommand(e.Data[1:], 0)
+			e.Data = fbCmd.RaftCommandPbBytes()
+			e.ID = kvserverbase.CmdIDKey(fbCmd.IdBytes())
+		}
 	case raftpb.EntryConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
 		ccTarget = e.ConfChangeV1
