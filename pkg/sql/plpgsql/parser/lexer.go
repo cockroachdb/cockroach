@@ -163,14 +163,17 @@ func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSq
 	}
 }
 
-// TODO we need to know the return type of the function. We should have know it
-// when we do "CREATE FUNCTION"
-func (l *lexer) ReadSqlExpression() string {
+// ReadSqlExpressionStr returns the string from the l.lastPos till it sees
+// the terminator for the first time. The returned string is made by tokens
+// between the starting index (included) to the terminator (not included).
+// TODO(plpgsql-team): pass the output to the sql parser
+// (i.e. sqlParserImpl.Parse()).
+func (l *lexer) ReadSqlExpressionStr(terminator int) string {
 	exprTokenStrs := make([]string, 0)
 	parenLevel := 0
-	for {
+	for l.lastPos < len(l.tokens) {
 		tok := l.Peek()
-		if tok.id == ';' {
+		if int(tok.id) == terminator {
 			break
 		} else if tok.id == '(' || tok.id == '[' {
 			parenLevel++
@@ -182,13 +185,12 @@ func (l *lexer) ReadSqlExpression() string {
 			}
 		}
 		exprTokenStrs = append(exprTokenStrs, tok.Str())
+		l.lastPos++
 	}
 	if parenLevel != 0 {
 		panic("parentheses is badly nested")
 	}
 	if len(exprTokenStrs) == 0 {
-		// TODO we need to get access to function return type, and it's ok to read
-		// nothing if return type is void.
 		panic("there should be at least one token for sql expression")
 	}
 
