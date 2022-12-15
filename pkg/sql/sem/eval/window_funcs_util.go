@@ -38,7 +38,7 @@ type peerGroup struct {
 // offsets if we have OFFSET_FOLLOWING type of bound (both F and O are
 // upper-bounded by total number of peer groups).
 type PeerGroupsIndicesHelper struct {
-	groups               ring.Buffer // queue of peer groups
+	groups               ring.Buffer[peerGroup]
 	peerGrouper          PeerGroupChecker
 	headPeerGroupNum     int  // number of the peer group at the head of the queue
 	allPeerGroupsSkipped bool // in GROUP mode, indicates whether all peer groups were skipped during Init
@@ -58,7 +58,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 	p.allRowsProcessed = false
 	p.unboundedFollowing = wfr.unboundedFollowing()
 
-	var group *peerGroup
+	var group peerGroup
 	p.peerGrouper = peerGrouper
 	startIdxOfFirstPeerGroupWithinFrame := 0
 	if wfr.Frame != nil && wfr.Frame.Mode == treewindow.GROUPS && wfr.Frame.Bounds.StartBound.BoundType == treewindow.OffsetFollowing {
@@ -80,7 +80,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 		// where zeroth peer group starts and how many rows it has, but the rows of
 		// zeroth group will never be in any frame.
 		peerGroupOffset := int(tree.MustBeDInt(wfr.StartBoundOffset))
-		group = &peerGroup{firstPeerIdx: 0, rowCount: 1}
+		group = peerGroup{firstPeerIdx: 0, rowCount: 1}
 		for group.firstPeerIdx < wfr.PartitionSize() && p.groups.Len() < peerGroupOffset {
 			p.groups.AddLast(group)
 			for ; group.firstPeerIdx+group.rowCount < wfr.PartitionSize(); group.rowCount++ {
@@ -91,7 +91,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 					break
 				}
 			}
-			group = &peerGroup{firstPeerIdx: group.firstPeerIdx + group.rowCount, rowCount: 1}
+			group = peerGroup{firstPeerIdx: group.firstPeerIdx + group.rowCount, rowCount: 1}
 		}
 
 		if group.firstPeerIdx == wfr.PartitionSize() {
@@ -104,7 +104,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 	}
 
 	// Compute the first peer group that is within the frame.
-	group = &peerGroup{firstPeerIdx: startIdxOfFirstPeerGroupWithinFrame, rowCount: 1}
+	group = peerGroup{firstPeerIdx: startIdxOfFirstPeerGroupWithinFrame, rowCount: 1}
 	p.groups.AddLast(group)
 	for ; group.firstPeerIdx+group.rowCount < wfr.PartitionSize(); group.rowCount++ {
 		idx := group.firstPeerIdx + group.rowCount
@@ -129,7 +129,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 		// - OFFSET_FOLLOWING - processing is done here
 		// - UNBOUNDED_FOLLOWING - we don't use this helper at all
 		peerGroupOffset := int(tree.MustBeDInt(wfr.EndBoundOffset))
-		group = &peerGroup{firstPeerIdx: group.firstPeerIdx + group.rowCount, rowCount: 1}
+		group = peerGroup{firstPeerIdx: group.firstPeerIdx + group.rowCount, rowCount: 1}
 		for group.firstPeerIdx < wfr.PartitionSize() && p.groups.Len() <= peerGroupOffset {
 			p.groups.AddLast(group)
 			for ; group.firstPeerIdx+group.rowCount < wfr.PartitionSize(); group.rowCount++ {
@@ -140,7 +140,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 					break
 				}
 			}
-			group = &peerGroup{firstPeerIdx: group.firstPeerIdx + group.rowCount, rowCount: 1}
+			group = peerGroup{firstPeerIdx: group.firstPeerIdx + group.rowCount, rowCount: 1}
 		}
 		if group.firstPeerIdx == wfr.PartitionSize() {
 			p.allRowsProcessed = true
@@ -161,7 +161,7 @@ func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
 
 	// nextPeerGroupStartIdx is the index of the first row that we haven't
 	// computed peer group for.
-	lastPeerGroup := p.groups.GetLast().(*peerGroup)
+	lastPeerGroup := p.groups.GetLast()
 	nextPeerGroupStartIdx := lastPeerGroup.firstPeerIdx + lastPeerGroup.rowCount
 
 	if (wfr.Frame == nil || wfr.Frame.Mode == treewindow.ROWS || wfr.Frame.Mode == treewindow.RANGE) ||
@@ -188,17 +188,17 @@ func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
 	}
 
 	// Compute the next peer group that is just entering the frame.
-	peerGroup := &peerGroup{firstPeerIdx: nextPeerGroupStartIdx, rowCount: 1}
-	p.groups.AddLast(peerGroup)
-	for ; peerGroup.firstPeerIdx+peerGroup.rowCount < wfr.PartitionSize(); peerGroup.rowCount++ {
-		idx := peerGroup.firstPeerIdx + peerGroup.rowCount
+	group := peerGroup{firstPeerIdx: nextPeerGroupStartIdx, rowCount: 1}
+	p.groups.AddLast(group)
+	for ; group.firstPeerIdx+group.rowCount < wfr.PartitionSize(); group.rowCount++ {
+		idx := group.firstPeerIdx + group.rowCount
 		if sameGroup, err := p.peerGrouper.InSameGroup(idx-1, idx); err != nil {
 			return err
 		} else if !sameGroup {
 			break
 		}
 	}
-	if peerGroup.firstPeerIdx+peerGroup.rowCount == wfr.PartitionSize() {
+	if group.firstPeerIdx+group.rowCount == wfr.PartitionSize() {
 		p.allRowsProcessed = true
 	}
 	return nil
@@ -211,7 +211,7 @@ func (p *PeerGroupsIndicesHelper) GetFirstPeerIdx(peerGroupNum int) int {
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
 	}
-	return p.groups.Get(posInBuffer).(*peerGroup).firstPeerIdx
+	return p.groups.Get(posInBuffer).firstPeerIdx
 }
 
 // GetRowCount returns the number of rows within peer group of number
@@ -221,7 +221,7 @@ func (p *PeerGroupsIndicesHelper) GetRowCount(peerGroupNum int) int {
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
 	}
-	return p.groups.Get(posInBuffer).(*peerGroup).rowCount
+	return p.groups.Get(posInBuffer).rowCount
 }
 
 // GetLastPeerGroupNum returns the number of the last peer group in the queue.
