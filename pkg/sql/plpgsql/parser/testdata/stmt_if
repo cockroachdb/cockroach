@@ -1,0 +1,10 @@
+parse
+DECLARE
+BEGIN
+  IF hello johnny joestar THEN ENDIF;
+END
+----
+DECLARE
+BEGIN
+IF hello johnny joestar THEN ENDIF
+END

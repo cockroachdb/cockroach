@@ -200,6 +200,7 @@ func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
 %token <str>	WARNING
 %token <str>	WHEN
 %token <str>	WHILE
+%token <str>	ENDIF
 
 %union {
   id    int32
@@ -221,7 +222,7 @@ func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
 //%type <nsitem>	decl_aliasitem // TODO what is nsitem? looks like namespace item, not sure if we need it.
 
 %type <plpgsqltree.PLpgSQLExpr>	expr_until_semi
-%type <plpgsqltree.PLpgSQLExpr>	expr_until_then expr_until_loop opt_expr_until_when
+%type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
 
 %type <plpgsqltree.PLpgSQLScalarVar>		cursor_variable
@@ -613,8 +614,13 @@ getdiag_target	: T_DATUM
 					}
 				;
 
-stmt_if			: IF expr_until_then proc_sect stmt_elsifs stmt_else END IF ';'
+stmt_if			: IF expr_until_then THEN ENDIF ';'
 					{
+					// I need to refactor the ENDIF here with
+					// https://cockroachlabs.slack.com/archives/C0168LW5THS/p1626899649301000?thread_ts=1626883246.298600&cid=C0168LW5THS
+					$$.val = &plpgsqltree.PLpgSQLStmtIf{
+           Condition: $2,
+          }
 					}
 				;
 
@@ -904,7 +910,9 @@ expr_until_semi :  ';'
 				;
 
 expr_until_then :
-					{ }
+					{
+					$$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(THEN)
+					 }
 				;
 
 expr_until_loop :
@@ -1055,6 +1063,7 @@ reserved_keyword:
 | DECLARE
 | ELSE
 | END
+| ENDIF
 | EXECUTE
 | FOR
 | FOREACH
