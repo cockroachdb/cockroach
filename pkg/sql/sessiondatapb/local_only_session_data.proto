@@ -309,6 +309,9 @@ message LocalOnlySessionData {
   // single hash group-join operation. At the moment, there is no optimizer
   // support for this, so some things can be incorrect (e.g. EXPLAIN plans).
   bool experimental_hash_group_join_enabled = 84;
+  // AllowOrdinalColumnReferences indicates whether the deprecated ordinal
+  // column reference syntax (e.g., `SELECT @1 FROM t`) is allowed.
+  bool allow_ordinal_column_references = 85;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -596,6 +596,16 @@ sort
 build
 SELECT b, c FROM t ORDER BY @2
 ----
+error (01P01): invalid syntax @2
+
+build
+SELECT b, c FROM t ORDER BY @4
+----
+error (01P01): invalid syntax @4
+
+build set=allow_ordinal_column_references=true
+SELECT b, c FROM t ORDER BY @2
+----
 sort
  ├── columns: b:2 c:3  [hidden: column6:6]
  ├── ordering: +6
@@ -606,7 +616,7 @@ sort
       └── projections
            └── b:2 [as=column6:6]
 
-build
+build set=allow_ordinal_column_references=true
 SELECT b, c FROM t ORDER BY @4
 ----
 sort

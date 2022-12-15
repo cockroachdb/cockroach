@@ -2370,6 +2370,21 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+	`allow_ordinal_column_references`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`allow_ordinal_column_references`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("allow_ordinal_column_references", s)
+			if err != nil {
+				return err
+			}
+			m.SetAllowOrdinalColumnReference(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowOrdinalColumnReferences), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.
