@@ -159,14 +159,14 @@ func StartSampler(
 type sampler struct {
 	mu struct {
 		syncutil.Mutex
-		ringBuffer            ring.Buffer // contains *metrics.Float64Histogram
+		ringBuffer            ring.Buffer[*metrics.Float64Histogram]
 		lastIntervalHistogram *metrics.Float64Histogram
 	}
 }
 
 func newSampler(period, duration time.Duration) *sampler {
 	s := &sampler{}
-	s.mu.ringBuffer = ring.MakeBuffer(nil)
+	s.mu.ringBuffer = ring.MakeBuffer(([]*metrics.Float64Histogram)(nil))
 	s.setPeriodAndDuration(period, duration)
 	return s
 }
@@ -209,7 +209,7 @@ func (s *sampler) recordLocked(
 	sample *metrics.Float64Histogram,
 ) (oldest *metrics.Float64Histogram, ok bool) {
 	if s.mu.ringBuffer.Len() == s.mu.ringBuffer.Cap() { // no more room, clear out the oldest
-		oldest = s.mu.ringBuffer.GetLast().(*metrics.Float64Histogram)
+		oldest = s.mu.ringBuffer.GetLast()
 		s.mu.ringBuffer.RemoveLast()
 	}
 	s.mu.ringBuffer.AddFirst(sample)

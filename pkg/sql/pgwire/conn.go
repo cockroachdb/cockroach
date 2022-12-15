@@ -1247,7 +1247,7 @@ type flushInfo struct {
 	// cmdStarts maintains the state about where the results for the respective
 	// positions begin. We utilize the invariant that positions are
 	// monotonically increasing sequences.
-	cmdStarts cmdIdxBuffer
+	cmdStarts ring.Buffer[cmdIdx]
 }
 
 type cmdIdx struct {
@@ -1255,61 +1255,14 @@ type cmdIdx struct {
 	idx int
 }
 
-var cmdIdxPool = sync.Pool{
-	New: func() interface{} {
-		return &cmdIdx{}
-	},
-}
-
-func (c *cmdIdx) release() {
-	*c = cmdIdx{}
-	cmdIdxPool.Put(c)
-}
-
-type cmdIdxBuffer struct {
-	// We intentionally do not just embed ring.Buffer in order to restrict the
-	// methods that can be called on cmdIdxBuffer.
-	buffer ring.Buffer
-}
-
-func (b *cmdIdxBuffer) empty() bool {
-	return b.buffer.Len() == 0
-}
-
-func (b *cmdIdxBuffer) addLast(pos sql.CmdPos, idx int) {
-	cmdIdx := cmdIdxPool.Get().(*cmdIdx)
-	cmdIdx.pos = pos
-	cmdIdx.idx = idx
-	b.buffer.AddLast(cmdIdx)
-}
-
-// removeLast removes the last cmdIdx from the buffer and will panic if the
-// buffer is empty.
-func (b *cmdIdxBuffer) removeLast() {
-	b.getLast().release()
-	b.buffer.RemoveLast()
-}
-
-// getLast returns the last cmdIdx in the buffer and will panic if the buffer is
-// empty.
-func (b *cmdIdxBuffer) getLast() *cmdIdx {
-	return b.buffer.GetLast().(*cmdIdx)
-}
-
-func (b *cmdIdxBuffer) clear() {
-	for !b.empty() {
-		b.removeLast()
-	}
-}
-
 // registerCmd updates cmdStarts buffer when the first result for a new command
 // is received.
 func (fi *flushInfo) registerCmd(pos sql.CmdPos) {
-	if !fi.cmdStarts.empty() && fi.cmdStarts.getLast().pos >= pos {
+	if fi.cmdStarts.Len() > 0 && fi.cmdStarts.GetLast().pos >= pos {
 		// Not a new command, nothing to do.
 		return
 	}
-	fi.cmdStarts.addLast(pos, fi.buf.Len())
+	fi.cmdStarts.AddLast(cmdIdx{pos: pos, idx: fi.buf.Len()})
 }
 
 func cookTag(
@@ -1682,7 +1635,7 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 
 	c.writerState.fi.lastFlushed = pos
 	// Make sure that the entire cmdStarts buffer is drained.
-	c.writerState.fi.cmdStarts.clear()
+	c.writerState.fi.cmdStarts.Discard()
 
 	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
 	if err != nil {
@@ -1756,13 +1709,13 @@ func (cl *clientConnLock) RTrim(ctx context.Context, pos sql.CmdPos) {
 	truncateIdx := cl.buf.Len()
 	// Update cmdStarts buffer: delete commands that were trimmed from the back
 	// of the cmdStarts buffer.
-	for !cl.cmdStarts.empty() {
-		cmdStart := cl.cmdStarts.getLast()
+	for cl.cmdStarts.Len() > 0 {
+		cmdStart := cl.cmdStarts.GetLast()
 		if cmdStart.pos < pos {
 			break
 		}
 		truncateIdx = cmdStart.idx
-		cl.cmdStarts.removeLast()
+		cl.cmdStarts.RemoveLast()
 	}
 	cl.buf.Truncate(truncateIdx)
 }

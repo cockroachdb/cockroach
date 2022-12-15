@@ -68,7 +68,7 @@ func (t *Tracer) SaveSnapshot() SnapshotInfo {
 	if snapshots.Len() == 0 {
 		id = 1
 	} else {
-		id = snapshots.GetLast().(snapshotWithID).ID + 1
+		id = snapshots.GetLast().ID + 1
 	}
 	snapshots.AddLast(snapshotWithID{
 		ID:            id,
@@ -101,16 +101,16 @@ func (t *Tracer) GetSnapshot(id SnapshotID) (SpansSnapshot, error) {
 	if snapshots.Len() == 0 {
 		return SpansSnapshot{}, errSnapshotDoesntExist
 	}
-	minID := snapshots.GetFirst().(snapshotWithID).ID
+	minID := snapshots.GetFirst().ID
 	if id < minID {
 		return SpansSnapshot{}, errSnapshotTooOld
 	}
-	maxID := snapshots.GetLast().(snapshotWithID).ID
+	maxID := snapshots.GetLast().ID
 	if id > maxID {
 		return SpansSnapshot{}, errSnapshotDoesntExist
 	}
 
-	return snapshots.Get(int(id - minID)).(snapshotWithID).SpansSnapshot, nil
+	return snapshots.Get(int(id - minID)).SpansSnapshot, nil
 }
 
 // SnapshotInfo represents minimal info about a stored snapshot, as returned by
@@ -128,7 +128,7 @@ func (t *Tracer) GetSnapshots() []SnapshotInfo {
 
 	res := make([]SnapshotInfo, snapshots.Len())
 	for i := 0; i < snapshots.Len(); i++ {
-		s := snapshots.Get(i).(snapshotWithID)
+		s := snapshots.Get(i)
 		res[i] = SnapshotInfo{
 			ID:         s.ID,
 			CapturedAt: s.CapturedAt,
