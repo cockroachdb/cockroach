@@ -12,14 +12,11 @@ package trigram
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
-
-// Trigrams are calculated per word. Words are made up of alphanumeric
-// characters. Note that this doesn't include _, so we can't just use \w.
-var alphaNumRe = regexp.MustCompile("[a-z0-9]+")
 
 // MakeTrigrams returns the downcased, sorted and de-duplicated trigrams for an
 // input string. Non-alphanumeric characters are treated as word boundaries.
@@ -34,21 +31,52 @@ func MakeTrigrams(s string, pad bool) []string {
 	s = strings.ToLower(s)
 
 	// Find words.
-	wordSpans := alphaNumRe.FindAllStringIndex(s, -1)
+	words := strings.FieldsFunc(s, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
 
 	// Approximately pre-size as if the string is all 1 big word.
 	output := make([]string, 0, len(s))
 
-	for _, span := range wordSpans {
-		word := s[span[0]:span[1]]
+	for _, word := range words {
 		if pad {
 			word = fmt.Sprintf("  %s ", word)
 		}
-		// If not padding, n will be less than 0, so we'll leave the loop as
-		// desired, since words less than length 3 have no trigrams.
-		n := len(word) - 2
-		for i := 0; i < n; i++ {
-			output = append(output, word[i:i+3])
+		nRunes := utf8.RuneCountInString(word)
+		if nRunes == len(word) {
+			// Fast path for words that have no wide characters.
+			// If not padding, n will be less than 0, so we'll leave the loop as
+			// desired, since words less than length 3 have no trigrams.
+			n := len(word) - 2
+			for i := 0; i < n; i++ {
+				output = append(output, word[i:i+3])
+			}
+		} else {
+			// There are some wide characters, so we need to assemble trigrams
+			// in a more careful way than just taking 3-byte windows: we have to
+			// decode each code point to find its width so we can make
+			// windows of 3 codepoints.
+			//
+			// Note that this behavior differs from Postgres: Postgres computes
+			// a hash of the 3 codepoint windows and takes the first 3 bytes of
+			// the hash as the trigram. This is due to limitations in Postgres
+			// and is a dubious way of computing a trigram.
+			// Our method should provide fewer false positives, but note that
+			// users shouldn't see any differences due to this change.
+			nFound := 0
+			charWidths := []int{0, 0}
+			for i, w := 0, 0; i < len(word); i += w {
+				_, w = utf8.DecodeRuneInString(word[i:])
+				if nFound < 2 {
+					charWidths[nFound] = w
+					nFound += 1
+					continue
+				}
+				// Now that we've found our first 2 widths, we can begin assembling the
+				// trigrams.
+				output = append(output, word[i-charWidths[0]-charWidths[1]:i+w])
+				charWidths[0], charWidths[1] = charWidths[1], w
+			}
 		}
 	}
 

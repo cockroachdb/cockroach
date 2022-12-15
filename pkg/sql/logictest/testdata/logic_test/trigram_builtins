@@ -5,6 +5,7 @@ SELECT show_trgm(str) FROM (VALUES
     ('ab'),
     ('abc'),
     ('abcd'),
+    ('Приветhi'),
     (NULL)
   ) tbl(str)
 ----
@@ -13,6 +14,7 @@ SELECT show_trgm(str) FROM (VALUES
 {"  a"," ab","ab "}
 {"  a"," ab",abc,"bc "}
 {"  a"," ab",abc,bcd,"cd "}
+{"  п"," пр","hi ",вет,етh,иве,при,рив,тhi}
 NULL
 
 # Test that we sort the output trigrams.
