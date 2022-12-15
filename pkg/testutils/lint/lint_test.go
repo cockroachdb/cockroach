@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"go/build"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1494,25 +1493,19 @@ func TestLint(t *testing.T) {
 		grepBuf.WriteString(")$")
 
 		filter := stream.FilterFunc(func(arg stream.Arg) error {
-			for _, useAllFiles := range []bool{false, true} {
-				buildContext := build.Default
-				buildContext.CgoEnabled = true
-				buildContext.UseAllFiles = useAllFiles
-
-				pkgPath := filepath.Join(cockroachDB, pkgScope)
-				pkgs, err := packages.Load(
-					&packages.Config{
-						Mode: packages.NeedImports | packages.NeedName,
-					},
-					pkgPath,
-				)
-				if err != nil {
-					return errors.Wrapf(err, "error loading package %s", pkgPath)
-				}
-				for _, pkg := range pkgs {
-					for _, s := range pkg.Imports {
-						arg.Out <- pkg.PkgPath + ": " + s.PkgPath
-					}
+			pkgPath := filepath.Join(cockroachDB, pkgScope)
+			pkgs, err := packages.Load(
+				&packages.Config{
+					Mode: packages.NeedImports | packages.NeedName,
+				},
+				pkgPath,
+			)
+			if err != nil {
+				return errors.Wrapf(err, "error loading package %s", pkgPath)
+			}
+			for _, pkg := range pkgs {
+				for _, s := range pkg.Imports {
+					arg.Out <- pkg.PkgPath + ": " + s.PkgPath
 				}
 			}
 			return nil
