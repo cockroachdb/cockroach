@@ -265,8 +265,9 @@ CREATE TABLE system.table_statistics (
 	histogram            BYTES,
 	"avgSize"            INT8       NOT NULL DEFAULT 0,
 	"partialPredicate"   STRING,
+	"fullStatisticsID"    INT8,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate")
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticsID")
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -1558,6 +1559,7 @@ var (
 				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
 				{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: &zeroIntString},
 				{Name: "partialPredicate", ID: 11, Type: types.String, Nullable: true},
+				{Name: "fullStatisticsID", ID: 12, Type: types.Int, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1575,8 +1577,9 @@ var (
 						"histogram",
 						"avgSize",
 						"partialPredicate",
+						"fullStatisticsID",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
 				},
 			},
 			descpb.IndexDescriptor{

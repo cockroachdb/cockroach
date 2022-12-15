@@ -19,18 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-const addPartialStatisticsPredicateCol = `
+const addPartialStatisticsPredicateAndIDCol = `
 ALTER TABLE system.table_statistics
-ADD COLUMN IF NOT EXISTS "partialPredicate" STRING
+ADD COLUMN IF NOT EXISTS "partialPredicate" STRING,
+ADD COLUMN IF NOT EXISTS "fullStatisticsID" INT8
 FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram"`
 
-func alterSystemTableStatisticsAddPartialPredicate(
+func alterSystemTableStatisticsAddPartialPredicateAndID(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	op := operation{
 		name:           "add-table-statistics-partialPredicate-col",
-		schemaList:     []string{"partialPredicate"},
-		query:          addPartialStatisticsPredicateCol,
+		schemaList:     []string{"partialPredicate", "fullStatisticsID"},
+		query:          addPartialStatisticsPredicateAndIDCol,
 		schemaExistsFn: hasColumn,
 	}
 	if err := migrateTable(ctx, cs, d, op, keys.TableStatisticsTableID, systemschema.TableStatisticsTable); err != nil {
