@@ -12,11 +12,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var useFastRetry = false
+var useFastRetry = envutil.EnvOrDefaultBool(
+	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY", false)
 
 // getRetry returns retry object for changefeed.
 func getRetry(ctx context.Context) Retry {
@@ -30,7 +32,7 @@ func getRetry(ctx context.Context) Retry {
 		opts = retry.Options{
 			InitialBackoff: 5 * time.Millisecond,
 			Multiplier:     2,
-			MaxBackoff:     250 * time.Minute,
+			MaxBackoff:     250 * time.Millisecond,
 		}
 	}
 

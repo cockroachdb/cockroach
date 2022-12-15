@@ -100,7 +100,10 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, crdbNodes)
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
