@@ -369,6 +369,14 @@ ALTER INDEX i VISIBLE -- literals removed
 ALTER INDEX _ VISIBLE -- identifiers removed
 
 parse
+ALTER INDEX i INVISIBLE
+----
+ALTER INDEX i NOT VISIBLE -- normalized!
+ALTER INDEX i NOT VISIBLE -- fully parenthesized
+ALTER INDEX i NOT VISIBLE -- literals removed
+ALTER INDEX _ NOT VISIBLE -- identifiers removed
+
+parse
 ALTER INDEX i NOT VISIBLE
 ----
 ALTER INDEX i NOT VISIBLE
