@@ -253,9 +253,9 @@ seed_yarn_cache(name = "yarn_cache")
 yarn_install(
     name = "npm_mirror_npm",
     package_json = "//pkg/cmd/mirror/npm:package.json",
-    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
-    symlink_node_modules = True,
     strict_visibility = False,
+    symlink_node_modules = True,
+    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
 )
 
 # Install external dependencies for NPM packages in pkg/ui/ as separate bazel

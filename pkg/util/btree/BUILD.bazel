@@ -1,0 +1,40 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "btree",
+    srcs = [
+        "config.go",
+        "iterator.go",
+        "map.go",
+        "set.go",
+        "updater.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/btree",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/btree/internal/aug",
+        "//pkg/util/btree/ordered",
+        "@org_golang_x_exp//constraints",
+    ],
+)
+
+go_test(
+    name = "btree_test",
+    srcs = [
+        "btree_example_test.go",
+        "btree_test.go",
+        "google_btree_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":btree"],
+    deps = [
+        "//pkg/util/btree/gbtree",
+        "//pkg/util/btree/ordered",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//constraints",
+    ],
+)
+
+get_x_data(name = "get_x_data")

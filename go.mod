@@ -17,16 +17,16 @@ require (
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0
 	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
-	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
+	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
 	golang.org/x/exp/typeparams v0.0.0-20220713135740-79cabaa25d75 // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/net v0.1.0
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.3.0
 	golang.org/x/text v0.4.0
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
-	golang.org/x/tools v0.1.12
+	golang.org/x/tools v0.2.0
 	google.golang.org/api v0.80.0
 	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3
 	google.golang.org/grpc v1.51.0
@@ -207,6 +207,7 @@ require (
 	github.com/xdg-go/scram v1.0.2
 	github.com/xdg-go/stringprep v1.0.2
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
+	go.etcd.io/etcd/raft/v3 v3.5.6
 	go.etcd.io/raft/v3 v3.0.0-20221221215055-65a0bf3b6779
 	go.opentelemetry.io/otel v1.0.0-RC3
 	go.opentelemetry.io/otel/exporters/jaeger v1.0.0-RC3
@@ -215,7 +216,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
+	golang.org/x/term v0.1.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	honnef.co/go/tools v0.3.2
