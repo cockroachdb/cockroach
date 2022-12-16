@@ -46,7 +46,7 @@ var (
 	targetDB    = "bank"
 	targetTable = "bank"
 
-	timeout = 30 * time.Minute
+	timeout = 45 * time.Minute
 )
 
 func registerCDCMixedVersions(r registry.Registry) {
