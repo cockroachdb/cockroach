@@ -590,6 +590,24 @@ func (s *TTLSpec) summary() (string, []string) {
 	}
 }
 
+// summary implements the diagramCellType interface.
+func (s *HashGroupJoinerSpec) summary() (string, []string) {
+	_, details := s.HashJoinerSpec.summary()
+	if len(s.JoinOutputColumns) > 0 {
+		details = append(details, "Join Projection: "+colListStr(s.JoinOutputColumns))
+	}
+	_, aggDetails := s.AggregatorSpec.summary()
+	if len(s.AggregatorSpec.GroupCols) > 0 {
+		// For hash group-join the equality columns of the join are always the
+		// same as the grouping columns of the aggregations, so we remove this
+		// duplicated information (which is included as the first line in the
+		// summary of the aggregation spec).
+		aggDetails = aggDetails[1:]
+	}
+	details = append(details, aggDetails...)
+	return "HashGroupJoiner", details
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

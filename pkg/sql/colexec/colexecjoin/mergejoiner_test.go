@@ -104,8 +104,10 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		testDiskAcc, evalCtx,
 	)
 	mj.Init(ctx)
-	hj := NewHashJoiner(
-		testAllocator, testAllocator, HashJoinerSpec{
+	hj := NewHashJoiner(NewHashJoinerArgs{
+		BuildSideAllocator:       testAllocator,
+		OutputUnlimitedAllocator: testAllocator,
+		Spec: HashJoinerSpec{
 			JoinType: descpb.InnerJoin,
 			Left: hashJoinerSourceSpec{
 				EqCols: []uint32{0}, SourceTypes: typs,
@@ -113,8 +115,11 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 			Right: hashJoinerSourceSpec{
 				EqCols: []uint32{0}, SourceTypes: typs,
 			},
-		}, leftHJSource, rightHJSource, HashJoinerInitialNumBuckets,
-	)
+		},
+		LeftSource:        leftHJSource,
+		RightSource:       rightHJSource,
+		InitialNumBuckets: HashJoinerInitialNumBuckets,
+	})
 	hj.Init(ctx)
 
 	var mjOutputTuples, hjOutputTuples colexectestutils.Tuples

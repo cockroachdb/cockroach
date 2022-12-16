@@ -70,7 +70,9 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 			lease_holder,
 			replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
 			replicas,
-			replica_localities
+			replica_localities,
+			voting_replicas,
+			non_voting_replicas
 		FROM %[1]s.crdb_internal.ranges AS r
 		WHERE database_name=%[2]s
 		ORDER BY table_name, r.start_key
@@ -121,7 +123,9 @@ SELECT
   lease_holder,
   replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
   replicas,
-  replica_localities
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas
 FROM %[3]s.crdb_internal.ranges AS r
 WHERE (r.start_key < x'%[2]s')
   AND (r.end_key   > x'%[1]s') ORDER BY index_name, r.start_key

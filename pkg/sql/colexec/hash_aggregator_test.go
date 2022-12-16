@@ -430,21 +430,25 @@ func TestHashAggregator(t *testing.T) {
 		}
 		colexectestutils.RunTestsWithOrderedCols(t, testAllocator, []colexectestutils.Tuples{tc.input}, typs, tc.expected, verifier, tc.orderedCols,
 			func(sources []colexecop.Operator) (colexecop.Operator, error) {
-				return NewHashAggregator(context.Background(), &colexecagg.NewAggregatorArgs{
-					Allocator:      testAllocator,
-					MemAccount:     testMemAcc,
-					Input:          sources[0],
-					InputTypes:     tc.typs,
-					Spec:           tc.spec,
-					EvalCtx:        &evalCtx,
-					Constructors:   constructors,
-					ConstArguments: constArguments,
-					OutputTypes:    outputTypes,
-				},
+				return NewHashAggregator(
+					context.Background(),
+					&colexecagg.NewHashAggregatorArgs{
+						NewAggregatorArgs: &colexecagg.NewAggregatorArgs{
+							Allocator:      testAllocator,
+							MemAccount:     testMemAcc,
+							Input:          sources[0],
+							InputTypes:     tc.typs,
+							Spec:           tc.spec,
+							EvalCtx:        &evalCtx,
+							Constructors:   constructors,
+							ConstArguments: constArguments,
+							OutputTypes:    outputTypes,
+						},
+						HashTableAllocator:       testAllocator,
+						OutputUnlimitedAllocator: testAllocator,
+						MaxOutputBatchMemSize:    math.MaxInt64,
+					},
 					nil, /* newSpillingQueueArgs */
-					testAllocator,
-					testAllocator,
-					math.MaxInt64,
 				), nil
 			})
 	}
@@ -477,7 +481,16 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 			for _, agg := range []aggType{
 				{
 					new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-						return NewHashAggregator(ctx, args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
+						return NewHashAggregator(
+							ctx,
+							&colexecagg.NewHashAggregatorArgs{
+								NewAggregatorArgs:        args,
+								HashTableAllocator:       testAllocator,
+								OutputUnlimitedAllocator: testAllocator,
+								MaxOutputBatchMemSize:    math.MaxInt64,
+							},
+							nil, /* newSpillingQueueArgs */
+						)
 					},
 					name:  "tracking=false",
 					order: unordered,
@@ -486,14 +499,23 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 					new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 						memAccounts = append(memAccounts, &spillingQueueMemAcc)
-						return NewHashAggregator(ctx, args, &colexecutils.NewSpillingQueueArgs{
-							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
-							Types:              args.InputTypes,
-							MemoryLimit:        execinfra.DefaultMemoryLimit,
-							DiskQueueCfg:       queueCfg,
-							FDSemaphore:        &colexecop.TestingSemaphore{},
-							DiskAcc:            testDiskAcc,
-						}, testAllocator, testAllocator, math.MaxInt64)
+						return NewHashAggregator(
+							ctx,
+							&colexecagg.NewHashAggregatorArgs{
+								NewAggregatorArgs:        args,
+								HashTableAllocator:       testAllocator,
+								OutputUnlimitedAllocator: testAllocator,
+								MaxOutputBatchMemSize:    math.MaxInt64,
+							},
+							&colexecutils.NewSpillingQueueArgs{
+								UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+								Types:              args.InputTypes,
+								MemoryLimit:        execinfra.DefaultMemoryLimit,
+								DiskQueueCfg:       queueCfg,
+								FDSemaphore:        &colexecop.TestingSemaphore{},
+								DiskAcc:            testDiskAcc,
+							},
+						)
 					},
 					name:  "tracking=true",
 					order: unordered,
@@ -540,14 +562,23 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 	f := func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 		spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 		memAccounts = append(memAccounts, &spillingQueueMemAcc)
-		return NewHashAggregator(ctx, args, &colexecutils.NewSpillingQueueArgs{
-			UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
-			Types:              args.InputTypes,
-			MemoryLimit:        execinfra.DefaultMemoryLimit,
-			DiskQueueCfg:       queueCfg,
-			FDSemaphore:        &colexecop.TestingSemaphore{},
-			DiskAcc:            testDiskAcc,
-		}, testAllocator, testAllocator, math.MaxInt64)
+		return NewHashAggregator(
+			ctx,
+			&colexecagg.NewHashAggregatorArgs{
+				NewAggregatorArgs:        args,
+				HashTableAllocator:       testAllocator,
+				OutputUnlimitedAllocator: testAllocator,
+				MaxOutputBatchMemSize:    math.MaxInt64,
+			},
+			&colexecutils.NewSpillingQueueArgs{
+				UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+				Types:              args.InputTypes,
+				MemoryLimit:        execinfra.DefaultMemoryLimit,
+				DiskQueueCfg:       queueCfg,
+				FDSemaphore:        &colexecop.TestingSemaphore{},
+				DiskAcc:            testDiskAcc,
+			},
+		)
 	}
 	// We choose any_not_null aggregate function because it is the simplest
 	// possible and, thus, its Compute function call will have the least impact

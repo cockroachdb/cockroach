@@ -160,6 +160,9 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 
 	n := batch.Length()
 	if n == 0 {
+		// TODO(yuzefovich): consider tracking by the spilling queue whether a
+		// zero batch was enqueued so that in case it wasn't, the queue would
+		// add it automatically in Dequeue.
 		if q.diskQueue != nil {
 			if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
 				HandleErrorFromDiskQueue(err)

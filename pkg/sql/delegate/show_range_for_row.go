@@ -65,7 +65,9 @@ SELECT
 	lease_holder,
 	replica_localities[array_position(replicas, lease_holder)] as lease_holder_locality,
 	replicas,
-	replica_localities
+	replica_localities,
+	voting_replicas,
+	non_voting_replicas
 FROM %[4]s.crdb_internal.ranges AS r
 WHERE (r.start_key <= crdb_internal.encode_key(%[1]d, %[2]d, %[3]s))
   AND (r.end_key   >  crdb_internal.encode_key(%[1]d, %[2]d, %[3]s)) ORDER BY r.start_key
