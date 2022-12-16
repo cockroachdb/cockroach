@@ -1943,6 +1943,86 @@ func (dsp *DistSQLPlanner) planAggregators(
 		orderedGroupColSet.Add(c.ColIdx)
 	}
 
+	// planHashGroupJoin tracks whether we should plan a hash group-join for the
+	// first stage of aggregators (either local if multi-stage or final if
+	// single-stage), which is the case when
+	//   1. the corresponding session variable is enabled
+	//   2. the input stage are hash joiners
+	//      2.1. there is no ON expression
+	//      2.2. the PostProcessSpec can only be a pass-through or a simple
+	//           projection (i.e. no rendering, limits, nor offsets)
+	//      2.3. only inner and outer joins are supported at the moment
+	//   3. the join's equality columns are exactly the same as the
+	//      aggregation's grouping columns
+	//      3.1. the join's equality columns must be non-empty
+	//   4. the first stage we're planning are hash aggregators
+	//   5. the distribution of the joiners and the first stage of aggregators
+	//      is the same (i.e. both either local or distributed).
+	//      TODO(yuzefovich): we could consider lifting the condition 5. by
+	//      changing the distribution of the hash joiner stager.
+	planHashGroupJoin := planCtx.ExtendedEvalCtx.SessionData().ExperimentalHashGroupJoinEnabled
+	if planHashGroupJoin { // condition 1.
+		planHashGroupJoin = func() bool {
+			prevStageProc := p.Processors[p.ResultRouters[0]].Spec
+			hjSpec := prevStageProc.Core.HashJoiner
+			if hjSpec == nil {
+				return false // condition 2.
+			}
+			if !hjSpec.OnExpr.Empty() {
+				return false // condition 2.1.
+			}
+			pps := prevStageProc.Post
+			if pps.RenderExprs != nil || pps.Limit != 0 || pps.Offset != 0 {
+				return false // condition 2.2.
+			}
+			switch hjSpec.Type {
+			case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
+			default:
+				return false // condition 2.3.
+			}
+			if len(hjSpec.LeftEqColumns) != len(groupCols) {
+				return false // condition 3.
+			}
+			if len(hjSpec.LeftEqColumns) == 0 {
+				return false // condition 3.1.
+			}
+			if len(groupCols) == len(orderedGroupCols) {
+				// We will plan streaming aggregation. We shouldn't really ever
+				// get here since the hash join doesn't provide any ordering,
+				// but we want to be safe.
+				return false // condition 4.
+			}
+			// Join's equality columns refer to columns from the join's inputs
+			// whereas the grouping columns refer to the join's output columns.
+			// Thus, we need to translate one or the other to the common
+			// denominator, and we choose to map the grouping columns to the
+			// ordinals of the join's inputs.
+			//
+			// If we define `m` and `n` as the number of columns from the
+			// left and right inputs of the join, respectively, then columns
+			// 0, 1, ..., m-1 refer to the corresponding "left" columns whereas
+			// m, m+1, ..., m+n-1 refer to the "right" ones.
+			var joinEqCols util.FastIntSet
+			m := len(prevStageProc.Input[0].ColumnTypes)
+			for _, leftEqCol := range hjSpec.LeftEqColumns {
+				joinEqCols.Add(int(leftEqCol))
+			}
+			for _, rightEqCol := range hjSpec.RightEqColumns {
+				joinEqCols.Add(m + int(rightEqCol))
+			}
+			for _, groupCol := range groupCols {
+				mappedCol := groupCol
+				if pps.OutputColumns != nil {
+					mappedCol = pps.OutputColumns[groupCol]
+				}
+				if !joinEqCols.Contains(int(mappedCol)) {
+					return false // condition 3.
+				}
+			}
+			return true
+		}()
+	}
+
 	// We can have a local stage of distinct processors if all aggregation
 	// functions are distinct.
 	allDistinct := true
@@ -1989,6 +2069,12 @@ func (dsp *DistSQLPlanner) planAggregators(
 			// Add distinct processors local to each existing current result
 			// processor.
 			p.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, inputTypes, p.MergeOrdering)
+
+			// The condition 4. above is not satisfied since we've just added
+			// a distinct stage before the first aggregation one.
+			// TODO(yuzefovich): re-evaluate whether it is worth skipping this
+			// local distinct stage in favor of getting hash group-join planned.
+			planHashGroupJoin = false
 		}
 	}
 
@@ -2020,6 +2106,11 @@ func (dsp *DistSQLPlanner) planAggregators(
 				multiStage = false
 				break
 			}
+		}
+		if !multiStage {
+			// The joiners are distributed whereas the aggregation cannot be
+			// distributed which fails condition 5.
+			planHashGroupJoin = false
 		}
 	}
 
@@ -2261,12 +2352,31 @@ func (dsp *DistSQLPlanner) planAggregators(
 			OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		}
 
-		p.AddNoGroupingStage(
-			execinfrapb.ProcessorCoreUnion{Aggregator: &localAggsSpec},
-			execinfrapb.PostProcessSpec{},
-			intermediateTypes,
-			execinfrapb.Ordering{Columns: ordCols},
-		)
+		if planHashGroupJoin {
+			prevStageProc := p.Processors[p.ResultRouters[0]].Spec
+			hjSpec := prevStageProc.Core.HashJoiner
+			pps := prevStageProc.Post
+			hgjSpec := execinfrapb.HashGroupJoinerSpec{
+				HashJoinerSpec:    *hjSpec,
+				JoinOutputColumns: pps.OutputColumns,
+				AggregatorSpec:    localAggsSpec,
+			}
+			p.ReplaceLastStage(
+				execinfrapb.ProcessorCoreUnion{HashGroupJoiner: &hgjSpec},
+				execinfrapb.PostProcessSpec{},
+				intermediateTypes,
+				execinfrapb.Ordering{Columns: ordCols},
+			)
+			// Let the final aggregation be planned as normal.
+			planHashGroupJoin = false
+		} else {
+			p.AddNoGroupingStage(
+				execinfrapb.ProcessorCoreUnion{Aggregator: &localAggsSpec},
+				execinfrapb.PostProcessSpec{},
+				intermediateTypes,
+				execinfrapb.Ordering{Columns: ordCols},
+			)
+		}
 
 		finalAggsSpec = execinfrapb.AggregatorSpec{
 			Type:             aggType,
@@ -2355,7 +2465,22 @@ func (dsp *DistSQLPlanner) planAggregators(
 	// has been programmed to produce the same columns as the groupNode.
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(info.aggregations))
 
-	if len(finalAggsSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
+	if planHashGroupJoin {
+		prevStageProc := p.Processors[p.ResultRouters[0]].Spec
+		hjSpec := prevStageProc.Core.HashJoiner
+		pps := prevStageProc.Post
+		hgjSpec := execinfrapb.HashGroupJoinerSpec{
+			HashJoinerSpec:    *hjSpec,
+			JoinOutputColumns: pps.OutputColumns,
+			AggregatorSpec:    finalAggsSpec,
+		}
+		p.ReplaceLastStage(
+			execinfrapb.ProcessorCoreUnion{HashGroupJoiner: &hgjSpec},
+			execinfrapb.PostProcessSpec{},
+			finalOutTypes,
+			dsp.convertOrdering(info.reqOrdering, p.PlanToStreamColMap),
+		)
+	} else if len(finalAggsSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
 		// No GROUP BY, or we have a single stream. Use a single final aggregator.
 		// If the previous stage was all on a single node, put the final
 		// aggregator there. Otherwise, bring the results back on this node.
@@ -2519,17 +2644,14 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 
 	// If any of the ordering columns originate from the lookup table, this is a
 	// case where we are ordering on a prefix of input columns followed by the
-	// lookup columns. We need to maintain the index ordering on each lookup.
+	// lookup columns.
 	var maintainLookupOrdering bool
 	numInputCols := len(plan.GetResultTypes())
 	for i := range n.reqOrdering {
 		if n.reqOrdering[i].ColIdx >= numInputCols {
+			// We need to maintain the index ordering on each lookup.
 			maintainLookupOrdering = true
-			if n.reqOrdering[i].Direction == encoding.Descending {
-				// Validate that an ordering on lookup columns does not contain
-				// descending columns.
-				panic(errors.AssertionFailedf("ordering on a lookup index with descending columns"))
-			}
+			break
 		}
 	}
 

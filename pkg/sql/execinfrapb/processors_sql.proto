@@ -395,9 +395,7 @@ message JoinReaderSpec {
   // only be set to true if maintain_ordering is also true.
   // maintain_lookup_ordering can be used if the output needs to be ordered by
   // a prefix of input columns followed by index (lookup) columns without
-  // requiring a (buffered) sort. As an additional restriction due to
-  // implementation details, maintain_lookup_ordering can only be used when the
-  // index columns that participate in the output ordering are all ASC.
+  // requiring a (buffered) sort.
   optional bool maintain_lookup_ordering = 22 [(gogoproto.nullable) = false];
 }
 
@@ -1043,4 +1041,43 @@ message WindowerSpec {
   repeated uint32 partitionBy = 1;
   // WindowFns is the specification of all window functions to be computed.
   repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
+}
+
+// HashGroupJoinerSpec is the specification for a hash group-join processor. It
+// has two inputs and one output.
+//
+// The processor combines two operations (the hash join followed by the hash
+// aggregation) into one when the join's equality columns are exactly the same
+// as the aggregation's grouping columns. The hash join cannot have an ON
+// expression and the PostProcessSpec on top of the hash join is only allowed to
+// to have a projection set (meaning that rendering, limits, and offsets are
+// prohibited).
+//
+// The processor works by reading the entire right input and putting it in a
+// hash table. All rows in the hash table are split into buckets according to
+// the equality columns. Then it reads the data from the left input in a
+// streaming fashion and probes it against the hash table determining which
+// bucket (if any) each "joined" row belongs to and performs the aggregation
+// accordingly, without fully materializing the result of the join.
+//
+// At the moment, only INNER, LEFT_OUTER, RIGHT_OUTER, and FULL_OUTER joins are
+// supported with non-empty equality columns (i.e. no cross joins).
+// TODO(yuzefovich): support other join types.
+// TODO(yuzefovich): think through whether we can support cross joins. Probably
+// it will be more similar to merge group-join.
+// TODO(yuzefovich): consider implementing streaming merge group-join.
+//
+// There is no guarantee on the ordering of results.
+//
+// The "internal columns" of a HashGroupJoiner (see ProcessorSpec) are the same
+// as of its AggregatorSpec.
+message HashGroupJoinerSpec {
+  optional HashJoinerSpec hash_joiner_spec = 1 [(gogoproto.nullable) = false];
+
+  // The join output columns describe a projection on the internal set of
+  // columns of the hash joiner; only the columns in this list will be needed
+  // by the aggregator.
+  repeated uint32 join_output_columns = 2 [packed = true];
+
+  optional AggregatorSpec aggregator_spec = 3 [(gogoproto.nullable) = false];
 }

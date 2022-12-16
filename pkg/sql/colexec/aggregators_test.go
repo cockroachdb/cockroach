@@ -81,7 +81,16 @@ var aggTypesWithPartial = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-			return NewHashAggregator(ctx, args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
+			return NewHashAggregator(
+				ctx,
+				&colexecagg.NewHashAggregatorArgs{
+					NewAggregatorArgs:        args,
+					HashTableAllocator:       testAllocator,
+					OutputUnlimitedAllocator: testAllocator,
+					MaxOutputBatchMemSize:    math.MaxInt64,
+				},
+				nil, /* newSpillingQueueArgs */
+			)
 		},
 		name:  "hash",
 		order: unordered,
@@ -95,7 +104,16 @@ var aggTypesWithPartial = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is
 		// compatible with NewOrderedAggregator.
 		new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-			return NewHashAggregator(ctx, args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
+			return NewHashAggregator(
+				ctx,
+				&colexecagg.NewHashAggregatorArgs{
+					NewAggregatorArgs:        args,
+					HashTableAllocator:       testAllocator,
+					OutputUnlimitedAllocator: testAllocator,
+					MaxOutputBatchMemSize:    math.MaxInt64,
+				},
+				nil, /* newSpillingQueueArgs */
+			)
 		},
 		name:  "hash-partial-order",
 		order: partial,

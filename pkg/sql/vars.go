@@ -2353,6 +2353,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`experimental_hash_group_join_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_hash_group_join_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`experimental_hash_group_join_enabled`, s)
+			if err != nil {
+				return err
+			}
+			m.SetExperimentalHashGroupJoinEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ExperimentalHashGroupJoinEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

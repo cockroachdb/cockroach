@@ -276,6 +276,11 @@ import (
 //      - R for decimal
 //      - B for boolean
 //      - O for oid
+//      - _ to include the column header, but ignore the column results.
+//        This is useful to verify that a column exists when the results are
+//        non-deterministic and to avoid projecting all other columns (for
+//        example `SHOW RANGES FROM TABLE`). A "_" placeholder is written in
+//        place of actual results.
 //
 //    Options are comma separated strings from the following:
 //      - nosort (default)
@@ -3406,81 +3411,87 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 					return err
 				}
 				for i, v := range vals {
-					if val := *v.(*interface{}); val != nil {
-						valT := reflect.TypeOf(val).Kind()
-						colT := query.colTypes[i]
-						switch colT {
-						case 'T':
-							if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-								return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'I':
-							if valT != reflect.Int64 {
-								if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
-									t.signalIgnoredError(
-										fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
-									)
-									return nil
-								}
-								return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'F', 'R':
-							if valT != reflect.Float64 && valT != reflect.Slice {
-								if *flexTypes && (valT == reflect.Int64) {
-									t.signalIgnoredError(
-										fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
-									)
-									return nil
-								}
-								return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'B':
-							if valT != reflect.Bool {
-								return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						case 'O':
-							if valT != reflect.Slice {
-								return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
-									query.pos, i, val, val,
-								)
-							}
-						default:
-							return fmt.Errorf("%s: unknown type in type string: %c in %s",
-								query.pos, colT, query.colTypes,
+					colT := query.colTypes[i]
+					// Ignore column - useful for non-deterministic output.
+					if colT == '_' {
+						actualResultsRaw = append(actualResultsRaw, "_")
+						continue
+					}
+					val := *v.(*interface{})
+					if val == nil {
+						actualResultsRaw = append(actualResultsRaw, "NULL")
+						continue
+					}
+					valT := reflect.TypeOf(val).Kind()
+					switch colT {
+					case 'T':
+						if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+							return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
 							)
 						}
-
-						if byteArray, ok := val.([]byte); ok {
-							// The postgres wire protocol does not distinguish between
-							// strings and byte arrays, but our tests do. In order to do
-							// The Right Thing™, we replace byte arrays which are valid
-							// UTF-8 with strings. This allows byte arrays which are not
-							// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
-							// while printing valid strings naturally.
-							if str := string(byteArray); utf8.ValidString(str) {
-								val = str
+					case 'I':
+						if valT != reflect.Int64 {
+							if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
+								t.signalIgnoredError(
+									fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
+								)
+								return nil
 							}
+							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
 						}
-						// Empty strings are rendered as "·" (middle dot)
-						if val == "" {
-							val = "·"
+					case 'F', 'R':
+						if valT != reflect.Float64 && valT != reflect.Slice {
+							if *flexTypes && (valT == reflect.Int64) {
+								t.signalIgnoredError(
+									fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
+								)
+								return nil
+							}
+							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
 						}
-						s := fmt.Sprint(val)
-						if query.roundFloatsInStringsSigFigs > 0 {
-							s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
+					case 'B':
+						if valT != reflect.Bool {
+							return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
 						}
-						actualResultsRaw = append(actualResultsRaw, s)
-					} else {
-						actualResultsRaw = append(actualResultsRaw, "NULL")
+					case 'O':
+						if valT != reflect.Slice {
+							return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
+						}
+					default:
+						return fmt.Errorf("%s: unknown type in type string: %c in %s",
+							query.pos, colT, query.colTypes,
+						)
 					}
+
+					if byteArray, ok := val.([]byte); ok {
+						// The postgres wire protocol does not distinguish between
+						// strings and byte arrays, but our tests do. In order to do
+						// The Right Thing™, we replace byte arrays which are valid
+						// UTF-8 with strings. This allows byte arrays which are not
+						// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+						// while printing valid strings naturally.
+						if str := string(byteArray); utf8.ValidString(str) {
+							val = str
+						}
+					}
+					// Empty strings are rendered as "·" (middle dot).
+					if val == "" {
+						val = "·"
+					}
+					s := fmt.Sprint(val)
+					if query.roundFloatsInStringsSigFigs > 0 {
+						s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
+					}
+					actualResultsRaw = append(actualResultsRaw, s)
 				}
 			}
 			if err := rows.Err(); err != nil {
