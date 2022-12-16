@@ -19,6 +19,8 @@
 
 cockroachdb/docs:
   triage_column_id: 3971225
+  aliases:
+    cockroachdb/docs-infra-prs: other
 cockroachdb/sql-sessions:
   aliases:
     cockroachdb/sql-syntax-prs: other
@@ -45,7 +47,7 @@ cockroachdb/replication:
   aliases:
     cockroachdb/repl-prs: other
   label: T-kv-replication
-cockroachdb/geospatial:
+cockroachdb/spatial:
   triage_column_id: 9487269
 cockroachdb/dev-inf:
   triage_column_id: 10210759
@@ -73,9 +75,9 @@ cockroachdb/server:
     cockroachdb/server-prs: other
     cockroachdb/http-api-prs: other
   triage_column_id: 2521812
-cockroachdb/cluster-ui:
+cockroachdb/admin-ui:
   aliases:
-    cockroachdb/cluster-ui-prs: other
+    cockroachdb/admin-ui-prs: other
   triage_column_id: 6598672
 cockroachdb/obs-inf-prs:
   triage_column_id: 14196277

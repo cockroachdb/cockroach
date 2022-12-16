@@ -216,6 +216,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if testResult.attempt > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
 				}
+				if testResult.testResult == nil {
+					continue
+				}
 				for _, output := range testResult.testResult.TestActionOutput {
 					if output.Name == "test.log" || output.Name == "test.xml" {
 						src := strings.TrimPrefix(output.GetUri(), "file://")

@@ -1091,16 +1091,16 @@ project
  ├── fd: ()-->(6)
  ├── index-join t47742
  │    ├── columns: a:1(int) t47742.b:2(bool!null)
- │    ├── stats: [rows=3063.5, distinct(2)=1.0025, null(2)=0]
- │    │   histogram(2)=  0    0    0.0024693 3063.5
- │    │                <--- false ----------- true
+ │    ├── stats: [rows=3063.5, distinct(2)=1, null(2)=0]
+ │    │   histogram(2)=  0 3063.5
+ │    │                <--- true
  │    ├── fd: ()-->(2)
  │    └── scan t47742@b_idx
  │         ├── columns: t47742.b:2(bool!null) rowid:3(int!null)
  │         ├── constraint: /-2/3: [/true - /true]
- │         ├── stats: [rows=3063.5, distinct(2)=11, null(2)=0]
- │         │   histogram(2)=  0   0    0.0024693 3063.5
- │         │                <--- NULL ----------- true
+ │         ├── stats: [rows=3063.5, distinct(2)=1, null(2)=0]
+ │         │   histogram(2)=  0 3063.5
+ │         │                <--- true
  │         ├── key: (3)
  │         └── fd: ()-->(2)
  └── projections

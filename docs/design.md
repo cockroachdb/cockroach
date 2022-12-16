@@ -201,11 +201,11 @@ implementation of SSI still requires no locking, but will end up
 aborting more transactions. Cockroach’s SI and SSI implementations
 prevent starvation scenarios even for arbitrarily long transactions.
 
-See the [Cahill paper](https://drive.google.com/file/d/0B9GCVTp_FHJIcEVyZVdDWEpYYXVVbFVDWElrYUV0NHFhU2Fv/edit?usp=sharing)
+See the [Cahill paper](https://ses.library.usyd.edu.au/bitstream/handle/2123/5353/michael-cahill-2009-thesis.pdf)
 for one possible implementation of SSI. This is another [great paper](http://cs.yale.edu/homes/thomson/publications/calvin-sigmod12.pdf).
 For a discussion of SSI implemented by preventing read-write conflicts
 (in contrast to detecting them, called write-snapshot isolation), see
-the [Yabandeh paper](https://drive.google.com/file/d/0B9GCVTp_FHJIMjJ2U2t6aGpHLTFUVHFnMTRUbnBwc2pLa1RN/edit?usp=sharing),
+the [Yabandeh paper](https://courses.cs.washington.edu/courses/cse444/10sp/544M/READING-LIST/fekete-sigmod2008.pdf),
 which is the source of much inspiration for Cockroach’s SSI.
 
 Both SI and SSI require that the outcome of reads must be preserved, i.e.
