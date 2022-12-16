@@ -7,7 +7,8 @@ set -euo pipefail
   yarn --cwd workspaces/db-console/src/js install
   yarn --cwd workspaces/cluster-ui install
   yarn --cwd workspaces/db-console install
-  yarn --cwd workspaces/e2e-tests install
+  # Don't install the native Cypress binary immediately. ./dev ui e2e will do that just in time.
+  CYPRESS_INSTALL_BINARY=0 yarn --cwd workspaces/e2e-tests install
 )
 
 cat << "EOF"
