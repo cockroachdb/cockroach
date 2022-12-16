@@ -65,8 +65,8 @@ func TestRangeSplit(t *testing.T) {
 	// Assert that the lhs now has half the previous load counters.
 	lhsLoad := s.load[lhs.RangeID()].(*ReplicaLoadCounter)
 	rhsLoad := s.load[rhs.RangeID()].(*ReplicaLoadCounter)
-	lhsQPS, _ := lhsLoad.QPS.SumLocked()
-	rhsQPS, _ := rhsLoad.QPS.SumLocked()
+	lhsQPS, _ := lhsLoad.QPS.Sum()
+	rhsQPS, _ := rhsLoad.QPS.Sum()
 	require.Equal(t, int64(50), lhsLoad.ReadKeys)
 	require.Equal(t, int64(50), lhsLoad.WriteKeys)
 	require.Equal(t, int64(50), lhsLoad.WriteBytes)
