@@ -1,5 +1,12 @@
 load("@npm_e2e_tests//eslint:index.bzl", "eslint_test")
 
+exports_files(
+    [
+        "yarn.lock",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 eslint_test(
     name = "lint",
     data = [

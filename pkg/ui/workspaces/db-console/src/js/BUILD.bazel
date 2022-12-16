@@ -1,6 +1,13 @@
 load("@//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
 load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 
+exports_files(
+    [
+        "yarn.lock",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 protobufjs_library(
     name = "crdb-protobuf-client__proto",
     out_name = "protos",
