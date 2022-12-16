@@ -7592,7 +7592,7 @@ expires until the statement bundle is collected`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"crdb_internal.anonymize_sql_constants": makeBuiltin(tree.FunctionProperties{
+	"crdb_internal.hide_sql_constants": makeBuiltin(tree.FunctionProperties{
 		Category:     builtinconstants.CategoryString,
 		Undocumented: true,
 	},
