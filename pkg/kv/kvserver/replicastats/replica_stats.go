@@ -11,14 +11,13 @@
 package replicastats
 
 import (
+	"fmt"
 	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -69,7 +68,6 @@ type RatedSummary struct {
 // initial use is tracking the number of requests received from each
 // cluster locality in order to inform lease transfer decisions.
 type ReplicaStats struct {
-	clock           *hlc.Clock
 	getNodeLocality LocalityOracle
 
 	// We use a set of time windows in order to age out old stats without having
@@ -172,13 +170,12 @@ func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
 }
 
 // NewReplicaStats constructs a new ReplicaStats tracker.
-func NewReplicaStats(clock *hlc.Clock, getNodeLocality LocalityOracle) *ReplicaStats {
+func NewReplicaStats(now time.Time, getNodeLocality LocalityOracle) *ReplicaStats {
 	rs := &ReplicaStats{
-		clock:           clock,
 		getNodeLocality: getNodeLocality,
 	}
 
-	rs.Mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
+	rs.Mu.lastRotate = now
 	for i := range rs.Mu.records {
 		rs.Mu.records[i] = &replicaStatsRecord{localityCounts: make(PerLocalityCounts)}
 	}
@@ -198,14 +195,12 @@ func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
 	defer rs.Mu.Unlock()
 
 	// Sanity check that the request lengths are correct, if not we cannot
-	// merge them so reset both.
-	if len(rs.Mu.records) != len(other.Mu.records) {
-		rs.ResetRequestCounts()
-		other.ResetRequestCounts()
-		return
-	}
-
+	// merge them.
 	n := len(rs.Mu.records)
+	m := len(other.Mu.records)
+	if n != m {
+		panic(fmt.Sprintf("mismatching replicastats lengths %d!=%d impossible merge", n, m))
+	}
 
 	for i := range other.Mu.records {
 		rsIdx := (rs.Mu.idx + n - i) % n
@@ -222,6 +217,7 @@ func (rs *ReplicaStats) MergeRequestCounts(other *ReplicaStats) {
 	if rs.Mu.lastRotate.After(other.Mu.lastRotate) {
 		rs.Mu.lastRotate = other.Mu.lastRotate
 	}
+
 }
 
 // SplitRequestCounts divides the current ReplicaStats object in two for the
@@ -254,13 +250,11 @@ func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 }
 
 // RecordCount records the given count against the given node ID.
-func (rs *ReplicaStats) RecordCount(count float64, nodeID roachpb.NodeID) {
+func (rs *ReplicaStats) RecordCount(now time.Time, count float64, nodeID roachpb.NodeID) {
 	var locality string
 	if rs.getNodeLocality != nil {
 		locality = rs.getNodeLocality(nodeID)
 	}
-	now := timeutil.Unix(0, rs.clock.PhysicalNow())
-
 	rs.Mu.Lock()
 	defer rs.Mu.Unlock()
 
@@ -289,9 +283,7 @@ func (rs *ReplicaStats) rotateLocked() {
 // amount of time over which the stats were accumulated. Note that the replica stats
 // stats are exponentially decayed such that newer requests are weighted more
 // heavily than older requests.
-func (rs *ReplicaStats) PerLocalityDecayingRate() (PerLocalityCounts, time.Duration) {
-	now := timeutil.Unix(0, rs.clock.PhysicalNow())
-
+func (rs *ReplicaStats) PerLocalityDecayingRate(now time.Time) (PerLocalityCounts, time.Duration) {
 	rs.Mu.Lock()
 	defer rs.Mu.Unlock()
 
@@ -351,9 +343,7 @@ func (rs *ReplicaStats) SumLocked() (float64, int) {
 // not exponentially decayed (there isn't a ton of justification for going
 // one way or the other, but not decaying makes the average more stable,
 // which is probably better for avoiding rebalance thrashing).
-func (rs *ReplicaStats) AverageRatePerSecond() (float64, time.Duration) {
-	now := timeutil.Unix(0, rs.clock.PhysicalNow())
-
+func (rs *ReplicaStats) AverageRatePerSecond(now time.Time) (float64, time.Duration) {
 	rs.Mu.Lock()
 	defer rs.Mu.Unlock()
 	if rs.Mu.avgRateForTesting != 0 {
@@ -375,7 +365,7 @@ func (rs *ReplicaStats) AverageRatePerSecond() (float64, time.Duration) {
 }
 
 // ResetRequestCounts resets the underlying request counts.
-func (rs *ReplicaStats) ResetRequestCounts() {
+func (rs *ReplicaStats) ResetRequestCounts(now time.Time) {
 	rs.Mu.Lock()
 	defer rs.Mu.Unlock()
 
@@ -385,16 +375,16 @@ func (rs *ReplicaStats) ResetRequestCounts() {
 	}
 	// Update the current idx record to be active.
 	rs.Mu.records[rs.Mu.idx].activate()
-	rs.Mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
+	rs.Mu.lastRotate = now
 	rs.Mu.lastReset = rs.Mu.lastRotate
 }
 
 // SnapshotRatedSummary returns a RatedSummary representing a snapshot of the
 // current replica stats state, summarized by arithmetic mean count,
 // per-locality count and duration recorded over.
-func (rs *ReplicaStats) SnapshotRatedSummary() *RatedSummary {
-	qps, _ := rs.AverageRatePerSecond()
-	localityCounts, interval := rs.PerLocalityDecayingRate()
+func (rs *ReplicaStats) SnapshotRatedSummary(now time.Time) *RatedSummary {
+	qps, _ := rs.AverageRatePerSecond(now)
+	localityCounts, interval := rs.PerLocalityDecayingRate(now)
 	return &RatedSummary{
 		QPS:            qps,
 		LocalityCounts: localityCounts,

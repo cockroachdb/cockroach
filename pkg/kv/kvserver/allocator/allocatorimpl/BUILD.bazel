@@ -61,7 +61,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
-        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",
