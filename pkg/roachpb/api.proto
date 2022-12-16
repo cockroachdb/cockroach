@@ -2611,6 +2611,10 @@ message Header {
   // Requests with a non-zero timestamp are not allowed to set this field.
   BoundedStalenessHeader bounded_staleness = 22;
 
+  // trace_info gives the server information about the trace that the RPC is
+  // part of. This is not set for local RPCs that don't go through gRPC.
+  //
+  // If a recording mode is set, the response will have collect_spans filled in.
   util.tracing.tracingpb.TraceInfo trace_info = 25;
 
   reserved 7, 10, 12, 14, 20;
@@ -2764,7 +2768,13 @@ message BatchResponse {
     util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false,
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
     // collected_spans stores trace spans recorded during the execution of this
-    // request.
+    // request, if recording is requested through trace_info on the request.
+    //
+    // The server fills in reply.CollectedSpans only when the client asked for
+    // it by setting trace_info on the request, and specifying a recording mode.
+    // Notably, the client does not set trace_info on local RPCs which don't go
+    // through gRPC; for local RPCs, the Tracer is shared between the client and
+    // the server, and the server span is a child of the server span.
     repeated util.tracing.tracingpb.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
     // Range used to execute the request. The server only populates this if the
     // server detects the client's client_range_info to be stale. Otherwise, it
