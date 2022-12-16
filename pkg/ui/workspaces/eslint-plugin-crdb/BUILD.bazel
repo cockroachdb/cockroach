@@ -2,6 +2,13 @@ load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 load("@npm_eslint_plugin_crdb//@bazel/typescript:index.bzl", "ts_project")
 load("@npm_eslint_plugin_crdb//jest:index.bzl", "jest_test")
 
+exports_files(
+    [
+        "yarn.lock",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 ts_project(
     name = "ts_project",
     srcs = glob(
