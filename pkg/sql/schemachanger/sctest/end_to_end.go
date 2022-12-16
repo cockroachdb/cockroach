@@ -184,6 +184,7 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 					// changer will allow non-fully implemented operations.
 					sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 					sd.ApplicationName = ""
+					sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
 				})),
 				sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 					BeforeStage: func(p scplan.Plan, stageIdx int) error {
