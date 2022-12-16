@@ -333,25 +333,16 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 
 	inputFamily := input.DataType().Family()
 	var dOid *tree.DOid
-	var err error
 
 	switch typ.Oid() {
-	case oid.T_oid:
+	case oid.T_oid, oid.T_regtype, oid.T_regproc, oid.T_regprocedure, oid.T_regnamespace:
 		switch inputFamily {
-		case types.StringFamily:
-			s := tree.MustBeDString(datum)
-			dOid, err = tree.ParseDOidAsInt(string(s))
+		case types.StringFamily, types.OidFamily, types.IntFamily:
+			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
 			if err != nil {
-				return nil, true, err
+				return nil, false, err
 			}
-		case types.IntFamily:
-			i := tree.MustBeDInt(datum)
-			dOid, err = tree.IntToOid(i)
-			if err != nil {
-				return nil, true, err
-			}
-		case types.OidFamily:
-			dOid = tree.NewDOidWithType(tree.MustBeDOid(datum).Oid, types.Oid)
+			dOid = tree.MustBeDOid(cDatum)
 		default:
 			return nil, false, nil
 		}
@@ -371,55 +362,9 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 
 			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
 			dOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
-		default:
-			return nil, false, nil
-		}
-	case oid.T_regtype:
-		switch inputFamily {
-		case types.StringFamily:
-			s := tree.MustBeDString(datum)
-			typRef, err := parser.GetTypeFromValidSQLSyntax(string(s))
-			if err != nil {
-				return nil, true, err
-			}
-
-			var resolvedTyp *types.T
-			var isArray bool
-			switch t := typRef.(type) {
-			case *tree.ArrayTypeReference:
-				resolvedTyp, err = c.f.catalog.ResolveType(c.f.ctx, t.ElementType.(*tree.UnresolvedObjectName))
-				if err != nil {
-					return nil, true, err
-				}
-				isArray = true
-			case *tree.UnresolvedObjectName:
-				resolvedTyp, err = c.f.catalog.ResolveType(c.f.ctx, t)
-				if err != nil {
-					return nil, true, err
-				}
-			case *types.T:
-				resolvedTyp = t
-			default:
-				return nil, false, nil
-			}
-
-			if isArray {
-				resolvedTyp = types.MakeArray(resolvedTyp)
-			}
-			dOid = tree.NewDOidWithTypeAndName(resolvedTyp.Oid(), types.RegType, resolvedTyp.SQLStandardName())
 
 		default:
 			return nil, false, nil
-		}
-	case oid.T_regproc, oid.T_regprocedure:
-		switch inputFamily {
-		case types.StringFamily, types.OidFamily, types.IntFamily:
-			cDatum, err := eval.PerformCast(c.f.ctx, c.f.evalCtx, datum, typ)
-			if err != nil {
-				return nil, false, err
-			}
-
-			dOid = tree.MustBeDOid(cDatum)
 		}
 	default:
 		return nil, false, nil

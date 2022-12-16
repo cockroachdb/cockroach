@@ -98,7 +98,7 @@ a[]
 query T
 SELECT pg_typeof(ARRAY[(1, 3)::a, (1, 2)::a])::regtype::oid::regtype
 ----
-_record
+a[]
 
 # You can't drop the type descriptor.
 statement error cannot modify table record type \"a\"
