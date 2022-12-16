@@ -123,7 +123,15 @@ var sourceAddr = func() net.Addr {
 	return nil
 }()
 
-var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
+// If we have this on, then we get into this code
+// which has to scale up the size of the slice until it matches the large payload in this benchmark,
+// which becomes the single largest allocator. With compression on we alloc in aggregate ~111gb,
+// without it <100gb, under:
+// go test -run - -bench BenchmarkReplicaProposal/bytes=512_KiB,withFollower=true -test.benchtime 3000x -test.memprofile mem.out -test.memprofilerate 1 ./pkg/kv/kvserver/
+//
+// https://github.com/grpc/grpc-go/blob/e8d06c51a523ba75f052cfaa56a1b8e0583ac589/rpc_util.go#L746-L749
+// https://go.dev/play/p/ZVL_ro1Qx86?v=goprev
+var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", false)
 
 type serverOpts struct {
 	interceptor func(fullMethod string) error
