@@ -159,6 +159,3 @@ func (n TenantName) IsValid() error {
 	}
 	return nil
 }
-
-// Silence unused warning.
-var _ = TenantFromContext
