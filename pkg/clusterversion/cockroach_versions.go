@@ -726,7 +726,6 @@ var versionsSingleton = func() keyedVersions {
 		// which conceptually is actually back down to 2 -- then back to to 1000003,
 		// then on to 1000004, etc.
 		skipFirst := allowUpgradeToDev
-		const devOffset = 1000000
 		first := true
 		for i := range rawVersionsSingleton {
 			// VPrimordial versions are not offset; they don't matter for the logic
@@ -739,7 +738,7 @@ var versionsSingleton = func() keyedVersions {
 				first = false
 				continue
 			}
-			rawVersionsSingleton[i].Major += devOffset
+			rawVersionsSingleton[i].Version = rawVersionsSingleton[i].Version.VersionWithDevOffset()
 		}
 	}
 	return rawVersionsSingleton
