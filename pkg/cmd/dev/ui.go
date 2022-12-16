@@ -576,6 +576,14 @@ launching test in a real browser. Extra flags are passed directly to the
 				return fmt.Errorf("unable to build cockroach with UI: %w", err)
 			}
 
+			// Ensure the native Cypress binary is installed.
+			cyInstallArgv := buildBazelYarnArgv("--silent", "--cwd", uiDirs.e2eTests, "cypress", "install")
+			logCommand("bazel", cyInstallArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", cyInstallArgv...)
+			if err != nil {
+				return fmt.Errorf("unable to install Cypress native package: %w", err)
+			}
+
 			// Run Cypress tests, passing any extra args through to 'cypress'
 			startCrdbThenSh := path.Join(uiDirs.e2eTests, "build/start-crdb-then.sh")
 			runCypressArgv := append(
