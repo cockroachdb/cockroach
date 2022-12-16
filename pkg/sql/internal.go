@@ -755,7 +755,7 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
-	o := sessiondata.InternalExecutorOverride{}
+	o := sessiondata.NoSessionDataOverride
 	sd := ie.sessionDataStack.Top()
 	if sd.User().Undefined() {
 		o.User = username.RootUserName()

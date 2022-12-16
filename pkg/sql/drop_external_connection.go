@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -73,7 +72,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.external_connections WHERE connection_name = $1`, name,
 	); err != nil {
 		return errors.Wrapf(err, "failed to delete external connection")
@@ -85,7 +84,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.privileges WHERE path = $1`, ecPrivilege.GetPath(),
 	); err != nil {
 		return errors.Wrapf(err, "failed to delete external connection")

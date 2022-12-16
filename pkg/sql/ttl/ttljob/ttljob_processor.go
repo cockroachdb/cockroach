@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -268,9 +267,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 			ctx,
 			"pre-select-delete-statement",
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{
-				User: username.RootUserName(),
-			},
+			sessiondata.RootUserSessionDataOverride,
 			preSelectStatement,
 		); err != nil {
 			return spanRowCount, err

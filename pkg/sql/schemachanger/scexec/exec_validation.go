@@ -13,7 +13,6 @@ package scexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -39,9 +38,7 @@ func executeValidateUniqueIndex(
 		return err
 	}
 	// Execute the validation operation as a root user.
-	execOverride := sessiondata.InternalExecutorOverride{
-		User: username.RootUserName(),
-	}
+	execOverride := sessiondata.RootUserSessionDataOverride
 	if index.GetType() == descpb.IndexDescriptor_FORWARD {
 		err = deps.Validator().ValidateForwardIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
 	} else {
@@ -76,9 +73,7 @@ func executeValidateCheckConstraint(
 	}
 
 	// Execute the validation operation as a root user.
-	execOverride := sessiondata.InternalExecutorOverride{
-		User: username.RootUserName(),
-	}
+	execOverride := sessiondata.RootUserSessionDataOverride
 	err = deps.Validator().ValidateCheckConstraint(ctx, table, check, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)

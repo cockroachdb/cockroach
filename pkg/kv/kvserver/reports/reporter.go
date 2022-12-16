@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -803,7 +802,7 @@ func getReportGenerationTime(
 		ctx,
 		"get-previous-timestamp",
 		txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		"select generated from system.reports_meta where id = $1",
 		rid,
 	)

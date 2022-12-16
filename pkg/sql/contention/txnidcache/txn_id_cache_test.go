@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
@@ -150,9 +149,7 @@ func TestTransactionIDCache(t *testing.T) {
 				ctx,
 				appName,
 				txn,
-				sessiondata.InternalExecutorOverride{
-					User: username.RootUserName(),
-				},
+				sessiondata.RootUserSessionDataOverride,
 				stmt,
 			)
 			require.NoError(t, err)

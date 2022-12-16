@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -49,7 +48,7 @@ func loadExternalConnections(
 		datums, _, err := params.ExecCfg().InternalExecutor.QueryBufferedExWithCols(
 			params.ctx,
 			"load-external-connections",
-			params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
 			"SELECT connection_name FROM system.external_connections")
 		if err != nil {
 			return nil, err

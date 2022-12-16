@@ -1486,7 +1486,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				runHistoricalTxn,
 				true,  /* withFirstMutationPubic */
 				false, /* gatherAllInvalid */
-				sessiondata.InternalExecutorOverride{},
+				sessiondata.NoSessionDataOverride,
 				sc.execCfg.ProtectedTimestampManager,
 			)
 		})
@@ -1502,7 +1502,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				runHistoricalTxn,
 				true,  /* withFirstMutationPublic */
 				false, /* gatherAllInvalid */
-				sessiondata.InternalExecutorOverride{},
+				sessiondata.NoSessionDataOverride,
 				sc.execCfg.ProtectedTimestampManager,
 			)
 		})

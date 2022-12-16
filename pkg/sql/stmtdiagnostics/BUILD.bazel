@@ -10,7 +10,6 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/kv",
         "//pkg/multitenant",
-        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",

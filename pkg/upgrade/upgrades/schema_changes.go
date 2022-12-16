@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -129,7 +128,7 @@ func migrateTable(
 			ctx,
 			fmt.Sprintf("migration-alter-table-%d", storedTableID),
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			sessiondata.NodeUserSessionDataOverride,
 			op.query); err != nil {
 			return err
 		}
