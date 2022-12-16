@@ -862,7 +862,7 @@ func numRangesInSpans(
 	ctx context.Context, db *kv.DB, distSQLPlanner *DistSQLPlanner, spans []roachpb.Span,
 ) (int, error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
-	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn, nil)
 	rangeIds := make(map[int64]struct{})
 	for _, span := range spans {
 		// For each span, iterate the spanResolver until it's exhausted, storing
@@ -896,7 +896,7 @@ func NumRangesInSpanContainedBy(
 	containedBy []roachpb.Span,
 ) (total, inContainedBy int, _ error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
-	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn, nil)
 	// For each span, iterate the spanResolver until it's exhausted, storing
 	// the found range ids in the map to de-duplicate them.
 	spanResolver.Seek(ctx, outerSpan, kvcoord.Ascending)
@@ -1026,8 +1026,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}
 		sd := NewFakeSessionData(sc.execCfg.SV())
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.ReadTimestamp(), descriptors)
-		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, /* planner */
-			txn, DistributionTypeSystemTenantOnly)
+		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, txn, DistributionTypeSystemTenantOnly, nil)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes)
@@ -1334,8 +1333,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			)
 			defer recv.Release()
 
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
-				DistributionTypeSystemTenantOnly)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, txn, DistributionTypeSystemTenantOnly, nil)
 			spec, err := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
 			if err != nil {
 				return err

@@ -347,8 +347,7 @@ func makePlan(
 			distMode = sql.DistributionTypeNone
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode))
+		planCtx := dsp.NewPlanningCtx(ctx, execCtx.ExtendedEvalContext(), nil, blankTxn, sql.DistributionType(distMode), nil)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err

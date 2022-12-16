@@ -1585,8 +1585,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
-	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
-		planner.txn, distribute)
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute, nil)
 	planCtx.stmtType = recv.stmtType
 	// Skip the diagram generation since on this "main" query path we can get it
 	// via the statement bundle.

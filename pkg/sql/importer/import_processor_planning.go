@@ -75,7 +75,7 @@ func distImport(
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		evalCtx := execCtx.ExtendedEvalContext()
 
-		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg(), nil)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -126,8 +126,7 @@ func newPlanningCtxForExplainPurposes(
 	if distribution.WillDistribute() {
 		distribute = DistributionTypeAlways
 	}
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
-		params.p, params.p.txn, distribute)
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, distribute, nil)
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {
 		p := &planCtx.planner.curPlan.subqueryPlans[i]

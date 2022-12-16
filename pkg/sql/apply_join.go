@@ -324,8 +324,7 @@ func runPlanInsidePlan(
 	if distributePlan.WillDistribute() {
 		distributeType = DistributionTypeAlways
 	}
-	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
-		ctx, evalCtx, &plannerCopy, params.p.txn, distributeType)
+	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, params.p.txn, distributeType, nil)
 	planCtx.planner.curPlan.planComponents = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
 	planCtx.ExtendedEvalCtx.StreamManagerFactory = &plannerCopy

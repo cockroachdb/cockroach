@@ -221,8 +221,7 @@ func getReplicationStreamSpec(
 	// Partition the spans with SQLPlanner
 	var noTxn *kv.Txn
 	dsp := jobExecCtx.DistSQLPlanner()
-	planCtx := dsp.NewPlanningCtx(ctx, jobExecCtx.ExtendedEvalContext(),
-		nil /* planner */, noTxn, sql.DistributionTypeSystemTenantOnly)
+	planCtx := dsp.NewPlanningCtx(ctx, jobExecCtx.ExtendedEvalContext(), nil, noTxn, sql.DistributionTypeSystemTenantOnly, nil)
 
 	details, ok := j.Details().(jobspb.StreamReplicationDetails)
 	if !ok {

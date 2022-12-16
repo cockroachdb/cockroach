@@ -207,7 +207,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		// We don't return the compatible nodes here since PartitionSpans will
 		// filter out incompatible nodes.
-		planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+		planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg, nil)
 		if err != nil {
 			return err
 		}

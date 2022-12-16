@@ -1606,8 +1606,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if distributeSubquery {
 		distribute = DistributionTypeAlways
 	}
-	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
-		distribute)
+	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute, nil)
 	subqueryPlanCtx.stmtType = tree.Rows
 	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
 	if planner.instrumentation.ShouldSaveFlows() {
@@ -1938,7 +1937,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if distributePostquery {
 		distribute = DistributionTypeAlways
 	}
-	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute, nil)
 	postqueryPlanCtx.stmtType = tree.Rows
 	// Postqueries are only executed on the main query path where we skip the
 	// diagram generation.

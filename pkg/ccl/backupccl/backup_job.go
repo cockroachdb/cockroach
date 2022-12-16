@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -164,10 +165,19 @@ func backup(
 
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
+	oracleCfg := replicaoracle.Config{
+		NodeDescs:  execCtx.ExecCfg().NodeDescs,
+		NodeID:     0,                  // Planning node ID not important.
+		Locality:   roachpb.Locality{}, // Planning node locality not important.
+		Settings:   execCtx.ExecCfg().Settings,
+		Clock:      execCtx.ExecCfg().Clock,
+		RPCContext: execCtx.ExecCfg().RPCContext,
+	}
+	oracle := replicaoracle.NewOracle(replicaoracle.PreferFollowerChoice, oracleCfg)
 
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg(), oracle)
 	if err != nil {
 		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
@@ -198,7 +208,7 @@ func backup(
 	}
 
 	numTotalSpans := 0
-	for _, spec := range backupSpecs {
+	for nodeID, spec := range backupSpecs {
 		numTotalSpans += len(spec.IntroducedSpans) + len(spec.Spans)
 	}
 

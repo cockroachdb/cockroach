@@ -78,7 +78,7 @@ func newDistSQLSpecExecFactory(
 		distribute = DistributionTypeSystemTenantOnly
 	}
 	evalCtx := p.ExtendedEvalContext()
-	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute)
+	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute, nil)
 	return e
 }
 

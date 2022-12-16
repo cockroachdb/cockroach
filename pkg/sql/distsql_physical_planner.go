@@ -4228,6 +4228,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	planner *planner,
 	txn *kv.Txn,
 	distributionType DistributionType,
+	oracle replicaoracle.Oracle,
 ) *PlanningCtx {
 	distribute := distributionType == DistributionTypeAlways || (distributionType == DistributionTypeSystemTenantOnly && evalCtx.Codec.ForSystemTenant())
 	planCtx := &PlanningCtx{
@@ -4254,7 +4255,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 		// we still need to instantiate a full planning context.
 		planCtx.parallelizeScansIfLocal = true
 	}
-	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
+	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn, oracle)
 	planCtx.nodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
 	planCtx.nodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
 	return planCtx

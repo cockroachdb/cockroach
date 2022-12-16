@@ -260,7 +260,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		evalCtx := execCtx.ExtendedEvalContext()
 		dsp := execCtx.DistSQLPlanner()
 
-		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg(), nil)
 
 		if err != nil {
 			return err

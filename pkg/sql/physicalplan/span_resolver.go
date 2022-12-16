@@ -63,7 +63,7 @@ import (
 type SpanResolver interface {
 	// NewSpanResolverIterator creates a new SpanResolverIterator.
 	// Txn is used for testing and for determining if follower reads are possible.
-	NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator
+	NewSpanResolverIterator(txn *kv.Txn, optionalOracle replicaoracle.Oracle) SpanResolverIterator
 }
 
 // SpanResolverIterator is used to iterate over the ranges composing a key span.
@@ -170,11 +170,17 @@ type spanResolverIterator struct {
 var _ SpanResolverIterator = &spanResolverIterator{}
 
 // NewSpanResolverIterator creates a new SpanResolverIterator.
-func (sr *spanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
+func (sr *spanResolver) NewSpanResolverIterator(
+	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+) SpanResolverIterator {
+	oracle := optionalOracle
+	if optionalOracle == nil {
+		oracle = sr.oracle
+	}
 	return &spanResolverIterator{
 		txn:        txn,
 		it:         kvcoord.MakeRangeIterator(sr.distSender),
-		oracle:     sr.oracle,
+		oracle:     oracle,
 		queryState: replicaoracle.MakeQueryState(),
 	}
 }

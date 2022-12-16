@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -578,7 +579,9 @@ type testSpanResolver struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (tsr *testSpanResolver) NewSpanResolverIterator(_ *kv.Txn) physicalplan.SpanResolverIterator {
+func (tsr *testSpanResolver) NewSpanResolverIterator(
+	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+) physicalplan.SpanResolverIterator {
 	return &testSpanResolverIterator{tsr: tsr}
 }
 
@@ -856,7 +859,7 @@ func TestPartitionSpans(t *testing.T) {
 			ctx := context.Background()
 			planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
 				Context: eval.Context{Codec: keys.SystemSQLCodec},
-			}, nil, nil, DistributionTypeSystemTenantOnly)
+			}, nil, nil, DistributionTypeSystemTenantOnly, nil)
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -1042,7 +1045,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			ctx := context.Background()
 			planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
 				Context: eval.Context{Codec: keys.SystemSQLCodec},
-			}, nil, nil, DistributionTypeSystemTenantOnly)
+			}, nil, nil, DistributionTypeSystemTenantOnly, nil)
 			partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
@@ -1143,7 +1146,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	ctx := context.Background()
 	planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
 		Context: eval.Context{Codec: keys.SystemSQLCodec},
-	}, nil, nil, DistributionTypeSystemTenantOnly)
+	}, nil, nil, DistributionTypeSystemTenantOnly, nil)
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)

@@ -139,7 +139,7 @@ func PlanCDCExpression(
 		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
 	}
 
-	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, DistributionTypeNone)
+	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, DistributionTypeNone, nil)
 
 	return CDCExpressionPlan{
 		Plan:         p.curPlan.main,

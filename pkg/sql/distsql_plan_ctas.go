@@ -35,8 +35,7 @@ func PlanAndRunCTAS(
 	if !isLocal {
 		distribute = DistributionTypeSystemTenantOnly
 	}
-	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner,
-		txn, distribute)
+	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner, txn, distribute, nil)
 	planCtx.stmtType = tree.Rows
 
 	physPlan, cleanup, err := dsp.createPhysPlan(ctx, planCtx, in)

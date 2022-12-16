@@ -153,8 +153,7 @@ func (dsp *DistSQLPlanner) Exec(
 		distributionType = DistributionTypeSystemTenantOnly
 	}
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
-		distributionType)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distributionType, nil)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)
@@ -180,8 +179,7 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 
 	distributionType := DistributionType(DistributionTypeNone)
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
-		distributionType)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distributionType, nil)
 	planCtx.stmtType = recv.stmtType
 
 	var evalCtxFactory func() *extendedEvalContext

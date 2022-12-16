@@ -168,8 +168,7 @@ func (ib *IndexBackfillPlanner) plan(
 	) error {
 		sd := NewFakeSessionData(ib.execCfg.SV())
 		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
-		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx,
-			nil /* planner */, txn, DistributionTypeSystemTenantOnly)
+		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, txn, DistributionTypeSystemTenantOnly, nil)
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
