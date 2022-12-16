@@ -13,7 +13,6 @@ package kvserver
 import (
 	"bytes"
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -95,7 +94,7 @@ func newUnloadedReplica(
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
-	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
+	split.Init(&r.loadBasedSplitter, nil, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
 	}, func() time.Duration {
 		return kvserverbase.SplitByLoadMergeDelay.Get(&store.cfg.Settings.SV)

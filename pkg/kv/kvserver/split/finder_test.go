@@ -278,7 +278,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 	samples := [splitKeySampleSize]sample{}
 	for i, idx := range rand.Perm(splitKeySampleSize) {
 		if i < 5 {
-			// insufficient counters
+			// Insufficient counters.
 			samples[idx] = sample{
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      0,
@@ -286,7 +286,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				contained: splitKeyMinCounter - 1,
 			}
 		} else if i < 7 {
-			// imbalance
+			// Imbalance and too many contained counters.
 			deviationLeft := rand.Intn(5)
 			deviationRight := rand.Intn(5)
 			samples[idx] = sample{
@@ -296,7 +296,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				contained: int(max(float64(splitKeyMinCounter-40-deviationLeft+deviationRight), float64(40+deviationLeft-deviationRight))),
 			}
 		} else if i < 13 {
-			// imbalance
+			// Imbalance counters.
 			deviationLeft := rand.Intn(5)
 			deviationRight := rand.Intn(5)
 			samples[idx] = sample{
@@ -306,7 +306,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				contained: int(max(float64(splitKeyMinCounter-80-deviationLeft+deviationRight), 0)),
 			}
 		} else {
-			// too many contained
+			// Too many contained counters.
 			contained := int(splitKeyMinCounter*splitKeyContainedThreshold + 1)
 			left := (splitKeyMinCounter - contained) / 2
 			samples[idx] = sample{
@@ -320,7 +320,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 
 	finder := NewFinder(timeutil.Now())
 	finder.samples = samples
-	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.NoSplitKeyCause()
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.noSplitKeyCause()
 	assert.Equal(t, 5, insufficientCounters, "unexpected insufficient counters")
 	assert.Equal(t, 6, imbalance, "unexpected imbalance counters")
 	assert.Equal(t, 7, tooManyContained, "unexpected too many contained counters")

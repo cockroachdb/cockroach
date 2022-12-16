@@ -77,11 +77,11 @@ import (
 const (
 	zipfGenerator    = 0
 	uniformGenerator = 1
-	numIterations    = 20
+	numIterations    = 200
 )
 
 type loadBasedSplitter interface {
-	Record(span roachpb.Span, weight float32)
+	Record(span roachpb.Span, weight float64)
 	Key() roachpb.Key
 }
 
@@ -101,12 +101,12 @@ type config struct {
 
 type request struct {
 	span   roachpb.Span
-	weight float32
+	weight float64
 }
 
 type weightedKey struct {
 	key    uint32
-	weight float32
+	weight float64
 }
 
 type settings struct {
@@ -127,15 +127,15 @@ func uint32ToKey(key uint32) roachpb.Key {
 	return keys.SystemSQLCodec.TablePrefix(key)
 }
 
-func generateRequests(config *config) ([]request, []weightedKey, float32) {
-	var totalWeight float32
+func generateRequests(config *config) ([]request, []weightedKey, float64) {
+	var totalWeight float64
 	requests := make([]request, 0, config.numRequests)
 	weightedKeys := make([]weightedKey, 0, 2*config.numRequests)
 
 	for i := 0; i < config.numRequests; i++ {
 		startKey := uint32(config.startKeyGenerator.Uint64())
 		spanLength := uint32(config.spanLengthGenerator.Uint64())
-		weight := float32(config.weightGenerator.Uint64())
+		weight := float64(config.weightGenerator.Uint64())
 
 		var span roachpb.Span
 		span.Key = uint32ToKey(startKey)
@@ -167,25 +167,25 @@ func generateRequests(config *config) ([]request, []weightedKey, float32) {
 }
 
 func getOptimalKey(
-	weightedKeys []weightedKey, totalWeight float32,
-) (optimalKey uint32, optimalLeftWeight, optimalRightWeight float32) {
+	weightedKeys []weightedKey, totalWeight float64,
+) (optimalKey uint32, optimalLeftWeight, optimalRightWeight float64) {
 	var optimalKeyPtr *uint32
-	var leftWeight float32
+	var leftWeight float64
 	sort.Slice(weightedKeys, func(i, j int) bool {
 		return weightedKeys[i].key < weightedKeys[j].key
 	})
-	for _, weightedKey := range weightedKeys {
+	for i := range weightedKeys {
 		rightWeight := totalWeight - leftWeight
 		// Find the split key that results in the smallest difference between the
 		// total weight of keys on the right side and the total weight of keys on
 		// the left side.
 		if optimalKeyPtr == nil ||
-			math.Abs(float64(rightWeight-leftWeight)) < math.Abs(float64(optimalRightWeight-optimalLeftWeight)) {
-			optimalKeyPtr = &weightedKey.key
+			math.Abs(rightWeight-leftWeight) < math.Abs(optimalRightWeight-optimalLeftWeight) {
+			optimalKeyPtr = &weightedKeys[i].key
 			optimalLeftWeight = leftWeight
 			optimalRightWeight = rightWeight
 		}
-		leftWeight += weightedKey.weight
+		leftWeight += weightedKeys[i].weight
 	}
 	optimalKey = *optimalKeyPtr
 	return
@@ -195,7 +195,7 @@ func getKey(
 	config *config, requests []request, weightedKeys []weightedKey,
 ) (
 	key uint32,
-	leftWeight, rightWeight float32,
+	leftWeight, rightWeight float64,
 	recordExecutionTime, keyExecutionTime time.Duration,
 ) {
 	recordStart := timeutil.Now()
@@ -222,7 +222,7 @@ func runTest(
 	config *config,
 ) (
 	key, optimalKey uint32,
-	leftWeight, rightWeight, optimalLeftWeight, optimalRightWeight float32,
+	leftWeight, rightWeight, optimalLeftWeight, optimalRightWeight float64,
 	recordExecutionTime, keyExecutionTime time.Duration,
 ) {
 	requests, weightedKeys, totalWeight := generateRequests(config)
@@ -248,7 +248,7 @@ func newGenerator(t *testing.T, randSource *rand.Rand, generatorType int, iMax u
 func runTestRepeated(
 	t *testing.T, settings *settings,
 ) (
-	avgPercentDifference, maxPercentDifference, avgOptimalPercentDifference, maxOptimalPercentDifference float32,
+	avgPercentDifference, maxPercentDifference, avgOptimalPercentDifference, maxOptimalPercentDifference float64,
 	avgRecordExecutionTime, avgKeyExecutionTime time.Duration,
 ) {
 	randSource := rand.New(rand.NewSource(settings.seed))
@@ -265,12 +265,12 @@ func runTestRepeated(
 			numRequests:         settings.numRequests,
 			randSource:          randSource,
 		})
-		percentDifference := float32(100 * math.Abs(float64(leftWeight-rightWeight)) / math.Abs(float64(leftWeight+rightWeight)))
+		percentDifference := 100 * math.Abs(leftWeight-rightWeight) / (leftWeight + rightWeight)
 		avgPercentDifference += percentDifference
 		if maxPercentDifference < percentDifference {
 			maxPercentDifference = percentDifference
 		}
-		optimalPercentDifference := float32(100 * math.Abs(float64(optimalLeftWeight-optimalRightWeight)) / math.Abs(float64(optimalLeftWeight+optimalRightWeight)))
+		optimalPercentDifference := 100 * math.Abs(optimalLeftWeight-optimalRightWeight) / (optimalLeftWeight + optimalRightWeight)
 		avgOptimalPercentDifference += optimalPercentDifference
 		if maxOptimalPercentDifference < optimalPercentDifference {
 			maxOptimalPercentDifference = optimalPercentDifference
@@ -280,8 +280,8 @@ func runTestRepeated(
 	}
 	avgRecordExecutionTime = time.Duration(avgRecordExecutionTime.Nanoseconds() / int64(numIterations))
 	avgKeyExecutionTime = time.Duration(avgKeyExecutionTime.Nanoseconds() / int64(numIterations))
-	avgPercentDifference /= float32(numIterations)
-	avgOptimalPercentDifference /= float32(numIterations)
+	avgPercentDifference /= numIterations
+	avgOptimalPercentDifference /= numIterations
 	return
 }
 
@@ -323,11 +323,85 @@ func TestUnweightedFinder(t *testing.T) {
 			weightGeneratorType:     uniformGenerator,
 			weightGeneratorIMax:     1,
 			rangeRequestPercent:     0.95,
-			numRequests:             10000,
+			numRequests:             13000,
 			lbs: func(randSource *rand.Rand) loadBasedSplitter {
 				return NewTestFinder(randSource)
 			},
 			seed: 2022,
+		},
+	})
+}
+
+func TestCompareFinders(t *testing.T) {
+	seed := uint64(2022)
+	lbs := func(randSource *rand.Rand) loadBasedSplitter {
+		return NewWeightedFinder(timeutil.Now(), randSource)
+	}
+	runTestMultipleSettings(t, []settings{
+		{
+			desc:                    "Weighted Finder",
+			startKeyGeneratorType:   zipfGenerator,
+			startKeyGeneratorIMax:   10000000000,
+			spanLengthGeneratorType: uniformGenerator,
+			spanLengthGeneratorIMax: 1000,
+			weightGeneratorType:     uniformGenerator,
+			weightGeneratorIMax:     10,
+			rangeRequestPercent:     0.95,
+			numRequests:             10000,
+			lbs:                     lbs,
+			seed:                    seed,
+		},
+		{
+			desc:                    "Weighted Finder",
+			startKeyGeneratorType:   zipfGenerator,
+			startKeyGeneratorIMax:   100000,
+			spanLengthGeneratorType: uniformGenerator,
+			spanLengthGeneratorIMax: 1000,
+			weightGeneratorType:     uniformGenerator,
+			weightGeneratorIMax:     10,
+			rangeRequestPercent:     0.95,
+			numRequests:             10000,
+			lbs:                     lbs,
+			seed:                    seed,
+		},
+		{
+			desc:                    "Weighted Finder",
+			startKeyGeneratorType:   zipfGenerator,
+			startKeyGeneratorIMax:   1000,
+			spanLengthGeneratorType: uniformGenerator,
+			spanLengthGeneratorIMax: 100,
+			weightGeneratorType:     uniformGenerator,
+			weightGeneratorIMax:     10,
+			rangeRequestPercent:     0.95,
+			numRequests:             10000,
+			lbs:                     lbs,
+			seed:                    seed,
+		},
+		{
+			desc:                    "Weighted Finder",
+			startKeyGeneratorType:   zipfGenerator,
+			startKeyGeneratorIMax:   100000,
+			spanLengthGeneratorType: uniformGenerator,
+			spanLengthGeneratorIMax: 1000,
+			weightGeneratorType:     uniformGenerator,
+			weightGeneratorIMax:     10,
+			rangeRequestPercent:     0,
+			numRequests:             10000,
+			lbs:                     lbs,
+			seed:                    seed,
+		},
+		{
+			desc:                    "Weighted Finder",
+			startKeyGeneratorType:   zipfGenerator,
+			startKeyGeneratorIMax:   10000000000,
+			spanLengthGeneratorType: uniformGenerator,
+			spanLengthGeneratorIMax: 1000,
+			weightGeneratorType:     uniformGenerator,
+			weightGeneratorIMax:     1,
+			rangeRequestPercent:     0.95,
+			numRequests:             10000,
+			lbs:                     lbs,
+			seed:                    seed,
 		},
 	})
 }

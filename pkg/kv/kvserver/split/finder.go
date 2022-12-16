@@ -12,6 +12,7 @@ package split
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -156,7 +157,7 @@ func (f *Finder) Key() roachpb.Key {
 // determines the number of samples that don't pass each split key requirement
 // (e.g. insufficient counters, imbalance in left and right counters, too many
 // contained counters, or a combination of the last two).
-func (f *Finder) NoSplitKeyCause() (
+func (f *Finder) noSplitKeyCause() (
 	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained int,
 ) {
 	for _, s := range f.samples {
@@ -177,6 +178,20 @@ func (f *Finder) NoSplitKeyCause() (
 		}
 	}
 	return
+}
+
+// NoSplitKeyCauseLogMsg returns a log message containing all of this
+// information if not all samples are invalid due to insufficient counters,
+// otherwise returns an empty string.
+func (f *Finder) NoSplitKeyCauseLogMsg() string {
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := f.noSplitKeyCause()
+	if insufficientCounters == splitKeySampleSize {
+		return ""
+	}
+	noSplitKeyCauseLogMsg := fmt.Sprintf(
+		"No split key found: insufficient counters = %d, imbalance = %d, too many contained = %d, imbalance and too many contained = %d",
+		insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained)
+	return noSplitKeyCauseLogMsg
 }
 
 // PopularKeyFrequency returns the percentage that the most popular key appears
@@ -217,7 +232,7 @@ func NewTestFinder(randSource *rand.Rand) *TestFinder {
 }
 
 // Record records the span, ignoring weight as this Finder is unweighted.
-func (tf *TestFinder) Record(span roachpb.Span, weight float32) {
+func (tf *TestFinder) Record(span roachpb.Span, weight float64) {
 	tf.f.Record(span, tf.randSource.Intn)
 }
 

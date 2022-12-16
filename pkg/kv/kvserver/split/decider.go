@@ -14,6 +14,7 @@ package split
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/exp/rand"
 )
 
 const minSplitSuggestionInterval = time.Minute
@@ -63,7 +65,7 @@ type LoadSplitterMetrics struct {
 // incoming requests to find potential split keys and checks if sampled
 // candidate split keys satisfy certain requirements.
 type Decider struct {
-	intn                func(n int) int      // supplied to Init
+	randSource          *rand.Rand
 	qpsThreshold        func() float64       // supplied to Init
 	qpsRetention        func() time.Duration // supplied to Init
 	loadSplitterMetrics *LoadSplitterMetrics // supplied to Init
@@ -80,8 +82,8 @@ type Decider struct {
 		maxQPS maxQPSTracker
 
 		// Fields tracking split key suggestions.
-		splitFinder         *Finder   // populated when engaged or decided
-		lastSplitSuggestion time.Time // last stipulation to client to carry out split
+		splitFinder         *WeightedFinder // populated when engaged or decided
+		lastSplitSuggestion time.Time       // last stipulation to client to carry out split
 
 		// Fields tracking logging / metrics around load-based splitter split key.
 		lastNoSplitKeyLoggingMetrics time.Time
@@ -94,12 +96,15 @@ type Decider struct {
 // may exist in the system at any given point in time.
 func Init(
 	lbs *Decider,
-	intn func(n int) int,
+	randSource *rand.Rand,
 	qpsThreshold func() float64,
 	qpsRetention func() time.Duration,
 	loadSplitterMetrics *LoadSplitterMetrics,
 ) {
-	lbs.intn = intn
+	if randSource == nil {
+		randSource = rand.New(rand.NewSource(2022))
+	}
+	lbs.randSource = randSource
 	lbs.qpsThreshold = qpsThreshold
 	lbs.qpsRetention = qpsRetention
 	lbs.loadSplitterMetrics = loadSplitterMetrics
@@ -147,7 +152,7 @@ func (d *Decider) recordLocked(
 		// to be used.
 		if d.mu.lastQPS >= d.qpsThreshold() {
 			if d.mu.splitFinder == nil {
-				d.mu.splitFinder = NewFinder(now)
+				d.mu.splitFinder = NewWeightedFinder(now, d.randSource)
 			}
 		} else {
 			d.mu.splitFinder = nil
@@ -157,7 +162,7 @@ func (d *Decider) recordLocked(
 	if d.mu.splitFinder != nil && n != 0 {
 		s := span()
 		if s.Key != nil {
-			d.mu.splitFinder.Record(span(), d.intn)
+			d.mu.splitFinder.Record(span(), 1)
 		}
 		if d.mu.splitFinder.Ready(now) {
 			if d.mu.splitFinder.Key() != nil {
@@ -168,16 +173,15 @@ func (d *Decider) recordLocked(
 			} else {
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
-					insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := d.mu.splitFinder.NoSplitKeyCause()
-					if insufficientCounters < splitKeySampleSize {
+					noSplitKeyCauseLogMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg()
+					if noSplitKeyCauseLogMsg != "" {
 						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
+						noSplitKeyCauseLogMsg += fmt.Sprintf(", most popular key occurs in %d%% of samples", int(popularKeyFrequency*100))
+						log.KvDistribution.Infof(ctx, "%s", noSplitKeyCauseLogMsg)
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
-						log.KvDistribution.Infof(ctx,
-							"No split key found: insufficient counters = %d, imbalance = %d, too many contained = %d, imbalance and too many contained = %d, most popular key occurs in %d%% of samples",
-							insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained, int(popularKeyFrequency*100))
 					}
 				}
 			}
