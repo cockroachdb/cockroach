@@ -45,14 +45,18 @@ func TestRandPartName(t *testing.T) {
 	// We can't guarantee much about the global distribution of names,
 	// but we should make sure that we're not always using the same 5
 	// names. Run up to 100 times before failing.
+	//
+	// NB: The odds of this flaking are extremely low. 92 choose 5 gives
+	// 4,9177,128 unique combinations. After 100 shuffles, the probability of
+	// seeing the same combination is astronomically low.
 	for i := 0; i < 100; i++ {
-		if len(seen) > 5 {
+		if len(seen) > nPartNames {
 			return
 		}
 		runOneRound()
 	}
 
-	if len(seen) <= 5 {
-		t.Errorf("only saw 5 names after calling randPartName 100 times")
+	if len(seen) <= nPartNames {
+		t.Errorf("only saw %d names after calling randPartName 100 times", nPartNames)
 	}
 }
