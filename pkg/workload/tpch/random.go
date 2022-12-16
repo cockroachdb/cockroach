@@ -129,9 +129,8 @@ func randPartName(rng *rand.Rand, namePerm []int, a *bufalloc.ByteAllocator) []b
 	// do nPartNames iterations of rand.Perm, to get a random 5-subset of the
 	// indexes into randPartNames.
 	for i := 0; i < nPartNames; i++ {
-		j := rng.Intn(i + 1)
-		namePerm[i] = namePerm[j]
-		namePerm[j] = i
+		j := rng.Intn(len(namePerm))
+		namePerm[i], namePerm[j] = namePerm[j], namePerm[i]
 	}
 	var buf []byte
 	*a, buf = a.Alloc(maxPartNameLen*nPartNames+nPartNames, 0)
