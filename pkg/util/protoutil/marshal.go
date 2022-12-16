@@ -51,3 +51,13 @@ func Unmarshal(data []byte, pb Message) error {
 	pb.Reset()
 	return pb.Unmarshal(data)
 }
+
+// UnmarshalWithoutReset is like Unmarshal, but without resetting.
+// Callers need to be mindful to reset the message manually or they
+// may end up with merged messages.
+//
+// This method is helpful for reducing memory allocations, as unmarshaling can
+// reuse existing byte slices that would be removed by a call to Reset().
+func UnmarshalWithoutReset(data []byte, pb Message) error {
+	return pb.Unmarshal(data)
+}
