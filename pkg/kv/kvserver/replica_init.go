@@ -95,7 +95,8 @@ func newUnloadedReplica(
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
-	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
+	randSource := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	split.Init(&r.loadBasedSplitter, store.cfg.Settings, randSource, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
 	}, func() time.Duration {
 		return kvserverbase.SplitByLoadMergeDelay.Get(&store.cfg.Settings.SV)
