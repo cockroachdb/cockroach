@@ -1262,7 +1262,6 @@ func setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest, tr *tracing.Tracer,
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
-	parentSpan := tracing.SpanFromContext(ctx)
 	localRequest := grpcutil.IsLocalRequestContext(ctx)
 	// For non-local requests, we'll need to attach the recording to the outgoing
 	// BatchResponse if the request is traced. We ignore whether the request is
@@ -1271,8 +1270,16 @@ func setupSpanForIncomingRPC(
 	if localRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
 		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
-	} else if parentSpan == nil {
+	} else {
 		// Non-local call. Tracing information comes from the request proto.
+
+		// Sanity check - we're not expecting a span in the context. If there was
+		// one, it'd be unclear what needRecordingCollection should be set to.
+		parentSpan := tracing.SpanFromContext(ctx)
+		if parentSpan != nil {
+			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
+		}
+
 		var remoteParent tracing.SpanMeta
 		if !ba.TraceInfo.Empty() {
 			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
@@ -1290,12 +1297,6 @@ func setupSpanForIncomingRPC(
 				tracing.WithRemoteParentFromSpanMeta(remoteParent),
 				tracing.WithServerSpanKind)
 		}
-	} else {
-		// It's unexpected to find a span in the context for a non-local request.
-		// Let's create a span for the RPC anyway.
-		ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-			tracing.WithParent(parentSpan),
-			tracing.WithServerSpanKind)
 	}
 
 	newSpan.SetLazyTag("request", ba.ShallowCopy())
