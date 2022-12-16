@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -54,39 +53,34 @@ type appBatch struct {
 
 func (b *appBatch) assertAndCheckCommand(
 	ctx context.Context, cmd *raftlog.ReplicatedCmd, state *kvserverpb.ReplicaState, isLocal bool,
-) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, forcedErr *roachpb.Error, _ error) {
+) (kvserverbase.ForcedErrResult, error) {
 	if log.V(4) {
 		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
 			cmd.ID, cmd.Index(), cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
 	}
 
 	if cmd.Index() == 0 {
-		return 0, 0, nil, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
+		return kvserverbase.ForcedErrResult{}, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
 	}
 	if idx, applied := cmd.Index(), state.RaftAppliedIndex; idx != applied+1 {
 		// If we have an out-of-order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return.
-		return 0, 0, nil, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
+		return kvserverbase.ForcedErrResult{}, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
 	}
 
 	// TODO(sep-raft-log): move the closedts checks from replicaAppBatch here as
 	// well. This just needs a bit more untangling as they reference *Replica, but
 	// for no super-convincing reason.
 
-	leaseIndex, rej, forcedErr := kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, state)
-	return leaseIndex, rej, forcedErr, nil
+	return kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, state), nil
 }
 
 func (b *appBatch) toCheckedCmd(
-	ctx context.Context,
-	cmd *raftlog.ReplicatedCmd,
-	leaseIndex uint64,
-	rej kvserverbase.ProposalRejectionType,
-	forcedErr *roachpb.Error,
+	ctx context.Context, cmd *raftlog.ReplicatedCmd, fr kvserverbase.ForcedErrResult,
 ) {
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = leaseIndex, rej, forcedErr
+	cmd.ForcedErrResult = fr
 	if cmd.Rejected() {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
+		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedError)
 
 		// Apply an empty command.
 		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}

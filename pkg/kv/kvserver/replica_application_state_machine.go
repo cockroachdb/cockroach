@@ -81,43 +81,38 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 
 // TODO(tbg): move this to replica_app_batch.go.
 func replicaApplyTestingFilters(
-	ctx context.Context,
-	r *Replica,
-	cmd *replicatedCmd,
-	rejection kvserverbase.ProposalRejectionType,
-	forcedErr *roachpb.Error,
-) (newRejection kvserverbase.ProposalRejectionType, newForcedErr *roachpb.Error) {
+	ctx context.Context, r *Replica, cmd *replicatedCmd, fr kvserverbase.ForcedErrResult,
+) kvserverbase.ForcedErrResult {
 	// By default, output is input.
-	newRejection = rejection
-	newForcedErr = forcedErr
+	newFR := fr
 
 	// Filters may change that.
-	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; forcedErr != nil || filter != nil {
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; fr.ForcedError != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
 			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
-			ForcedError:          forcedErr,
+			ForcedError:          fr.ForcedError,
 		}
-		if forcedErr == nil {
+		if fr.ForcedError == nil {
 			if cmd.IsLocal() {
 				args.Req = cmd.proposal.Request
 			}
 			var newRej int
-			newRej, newForcedErr = filter(args)
-			if rejection == 0 {
-				newRejection = kvserverbase.ProposalRejectionType(newRej)
+			newRej, newFR.ForcedError = filter(args)
+			if fr.Rejection == 0 {
+				newFR.Rejection = kvserverbase.ProposalRejectionType(newRej)
 			}
 		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
 			var newRej int
-			newRej, newForcedErr = filter(args)
-			if rejection == 0 {
-				newRejection = kvserverbase.ProposalRejectionType(newRej)
+			newRej, newFR.ForcedError = filter(args)
+			if fr.Rejection == 0 {
+				newFR.Rejection = kvserverbase.ProposalRejectionType(newRej)
 			}
 		}
 	}
-	return newRejection, newForcedErr
+	return newFR
 }
 
 // NewEphemeralBatch implements the apply.StateMachine interface.
