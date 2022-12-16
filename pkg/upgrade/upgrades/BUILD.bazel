@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "upgrades",
     srcs = [
+        "alter_jobs_add_job_type.go",
         "alter_sql_instances_locality.go",
         "alter_statement_statistics_index_recommendations.go",
         "alter_table_statistics_partial_predicate.go",
@@ -76,6 +77,7 @@ go_test(
     name = "upgrades_test",
     size = "large",
     srcs = [
+        "alter_jobs_add_job_type_test.go",
         "alter_sql_instances_locality_test.go",
         "alter_statement_statistics_index_recommendations_test.go",
         "alter_table_statistics_partial_predicate_test.go",
