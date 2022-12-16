@@ -4112,6 +4112,35 @@ value if you rely on the HLC for accuracy.`,
 			}
 		}()...),
 
+	"crdb_internal.job_payload_user": makeBuiltin(
+		jsonProps(),
+		func() []tree.Overload {
+			returnType := tree.FixedReturnType(types.String)
+			getJobOwner := func(data []byte) (tree.Datum, error) {
+				var msg jobspb.Payload
+				if err := protoutil.Unmarshal(data, &msg); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(msg.UsernameProto.Decode().Normalized()), nil
+			}
+
+			return []tree.Overload{
+				{
+					Info:       "Reads the user from the jobspb.Payload protocol message.",
+					Volatility: volatility.Immutable,
+					Types: tree.ParamTypes{
+						{Name: "data", Typ: types.Bytes},
+					},
+					ReturnType: returnType,
+					Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+						return getJobOwner(
+							[]byte(tree.MustBeDBytes(args[0])),
+						)
+					},
+				},
+			}
+		}()...),
+
 	"crdb_internal.json_to_pb": makeBuiltin(
 		jsonProps(),
 		tree.Overload{

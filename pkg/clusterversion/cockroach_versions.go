@@ -362,6 +362,14 @@ const (
 	// column in the system.jobs table.
 	V23_1BackfillTypeColumnInJobsTable
 
+	// V23_1AddUsernameColumnToJobsTable adds the user column to
+	// the system.jobs table.
+	V23_1AddUsernameColumnToJobsTable
+
+	// V23_1BackfillUsernameColumnInJobsTable backfills the user
+	// column in the system.jobs table.
+	V23_1BackfillUsernameColumnInJobsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -627,6 +635,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1BackfillTypeColumnInJobsTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 20},
+	},
+	{
+		Key:     V23_1AddUsernameColumnToJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
+	},
+	{
+		Key:     V23_1BackfillUsernameColumnInJobsTable,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 24},
 	},
 
 	// *************************************************
