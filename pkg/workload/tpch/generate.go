@@ -213,7 +213,7 @@ func (w *tpch) tpchPartSuppInitialRowBatch(
 		// PS_AVAILQTY random value [1 .. 9,999].
 		availQtyCol[i] = int16(randInt(rng, 1, 9999))
 		// PS_SUPPLYCOST random value [1.00 .. 1,000.00].
-		supplyCostCol[i] = float64(randFloat(rng, 1, 1000, 100))
+		supplyCostCol[i] = float64(randFloat(rng, 100, 100000, 100))
 		// PS_COMMENT text string [49,198].
 		commentCol.Set(i, w.textPool.randString(rng, 49, 198))
 	}
