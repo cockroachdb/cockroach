@@ -240,6 +240,18 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillJobTypeColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"add user column to system.jobs table",
+		toCV(clusterversion.V23_1AddUsernameColumnToJobsTable),
+		upgrade.NoPrecondition,
+		alterSystemJobsAddUsernameColumn,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill user column in system.jobs table",
+		toCV(clusterversion.V23_1BackfillUsernameColumnInJobsTable),
+		upgrade.NoPrecondition,
+		backfillJobsUsernameColumn,
+	),
 }
 
 func init() {
