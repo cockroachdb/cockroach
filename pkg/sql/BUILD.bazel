@@ -751,6 +751,7 @@ go_test(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/sql/physicalplan",
+        "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/privilege",
         "//pkg/sql/querycache",
         "//pkg/sql/randgen",
