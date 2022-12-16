@@ -93,7 +93,7 @@ type PLpgSQLStmtIf struct {
 }
 
 func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(fmt.Sprintf("IF %s THEN ENDIF\n", s.Condition))
+	ctx.WriteString(fmt.Sprintf("IF %s THEN END IF\n", s.Condition))
 }
 
 type PLpgSQLStmtIfElseIfArm struct {
@@ -128,10 +128,11 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 	if s.HaveElse {
 		ctx.WriteString("ELSE\n")
 		for _, stmt := range s.ElseStmts {
+			ctx.WriteString("  ")
 			stmt.Format(ctx)
 		}
 	}
-	ctx.WriteString("ENDCASE\n")
+	ctx.WriteString("END CASE\n")
 }
 
 type PLpgSQLStmtCaseWhenArm struct {
@@ -142,12 +143,14 @@ type PLpgSQLStmtCaseWhenArm struct {
 }
 
 func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(fmt.Sprintf("WHEN %s\n", s.Expr))
-	ctx.WriteString("THEN")
-	for _, stmt := range s.Stmts {
+	ctx.WriteString(fmt.Sprintf("WHEN %s THEN\n", s.Expr))
+	for i, stmt := range s.Stmts {
+		ctx.WriteString("  ")
 		stmt.Format(ctx)
+		if i != len(s.Stmts)-1 {
+			ctx.WriteString("\n")
+		}
 	}
-	ctx.WriteString("\n")
 }
 
 // stmt_loop
