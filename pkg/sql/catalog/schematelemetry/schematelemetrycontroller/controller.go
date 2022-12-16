@@ -316,7 +316,7 @@ func GetSchemaTelemetryScheduleID(
 		ctx,
 		"check-existing-schema-telemetry-schedule",
 		txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		`SELECT schedule_id FROM system.scheduled_jobs WHERE schedule_name = $1 ORDER BY schedule_id ASC LIMIT 1`,
 		SchemaTelemetryScheduleName,
 	)

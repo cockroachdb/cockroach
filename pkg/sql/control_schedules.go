@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -72,7 +71,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
-		params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
 			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args, owner FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),

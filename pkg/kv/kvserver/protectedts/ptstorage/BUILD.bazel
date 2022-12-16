@@ -17,7 +17,6 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

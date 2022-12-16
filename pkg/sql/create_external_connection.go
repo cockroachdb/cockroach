@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -128,7 +127,7 @@ func (p *planner) createExternalConnection(
 			ec.name, p.User().SQLIdentifier())
 		_, err = ie.ExecEx(params.ctx,
 			"grant-on-create-external-connection", txn,
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, grantStatement)
+			sessiondata.NodeUserSessionDataOverride, grantStatement)
 		if err != nil {
 			return errors.Wrap(err, "failed to grant on newly created External Connection")
 		}

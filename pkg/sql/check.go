@@ -70,9 +70,7 @@ func validateCheckExpr(
 		ctx,
 		"validate check constraint",
 		txn,
-		sessiondata.InternalExecutorOverride{
-			User: username.RootUserName(),
-		},
+		sessiondata.RootUserSessionDataOverride,
 		queryStr)
 	if err != nil {
 		return err

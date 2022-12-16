@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -331,9 +330,7 @@ DO NOTHING
 		ctx,
 		"insert-txn-stats",
 		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
+		sessiondata.NodeUserSessionDataOverride,
 		insertStmt,
 		aggregatedTs,            // aggregated_ts
 		serializedFingerprintID, // fingerprint_id
@@ -373,9 +370,7 @@ WHERE fingerprint_id = $2
 		ctx,
 		"update-stmt-stats",
 		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
+		sessiondata.NodeUserSessionDataOverride,
 		updateStmt,
 		statistics,              // statistics
 		serializedFingerprintID, // fingerprint_id
@@ -433,9 +428,7 @@ WHERE fingerprint_id = $3
 		ctx,
 		"update-stmt-stats",
 		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
+		sessiondata.NodeUserSessionDataOverride,
 		updateStmt,
 		statistics,                         // statistics
 		indexRecommendations,               // index_recommendations
@@ -529,9 +522,7 @@ DO NOTHING
 		ctx,
 		"insert-stmt-stats",
 		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
+		sessiondata.NodeUserSessionDataOverride,
 		insertStmt,
 		args...,
 	)
@@ -566,9 +557,7 @@ FOR UPDATE
 		ctx,
 		"fetch-txn-stats",
 		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
+		sessiondata.NodeUserSessionDataOverride,
 		readStmt,                // stmt
 		serializedFingerprintID, // fingerprint_id
 		appName,                 // app_name
@@ -624,9 +613,7 @@ FOR UPDATE
 		ctx,
 		"fetch-stmt-stats",
 		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
+		sessiondata.NodeUserSessionDataOverride,
 		readStmt,                           // stmt
 		serializedFingerprintID,            // fingerprint_id
 		serializedTransactionFingerprintID, // transaction_fingerprint_id

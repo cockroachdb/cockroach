@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -162,9 +161,7 @@ func collectCombinedStatements(
 	const expectedNumDatums = 8
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -274,9 +271,7 @@ func collectCombinedTransactions(
 	const expectedNumDatums = 6
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-txns-by-interval", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -502,9 +497,7 @@ func getTotalStatementDetails(
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	if err != nil {
 		return statement, serverError(ctx, err)
@@ -593,9 +586,7 @@ func getStatementDetailsPerAggregatedTs(
 	const expectedNumDatums = 5
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -668,9 +659,7 @@ func getExplainPlanFromGist(ctx context.Context, ie *sql.InternalExecutor, planG
 	args = append(args, planGist)
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-get-explain-plan", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	if err != nil {
 		return planError
@@ -708,9 +697,7 @@ func getIdxAndTableName(ctx context.Context, ie *sql.InternalExecutor, indexInfo
 	args = append(args, indexID)
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-get-index-and-table-names", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, `SELECT descriptor_name, index_name FROM crdb_internal.table_indexes 
+		sessiondata.NodeUserSessionDataOverride, `SELECT descriptor_name, index_name FROM crdb_internal.table_indexes 
     WHERE descriptor_id =$1 AND index_id=$2`, args...)
 	if err != nil {
 		return indexInfo
@@ -775,9 +762,7 @@ func getStatementDetailsPerPlanHash(
 	args = append(args, limit)
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	if err != nil {
 		return nil, serverError(ctx, err)

@@ -124,7 +124,7 @@ func (r *sqlStatsCompactionResumer) getScheduleID(
 	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, env scheduledjobs.JobSchedulerEnv,
 ) (scheduleID int64, _ error) {
 	row, err := ie.QueryRowEx(ctx, "lookup-sql-stats-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2", env.SystemJobsTableName()),
 		r.job.ID(), jobs.CreatedByScheduledJobs,
 	)
