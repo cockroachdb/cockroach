@@ -1,3 +1,6 @@
+skip issue-num=93731
+----
+
 # This test ensures that table, database and cluster backups properly backup and
 # restore (i.e. capture) an in progress database or table RESTORE. The
 # in-progress restore may take other kinds of descriptors offline (e.g. type,
