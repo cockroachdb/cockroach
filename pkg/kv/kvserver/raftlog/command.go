@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -32,13 +31,11 @@ import (
 // changes replica boundaries.
 type ReplicatedCmd struct {
 	*Entry
-	// The following fields are set in shouldApplyCommand when we validate that
-	// a command applies given the current lease and GC threshold. The process
-	// of setting these fields is what transforms an apply.Command into an
+	// The following struct is populated in shouldApplyCommand when we validate
+	// that a command applies given the current lease and GC threshold. The
+	// process of populating it is what transforms an apply.Command into an
 	// apply.CheckedCommand.
-	LeaseIndex uint64
-	ForcedErr  *roachpb.Error
-	Rejection  kvserverbase.ProposalRejectionType
+	kvserverbase.ForcedErrResult
 }
 
 var _ apply.Command = (*ReplicatedCmd)(nil)
@@ -106,7 +103,7 @@ func (c *ReplicatedCmd) AckOutcomeAndFinish(context.Context) error { return nil 
 // A command is rejected if it has a ForcedErr, i.e. if the state machines
 // (deterministically) apply the associated entry as a no-op. See
 // kvserverbase.CheckForcedErr.
-func (c *ReplicatedCmd) Rejected() bool { return c.ForcedErr != nil }
+func (c *ReplicatedCmd) Rejected() bool { return c.ForcedError != nil }
 
 // CanAckBeforeApplication implements apply.CheckedCommand.
 //

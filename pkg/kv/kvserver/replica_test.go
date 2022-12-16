@@ -825,10 +825,11 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 		},
 	}
 	tc.repl.mu.Lock()
-	_, _, pErr := kvserverbase.CheckForcedErr(
+	fr := kvserverbase.CheckForcedErr(
 		ctx, makeIDKey(), &raftCmd, false, /* isLocal */
 		&tc.repl.mu.state,
 	)
+	pErr := fr.ForcedError
 	tc.repl.mu.Unlock()
 	if _, isErr := pErr.GetDetail().(*roachpb.LeaseRejectedError); !isErr {
 		t.Fatal(pErr)
