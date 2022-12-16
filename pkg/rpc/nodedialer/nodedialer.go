@@ -305,6 +305,9 @@ func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
 
 // TracingInternalClient wraps an InternalClient and fills in trace information
 // on Batch RPCs.
+//
+// Note that TracingInternalClient is not used to wrap the internalClientAdapter
+// - local RPCs don't need this tracing functionality.
 type TracingInternalClient struct {
 	roachpb.InternalClient
 }
