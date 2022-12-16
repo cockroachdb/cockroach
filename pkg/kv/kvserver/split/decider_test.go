@@ -13,7 +13,6 @@ package split
 import (
 	"context"
 	"math"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 func ms(i int) time.Time {
@@ -37,10 +37,10 @@ func ms(i int) time.Time {
 func TestDecider(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	intn := rand.New(rand.NewSource(12)).Intn
+	rand := rand.New(rand.NewSource(12))
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 10.0 }, func() time.Duration { return 2 * time.Second }, &LoadSplitterMetrics{
+	Init(&d, nil, rand, func() float64 { return 10.0 }, func() time.Duration { return 2 * time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
@@ -96,7 +96,7 @@ func TestDecider(t *testing.T) {
 	assert.Equal(t, ms(1200), d.mu.lastQPSRollover)
 	assertMaxQPS(1099, 0, false)
 
-	var nilFinder *Finder
+	var nilFinder *DeprecatedFinder
 
 	assert.Equal(t, nilFinder, d.mu.splitFinder)
 
@@ -166,7 +166,7 @@ func TestDecider(t *testing.T) {
 	}
 
 	// ... which we verify by looking at its samples directly.
-	for _, sample := range d.mu.splitFinder.samples {
+	for _, sample := range d.mu.splitFinder.(*DeprecatedFinder).samples {
 		assert.Equal(t, roachpb.Key("p"), sample.key)
 	}
 
@@ -196,10 +196,10 @@ func TestDecider(t *testing.T) {
 
 func TestDecider_MaxQPS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	intn := rand.New(rand.NewSource(11)).Intn
+	rand := rand.New(rand.NewSource(11))
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 100.0 }, func() time.Duration { return 10 * time.Second }, &LoadSplitterMetrics{
+	Init(&d, nil, rand, func() float64 { return 100.0 }, func() time.Duration { return 10 * time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
@@ -242,10 +242,10 @@ func TestDecider_MaxQPS(t *testing.T) {
 
 func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	intn := rand.New(rand.NewSource(11)).Intn
+	rand := rand.New(rand.NewSource(11))
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+	Init(&d, nil, rand, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
@@ -278,10 +278,10 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 
 func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	intn := rand.New(rand.NewSource(11)).Intn
+	rand := rand.New(rand.NewSource(11))
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+	Init(&d, nil, rand, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
@@ -409,11 +409,11 @@ func TestMaxQPSTracker(t *testing.T) {
 
 func TestDeciderMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	intn := rand.New(rand.NewSource(11)).Intn
+	rand := rand.New(rand.NewSource(11))
 	timeStart := 1000
 
 	var dPopular Decider
-	Init(&dPopular, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+	Init(&dPopular, nil, rand, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
@@ -435,7 +435,7 @@ func TestDeciderMetrics(t *testing.T) {
 
 	// No split key, not popular key
 	var dNotPopular Decider
-	Init(&dNotPopular, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+	Init(&dNotPopular, nil, rand, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
@@ -455,7 +455,7 @@ func TestDeciderMetrics(t *testing.T) {
 
 	// No split key, all insufficient counters
 	var dAllInsufficientCounters Decider
-	Init(&dAllInsufficientCounters, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+	Init(&dAllInsufficientCounters, nil, rand, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})

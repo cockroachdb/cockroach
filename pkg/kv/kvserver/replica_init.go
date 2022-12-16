@@ -13,7 +13,6 @@ package kvserver
 import (
 	"bytes"
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"go.etcd.io/raft/v3"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -95,7 +95,8 @@ func newUnloadedReplica(
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
-	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
+	randSource := rand.New(rand.NewSource(2022))
+	split.Init(&r.loadBasedSplitter, store.cfg.Settings, randSource, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
 	}, func() time.Duration {
 		return kvserverbase.SplitByLoadMergeDelay.Get(&store.cfg.Settings.SV)

@@ -12,13 +12,13 @@ package state
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"golang.org/x/exp/rand"
 )
 
 // LoadSplitter provides an abstraction for load based splitting. It records
@@ -61,14 +61,9 @@ func NewSplitDecider(
 }
 
 func (s *SplitDecider) newDecider() *split.Decider {
-	rand := rand.New(rand.NewSource(s.seed))
-
-	intN := func(n int) int {
-		return rand.Intn(n)
-	}
-
+	rand := rand.New(rand.NewSource(uint64(s.seed)))
 	decider := &split.Decider{}
-	split.Init(decider, intN, s.qpsThreshold, s.qpsRetention, &split.LoadSplitterMetrics{
+	split.Init(decider, nil, rand, s.qpsThreshold, s.qpsRetention, &split.LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
