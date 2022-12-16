@@ -41,6 +41,13 @@ type InternalExecutorOverride struct {
 var NoSessionDataOverride = InternalExecutorOverride{}
 
 // NodeUserSessionDataOverride is an InternalExecutorOverride which overrides
-// the users to the NodeUser.
+// the user to the NodeUser.
 var NodeUserSessionDataOverride = InternalExecutorOverride{
-	User: username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser)}
+	User: username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
+}
+
+// RootUserSessionDataOverride is an InternalExecutorOverride which overrides
+// the user to the RootUser.
+var RootUserSessionDataOverride = InternalExecutorOverride{
+	User: username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+}

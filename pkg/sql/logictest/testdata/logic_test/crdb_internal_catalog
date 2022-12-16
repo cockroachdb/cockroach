@@ -758,7 +758,7 @@ TableCommentType       4294967216  0  "attributes was created for compatibility 
 TableCommentType       4294967217  0  "roles available to the current user\nhttps://www.cockroachlabs.com/docs/v23.1/information-schema.html#applicable_roles\nhttps://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html"
 TableCommentType       4294967218  0  "roles for which the current user has admin option\nhttps://www.cockroachlabs.com/docs/v23.1/information-schema.html#administrable_role_authorizations\nhttps://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html"
 TableCommentType       4294967220  0  "list super regions of databases visible to the current user"
-TableCommentType       4294967221  0  "table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)"
+TableCommentType       4294967221  0  "which entries of pg_catalog are implemented in this version of CockroachDB"
 TableCommentType       4294967223  0  "node-level table listing all currently running range feeds"
 TableCommentType       4294967224  0  "virtual table with default privileges"
 TableCommentType       4294967225  0  "available regions for the cluster"

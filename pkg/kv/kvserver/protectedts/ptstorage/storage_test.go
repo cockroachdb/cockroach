@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -656,7 +655,7 @@ func TestCorruptData(t *testing.T) {
 		}
 		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			sessiondata.NodeUserSessionDataOverride,
 			updateQuery,
 			[]byte("junk"), rec.ID.String())
 		require.NoError(t, err)
@@ -745,7 +744,7 @@ func TestCorruptData(t *testing.T) {
 		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
 		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			sessiondata.NodeUserSessionDataOverride,
 			"UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
 			d.String(), rec.ID.String())
 		require.NoError(t, err)

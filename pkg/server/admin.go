@@ -1709,7 +1709,7 @@ func (s *adminServer) rangeLogHelper(
 	}
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-range-log", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
@@ -1837,7 +1837,7 @@ func (s *adminServer) getUIData(
 	}
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-getUIData", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		query.String(), query.QueryArguments()...,
 	)
 	if err != nil {
@@ -2014,7 +2014,7 @@ func (s *adminServer) Settings(
 	alteredSettings := make(map[string]*time.Time)
 	if it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "read-setting", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		`SELECT name, "lastUpdated" FROM system.settings`,
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
@@ -2514,7 +2514,7 @@ func (s *adminServer) locationsHelper(
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-locations", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		q.String(),
 	)
 	if err != nil {

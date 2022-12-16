@@ -2624,7 +2624,7 @@ objoid      classoid    objsubid  description
 4294967217  4294967120  0         roles available to the current user
 4294967218  4294967120  0         roles for which the current user has admin option
 4294967220  4294967120  0         list super regions of databases visible to the current user
-4294967221  4294967120  0         table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)
+4294967221  4294967120  0         which entries of pg_catalog are implemented in this version of CockroachDB
 4294967223  4294967120  0         node-level table listing all currently running range feeds
 4294967224  4294967120  0         virtual table with default privileges
 4294967225  4294967120  0         available regions for the cluster

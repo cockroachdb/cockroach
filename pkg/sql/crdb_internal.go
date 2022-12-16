@@ -635,7 +635,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 }
 
 var crdbInternalPgCatalogTableIsImplementedTable = virtualSchemaTable{
-	comment: `table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)`,
+	comment: `which entries of pg_catalog are implemented in this version of CockroachDB`,
 	schema: `
 CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
   name                     STRING NOT NULL,
@@ -702,7 +702,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
             GROUP BY s."tableID"`, statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
 			ctx, "crdb-internal-statistics-table", nil,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			query)
 		if err != nil {
 			// This query is likely to cause errors due to SHOW TABLES being run less
@@ -928,7 +928,7 @@ func makeJobsTableRows(
 
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		query, params...)
 	if err != nil {
 		return matched, err
@@ -5130,7 +5130,7 @@ func collectMarshaledJobMetadataMap(
 	query := `SELECT id, status, payload, progress FROM system.jobs`
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.Txn(),
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		query)
 	if err != nil {
 		return nil, err

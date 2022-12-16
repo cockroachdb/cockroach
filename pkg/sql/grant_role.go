@@ -227,7 +227,7 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 
 				memberStmtRowsAffected, err := ie.ExecEx(
 					ctx, "grant-role", txn,
-					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+					sessiondata.RootUserSessionDataOverride,
 					memberStmt, qargs...,
 				)
 				if err != nil {

@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
