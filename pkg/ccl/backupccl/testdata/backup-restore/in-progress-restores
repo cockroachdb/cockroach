@@ -168,7 +168,6 @@ baz greeting_idx true 2 rowid ASC false true true
 
 exec-sql
 USE d;
-DROP SCHEMA IF EXISTS me CASCADE;
 ----
 
 
