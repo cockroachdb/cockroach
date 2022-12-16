@@ -89,7 +89,7 @@ type ReplicaStats struct {
 }
 
 type replicaStatsRecord struct {
-	localityCounts PerLocalityCounts
+	localityCounts *PerLocalityCounts
 	sum            float64
 	active         bool
 }
@@ -97,7 +97,7 @@ type replicaStatsRecord struct {
 func (rsr *replicaStatsRecord) reset() {
 	rsr.sum = 0
 
-	if len(rsr.localityCounts) == 0 {
+	if rsr.localityCounts == nil || len(*rsr.localityCounts) == 0 {
 		return
 	}
 
@@ -111,15 +111,15 @@ func (rsr *replicaStatsRecord) reset() {
 	// accumulate, create a new map if there are any unused localities. This is
 	// important when there are many quiesced ranges, that may have previously
 	// had just one request.
-	for _, v := range rsr.localityCounts {
+	for _, v := range *rsr.localityCounts {
 		if v == 0 {
-			rsr.localityCounts = make(PerLocalityCounts)
+			rsr.localityCounts = &PerLocalityCounts{}
 			return
 		}
 	}
 
-	for k := range rsr.localityCounts {
-		rsr.localityCounts[k] = 0
+	for k := range *rsr.localityCounts {
+		(*rsr.localityCounts)[k] = 0
 	}
 
 }
@@ -150,8 +150,15 @@ func (rsr *replicaStatsRecord) mergeReplicaStatsRecords(other *replicaStatsRecor
 	rsr.sum += other.sum
 	rsr.activate()
 
-	for locality, count := range other.localityCounts {
-		rsr.localityCounts[locality] += count
+	// If either of the locality counts are not set, then set both to be nil.
+	if rsr.localityCounts == nil || other.localityCounts == nil {
+		rsr.localityCounts = nil
+		other.localityCounts = nil
+		return
+	}
+
+	for locality, count := range *other.localityCounts {
+		(*rsr.localityCounts)[locality] += count
 	}
 }
 
@@ -159,9 +166,16 @@ func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
 	rsr.sum = rsr.sum / 2.0
 	other.sum = rsr.sum
 
-	for locality, count := range rsr.localityCounts {
-		rsr.localityCounts[locality] = count / 2.0
-		other.localityCounts[locality] = rsr.localityCounts[locality]
+	// If either of the locality counts are not set, then set both to be nil.
+	if rsr.localityCounts == nil || other.localityCounts == nil {
+		rsr.localityCounts = nil
+		other.localityCounts = nil
+		return
+	}
+
+	for locality, count := range *rsr.localityCounts {
+		(*rsr.localityCounts)[locality] = count / 2.0
+		(*other.localityCounts)[locality] = (*rsr.localityCounts)[locality]
 	}
 }
 
@@ -173,7 +187,11 @@ func NewReplicaStats(now time.Time, getNodeLocality LocalityOracle) *ReplicaStat
 
 	rs.lastRotate = now
 	for i := range rs.records {
-		rs.records[i] = &replicaStatsRecord{localityCounts: make(PerLocalityCounts)}
+		rs.records[i] = &replicaStatsRecord{}
+		// Only create the locality counts when a locality oracle is given.
+		if getNodeLocality != nil {
+			rs.records[i].localityCounts = &PerLocalityCounts{}
+		}
 	}
 	// Set the first record to active. All other records will be initially
 	// inactive and empty.
@@ -237,16 +255,15 @@ func (rs *ReplicaStats) SplitRequestCounts(other *ReplicaStats) {
 
 // RecordCount records the given count against the given node ID.
 func (rs *ReplicaStats) RecordCount(now time.Time, count float64, nodeID roachpb.NodeID) {
-	var locality string
-	if rs.getNodeLocality != nil {
-		locality = rs.getNodeLocality(nodeID)
-	}
-
 	rs.maybeRotate(now)
 
 	record := rs.records[rs.idx]
 	record.sum += count
-	record.localityCounts[locality] += count
+
+	if rs.getNodeLocality != nil {
+		(*record.localityCounts)[rs.getNodeLocality(nodeID)] += count
+	}
+
 }
 
 func (rs *ReplicaStats) maybeRotate(now time.Time) {
@@ -269,13 +286,19 @@ func (rs *ReplicaStats) rotate() {
 // heavily than older requests.
 func (rs *ReplicaStats) PerLocalityDecayingRate(now time.Time) (PerLocalityCounts, time.Duration) {
 	rs.maybeRotate(now)
+	counts := make(PerLocalityCounts)
+
+	// When the locality oracle isn't set, return early as there could not be
+	// any locality specific values.
+	if rs.getNodeLocality == nil {
+		return counts, now.Sub(rs.lastReset)
+	}
 
 	// Use the fraction of time since the last rotation as a smoothing factor to
 	// avoid jarring changes in request count immediately before/after a rotation.
 	timeSinceRotate := now.Sub(rs.lastRotate)
 	fractionOfRotation := float64(timeSinceRotate) / float64(replStatsRotateInterval)
 
-	counts := make(PerLocalityCounts)
 	var duration time.Duration
 	for i := range rs.records {
 		// We have to add len(rs.requests) to the numerator to avoid getting a
@@ -288,7 +311,7 @@ func (rs *ReplicaStats) PerLocalityDecayingRate(now time.Time) (PerLocalityCount
 			} else {
 				duration += time.Duration(float64(replStatsRotateInterval) * decay)
 			}
-			for k, v := range cur.localityCounts {
+			for k, v := range *cur.localityCounts {
 				counts[k] += v * decay
 			}
 		}
