@@ -665,3 +665,13 @@ SELECT * FROM abc WHERE NOT EXISTS (SELECT * FROM xyz WHERE (abc.a = xyz.x OR ab
 12  13  14
 
 ### End Split Disjunctions Tests
+
+# Regression test for SHOW session_id in a subquery.
+# See https://github.com/cockroachdb/cockroach/issues/93739
+let $session_id
+SHOW session_id
+
+query B
+select lower((select session_id from [show session_id])) = lower('$session_id')
+----
+true
