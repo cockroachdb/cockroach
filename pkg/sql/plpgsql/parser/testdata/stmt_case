@@ -1,81 +1,63 @@
 parse
 DECLARE
 BEGIN
-CASE
-hello
-WHEN
-world
-THEN
-ENDCASE;
+CASE hello
+WHEN world THEN
+END CASE;
 END
 ----
 DECLARE
 BEGIN
 CASE hello
-WHEN world
-THEN
-ENDCASE
+WHEN world THEN
+END CASE
 END
 
 parse
 DECLARE
 BEGIN
-CASE
-order_cnt
-WHEN
-1, 2, 3
-THEN
-ENDCASE;
+CASE order_cnt
+WHEN 1, 2, 3 THEN
+END CASE;
 END
 ----
 DECLARE
 BEGIN
 CASE order_cnt
-WHEN 1 , 2 , 3
-THEN
-ENDCASE
+WHEN 1 , 2 , 3 THEN
+END CASE
 END
 
 parse
 DECLARE
 BEGIN
-CASE
-order_cnt
-WHEN
-1, 2, 3
-THEN
-WHEN
-5
-THEN
-ENDCASE;
+CASE order_cnt
+WHEN 1, 2, 3 THEN
+WHEN 5 THEN
+END CASE;
 END
 ----
 DECLARE
 BEGIN
 CASE order_cnt
-WHEN 1 , 2 , 3
-THEN
-WHEN 5
-THEN
-ENDCASE
+WHEN 1 , 2 , 3 THEN
+WHEN 5 THEN
+END CASE
 END
 
 parse
 DECLARE
 BEGIN
 CASE
-WHEN
-true
-THEN
-ENDCASE;
+WHEN true THEN
+END CASE;
 END
 ----
 DECLARE
 BEGIN
 CASE
-WHEN true
-THEN
-ENDCASE
+WHEN true THEN
+END CASE
 END
 
 parse
@@ -83,21 +65,41 @@ DECLARE
   order_cnt integer := 10;
 BEGIN
 CASE
-WHEN
-order_cnt BETWEEN 0 AND 100
-THEN
-WHEN
-order_cnt > 100
-THEN
-ENDCASE;
+WHEN order_cnt BETWEEN 0 AND 100 THEN
+WHEN order_cnt > 100 THEN
+END CASE;
 END
 ----
 DECLARE
 BEGIN
 CASE
-WHEN order_cnt between 0 and 100
-THEN
-WHEN order_cnt > 100
-THEN
-ENDCASE
+WHEN order_cnt between 0 and 100 THEN
+WHEN order_cnt > 100 THEN
+END CASE
+END
+
+parse
+DECLARE
+  order_cnt integer := 10;
+BEGIN
+  CASE
+  WHEN order_cnt BETWEEN 0 AND 100 THEN
+    CALL fn(1);
+  WHEN order_cnt > 100 THEN
+    CALL fn(2);
+  ELSE
+    CALL fn(3);
+END CASE;
+END
+----
+DECLARE
+BEGIN
+CASE
+WHEN order_cnt between 0 and 100 THEN
+  CALL a function/procedure
+WHEN order_cnt > 100 THEN
+  CALL a function/procedure
+ELSE
+  CALL a function/procedure
+END CASE
 END
