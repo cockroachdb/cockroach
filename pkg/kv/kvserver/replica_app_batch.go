@@ -96,6 +96,8 @@ func (b *replicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 
+	// We'll follow the steps outlined in appBatch's comment here, and will call
+	// into appBatch at appropriate times.
 	var ab appBatch
 
 	leaseIndex, rej, forcedErr, err := ab.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, &b.state, cmd.IsLocal())

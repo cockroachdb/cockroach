@@ -21,6 +21,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// appBatch is the in-progress foundation for standalone log entry
+// application[^1], i.e. the act of applying raft log entries to the state
+// machine in a library-style fashion, without a running CockroachDB server.
+//
+// The intended usage is as follows. Starting with a ReplicatedCmd per Entry,
+//
+//  1. check it via assertAndCheckCommand followed by toCheckedCmd
+//  2. run pre-add triggers (which may augment the WriteBatch)
+//  3. stage the WriteBatch into a pebble Batch
+//  4. run post-add triggers (metrics, etc)
+//
+// when all Entries have been added, the batch can be committed. In the course
+// of time, appBatch will become an implementation of apply.Batch itself; at the
+// time of writing it is only used by the replicaAppBatch implementation of
+// apply.Batch, which goes through the above steps while interspersing:
+//
+//	1a. testing interceptors between assertAndCheckCommand and toCheckedCmd
+//	2b. pre-add triggers specific to online command application (e.g. acquiring locks
+//	    during replica-spanning operations), and
+//	4b. post-add triggers specific to online command application (e.g. updates to
+//		  Replica in-mem state)
+//
+// [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
