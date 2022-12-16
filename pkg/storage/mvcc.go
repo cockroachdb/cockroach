@@ -5714,7 +5714,7 @@ func computeStatsForIterWithVisitors(
 		if implicitMeta {
 			// INVARIANT: implicitMeta => isValue.
 			// No MVCCMetadata entry for this series of keys.
-			meta.Reset()
+			meta.ResetForReuse()
 			meta.KeyBytes = MVCCVersionTimestampSize
 			meta.ValBytes = int64(valueLen)
 			meta.Deleted = mvccValueIsTombstone
@@ -5731,7 +5731,8 @@ func computeStatsForIterWithVisitors(
 			first = true
 
 			if !implicitMeta {
-				if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+				meta.ResetForReuse()
+				if err := protoutil.UnmarshalWithoutReset(iter.UnsafeValue(), &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 			}

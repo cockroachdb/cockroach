@@ -219,6 +219,14 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.AbortSpanBytes -= oms.AbortSpanBytes
 }
 
+// ResetForReuse resets the field but keeps RawBytes[:0] in the
+// struct such that a future call to `meta.Unmarshal` can use it.
+func (meta *MVCCMetadata) ResetForReuse() {
+	rawBytes := meta.RawBytes[:0]
+	meta.Reset()
+	meta.RawBytes = rawBytes
+}
+
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
