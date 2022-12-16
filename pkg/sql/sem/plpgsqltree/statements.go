@@ -93,16 +93,38 @@ type PLpgSQLStmtIf struct {
 }
 
 func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(fmt.Sprintf("IF %s THEN END IF\n", s.Condition))
+	ctx.WriteString(fmt.Sprintf("IF %s THEN\n", s.Condition))
+	for _, stmt := range s.ThenBody {
+		ctx.WriteString("\t")
+		stmt.Format(ctx)
+	}
+	for _, elsifStmt := range s.ElseIfList {
+		elsifStmt.Format(ctx)
+	}
+	for i, elseStmt := range s.ElseBody {
+		if i == 0 {
+			ctx.WriteString("ELSE\n")
+		}
+		ctx.WriteString("\t")
+		elseStmt.Format(ctx)
+	}
+	ctx.WriteString("END IF\n")
 }
 
 type PLpgSQLStmtIfElseIfArm struct {
-	LineNo    int
-	Condition PLpgSQLExpr
+	PLpgSQLStatementImpl
+	LineNo int
+	// TODO(jane): It should be PLpgSQLExpr.
+	Condition string
 	Stmts     []PLpgSQLStatement
 }
 
 func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("ELSIF %s THEN\n", s.Condition))
+	for _, stmt := range s.Stmts {
+		ctx.WriteString("\t")
+		stmt.Format(ctx)
+	}
 }
 
 // stmt_case
@@ -458,8 +480,6 @@ func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CLOSE a cursor\n")
 }
 
-// TODO stmt_null ? it's only a `NULL`
-
 // stmt_commit
 type PLpgSQLStmtCommit struct {
 	PLpgSQLStatementImpl
@@ -476,4 +496,13 @@ type PLpgSQLStmtRollback struct {
 }
 
 func (s *PLpgSQLStmtRollback) Format(ctx *tree.FmtCtx) {
+}
+
+// stmt_null
+type PLpgSQLStmtNull struct {
+	PLpgSQLStatementImpl
+}
+
+func (s *PLpgSQLStmtNull) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("NULL\n")
 }

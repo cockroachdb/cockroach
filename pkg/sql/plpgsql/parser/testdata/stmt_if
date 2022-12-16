@@ -1,10 +1,38 @@
 parse
 DECLARE
 BEGIN
-  IF hello johnny joestar THEN END IF;
+  IF johnny gyro THEN
+    NULL;
+    diego := 1 + 2;
+  ELSIF hi hot pants THEN
+    diego := 7 + 7;
+  ELSE
+    diego := 0;
+  END IF;
 END
 ----
 DECLARE
 BEGIN
-IF hello johnny joestar THEN END IF
+IF johnny gyro THEN
+	NULL
+	ASSIGN diego := 1 + 2
+ELSIF hi hot pants THEN
+	ASSIGN diego := 7 + 7
+ELSE
+	ASSIGN diego := 0
+END IF
+END
+
+
+parse
+DECLARE
+BEGIN
+  IF johnny gyro THEN
+  END IF;
+END
+----
+DECLARE
+BEGIN
+IF johnny gyro THEN
+END IF
 END

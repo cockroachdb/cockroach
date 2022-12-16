@@ -111,6 +111,9 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
     return u.val.(plpgsqltree.PLpgSQLStmtGetDiagItemList)
 }
 
+func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStmtIfElseIfArm {
+    return u.val.([]*plpgsqltree.PLpgSQLStmtIfElseIfArm)
+}
 
 
 %}
@@ -175,6 +178,8 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 %token <str>	ELSE
 %token <str>	ELSIF
 %token <str>	END
+%token <str>	END_CASE
+%token <str>	END_IF
 %token <str>	ERRCODE
 %token <str>	ERROR
 %token <str>	EXCEPTION
@@ -248,8 +253,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 %token <str>	WARNING
 %token <str>	WHEN
 %token <str>	WHILE
-%token <str>	END_IF
-%token <str>	END_CASE
+
 
 %union {
   id    int32
@@ -271,7 +275,6 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 //%type <nsitem>	decl_aliasitem // TODO what is nsitem? looks like namespace item, not sure if we need it.
 
 %type <str>	expr_until_semi
-//%type <plpgsqltree.PLpgSQLExpr>	expr_until_then expr_until_loop opt_expr_until_when
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
 
@@ -285,7 +288,8 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 //%type <str>		option_value
 
 %type <[]plpgsqltree.PLpgSQLStatement> proc_sect
-%type <[]plpgsqltree.PLpgSQLStatement> stmt_elsifs stmt_else // TODO is this a list of statement?
+%type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
+%type <[]plpgsqltree.PLpgSQLStatement> stmt_else // TODO is this a list of statement?
 %type <loopBody> loop_body
 %type <plpgsqltree.PLpgSQLStatement>  pl_block
 %type <plpgsqltree.PLpgSQLStatement>	proc_stmt
@@ -726,29 +730,38 @@ getdiag_target	:
 					}
 				;
 
-stmt_if			: IF expr_until_then THEN END_IF IF ';'
+stmt_if			: IF expr_until_then THEN proc_sect stmt_elsifs stmt_else END_IF IF ';'
 					{
-					// I need to refactor the ENDIF here with
-					// https://cockroachlabs.slack.com/archives/C0168LW5THS/p1626899649301000?thread_ts=1626883246.298600&cid=C0168LW5THS
 					$$.val = &plpgsqltree.PLpgSQLStmtIf{
            Condition: $2,
+           ThenBody: $4.plpgsqlStatements(),
+           ElseIfList: $5.pLpgSQLStmtIfElseIfArmList(),
+           ElseBody: $6.plpgsqlStatements(),
           }
 					}
 				;
 
 stmt_elsifs		:
 					{
+					$$.val = []*plpgsqltree.PLpgSQLStmtIfElseIfArm{};
 					}
-				| stmt_elsifs ELSIF expr_until_then proc_sect
+				| stmt_elsifs ELSIF expr_until_then THEN proc_sect
 					{
+					newStmt := &plpgsqltree.PLpgSQLStmtIfElseIfArm{
+						Condition: $3,
+						Stmts: $5.plpgsqlStatements(),
+					}
+					$$.val = append($1.pLpgSQLStmtIfElseIfArmList() , newStmt)
 					}
 				;
 
 stmt_else		:
 					{
+					  $$.val = []plpgsqltree.PLpgSQLStatement{};
 					}
 				| ELSE proc_sect
 					{
+					  $$.val = $2.plpgsqlStatements();
 					}
 				;
 
@@ -989,6 +1002,7 @@ stmt_close		: CLOSE cursor_variable ';'
 
 stmt_null		: NULL ';'
 					{
+					$$.val = &plpgsqltree.PLpgSQLStmtNull{};
 					}
 				;
 
