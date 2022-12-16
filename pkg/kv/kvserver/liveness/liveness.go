@@ -67,6 +67,16 @@ var (
 	ErrEpochAlreadyIncremented = errors.New("epoch already incremented")
 )
 
+type ErrEpochCondFailed struct {
+	expected, actual livenesspb.Liveness
+}
+
+func (e *ErrEpochCondFailed) Error() string {
+	return fmt.Sprintf(
+		"liveness record changed while incrementing epoch for %+v; actual is %+v; is the node still live?",
+		e.expected, e.actual)
+}
+
 type errRetryLiveness struct {
 	error
 }
@@ -1211,7 +1221,10 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		} else if actual.Epoch < liveness.Epoch {
 			return errors.Errorf("unexpected liveness epoch %d; expected >= %d", actual.Epoch, liveness.Epoch)
 		}
-		return errors.Errorf("mismatch incrementing epoch for %+v; actual is %+v", liveness, actual)
+		return &ErrEpochCondFailed{
+			expected: liveness,
+			actual:   actual.Liveness,
+		}
 	})
 	if err != nil {
 		return err
