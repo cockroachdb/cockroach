@@ -375,7 +375,7 @@ func isIndexDependent(e scpb.Element) bool {
 // when we properly support adding/dropping them in the new schema changer.
 func isSupportedNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint:
+	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
 		return true
 	}
 	return false
