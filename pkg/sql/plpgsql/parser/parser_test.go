@@ -22,8 +22,16 @@ import (
 func TestParseDeclareSection(t *testing.T) {
 	fn := `
 DECLARE
+  order_cnt integer := 10;
 BEGIN
-  EXECUTE 'any command' INTO x1 USING x2;
+  CASE
+  WHEN order_cnt BETWEEN 0 AND 100 THEN
+    CALL fn(1);
+  WHEN order_cnt > 100 THEN
+    CALL fn(2);
+  ELSE
+    CALL fn(3);
+END CASE;
 END`
 	stmt, err := parser.Parse(fn)
 	require.NoError(t, err)
