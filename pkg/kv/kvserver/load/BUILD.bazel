@@ -13,6 +13,7 @@ go_library(
         "//pkg/kv/kvserver/replicastats",
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/timeutil",
     ],
 )
 

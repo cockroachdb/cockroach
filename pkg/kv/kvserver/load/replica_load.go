@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TODO(kvoli): Recording per-second stats on every replica costs unnecessary
@@ -79,6 +80,7 @@ type ReplicaLoadStats struct {
 
 // ReplicaLoad tracks a sliding window of throughput on a replica.
 type ReplicaLoad struct {
+	clock *hlc.Clock
 	stats [numLoadStats]*replicastats.ReplicaStats
 }
 
@@ -86,25 +88,27 @@ type ReplicaLoad struct {
 // request throughput of a replica.
 func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracle) *ReplicaLoad {
 	stats := [numLoadStats]*replicastats.ReplicaStats{}
+	now := timeutil.Unix(0, clock.PhysicalNow())
 
 	// NB: We only wish to record the locality of a request for QPS, where it
 	// as only follow-the-workload lease transfers use this per-locality
 	// request count. Maintaining more than one bucket for client requests
 	// increases the memory footprint O(localities).
-	stats[Queries] = replicastats.NewReplicaStats(clock, getNodeLocality)
+	stats[Queries] = replicastats.NewReplicaStats(now, getNodeLocality)
 
 	// For all other stats, we don't include a locality oracle.
 	for i := 1; i < numLoadStats; i++ {
-		stats[i] = replicastats.NewReplicaStats(clock, nil)
+		stats[i] = replicastats.NewReplicaStats(now, nil)
 	}
 
 	return &ReplicaLoad{
+		clock: clock,
 		stats: stats,
 	}
 }
 
 func (rl *ReplicaLoad) record(stat LoadStat, val float64, nodeID roachpb.NodeID) {
-	rl.stats[stat].RecordCount(val, nodeID)
+	rl.stats[stat].RecordCount(timeutil.Unix(0, rl.clock.PhysicalNow()), val, nodeID)
 }
 
 // Split will distribute the load in the calling struct, evenly between itself
@@ -125,7 +129,7 @@ func (rl *ReplicaLoad) Merge(other *ReplicaLoad) {
 // Reset will clear all recorded history.
 func (rl *ReplicaLoad) Reset() {
 	for i := range rl.stats {
-		rl.stats[i].ResetRequestCounts()
+		rl.stats[i].ResetRequestCounts(timeutil.Unix(0, rl.clock.PhysicalNow()))
 	}
 }
 
@@ -134,7 +138,7 @@ func (rl *ReplicaLoad) get(stat LoadStat) float64 {
 	var ret float64
 	// Only return the value if the statistics have been gathered for longer
 	// than the minimum duration.
-	if val, dur := rl.stats[stat].AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+	if val, dur := rl.stats[stat].AverageRatePerSecond(timeutil.Unix(0, rl.clock.PhysicalNow())); dur >= replicastats.MinStatsDuration {
 		ret = val
 	}
 	return ret
@@ -156,7 +160,7 @@ func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 // RequestLocalityInfo returns the summary of client localities for requests
 // made to this replica.
 func (rl *ReplicaLoad) RequestLocalityInfo() *replicastats.RatedSummary {
-	return rl.stats[Queries].SnapshotRatedSummary()
+	return rl.stats[Queries].SnapshotRatedSummary(timeutil.Unix(0, rl.clock.PhysicalNow()))
 }
 
 // TestingGetSum returns the sum of recorded values for the LoadStat with
