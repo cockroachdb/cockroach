@@ -64,8 +64,8 @@ func (a kvAuth) unaryInterceptor(
 	if err != nil {
 		return nil, err
 	}
+	ctx = contextWithTenant(ctx, tenID)
 	if tenID != (roachpb.TenantID{}) {
-		ctx = contextWithTenant(ctx, tenID)
 		if err := a.tenant.authorize(tenID, info.FullMethod, req); err != nil {
 			return nil, err
 		}
@@ -81,8 +81,8 @@ func (a kvAuth) streamInterceptor(
 	if err != nil {
 		return err
 	}
+	ctx = contextWithTenant(ctx, tenID)
 	if tenID != (roachpb.TenantID{}) {
-		ctx = contextWithTenant(ctx, tenID)
 		origSS := ss
 		ss = &wrappedServerStream{
 			ServerStream: origSS,
