@@ -95,3 +95,21 @@ SELECT fetch_a_of_1_strict(NULL::INT)
 query T kvtrace
 SELECT fetch_a_of_2_strict(1, NULL::INT)
 ----
+
+# Regression test for #88259. Arguments to UDFs should be formatted correctly in
+# EXPLAIN output.
+statement ok
+CREATE FUNCTION f88259(a INT, b INT) RETURNS INT LANGUAGE SQL IMMUTABLE STRICT AS $$
+  SELECT a + b
+$$
+
+query T
+EXPLAIN (VERBOSE) SELECT f88259(333, 444)
+----
+distribution: local
+vectorized: true
+·
+• values
+  columns: (f88259)
+  size: 1 column, 1 row
+  row 0, expr 0: f88259(333, 444)
