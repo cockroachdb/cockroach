@@ -12,6 +12,7 @@ package split
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -28,7 +29,7 @@ import (
 // - Disengage when a range no longer meets the criteria
 // - During split:
 //  - Record start time
-//  - Keep a sample of 10 keys
+//  - Keep a sample of 20 keys
 //   - Each sample contains three counters: left, right and contained.
 //   - On each span, increment the left and/or right counters, depending
 //     on whether the span falls entirely to the left, to the right.
@@ -59,30 +60,32 @@ type sample struct {
 	left, right, contained int
 }
 
-// Finder is a structure that is used to determine the split point
+// DeprecatedFinder is a structure that is used to determine the split point
 // using the Reservoir Sampling method.
-type Finder struct {
-	startTime time.Time
-	samples   [splitKeySampleSize]sample
-	count     int
+type DeprecatedFinder struct {
+	startTime  time.Time
+	randSource RandSource
+	samples    [splitKeySampleSize]sample
+	count      int
 }
 
-// NewFinder initiates a Finder with the given time.
-func NewFinder(startTime time.Time) *Finder {
-	return &Finder{
-		startTime: startTime,
+// NewDeprecatedFinder initiates a DeprecatedFinder with the given time.
+func NewDeprecatedFinder(startTime time.Time, randSource RandSource) *DeprecatedFinder {
+	rand.Float64()
+	return &DeprecatedFinder{
+		startTime:  startTime,
+		randSource: randSource,
 	}
 }
 
-// Ready checks if the Finder has been initialized with a sufficient
-// sample duration.
-func (f *Finder) Ready(nowTime time.Time) bool {
+// Ready implements the LoadBasedSplitter interface.
+func (f *DeprecatedFinder) Ready(nowTime time.Time) bool {
 	return nowTime.Sub(f.startTime) > RecordDurationThreshold
 }
 
-// Record informs the Finder about where the span lies with
-// regard to the keys in the samples.
-func (f *Finder) Record(span roachpb.Span, intNFn func(int) int) {
+// Record implements the LoadBasedSplitter interface. Record uses reservoir
+// sampling to get the candidate split keys.
+func (f *DeprecatedFinder) Record(span roachpb.Span, weight float64) {
 	if f == nil {
 		return
 	}
@@ -92,7 +95,7 @@ func (f *Finder) Record(span roachpb.Span, intNFn func(int) int) {
 	f.count++
 	if count < splitKeySampleSize {
 		idx = count
-	} else if idx = intNFn(count); idx >= splitKeySampleSize {
+	} else if idx = f.randSource.Intn(count); idx >= splitKeySampleSize {
 		// Increment all existing keys' counters.
 		for i := range f.samples {
 			if span.ProperlyContainsKey(f.samples[i].key) {
@@ -120,9 +123,12 @@ func (f *Finder) Record(span roachpb.Span, intNFn func(int) int) {
 	f.samples[idx] = sample{key: span.Key}
 }
 
-// Key finds an appropriate split point based on the Reservoir sampling method.
-// Returns a nil key if no appropriate key was found.
-func (f *Finder) Key() roachpb.Key {
+// Key implements the LoadBasedSplitter interface. Key returns the candidate
+// split key that minimizes the sum of the balance score (percentage difference
+// between the left and right counters) and the contained score (percentage of
+// counters are contained), provided the balance score is < 0.25 and the
+// contained score is < 0.5.
+func (f *DeprecatedFinder) Key() roachpb.Key {
 	if f == nil {
 		return nil
 	}
@@ -156,7 +162,7 @@ func (f *Finder) Key() roachpb.Key {
 // determines the number of samples that don't pass each split key requirement
 // (e.g. insufficient counters, imbalance in left and right counters, too many
 // contained counters, or a combination of the last two).
-func (f *Finder) NoSplitKeyCause() (
+func (f *DeprecatedFinder) noSplitKeyCause() (
 	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained int,
 ) {
 	for _, s := range f.samples {
@@ -179,9 +185,20 @@ func (f *Finder) NoSplitKeyCause() (
 	return
 }
 
-// PopularKeyFrequency returns the percentage that the most popular key appears
-// in f.samples.
-func (f *Finder) PopularKeyFrequency() float64 {
+// NoSplitKeyCauseLogMsg implements the LoadBasedSplitter interface.
+func (f *DeprecatedFinder) NoSplitKeyCauseLogMsg() string {
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := f.noSplitKeyCause()
+	if insufficientCounters == splitKeySampleSize {
+		return ""
+	}
+	noSplitKeyCauseLogMsg := fmt.Sprintf(
+		"No split key found: insufficient counters = %d, imbalance = %d, too many contained = %d, imbalance and too many contained = %d",
+		insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained)
+	return noSplitKeyCauseLogMsg
+}
+
+// PopularKeyFrequency implements the LoadBasedSplitter interface.
+func (f *DeprecatedFinder) PopularKeyFrequency() float64 {
 	sort.Slice(f.samples[:], func(i, j int) bool {
 		return bytes.Compare(f.samples[i].key, f.samples[j].key) < 0
 	})
@@ -200,28 +217,4 @@ func (f *Finder) PopularKeyFrequency() float64 {
 	}
 
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
-}
-
-// TestFinder is a wrapper of Finder compatible with the load-based splitter
-// testing framework.
-type TestFinder struct {
-	f          Finder
-	randSource *rand.Rand
-}
-
-// NewTestFinder initiates a TestFinder with a random source.
-func NewTestFinder(randSource *rand.Rand) *TestFinder {
-	return &TestFinder{
-		randSource: randSource,
-	}
-}
-
-// Record records the span, ignoring weight as this Finder is unweighted.
-func (tf *TestFinder) Record(span roachpb.Span, weight float32) {
-	tf.f.Record(span, tf.randSource.Intn)
-}
-
-// Key finds a split key.
-func (tf *TestFinder) Key() roachpb.Key {
-	return tf.f.Key()
 }

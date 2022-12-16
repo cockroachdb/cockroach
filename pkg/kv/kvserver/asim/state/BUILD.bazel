@@ -36,6 +36,7 @@ go_library(
         "@com_github_google_btree//:btree",
         "@io_etcd_go_raft_v3//:raft",
         "@io_etcd_go_raft_v3//tracker",
+        "@org_golang_x_exp//rand",
     ],
 )
 
