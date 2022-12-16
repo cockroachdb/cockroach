@@ -379,7 +379,7 @@ func (r *Registry) batchJobInsertStmt(
 	ctx context.Context, sessionID sqlliveness.SessionID, records []*Record, modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	instanceID := r.ID()
-	columns := []string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`, `job_type`}
+	columns := []string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`, `job_type`, `username`}
 	numColumns := len(columns)
 	marshalPanic := func(m protoutil.Message) []byte {
 		data, err := protoutil.Marshal(m)
@@ -412,12 +412,18 @@ func (r *Registry) batchJobInsertStmt(
 		`job_type`: func(rec *Record) interface{} {
 			return (&jobspb.Payload{Details: jobspb.WrapPayloadDetails(rec.Details)}).Type().String()
 		},
+		`username`: func(rec *Record) interface{} {
+			return rec.Username.Normalized()
+		},
 	}
 
 	// To run the upgrade below, migration and schema change jobs will need to be
 	// created using the old schema, which does not have the job_type column.
-	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddUsernameColumnToJobsTable) {
 		numColumns -= 1
+		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+			numColumns -= 1
+		}
 	}
 
 	appendValues := func(rec *Record, vals *[]interface{}) (err error) {
@@ -486,6 +492,7 @@ func (r *Registry) CreateJobWithTxn(
 		start = txn.ReadTimestamp().GoTime()
 	}
 	jobType := j.mu.payload.Type()
+	user := record.Username.Normalized()
 	j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(start)
 	payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 	if err != nil {
@@ -496,9 +503,9 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 
-	cols := [7]string{"id", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
+	cols := [8]string{"id", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type", "username"}
+	vals := [8]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String(), user}
 	numCols := len(cols)
-	vals := [7]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
 	placeholders := func() string {
 		var p strings.Builder
 		for i := 0; i < numCols; i++ {
@@ -512,8 +519,11 @@ func (r *Registry) CreateJobWithTxn(
 	}
 	// To run the upgrade below, migration and schema change jobs will need
 	// to be created using the old schema of the jobs table.
-	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddUsernameColumnToJobsTable) {
 		numCols -= 1
+		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+			numCols -= 1
+		}
 	}
 	insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`, strings.Join(cols[:numCols], ","), placeholders())
 	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, insertStmt, vals[:numCols]...,

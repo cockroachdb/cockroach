@@ -296,6 +296,7 @@ claim_instance_id  INT8       true   NULL               ·  {jobs_run_stats_idx,
 num_runs           INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
 last_run           TIMESTAMP  true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
 job_type           STRING     true   NULL               ·  {jobs_job_type_idx,primary}                                                                                    false
+username           STRING     true   NULL               ·  {primary}                                                                                                      false
 
 
 query TTBTTTB
