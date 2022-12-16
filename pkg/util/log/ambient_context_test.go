@@ -113,4 +113,11 @@ func TestResetAndAnnotateCtx(t *testing.T) {
 	if exp, val := "[a1] test", FormatWithContextTags(ctx, "test"); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
+
+	ctx = logtags.AddTag(context.Background(), "b", 2)
+	ac = AmbientContext{}
+	ctx = ac.ResetAndAnnotateCtx(ctx)
+	if exp, val := "test", FormatWithContextTags(ctx, "test"); val != exp {
+		t.Errorf("expected '%s', got '%s'", exp, val)
+	}
 }
