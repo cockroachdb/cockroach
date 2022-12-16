@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -92,7 +91,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	util.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
+	false,
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check
