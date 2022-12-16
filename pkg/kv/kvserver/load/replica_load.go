@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -81,12 +82,20 @@ type ReplicaLoadStats struct {
 // ReplicaLoad tracks a sliding window of throughput on a replica.
 type ReplicaLoad struct {
 	clock *hlc.Clock
-	stats [numLoadStats]*replicastats.ReplicaStats
+
+	mu struct {
+		syncutil.Mutex
+		stats [numLoadStats]*replicastats.ReplicaStats
+	}
 }
 
 // NewReplicaLoad returns a new ReplicaLoad, which may be used to track the
 // request throughput of a replica.
 func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracle) *ReplicaLoad {
+	rl := &ReplicaLoad{
+		clock: clock,
+	}
+
 	stats := [numLoadStats]*replicastats.ReplicaStats{}
 	now := timeutil.Unix(0, clock.PhysicalNow())
 
@@ -101,44 +110,73 @@ func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracl
 		stats[i] = replicastats.NewReplicaStats(now, nil)
 	}
 
-	return &ReplicaLoad{
-		clock: clock,
-		stats: stats,
-	}
+	rl.mu.stats = stats
+	return rl
+
 }
 
 func (rl *ReplicaLoad) record(stat LoadStat, val float64, nodeID roachpb.NodeID) {
-	rl.stats[stat].RecordCount(timeutil.Unix(0, rl.clock.PhysicalNow()), val, nodeID)
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	rl.mu.stats[stat].RecordCount(timeutil.Unix(0, rl.clock.PhysicalNow()), val, nodeID)
 }
 
-// Split will distribute the load in the calling struct, evenly between itself
+// Split will distribute the load from the calling struct, evenly between itself
 // and other.
+// NB: Split could create a cycle where a.split(b) || b.split(c) || c.split(a)
+// (where || = concurrent). Split should not be called on another replica load
+// object unless a higher level lock (raftMu) is also held on the given
+// replicas. See SplitRange() in store_split.go.
 func (rl *ReplicaLoad) Split(other *ReplicaLoad) {
-	for i := range rl.stats {
-		rl.stats[i].SplitRequestCounts(other.stats[i])
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	other.mu.Lock()
+	defer other.mu.Unlock()
+
+	// TODO(kvoli): Make this method immutable, returning two new replica load
+	// structs rather than mutating the original and other to split
+	// attribution.
+	for i := range rl.mu.stats {
+		rl.mu.stats[i].SplitRequestCounts(other.mu.stats[i])
 	}
 }
 
-// Merge will combine the tracked load in other, into the calling struct.
+// Merge will combine the tracked load from other, into the calling struct.
+// NB: Merging could create a cycle in theory where a.merge(b) || b.merge(c) ||
+// c.merge(a) (where || = concurrent). Merge should not be called on another
+// replica load object unless a higher level lock (raftMu) is also held on the
+// given replicas. See MergeRange() in store_merge.go.
 func (rl *ReplicaLoad) Merge(other *ReplicaLoad) {
-	for i := range rl.stats {
-		rl.stats[i].MergeRequestCounts(other.stats[i])
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	other.mu.Lock()
+	defer other.mu.Unlock()
+
+	// TODO(kvoli): Make this method immutable, returning one new replica load
+	// struct rather than mutating the original and other to merge attribution.
+	for i := range rl.mu.stats {
+		rl.mu.stats[i].MergeRequestCounts(other.mu.stats[i])
 	}
 }
 
 // Reset will clear all recorded history.
 func (rl *ReplicaLoad) Reset() {
-	for i := range rl.stats {
-		rl.stats[i].ResetRequestCounts(timeutil.Unix(0, rl.clock.PhysicalNow()))
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	for i := range rl.mu.stats {
+		rl.mu.stats[i].ResetRequestCounts(timeutil.Unix(0, rl.clock.PhysicalNow()))
 	}
 }
 
-// get returns the current value for the LoadStat with ordinal stat.
-func (rl *ReplicaLoad) get(stat LoadStat) float64 {
+// getLocked returns the current value for the LoadStat with ordinal stat. It
+// requires holding a lock.
+func (rl *ReplicaLoad) getLocked(stat LoadStat) float64 {
 	var ret float64
 	// Only return the value if the statistics have been gathered for longer
 	// than the minimum duration.
-	if val, dur := rl.stats[stat].AverageRatePerSecond(timeutil.Unix(0, rl.clock.PhysicalNow())); dur >= replicastats.MinStatsDuration {
+	if val, dur := rl.mu.stats[stat].AverageRatePerSecond(timeutil.Unix(0, rl.clock.PhysicalNow())); dur >= replicastats.MinStatsDuration {
 		ret = val
 	}
 	return ret
@@ -146,28 +184,37 @@ func (rl *ReplicaLoad) get(stat LoadStat) float64 {
 
 // Stats returns a current stat summary of replica load.
 func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
 	return ReplicaLoadStats{
-		QueriesPerSecond:    rl.get(Queries),
-		RequestsPerSecond:   rl.get(Requests),
-		WriteKeysPerSecond:  rl.get(WriteKeys),
-		ReadKeysPerSecond:   rl.get(ReadKeys),
-		WriteBytesPerSecond: rl.get(WriteBytes),
-		ReadBytesPerSecond:  rl.get(ReadBytes),
-		CPUNanosPerSecond:   rl.get(RaftCPUNanos) + rl.get(ReqCPUNanos),
+		QueriesPerSecond:    rl.getLocked(Queries),
+		RequestsPerSecond:   rl.getLocked(Requests),
+		WriteKeysPerSecond:  rl.getLocked(WriteKeys),
+		ReadKeysPerSecond:   rl.getLocked(ReadKeys),
+		WriteBytesPerSecond: rl.getLocked(WriteBytes),
+		ReadBytesPerSecond:  rl.getLocked(ReadBytes),
+		CPUNanosPerSecond:   rl.getLocked(RaftCPUNanos) + rl.getLocked(ReqCPUNanos),
 	}
 }
 
 // RequestLocalityInfo returns the summary of client localities for requests
 // made to this replica.
 func (rl *ReplicaLoad) RequestLocalityInfo() *replicastats.RatedSummary {
-	return rl.stats[Queries].SnapshotRatedSummary(timeutil.Unix(0, rl.clock.PhysicalNow()))
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	return rl.mu.stats[Queries].SnapshotRatedSummary(timeutil.Unix(0, rl.clock.PhysicalNow()))
 }
 
 // TestingGetSum returns the sum of recorded values for the LoadStat with
 // ordinal stat. The sum is used in testing in place of any averaging in order
 // to assert precisely on the values that have been recorded.
 func (rl *ReplicaLoad) TestingGetSum(stat LoadStat) float64 {
-	val, _ := rl.stats[stat].SumLocked()
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	val, _ := rl.mu.stats[stat].Sum()
 	return val
 }
 
@@ -175,5 +222,8 @@ func (rl *ReplicaLoad) TestingGetSum(stat LoadStat) float64 {
 // value given. This value will then be returned in all future Stats() calls
 // unless overriden by another call to TestingSetStat.
 func (rl *ReplicaLoad) TestingSetStat(stat LoadStat, val float64) {
-	rl.stats[stat].SetMeanRateForTesting(val)
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	rl.mu.stats[stat].SetMeanRateForTesting(val)
 }

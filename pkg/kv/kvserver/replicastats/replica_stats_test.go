@@ -204,7 +204,7 @@ func TestReplicaStats(t *testing.T) {
 			t.Errorf("%d: avgQPS() got %f, want %f", i, actual, expectedAvgQPS)
 		}
 		rs.ResetRequestCounts(now)
-		if actual, _ := rs.SumLocked(); actual != 0 {
+		if actual, _ := rs.Sum(); actual != 0 {
 			t.Errorf("%d: unexpected non-empty QPS averages after resetting: %+v", i, actual)
 		}
 	}
@@ -259,7 +259,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 		}
 
 		var totalDuration time.Duration
-		for i := 0; i < len(rs.Mu.records)-1; i++ {
+		for i := 0; i < len(rs.records)-1; i++ {
 			now = now.Add(replStatsRotateInterval)
 			totalDuration = time.Duration(float64(replStatsRotateInterval+totalDuration) * decayFactor)
 			expected := make(PerLocalityCounts)
@@ -456,14 +456,14 @@ func TestReplicaStatsSplit(t *testing.T) {
 		initial := genTestingReplicaStats(tc.windowsInitial, 10, tc.rotation)
 		expected := genTestingReplicaStats(tc.expectedSplit, 10, tc.rotation)
 		otherHalf := genTestingReplicaStats(nilMultipliers, 0, 0)
-		n := len(initial.Mu.records)
+		n := len(initial.records)
 
 		initial.SplitRequestCounts(otherHalf)
 
-		for i := range expected.Mu.records {
-			idxExpected, leftIdx, rightIdx := (expected.Mu.idx+n-i)%n, (initial.Mu.idx+n-i)%n, (otherHalf.Mu.idx+n-i)%n
-			assert.Equal(t, expected.Mu.records[idxExpected], initial.Mu.records[leftIdx])
-			assert.Equal(t, expected.Mu.records[idxExpected], otherHalf.Mu.records[rightIdx])
+		for i := range expected.records {
+			idxExpected, leftIdx, rightIdx := (expected.idx+n-i)%n, (initial.idx+n-i)%n, (otherHalf.idx+n-i)%n
+			assert.Equal(t, expected.records[idxExpected], initial.records[leftIdx])
+			assert.Equal(t, expected.records[idxExpected], otherHalf.records[rightIdx])
 		}
 	}
 }
@@ -539,13 +539,13 @@ func TestReplicaStatsMerge(t *testing.T) {
 		rsA := genTestingReplicaStats(tc.windowsA, 10, tc.rotateA)
 		rsB := genTestingReplicaStats(tc.windowsB, 10, tc.rotateB)
 		expectedRs := genTestingReplicaStats(tc.windowsExp, 10, tc.rotateA)
-		n := len(expectedRs.Mu.records)
+		n := len(expectedRs.records)
 
 		rsA.MergeRequestCounts(rsB)
 
-		for i := range expectedRs.Mu.records {
-			idxExpected, idxA := (expectedRs.Mu.idx+n-i)%n, (rsA.Mu.idx+n-i)%n
-			assert.Equal(t, expectedRs.Mu.records[idxExpected], rsA.Mu.records[idxA], "expected idx: %d, merged idx %d", idxExpected, idxA)
+		for i := range expectedRs.records {
+			idxExpected, idxA := (expectedRs.idx+n-i)%n, (rsA.idx+n-i)%n
+			assert.Equal(t, expectedRs.records[idxExpected], rsA.records[idxA], "expected idx: %d, merged idx %d", idxExpected, idxA)
 		}
 	}
 }
@@ -568,9 +568,9 @@ func TestReplicaStatsRecordAggregate(t *testing.T) {
 	expectedSum := float64(n*(n+1)) / 2.0
 
 	for i := 1; i <= n; i++ {
-		rs.RecordCount(rs.Mu.lastRotate, float64(i*1), 1)
-		rs.RecordCount(rs.Mu.lastRotate, float64(i*2), 2)
-		rs.RecordCount(rs.Mu.lastRotate, float64(i*3), 3)
+		rs.RecordCount(rs.lastRotate, float64(i*1), 1)
+		rs.RecordCount(rs.lastRotate, float64(i*2), 2)
+		rs.RecordCount(rs.lastRotate, float64(i*3), 3)
 	}
 
 	expectedLocalityCounts := PerLocalityCounts{
@@ -584,5 +584,5 @@ func TestReplicaStatsRecordAggregate(t *testing.T) {
 		active:         true,
 	}
 
-	require.Equal(t, expectedStatsRecord, rs.Mu.records[rs.Mu.idx])
+	require.Equal(t, expectedStatsRecord, rs.records[rs.idx])
 }

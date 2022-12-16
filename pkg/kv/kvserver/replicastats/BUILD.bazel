@@ -9,7 +9,6 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/util/syncutil",
     ],
 )
 
