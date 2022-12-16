@@ -688,6 +688,50 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"pg_get_function_arguments": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				funcOid := tree.MustBeDOid(args[0])
+				t, err := evalCtx.Planner.QueryRowEx(
+					ctx, "pg_get_function_arguments",
+					sessiondata.NoSessionDataOverride,
+					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, funcOid.Oid)
+				if err != nil {
+					return nil, err
+				}
+				if len(t) == 0 || t[0] == tree.DNull {
+					return tree.NewDString(""), nil
+				}
+				arr := tree.MustBeDArray(t[0])
+				var sb strings.Builder
+				for i, elem := range arr.Array {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					if elem == tree.DNull {
+						// This shouldn't ever happen, but let's be safe about it.
+						sb.WriteString("NULL")
+						continue
+					}
+					str, ok := tree.AsDString(elem)
+					if !ok {
+						// This also shouldn't happen.
+						sb.WriteString(elem.String())
+						continue
+					}
+					sb.WriteString(string(str))
+				}
+				return tree.NewDString(sb.String()), nil
+			},
+			Info: "Returns the argument list (with defaults) necessary to identify a function, " +
+				"in the form it would need to appear in within CREATE FUNCTION.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	// pg_get_function_result returns the types of the result of a builtin
 	// function. Multi-return builtins currently are returned as anyelement, which
 	// is a known incompatibility with Postgres.

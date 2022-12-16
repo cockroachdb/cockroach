@@ -20,7 +20,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/exp/typeparams v0.0.0-20220713135740-79cabaa25d75 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
@@ -106,7 +106,7 @@ require (
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.2.19
-	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
+	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
 	github.com/cockroachdb/datadriven v1.0.2
 	github.com/cockroachdb/errors v1.9.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55

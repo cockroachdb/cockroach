@@ -454,8 +454,8 @@ github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292 h1:dzj1/xcivGjNPw
 github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292/go.mod h1:qRiX68mZX1lGBkTWyp3CLcenw9I94W2dLeRvMzcn9N4=
 github.com/cockroachdb/cockroach-go/v2 v2.2.19 h1:YIHyz17jZumBeXPuoZKq/0nrITsqDoDD8/KQt3/xiyc=
 github.com/cockroachdb/cockroach-go/v2 v2.2.19/go.mod h1:mzlIDDBALQfEjv/7DU12fb2AfQ/MUYTlychcMpWp9QI=
-github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79 h1:4s0GWs4NXFK4JEeUc0Q1pRbL4oMbqh1DK70qeQ+viOA=
-github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79/go.mod h1:EOI6rrXIdP+4EXwM8837kmmb6IJesf7k7W6bUu8BDOg=
+github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 h1:i0bnjanlWAvM50wHMT7EFyxlt5HQusznWrkwl+HBIsU=
+github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548/go.mod h1:qtkxNlt5i3rrdirfJE/bQeW/IeLajKexErv7jEIV+Uc=
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=
 github.com/cockroachdb/datadriven v1.0.1-0.20211007161720-b558070c3be0/go.mod h1:5Ib8Meh+jk1RlHIXej6Pzevx/NLlNvQB9pmSBZErGA4=
 github.com/cockroachdb/datadriven v1.0.1-0.20220214170620-9913f5bc19b7/go.mod h1:hi0MtSY3AYDQNDi83kDkMH5/yqM/CsIrsOITkSoH7KI=
@@ -469,7 +469,6 @@ github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:Yq
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
 github.com/cockroachdb/google-api-go-client v0.80.1-0.20221117193156-6a9f7150cb93 h1:4OctRhiOrTL8zT3udFWOyb2DNIipaGawQudxVt4wcdQ=
 github.com/cockroachdb/google-api-go-client v0.80.1-0.20221117193156-6a9f7150cb93/go.mod h1:xY3nI94gbvBrE0J6NHXhxOmW97HG7Khjkku6AFB3Hyg=
-github.com/cockroachdb/gostdlib v1.13.0/go.mod h1:eXX95p9QDrYwJfJ6AgeN9QnRa/lqqid9LAzWz/l5OgA=
 github.com/cockroachdb/gostdlib v1.19.0 h1:cSISxkVnTlWhTkyple/T6NXzOi5659FkhxvUgZv+Eb0=
 github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTymPZUKMfURjBtY=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
@@ -490,7 +489,6 @@ github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11 h1:UAqRo5xPCy
 github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11/go.mod h1:3299Mt0Q7PkqGqbsxhvbrTpMqRyIcZ6OMw4IEmiO09g=
 github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 h1:qVTb3XEv+7VVjPetop8yGbN95HfCeqZx+VMveeSJPZw=
 github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40/go.mod h1:cllxeV+TYc387/XzQRnDg6YThHoDzFewovWffzAm37Q=
-github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d/go.mod h1:NltwFG0VBANi1jHKpn5KL9AbsHTE+8fPaAHT0TzL20k=
 github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8 h1:Hli+oX84dKq44sLVCcsGKqifm5Lg9J8VoJ2P3h9iPdI=
 github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8/go.mod h1:75wnig8+TF6vst9hChkpcFO7YrRLddouJ5is8uqpfv0=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82 h1:8htEd1lLILqfjKardWfKKGgXVCs0WmcgEj9cXnmcuos=
@@ -2441,8 +2439,9 @@ golang.org/x/mod v0.4.1/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
 golang.org/x/mod v0.4.2/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
 golang.org/x/mod v0.5.0/go.mod h1:5OXOZSfqPIIbmVBIIKWRFfZjPR0E5r58TLhUjH0a2Ro=
 golang.org/x/mod v0.5.1/go.mod h1:5OXOZSfqPIIbmVBIIKWRFfZjPR0E5r58TLhUjH0a2Ro=
-golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 h1:6zppjxzCulZykYSLyVDYbneBfbaBIQPYMevg0bEwv2s=
 golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
+golang.org/x/mod v0.7.0 h1:LapD9S96VoQRhi/GrNTqeBJFrUjs5UHCAtTlgwA5oZA=
+golang.org/x/mod v0.7.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
 golang.org/x/net v0.0.0-20170114055629-f2499483f923/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/net v0.0.0-20180218175443-cbe0f9307d01/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/net v0.0.0-20180530234432-1e491301e022/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
@@ -2829,7 +2828,6 @@ golang.org/x/tools v0.0.0-20200729194436-6467de6f59a7/go.mod h1:njjCfa9FT2d7l9Bc
 golang.org/x/tools v0.0.0-20200804011535-6c149bb5ef0d/go.mod h1:njjCfa9FT2d7l9Bc6FUM5FLjQPp3cFF28FI3qnDFljA=
 golang.org/x/tools v0.0.0-20200825202427-b303f430e36d/go.mod h1:njjCfa9FT2d7l9Bc6FUM5FLjQPp3cFF28FI3qnDFljA=
 golang.org/x/tools v0.0.0-20200904185747-39188db58858/go.mod h1:Cj7w3i3Rnn0Xh82ur9kSqwfTHTeVxaDqrfMjpcNT6bE=
-golang.org/x/tools v0.0.0-20200923014426-f5e916c686e1/go.mod h1:z6u4i615ZeAfBE4XtMziQW1fSVJXACjjbWkB/mvPzlU=
 golang.org/x/tools v0.0.0-20201110124207-079ba7bd75cd/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
 golang.org/x/tools v0.0.0-20201124115921-2c860bdd6e78/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
 golang.org/x/tools v0.0.0-20201125231158-b5590deeca9b/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=

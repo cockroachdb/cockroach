@@ -38,9 +38,11 @@ func (r *streamIngestManagerImpl) CompleteStreamIngestion(
 
 // GetStreamIngestionStats implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) GetStreamIngestionStats(
-	ctx context.Context, ingestionJobID jobspb.JobID,
+	ctx context.Context,
+	streamIngestionDetails jobspb.StreamIngestionDetails,
+	jobProgress jobspb.Progress,
 ) (*streampb.StreamIngestionStats, error) {
-	return getStreamIngestionStats(ctx, r.evalCtx, r.txn, ingestionJobID)
+	return getStreamIngestionStats(ctx, streamIngestionDetails, jobProgress)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(

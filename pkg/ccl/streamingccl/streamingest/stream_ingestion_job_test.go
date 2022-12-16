@@ -11,7 +11,6 @@ package streamingest
 import (
 	"context"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,37 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	json2 "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
-
-func verifyIngestionStats(t *testing.T, streamID int64, cutoverTime time.Time, stats string) {
-	fetchRequiredValueKey := func(j json2.JSON, key string) json2.JSON {
-		val, err := j.FetchValKey(key)
-		require.NoError(t, err)
-		require.NotNilf(t, val, "expected key %q to in json %q", key, j)
-		return val
-	}
-
-	parseInt64 := func(s string) int64 {
-		res, err := strconv.Atoi(s)
-		require.NoError(t, err)
-		return int64(res)
-	}
-
-	statsJSON, err := json2.ParseJSON(stats)
-	require.NoError(t, err)
-
-	ingestionProgress := fetchRequiredValueKey(statsJSON, "ingestion_progress")
-	require.Equal(t, cutoverTime.UnixNano(),
-		parseInt64(fetchRequiredValueKey(fetchRequiredValueKey(ingestionProgress, "cutover_time"), "wall_time").String()))
-
-	require.Equal(t, strconv.Itoa(int(streampb.StreamReplicationStatus_STREAM_INACTIVE)),
-		fetchRequiredValueKey(fetchRequiredValueKey(statsJSON, "producer_status"), "stream_status").String())
-}
 
 // TestTenantStreaming tests that tenants can stream changes end-to-end.
 func TestTenantStreaming(t *testing.T) {
@@ -167,8 +140,9 @@ INSERT INTO d.t2 VALUES (2);
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 
-	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
-		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
+	stats := streamIngestionStats(t, ctx, destSQL, int(ingestionJobID))
+	require.Equal(t, cutoverTime, stats.IngestionProgress.CutoverTime.GoTime())
+	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, stats.ProducerStatus.StreamStatus)
 
 	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{
 		TenantID:            roachpb.MustMakeTenantID(2),
@@ -379,7 +353,7 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
 
 	<-planned
-	stats := streamIngestionStats(t, c.destSysSQL, replicationJobID)
+	stats := streamIngestionStats(t, ctx, c.destSysSQL, replicationJobID)
 
 	// Assert that the start time hasn't changed.
 	require.Equal(t, startTime, stats.IngestionDetails.ReplicationStartTime)

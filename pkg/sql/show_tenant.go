@@ -12,8 +12,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -28,9 +31,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type tenantStatus string
+
+const (
+	replicating              tenantStatus = "REPLICATING"
+	replicationPaused        tenantStatus = "REPLICATION PAUSED"
+	replicationUnknownFormat tenantStatus = "REPLICATION UNKNOWN (%s)"
+)
+
 type showTenantNode struct {
 	name               tree.TypedExpr
 	tenantInfo         *descpb.TenantInfo
+	tenantStatus       tenantStatus
 	withReplication    bool
 	replicationInfo    *streampb.StreamIngestionStats
 	protectedTimestamp hlc.Timestamp
@@ -90,24 +102,57 @@ func (n *showTenantNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-
+	var job *jobs.Job
 	n.tenantInfo = tenantRecord
+	jobId := n.tenantInfo.TenantReplicationJobID
+	if jobId == 0 {
+		n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+	} else {
+		registry := params.p.execCfg.JobRegistry
+		job, err = registry.LoadJobWithTxn(params.ctx, jobId, params.p.Txn())
+		if err != nil {
+			return err
+		}
+		switch n.tenantInfo.State {
+		case descpb.TenantInfo_ADD:
+			switch job.Status() {
+			case jobs.StatusPending:
+				// Replication did not start yet, this is similar to a tenant in the ADD state.
+				n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+			case jobs.StatusRunning, jobs.StatusPauseRequested:
+				n.tenantStatus = replicating
+			case jobs.StatusPaused:
+				n.tenantStatus = replicationPaused
+			default:
+				n.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), job.Status()))
+			}
+		case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
+			n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+		default:
+			return errors.Newf("unknown tenant status %s", n.tenantInfo.State)
+		}
+	}
+
 	if n.withReplication {
-		if n.tenantInfo.TenantReplicationJobID == 0 {
+		if jobId == 0 {
 			return errors.Newf("tenant %q does not have an active replication job", tenantName)
 		}
 		mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
 		if err != nil {
 			return err
 		}
-		stats, err := mgr.GetStreamIngestionStats(params.ctx, n.tenantInfo.TenantReplicationJobID)
+		details, ok := job.Details().(jobspb.StreamIngestionDetails)
+		if !ok {
+			return errors.Newf("job with id %d is not a stream ingestion job", job.ID())
+		}
+		stats, err := mgr.GetStreamIngestionStats(params.ctx, details, job.Progress())
 		if err != nil {
 			// An error means we don't have stats but we can still present some info,
 			// therefore we don't fail here.
 			// TODO(lidor): we need a better signal from GetStreamIngestionStats(), instead of
 			// ignoring all errors.
 			log.Infof(params.ctx, "stream ingestion stats unavailable for tenant %q and job %d",
-				tenantName, n.tenantInfo.TenantReplicationJobID)
+				tenantName, jobId)
 		} else {
 			n.replicationInfo = stats
 			if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
@@ -115,7 +160,7 @@ func (n *showTenantNode) startExec(params runParams) error {
 				// the info we do have about tenant replication status, logging an error
 				// and continuing.
 				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d",
-					tenantName, n.tenantInfo.TenantReplicationJobID)
+					tenantName, jobId)
 			} else {
 				ptp := params.p.execCfg.ProtectedTimestampProvider
 				record, err := ptp.GetRecord(params.ctx, params.p.Txn(), *stats.IngestionDetails.ProtectedTimestampRecordID)
@@ -140,7 +185,7 @@ func (n *showTenantNode) Next(_ runParams) (bool, error) {
 func (n *showTenantNode) Values() tree.Datums {
 	tenantId := tree.NewDInt(tree.DInt(n.tenantInfo.ID))
 	tenantName := tree.NewDString(string(n.tenantInfo.Name))
-	tenantStatus := tree.NewDString(n.tenantInfo.State.String())
+	tenantStatus := tree.NewDString(string(n.tenantStatus))
 	if !n.withReplication {
 		// This is a simple 'SHOW TENANT name'.
 		return tree.Datums{

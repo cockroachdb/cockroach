@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -347,16 +345,6 @@ func configureClusterSettings(setting map[string]string) []string {
 	return res
 }
 
-func streamIngestionStats(
-	t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
-) *streampb.StreamIngestionStats {
-	stats, rawStats := &streampb.StreamIngestionStats{}, make([]byte, 0)
-	row := sqlRunner.QueryRow(t, "SELECT crdb_internal.stream_ingestion_stats_pb($1)", ingestionJobID)
-	row.Scan(&rawStats)
-	require.NoError(t, protoutil.Unmarshal(rawStats, stats))
-	return stats
-}
-
 func runningStatus(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
 	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
 	return p.RunningStatus
@@ -453,7 +441,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
 
-	stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+	stats := streamIngestionStats(t, ctx, c.destSysSQL, ingestionJobID)
 
 	require.NotNil(t, stats.ReplicationLagInfo)
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
@@ -517,7 +505,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	// Pause ingestion.
 	c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
 	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
-	pausedCheckpoint := streamIngestionStats(t, c.destSysSQL, ingestionJobID).
+	pausedCheckpoint := streamIngestionStats(t, ctx, c.destSysSQL, ingestionJobID).
 		ReplicationLagInfo.MinIngestedTimestamp
 	// Check we paused at a timestamp greater than the previously reached high watermark
 	require.True(t, srcTime.LessEq(pausedCheckpoint))
@@ -528,7 +516,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	// to src cluster checkpoints events, the job high watermark may change.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, pausedCheckpoint,
-		streamIngestionStats(t, c.destSysSQL, ingestionJobID).ReplicationLagInfo.MinIngestedTimestamp)
+		streamIngestionStats(t, ctx, c.destSysSQL, ingestionJobID).ReplicationLagInfo.MinIngestedTimestamp)
 
 	// Resume ingestion.
 	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
@@ -579,7 +567,7 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	require.Equal(t, 2, ingestionStarts)
 
 	// Check we didn't make any progress.
-	require.Nil(t, streamIngestionStats(t, c.destSysSQL, ingestionJobID).ReplicationLagInfo)
+	require.Nil(t, streamIngestionStats(t, ctx, c.destSysSQL, ingestionJobID).ReplicationLagInfo)
 
 	// Resume ingestion.
 	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
@@ -744,7 +732,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		jobutils.WaitForJobToCancel(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		stats := streamIngestionStats(t, ctx, c.destSysSQL, ingestionJobID)
 		require.NotNil(t, stats.ProducerStatus)
 		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
 
@@ -814,7 +802,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		jobutils.WaitForJobToCancel(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		stats := streamIngestionStats(t, ctx, c.destSysSQL, ingestionJobID)
 		require.NotNil(t, stats.ProducerStatus)
 		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
 
@@ -1128,7 +1116,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		// greater or equal to the frontier we know we have replicated up until.
 		waitForProducerProtection := func(c *tenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
 			testutils.SucceedsSoon(t, func() error {
-				stats := streamIngestionStats(t, c.destSysSQL, replicationJobID)
+				stats := streamIngestionStats(t, ctx, c.destSysSQL, replicationJobID)
 				if stats.ProducerStatus == nil {
 					return errors.New("nil ProducerStatus")
 				}
@@ -1240,7 +1228,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		}
 
 		// Check if the producer job has released protected timestamp.
-		stats := streamIngestionStats(t, c.destSysSQL, replicationJobID)
+		stats := streamIngestionStats(t, ctx, c.destSysSQL, replicationJobID)
 		require.NotNil(t, stats.ProducerStatus)
 		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
 
@@ -1306,7 +1294,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &replicationStartTime)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
-	require.Equal(t, "ADD", status)
+	require.Equal(t, "REPLICATING", status)
 	require.Equal(t, "source", source)
 	require.Equal(t, c.srcURL.String(), sourceUri)
 	require.Equal(t, ingestionJobID, jobId)

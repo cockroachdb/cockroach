@@ -101,6 +101,26 @@ var FrontendAdmit = func(
 		}
 	}
 
+	// CancelRequest is unencrypted and unauthenticated, regardless of whether
+	// the server requires TLS connections.
+	// The PostgreSQL protocol definition says that cancel payloads
+	// must be sent *prior to upgrading the connection to use TLS*.
+	// Yet, we've found clients in the wild that send the cancel
+	// after the TLS handshake, for example at
+	// https://github.com/cockroachlabs/support/issues/600.
+	if c, ok := m.(*pgproto3.CancelRequest); ok {
+		// Craft a proxyCancelRequest in case we need to forward the request.
+		cr := &proxyCancelRequest{
+			ProxyIP:   decodeIP(c.ProcessID),
+			SecretKey: c.SecretKey,
+			ClientIP:  conn.RemoteAddr().(*net.TCPAddr).IP,
+		}
+		return &FrontendAdmitInfo{
+			Conn:          conn,
+			CancelRequest: cr,
+		}
+	}
+
 	if startup, ok := m.(*pgproto3.StartupMessage); ok {
 		// This forwards the remote addr to the backend.
 		startup.Parameters[remoteAddrStartupParam] = conn.RemoteAddr().String()
