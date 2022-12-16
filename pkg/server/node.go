@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1262,13 +1261,12 @@ func setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest, tr *tracing.Tracer,
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
-	localRequest := grpcutil.IsLocalRequestContext(ctx)
-	// For non-local requests, we'll need to attach the recording to the outgoing
-	// BatchResponse if the request is traced. We ignore whether the request is
-	// traced or not here; if it isn't, the recording will be empty.
-	needRecordingCollection := !localRequest
-	if localRequest {
-		// This is a local request which circumvented gRPC. Start a span now.
+	remoteParent := !ba.TraceInfo.Empty()
+	if !remoteParent {
+		// This is either a local request which circumvented gRPC, or a remote
+		// request that didn't specify tracing information. In the former case,
+		// EnsureChildSpan will create a child span, in the former case we'll get a
+		// root span.
 		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
@@ -1280,18 +1278,18 @@ func setupSpanForIncomingRPC(
 			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
 		}
 
-		var parentOpt tracing.SpanOption
-		if !ba.TraceInfo.Empty() {
-			parentOpt = tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo)
-		}
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind,
-			parentOpt)
+			ctx, grpcinterceptor.BatchMethodName,
+			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
+			tracing.WithServerSpanKind)
 	}
 
 	newSpan.SetLazyTag("request", ba.ShallowCopy())
 	return ctx, spanForRequest{
-		needRecording: needRecordingCollection,
+		// For non-local requests, we'll need to attach the recording to the
+		// outgoing BatchResponse if the request is traced. We ignore whether the
+		// request is traced or not here; if it isn't, the recording will be empty.
+		needRecording: remoteParent,
 		tenID:         tenID,
 		sp:            newSpan,
 	}
