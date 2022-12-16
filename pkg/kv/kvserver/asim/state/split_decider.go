@@ -62,13 +62,8 @@ func NewSplitDecider(
 
 func (s *SplitDecider) newDecider() *split.Decider {
 	rand := rand.New(rand.NewSource(s.seed))
-
-	intN := func(n int) int {
-		return rand.Intn(n)
-	}
-
 	decider := &split.Decider{}
-	split.Init(decider, intN, s.qpsThreshold, s.qpsRetention, &split.LoadSplitterMetrics{
+	split.Init(decider, nil, rand, s.qpsThreshold, s.qpsRetention, &split.LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
