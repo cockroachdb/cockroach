@@ -48,34 +48,33 @@ tc_start_block "Configure docker"
 echo "${QUAY_REGISTRY_KEY}" | docker login --username $rhel_registry_username --password-stdin $rhel_registry
 tc_end_block "Configure docker"
 
-tc_start_block "Rebuild per-arch docker images"
-declare -a combined_image_args
-for docker_arch in "${docker_archs[@]}"; do
-  cp --recursive build/deploy-redhat "build/deploy-redhat-${docker_arch}"
+tc_start_block "Rebuild docker image"
+sed \
+  -e "s,@repository@,${dockerhub_repository},g" \
+  -e "s,@tag@,${build_name},g" \
+  build/deploy-redhat/Dockerfile.in > build/deploy-redhat/Dockerfile
 
-  sed \
-    -e "s,@repository@,${dockerhub_repository},g" \
-    -e "s,@tag@,${docker_arch}-${build_name},g" \
-    "build/deploy-redhat-${docker_arch}/Dockerfile.in" > "build/deploy-redhat-${docker_arch}/Dockerfile"
+cat build/deploy-redhat/Dockerfile
 
-  cat "build/deploy-redhat-${docker_arch}/Dockerfile"
+docker build --no-cache \
+  --pull \
+  --label release=$rhel_release \
+  --tag="${rhel_repository}:${build_name}" \
+  build/deploy-redhat
+tc_end_block "Rebuild docker image"
 
-  build_docker_tag="${rhel_repository}:${docker_arch}-${build_name}"
-  combined_image_args+=("--amend" "${build_docker_tag}")
-  docker build --no-cache \
-    --label=release=$rhel_release \
-    --platform="linux/${docker_arch}" \
-    --tag="${build_docker_tag}" \
-    --pull \
-    "build/deploy-redhat-${docker_arch}"
-  retry docker push "${build_docker_tag}"
-done
-tc_end_block "Rebuild per-arch docker images"
+tc_start_block "Push RedHat docker image"
+retry docker push "${rhel_repository}:${build_name}"
+tc_end_block "Push RedHat docker image"
 
-tc_start_block "Push multiarch RedHat docker image"
-docker manifest create "${rhel_repository}:${build_name}" "${combined_image_args[@]}"
-retry docker manifest push "${rhel_repository}:${build_name}"
-tc_end_block "Push multiarch RedHat docker image"
+tc_start_block "Tag docker image as latest"
+if [[ -n "${PUBLISH_LATEST}" ]]; then
+  docker tag "${rhel_repository}:${build_name}" "${rhel_repository}:latest"
+  retry docker push "${rhel_repository}:latest"
+else
+  echo "Not required"
+fi
+tc_end_block "Tag docker images as latest"
 
 tc_start_block "Run preflight"
 mkdir -p artifacts
