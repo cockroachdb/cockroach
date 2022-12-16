@@ -279,6 +279,17 @@ yarn_install(
         "//pkg/ui:.yarnrc",
         "@yarn_cache//:.seed",
     ],
+    environment = {
+        # Don't automatically install the native Cypress binary, since not all
+        # platforms that build CRDB have Cypress binaries to install:
+        # https://docs.cypress.io/guides/getting-started/installing-cypress#System-requirements
+        #
+        # The native binary will be installed by `./dev ui e2e` just-in-time.
+        # While unsupported platforms will still encounter errors at that
+        # point, UI end-to-end tests aren't part of the core build or test
+        # flows and are intended for regression testing by CRDB developers.
+        "CYPRESS_INSTALL_BINARY": "0",
+    },
     package_json = "//pkg/ui/workspaces/e2e-tests:package.json",
     strict_visibility = False,
     symlink_node_modules = True,
