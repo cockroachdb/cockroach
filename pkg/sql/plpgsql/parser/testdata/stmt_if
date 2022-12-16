@@ -1,10 +1,10 @@
 parse
 DECLARE
 BEGIN
-  IF hello johnny joestar THEN ENDIF;
+  IF hello johnny joestar THEN END IF;
 END
 ----
 DECLARE
 BEGIN
-IF hello johnny joestar THEN ENDIF
+IF hello johnny joestar THEN END IF
 END
