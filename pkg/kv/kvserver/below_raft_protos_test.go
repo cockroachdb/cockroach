@@ -14,53 +14,32 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math/rand"
-	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-func verifyHash(b []byte, expectedSum uint64) error {
-	hash := fnv.New64a()
-	if _, err := hash.Write(b); err != nil {
-		return err
-	}
-	if sum := hash.Sum64(); sum != expectedSum {
-		return fmt.Errorf("expected sum %d; got %d", expectedSum, sum)
-	}
-	return nil
-}
+// TestBelowRaftProtosDontChange is a manually curated list of protos that we
+// use below Raft. Care must be taken to change these protos, as replica
+// divergence could ensue (if the old code and the new code handle the updated
+// or old proto differently). Changes to the encoding of these protos will be
+// detected by this test. The expectations should only be updated after a
+// reflection on the safety of the proposed change.
+func TestBelowRaftProtosDontChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-// An arbitrary number chosen to seed the PRNGs used to populate the tested
-// protos.
-const goldenSeed = 1337
-
-// The count of randomly populated protos that will be concatenated and hashed
-// per proto type. Given that the population functions have a chance of leaving
-// some fields zero-valued, this number must be greater than `1` to give this
-// test a reasonable chance of encountering a non-zero value of every field.
-const itersPerProto = 20
-
-type fixture struct {
-	populatedConstructor   func(*rand.Rand) protoutil.Message
-	emptySum, populatedSum uint64
-}
-
-// belowRaftGoldenProtos are protos that we use below Raft. Care must be
-// taken to change these protos, as replica divergence could ensue (if the
-// old code and the new code handle the updated or old proto differently).
-// To reduce the chances of a bug like this, we track the protos that are
-// used below Raft and fail on any changes to their structure. When a
-// migration was put into place, the map below can be updated with the new
-// emptySum and populatedSum for the proto that was changed.
-var belowRaftGoldenProtos = map[reflect.Type]fixture{
-	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+	testCases := []func(r *rand.Rand) protoutil.Message{
+		func(r *rand.Rand) protoutil.Message {
 			m := enginepb.NewPopulatedMVCCMetadata(r, false)
 			m.Txn = nil                 // never populated below Raft
 			m.Timestamp.Synthetic = nil // never populated below Raft
@@ -70,18 +49,10 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			m.TxnDidNotUpdateMeta = nil // never populated below Raft
 			return m
 		},
-		emptySum:     7551962144604783939,
-		populatedSum: 6170112718709472849,
-	},
-	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+		func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
-		emptySum:     10160370728048384381,
-		populatedSum: 13858955692092952193,
-	},
-	reflect.TypeOf(&raftpb.HardState{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+		func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
 				Term   uint64
 				Vote   uint64
@@ -98,81 +69,55 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 				Commit: n % 11,
 			}
 		},
-		emptySum:     13621293256077144893,
-		populatedSum: 13375098491754757572,
-	},
-	// This is used downstream of Raft only to write it into unreplicated keyspace
-	// as part of VersionUnreplicatedRaftTruncatedState.
-	// However, it has been sent through Raft for a long time, as part of
-	// ReplicatedEvalResult.
-	reflect.TypeOf(&roachpb.RaftTruncatedState{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+		func(r *rand.Rand) protoutil.Message {
+			// This is used downstream of Raft only to write it into unreplicated keyspace
+			// as part of VersionUnreplicatedRaftTruncatedState.
+			// However, it has been sent through Raft for a long time, as part of
+			// ReplicatedEvalResult.
 			return roachpb.NewPopulatedRaftTruncatedState(r, false)
 		},
-		emptySum:     5531676819244041709,
-		populatedSum: 14781226418259198098,
-	},
-	// These are marshaled below Raft by the Pebble merge operator. The Pebble
-	// merge operator can be called below Raft whenever a Pebble MVCCIterator is
-	// used.
-	reflect.TypeOf(&roachpb.InternalTimeSeriesData{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+		func(r *rand.Rand) protoutil.Message {
+
+			// These are marshaled below Raft by the Pebble merge operator. The Pebble
+			// merge operator can be called below Raft whenever a Pebble MVCCIterator is
+			// used.
 			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
 		},
-		emptySum:     5531676819244041709,
-		populatedSum: 17471291891947207032,
-	},
-	reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+		func(r *rand.Rand) protoutil.Message {
 			m := enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
 			if m.MergeTimestamp != nil {
 				m.MergeTimestamp.Synthetic = nil // never populated below Raft
 			}
 			return m
 		},
-		emptySum:     14695981039346656037,
-		populatedSum: 1187861800212570275,
-	},
-	reflect.TypeOf(&roachpb.RaftReplicaID{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+		func(r *rand.Rand) protoutil.Message {
 			return roachpb.NewPopulatedRaftReplicaID(r, false)
 		},
-		emptySum:     598336668751268149,
-		populatedSum: 9313101058286450988,
-	},
-}
+	}
 
-func TestBelowRaftProtos(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	// An arbitrary number chosen to seed the PRNGs used to populate the tested
+	// protos.
+	const goldenSeed = 1337
+	// We'll randomly populate, marshal, and hash each proto. Doing this more than
+	// once is necessary to make it very likely that all fields will be nonzero at
+	// some point.
+	const itersPerProto = 50
 
-	// Enable the additional checks in TestMain. NB: running this test by itself
-	// will fail those extra checks - such failures are safe to ignore, so long
-	// as this test passes when run with the entire package's tests.
-	verifyBelowRaftProtos = true
-
-	slice := make([]byte, 1<<20)
-	for typ, fix := range belowRaftGoldenProtos {
-		if b, err := protoutil.Marshal(reflect.New(typ.Elem()).Interface().(protoutil.Message)); err != nil {
-			t.Fatal(err)
-		} else if err := verifyHash(b, fix.emptySum); err != nil {
-			t.Errorf("%s (empty): %s\n", typ, err)
-		}
-
-		randGen := rand.New(rand.NewSource(goldenSeed))
-
-		bytes := slice
-		numBytes := 0
-		for i := 0; i < itersPerProto; i++ {
-			if n, err := fix.populatedConstructor(randGen).MarshalTo(bytes); err != nil {
-				t.Fatal(err)
-			} else {
-				bytes = bytes[n:]
-				numBytes += n
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	for _, fn := range testCases {
+		name := fmt.Sprintf("%T", fn(rand.New(rand.NewSource(0))))
+		name = regexp.MustCompile(`.*\.`).ReplaceAllString(name, "")
+		t.Run(name, w.Run(t, name, func(t *testing.T) string {
+			rng := rand.New(rand.NewSource(goldenSeed))
+			hash := fnv.New64a()
+			for i := 0; i < itersPerProto; i++ {
+				msg := fn(rng)
+				dst := make([]byte, msg.Size())
+				_, err := msg.MarshalTo(dst)
+				require.NoError(t, err)
+				hash.Write(dst)
 			}
-		}
-		if err := verifyHash(slice[:numBytes], fix.populatedSum); err != nil {
-			t.Errorf("%s (populated): %s\n", typ, err)
-		}
+			return fmt.Sprint(hash.Sum64())
+		}))
 	}
 }
