@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import {
-  executeInternalSql,
+  executeInternalSql, EXTRA_LARGE_RESULT_SIZE,
   LARGE_RESULT_SIZE,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
@@ -65,12 +65,12 @@ FROM
 export const transactionContentionRequest: SqlExecutionRequest = {
   statements: [{ sql: txnContentionQuery }],
   execute: true,
-  max_result_size: LARGE_RESULT_SIZE,
+  max_result_size: EXTRA_LARGE_RESULT_SIZE,
 };
 
 // getTxnContentionEvents returns a list of transaction contention events from
 // the `crdb_internal.transaction_contention_events` virtual table.
-export async function getTxnContentionEvents(): Promise<ContentionEventsResponse> {
+export function getTxnContentionEvents(): Promise<ContentionEventsResponse> {
   return executeInternalSql<ContentionEventResponseColumns>(
     transactionContentionRequest,
   ).then(result => {
@@ -82,7 +82,7 @@ export async function getTxnContentionEvents(): Promise<ContentionEventsResponse
       return [];
     }
 
-    let events: ContentionEvent[];
+    const events: ContentionEvent[] = [];
 
     result.execution.txn_results[0].rows.forEach(row => {
       events.push({

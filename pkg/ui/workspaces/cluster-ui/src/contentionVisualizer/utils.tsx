@@ -15,7 +15,7 @@ export function mapContentionToGraphData (contentionEvents: ContentionEventsResp
   const contentionNodes: GraphNode[] = [];
   const contentionLinks: GraphLink[] = [];
 
-  contentionEvents.forEach(event => {
+  contentionEvents?.forEach(event => {
       contentionNodes.push({id: event.waitingTxnExecutionID});
       contentionLinks.push({source: event.waitingTxnExecutionID, target: event.blockingTxnExecutionID});
     }

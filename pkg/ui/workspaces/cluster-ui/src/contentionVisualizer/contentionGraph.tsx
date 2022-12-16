@@ -14,7 +14,7 @@ import React, { useEffect } from "react";
 import { ContentionEventsResponse } from "../api/txnContentionApi";
 
 type ContentionGraphProps = {
-  contentionEvents: ContentionEventsResponse;
+  contentionEvents: ContentionEventsResponse | null;
 };
 
 export const ContentionGraph: React.FC<ContentionGraphProps> = ({
@@ -29,16 +29,11 @@ export const ContentionGraph: React.FC<ContentionGraphProps> = ({
     window.alert(`Clicked link between ${source} and ${target}`);
   };
 
-  let data: GraphData<GraphNode, GraphLink>;
+  const data = mapContentionToGraphData(contentionEvents);
 
-  useEffect( () => {
-      if (!contentionEvents) {
-        console.log("no events")
-      }
-      data = mapContentionToGraphData(contentionEvents);
-    }
-  , [contentionEvents])
-
+  if (!data || data === null) {
+    return null
+  }
   return (
     <Graph
       id="txn-contention" // id is mandatory

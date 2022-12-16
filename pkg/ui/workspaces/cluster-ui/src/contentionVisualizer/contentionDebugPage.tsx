@@ -18,7 +18,7 @@ const GRAPH_TITLE = "Transaction Contention"
 const GRAPH_TOOLTIP = "This graph displays the network of tranasction contention across your cluster."
 
 export type ContentionDebugStateProps = {
-  contentionEvents: ContentionEventsResponse;
+  contentionEvents: ContentionEventsResponse | null;
   contentionError: Error | null;
 };
 
@@ -49,11 +49,6 @@ export const ContentionDebugPage: React.FC<ContentionDebugPageProps> = (
 
   return (
     <div>
-        <Loading
-          loading={contentionEvents === null}
-          page="statement insights"
-          error={contentionError}
-        >
           <Visualization
             title={GRAPH_TITLE}
             loading={contentionEvents === null}
@@ -61,7 +56,6 @@ export const ContentionDebugPage: React.FC<ContentionDebugPageProps> = (
           >
             <ContentionGraph contentionEvents={contentionEvents}/>
           </Visualization>
-        </Loading>
     </div>
   );
 };

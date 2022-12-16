@@ -66,7 +66,7 @@ export class Sidebar extends React.Component<SidebarProps> {
     {
       path: "/debug",
       text: "Advanced Debug",
-      activeFor: ["/reports", "/data-distribution", "/raft"],
+      activeFor: ["/reports", "/data-distribution", "/raft", "/contention-visualizer"],
       ignoreFor: ["/reports/network"],
     },
   ];
