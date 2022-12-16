@@ -356,7 +356,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     path="/debug/hotranges/:node_id"
                     component={HotRanges}
                   />
-                  <Route exact path="/debug/contention-visualizer" component={ContentionDebugPage} />
+                  <Route
+                    exact
+                    path="/debug/contention-visualizer"
+                    component={ContentionDebugPage}
+                  />
 
                   <Route path="/raft">
                     <Raft>

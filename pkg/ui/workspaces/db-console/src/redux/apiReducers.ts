@@ -97,11 +97,21 @@ export const locationsReducerObj = new CachedDataReducer(
 );
 export const refreshLocations = locationsReducerObj.refresh;
 
+const txnEventRequestToID = (req: clusterUiApi.SqlExecutionRequest): string =>
+  req.timestamp;
+
+// const txnContentionEventReducerObj = new KeyedCachedDataReducer(
+//   clusterUiApi.getTxnContentionEvents,
+//   "txnContentionEvents",
+//   txnEventRequestToID,
+//   moment.duration(10, "m"),
+//   null,
+// );
 const txnContentionEventReducerObj = new CachedDataReducer(
   clusterUiApi.getTxnContentionEvents,
   "txnContentionEvents",
-  null,
   moment.duration(10, "m"),
+  null,
 );
 export const refreshTxnContentionEvents = txnContentionEventReducerObj.refresh;
 

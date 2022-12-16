@@ -372,7 +372,8 @@ export default function Debug() {
         <DebugTableRow title="Transaction Contention">
           <DebugTableLink
             name="Cluster-wide transaction contention"
-            url="debug/contention-visualizer"
+            url="#/debug/contention-visualizer"
+            // url="#/debug/chart"
           />
         </DebugTableRow>
       </DebugTable>

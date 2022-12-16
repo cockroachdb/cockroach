@@ -14,32 +14,41 @@ import {
   ContentionDebugStateProps,
   ContentionDebugDispatchProps,
 } from "@cockroachlabs/cluster-ui";
-import {createSelector} from "reselect";
-import {AdminUIState} from "src/redux/state";
-import {
-  refreshTxnContentionEvents
-} from "src/redux/apiReducers";
+import { createSelector } from "reselect";
+import { AdminUIState } from "src/redux/state";
+import { refreshTxnContentionEvents } from "src/redux/apiReducers";
 
 const selectContentionEvents = createSelector(
-  (state: AdminUIState) => state.cachedData.txnContentionEvents, contentionEventsState =>
-    contentionEventsState
+  (state: AdminUIState) => state.cachedData.txnContentionEvents,
+  txnContentionEvents => txnContentionEvents,
 );
 
+const selectContentionEventsData = createSelector(
+  selectContentionEvents,
+  events => {
+    return events.data;
+  },
+);
 
-const mapStateToProps = (
-  state: AdminUIState
-): ContentionDebugStateProps => {
-  const events = selectContentionEvents(state)?.data;
-  const error = selectContentionEvents(state)?.lastError;
-  return (
-    {
-      contentionEvents: events,
-      contentionError: error
-    }
-  )
-}
+const selectContentionEventsError = createSelector(
+  selectContentionEvents,
+  events => events.lastError,
+);
 
-const mapDispatchToProps: ContentionDebugDispatchProps = {refreshContentionEvents:
-  refreshTxnContentionEvents};
+const mapStateToProps = (state: AdminUIState): ContentionDebugStateProps => {
+  const events = selectContentionEventsData(state);
+  const error = selectContentionEventsError(state);
+  return {
+    contentionEvents: events,
+    contentionError: error,
+  };
+};
 
-export default connect(mapStateToProps, mapDispatchToProps)(ContentionDebugPage);
+const mapDispatchToProps: ContentionDebugDispatchProps = {
+  refreshTxnContentionEvents: refreshTxnContentionEvents,
+};
+
+export default connect(
+  mapStateToProps,
+  mapDispatchToProps,
+)(ContentionDebugPage);

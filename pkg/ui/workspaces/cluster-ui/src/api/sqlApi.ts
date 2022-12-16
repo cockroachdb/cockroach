@@ -17,6 +17,7 @@ export type SqlExecutionRequest = {
   application_name?: string; // Defaults to '$ api-v2-sql'
   database?: string; // Defaults to defaultDb
   max_result_size?: number; // Default 10kib
+  timestamp?: string;
 };
 
 export type SqlStatement = {

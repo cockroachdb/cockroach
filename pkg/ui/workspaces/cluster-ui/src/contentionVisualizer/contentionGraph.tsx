@@ -18,9 +18,8 @@ type ContentionGraphProps = {
 };
 
 export const ContentionGraph: React.FC<ContentionGraphProps> = ({
-                                                                  contentionEvents
-                                                                 }) => {
-
+  contentionEvents
+}) => {
   const onClickNode = function(nodeId: string) {
     window.alert(`Clicked node ${nodeId}`);
   };

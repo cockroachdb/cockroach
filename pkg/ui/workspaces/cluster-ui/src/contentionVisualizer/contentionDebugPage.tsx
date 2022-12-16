@@ -39,9 +39,9 @@ export const ContentionDebugPage: React.FC<ContentionDebugPageProps> = (
   } = props;
 
   useEffect(() => {
-    // Refresh every 10 seconds.
+    // Refresh every 100 seconds.
     refreshTxnContentionEvents();
-    const interval = setInterval(refreshTxnContentionEvents, 10 * 1000);
+    const interval = setInterval(refreshTxnContentionEvents, 1000 * 1000);
     return () => {
       clearInterval(interval);
     };
@@ -49,6 +49,7 @@ export const ContentionDebugPage: React.FC<ContentionDebugPageProps> = (
 
   return (
     <div>
+          <p></p>
           <Visualization
             title={GRAPH_TITLE}
             loading={contentionEvents === null}

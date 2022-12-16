@@ -12,14 +12,26 @@ import { GraphData, GraphNode, GraphLink  } from "react-d3-graph";
 import { ContentionEventsResponse } from "../api/txnContentionApi";
 
 export function mapContentionToGraphData (contentionEvents: ContentionEventsResponse): GraphData<GraphNode, GraphLink> {
+  let uniqueIDs = new Set<string>();
   const contentionNodes: GraphNode[] = [];
   const contentionLinks: GraphLink[] = [];
 
   contentionEvents?.forEach(event => {
-      contentionNodes.push({id: event.waitingTxnExecutionID});
-      contentionLinks.push({source: event.waitingTxnExecutionID, target: event.blockingTxnExecutionID});
+    if (!uniqueIDs.has(event.waitingTxnExecutionID)) {
+      uniqueIDs.add(event.waitingTxnExecutionID);  
     }
-  )
+    if (!uniqueIDs.has(event.blockingTxnExecutionID)) {
+      uniqueIDs.add(event.blockingTxnExecutionID);
+    }
+  });
+
+  uniqueIDs.forEach(id => {
+    contentionNodes.push({id: id});
+  });
+
+  contentionEvents?.forEach(event => {
+    contentionLinks.push({ source: event.waitingTxnExecutionID, target: event.blockingTxnExecutionID });
+  });
 
   const data: GraphData<GraphNode, GraphLink> = {
     nodes: contentionNodes,

@@ -46,7 +46,7 @@ export type ContentionEventsResponse = ContentionEvent[];
 // transaction fingerprint ID column.
 const txnContentionQuery = `
 SELECT 
-  collection_ts, 
+  collection_ts,  
   blocking_txn_id, 
   encode(
     blocking_txn_fingerprint_id, 'hex'
@@ -56,13 +56,14 @@ SELECT
     waiting_txn_fingerprint_id, 'hex'
   ) AS waiting_txn_fingerprint_id, 
   contention_duration, 
-  crdb_internal.pretty_key(contending_key, 0) AS key, 
+  crdb_internal.pretty_key  (contending_key, 0) AS key, 
   prettify_statement(metadata ->> 'query', 108, 1, 1) AS query 
 FROM 
   crdb_internal.transaction_contention_events AS tce 
   INNER JOIN crdb_internal.statement_statistics AS ss ON tce.waiting_txn_fingerprint_id = ss.transaction_fingerprint_id;`;
 
 export const transactionContentionRequest: SqlExecutionRequest = {
+  timestamp: String(Date.now()),
   statements: [{ sql: txnContentionQuery }],
   execute: true,
   max_result_size: EXTRA_LARGE_RESULT_SIZE,
@@ -82,7 +83,7 @@ export function getTxnContentionEvents(): Promise<ContentionEventsResponse> {
       return [];
     }
 
-    const events: ContentionEvent[] = [];
+    let events: ContentionEvent[] = [];
 
     result.execution.txn_results[0].rows.forEach(row => {
       events.push({
