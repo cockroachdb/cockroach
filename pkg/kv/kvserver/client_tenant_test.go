@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	io "io"
 	"regexp"
@@ -26,6 +27,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // for tenant functionality
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -286,4 +289,88 @@ func TestTenantRateLimiter(t *testing.T) {
 			break
 		}
 	}
+}
+
+// Test that KV requests made by a tenant get a context annotated with the tenant ID.
+func TestTenantCtx(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const magicKey = "424242"
+
+	gotPush := make(chan struct{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+					TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+						ctx := filterArgs.Ctx
+
+						req, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
+						if !ok {
+							return nil
+						}
+
+						keyRecognized := strings.Contains(req.Header().Key.String(), magicKey)
+						if !keyRecognized {
+							return nil
+						}
+						tenID, isTenantRequest := roachpb.TenantFromContext(ctx)
+
+						// Check that the Get request has the tenant ID.
+						_, ok = filterArgs.Req.(*roachpb.GetRequest)
+						if ok {
+							if !isTenantRequest {
+								return roachpb.NewErrorf("expected Get to be a tenant request, but wasn't")
+							}
+							return nil
+						}
+
+						// Check that the Push request no longer has the txn request; RPCs
+						// done by KV do not identify the tenant.
+						req, ok = filterArgs.Req.(*roachpb.PushTxnRequest)
+						if !ok {
+							return nil
+						}
+						tenID, ok = roachpb.TenantFromContext(ctx)
+						defer close(gotPush)
+						if ok {
+							return roachpb.NewErrorf("got unexpected tenant in push: %d", tenID)
+						}
+						return nil
+					},
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	tenantID := serverutils.TestTenantID()
+	_, tsql := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: tenantID,
+	})
+	defer tsql.Close()
+
+	_, err := tsql.Exec("create table t (x int primary key)")
+	require.NoError(t, err)
+	tx1, err := tsql.BeginTx(ctx, nil /* opts */)
+	require.NoError(t, err)
+	_, err = tx1.Exec("insert into t(x) values (424242)")
+	require.NoError(t, err)
+
+	var tx2 *gosql.Tx
+	var tx2C = make(chan struct{})
+	go func() {
+		var err error
+		tx2, err = tsql.BeginTx(ctx, nil /* opts */)
+		assert.NoError(t, err)
+		_, err = tx2.Exec("select * from t where x = " + magicKey)
+		assert.NoError(t, err)
+		close(tx2C)
+	}()
+	<-gotPush
+
+	_ = tx1.Rollback()
+	<-tx2C
+	_ = tx2.Rollback()
 }
