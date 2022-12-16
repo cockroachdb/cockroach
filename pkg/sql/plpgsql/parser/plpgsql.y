@@ -248,8 +248,8 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGe
 %token <str>	WARNING
 %token <str>	WHEN
 %token <str>	WHILE
-%token <str>	ENDIF
-%token <str>	ENDCASE
+%token <str>	END_IF
+%token <str>	END_CASE
 
 %union {
   id    int32
@@ -726,7 +726,7 @@ getdiag_target	:
 					}
 				;
 
-stmt_if			: IF expr_until_then THEN ENDIF ';'
+stmt_if			: IF expr_until_then THEN END_IF IF ';'
 					{
 					// I need to refactor the ENDIF here with
 					// https://cockroachlabs.slack.com/archives/C0168LW5THS/p1626899649301000?thread_ts=1626883246.298600&cid=C0168LW5THS
@@ -752,20 +752,16 @@ stmt_else		:
 					}
 				;
 
-// TODO: ENDCASE should be END CASE
-stmt_case		: CASE opt_expr_until_when case_when_list opt_case_else ENDCASE ';'
+stmt_case		: CASE opt_expr_until_when case_when_list opt_case_else END_CASE CASE ';'
 					{
 					  expr := &plpgsqltree.PLpgSQLStmtCase {
 					    TestExpr: $2,
 					    CaseWhenList: $3.plpgsqlStmtCaseWhenArms(),
 					  }
-					  // TODO: Add support for ELSE
-					  /*
 					  if $4.val != nil {
 					     expr.HaveElse = true
 							 expr.ElseStmts = $4.plpgsqlStatements()
 					  }
-					  */
 					  $$.val = expr
 					}
 				;
@@ -806,13 +802,14 @@ case_when		: WHEN expr_until_then THEN proc_sect
 				;
 
 opt_case_else	:
-					{
-					}
-				| ELSE proc_sect
-					{
-						$$.val = $2.plpgsqlStatements()
-					}
-				;
+{
+  $$.val = nil
+}
+| ELSE proc_sect
+{
+  $$.val = $2.plpgsqlStatements()
+}
+;
 
 stmt_loop		: opt_loop_label LOOP loop_body
 					{
@@ -1205,8 +1202,8 @@ reserved_keyword:
 | DECLARE
 | ELSE
 | END
-| ENDCASE
-| ENDIF
+| END_CASE
+| END_IF
 | EXECUTE
 | FOR
 | FOREACH
