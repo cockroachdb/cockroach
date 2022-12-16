@@ -12,7 +12,6 @@ package builtins
 
 import (
 	"context"
-	gojson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -89,30 +88,10 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return tree.DNull, errors.New("job_id cannot be specified with null argument")
-				}
-				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
-				if err != nil {
-					return nil, err
-				}
-				jsonStats, err := gojson.Marshal(stats)
-				if err != nil {
-					return nil, err
-				}
-				jsonDatum, err := tree.ParseDJSON(string(jsonStats))
-				if err != nil {
-					return nil, err
-				}
-				return jsonDatum, nil
+				// Keeping this builtin as 'unimplemented' in order to reserve the oid.
+				return tree.DNull, errors.New("unimplemented")
 			},
-			Info: "This function can be used on the ingestion side to get a statistics summary " +
-				"of a stream ingestion job in json format.",
+			Info:       "DEPRECATED, consider using `SHOW TENANT name WITH REPLICATION STATUS`",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -129,26 +108,10 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return tree.DNull, errors.New("job_id cannot be specified with null argument")
-				}
-				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
-				if err != nil {
-					return nil, err
-				}
-				rawStatus, err := protoutil.Marshal(stats)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(rawStatus)), nil
+				// Keeping this builtin as 'unimplemented' in order to reserve the oid.
+				return tree.DNull, errors.New("unimplemented")
 			},
-			Info: "This function can be used on the ingestion side to get a statistics summary " +
-				"of a stream ingestion job in protobuf format.",
+			Info:       "DEPRECATED, consider using `SHOW TENANT name WITH REPLICATION STATUS`",
 			Volatility: volatility.Volatile,
 		},
 	),

@@ -515,7 +515,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, error) {
 			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
-				return nil, errors.Wrapf(err, "unable to look up descriptor for nsql%d", nodeID)
+				return nil, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 			}
 			return &util.UnresolvedAddr{AddressField: info.InstanceAddr}, nil
 		}

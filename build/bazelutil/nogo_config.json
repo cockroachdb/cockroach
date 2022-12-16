@@ -78,11 +78,6 @@
             "cockroach/pkg/.*$": "first-party code"
         }
     },
-    "generics": {
-        "only_files": {
-            "cockroach/pkg/.*$": "first-party code"
-        }
-    },
     "grpcconnclose": {
         "exclude_files": {
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",

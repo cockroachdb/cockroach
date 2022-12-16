@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -116,11 +117,17 @@ func alterReplicationJobHook(
 		}
 		jobRegistry := p.ExecCfg().JobRegistry
 		if alterTenantStmt.Cutover != nil {
+			job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.TenantReplicationJobID, p.Txn())
+			if err != nil {
+				return err
+			}
+			details, ok := job.Details().(jobspb.StreamIngestionDetails)
+			if !ok {
+				return errors.Newf("job with id %d is not a stream ingestion job", job.ID())
+			}
+			progress := job.Progress()
 			if alterTenantStmt.Cutover.Latest {
-				ts, err := getStreamHighWater(ctx, jobRegistry, p.Txn(), tenInfo.TenantReplicationJobID)
-				if err != nil {
-					return err
-				}
+				ts := progress.GetHighWater()
 				if ts == nil || ts.IsEmpty() {
 					return errors.Newf("replicated tenant %q has not yet recorded a safe replication time", tenantName)
 				}
@@ -129,8 +136,7 @@ func alterReplicationJobHook(
 			// TODO(ssd): We could use the replication manager here, but that embeds a priviledge check which is already completed.
 
 			// Check that the timestamp is above our retained timestamp.
-			evalCtx := &p.ExtendedEvalContext().Context
-			stats, err := getStreamIngestionStatsNoHeartbeat(ctx, evalCtx, p.Txn(), tenInfo.TenantReplicationJobID)
+			stats, err := getStreamIngestionStatsNoHeartbeat(ctx, details, progress)
 			if err != nil {
 				return err
 			}
