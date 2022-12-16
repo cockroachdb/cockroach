@@ -5627,6 +5627,7 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.tab (a INT PRIMARY KEY, b INT, c INT);
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
