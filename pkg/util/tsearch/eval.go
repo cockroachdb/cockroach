@@ -44,8 +44,18 @@ func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 	case invalid:
 		// If there's no operator we're evaluating a leaf term.
 		prefixMatch := false
-		if len(node.term.positions) > 0 && node.term.positions[0].weight == weightStar {
-			prefixMatch = true
+		targetWeight := weightAny
+		if len(node.term.positions) > 0 {
+			targetWeight = node.term.positions[0].weight
+			if targetWeight&weightStar > 0 {
+				prefixMatch = true
+				// Unset the prefix match.
+				targetWeight = node.term.positions[0].weight & ^weightStar
+			}
+			// If no flags are set we can match anything.
+			if targetWeight == 0 {
+				targetWeight = weightAny
+			}
 		}
 
 		// To evaluate a term, we search the vector for a match.
@@ -53,12 +63,19 @@ func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 		i := sort.Search(len(e.v), func(i int) bool {
 			return e.v[i].lexeme >= target
 		})
-		if i < len(e.v) {
+		if !prefixMatch && i < len(e.v) {
+			return e.v[i].lexeme == target && e.v[i].matchesWeight(targetWeight), nil
+		}
+		for ; i < len(e.v); i++ {
 			t := e.v[i]
-			if prefixMatch {
-				return strings.HasPrefix(t.lexeme, target), nil
+			// If we're prefix matching, continue searching until we either run out
+			// of prefix matches or find one that matches the weight in question.
+			if !strings.HasPrefix(t.lexeme, target) {
+				break
 			}
-			return t.lexeme == target, nil
+			if t.matchesWeight(targetWeight) {
+				return true, nil
+			}
 		}
 		return false, nil
 	case and:
@@ -71,11 +88,8 @@ func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 	case or:
 		// Match if either operand is true.
 		l, err := e.evalNode(node.l)
-		if err != nil {
-			return false, err
-		}
-		if l {
-			return true, nil
+		if err != nil || l {
+			return l, err
 		}
 		return e.evalNode(node.r)
 	case not:
@@ -87,7 +101,7 @@ func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 		// Then, we return true if there is at least one position at which the
 		// followed-by query matches.
 		positions, err := e.evalWithinFollowedBy(node)
-		return len(positions.positions) > 0, err
+		return positions.res, err
 	}
 	return false, errors.AssertionFailedf("invalid operator %d", node.op)
 }
@@ -105,6 +119,12 @@ type tsPositionSet struct {
 	// invert, if true, indicates that this match should be inverted. It's used
 	// to handle followed by matches within not operators.
 	invert bool
+
+	// res indicates that this match found positive results.
+	res bool
+
+	// noPos indicates that this match was missing position information.
+	noPos bool
 }
 
 // emitMode is a bitfield that controls the output of followed by matches.
@@ -193,6 +213,9 @@ func (e *tsEvaluator) evalFollowedBy(
 			rIdx++
 		}
 	}
+	if len(ret.positions) > 0 {
+		ret.res = true
+	}
 	return ret, nil
 }
 
@@ -204,9 +227,18 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 	switch node.op {
 	case invalid:
 		// We're evaluating a leaf (a term).
+		targetWeight := weightAny
 		prefixMatch := false
-		if len(node.term.positions) > 0 && node.term.positions[0].weight == weightStar {
-			prefixMatch = true
+		if len(node.term.positions) > 0 {
+			targetWeight = node.term.positions[0].weight
+			if targetWeight&weightStar > 0 {
+				prefixMatch = true
+				// Unset the prefix match.
+				targetWeight = node.term.positions[0].weight & ^weightStar
+			}
+			if targetWeight == 0 {
+				targetWeight = weightAny
+			}
 		}
 
 		// To evaluate a term, we search the vector for a match.
@@ -219,22 +251,29 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 			return tsPositionSet{}, nil
 		}
 		var ret []tsPosition
+		noPos := false
 		if prefixMatch {
 			for j := i; j < len(e.v); j++ {
 				t := e.v[j]
 				if !strings.HasPrefix(t.lexeme, target) {
 					break
 				}
+				if len(t.positions) == 0 {
+					noPos = true
+				}
 				ret = append(ret, t.positions...)
 			}
 			ret = sortAndUniqTSPositions(ret)
-			return tsPositionSet{positions: ret}, nil
+			ret = filterPositionsByWeight(ret, targetWeight)
+			return tsPositionSet{positions: ret, res: len(ret) > 0, noPos: noPos}, nil
 		} else if e.v[i].lexeme != target {
 			// No match.
 			return tsPositionSet{}, nil
 		}
-		// Return all of the positions at which the term is present.
-		return tsPositionSet{positions: e.v[i].positions}, nil
+		// Return all of the positions at which the term is present and matches the
+		// input weights.
+		positions := filterPositionsByWeight(e.v[i].positions, targetWeight)
+		return tsPositionSet{positions: positions, res: len(positions) > 0, noPos: len(e.v[i].positions) == 0}, nil
 	case or:
 		var lOffset, rOffset, width int
 
@@ -245,6 +284,19 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 		rPositions, err := e.evalWithinFollowedBy(node.r)
 		if err != nil {
 			return tsPositionSet{}, err
+		}
+		if !lPositions.res && !rPositions.res {
+			return tsPositionSet{}, nil
+		}
+		if lPositions.noPos || rPositions.noPos {
+			// Still no position information.
+			return tsPositionSet{noPos: true}, nil
+		}
+		if !lPositions.res {
+			lPositions.positions = nil
+		}
+		if !rPositions.res {
+			rPositions.positions = nil
 		}
 
 		width = lPositions.width
@@ -270,6 +322,7 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 		ret, err := e.evalFollowedBy(lPositions, rPositions, lOffset, rOffset, mode)
 		if invertResults {
 			ret.invert = true
+			ret.res = true
 		}
 		ret.width = width
 		return ret, err
@@ -278,7 +331,21 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 		if err != nil {
 			return tsPositionSet{}, err
 		}
-		ret.invert = !ret.invert
+		if ret.res {
+			if len(ret.positions) > 0 {
+				ret.invert = !ret.invert
+				ret.res = true
+			} else if ret.invert {
+				ret.invert = false
+				ret.res = false
+			}
+		} else if ret.noPos {
+			// We still have no position information, so just propagate.
+			return ret, nil
+		} else {
+			ret.invert = true
+			ret.res = true
+		}
 		return ret, nil
 	case followedby:
 		// Followed by and and have similar handling.
@@ -287,12 +354,16 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 		var lOffset, rOffset, width int
 
 		lPositions, err := e.evalWithinFollowedBy(node.l)
-		if err != nil {
+		if err != nil || !lPositions.res {
 			return tsPositionSet{}, err
 		}
 		rPositions, err := e.evalWithinFollowedBy(node.r)
-		if err != nil {
+		if err != nil || !rPositions.res {
 			return tsPositionSet{}, err
+		}
+		if lPositions.noPos || rPositions.noPos {
+			// Still no position information.
+			return tsPositionSet{noPos: true}, nil
 		}
 		if node.op == followedby {
 			lOffset = int(node.followedN) + rPositions.width
@@ -319,12 +390,44 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) 
 		}
 		ret, err := e.evalFollowedBy(lPositions, rPositions, lOffset, rOffset, mode)
 		if invertResults {
+			ret.res = true
 			ret.invert = true
 		}
 		ret.width = width
 		return ret, err
 	}
 	return tsPositionSet{}, errors.AssertionFailedf("invalid operator %d", node.op)
+}
+
+func filterPositionsByWeight(positions []tsPosition, weight tsWeight) []tsPosition {
+	if weight == weightAny {
+		return positions
+	}
+	var i int
+	var pos tsPosition
+	var filtered = false
+	for i, pos = range positions {
+		// If we filter anything out, copy into a new return slice.
+		if !pos.weight.matches(weight) {
+			filtered = true
+			break
+		}
+	}
+	if !filtered {
+		return positions
+	}
+	ret := make([]tsPosition, i, len(positions)-1)
+	copy(ret, positions[:i])
+	// Skip the entry we know doesn't match.
+	i += 1
+	for ; i < len(positions); i++ {
+		pos = positions[i]
+		// Filter the rest of the list.
+		if pos.weight.matches(weight) {
+			ret = append(ret, pos)
+		}
+	}
+	return ret
 }
 
 // sortAndUniqTSPositions sorts and uniquifies the input tsPosition list by
