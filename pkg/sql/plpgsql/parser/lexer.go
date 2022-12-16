@@ -90,19 +90,22 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 		if l.lastPos+1 < len(l.tokens) {
 			nextToken = l.tokens[l.lastPos+1]
 		}
-		// TODO this might not be needed
-		//secondNextToken := plpgsqlSymType{}
-		//if l.lastPos+2 < len(l.tokens) {
-		//	secondNextToken = l.tokens[l.lastPos+2]
-		//}
-		switch lval.id {
-		case RETURN:
-			switch nextToken.id {
-			case NEXT:
-				lval.id = RETURN_NEXT
-			case QUERY:
-				lval.id = RETURN_QUERY
-			}
+		switch nextToken.id {
+		case NEXT:
+			lval.id = RETURN_NEXT
+		case QUERY:
+			lval.id = RETURN_QUERY
+		}
+	case END:
+		nextToken := plpgsqlSymType{}
+		if l.lastPos+1 < len(l.tokens) {
+			nextToken = l.tokens[l.lastPos+1]
+		}
+		switch nextToken.id {
+		case IF:
+			lval.id = END_IF
+		case CASE:
+			lval.id = END_CASE
 		}
 	}
 
