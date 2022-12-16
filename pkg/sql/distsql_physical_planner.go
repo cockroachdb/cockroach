@@ -4386,6 +4386,19 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	txn *kv.Txn,
 	distributionType DistributionType,
 ) *PlanningCtx {
+	return dsp.NewPlanningCtxWithOracle(ctx, evalCtx, planner, txn, distributionType, physicalplan.DefaultReplicaChooser)
+}
+
+// NewPlanningCtxWithOracle is a varient of NewPlanningCtx that allows passing a
+// replica choice oracle as well.
+func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	planner *planner,
+	txn *kv.Txn,
+	distributionType DistributionType,
+	oracle replicaoracle.Oracle,
+) *PlanningCtx {
 	distribute := distributionType == DistributionTypeAlways || (distributionType == DistributionTypeSystemTenantOnly && evalCtx.Codec.ForSystemTenant())
 	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID)
 	planCtx := &PlanningCtx{
@@ -4419,7 +4432,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 		// we still need to instantiate a full planning context.
 		planCtx.parallelizeScansIfLocal = true
 	}
-	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
+	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn, oracle)
 	planCtx.nodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
 	planCtx.nodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
 	return planCtx
