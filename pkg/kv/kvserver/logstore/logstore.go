@@ -104,9 +104,8 @@ type LogStore struct {
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
-	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch. Any reads are performed on the underlying DB.
+	// Use an unindexed batch because we don't need to read our writes, and
+	// it is more efficient.
 	return eng.NewUnindexedBatch(false /* writeOnly */)
 }
 
