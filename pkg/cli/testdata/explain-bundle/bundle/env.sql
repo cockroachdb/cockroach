@@ -95,6 +95,7 @@
 --   kv.closed_timestamp.side_transport_interval = 200ms  (the interval at which the closed-timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport)
 --   kv.closed_timestamp.target_duration = 3s  (if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration)
 --   kv.concurrency.optimistic_eval_limited_scans.enabled = true  (when true, limited scans are optimistically evaluated in the sense of not checking for conflicting latches or locks up front for the full key range of the scan, and instead subsequently checking for conflicts only over the key range that was read)
+--   kv.deprecated_lb_split_finder.enabled = true  (if enabled, use the deprecated finder for load-based splitting)
 --   kv.dist_sender.concurrency_limit = 2048  (maximum number of asynchronous send requests)
 --   kv.follower_read.target_multiple = 3  (if above 1, encourages the distsender to perform a read against the closest replica if a request is older than kv.closed_timestamp.target_duration * (1 + kv.closed_timestamp.close_fraction * this) less a clock uncertainty interval. This value also is used to create follower_timestamp().)
 --   kv.gc.intent_age_threshold = 2h0m0s  (intents older than this threshold will be resolved when encountered by the GC queue)
