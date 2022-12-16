@@ -1,0 +1,28 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "orderstat",
+    srcs = [
+        "iterator.go",
+        "map.go",
+        "order_stat.go",
+        "set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/btree/orderstat",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/btree/internal/abstract"],
+)
+
+go_test(
+    name = "orderstat_test",
+    srcs = ["order_stat_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":orderstat"],
+    deps = [
+        "//pkg/util/btree/internal/ordered",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

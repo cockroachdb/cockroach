@@ -1,0 +1,34 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "interval",
+    srcs = [
+        "aug.go",
+        "interval.go",
+        "iterator.go",
+        "map.go",
+        "set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/btree/interval",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/btree/internal/abstract"],
+)
+
+go_test(
+    name = "interval_test",
+    srcs = [
+        "interval_span_test.go",
+        "interval_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":interval"],
+    deps = [
+        "//pkg/util/btree/internal/abstract",
+        "//pkg/util/btree/internal/ordered",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

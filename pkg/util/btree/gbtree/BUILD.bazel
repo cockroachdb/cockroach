@@ -1,0 +1,20 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "btreeg",
+    srcs = ["btree_g.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/btree/btreeg",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/btree"],
+)
+
+go_library(
+    name = "gbtree",
+    srcs = ["btree_g.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/btree/gbtree",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/btree"],
+)
+
+get_x_data(name = "get_x_data")
