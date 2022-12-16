@@ -42,6 +42,13 @@ var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
 // corresponding to a ProbeRequest is handled.
 var NoopOnProbeCommandErr = roachpb.NewErrorf("no-op on ProbeRequest")
 
+// ForcedErrResult is the output from CheckForcedErr.
+type ForcedErrResult struct {
+	LeaseIndex  uint64
+	Rejection   ProposalRejectionType
+	ForcedError *roachpb.Error
+}
+
 // CheckForcedErr determines whether or not a command should be applied to the
 // replicated state machine after it has been committed to the Raft log. This
 // decision is deterministic on all replicas, such that a command that is
@@ -69,13 +76,16 @@ func CheckForcedErr(
 	raftCmd *kvserverpb.RaftCommand,
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
-) (uint64, ProposalRejectionType, *roachpb.Error) {
+) ForcedErrResult {
 	if raftCmd.ReplicatedEvalResult.IsProbe {
 		// A Probe is handled by forcing an error during application (which
 		// avoids a separate "success" code path for this type of request)
 		// that we can special case as indicating success of the probe above
 		// raft.
-		return 0, ProposalRejectionPermanent, NoopOnProbeCommandErr
+		return ForcedErrResult{
+			Rejection:   ProposalRejectionPermanent,
+			ForcedError: NoopOnProbeCommandErr,
+		}
 	}
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
@@ -89,7 +99,11 @@ func CheckForcedErr(
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
-		return leaseIndex, ProposalRejectionPermanent, noopOnEmptyRaftCommandErr
+		return ForcedErrResult{
+			LeaseIndex:  leaseIndex,
+			Rejection:   ProposalRejectionPermanent,
+			ForcedError: noopOnEmptyRaftCommandErr,
+		}
 	}
 
 	// Verify the lease matches the proposer's expectation. We rely on
@@ -162,11 +176,15 @@ func CheckForcedErr(
 			// For lease requests we return a special error that
 			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
-			return leaseIndex, ProposalRejectionPermanent, roachpb.NewError(&roachpb.LeaseRejectedError{
-				Existing:  *replicaState.Lease,
-				Requested: requestedLease,
-				Message:   "proposed under invalid lease",
-			})
+			return ForcedErrResult{
+				LeaseIndex: leaseIndex,
+				Rejection:  ProposalRejectionPermanent,
+				ForcedError: roachpb.NewError(&roachpb.LeaseRejectedError{
+					Existing:  *replicaState.Lease,
+					Requested: requestedLease,
+					Message:   "proposed under invalid lease",
+				}),
+			}
 		}
 		// We return a NotLeaseHolderError so that the DistSender retries.
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
@@ -176,7 +194,11 @@ func CheckForcedErr(
 			fmt.Sprintf(
 				"stale proposal: command was proposed under lease #%d but is being applied "+
 					"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease))
-		return leaseIndex, ProposalRejectionPermanent, roachpb.NewError(nlhe)
+		return ForcedErrResult{
+			LeaseIndex:  leaseIndex,
+			Rejection:   ProposalRejectionPermanent,
+			ForcedError: roachpb.NewError(nlhe),
+		}
 	}
 
 	if isLeaseRequest {
@@ -188,11 +210,15 @@ func CheckForcedErr(
 		// However, leases get special vetting to make sure we don't give one to a replica that was
 		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
 		if _, ok := replicaState.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
-			return leaseIndex, ProposalRejectionPermanent, roachpb.NewError(&roachpb.LeaseRejectedError{
-				Existing:  *replicaState.Lease,
-				Requested: requestedLease,
-				Message:   "replica not part of range",
-			})
+			return ForcedErrResult{
+				LeaseIndex: leaseIndex,
+				Rejection:  ProposalRejectionPermanent,
+				ForcedError: roachpb.NewError(&roachpb.LeaseRejectedError{
+					Existing:  *replicaState.Lease,
+					Requested: requestedLease,
+					Message:   "replica not part of range",
+				}),
+			}
 		}
 	} else if replicaState.LeaseAppliedIndex < raftCmd.MaxLeaseIndex {
 		// The happy case: the command is applying at or ahead of the minimal
@@ -219,9 +245,12 @@ func CheckForcedErr(
 			)
 			retry = ProposalRejectionIllegalLeaseIndex
 		}
-		return leaseIndex, retry, roachpb.NewErrorf(
-			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
-		)
+		return ForcedErrResult{
+			LeaseIndex: leaseIndex,
+			Rejection:  retry,
+			ForcedError: roachpb.NewErrorf(
+				"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
+			)}
 	}
 
 	// Verify that command is not trying to write below the GC threshold. This is
@@ -235,10 +264,18 @@ func CheckForcedErr(
 	// the GC threshold has advanced since then?
 	wts := raftCmd.ReplicatedEvalResult.WriteTimestamp
 	if !wts.IsEmpty() && wts.LessEq(*replicaState.GCThreshold) {
-		return leaseIndex, ProposalRejectionPermanent, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
-			Timestamp: wts,
-			Threshold: *replicaState.GCThreshold,
-		})
+		return ForcedErrResult{
+			LeaseIndex: leaseIndex,
+			Rejection:  ProposalRejectionPermanent,
+			ForcedError: roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+				Timestamp: wts,
+				Threshold: *replicaState.GCThreshold,
+			}),
+		}
 	}
-	return leaseIndex, ProposalRejectionPermanent, nil
+	return ForcedErrResult{
+		LeaseIndex:  leaseIndex,
+		Rejection:   ProposalRejectionPermanent,
+		ForcedError: nil,
+	}
 }

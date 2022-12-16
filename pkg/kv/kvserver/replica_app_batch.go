@@ -100,19 +100,19 @@ func (b *replicaAppBatch) Stage(
 	// into appBatch at appropriate times.
 	var ab appBatch
 
-	leaseIndex, rej, forcedErr, err := ab.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, &b.state, cmd.IsLocal())
+	fr, err := ab.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, &b.state, cmd.IsLocal())
 	if err != nil {
 		return nil, err
 	}
 
 	// Then, maybe override the result with testing knobs.
 	if b.r.store.TestingKnobs() != nil {
-		rej, forcedErr = replicaApplyTestingFilters(ctx, b.r, cmd, rej, forcedErr)
+		fr = replicaApplyTestingFilters(ctx, b.r, cmd, fr)
 	}
 
 	// Now update cmd. We'll either put the lease index in it or zero out
 	// the cmd in case there's a forced error.
-	ab.toCheckedCmd(ctx, &cmd.ReplicatedCmd, leaseIndex, rej, forcedErr)
+	ab.toCheckedCmd(ctx, &cmd.ReplicatedCmd, fr)
 
 	// TODO(tbg): these assertions should be pushed into
 	// (*appBatch).assertAndCheckCommand.
@@ -785,11 +785,11 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 
-	leaseIndex, rejection, forcedErr := kvserverbase.CheckForcedErr(
+	fr := kvserverbase.CheckForcedErr(
 		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &mb.state,
 	)
-	rejection, forcedErr = replicaApplyTestingFilters(ctx, mb.r, cmd, rejection, forcedErr)
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = leaseIndex, rejection, forcedErr
+	fr = replicaApplyTestingFilters(ctx, mb.r, cmd, fr)
+	cmd.ForcedErrResult = fr
 
 	return cmd, nil
 }
