@@ -58,6 +58,15 @@ func runBenchmarkReplicaProposal(b *testing.B, bytes int64, withFollower bool) {
 
 	args := base.TestClusterArgs{}
 	args.ReplicationMode = base.ReplicationManual
+	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		// Log truncations call ComputeStats which unmarshals MVCCMetadata, take these out of
+		// the benchmark for now (but they're a real problem).
+		//
+		// TODO(tbg): a flavor for this vs without this to gauge the overall impact? It's like  ~1-2%
+		// of alloc_space I think but there is a lot of other inefficient use of space so that doesn't
+		// mean its insignificant.
+		DisableRaftLogQueue: true,
+	}
 	tc := testcluster.StartTestCluster(b, nodes, args)
 	defer tc.Stopper().Stop(ctx)
 
