@@ -16,6 +16,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -38,6 +39,8 @@ var (
 	BinPackingChoice = RegisterPolicy(newBinPackingOracle)
 	// ClosestChoice chooses the node closest to the current node.
 	ClosestChoice = RegisterPolicy(newClosestOracle)
+	// PreferFollowerChoice prefers choosing followers over leaseholders.
+	PreferFollowerChoice = RegisterPolicy(newPreferFollowerOracle)
 )
 
 // Config is used to construct an OracleFactory.
@@ -287,4 +290,42 @@ func latencyFunc(rpcCtx *rpc.Context) kvcoord.LatencyFunc {
 		return rpcCtx.RemoteClocks.Latency
 	}
 	return nil
+}
+
+type preferFollowerOracle struct {
+	nodeDescs kvcoord.NodeDescStore
+}
+
+func newPreferFollowerOracle(cfg Config) Oracle {
+	return &preferFollowerOracle{nodeDescs: cfg.NodeDescs}
+}
+
+func (o preferFollowerOracle) ChoosePreferredReplica(
+	ctx context.Context,
+	_ *kv.Txn,
+	desc *roachpb.RangeDescriptor,
+	_ *roachpb.ReplicaDescriptor,
+	_ roachpb.RangeClosedTimestampPolicy,
+	_ QueryState,
+) (roachpb.ReplicaDescriptor, error) {
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.AllExtantReplicas)
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+
+	leaseholders, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.OnlyPotentialLeaseholders)
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	leaseholderNodeIDs := make(map[roachpb.NodeID]bool, len(leaseholders))
+	for i := range leaseholders {
+		leaseholderNodeIDs[leaseholders[i].NodeID] = true
+	}
+
+	sort.Slice(replicas, func(i, j int) bool {
+		return !leaseholderNodeIDs[replicas[i].NodeID] && leaseholderNodeIDs[replicas[j].NodeID]
+	})
+
+	// TODO: Pick a random replica from replicas[:len(replicas)-len(leaseholders)]
+	return replicas[0].ReplicaDescriptor, nil
 }

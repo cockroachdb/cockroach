@@ -111,7 +111,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	// Resolve the spans. Since the range descriptor cache doesn't have any
 	// leases, all the ranges should be grouped and "assigned" to replica 0.
-	replicas, err := resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
+	replicas, err := resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil, nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	if err := populateCache(tc.Conns[3], 3 /* expectedNumRows */); err != nil {
 		t.Fatal(err)
 	}
-	replicas, err = resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
+	replicas, err = resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil, nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestSpanResolver(t *testing.T) {
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
-	it := lr.NewSpanResolverIterator(nil)
+	it := lr.NewSpanResolverIterator(nil, nil)
 
 	testCases := []struct {
 		spans    []roachpb.Span
@@ -308,7 +308,7 @@ func TestMixedDirections(t *testing.T) {
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
-	it := lr.NewSpanResolverIterator(nil)
+	it := lr.NewSpanResolverIterator(nil, nil)
 
 	spans := []spanWithDir{
 		orient(kvcoord.Ascending, makeSpan(tableDesc, 11, 15))[0],

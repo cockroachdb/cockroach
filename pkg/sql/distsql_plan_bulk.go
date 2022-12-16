@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -25,19 +27,33 @@ import (
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
+	return dsp.SetupAllNodesPlanningWithOracle(ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser)
+}
+
+// SetupAllNodesPlanning creates a planCtx and sets up the planCtx.nodeStatuses
+// map for all nodes. It returns all nodes that can be used for planning.
+func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	execCfg *ExecutorConfig,
+	oracle replicaoracle.Oracle,
+) (*PlanningCtx, []base.SQLInstanceID, error) {
 	if dsp.codec.ForSystemTenant() {
-		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg)
+		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle)
 	}
-	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg)
+	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle)
 }
 
 // setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
 // in a system tenant.
 func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
-	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	execCfg *ExecutorConfig,
+	oracle replicaoracle.Oracle,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways)
+	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
+		DistributionTypeAlways, oracle)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
@@ -65,13 +81,13 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 // setupAllNodesPlanningTenant creates a planCtx and returns all nodes available
 // in a non-system tenant.
 func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
-	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	execCfg *ExecutorConfig,
+	oracle replicaoracle.Oracle,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	if dsp.sqlAddressResolver == nil {
-		return nil, nil, errors.New("sql instance provider not available in multi-tenant environment")
-	}
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
-		DistributionTypeAlways)
+	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
+		DistributionTypeAlways, oracle)
 	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, nil, err
