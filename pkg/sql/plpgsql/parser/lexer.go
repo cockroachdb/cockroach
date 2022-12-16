@@ -260,6 +260,7 @@ func (l *lexer) ReadSqlConstruct(
 		panic("parentheses is badly nested")
 	}
 	if len(exprTokenStrs) == 0 {
+		//TODO(jane): show the terminator in the panic message.
 		panic("there should be at least one token for sql expression")
 	}
 
