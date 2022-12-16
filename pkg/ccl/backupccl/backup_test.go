@@ -8152,16 +8152,14 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	mem.Close(ctx)
 }
 
-func TestManifestTooNew(t *testing.T) {
+func TestRestoringAcrossVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
+
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
-	// Prove we can restore.
-	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
 	// Load/deserialize the manifest so we can mess with it.
@@ -8173,45 +8171,62 @@ func TestManifestTooNew(t *testing.T) {
 	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
 
-	// Bump the version and write it back out to make it look newer.
-	backupManifest.ClusterVersion = roachpb.Version{Major: math.MaxInt32, Minor: 1}
-	manifestData, err = protoutil.Marshal(&backupManifest)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
-	// Also write the checksum file to match the new manifest.
-	checksum, err := backupinfo.GetChecksum(manifestData)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	setManifestClusterVersion := func(version roachpb.Version) {
+		backupManifest.ClusterVersion = version
+		manifestData, err = protoutil.Marshal(&backupManifest)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+		// Also write the checksum file to match the new manifest.
+		checksum, err := backupinfo.GetChecksum(manifestData)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	}
 
-	// Verify we reject it.
-	sqlDB.ExpectErr(t, "backup from version 2147483647.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	t.Run("restore-same-version", func(t *testing.T) {
+		// Prove we can restore.
+		sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+		sqlDB.Exec(t, `DROP DATABASE r1`)
+	})
 
-	// Bump the version down and write it back out to make it look older.
-	backupManifest.ClusterVersion = roachpb.Version{Major: 20, Minor: 2, Internal: 2}
-	manifestData, err = protoutil.Marshal(&backupManifest)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
-	// Also write the checksum file to match the new manifest.
-	checksum, err = backupinfo.GetChecksum(manifestData)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	t.Run("restore-newer-version", func(t *testing.T) {
+		// Bump the version and write it back out to make it look newer.
+		setManifestClusterVersion(roachpb.Version{Major: math.MaxInt32, Minor: 1})
 
-	// Prove we can restore again.
-	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
+		// Verify we reject it.
+		sqlDB.ExpectErr(t, "backup from version 2147483647.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	})
 
-	// Nil out the version to match an old backup that lacked it.
-	backupManifest.ClusterVersion = roachpb.Version{}
-	manifestData, err = protoutil.Marshal(&backupManifest)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
-	// Also write the checksum file to match the new manifest.
-	checksum, err = backupinfo.GetChecksum(manifestData)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
-	// Prove we can restore again.
-	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
+	t.Run("restore-older-major-version", func(t *testing.T) {
+		// Bump the version down to > 1 major version, and write it back out. This
+		// makes it ineligible for restore because of our restore version policy.
+		setManifestClusterVersion(roachpb.Version{Major: 20, Minor: 2, Internal: 2})
+
+		// Verify we reject it.
+		sqlDB.ExpectErr(t, "backup from version 20.2-2 is older than the minimum restoreable version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	})
+
+	t.Run("restore-previous-major-version", func(t *testing.T) {
+		// Bump the version down to < 1 major version, and write it back out. This
+		// makes it eligible for restore because of our restore version policy.
+		currentVersion := tc.Server(0).ClusterSettings().Version.ActiveVersion(context.Background())
+		previousMajorVersion := currentVersion.Version
+		if currentVersion.Minor > 1 {
+			previousMajorVersion.Minor -= 1
+		} else {
+			previousMajorVersion.Major -= 1
+		}
+		setManifestClusterVersion(previousMajorVersion)
+		sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+		sqlDB.Exec(t, `DROP DATABASE r1`)
+	})
+
+	t.Run("restore-nil-version-manifest", func(t *testing.T) {
+		// Nil out the version to match an old backup that lacked it.
+		setManifestClusterVersion(roachpb.Version{})
+
+		// Verify we reject it.
+		sqlDB.ExpectErr(t, "the backup is from a version older than our minimum restoreable version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	})
 }
 
 // TestManifestBitFlip tests that we can detect a corrupt manifest when a bit
