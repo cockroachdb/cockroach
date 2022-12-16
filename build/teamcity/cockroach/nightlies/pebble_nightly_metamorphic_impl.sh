@@ -18,7 +18,7 @@ exit_status=0
 # correct flags in the reproduction command.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --formatter=pebble-metamorphic -- test --config=ci \
                                       @com_github_cockroachdb_pebble//internal/metamorphic:metamorphic_test \
-                                      --test_env TC_SERVER_URL \
+                                      --test_env TC_SERVER_URL=$TC_SERVER_URL \
                                       --test_timeout=25200 '--test_filter=TestMeta$' \
                                       --define gotags=bazel,invariants \
                                       --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 6h -maxfails 1 -stderr -p 1" \
