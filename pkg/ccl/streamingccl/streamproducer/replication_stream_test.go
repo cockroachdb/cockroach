@@ -645,6 +645,8 @@ func sortDelRanges(receivedDelRanges []roachpb.RangeFeedDeleteRange) {
 func TestStreamDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 93568)
 	skip.UnderStressRace(t, "disabled under stress and race")
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
