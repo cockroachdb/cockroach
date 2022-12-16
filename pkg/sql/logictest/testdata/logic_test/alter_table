@@ -1560,7 +1560,9 @@ statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
-statement error pgcode 23505 pq: could not create unique constraint "my_unique_e"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
+# Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
+# the constraint name, at the time of validation failure, is still a place-holder name.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
 # We can create not-valid constraints, however.
@@ -1603,11 +1605,14 @@ SELECT usage_count
  WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
 
 # Trying to add a partial unique constraint fails when there are duplicates.
-statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0
 
 # Sanity: Check the number of user errors and
 # database errors in the test.
+# We only do this check for the legacy schema changer because the declarative schema changer does not increment
+# exactly the same counters.
+onlyif config local-legacy-schema-changer
 query B
 SELECT usage_count > $constraint_violations_before
   FROM crdb_internal.feature_usage
