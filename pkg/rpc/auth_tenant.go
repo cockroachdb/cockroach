@@ -426,7 +426,25 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
 	ctx = roachpb.NewContextForTenant(ctx, tenID)
-	ctx = logtags.AddTag(ctx, "tenant", tenID.String())
+	const key = "tenant"
+	// Don't set a log tag if the tenant is not set and there is no existing log
+	// tag.
+	if !tenID.IsSet() {
+		found := false
+		tags := logtags.FromContext(ctx)
+		if tags != nil {
+			for _, t := range tags.Get() {
+				if t.Key() == key {
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return ctx
+		}
+	}
+	ctx = logtags.AddTag(ctx, key, tenID.String())
 	return ctx
 }
 
