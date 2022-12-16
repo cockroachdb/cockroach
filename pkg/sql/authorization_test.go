@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -53,26 +52,26 @@ func TestCheckAnyPrivilegeForNodeUser(t *testing.T) {
 		// 3 databases (system, defaultdb, postgres).
 		require.Equal(t, row.String(), "(3)")
 
-		_, err = ie.ExecEx(ctx, "create-database1", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		_, err = ie.ExecEx(ctx, "create-database1", txn, sessiondata.RootUserSessionDataOverride,
 			"CREATE DATABASE test1")
 		require.NoError(t, err)
 
-		_, err = ie.ExecEx(ctx, "create-database2", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		_, err = ie.ExecEx(ctx, "create-database2", txn, sessiondata.RootUserSessionDataOverride,
 			"CREATE DATABASE test2")
 		require.NoError(t, err)
 
 		// Revoke CONNECT on all non-system databases and ensure that when querying
 		// with node, we can still see all the databases.
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE test1 FROM public")
 		require.NoError(t, err)
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE test2 FROM public")
 		require.NoError(t, err)
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE defaultdb FROM public")
 		require.NoError(t, err)
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE postgres FROM public")
 		require.NoError(t, err)
 

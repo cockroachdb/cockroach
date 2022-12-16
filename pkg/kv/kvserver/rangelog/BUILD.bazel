@@ -38,7 +38,6 @@ go_test(
         "//pkg/kv/kvserver/rangelog/internal/rangelogtestpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
-        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog",

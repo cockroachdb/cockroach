@@ -132,7 +132,7 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				memberStmt,
 				r.Normalized(), m.Normalized(),
 			)

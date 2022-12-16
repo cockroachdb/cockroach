@@ -825,7 +825,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
 		databaseSchema)
 	numRows, err := ie.ExecEx(ctx, "tables-exist", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		tableExistenceQuery, fileTableName, payloadTableName)
 	if err != nil {
 		return false, err
@@ -878,7 +878,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
 	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		grantQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to grant access privileges to file and payload tables")
@@ -896,7 +896,7 @@ func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
 	it, err := ie.QueryIteratorEx(
 		ctx, "get-users", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		getUsersQuery, f.username,
 	)
 	if err != nil {
@@ -918,7 +918,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
 			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user.SQLIdentifier())
 		_, err = ie.ExecEx(ctx, "revoke-user-privileges", txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			revokeQuery)
 		if err != nil {
 			return errors.Wrap(err, "failed to revoke privileges")

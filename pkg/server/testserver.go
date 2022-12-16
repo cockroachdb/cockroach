@@ -1459,7 +1459,7 @@ func (ts *TestServer) ForceTableGC(
  `
 	row, err := ts.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "resolve-table-id", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		tableIDQuery, database, table)
 	if err != nil {
 		return err

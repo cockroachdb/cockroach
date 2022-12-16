@@ -85,7 +85,7 @@ VALUES($1, $2, $3, $4)
 				ctx,
 				"add-session",
 				nil, /* txn */
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				insertSessionStmt,
 				hashedSecret,
 				userName.Normalized(),

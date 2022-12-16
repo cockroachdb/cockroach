@@ -51,7 +51,7 @@ func TestInternalExecutor(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestInternalExecutor(t *testing.T) {
 	// The following statement will succeed on the 2nd try.
 	row, err = ie.QueryRowEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestInternalExecutor(t *testing.T) {
 		cnt++
 		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if cnt == 1 {
@@ -335,7 +335,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 		})
 
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{},
+		sessiondata.NoSessionDataOverride,
 		"show database")
 	if err != nil {
 		t.Fatal(err)
@@ -573,7 +573,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err := ie.ExecEx(
-		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: username.RootUserName()}, "SELECT 1",
+		ctx, "leaf-query", leafTxn, sessiondata.RootUserSessionDataOverride, "SELECT 1",
 	)
 	require.NoError(t, err)
 }

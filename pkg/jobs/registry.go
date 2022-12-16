@@ -363,7 +363,7 @@ func (r *Registry) createJobsInBatchWithTxn(
 		return nil, err
 	}
 	_, err = ie.ExecEx(
-		ctx, "job-rows-batch-insert", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()}, stmt, args...,
+		ctx, "job-rows-batch-insert", txn, sessiondata.RootUserSessionDataOverride, stmt, args...,
 	)
 	if err != nil {
 		return nil, err
@@ -859,7 +859,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := r.ex.ExecEx(
 				ctx, "expire-sessions", txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
@@ -909,7 +909,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := r.ex.ExecEx(
 				ctx, "remove-claims-for-session", txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				sessiondata.RootUserSessionDataOverride,
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
 			)
 			return err

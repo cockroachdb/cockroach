@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -77,7 +76,7 @@ func CheckScheduleAlreadyExists(
 	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
 ) (bool, error) {
 	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
-		p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		p.Txn(), sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
 			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
 

@@ -264,7 +264,7 @@ func retrieveAuthInfo(
 	ie := f.MakeInternalExecutorWithoutTxn()
 	values, err := ie.QueryRowEx(
 		ctx, "get-hashed-pwd", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		getHashedPassword, user)
 
 	if err != nil {
@@ -294,7 +294,7 @@ func retrieveAuthInfo(
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		getLoginDependencies,
 		user,
 	)
@@ -395,7 +395,7 @@ WHERE
 	ie := f.MakeInternalExecutorWithoutTxn()
 	defaultSettingsIt, err := ie.QueryIteratorEx(
 		ctx, "get-default-settings", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		getDefaultSettings,
 		user,
 		databaseID,
@@ -448,7 +448,7 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 	query := `SELECT username FROM system.users`
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "read-users", p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		query)
 	if err != nil {
 		return nil, err
@@ -479,7 +479,7 @@ func RoleExists(
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := ie.QueryRowEx(
 		ctx, "read-users", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		query, role,
 	)
 	if err != nil {

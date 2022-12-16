@@ -159,7 +159,7 @@ func (h *testHelper) createBackupSchedule(
 		// Query system.scheduled_job table and load those schedules.
 		datums, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
 			context.Background(), "sched-load", nil,
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			sessiondata.RootUserSessionDataOverride,
 			"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
 			id,
 		)
@@ -901,7 +901,7 @@ func TestCreateBackupScheduleIfNotExists(t *testing.T) {
 
 	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
 		context.Background(), "check-sched", nil,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		selectQuery)
 
 	require.NoError(t, err)
@@ -914,7 +914,7 @@ func TestCreateBackupScheduleIfNotExists(t *testing.T) {
 
 	rows, err = th.cfg.InternalExecutor.QueryBufferedEx(
 		context.Background(), "check-sched2", nil,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		sessiondata.RootUserSessionDataOverride,
 		selectQuery)
 
 	require.NoError(t, err)
