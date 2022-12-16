@@ -183,8 +183,21 @@
 
 /pkg/geo/                    @cockroachdb/spatial
 
-# The KV team generally owns ./pkg/kv/... but some of it belongs to Repl.
-/pkg/kv/                                @cockroachdb/kv-prs
+# The KV team generally owns ./pkg/kv/... but not all of it. By convention,
+# inside of the /pkg/kv tree, we list out rules for each subdirectory, i.e. when
+# a new directory is created CODEOWNERS should mandate a new line below. This
+# serves as a lint that ownership is properly considered at creation time.
+/pkg/kv/*.*                             @cockroachdb/kv-prs
+/pkg/kv/bulk/                           @cockroachdb/disaster-recovery
+/pkg/kv/kvbase/                         @cockroachdb/kv-prs
+/pkg/kv/kvclient/                       @cockroachdb/kv-prs
+/pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/repl-prs
+/pkg/kv/kvclient/kvstreamer             @cockroachdb/sql-queries
+/pkg/kv/kvclient/rangefeed/             @cockroachdb/repl-prs
+/pkg/kv/kvnemesis/                      @cockroachdb/kv-prs
+/pkg/kv/kvprober/                       @cockroachdb/kv-prs
+# Same subdirectory rule as above for `/pkg/kv`
+/pkg/kv/kvserver/*.*                    @cockroachdb/kv-prs
 /pkg/kv/kvserver/*circuit*.go           @cockroachdb/repl-prs
 /pkg/kv/kvserver/*closed*ts*.go         @cockroachdb/repl-prs
 /pkg/kv/kvserver/*_app*.go              @cockroachdb/repl-prs
@@ -196,16 +209,44 @@
 /pkg/kv/kvserver/*raft*/                @cockroachdb/repl-prs
 /pkg/kv/kvserver/*rangefeed*.go         @cockroachdb/repl-prs
 /pkg/kv/kvserver/*sideload*.go          @cockroachdb/repl-prs
+/pkg/kv/kvserver/abortspan/             @cockroachdb/kv-prs
+/pkg/kv/kvserver/allocator/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/apply/                 @cockroachdb/repl-prs
+/pkg/kv/kvserver/asim/                  @cockroachdb/kv-prs
+/pkg/kv/kvserver/batcheval/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/closedts/              @cockroachdb/repl-prs
+/pkg/kv/kvserver/concurrency/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/constraint/            @cockroachdb/kv-prs
+/pkg/kv/kvserver/diskmap/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/gc/                    @cockroachdb/kv-prs
+/pkg/kv/kvserver/idalloc/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/intentresolver/        @cockroachdb/kv-prs
+/pkg/kv/kvserver/kvadmission/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
+/pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
+/pkg/kv/kvserver/liveness/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/logstore/              @cockroachdb/repl-prs
+/pkg/kv/kvserver/loqrecovery/           @cockroachdb/repl-prs
+/pkg/kv/kvserver/multiqueue/            @cockroachdb/kv-prs
+/pkg/kv/kvserver/protectedts/           @cockroachdb/repl-prs
 /pkg/kv/kvserver/rangefeed/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/rangelog/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/rditer/                @cockroachdb/repl-prs
-/pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/repl-prs
-/pkg/kv/kvclient/rangefeed/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/readsummary/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/replicastats/          @cockroachdb/kv-prs
+/pkg/kv/kvserver/reports/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/spanlatch/             @cockroachdb/kv-prs
+/pkg/kv/kvserver/spanset/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/split/                 @cockroachdb/kv-prs
+/pkg/kv/kvserver/stateloader/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/tenantrate/            @cockroachdb/kv-prs
+#!/pkg/kv/kvserver/testdata/            @cockroachdb/kv-prs-noreview
+/pkg/kv/kvserver/tscache/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/txnrecovery/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
+/pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
 
 /pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
-/pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
 
 /pkg/ccl/storageccl/engineccl   @cockroachdb/storage
 /pkg/storage/                   @cockroachdb/storage
