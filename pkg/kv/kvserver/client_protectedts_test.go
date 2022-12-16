@@ -47,6 +47,7 @@ import (
 func TestProtectedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 93497, "flaky test")
 	ctx := context.Background()
 
 	// This test is too slow to run with race.
