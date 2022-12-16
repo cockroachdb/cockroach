@@ -175,3 +175,9 @@ bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tes
 bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
 bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
 crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh bazel run @yarn//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:debug
+
+exec
+dev ui mirror-deps
+----
+bazel run //pkg/cmd/mirror/npm:mirror_npm_dependencies
+bazel run //pkg/cmd/mirror/npm:update_yarn_lock

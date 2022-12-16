@@ -41,6 +41,7 @@ func makeUICmd(d *dev) *cobra.Command {
 	uiCmd.AddCommand(makeUITestCmd(d))
 	uiCmd.AddCommand(makeUIWatchCmd(d))
 	uiCmd.AddCommand(makeUIE2eCmd(d))
+	uiCmd.AddCommand(makeMirrorDepsCmd(d))
 
 	return uiCmd
 }
@@ -608,6 +609,37 @@ launching test in a real browser. Extra flags are passed directly to the
 	e2eTestCmd.Flags().Bool(headedFlag /* default */, false, "run tests in the interactive Cypres GUI")
 
 	return e2eTestCmd
+}
+
+func makeMirrorDepsCmd(d *dev) *cobra.Command {
+	mirrorDepsCmd := &cobra.Command{
+		Use:   "mirror-deps",
+		Short: "mirrors NPM dependencies to Google Cloud Storage",
+		Long: strings.TrimSpace(`
+Downloads NPM dependencies from public registries, uploads them to a Google
+Cloud Storage bucket managed by Cockroach Labs, and rewrites yarn.lock files
+so that future 'yarn install' invocations download from that bucket instead
+of the default registries.`),
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			ctx := cmd.Context()
+
+			mirrorArgv := []string{"run", "//pkg/cmd/mirror/npm:mirror_npm_dependencies"}
+			logCommand("bazel", mirrorArgv...)
+			if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", mirrorArgv...); err != nil {
+				return fmt.Errorf("unable to mirror dependencies to GCS: %w", err)
+			}
+
+			updateArgv := []string{"run", "//pkg/cmd/mirror/npm:update_yarn_lock"}
+			logCommand("bazel", updateArgv...)
+			if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", updateArgv...); err != nil {
+				return fmt.Errorf("unable to update yarn.lock files: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	return mirrorDepsCmd
 }
 
 // buildBazelYarnArgv returns the provided argv formatted so it can be run with
