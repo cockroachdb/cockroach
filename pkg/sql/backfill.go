@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -848,7 +849,7 @@ func NumRangesInSpans(
 	ctx context.Context, db *kv.DB, distSQLPlanner *DistSQLPlanner, spans []roachpb.Span,
 ) (int, error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
-	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn, physicalplan.DefaultReplicaChooser)
 	rangeIds := make(map[int64]struct{})
 	for _, span := range spans {
 		// For each span, iterate the spanResolver until it's exhausted, storing
@@ -882,7 +883,7 @@ func NumRangesInSpanContainedBy(
 	containedBy []roachpb.Span,
 ) (total, inContainedBy int, _ error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
-	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn)
+	spanResolver := distSQLPlanner.spanResolver.NewSpanResolverIterator(txn, physicalplan.DefaultReplicaChooser)
 	// For each span, iterate the spanResolver until it's exhausted, storing
 	// the found range ids in the map to de-duplicate them.
 	spanResolver.Seek(ctx, outerSpan, kvcoord.Ascending)
