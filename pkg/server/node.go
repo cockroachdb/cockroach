@@ -1280,23 +1280,13 @@ func setupSpanForIncomingRPC(
 			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
 		}
 
-		var remoteParent tracing.SpanMeta
+		var parentOpt tracing.SpanOption
 		if !ba.TraceInfo.Empty() {
-			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-				tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
-				tracing.WithServerSpanKind)
-		} else {
-			// For backwards compatibility with 21.2, if tracing info was passed as
-			// gRPC metadata, we use it.
-			var err error
-			remoteParent, err = grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
-			if err != nil {
-				log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
-			}
-			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-				tracing.WithRemoteParentFromSpanMeta(remoteParent),
-				tracing.WithServerSpanKind)
+			parentOpt = tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo)
 		}
+		ctx, newSpan = tr.StartSpanCtx(
+			ctx, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind,
+			parentOpt)
 	}
 
 	newSpan.SetLazyTag("request", ba.ShallowCopy())
