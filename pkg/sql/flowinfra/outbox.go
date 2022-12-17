@@ -406,6 +406,13 @@ func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 			switch {
 			case signal.DrainRequest != nil:
 				if shouldExit := sendDrainSignal(true, nil); shouldExit {
+					// Drain the stream, as per the gRPC contract.
+					for {
+						_, err := stream.Recv()
+						if err != nil {
+							break
+						}
+					}
 					return
 				}
 			case signal.Handshake != nil:
