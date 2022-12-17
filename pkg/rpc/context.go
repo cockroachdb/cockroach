@@ -684,9 +684,9 @@ func (rpcCtx *Context) Metrics() *Metrics {
 // Note: the node ID ought to be retyped, see
 // https://github.com/cockroachdb/cockroach/pull/73309
 func (rpcCtx *Context) GetLocalInternalClientForAddr(
-	target string, nodeID roachpb.NodeID,
+	nodeID roachpb.NodeID,
 ) RestrictedInternalClient {
-	if target == rpcCtx.Config.AdvertiseAddr && nodeID == rpcCtx.NodeID.Get() {
+	if nodeID == rpcCtx.NodeID.Get() {
 		return rpcCtx.localInternalClient
 	}
 	return nil
@@ -1410,7 +1410,7 @@ func (rpcCtx *Context) ConnHealth(
 	target string, nodeID roachpb.NodeID, class ConnectionClass,
 ) error {
 	// The local client is always considered healthy.
-	if rpcCtx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+	if rpcCtx.GetLocalInternalClientForAddr(nodeID) != nil {
 		return nil
 	}
 	if conn, ok := rpcCtx.m.Get(connKey{target, nodeID, class}); ok {
