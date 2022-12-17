@@ -153,21 +153,46 @@ func ReadBackupManifestFromStore(
 ) (backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifestFromStore")
 	defer sp.Finish()
-	backupManifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupManifestName,
+
+	manifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.SlimBackupManifestName,
 		encryption, kmsEnv)
 	if err != nil {
-		oldManifest, newMemSize, newErr := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupOldManifestName,
-			encryption, kmsEnv)
-		if newErr != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return backuppb.BackupManifest{}, 0, err
 		}
-		backupManifest = oldManifest
-		memSize = newMemSize
+
+		// If we did not find `SLIM_BACKUP_MANIFEST` we look for the
+		// `BACKUP_MANIFEST` file as it is possible the backup was created by a
+		// pre-23.1 node.
+		backupManifest, backupManifestMemSize, backupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
+			backupbase.BackupManifestName, encryption, kmsEnv)
+		if backupManifestErr != nil {
+			if !errors.Is(backupManifestErr, cloud.ErrFileDoesNotExist) {
+				return backuppb.BackupManifest{}, 0, err
+			}
+
+			// If we did not find a `BACKUP_MANIFEST` we look for a `BACKUP` file as
+			// it is possible the backup was created by a pre-20.1 node.
+			//
+			// TODO(adityamaru): Remove this logic once we disallow >1 major version
+			// restores.
+			oldBackupManifest, oldBackupManifestMemSize, oldBackupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
+				backupbase.BackupOldManifestName, encryption, kmsEnv)
+			if oldBackupManifestErr != nil {
+				return backuppb.BackupManifest{}, 0, oldBackupManifestErr
+			} else {
+				// We found a `BACKUP` manifest file.
+				manifest = oldBackupManifest
+				memSize = oldBackupManifestMemSize
+			}
+		} else {
+			// We found a `BACKUP_MANIFEST` file.
+			manifest = backupManifest
+			memSize = backupManifestMemSize
+		}
 	}
-	backupManifest.Dir = exportStore.Conf()
-	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime, non-empty
-	// Paths, and non-overlapping Spans and keyranges in Files.
-	return backupManifest, memSize, nil
+	manifest.Dir = exportStore.Conf()
+	return manifest, memSize, nil
 }
 
 // compressData compresses data buffer and returns compressed
@@ -527,6 +552,44 @@ func WriteBackupLock(
 	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
 
 	return cloud.WriteFile(ctx, defaultStore, lockFileName, bytes.NewReader([]byte("lock")))
+}
+
+// WriteSlimBackupManifestWithMetadataSSTs writes a "slim" version of manifest
+// to `exportStore`. This version currently has the alloc heavy `Files` repeated
+// field nil'ed out, and written to an accompanying SST instead.
+func WriteSlimBackupManifestWithMetadataSSTs(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	manifest *backuppb.BackupManifest,
+) error {
+	if err := writeSlimBackupManifest(ctx, exportStore, backupbase.SlimBackupManifestName, encryption,
+		kmsEnv, manifest); err != nil {
+		return errors.Wrap(err, "failed to write the slim backup manifest")
+	}
+	return errors.Wrap(WriteBackupManifestFilesSST(ctx, exportStore, encryption, kmsEnv, manifest,
+		SlimManifestFileInfoPath), "failed to write backup manfiest files SST")
+}
+
+// WriteSlimBackupManifest compresses and writes a slim version of the
+// BackupManifest `desc` to `exportStore`.
+//
+// A slim backup manifest has the following repeated fields of the
+// BackupManifest proto nil'ed out:
+// - Files
+func writeSlimBackupManifest(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	manifest *backuppb.BackupManifest,
+) error {
+	slimManifest := *manifest
+	slimManifest.Files = nil
+	slimManifest.IsSlimManifest = true
+	return WriteBackupManifest(ctx, exportStore, filename, encryption, kmsEnv, &slimManifest)
 }
 
 // WriteBackupManifest compresses and writes the passed in BackupManifest `desc`

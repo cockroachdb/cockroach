@@ -131,7 +131,16 @@ message BackupManifest {
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 
-  // NEXT ID: 27
+  // IsSlimManifest is set to true if the backup manifest has some of its alloc
+  // heavy repeated fields nil'ed out and written as supporting SST files
+  // instead. Currently, the fields that are nil'ed out are:
+  // - Files
+  //
+  // TODO(adityamaru): Delete in 23.2 since all backups in 23.1+ will write slim
+  // manifests.
+  bool is_slim_manifest = 27;
+
+  // NEXT ID: 28
 }
 
 message BackupPartitionDescriptor{

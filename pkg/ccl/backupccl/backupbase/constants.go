@@ -32,13 +32,25 @@ const (
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 
-	// BackupManifestName is the file name used for serialized BackupManifest
-	// protos.
-	BackupManifestName = "BACKUP_MANIFEST"
-
 	// BackupOldManifestName is an old name for the serialized BackupManifest
 	// proto. It is used by 20.1 nodes and earlier.
+	//
+	// TODO(adityamaru): Remove this in 22.2 as part of disallowing backups
+	// from >1 major version in the past.
 	BackupOldManifestName = "BACKUP"
+
+	// BackupManifestName is the file name used for serialized BackupManifest
+	// protos.
+	//
+	// TODO(adityamaru): Remove in 23.2 since at that point all nodes will be
+	// writing a SlimBackupManifest instead.
+	BackupManifestName = "BACKUP_MANIFEST"
+
+	// SlimBackupManifestName is the file name used for serialized BackupManifest
+	// protos written by 23.1 nodes and later. This manifest has some of its alloc
+	// heavy repeated fields nil'ed out, and is used in conjunction with SSTs for
+	// each of those elided fields.
+	SlimBackupManifestName = "SLIM_BACKUP_MANIFEST"
 
 	// DefaultIncrementalsSubdir is the default name of the subdirectory to which
 	// incremental backups will be written.
