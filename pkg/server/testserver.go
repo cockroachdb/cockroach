@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -804,7 +805,90 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
 }
 
-// StartTenant starts a SQL tenant communicating with this TestServer.
+// StartSharedProcessTenant is part of TestServerInterface.
+func (ts *TestServer) StartSharedProcessTenant(
+	ctx context.Context, args base.TestSharedProcessTenantArgs,
+) (serverutils.TestTenantInterface, *gosql.DB, error) {
+	if err := args.TenantName.IsValid(); err != nil {
+		return nil, nil, err
+	}
+	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
+		ctx, "testserver-check-tenant-active", nil, /* txn */
+		"SELECT id FROM system.tenants WHERE name=$1 AND active=true",
+		args.TenantName,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	tenantExists := tenantRow != nil
+
+	if tenantExists {
+		// A tenant with the given name already exists; let's check that it matches
+		// the ID that this call wants (if any).
+		id := uint64(*tenantRow[0].(*tree.DInt))
+		if args.TenantID.IsSet() && args.TenantID.ToUint64() != id {
+			return nil, nil, errors.Newf("a tenant with name %q exists, but its ID is %d instead of %d",
+				args.TenantName, id, args.TenantID)
+		}
+	} else {
+		// The tenant doesn't exist; let's create it.
+		if args.TenantID.IsSet() {
+			// Create with name and ID.
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+				ctx,
+				"create-tenant",
+				nil, /* txn */
+				sessiondata.NodeUserSessionDataOverride,
+				"SELECT crdb_internal.create_tenant($1,$2)",
+				args.TenantID.ToUint64(), args.TenantName,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+		} else {
+			// Create with name alone; allocate an ID automatically.
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+				ctx,
+				"create-tenant",
+				nil, /* txn */
+				sessiondata.NodeUserSessionDataOverride,
+				"SELECT crdb_internal.create_tenant($1)",
+				args.TenantName,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
+	// Instantiate the tenant server.
+	s, err := ts.Server.serverController.createServer(ctx, args.TenantName, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sqlServerWrapper := s.(*tenantServerWrapper).server
+	sqlServer := sqlServerWrapper.sqlServer
+	hts := &httpTestServer{}
+	hts.t.authentication = sqlServerWrapper.authentication
+	hts.t.sqlServer = sqlServer
+	testTenant := &TestTenant{
+		SQLServer:      sqlServer,
+		Cfg:            sqlServer.cfg,
+		pgPreServer:    sqlServerWrapper.pgPreServer,
+		httpTestServer: hts,
+		drain:          sqlServerWrapper.drainServer,
+	}
+
+	sqlDB, err := serverutils.OpenDBConnE(
+		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper)
+	if err != nil {
+		return nil, nil, err
+	}
+	return testTenant, sqlDB, err
+}
+
+// StartTenant is part of TestServerInterface.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
@@ -876,27 +960,6 @@ func (ts *TestServer) StartTenant(
 		if row[0] != tree.DNull {
 			params.TenantID = roachpb.MustMakeTenantID(uint64(tree.MustBeDInt(row[0])))
 		}
-	}
-
-	if params.UseServerController {
-		onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
-		if err != nil {
-			return nil, err
-		}
-		sw := onDemandServer.(*tenantServerWrapper)
-
-		hts := &httpTestServer{}
-		hts.t.authentication = sw.server.authentication
-		hts.t.sqlServer = sw.server.sqlServer
-		hts.t.tenantName = params.TenantName
-
-		return &TestTenant{
-			SQLServer:      sw.server.sqlServer,
-			Cfg:            sw.server.sqlServer.cfg,
-			pgPreServer:    sw.server.pgPreServer,
-			httpTestServer: hts,
-			drain:          sw.server.drainServer,
-		}, err
 	}
 
 	st := params.Settings

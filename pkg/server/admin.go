@@ -3204,7 +3204,7 @@ func (s *systemAdminServer) SendKVBatch(
 	// NB: wrapped to delay br evaluation to its value when returning.
 	defer func() {
 		var redact redactOpt
-		if redactServerTracesForSecondaryTenants.Get(&s.server.ClusterSettings().SV) {
+		if RedactServerTracesForSecondaryTenants.Get(&s.server.ClusterSettings().SV) {
 			redact = redactIfTenantRequest
 		} else {
 			redact = dontRedactEvenIfTenantRequest

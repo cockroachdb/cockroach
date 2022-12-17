@@ -707,7 +707,7 @@ func (sp *Span) reset(
 		}
 
 		if kind != oteltrace.SpanKindUnspecified {
-			c.setTagLocked(spanKindTagKey, attribute.StringValue(kind.String()))
+			c.setTagLocked(SpanKindTagKey, attribute.StringValue(kind.String()))
 		}
 		c.mu.Unlock()
 	}
