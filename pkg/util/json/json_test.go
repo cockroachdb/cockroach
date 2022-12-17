@@ -375,6 +375,26 @@ func TestJSONErrors(t *testing.T) {
 		testCase(`\u1`, `invalid JSON token`, useFastJSONParser),
 		testCase(`\u111z`, `unable to decode JSON: invalid character .* looking for beginning of value`, useStdGoJSON),
 		testCase(`\u111z`, `invalid JSON token`, useFastJSONParser),
+
+		// Trailing "," should not be allowed.
+		testCase(`[,]`, `invalid character ','`, useStdGoJSON),
+		testCase(`[,]`, `unexpected comma`, useFastJSONParser),
+		testCase(`[1,]`, `invalid character ']'`, useStdGoJSON),
+		testCase(`[1,]`, `unexpected comma`, useFastJSONParser),
+		testCase(`[1, [2,]]`, `invalid character ']'`, useStdGoJSON),
+		testCase(`[1, [2,]]`, `unexpected comma`, useFastJSONParser),
+		testCase(`[1, [2, 3],]`, `invalid character ']'`, useStdGoJSON),
+		testCase(`[1, [2, 3],]`, `unexpected comma`, useFastJSONParser),
+		testCase(`{"k":,}`, `invalid character ','`, useStdGoJSON),
+		testCase(`{"k":,}`, `unexpected object token ","`, useFastJSONParser),
+		testCase(`{"k": [1,]}`, `invalid character ']'`, useStdGoJSON),
+		testCase(`{"k": [1,]}`, `unexpected comma`, useFastJSONParser),
+		testCase(`{"b": false, }`, `invalid character '}' looking for beginning of object key`, useStdGoJSON),
+		testCase(`{"b": false, }`, `stateObjectString: missing string key`, useFastJSONParser),
+		testCase(`[1, {"a":"b",}]`, `invalid character '}'`, useStdGoJSON),
+		testCase(`[1, {"a":"b",}]`, `stateObjectString: missing string key`, useFastJSONParser),
+		testCase(`[1, {"a":"b"},]`, `invalid character ']'`, useStdGoJSON),
+		testCase(`[1, {"a":"b"},]`, `unexpected comma`, useFastJSONParser),
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", tc.implName, tc.input), func(t *testing.T) {
@@ -389,6 +409,45 @@ func TestJSONErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Not a true fuzz test, but we'll generate some number of random JSON objects,
+// with or without errors, and attempt to parse them using both standard and
+// fast parsers.
+func TestParseJSONFuzz(t *testing.T) {
+	const errProb = 0.005         // ~0.5% chance of an error.
+	const fuzzTargetErrors = 1000 // ~90k inputs.
+
+	rng, seed := randutil.NewTestRand()
+	t.Log("test seed ", seed)
+	numInputs := 0
+	for numErrors := 0; numErrors < fuzzTargetErrors; {
+		inputJson, err := RandGen(rng)
+		require.NoError(t, err)
+
+		jsonStr := AsStringWithErrorChance(inputJson, rng, errProb)
+		numInputs++
+
+		fastJson, fastErr := ParseJSON(jsonStr, WithFastJSONParser())
+		stdJson, stdErr := ParseJSON(jsonStr, WithGoStandardParser())
+
+		if fastErr == nil && stdErr == nil {
+			// No errors -- both JSONs must be identical.
+			// Note: we can't compare against inputJSON since jsonStr (generated with
+			// error probability), sometimes drops array/object elements.
+			eq, err := fastJson.Compare(stdJson)
+			require.NoError(t, err)
+			require.Equal(t, 0, eq, "unequal JSON objects: std<%s> fast<%s>",
+				asString(stdJson), asString(fastJson))
+		} else {
+			numErrors++
+			// Both parsers must produce an error.
+			require.Errorf(t, fastErr, "expected fast parser error for input: %s", jsonStr)
+			require.Errorf(t, stdErr, "expected std parser error for input: %s", jsonStr)
+		}
+	}
+
+	t.Logf("Executed fuzz test against %d inputs", numInputs)
 }
 
 func TestJSONSize(t *testing.T) {
