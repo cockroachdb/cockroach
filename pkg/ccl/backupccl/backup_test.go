@@ -8166,7 +8166,7 @@ func TestManifestTooNew(t *testing.T) {
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
 	// Load/deserialize the manifest so we can mess with it.
-	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
+	manifestPath := filepath.Join(rawDir, "too_new", backupbase.SlimBackupManifestName)
 	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
@@ -8248,7 +8248,7 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	foundManifest := false
 	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		log.Infof(context.Background(), "visiting %s", path)
-		if filepath.Base(path) == backupbase.BackupManifestName {
+		if filepath.Base(path) == backupbase.SlimBackupManifestName {
 			foundManifest = true
 			data, err := os.ReadFile(path)
 			require.NoError(t, err)
