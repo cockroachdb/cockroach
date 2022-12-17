@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
@@ -57,7 +58,7 @@ type AmbientContext struct {
 
 	// ServerIDs will be embedded into contexts that don't already have
 	// one.
-	ServerIDs ServerIdentificationPayload
+	ServerIDs serverident.ServerIdentificationPayload
 
 	// eventLog will be embedded into contexts that don't already have an event
 	// log or an open span (if not nil).
@@ -142,7 +143,7 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 			ctx = logtags.WithTags(ctx, ac.tags)
 		}
 		if ac.ServerIDs != nil {
-			ctx = ContextWithServerIdentification(ctx, ac.ServerIDs)
+			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
 		}
 		return ctx
 	}
@@ -155,8 +156,8 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 	if ac.tags != nil {
 		ctx = logtags.AddTags(ctx, ac.tags)
 	}
-	if ac.ServerIDs != nil && ServerIdentificationFromContext(ctx) == nil {
-		ctx = ContextWithServerIdentification(ctx, ac.ServerIDs)
+	if ac.ServerIDs != nil && serverident.ServerIdentificationFromContext(ctx) == nil {
+		ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
 	}
 	return ctx
 }
@@ -182,8 +183,8 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		if ac.tags != nil {
 			ctx = logtags.AddTags(ctx, ac.tags)
 		}
-		if ac.ServerIDs != nil && ServerIdentificationFromContext(ctx) == nil {
-			ctx = ContextWithServerIdentification(ctx, ac.ServerIDs)
+		if ac.ServerIDs != nil && serverident.ServerIdentificationFromContext(ctx) == nil {
+			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
 		}
 	}
 
@@ -218,7 +219,7 @@ func MakeTestingAmbientCtxWithNewTracer() AmbientContext {
 // MakeServerAmbientContext creates an AmbientContext for use by
 // server processes.
 func MakeServerAmbientContext(
-	tracer *tracing.Tracer, idProvider ServerIdentificationPayload,
+	tracer *tracing.Tracer, idProvider serverident.ServerIdentificationPayload,
 ) AmbientContext {
 	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
 }

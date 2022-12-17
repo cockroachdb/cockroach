@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -38,7 +39,7 @@ import (
 // formatters. logpb.Entry, in comparison, was tailored specifically
 // to the legacy crdb-v1 formatter, and is a lossy representation.
 type logEntry struct {
-	idPayload
+	serverident.IDPayload
 
 	// The entry timestamp.
 	ts int64
@@ -190,10 +191,10 @@ func makeUnsafePayload(ctx context.Context, m string) entryPayload {
 
 // makeEntry creates a logEntry.
 func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
-	ids := getIdentificationPayload(ctx)
+	ids := serverident.GetIdentificationPayload(ctx)
 
 	res = logEntry{
-		idPayload: ids,
+		IDPayload: ids,
 		ts:        timeutil.Now().UnixNano(),
 		sev:       s,
 		ch:        c,

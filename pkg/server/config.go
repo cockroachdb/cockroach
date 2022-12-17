@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -961,7 +962,7 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 //
 // For each of the "main" data items, it also memoizes its
 // representation as a string (the one needed by the
-// log.ServerIdentificationPayload interface) as soon as the value is
+// serverident.ServerIdentificationPayload interface) as soon as the value is
 // initialized. This saves on conversion costs.
 type idProvider struct {
 	// clusterID contains the cluster ID (initialized late).
@@ -982,17 +983,17 @@ type idProvider struct {
 	serverStr atomic.Value
 }
 
-var _ log.ServerIdentificationPayload = (*idProvider)(nil)
+var _ serverident.ServerIdentificationPayload = (*idProvider)(nil)
 
-// TenantID is part of the log.ServerIdentificationPayload interface.
+// TenantID is part of the serverident.ServerIdentificationPayload interface.
 func (s *idProvider) TenantID() interface{} {
 	return s.tenantID
 }
 
-// ServerIdentityString implements the log.ServerIdentificationPayload interface.
-func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) string {
+// ServerIdentityString implements the serverident.ServerIdentificationPayload interface.
+func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKey) string {
 	switch key {
-	case log.IdentifyClusterID:
+	case serverident.IdentifyClusterID:
 		c := s.clusterStr.Load()
 		cs, ok := c.(string)
 		if !ok {
@@ -1004,7 +1005,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return cs
 
-	case log.IdentifyTenantID:
+	case serverident.IdentifyTenantID:
 		t := s.tenantStr.Load()
 		ts, ok := t.(string)
 		if !ok {
@@ -1016,7 +1017,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return ts
 
-	case log.IdentifyInstanceID:
+	case serverident.IdentifyInstanceID:
 		// If tenantID is not set, this is a KV node and it has no SQL
 		// instance ID.
 		if !s.tenantID.IsSet() {
@@ -1024,7 +1025,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return s.maybeMemoizeServerID()
 
-	case log.IdentifyKVNodeID:
+	case serverident.IdentifyKVNodeID:
 		// If tenantID is set, this is a SQL-only server and it has no
 		// node ID.
 		if s.tenantID.IsSet() {
@@ -1040,7 +1041,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 // a SQL server.
 //
 // Note: this should not be called concurrently with logging which may
-// invoke the method from the log.ServerIdentificationPayload
+// invoke the method from the serverident.ServerIdentificationPayload
 // interface.
 func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
 	if !tenantID.IsSet() {

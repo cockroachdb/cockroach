@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package log
+package serverident
 
 import "context"
 
@@ -60,28 +60,28 @@ const (
 	IdentifyTenantID
 )
 
-type idPayload struct {
+type IDPayload struct {
 	// the Cluster ID is reported on every new log file so as to ease
 	// the correlation of panic reports with self-reported log files.
-	clusterID string
+	ClusterID string
 	// the node ID is reported like the cluster ID, for the same reasons.
 	// We avoid using roahcpb.NodeID to avoid a circular reference.
-	nodeID string
+	NodeID string
 	// ditto for the tenant ID.
-	tenantID string
+	TenantID string
 	// ditto for the SQL instance ID.
-	sqlInstanceID string
+	SQLInstanceID string
 }
 
-func getIdentificationPayload(ctx context.Context) idPayload {
+func GetIdentificationPayload(ctx context.Context) IDPayload {
 	si := ServerIdentificationFromContext(ctx)
 	if si == nil {
-		return idPayload{}
+		return IDPayload{}
 	}
-	return idPayload{
-		clusterID:     si.ServerIdentityString(IdentifyClusterID),
-		nodeID:        si.ServerIdentityString(IdentifyKVNodeID),
-		sqlInstanceID: si.ServerIdentityString(IdentifyInstanceID),
-		tenantID:      si.ServerIdentityString(IdentifyTenantID),
+	return IDPayload{
+		ClusterID:     si.ServerIdentityString(IdentifyClusterID),
+		NodeID:        si.ServerIdentityString(IdentifyKVNodeID),
+		SQLInstanceID: si.ServerIdentityString(IdentifyInstanceID),
+		TenantID:      si.ServerIdentityString(IdentifyTenantID),
 	}
 }

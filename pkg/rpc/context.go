@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"hash/fnv"
 	"io"
 	"math"
@@ -817,7 +818,7 @@ func makeInternalClientAdapter(
 
 func tenantIDFromContext(ctx context.Context) roachpb.TenantID {
 	var tenantID roachpb.TenantID
-	si := log.ServerIdentificationFromContext(ctx)
+	si := serverident.ServerIdentificationFromContext(ctx)
 	// si should only be nil in rpc unit tests.
 	if si != nil {
 		tenantID = si.TenantID().(roachpb.TenantID)
