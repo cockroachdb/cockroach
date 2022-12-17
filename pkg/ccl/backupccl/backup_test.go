@@ -8129,20 +8129,26 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	mem.Close(ctx)
 }
 
-func TestManifestTooNew(t *testing.T) {
+// TestIncorrectAccessOfFilesInBackupMetadata ensures that an accidental use of
+// the `Files` field (instead of its dedicated SST) on the `BACKUP_METADATA`
+// results in an error on restore and show.
+func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET CLUSTER SETTING backup.write_metadata_with_files_sst.enabled = true`)
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
-	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
-	// Prove we can restore.
-	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
+	sqlDB.Exec(t, `CREATE TABLE r1.foo ( id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO r1.foo VALUES (1)`)
+	sqlDB.Exec(t, `BACKUP DATABASE r1 INTO 'nodelocal://0/test'`)
 
 	// Load/deserialize the manifest so we can mess with it.
-	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
+	matches, err := filepath.Glob(filepath.Join(rawDir, "test", "*/*/*", backupbase.BackupMetadataName))
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	manifestPath := matches[0]
 	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
@@ -8150,8 +8156,13 @@ func TestManifestTooNew(t *testing.T) {
 	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
 
-	// Bump the version and write it back out to make it look newer.
-	backupManifest.ClusterVersion = roachpb.Version{Major: math.MaxInt32, Minor: 1}
+	// The manifest should have `HasExternalFilesList` set to true.
+	require.True(t, backupManifest.HasExternalFilesList)
+
+	// Set it to false, so that any operation that resolves the metadata treats
+	// this manifest as a pre-23.1 BACKUP_MANIFEST, and directly accesses the
+	// `Files` field, instead of reading from the external SST.
+	backupManifest.HasExternalFilesList = false
 	manifestData, err = protoutil.Marshal(&backupManifest)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
@@ -8160,35 +8171,82 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
-	// Verify we reject it.
-	sqlDB.ExpectErr(t, "backup from version 2147483647.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	// Expect an error on restore.
+	sqlDB.ExpectErr(t, "assertion: this placeholder legacy Files entry should never be opened", `RESTORE DATABASE r1 FROM LATEST IN 'nodelocal://0/test' WITH new_db_name = 'r2'`)
+}
 
-	// Bump the version down and write it back out to make it look older.
-	backupManifest.ClusterVersion = roachpb.Version{Major: 20, Minor: 2, Internal: 2}
-	manifestData, err = protoutil.Marshal(&backupManifest)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
-	// Also write the checksum file to match the new manifest.
-	checksum, err = backupinfo.GetChecksum(manifestData)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+func TestManifestTooNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	defer cleanupFn()
 
-	// Prove we can restore again.
-	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
+	testutils.RunTrueAndFalse(t, "with-backup-metadata", func(t *testing.T, withBackupMetadata bool) {
+		backupPath := fmt.Sprintf("'nodelocal://0/too_new/%s'", t.Name())
+		sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING backup.write_metadata_with_files_sst.enabled = %t`, withBackupMetadata))
+		sqlDB.Exec(t, `CREATE DATABASE r1`)
+		sqlDB.Exec(t, `BACKUP DATABASE r1 TO `+backupPath)
+		sqlDB.Exec(t, `DROP DATABASE r1`)
+		// Prove we can restore.
+		sqlDB.Exec(t, `RESTORE DATABASE r1 FROM `+backupPath)
+		sqlDB.Exec(t, `DROP DATABASE r1`)
 
-	// Nil out the version to match an old backup that lacked it.
-	backupManifest.ClusterVersion = roachpb.Version{}
-	manifestData, err = protoutil.Marshal(&backupManifest)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
-	// Also write the checksum file to match the new manifest.
-	checksum, err = backupinfo.GetChecksum(manifestData)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
-	// Prove we can restore again.
-	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
-	sqlDB.Exec(t, `DROP DATABASE r1`)
+		var manifestPath string
+		if withBackupMetadata {
+			manifestPath = filepath.Join(rawDir, fmt.Sprintf("too_new/%s", t.Name()), backupbase.BackupMetadataName)
+		} else {
+			manifestPath = filepath.Join(rawDir, fmt.Sprintf("too_new/%s", t.Name()), backupbase.BackupManifestName)
+		}
+
+		// Load/deserialize the manifest so we can mess with it.
+		manifestData, err := os.ReadFile(manifestPath)
+		require.NoError(t, err)
+		manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
+		require.NoError(t, err)
+		var backupManifest backuppb.BackupManifest
+		require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
+
+		// Bump the version and write it back out to make it look newer.
+		backupManifest.ClusterVersion = roachpb.Version{Major: math.MaxInt32, Minor: 1}
+		manifestData, err = protoutil.Marshal(&backupManifest)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+		// Also write the checksum file to match the new manifest.
+		checksum, err := backupinfo.GetChecksum(manifestData)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+
+		// Verify we reject it.
+		sqlDB.ExpectErr(t, "backup from version 2147483647.1 is newer than current version",
+			`RESTORE DATABASE r1 FROM `+backupPath)
+
+		// Bump the version down and write it back out to make it look older.
+		backupManifest.ClusterVersion = roachpb.Version{Major: 20, Minor: 2, Internal: 2}
+		manifestData, err = protoutil.Marshal(&backupManifest)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+		// Also write the checksum file to match the new manifest.
+		checksum, err = backupinfo.GetChecksum(manifestData)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+
+		// Prove we can restore again.
+		sqlDB.Exec(t, `RESTORE DATABASE r1 FROM `+backupPath)
+		sqlDB.Exec(t, `DROP DATABASE r1`)
+
+		// Nil out the version to match an old backup that lacked it.
+		backupManifest.ClusterVersion = roachpb.Version{}
+		manifestData, err = protoutil.Marshal(&backupManifest)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+		// Also write the checksum file to match the new manifest.
+		checksum, err = backupinfo.GetChecksum(manifestData)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+		// Prove we can restore again.
+		sqlDB.Exec(t, `RESTORE DATABASE r1 FROM `+backupPath)
+		sqlDB.Exec(t, `DROP DATABASE r1`)
+	})
 }
 
 // TestManifestBitFlip tests that we can detect a corrupt manifest when a bit
@@ -8198,6 +8256,7 @@ func TestManifestBitFlip(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET CLUSTER SETTING backup.write_metadata_with_files_sst.enabled = false`)
 	sqlDB.Exec(t, `CREATE DATABASE r1; CREATE DATABASE r2; CREATE DATABASE r3;`)
 	const checksumError = "checksum mismatch"
 	t.Run("unencrypted", func(t *testing.T) {
