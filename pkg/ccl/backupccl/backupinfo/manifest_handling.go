@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -92,6 +93,16 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
 	false,
+)
+
+// WriteMetadataWithFilesSST controls if we write a `BACKUP_METADATA` file
+// along with an SST containing the list of `BackupManifest_Files`. This new format
+// of metadata is
+var WriteMetadataWithFilesSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"backup.write_metadata_with_files_sst.enabled",
+	"write BACKUP metadata along with a supporting SST file",
+	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_files_sst.enabled", false),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check
@@ -152,21 +163,45 @@ func ReadBackupManifestFromStore(
 ) (backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifestFromStore")
 	defer sp.Finish()
-	backupManifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupManifestName,
+
+	manifest, memSize, err := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupMetadataName,
 		encryption, kmsEnv)
 	if err != nil {
-		oldManifest, newMemSize, newErr := ReadBackupManifest(ctx, mem, exportStore, backupbase.BackupOldManifestName,
-			encryption, kmsEnv)
-		if newErr != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return backuppb.BackupManifest{}, 0, err
 		}
-		backupManifest = oldManifest
-		memSize = newMemSize
+
+		// If we did not find `BACKUP_METADATA` we look for the
+		// `BACKUP_MANIFEST` file as it is possible the backup was created by a
+		// pre-23.1 node.
+		backupManifest, backupManifestMemSize, backupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
+			backupbase.BackupManifestName, encryption, kmsEnv)
+		if backupManifestErr != nil {
+			if !errors.Is(backupManifestErr, cloud.ErrFileDoesNotExist) {
+				return backuppb.BackupManifest{}, 0, err
+			}
+
+			// If we did not find a `BACKUP_MANIFEST` we look for a `BACKUP` file as
+			// it is possible the backup was created by a pre-20.1 node.
+			//
+			// TODO(adityamaru): Remove this logic once we disallow restores beyond
+			// the binary upgrade compatibility window.
+			oldBackupManifest, oldBackupManifestMemSize, oldBackupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
+				backupbase.BackupOldManifestName, encryption, kmsEnv)
+			if oldBackupManifestErr != nil {
+				return backuppb.BackupManifest{}, 0, oldBackupManifestErr
+			}
+			// We found a `BACKUP` manifest file.
+			manifest = oldBackupManifest
+			memSize = oldBackupManifestMemSize
+		} else {
+			// We found a `BACKUP_MANIFEST` file.
+			manifest = backupManifest
+			memSize = backupManifestMemSize
+		}
 	}
-	backupManifest.Dir = exportStore.Conf()
-	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime, non-empty
-	// Paths, and non-overlapping Spans and keyranges in Files.
-	return backupManifest, memSize, nil
+	manifest.Dir = exportStore.Conf()
+	return manifest, memSize, nil
 }
 
 // compressData compresses data buffer and returns compressed
@@ -523,6 +558,47 @@ func WriteBackupLock(
 	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
 
 	return cloud.WriteFile(ctx, defaultStore, lockFileName, bytes.NewReader([]byte("lock")))
+}
+
+// WriteFilesListMetadataWithSSTs writes a "slim" version of manifest
+// to `exportStore`. This version has the alloc heavy `Files` repeated field
+// nil'ed out, and written to an accompanying SST instead.
+func WriteFilesListMetadataWithSSTs(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	manifest *backuppb.BackupManifest,
+) error {
+	if err := writeFilesListMetadata(ctx, exportStore, backupbase.BackupMetadataName, encryption,
+		kmsEnv, manifest); err != nil {
+		return errors.Wrap(err, "failed to write the backup metadata with external Files list")
+	}
+	return errors.Wrap(WriteFilesListSST(ctx, exportStore, encryption, kmsEnv, manifest,
+		BackupMetadataFilesListPath), "failed to write backup metadata Files SST")
+}
+
+// writeFilesListMetadata compresses and writes a slimmer version of the
+// BackupManifest `desc` to `exportStore` with the `Files` field of the proto
+// set to a bogus value that will error out on incorrect use.
+func writeFilesListMetadata(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	manifest *backuppb.BackupManifest,
+) error {
+	slimManifest := *manifest
+	// We write a bogus file entry to ensure that no call site incorrectly uses
+	// the `Files` field from the FilesListMetadata proto.
+	bogusFile := backuppb.BackupManifest_File{
+		Span: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+		Path: "assertion: this placeholder legacy Files entry should never be opened",
+	}
+	slimManifest.Files = []backuppb.BackupManifest_File{bogusFile}
+	slimManifest.HasExternalFilesList = true
+	return WriteBackupManifest(ctx, exportStore, filename, encryption, kmsEnv, &slimManifest)
 }
 
 // WriteBackupManifest compresses and writes the passed in BackupManifest `desc`
