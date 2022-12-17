@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -799,6 +800,54 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
 }
 
+// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
+// running alongside a KV server.
+//
+// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
+// servers.
+func (ts *TestServer) StartSharedProcessTenant(
+	ctx context.Context, tenantName roachpb.TenantName, args base.TestSharedProcessTenantArgs,
+) (serverutils.TestTenantInterface, *gosql.DB, error) {
+	// Insert the tenant metadata.
+	_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+		ctx,
+		"create-tenant",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT crdb_internal.create_tenant($1)",
+		tenantName,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Instantiate the tenant server.
+	s, err := ts.Server.serverController.getOrCreateServerInner(ctx, tenantName, true /* errorOnExistingName */, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sqlServerWrapper := s.(*tenantServerWrapper).server
+	sqlServer := sqlServerWrapper.sqlServer
+	hts := &httpTestServer{}
+	hts.t.authentication = sqlServerWrapper.authentication
+	hts.t.sqlServer = sqlServer
+	testTenant := &TestTenant{
+		SQLServer:      sqlServer,
+		Cfg:            sqlServer.cfg,
+		pgPreServer:    sqlServerWrapper.pgPreServer,
+		httpTestServer: hts,
+		drain:          sqlServerWrapper.drainServer,
+	}
+
+	sqlDB, err := serverutils.OpenDBConnE(
+		ts.SQLAddr(), "cluster:"+string(tenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper)
+	if err != nil {
+		return nil, nil, err
+	}
+	return testTenant, sqlDB, err
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
@@ -852,27 +901,6 @@ func (ts *TestServer) StartTenant(
 			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %s",
 				params.TenantID.ToUint64(), params.TenantName)
 		}
-	}
-
-	if params.UseServerController {
-		onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
-		if err != nil {
-			return nil, err
-		}
-		sw := onDemandServer.(*tenantServerWrapper)
-
-		hts := &httpTestServer{}
-		hts.t.authentication = sw.server.authentication
-		hts.t.sqlServer = sw.server.sqlServer
-		hts.t.tenantName = params.TenantName
-
-		return &TestTenant{
-			SQLServer:      sw.server.sqlServer,
-			Cfg:            sw.server.sqlServer.cfg,
-			pgPreServer:    sw.server.pgPreServer,
-			httpTestServer: hts,
-			drain:          sw.server.drainServer,
-		}, err
 	}
 
 	st := params.Settings

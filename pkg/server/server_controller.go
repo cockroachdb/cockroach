@@ -83,29 +83,13 @@ type serverEntry struct {
 	shouldStop bool
 }
 
-// newServerFn is the type of a constructor for on-demand server.
-//
-// The value provided for index is guaranteed to be different for each
-// simultaneously running server. This can be used to allocate
-// distinct but predictable network listeners.
-//
-// If the specified tenant name is invalid (tenant does not exist or
-// is not active), the returned error will contain the
-// ErrInvalidTenant mark, which can be checked with errors.Is.
-type newServerFn func(
-	ctx context.Context,
-	tenantName roachpb.TenantName,
-	index int,
-	deregister func(),
-) (onDemandServer, error)
-
 // serverController manages a fleet of multiple servers side-by-side.
 // They are instantiated on demand the first time they are accessed.
 // Instantiation can fail, e.g. if the target tenant doesn't exist or
 // is not active.
 type serverController struct {
-	// newServerFn instantiates a new server.
-	newServerFn newServerFn
+	// tenantCreator instantiates tenant servers.
+	tenantCreator tenantCreator
 
 	// stopper is the parent stopper.
 	stopper *stop.Stopper
@@ -128,17 +112,35 @@ type serverController struct {
 	}
 }
 
+// tenantCreator is used by the serverController to instantiate tenant servers.
+type tenantCreator interface {
+	// newTenant instantiates a tenant server.
+	//
+	// The value provided for index is guaranteed to be different for each
+	// simultaneously running server. This can be used to allocate distinct but
+	// predictable network listeners.
+	//
+	// If the specified tenant name is invalid (tenant does not exist or is not
+	// active), the returned error will contain the ErrInvalidTenant mark, which
+	// can be checked with errors.Is.
+	//
+	// testArgs is used by tests to tweak the tenant server.
+	newTenant(ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
+		testArgs base.TestSharedProcessTenantArgs,
+	) (onDemandServer, error)
+}
+
 func newServerController(
 	ctx context.Context,
 	parentStopper *stop.Stopper,
 	st *cluster.Settings,
-	newServerFn newServerFn,
+	tenantCreator tenantCreator,
 	systemServer onDemandServer,
 ) *serverController {
 	c := &serverController{
-		st:          st,
-		stopper:     parentStopper,
-		newServerFn: newServerFn,
+		st:            st,
+		stopper:       parentStopper,
+		tenantCreator: tenantCreator,
 	}
 	c.mu.servers = map[roachpb.TenantName]serverEntry{
 		catconstants.SystemTenantName: {
@@ -156,9 +158,21 @@ func newServerController(
 func (c *serverController) getOrCreateServer(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (onDemandServer, error) {
+	return c.getOrCreateServerInner(ctx, tenantName, false /* errorOnExistingName */, base.TestSharedProcessTenantArgs{})
+}
+
+func (c *serverController) getOrCreateServerInner(
+	ctx context.Context,
+	tenantName roachpb.TenantName,
+	errorOnExistingName bool,
+	testArgs base.TestSharedProcessTenantArgs,
+) (onDemandServer, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if s, ok := c.mu.servers[tenantName]; ok {
+		if errorOnExistingName {
+			return nil, errors.Newf("tenant %s already exists", tenantName)
+		}
 		return s.server, nil
 	}
 
@@ -173,7 +187,7 @@ func (c *serverController) getOrCreateServer(
 	// Server does not exist yet: instantiate and start it.
 	c.mu.nextServerIdx++
 	idx := c.mu.nextServerIdx
-	s, err := c.newServerFn(ctx, tenantName, idx, deregisterFn)
+	s, err := c.tenantCreator.newTenant(ctx, tenantName, idx, deregisterFn, testArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -546,15 +560,9 @@ func (errInvalidTenantMarker) Error() string { return "invalid tenant" }
 // not exist or it is not currently active.
 var ErrInvalidTenant error = errInvalidTenantMarker{}
 
-// newServerForTenant is a constructor function suitable for use with
-// newTenantController. It instantiates SQL servers for secondary
-// tenants.
-// If the specified tenant name is invalid (tenant does not exist or
-// is not active), the returned error will contain the
-// ErrInvalidTenant mark, which can be checked with errors.Is.
-func (s *Server) newServerForTenant(
-	ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
-) (onDemandServer, error) {
+func (s *Server) getTenantID(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (roachpb.TenantID, error) {
 	// Look up the ID of the requested tenant.
 	//
 	// TODO(knz): use a flag or capability to decide whether to start in-memory.
@@ -562,26 +570,49 @@ func (s *Server) newServerForTenant(
 	datums, err := ie.QueryRow(ctx, "get-tenant-id", nil, /* txn */
 		`SELECT id, active FROM system.tenants WHERE name = $1 LIMIT 1`, tenantName)
 	if err != nil {
-		return nil, err
+		return roachpb.TenantID{}, err
 	}
 	if datums == nil {
-		return nil, errors.Mark(errors.Newf("no tenant found with name %q", tenantName), ErrInvalidTenant)
+		return roachpb.TenantID{}, errors.Mark(errors.Newf("no tenant found with name %q", tenantName), ErrInvalidTenant)
 	}
 
 	tenantIDi := uint64(tree.MustBeDInt(datums[0]))
 	isActive := tree.MustBeDBool(datums[1])
 	if !isActive {
-		return nil, errors.Mark(errors.Newf("tenant %q is not active", tenantName), ErrInvalidTenant)
+		return roachpb.TenantID{}, errors.Mark(errors.Newf("tenant %q is not active", tenantName), ErrInvalidTenant)
 	}
 	tenantID, err := roachpb.MakeTenantID(tenantIDi)
 	if err != nil {
-		return nil, errors.Mark(
+		return roachpb.TenantID{}, errors.Mark(
 			errors.NewAssertionErrorWithWrappedErrf(err, "stored tenant ID %d does not convert to TenantID", tenantIDi),
 			ErrInvalidTenant)
 	}
+	return tenantID, nil
+}
 
-	// Start the tenant server.
-	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index)
+var _ tenantCreator = &Server{}
+
+// newTenant implements the tenantCreator interface.
+func (s *Server) newTenant(
+	ctx context.Context,
+	tenantName roachpb.TenantName,
+	index int,
+	deregister func(),
+	testArgs base.TestSharedProcessTenantArgs,
+) (onDemandServer, error) {
+	tenantID, err := s.getTenantID(ctx, tenantName)
+	if err != nil {
+		return nil, err
+	}
+	tenantStopper, baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, index)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply the TestTenantArgs, if any.
+	baseCfg.TestingKnobs = testArgs.Knobs
+
+	tenantServer, err := s.startInMemoryTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper)
 	if err != nil {
 		// Abandon any work done so far.
 		tenantStopper.Stop(ctx)
@@ -665,17 +696,15 @@ func (t *systemServerWrapper) serveConn(
 	return t.server.sqlServer.pgServer.ServeConn(pgCtx, conn, status)
 }
 
-// startInMemoryTenantServerInternal starts an in-memory server for
-// the given target tenant ID. The resulting stopper should be closed
-// in any case, even when an error is returned.
-//
-// The value provided for index is guaranteed to be different for each
-// simultaneously running server. This can be used to allocate
-// distinct but predictable network listeners.
-func (s *Server) startInMemoryTenantServerInternal(
+func (s *Server) makeSharedProcessTenantConfig(
 	ctx context.Context, tenantID roachpb.TenantID, index int,
-) (stopper *stop.Stopper, tenantServer *SQLServerWrapper, err error) {
-	stopper = stop.NewStopper()
+) (*stop.Stopper, BaseConfig, SQLConfig, error) {
+	stopper := stop.NewStopper()
+	defer func() {
+		if stopper != nil {
+			stopper.Stop(ctx)
+		}
+	}()
 
 	// Create a configuration for the new tenant.
 	// TODO(knz): Maybe enforce the SQL Instance ID to be equal to the KV node ID?
@@ -683,10 +712,24 @@ func (s *Server) startInMemoryTenantServerInternal(
 	parentCfg := s.cfg
 	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, index, parentCfg, stopper)
 	if err != nil {
-		return stopper, nil, err
+		return nil, BaseConfig{}, SQLConfig{}, err
 	}
+	st := stopper
+	stopper = nil // inhibit the deferred Stop()
+	return st, baseCfg, sqlCfg, nil
+}
 
-	// Create a child stopper for this tenant's server.
+// startInMemoryTenantServerInternal starts an in-memory server for
+// the given target tenant ID.
+//
+// The value provided needs to be different for each simultaneously running
+// server; it is used to allocate distinct but predictable network ports.
+//
+// Note that even if an error is returned, tasks might have been started with
+// the stopper, so the caller needs to Stop() it.
+func (s *Server) startInMemoryTenantServerInternal(
+	ctx context.Context, baseCfg BaseConfig, sqlCfg SQLConfig, stopper *stop.Stopper,
+) (*SQLServerWrapper, error) {
 	ambientCtx := baseCfg.AmbientCtx
 	stopper.SetTracer(baseCfg.Tracer)
 
@@ -698,9 +741,9 @@ func (s *Server) startInMemoryTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg)
+	tenantServer, err := NewTenantServer(startCtx, stopper, baseCfg, sqlCfg)
 	if err != nil {
-		return stopper, tenantServer, err
+		return nil, err
 	}
 
 	// Start a goroutine that watches for shutdown requests issued by
@@ -712,23 +755,23 @@ func (s *Server) startInMemoryTenantServerInternal(
 		case req := <-tenantServer.ShutdownRequested():
 			log.Warningf(startCtx,
 				"in-memory server for tenant %v is requesting shutdown: %d %v",
-				tenantID, req.Reason, req.ShutdownCause())
+				sqlCfg.TenantID, req.Reason, req.ShutdownCause())
 			stopper.Stop(startCtx)
 		case <-stopper.ShouldQuiesce():
 		}
 	}()
 
 	if err := tenantServer.Start(startCtx); err != nil {
-		return stopper, tenantServer, err
+		return tenantServer, err
 	}
 
 	// Show the tenant details in logs.
 	// TODO(knz): Remove this once we can use a single listener.
 	if err := reportTenantInfo(startCtx, baseCfg, sqlCfg); err != nil {
-		return stopper, tenantServer, err
+		return tenantServer, err
 	}
 
-	return stopper, tenantServer, nil
+	return tenantServer, nil
 }
 
 func makeInMemoryTenantServerConfig(

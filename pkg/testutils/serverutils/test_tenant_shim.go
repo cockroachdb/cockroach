@@ -38,7 +38,12 @@ type TestTenantInterface interface {
 	// SQLServer. Each tenant can have zero or more running SQLServer instances.
 	SQLInstanceID() base.SQLInstanceID
 
-	// SQLAddr returns the tenant's SQL address.
+	// SQLAddr returns the tenant's SQL address. Note that for "shared-process
+	// tenants" (i.e. tenants created with TestServer.StartSharedProcessTenant),
+	// simply connecting to this address connects to the system tenant, not to
+	// this tenant. In order to connect to this tenant,
+	// "cluster:<tenantName>/<databaseName>" needs to be added to the connection
+	// string as the database name.
 	SQLAddr() string
 
 	// HTTPAddr returns the tenant's http address.

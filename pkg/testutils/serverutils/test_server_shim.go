@@ -235,7 +235,18 @@ type TestServerInterface interface {
 	// updates that are available.
 	UpdateChecker() interface{}
 
-	// StartTenant spawns off tenant process connecting to this TestServer.
+	// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
+	// running alongside a KV server.
+	//
+	// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
+	// servers.
+	StartSharedProcessTenant(
+		ctx context.Context, tenantName roachpb.TenantName, args base.TestSharedProcessTenantArgs,
+	) (TestTenantInterface, *gosql.DB, error)
+
+	// StartTenant starts a tenant server connecting to this TestServer. The
+	// tenant server simulates an out-of-process server. See also
+	// StartSharedProcessTenant() for a tenant simulating a shared-memory server.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.

@@ -240,8 +240,18 @@ func DefaultTestTempStorageConfigWithSize(
 	}
 }
 
-// TestTenantArgs are the arguments used when creating a tenant from a
-// TestServer.
+// TestSharedProcessTenantArgs are the arguments to
+// TestServer.StartSharedProcessTenant.
+type TestSharedProcessTenantArgs struct {
+	Knobs TestingKnobs
+
+	// If set, this will be appended to the Postgres URL by functions that
+	// automatically open a connection to the server. That's equivalent to running
+	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
+	UseDatabase string
+}
+
+// TestTenantArgs are the arguments to TestServer.StartTenant.
 type TestTenantArgs struct {
 	TenantName roachpb.TenantName
 
@@ -339,8 +349,4 @@ type TestTenantArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
-
-	// UseServerController tells testserver.StartTenant() to use
-	// its serverController to start the secondary tenant.
-	UseServerController bool
 }

@@ -401,42 +401,37 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
 
-				args := base.TestTenantArgs{
-					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
-					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
-					// SQL/HTTP ports so the first tenant ends up with the desired default
-					// ports.
-					DisableCreateTenant: !createTenant,
-					TenantName:          demoTenantName,
-					TenantID:            roachpb.MustMakeTenantID(secondaryTenantID),
-					UseServerController: !c.demoCtx.DisableServerController,
-					TestingKnobs: base.TestingKnobs{
-						Server: &server.TestingKnobs{
-							ContextTestingKnobs: rpc.ContextTestingKnobs{
-								InjectedLatencyOracle:  latencyMap,
-								InjectedLatencyEnabled: c.latencyEnabled.Get,
+				var ts serverutils.TestTenantInterface
+				if c.demoCtx.DisableServerController {
+					tenantStopper := stop.NewStopper()
+					args := base.TestTenantArgs{
+						// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
+						// tenant 1 is the system tenant. We also subtract 2 for the "starting"
+						// SQL/HTTP ports so the first tenant ends up with the desired default
+						// ports.
+						DisableCreateTenant:     !createTenant,
+						TenantName:              demoTenantName,
+						TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
+						Stopper:                 tenantStopper,
+						ForceInsecure:           c.demoCtx.Insecure,
+						SSLCertsDir:             c.demoDir,
+						DisableTLSForHTTP:       true,
+						EnableDemoLoginEndpoint: true,
+						StartingRPCAndSQLPort:   c.demoCtx.sqlPort(i, true) - secondaryTenantID,
+						StartingHTTPPort:        c.demoCtx.httpPort(i, true) - secondaryTenantID,
+						Locality:                c.demoCtx.Localities[i],
+						TestingKnobs: base.TestingKnobs{
+							Server: &server.TestingKnobs{
+								ContextTestingKnobs: rpc.ContextTestingKnobs{
+									InjectedLatencyOracle:  latencyMap,
+									InjectedLatencyEnabled: c.latencyEnabled.Get,
+								},
 							},
 						},
-					},
-				}
+					}
 
-				var tenantStopper *stop.Stopper
-				if c.demoCtx.DisableServerController {
-					tenantStopper = stop.NewStopper()
-					args.Stopper = tenantStopper
-					args.ForceInsecure = c.demoCtx.Insecure
-					args.SSLCertsDir = c.demoDir
-					args.DisableTLSForHTTP = true
-					args.EnableDemoLoginEndpoint = true
-					args.StartingRPCAndSQLPort = c.demoCtx.sqlPort(i, true) - secondaryTenantID
-					args.StartingHTTPPort = c.demoCtx.httpPort(i, true) - secondaryTenantID
-					args.Locality = c.demoCtx.Localities[i]
-				}
-
-				ts, err := c.servers[i].StartTenant(ctx, args)
-				if c.demoCtx.DisableServerController {
-					// If we use the server controller, it is already taking
-					// care of shutdown.
+					var err error
+					ts, err = c.servers[i].StartTenant(ctx, args)
 					c.stopper.AddCloser(stop.CloserFn(func() {
 						stopCtx := context.Background()
 						if ts != nil {
@@ -444,10 +439,28 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 						}
 						tenantStopper.Stop(stopCtx)
 					}))
+					if err != nil {
+						return err
+					}
+				} else {
+					var err error
+					ts, _, err = c.servers[i].StartSharedProcessTenant(ctx,
+						demoTenantName,
+						base.TestSharedProcessTenantArgs{
+							Knobs: base.TestingKnobs{
+								Server: &server.TestingKnobs{
+									ContextTestingKnobs: rpc.ContextTestingKnobs{
+										InjectedLatencyOracle:  latencyMap,
+										InjectedLatencyEnabled: c.latencyEnabled.Get,
+									},
+								},
+							},
+						})
+					if err != nil {
+						return err
+					}
 				}
-				if err != nil {
-					return err
-				}
+
 				c.tenantServers[i] = ts
 				c.infoLog(ctx, "started tenant server %d: %s", i, ts.SQLAddr())
 			}
