@@ -43,6 +43,7 @@ type JSONStatistic struct {
 	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitempty"`
 	HistogramVersion    HistogramVersion  `json:"histo_version,omitempty"`
 	PartialPredicate    string            `json:"partial_predicate,omitempty"`
+	FullStatisticID     uint64            `json:"full_statistic_id,omitempty"`
 }
 
 // JSONHistoBucket is a struct used for JSON marshaling and unmarshaling of

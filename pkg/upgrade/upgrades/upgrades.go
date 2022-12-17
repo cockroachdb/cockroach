@@ -207,10 +207,10 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		descIDSequenceForSystemTenant,
 	),
-	upgrade.NewTenantUpgrade("add a partial predicate column to system.table_statistics",
-		toCV(clusterversion.V23_1AddPartialStatisticsPredicateCol),
+	upgrade.NewTenantUpgrade("add a partial predicate and full statistics ID columns to system.table_statistics",
+		toCV(clusterversion.V23_1AddPartialStatisticsColumns),
 		upgrade.NoPrecondition,
-		alterSystemTableStatisticsAddPartialPredicate,
+		alterSystemTableStatisticsAddPartialPredicateAndID,
 	),
 	upgrade.NewTenantUpgrade(
 		"create system.job_info table",

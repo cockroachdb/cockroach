@@ -2261,6 +2261,7 @@ system         public        table_statistics                 avgSize           
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
 system         public        table_statistics                 distinctCount                                                                                             7
+system         public        table_statistics                 fullStatisticID                                                                                          12
 system         public        table_statistics                 histogram                                                                                                 9
 system         public        table_statistics                 name                                                                                                      3
 system         public        table_statistics                 nullCount                                                                                                 8
