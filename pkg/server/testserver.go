@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -775,6 +776,54 @@ func (t *TestTenant) Codec() keys.SQLCodec {
 // Tracer is part of the TestTenantInterface.
 func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
+}
+
+// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
+// running alongside a KV server.
+//
+// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
+// servers.
+func (ts *TestServer) StartSharedProcessTenant(
+	ctx context.Context, tenantName string, args base.TestSharedProcessTenantArgs,
+) (serverutils.TestTenantInterface, *gosql.DB, error) {
+	// Insert the tenant metadata.
+	_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+		ctx,
+		"create-tenant",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT crdb_internal.create_tenant($1)",
+		tenantName,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Instantiate the tenant server.
+	s, err := ts.Server.serverController.getOrCreateServerInner(ctx, tenantName, true /* errorOnExistingName */, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sqlServerWrapper := s.(*tenantServerWrapper).server
+	sqlServer := sqlServerWrapper.sqlServer
+	hts := &httpTestServer{}
+	hts.t.authentication = sqlServerWrapper.authentication
+	hts.t.sqlServer = sqlServer
+	testTenant := &TestTenant{
+		SQLServer:      sqlServer,
+		Cfg:            sqlServer.cfg,
+		httpTestServer: hts,
+		drain:          sqlServerWrapper.drainServer,
+	}
+
+	sqlDB, err := serverutils.OpenDBConnE(
+		testTenant.SQLAddr(), args.UseDatabase, false /* insecure */, ts.stopper)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return testTenant, sqlDB, err
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
