@@ -157,7 +157,7 @@ var (
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
 	).WithPublic()
-	redactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
+	RedactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"server.secondary_tenants.redact_trace.enabled",
 		"controls if server side traces are redacted for tenant operations",
@@ -1092,7 +1092,7 @@ func (n *Node) batchInternal(
 	// NB: wrapped to delay br evaluation to its value when returning.
 	defer func() {
 		var redact redactOpt
-		if redactServerTracesForSecondaryTenants.Get(&n.storeCfg.Settings.SV) {
+		if RedactServerTracesForSecondaryTenants.Get(&n.storeCfg.Settings.SV) {
 			redact = redactIfTenantRequest
 		} else {
 			redact = dontRedactEvenIfTenantRequest
