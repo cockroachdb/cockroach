@@ -235,6 +235,15 @@ type TestServerInterface interface {
 	// updates that are available.
 	UpdateChecker() interface{}
 
+	// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
+	// running alongside a KV server.
+	//
+	// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
+	// servers.
+	StartSharedProcessTenant(
+		ctx context.Context, tenantName string, args base.TestSharedProcessTenantArgs,
+	) (TestTenantInterface, *gosql.DB, error)
+
 	// StartTenant spawns off tenant process connecting to this TestServer.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 

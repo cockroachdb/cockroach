@@ -973,7 +973,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Create a server controller.
 	sc := newServerController(ctx, stopper,
-		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer})
+		lateBoundServer, &systemServerWrapper{server: lateBoundServer})
 
 	// Create the debug API server.
 	debugServer := debug.NewServer(
