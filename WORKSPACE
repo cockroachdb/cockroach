@@ -169,15 +169,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.1.darwin-amd64.tar.gz", "96a164130f532c0ed65e437aaf9cc66b518f0b887d5830b2dc01ebfee9d58f52"),
-        "darwin_arm64": ("go1.19.1.darwin-arm64.tar.gz", "e46aecce83a9289be16ce4ba9b8478a5b89b8aa0230171d5c6adbc0c66640548"),
-        "freebsd_amd64": ("go1.19.1.freebsd-amd64.tar.gz", "db5b8f232e12c655cc6cde6af1adf4d27d842541807802d747c86161e89efa0a"),
-        "linux_amd64": ("go1.19.1.linux-amd64.tar.gz", "b8c00cd587c49beef8943887d52d77aeda66a30e94effbc1e6d39e1c80f01d37"),
-        "linux_arm64": ("go1.19.1.linux-arm64.tar.gz", "49d7c2badb24de8dd75e6c709d4f26d0b5e9509da2fa8c9d79929952b2607c55"),
-        "windows_amd64": ("go1.19.1.windows-amd64.tar.gz", "a507d42a457175a50695cf5df8efc64309dec5aa2ebf28d8d28bcd8317d6350c"),
+        "darwin_amd64": ("go1.19.4.darwin-amd64.tar.gz", "6fa1e9087b36fba65625869c885ca9c6f1db734306d8e74836b212248c20d55d"),
+        "darwin_arm64": ("go1.19.4.darwin-arm64.tar.gz", "bb3bc5d7655b9637cfe2b5e90055dee93b0ead50e2ffd091df320d1af1ca853f"),
+        "freebsd_amd64": ("go1.19.4.freebsd-amd64.tar.gz", "84489ebb63f1757b79574d7345c647bd40bc6414cecb868c93e24476c2d2b9b6"),
+        "linux_amd64": ("go1.19.4.linux-amd64.tar.gz", "e52774e4d6a0bb5bcc5a0f1d11e337929de826b40c99c408283b8854336d9dc4"),
+        "linux_arm64": ("go1.19.4.linux-arm64.tar.gz", "8bb193126fea46dca70658b7916b458a22fddb8e37d6deb463f14e10d6f06552"),
+        "windows_amd64": ("go1.19.4.windows-amd64.tar.gz", "ced538537d190c03e6e4bffb3b60049794d70f09af7900bd8419b44245b2b5dc"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20220907-175858/{}"],
-    version = "1.19.1",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20221219-000617/{}"],
+    version = "1.19.4",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -212,6 +212,7 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 # bazel_skylib handled above.
 # rules_nodejs handled above.
 load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
+
 build_bazel_rules_nodejs_dependencies()
 
 # Configure nodeJS.
@@ -244,6 +245,7 @@ yarn_repositories(
 )
 
 load("//build/bazelutil:seed_yarn_cache.bzl", "seed_yarn_cache")
+
 seed_yarn_cache(name = "yarn_cache")
 
 # Install external dependencies for NPM packages in pkg/ui/ as separate bazel
@@ -258,13 +260,13 @@ yarn_install(
         "--ignore-optional",
     ],
     data = [
-      "//pkg/ui:.yarnrc",
-      "@yarn_cache//:.seed",
+        "//pkg/ui:.yarnrc",
+        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
     symlink_node_modules = True,
+    yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
 )
 
 yarn_install(
@@ -273,13 +275,13 @@ yarn_install(
         "--offline",
     ],
     data = [
-      "//pkg/ui:.yarnrc",
-      "@yarn_cache//:.seed",
+        "//pkg/ui:.yarnrc",
+        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/e2e-tests:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui/workspaces/e2e-tests:yarn.lock",
     symlink_node_modules = True,
+    yarn_lock = "//pkg/ui/workspaces/e2e-tests:yarn.lock",
 )
 
 yarn_install(
@@ -289,11 +291,11 @@ yarn_install(
         "--ignore-optional",
     ],
     data = [
-      "//pkg/ui:.yarnrc",
-      "@yarn_cache//:.seed",
+        "//pkg/ui:.yarnrc",
+        "@yarn_cache//:.seed",
     ],
-    package_path = "/",
     package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
+    package_path = "/",
     strict_visibility = False,
     yarn_lock = "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
 )
@@ -305,13 +307,13 @@ yarn_install(
         "--ignore-optional",
     ],
     data = [
-      "//pkg/ui:.yarnrc",
-      "@yarn_cache//:.seed",
+        "//pkg/ui:.yarnrc",
+        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/db-console:package.json",
-    yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
     strict_visibility = False,
     symlink_node_modules = True,
+    yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
 )
 
 yarn_install(
@@ -322,13 +324,13 @@ yarn_install(
         "--ignore-optional",
     ],
     data = [
-      "//pkg/ui:.yarnrc",
-      "@yarn_cache//:.seed",
+        "//pkg/ui:.yarnrc",
+        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
     symlink_node_modules = True,
+    yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
 )
 
 #################################
@@ -546,29 +548,33 @@ rules_foreign_cc_dependencies(
 ################################
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
 http_archive(
     name = "rules_pkg",
+    sha256 = "8a298e832762eda1830597d64fe7db58178aa84cd5926d76d5b744d6558941c2",
     urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_pkg-0.7.0.tar.gz",
     ],
-    sha256 = "8a298e832762eda1830597d64fe7db58178aa84cd5926d76d5b744d6558941c2",
 )
 # Ref: https://github.com/bazelbuild/rules_pkg/blob/main/pkg/deps.bzl
 
 # bazel_skylib handled above.
 http_archive(
     name = "rules_python",
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_python-0.1.0.tar.gz"],
     sha256 = "b6d46438523a3ec0f3cead544190ee13223a52f6a6765a29eae7b7cc24cc83a0",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_python-0.1.0.tar.gz"],
 )
+
 http_archive(
     name = "rules_license",
+    sha256 = "4865059254da674e3d18ab242e21c17f7e3e8c6b1f1421fffa4c5070f82e98b5",
     urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_license-0.0.1.tar.gz",
     ],
-    sha256 = "4865059254da674e3d18ab242e21c17f7e3e8c6b1f1421fffa4c5070f82e98b5",
 )
+
 load("@rules_pkg//pkg:deps.bzl", "rules_pkg_dependencies")
+
 rules_pkg_dependencies()
 
 ##############################
@@ -630,11 +636,12 @@ http_archive(
 )
 
 load("//build/bazelutil:repositories.bzl", "distdir_repositories")
+
 distdir_repositories()
 
 # This is used only by rules_nodejs to find the local version of node.
 new_local_repository(
     name = "nodejs_freebsd_amd64",
-    path = "/usr/local",
     build_file_content = """exports_files[("bin/node")]""",
+    path = "/usr/local",
 )
