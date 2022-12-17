@@ -149,18 +149,18 @@ func (n *Dialer) DialInternalClient(
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
 	}
-	addr, err := n.resolver(nodeID)
-	if err != nil {
-		return nil, err
-	}
-
 	{
 		// If we're dialing the local node, don't go through gRPC.
-		localClient := n.rpcContext.GetLocalInternalClientForAddr(addr.String(), nodeID)
+		localClient := n.rpcContext.GetLocalInternalClientForAddr(nodeID)
 		if localClient != nil && !n.testingKnobs.TestingNoLocalClientOptimization {
 			log.VEvent(ctx, 2, kvbase.RoutingRequestLocallyMsg)
 			return localClient, nil
 		}
+	}
+
+	addr, err := n.resolver(nodeID)
+	if err != nil {
+		return nil, err
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
 	conn, err := n.dial(ctx, nodeID, addr, n.getBreaker(nodeID, class), true /* checkBreaker */, class)
