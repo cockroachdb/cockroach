@@ -8241,6 +8241,51 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	mem.Close(ctx)
 }
 
+// TestIncorrectAccessOfFilesInBackupMetadata ensures that an accidental use of
+// the `Files` field (instead of its dedicated SST) on the `BACKUP_METADATA`
+// results in an error on restore and show.
+func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	sqlDB.Exec(t, `CREATE TABLE r1.foo ( id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO r1.foo VALUES (1)`)
+	sqlDB.Exec(t, `BACKUP DATABASE r1 INTO 'nodelocal://0/test'`)
+
+	// Load/deserialize the manifest so we can mess with it.
+	matches, err := filepath.Glob(filepath.Join(rawDir, "test", "*/*/*", backupbase.BackupMetadataName))
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	manifestPath := matches[0]
+	manifestData, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
+	require.NoError(t, err)
+	var backupManifest backuppb.BackupManifest
+	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
+
+	// The manifest should have `HasExternalFilesList` set to true.
+	require.True(t, backupManifest.HasExternalFilesList)
+
+	// Set it to false, so that any operation that resolves the metadata treats
+	// this manifest as a pre-23.1 BACKUP_MANIFEST, and directly accesses the
+	// `Files` field, instead of reading from the external SST.
+	backupManifest.HasExternalFilesList = false
+	manifestData, err = protoutil.Marshal(&backupManifest)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+	// Also write the checksum file to match the new manifest.
+	checksum, err := backupinfo.GetChecksum(manifestData)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+
+	// Expect an error on restore.
+	sqlDB.ExpectErr(t, "assertion: this placeholder legacy Files entry should never be opened", `RESTORE DATABASE r1 FROM LATEST IN 'nodelocal://0/test' WITH new_db_name = 'r2'`)
+}
+
 func TestManifestTooNew(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -8254,7 +8299,7 @@ func TestManifestTooNew(t *testing.T) {
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
 	// Load/deserialize the manifest so we can mess with it.
-	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
+	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupMetadataName)
 	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
@@ -8336,7 +8381,7 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	foundManifest := false
 	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		log.Infof(context.Background(), "visiting %s", path)
-		if filepath.Base(path) == backupbase.BackupManifestName {
+		if filepath.Base(path) == backupbase.BackupMetadataName {
 			foundManifest = true
 			data, err := os.ReadFile(path)
 			require.NoError(t, err)
