@@ -138,9 +138,7 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		if ac.eventLog != nil && tracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
 			ctx = embedCtxEventLog(ctx, ac.eventLog)
 		}
-		if ac.tags != nil {
-			ctx = logtags.WithTags(ctx, ac.tags)
-		}
+		ctx = logtags.WithTags(ctx, ac.tags)
 		if ac.ServerIDs != nil {
 			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 		}
