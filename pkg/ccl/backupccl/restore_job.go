@@ -284,8 +284,22 @@ func restore(
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests,
-		backupLocalityMap, introducedSpanFrontier, highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(restoreCtx, execCtx.ExecCfg(),
+		backupManifests, encryption, kmsEnv)
+	if err != nil {
+		return emptyRowCount, err
+	}
+	importSpans, err := makeSimpleImportSpans(
+		dataToRestore.getSpans(),
+		backupManifests,
+		layerToBackupManifestFileIterFactory,
+		backupLocalityMap,
+		introducedSpanFrontier,
+		highWaterMark,
+		targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+	if err != nil {
+		return emptyRowCount, err
+	}
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.

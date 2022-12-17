@@ -37,6 +37,10 @@ import (
 const (
 	// MetadataSSTName is the name of the SST file containing the backup metadata.
 	MetadataSSTName = "metadata.sst"
+	// BackupMetadataFilesListPath is the name of the SST file containing the
+	// BackupManifest_Files of the backup. This file is always written in
+	// conjunction with the `BACKUP_METADATA`.
+	BackupMetadataFilesListPath = "filelist.sst"
 	// FileInfoPath is the name of the SST file containing the
 	// BackupManifest_Files of the backup.
 	FileInfoPath     = "fileinfo.sst"
@@ -53,6 +57,20 @@ var iterOpts = storage.IterOptions{
 	KeyTypes:   storage.IterKeyTypePointsOnly,
 	LowerBound: keys.LocalMax,
 	UpperBound: keys.MaxKey,
+}
+
+// WriteFilesListSST is responsible for constructing and writing the
+// filePathInfo to dest. This file contains the `BackupManifest_Files` of the
+// backup.
+func WriteFilesListSST(
+	ctx context.Context,
+	dest cloud.ExternalStorage,
+	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	manifest *backuppb.BackupManifest,
+	filePathInfo string,
+) error {
+	return writeFilesSST(ctx, manifest, dest, enc, kmsEnv, filePathInfo)
 }
 
 // WriteBackupMetadataSST is responsible for constructing and writing the
@@ -244,9 +262,8 @@ func writeDescsToMetadata(
 	return nil
 }
 
-func writeFilesToMetadata(
+func writeFilesSST(
 	ctx context.Context,
-	sst storage.SSTWriter,
 	m *backuppb.BackupManifest,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
@@ -267,12 +284,13 @@ func writeFilesToMetadata(
 		return cmp < 0 || (cmp == 0 && strings.Compare(m.Files[i].Path, m.Files[j].Path) < 0)
 	})
 
-	for _, i := range m.Files {
-		b, err := protoutil.Marshal(&i)
+	for i := range m.Files {
+		file := m.Files[i]
+		b, err := protoutil.Marshal(&file)
 		if err != nil {
 			return err
 		}
-		if err := fileSST.PutUnversioned(encodeFileSSTKey(i.Span.Key, i.Path), b); err != nil {
+		if err := fileSST.PutUnversioned(encodeFileSSTKey(file.Span.Key, file.Path), b); err != nil {
 			return err
 		}
 	}
@@ -281,11 +299,21 @@ func writeFilesToMetadata(
 	if err != nil {
 		return err
 	}
-	err = w.Close()
-	if err != nil {
+	return w.Close()
+}
+
+func writeFilesToMetadata(
+	ctx context.Context,
+	sst storage.SSTWriter,
+	m *backuppb.BackupManifest,
+	dest cloud.ExternalStorage,
+	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	fileInfoPath string,
+) error {
+	if err := writeFilesSST(ctx, m, dest, enc, kmsEnv, fileInfoPath); err != nil {
 		return err
 	}
-
 	// Write the file info into the main metadata SST.
 	return sst.PutUnversioned(encodeFilenameSSTKey(fileInfoPath), nil)
 }
@@ -1023,6 +1051,19 @@ func (b *BackupMetadata) NewFileIter(ctx context.Context) (*FileIterator, error)
 		return nil, fileInfoIter.err()
 	}
 	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encOpts, iterOpts)
+	if err != nil {
+		return nil, err
+	}
+	iter.SeekGE(storage.MVCCKey{})
+	return &FileIterator{mergedIterator: iter}, nil
+}
+
+// NewFileSSTIter creates a new FileIterator to iterate over the storeFile.
+// It is the caller's responsibility to Close() the returned iterator.
+func NewFileSSTIter(
+	ctx context.Context, storeFile storageccl.StoreFile, encOpts *roachpb.FileEncryptionOptions,
+) (*FileIterator, error) {
+	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{storeFile}, encOpts, iterOpts)
 	if err != nil {
 		return nil, err
 	}
