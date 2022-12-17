@@ -219,17 +219,18 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 
 	var histogram []cat.HistogramBucket
-	// Find the histogram from the newest table statistic for our column
-	// that is not partial and not forecasted. The first one we find will
-	// be the latest due to the newest to oldest ordering property of the
-	// cache.
+	var stat *stats.TableStatistic
+	// Find the statistic and histogram from the newest table statistic for our
+	// column that is not partial and not forecasted. The first one we find will
+	// be the latest due to the newest to oldest ordering property of the cache.
 	for _, t := range tableStats {
 		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] && t.PartialPredicate == "" && t.Name != jobspb.ForecastStatsName {
+			stat = t
 			histogram = t.Histogram
 			break
 		}
 	}
-	if len(histogram) == 0 {
+	if stat == nil || len(histogram) == 0 {
 		return nil, pgerror.Newf(
 			pgcode.ObjectNotInPrerequisiteState,
 			"column %s does not have a prior statistic, "+
@@ -270,6 +271,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		Columns:             make([]uint32, len(reqStat.columns)),
 		StatName:            reqStat.name,
 		PartialPredicate:    extremesPredicate,
+		FullStatisticID:     stat.StatisticID,
 	}
 	// For now, this loop should iterate only once, as we only
 	// handle single-column partial statistics.

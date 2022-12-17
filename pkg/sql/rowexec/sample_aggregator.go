@@ -520,6 +520,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				s.getAvgSize(&si),
 				histogram,
 				si.spec.PartialPredicate,
+				si.spec.FullStatisticID,
 			); err != nil {
 				return err
 			}

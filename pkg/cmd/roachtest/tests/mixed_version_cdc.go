@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -47,13 +48,26 @@ var (
 	targetTable = "bank"
 
 	timeout = 30 * time.Minute
+
+	// teamcityAgentZone is the zone used in this test. Since this test
+	// runs a lot of queries from the TeamCity agent to CRDB nodes, we
+	// make sure to create roachprod nodes that are in the same region
+	// as the TeamCity agents. Note that a change in the TeamCity agent
+	// region could lead to this test timing out (see #92649 for an
+	// occurrence of this).
+	teamcityAgentZone = "us-east4-b"
 )
 
 func registerCDCMixedVersions(r registry.Registry) {
+	var zones string
+	if r.MakeClusterSpec(1).Cloud == spec.GCE {
+		// see rationale in definition of `teamcityAgentZone`
+		zones = teamcityAgentZone
+	}
 	r.Add(registry.TestSpec{
 		Name:            "cdc/mixed-versions",
 		Owner:           registry.OwnerTestEng,
-		Cluster:         r.MakeClusterSpec(5),
+		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones)),
 		Timeout:         timeout,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

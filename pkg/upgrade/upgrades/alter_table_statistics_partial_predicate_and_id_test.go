@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestAlterSystemTableStatisticsAddPartialPredicate(t *testing.T) {
+func TestAlterSystemTableStatisticsAddPartialPredicateAndID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -42,7 +42,7 @@ func TestAlterSystemTableStatisticsAddPartialPredicate(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1AddPartialStatisticsPredicateCol - 1),
+						clusterversion.V23_1AddPartialStatisticsColumns - 1),
 				},
 			},
 		},
@@ -59,6 +59,7 @@ func TestAlterSystemTableStatisticsAddPartialPredicate(t *testing.T) {
 	var (
 		validationSchemas = []upgrades.Schema{
 			{Name: "partialPredicate", ValidationFn: upgrades.HasColumn},
+			{Name: "fullStatisticID", ValidationFn: upgrades.HasColumn},
 		}
 	)
 
@@ -81,7 +82,7 @@ func TestAlterSystemTableStatisticsAddPartialPredicate(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V23_1AddPartialStatisticsPredicateCol,
+		clusterversion.V23_1AddPartialStatisticsColumns,
 		nil,   /* done */
 		false, /* expectError */
 	)

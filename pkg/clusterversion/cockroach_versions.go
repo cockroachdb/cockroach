@@ -335,9 +335,10 @@ const (
 	// system tenant.
 	V23_1DescIDSequenceForSystemTenant
 
-	// V23_1AddPartialStatisticsPredicateCol adds a column to store the predicate
-	// for a partial statistics collection.
-	V23_1AddPartialStatisticsPredicateCol
+	// V23_1AddPartialStatisticsColumns adds two columns: one to store the predicate
+	// for a partial statistics collection, and another to refer to the full statistic
+	// it was collected from.
+	V23_1AddPartialStatisticsColumns
 
 	// V23_1_CreateSystemJobInfoTable creates the system.job_info table.
 	V23_1CreateSystemJobInfoTable
@@ -601,7 +602,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 	{
-		Key:     V23_1AddPartialStatisticsPredicateCol,
+		Key:     V23_1AddPartialStatisticsColumns,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 8},
 	},
 	{
