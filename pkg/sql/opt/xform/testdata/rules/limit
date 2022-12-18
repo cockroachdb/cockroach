@@ -2578,3 +2578,469 @@ scalar-group-by
  └── aggregations
       └── const-agg [as=min:7, outer=(1)]
            └── a:1
+
+# Regression Test for #93410
+exec-ddl
+CREATE TABLE t93410 (
+        col1 INT NOT NULL,
+        col2 INT NOT NULL,
+        col3 INT NOT NULL,
+        col4 INT NOT NULL,
+        col5 INT NOT NULL,
+        col6 INT NOT NULL,
+        col7 INT NOT NULL,
+        col8 INT NOT NULL,
+        col9 INT NOT NULL,
+        col10 INT NOT NULL,
+        col11 INT NOT NULL,
+        col12 INT NULL,
+        col13 INT NULL,
+        col14 INT NOT NULL,
+        col15 INT NULL,
+        col16 INT,
+        CONSTRAINT "primary" PRIMARY KEY (col1 ASC, col2 ASC, col3 ASC, col4 ASC, col5 ASC),
+        CONSTRAINT fk_col1_ref_t93410 FOREIGN KEY (col1, col2, col3, col4, col12) REFERENCES t93410(col1, col2, col3, col4, col5) ON DELETE CASCADE,
+        UNIQUE INDEX t93410_col1_col2_col3_col5_key (col1 ASC, col2 ASC, col3 ASC, col5 ASC),
+        INDEX t93410_col13_idx (col13 ASC),
+        INDEX t93410_col1_col2_col13_col15_idx (col1 ASC, col2 ASC, col13 ASC, col15 ASC),
+        UNIQUE INDEX t93410_col1_col2_col5_col9_key (col1 ASC, col2 ASC, col5 ASC, col9 ASC),
+        UNIQUE INDEX t93410_col1_col2_col5_key (col1 ASC, col2 ASC, col5 ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t93410_2 (
+        col1 INT NOT NULL,
+        col2 INT NOT NULL,
+        col3 INT NOT NULL,
+        col4 INT NOT NULL,
+        col5 INT NOT NULL,
+        col6 INT NOT NULL,
+        CONSTRAINT "primary" PRIMARY KEY (col1 ASC, col2 ASC, col3 ASC, col5 ASC, col6 ASC),
+        CONSTRAINT fk_col1_ref_t93410 FOREIGN KEY (col1, col2, col3, col4, col5) REFERENCES t93410(col1, col2, col3, col4, col5) ON DELETE CASCADE,
+        INDEX t93410_2_col1_col2_col3_col4_col5_idx (col1 ASC, col2 ASC, col3 ASC, col4 ASC, col5 ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE t93410 INJECT STATISTICS '[
+    {
+        "avg_size": 2,
+        "columns": [
+            "col1"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "col2"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    }
+]';
+----
+
+exec-ddl
+ALTER TABLE t93410_2 INJECT STATISTICS '[
+    {
+        "avg_size": 2,
+        "columns": [
+            "col1"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "col2"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    }
+]';
+----
+
+# A streaming group-by with no TopK operation should be generated.
+opt expect=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  DISTINCT
+  t1.col1,
+  t1.col2,
+  t1.col3,
+  t1.col4,
+  t1.col5,
+  t1.col6,
+  t1.col7,
+  t1.col8,
+  t1.col9,
+  t1.col10,
+  t1.col11,
+  t1.col12,
+  t1.col13,
+  t1.col14,
+  t1.col15,
+  t1.col16,
+  array_remove(array_agg(t2.col6), NULL) AS col6s
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+GROUP BY
+  t1.col1,
+  t1.col2,
+  t1.col3,
+  t1.col4,
+  t1.col5
+ORDER BY
+  col9 DESC, t1.col5 DESC
+LIMIT 20
+----
+project
+ ├── columns: col1:1!null col2:2!null col3:3!null col4:4!null col5:5!null col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 col6s:28
+ ├── cardinality: [0 - 20]
+ ├── immutable
+ ├── key: (5)
+ ├── fd: ()-->(1,2), (5)-->(3,4,6-16,28)
+ ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ ├── limit
+ │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 array_agg:27
+ │    ├── internal-ordering: -9,-5 opt(1,2)
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (5)
+ │    ├── fd: ()-->(1,2), (5)-->(1-4,6-16,27)
+ │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    ├── group-by (streaming)
+ │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 array_agg:27
+ │    │    ├── grouping columns: t1.col5:5!null col9:9!null
+ │    │    ├── internal-ordering: -9,-5 opt(1,2)
+ │    │    ├── key: (5)
+ │    │    ├── fd: ()-->(1,2), (5)-->(1-4,6-16,27)
+ │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    ├── limit hint: 20.00
+ │    │    ├── left-join (lookup t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2])
+ │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23 t2.col6:24
+ │    │    │    ├── key columns: [1 2 3 4 5] = [19 20 21 22 23]
+ │    │    │    ├── key: (5,21,23,24)
+ │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16), (21,23,24)-->(22), (5,21,23,24)-->(19,20)
+ │    │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    │    ├── limit hint: 20.00
+ │    │    │    ├── index-join t93410
+ │    │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16
+ │    │    │    │    ├── key: (5)
+ │    │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16)
+ │    │    │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    │    │    ├── limit hint: 100.00
+ │    │    │    │    └── sort
+ │    │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │    │         ├── key: (5)
+ │    │    │    │         ├── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    │    │         ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    │    │         ├── limit hint: 100.00
+ │    │    │    │         └── scan t93410@t93410_col1_col2_col5_col9_key [as=t1]
+ │    │    │    │              ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │    │              ├── constraint: /1/2/5/9: [/1/1 - /1/1]
+ │    │    │    │              ├── key: (5)
+ │    │    │    │              └── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    │    └── filters
+ │    │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+ │    │    │         └── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
+ │    │    └── aggregations
+ │    │         ├── array-agg [as=array_agg:27, outer=(24)]
+ │    │         │    └── t2.col6:24
+ │    │         ├── const-agg [as=t1.col1:1, outer=(1)]
+ │    │         │    └── t1.col1:1
+ │    │         ├── const-agg [as=t1.col2:2, outer=(2)]
+ │    │         │    └── t1.col2:2
+ │    │         ├── const-agg [as=t1.col3:3, outer=(3)]
+ │    │         │    └── t1.col3:3
+ │    │         ├── const-agg [as=t1.col4:4, outer=(4)]
+ │    │         │    └── t1.col4:4
+ │    │         ├── const-agg [as=t1.col6:6, outer=(6)]
+ │    │         │    └── t1.col6:6
+ │    │         ├── const-agg [as=col7:7, outer=(7)]
+ │    │         │    └── col7:7
+ │    │         ├── const-agg [as=col8:8, outer=(8)]
+ │    │         │    └── col8:8
+ │    │         ├── const-agg [as=col10:10, outer=(10)]
+ │    │         │    └── col10:10
+ │    │         ├── const-agg [as=col11:11, outer=(11)]
+ │    │         │    └── col11:11
+ │    │         ├── const-agg [as=col12:12, outer=(12)]
+ │    │         │    └── col12:12
+ │    │         ├── const-agg [as=col13:13, outer=(13)]
+ │    │         │    └── col13:13
+ │    │         ├── const-agg [as=col14:14, outer=(14)]
+ │    │         │    └── col14:14
+ │    │         ├── const-agg [as=col15:15, outer=(15)]
+ │    │         │    └── col15:15
+ │    │         └── const-agg [as=col16:16, outer=(16)]
+ │    │              └── col16:16
+ │    └── 20
+ └── projections
+      └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
+
+# GenerateStreamingGroupByLimitOrderingHint should not fire if there is no
+# overlap between the grouping columns and order-by columns.
+opt expect-not=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  DISTINCT
+  t2.col1,
+  t2.col2,
+  t2.col3,
+  t2.col4,
+  t2.col5,
+  array_remove(array_agg(t1.col6), NULL) AS col6s
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+GROUP BY
+  t2.col1,
+  t2.col2,
+  t2.col3,
+  t2.col4,
+  t2.col5
+ORDER BY
+  col6s DESC
+LIMIT 20
+----
+top-k
+ ├── columns: col1:19 col2:20 col3:21 col4:22 col5:23 col6s:28
+ ├── internal-ordering: -28
+ ├── k: 20
+ ├── cardinality: [0 - 20]
+ ├── immutable
+ ├── key: (19-23)
+ ├── fd: (19-23)-->(28)
+ ├── ordering: -28
+ └── project
+      ├── columns: col6s:28 t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+      ├── immutable
+      ├── key: (19-23)
+      ├── fd: (19-23)-->(28)
+      ├── group-by (hash)
+      │    ├── columns: t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23 array_agg:27!null
+      │    ├── grouping columns: t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+      │    ├── key: (19-23)
+      │    ├── fd: (19-23)-->(27)
+      │    ├── left-join (merge)
+      │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+      │    │    ├── left ordering: +3,+4,+5,+1,+2
+      │    │    ├── right ordering: +21,+22,+23,+19,+20
+      │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6)
+      │    │    ├── scan t93410 [as=t1]
+      │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null
+      │    │    │    ├── constraint: /1/2/3/4/5: [/1/1 - /1/1]
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6)
+      │    │    │    └── ordering: +3,+4,+5 opt(1,2) [actual: +3,+4,+5]
+      │    │    ├── scan t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2]
+      │    │    │    ├── columns: t2.col1:19!null t2.col2:20!null t2.col3:21!null t2.col4:22!null t2.col5:23!null
+      │    │    │    ├── constraint: /19/20/21/22/23/24: [/1/1 - /1/1]
+      │    │    │    ├── fd: ()-->(19,20)
+      │    │    │    └── ordering: +21,+22,+23 opt(19,20) [actual: +21,+22,+23]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         └── array-agg [as=array_agg:27, outer=(6)]
+      │              └── t1.col6:6
+      └── projections
+           └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
+
+# A distinct-on which satisfies the required ordering should be used.
+opt expect=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  DISTINCT ON (t1.col5, t1.col9) t2.col2
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+ORDER BY
+  col9 ASC, t1.col5 DESC
+LIMIT 20
+----
+limit
+ ├── columns: col2:20  [hidden: t1.col5:5!null col9:9!null]
+ ├── internal-ordering: +9,-5
+ ├── cardinality: [0 - 20]
+ ├── key: (5)
+ ├── fd: (5)-->(9,20)
+ ├── ordering: +9,-5
+ ├── distinct-on
+ │    ├── columns: t1.col5:5!null col9:9!null t2.col2:20
+ │    ├── grouping columns: t1.col5:5!null col9:9!null
+ │    ├── internal-ordering: +9,-5 opt(1,2)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(9,20)
+ │    ├── ordering: +9,-5
+ │    ├── limit hint: 20.00
+ │    ├── left-join (lookup t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2])
+ │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+ │    │    ├── key columns: [1 2 3 4 5] = [19 20 21 22 23]
+ │    │    ├── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    ├── ordering: +9,-5 opt(1,2) [actual: +9,-5]
+ │    │    ├── limit hint: 24.00
+ │    │    ├── sort
+ │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    │    ├── ordering: +9,-5 opt(1,2) [actual: +9,-5]
+ │    │    │    ├── limit hint: 100.00
+ │    │    │    └── scan t93410@t93410_col1_col2_col5_col9_key [as=t1]
+ │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │         ├── constraint: /1/2/5/9: [/1/1 - /1/1]
+ │    │    │         ├── key: (5)
+ │    │    │         └── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    └── filters
+ │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+ │    │         └── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
+ │    └── aggregations
+ │         └── first-agg [as=t2.col2:20, outer=(20)]
+ │              └── t2.col2:20
+ └── 20
+
+# This should generate a partial streaming aggregation.
+opt expect=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  count(*)
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4)
+WHERE
+  t1.col2 = 1
+GROUP BY
+  t1.col2,
+  t1.col3,
+  t1.col4
+ORDER BY
+  t1.col4 DESC
+LIMIT 20
+----
+project
+ ├── columns: count:27!null  [hidden: t1.col4:4!null]
+ ├── cardinality: [0 - 20]
+ ├── ordering: -4
+ └── limit
+      ├── columns: t1.col3:3!null t1.col4:4!null count_rows:27!null
+      ├── internal-ordering: -4
+      ├── cardinality: [0 - 20]
+      ├── key: (3,4)
+      ├── fd: (3,4)-->(27)
+      ├── ordering: -4
+      ├── group-by (partial streaming)
+      │    ├── columns: t1.col3:3!null t1.col4:4!null count_rows:27!null
+      │    ├── grouping columns: t1.col3:3!null t1.col4:4!null
+      │    ├── key: (3,4)
+      │    ├── fd: (3,4)-->(27)
+      │    ├── ordering: -4
+      │    ├── limit hint: 20.00
+      │    ├── left-join (lookup t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2])
+      │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22
+      │    │    ├── key columns: [1 2 3 4] = [19 20 21 22]
+      │    │    ├── fd: ()-->(2)
+      │    │    ├── ordering: -4 opt(2) [actual: -4]
+      │    │    ├── limit hint: 20.00
+      │    │    ├── sort
+      │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null
+      │    │    │    ├── fd: ()-->(2)
+      │    │    │    ├── ordering: -4 opt(2) [actual: -4]
+      │    │    │    ├── limit hint: 100.00
+      │    │    │    └── select
+      │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null
+      │    │    │         ├── fd: ()-->(2)
+      │    │    │         ├── scan t93410@t93410_col1_col2_col3_col5_key [as=t1]
+      │    │    │         │    └── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null
+      │    │    │         └── filters
+      │    │    │              └── t1.col2:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │    │    └── filters
+      │    │         └── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+      │    └── aggregations
+      │         └── count-rows [as=count_rows:27]
+      └── 20
+
+# End Regression Test for #93410
