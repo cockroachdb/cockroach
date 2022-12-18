@@ -108,7 +108,7 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 					keysOutputIdx = append(keysOutputIdx, i)
 				}
 			} else {
-				for _, idx := range inSel {
+				for _, idx := range inSel[:batch.Length()] {
 					if inNulls.MaybeHasNulls() && inNulls.NullAt(idx) {
 						// Skip all NULL keys.
 						continue
@@ -127,6 +127,8 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 			// TODO(ajwerner): Reserve memory for the responses. We know they'll
 			// at least, on average, contain keys so it'll be 2x the size of the
 			// keys plus some constant multiple.
+			// TODO(yuzefovich): add unit tests that use the RunTests test
+			// harness.
 			res, err := r.fetcher.RangeStats(r.Ctx, keys...)
 			if err != nil {
 				colexecerror.ExpectedError(err)
