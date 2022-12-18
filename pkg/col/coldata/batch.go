@@ -47,6 +47,8 @@ type Batch interface {
 	// Selection, if not nil, returns the selection vector on this batch: a
 	// densely-packed list of the *increasing* indices in each column that have
 	// not been filtered out by a previous step.
+	// TODO(yuzefovich): consider ensuring that the length of the returned slice
+	// equals the length of the batch.
 	Selection() []int
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
