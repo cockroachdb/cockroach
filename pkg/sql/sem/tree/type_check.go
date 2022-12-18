@@ -2384,10 +2384,11 @@ func TypeCheckSameTypedExprs(
 
 	switch {
 	case resolvableIdxs.Empty() && constIdxs.Empty():
-		if err := typeCheckSameTypedPlaceholders(s, desired); err != nil {
+		typ, err := typeCheckSameTypedPlaceholders(s, desired)
+		if err != nil {
 			return nil, nil, err
 		}
-		return typedExprs, desired, nil
+		return typedExprs, typ, nil
 	case resolvableIdxs.Empty():
 		return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 	default:
@@ -2441,7 +2442,7 @@ func TypeCheckSameTypedExprs(
 			}
 		}
 		if !placeholderIdxs.Empty() {
-			if err := typeCheckSameTypedPlaceholders(s, firstValidType); err != nil {
+			if _, err := typeCheckSameTypedPlaceholders(s, firstValidType); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -2450,15 +2451,16 @@ func TypeCheckSameTypedExprs(
 }
 
 // Used to set placeholders to the desired typ.
-func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ *types.T) error {
+func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ *types.T) (*types.T, error) {
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
 		typedExpr, err := typeCheckAndRequire(s.ctx, s.semaCtx, s.exprs[i], typ, "placeholder")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		s.typedExprs[i] = typedExpr
+		typ = typedExpr.ResolvedType()
 	}
-	return nil
+	return typ, nil
 }
 
 // Used to type check constants to the same type. An optional typ can be
@@ -2552,7 +2554,8 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 		return nil, nil, err
 	}
 	if !s.placeholderIdxs.Empty() {
-		if err := typeCheckSameTypedPlaceholders(s, typ); err != nil {
+		typ, err = typeCheckSameTypedPlaceholders(s, typ)
+		if err != nil {
 			return nil, nil, err
 		}
 	}
