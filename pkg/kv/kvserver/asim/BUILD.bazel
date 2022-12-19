@@ -18,7 +18,6 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/roachpb",
         "//pkg/util/encoding/csv",
         "//pkg/util/log",
     ],
@@ -35,7 +34,6 @@ go_test(
     embed = [":asim"],
     deps = [
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",

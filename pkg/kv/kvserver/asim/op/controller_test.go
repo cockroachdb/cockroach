@@ -137,6 +137,8 @@ func TestRelocateRangeOp(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 	settings.ReplicaAddRate = 1
 	settings.ReplicaChangeBaseDelay = 5 * time.Second
+	settings.StateExchangeInterval = 1 * time.Second
+	settings.StateExchangeDelay = 0
 
 	type testRelocationArgs struct {
 		voters               []state.StoreID
@@ -284,19 +286,8 @@ func TestRelocateRangeOp(t *testing.T) {
 				}
 			}
 
-			exchange := gossip.NewFixedDelayExhange(
-				start,
-				time.Second,
-				time.Second*0, /* no state update delay */
-			)
-
-			// Update the storepool for informing allocator decisions.
-			storeDescriptors := s.StoreDescriptors()
-			exchange.Put(state.OffsetTick(start, 0), storeDescriptors...)
-			for _, store := range s.Stores() {
-				storeID := store.StoreID()
-				s.UpdateStorePool(storeID, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(storeID)))
-			}
+			gossip := gossip.NewGossip(s, settings)
+			gossip.Tick(ctx, start, s)
 
 			results := map[int64]map[state.RangeID]rangeState{}
 			pending := []DispatchedTicket{}
