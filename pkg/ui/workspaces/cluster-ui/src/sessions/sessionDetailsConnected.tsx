@@ -29,7 +29,9 @@ import { TimeScale } from "src/timeScaleDropdown";
 export const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AppState, props: RouteComponentProps) => ({
-      nodeNames: nodeDisplayNameByIDSelector(state),
+      nodeNames: selectIsTenant(state)
+        ? {}
+        : nodeDisplayNameByIDSelector(state),
       session: selectSession(state, props),
       sessionError: state.adminUI.sessions.lastError,
       uiConfig: selectSessionDetailsUiConfig(state),

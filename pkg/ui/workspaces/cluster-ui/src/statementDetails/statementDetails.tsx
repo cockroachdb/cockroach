@@ -268,8 +268,8 @@ export class StatementDetails extends React.Component<
       this.props.location,
     );
     this.props.refreshUserSQLRoles();
+    this.props.refreshNodes();
     if (!this.props.isTenant) {
-      this.props.refreshNodes();
       this.props.refreshNodesLiveness();
       if (!this.props.hasViewActivityRedactedRole) {
         this.props.refreshStatementDiagnosticsRequests();
@@ -291,8 +291,8 @@ export class StatementDetails extends React.Component<
       );
     }
 
+    this.props.refreshNodes();
     if (!this.props.isTenant) {
-      this.props.refreshNodes();
       this.props.refreshNodesLiveness();
       if (!this.props.hasViewActivityRedactedRole) {
         this.props.refreshStatementDiagnosticsRequests();
