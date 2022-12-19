@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -207,14 +206,14 @@ func (n *showTenantNode) Values() tree.Datums {
 		sourceTenantName = tree.NewDString(string(n.replicationInfo.IngestionDetails.SourceTenantName))
 		sourceClusterUri = tree.NewDString(n.replicationInfo.IngestionDetails.StreamAddress)
 		if n.replicationInfo.ReplicationLagInfo != nil {
-			minIngested := n.replicationInfo.ReplicationLagInfo.MinIngestedTimestamp.WallTime
+			minIngested := n.replicationInfo.ReplicationLagInfo.MinIngestedTimestamp
 			// The latest fully replicated time.
-			replicatedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, minIngested), time.Nanosecond)
+			replicatedTimestamp, _ = tree.MakeDTimestampTZ(minIngested.GoTime(), time.Nanosecond)
 		}
 		// The protected timestamp on the destination cluster.
-		retainedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, n.protectedTimestamp.WallTime), time.Nanosecond)
-		replicationStartTimestamp, _ = tree.MakeDTimestamp(
-			timeutil.Unix(0, n.replicationInfo.IngestionDetails.ReplicationStartTime.WallTime), time.Nanosecond)
+		retainedTimestamp, _ = tree.MakeDTimestampTZ(n.protectedTimestamp.GoTime(), time.Nanosecond)
+		replicationStartTimestamp, _ = tree.MakeDTimestampTZ(
+			n.replicationInfo.IngestionDetails.ReplicationStartTime.GoTime(), time.Nanosecond)
 	}
 
 	return tree.Datums{
