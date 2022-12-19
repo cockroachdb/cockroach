@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -677,8 +678,8 @@ func inspectEngines(
 			}
 		}
 
-		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
-		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
+		storeIdent, err := kvstorage.ReadStoreIdent(ctx, eng)
+		if errors.HasType(err, (*kvstorage.NotBootstrappedError)(nil)) {
 			uninitializedEngines = append(uninitializedEngines, eng)
 			continue
 		} else if err != nil {

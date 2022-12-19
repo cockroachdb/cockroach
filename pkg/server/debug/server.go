@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
@@ -198,7 +199,7 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 
 	storeIDs := make([]roachpb.StoreIdent, len(engines))
 	for i := range engines {
-		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
 			return err
 		}

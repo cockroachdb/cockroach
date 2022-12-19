@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -166,7 +166,7 @@ func checkStoreRangeStats(
 	}
 
 	go func() {
-		if err := kvserver.IterateRangeDescriptorsFromDisk(ctx, eng,
+		if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, eng,
 			func(desc roachpb.RangeDescriptor) error {
 				inCh <- checkInput{eng: eng, desc: &desc, sl: stateloader.Make(desc.RangeID)}
 				return nil

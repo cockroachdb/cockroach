@@ -127,6 +127,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/gc",
+        "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
