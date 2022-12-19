@@ -302,7 +302,10 @@ func getDescriptorsFromStoreForInterval(
 
 				// Decode key and value of descriptor.
 				k := it.UnsafeKey()
-				descContent := it.UnsafeValue()
+				descContent, err := it.UnsafeValue()
+				if err != nil {
+					return err
+				}
 				if descContent == nil {
 					return errors.Wrapf(errors.New("unsafe value error"), "error "+
 						"extracting raw bytes of descriptor with key %s modified between "+

@@ -250,15 +250,20 @@ func assertExportedKVs(
 	defer sst.Close()
 
 	sst.SeekGE(MVCCKey{})
+	checkValErr := func(v []byte, err error) []byte {
+		require.NoError(t, err)
+		return v
+	}
 	for i := range expected {
 		ok, err := sst.Valid()
 		require.NoError(t, err)
 		require.Truef(t, ok, "iteration produced %d keys, expected %d", i, len(expected))
 		assert.Equalf(t, expected[i].Key, sst.UnsafeKey(), "key %d", i)
 		if expected[i].Value == nil {
-			assert.Equalf(t, []byte{}, sst.UnsafeValue(), "key %d %q", i, sst.UnsafeKey())
+			assert.Equalf(t, []byte{}, checkValErr(sst.UnsafeValue()), "key %d %q", i, sst.UnsafeKey())
 		} else {
-			assert.Equalf(t, expected[i].Value, sst.UnsafeValue(), "key %d %q", i, sst.UnsafeKey())
+			assert.Equalf(
+				t, expected[i].Value, checkValErr(sst.UnsafeValue()), "key %d %q", i, sst.UnsafeKey())
 		}
 		sst.Next()
 	}
@@ -326,8 +331,12 @@ func assertIgnoreTimeIteratedKVs(
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
 		kvs = append(kvs, MVCCKeyValue{
-			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, iter.UnsafeValue()...)})
+			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, v...)})
 	}
 
 	if len(kvs) != len(expected) {
@@ -374,8 +383,12 @@ func assertIteratedKVs(
 		if iter.NumCollectedIntents() > 0 {
 			t.Fatal("got unexpected intent error")
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
 		kvs = append(kvs, MVCCKeyValue{
-			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, iter.UnsafeValue()...)})
+			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, v...)})
 	}
 
 	if len(kvs) != len(expected) {
@@ -876,7 +889,8 @@ func expectKeyValue(t *testing.T, iter SimpleMVCCIterator, kv MVCCKeyValue) {
 	assert.NoError(t, err)
 
 	unsafeKey := iter.UnsafeKey()
-	unsafeVal := iter.UnsafeValue()
+	unsafeVal, err := iter.UnsafeValue()
+	require.NoError(t, err)
 
 	assert.True(t, unsafeKey.Key.Equal(kv.Key.Key), "keys not equal")
 	assert.Equal(t, kv.Key.Timestamp, unsafeKey.Timestamp)
@@ -890,7 +904,8 @@ func expectIntent(t *testing.T, iter SimpleMVCCIterator, intent roachpb.Intent) 
 	assert.NoError(t, err)
 
 	unsafeKey := iter.UnsafeKey()
-	unsafeVal := iter.UnsafeValue()
+	unsafeVal, err := iter.UnsafeValue()
+	require.NoError(t, err)
 
 	var meta enginepb.MVCCMetadata
 	err = protoutil.Unmarshal(unsafeVal, &meta)
@@ -1087,8 +1102,12 @@ func slurpKVsInTimeRange(
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, err
+		}
 		kvs = append(kvs, MVCCKeyValue{
-			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, iter.UnsafeValue()...)})
+			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, v...)})
 	}
 	return kvs, nil
 }

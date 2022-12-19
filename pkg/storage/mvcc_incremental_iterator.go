@@ -408,7 +408,13 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 	// will handle below. If an intent meta, then this is used later to see if
 	// the timestamp of this intent is within the incremental iterator's time
 	// bounds.
-	if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
+	var v []byte
+	v, i.err = i.iter.UnsafeValue()
+	if i.err != nil {
+		i.valid = false
+		return i.err
+	}
+	if i.err = protoutil.Unmarshal(v, &i.meta); i.err != nil {
 		i.valid = false
 		return i.err
 	}
@@ -646,9 +652,9 @@ func (i *MVCCIncrementalIterator) RangeKeyChangedIgnoringTime() bool {
 }
 
 // UnsafeValue implements SimpleMVCCIterator.
-func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
+func (i *MVCCIncrementalIterator) UnsafeValue() ([]byte, error) {
 	if !i.hasPoint {
-		return nil
+		return nil, nil
 	}
 	return i.iter.UnsafeValue()
 }

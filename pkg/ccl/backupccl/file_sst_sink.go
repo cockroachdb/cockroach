@@ -239,12 +239,16 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 			break
 		}
 		k := iter.UnsafeKey()
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
 		if k.Timestamp.IsEmpty() {
-			if err := s.sst.PutUnversioned(k.Key, iter.UnsafeValue()); err != nil {
+			if err := s.sst.PutUnversioned(k.Key, v); err != nil {
 				return err
 			}
 		} else {
-			if err := s.sst.PutRawMVCC(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
+			if err := s.sst.PutRawMVCC(iter.UnsafeKey(), v); err != nil {
 				return err
 			}
 		}

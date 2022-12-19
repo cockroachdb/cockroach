@@ -696,7 +696,11 @@ func debugDumpFileSST(
 		if err != nil {
 			return err
 		}
-		f, err := pbBytesToJSON(iter.UnsafeValue(), &backuppb.BackupManifest_File{})
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		f, err := pbBytesToJSON(v, &backuppb.BackupManifest_File{})
 		if err != nil {
 			return err
 		}
@@ -743,7 +747,11 @@ func DebugDumpMetadataSST(
 		k := iter.UnsafeKey()
 		switch {
 		case bytes.Equal(k.Key, []byte(sstBackupKey)):
-			info, err := pbBytesToJSON(iter.UnsafeValue(), &backuppb.BackupManifest{})
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			info, err := pbBytesToJSON(v, &backuppb.BackupManifest{})
 			if err != nil {
 				return err
 			}
@@ -757,11 +765,13 @@ func DebugDumpMetadataSST(
 				return err
 			}
 			var desc json.JSON
-			if v := iter.UnsafeValue(); len(v) > 0 {
+			if v, err := iter.UnsafeValue(); err == nil && len(v) > 0 {
 				desc, err = pbBytesToJSON(v, &descpb.Descriptor{})
 				if err != nil {
 					return err
 				}
+			} else if err != nil {
+				return err
 			}
 			if err := out(k.String(), fmt.Sprintf("desc %d @ %v", id, k.Timestamp), desc); err != nil {
 				return err
@@ -784,11 +794,13 @@ func DebugDumpMetadataSST(
 				return err
 			}
 			var id uint64
-			if v := iter.UnsafeValue(); len(v) > 0 {
+			if v, err := iter.UnsafeValue(); err == nil && len(v) > 0 {
 				_, id, err = encoding.DecodeUvarintAscending(v)
 				if err != nil {
 					return err
 				}
+			} else if err != nil {
+				return err
 			}
 			mapping := fmt.Sprintf("name db %d / schema %d / %q @ %v -> %d", db, sc, name, k.Timestamp, id)
 			if err := out(k.String(), mapping, nil); err != nil {
@@ -809,7 +821,11 @@ func DebugDumpMetadataSST(
 			if err != nil {
 				return err
 			}
-			s, err := pbBytesToJSON(iter.UnsafeValue(), &stats.TableStatisticProto{})
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			s, err := pbBytesToJSON(v, &stats.TableStatisticProto{})
 			if err != nil {
 				return err
 			}
@@ -822,7 +838,11 @@ func DebugDumpMetadataSST(
 			if err != nil {
 				return err
 			}
-			i, err := pbBytesToJSON(iter.UnsafeValue(), &descpb.TenantInfo{})
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			i, err := pbBytesToJSON(v, &descpb.TenantInfo{})
 			if err != nil {
 				return err
 			}
@@ -831,7 +851,11 @@ func DebugDumpMetadataSST(
 			}
 
 		default:
-			if err := out(k.String(), "unknown", json.FromString(fmt.Sprintf("%q", iter.UnsafeValue()))); err != nil {
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			if err := out(k.String(), "unknown", json.FromString(fmt.Sprintf("%q", v))); err != nil {
 				return err
 			}
 		}
@@ -884,7 +908,11 @@ func NewBackupMetadata(
 		return nil, errors.Errorf("metadata SST does not contain backup manifest")
 	}
 
-	if err := protoutil.Unmarshal(iter.UnsafeValue(), &sstManifest); err != nil {
+	v, err := iter.UnsafeValue()
+	if err != nil {
+		return nil, err
+	}
+	if err := protoutil.Unmarshal(v, &sstManifest); err != nil {
 		return nil, err
 	}
 
@@ -1028,7 +1056,12 @@ func (fi *FileIterator) Next(file *backuppb.BackupManifest_File) bool {
 		fi.err = err
 		return false
 	}
-	err = protoutil.Unmarshal(fi.mergedIterator.UnsafeValue(), file)
+	v, err := fi.mergedIterator.UnsafeValue()
+	if err != nil {
+		fi.err = err
+		return false
+	}
+	err = protoutil.Unmarshal(v, file)
 	if err != nil {
 		fi.err = err
 		return false
@@ -1327,7 +1360,13 @@ func (bi *bytesIter) next(resWrapper *resultWrapper) bool {
 	resWrapper.key.Key = key.Key.Clone()
 	resWrapper.key.Timestamp = key.Timestamp
 	resWrapper.value = resWrapper.value[:0]
-	resWrapper.value = append(resWrapper.value, bi.Iter.UnsafeValue()...)
+	v, err := bi.Iter.UnsafeValue()
+	if err != nil {
+		bi.close()
+		bi.iterError = err
+		return false
+	}
+	resWrapper.value = append(resWrapper.value, v...)
 
 	if bi.useMVCCNext {
 		bi.Iter.NextKey()

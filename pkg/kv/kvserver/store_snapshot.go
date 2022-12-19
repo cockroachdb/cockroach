@@ -585,7 +585,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					if err != nil {
 						return err
 					}
-					if err = b.PutEngineKey(key, iter.UnsafeValue()); err != nil {
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					if err = b.PutEngineKey(key, v); err != nil {
 						return err
 					}
 					if err = maybeFlushBatch(); err != nil {

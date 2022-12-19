@@ -169,7 +169,7 @@ func (i *MVCCIterator) UnsafeRawMVCCKey() []byte {
 }
 
 // UnsafeValue is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) UnsafeValue() []byte {
+func (i *MVCCIterator) UnsafeValue() ([]byte, error) {
 	return i.i.UnsafeValue()
 }
 
@@ -381,7 +381,7 @@ func (i *EngineIterator) UnsafeEngineKey() (storage.EngineKey, error) {
 }
 
 // UnsafeValue is part of the storage.EngineIterator interface.
-func (i *EngineIterator) UnsafeValue() []byte {
+func (i *EngineIterator) UnsafeValue() ([]byte, error) {
 	return i.i.UnsafeValue()
 }
 
