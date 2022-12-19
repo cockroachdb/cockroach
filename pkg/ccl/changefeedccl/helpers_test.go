@@ -640,7 +640,7 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 			}
 			knobs.DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs).FeedKnobs.ModifyTimestamps = func(t *hlc.Timestamp) {
-				t.Add(offset, 0)
+				*t = t.Add(offset, 0)
 				t.Synthetic = true
 			}
 		}
