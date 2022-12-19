@@ -10,11 +10,11 @@ DROP TYPE defaultdb.typ
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
   {descriptorId: 104, owner: root}
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: 2, userName: admin}
+  {descriptorId: 104, privileges: "2", userName: admin}
 - [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: 512, userName: public}
+  {descriptorId: 104, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: 2, userName: root}
+  {descriptorId: 104, privileges: "2", userName: root}
 - [[EnumType:{DescID: 104}, ABSENT], PUBLIC]
   {arrayTypeId: 105, typeId: 104}
 - [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC]
@@ -26,11 +26,11 @@ DROP TYPE defaultdb.typ
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: 2, userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin}
 - [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: 512, userName: public}
+  {descriptorId: 105, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: 2, userName: root}
+  {descriptorId: 105, privileges: "2", userName: root}
 - [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC]
   {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]

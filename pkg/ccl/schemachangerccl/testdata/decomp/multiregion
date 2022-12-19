@@ -35,17 +35,17 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2048
+    privileges: "2048"
     userName: public
   Status: PUBLIC
 - DatabaseRegionConfig:
@@ -311,12 +311,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:
@@ -573,12 +573,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:
@@ -940,12 +940,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:
@@ -977,17 +977,17 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
-    privileges: 512
+    privileges: "512"
     userName: public
   Status: PUBLIC
 - ObjectParent:
