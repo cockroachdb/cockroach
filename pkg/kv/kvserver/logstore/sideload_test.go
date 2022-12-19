@@ -83,7 +83,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	t.Run("Mem", func(t *testing.T) {
-		eng := storage.NewDefaultInMemForTesting()
+		eng := NewLogEngine(storage.NewDefaultInMemForTesting())
 		defer eng.Close()
 		testSideloadingSideloadedStorage(t, eng)
 	})
@@ -96,7 +96,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 	})
 }
 
-func newTestingSideloadStorage(t *testing.T, eng storage.Engine) *DiskSideloadStorage {
+func newTestingSideloadStorage(t *testing.T, eng Engine) *DiskSideloadStorage {
 	st := cluster.MakeTestingClusterSettings()
 	ss, err := NewDiskSideloadStorage(
 		st, 1, 2, filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
@@ -106,7 +106,7 @@ func newTestingSideloadStorage(t *testing.T, eng storage.Engine) *DiskSideloadSt
 	return ss
 }
 
-func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
+func testSideloadingSideloadedStorage(t *testing.T, eng Engine) {
 	ctx := context.Background()
 	ss := newTestingSideloadStorage(t, eng)
 
@@ -438,7 +438,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			context.Background(), tracing.NewTracer(), "test-recording")
 		defer getRecAndFinish()
 
-		eng := storage.NewDefaultInMemForTesting()
+		eng := NewLogEngine(storage.NewDefaultInMemForTesting())
 		defer eng.Close()
 		ss := newTestingSideloadStorage(t, eng)
 		ec := raftentry.NewCache(1024) // large enough
@@ -545,7 +545,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			eng := storage.NewDefaultInMemForTesting()
+			eng := NewLogEngine(storage.NewDefaultInMemForTesting())
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(t, eng)
 			postEnts, numSideloaded, size, nonSideloadedSize, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
@@ -581,7 +581,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	}
 }
 
-func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine) {
+func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), Engine) {
 	dir, cleanup := testutils.TempDir(t)
 	eng, err := storage.Open(
 		ctx,
@@ -590,5 +590,5 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cleanup, eng
+	return cleanup, NewLogEngine(eng)
 }

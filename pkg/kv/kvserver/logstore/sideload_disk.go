@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -39,7 +38,7 @@ type DiskSideloadStorage struct {
 	limiter    *rate.Limiter
 	dir        string
 	dirCreated bool
-	eng        storage.Engine
+	eng        Engine
 }
 
 func deprecatedSideloadedPath(
@@ -68,7 +67,7 @@ func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 	)
 }
 
-func exists(eng storage.Engine, path string) (bool, error) {
+func exists(eng Engine, path string) (bool, error) {
 	_, err := eng.Stat(path)
 	if err == nil {
 		return true, nil
@@ -87,7 +86,7 @@ func NewDiskSideloadStorage(
 	replicaID roachpb.ReplicaID,
 	baseDir string,
 	limiter *rate.Limiter,
-	eng storage.Engine,
+	eng Engine,
 ) (*DiskSideloadStorage, error) {
 	path := deprecatedSideloadedPath(baseDir, rangeID, replicaID)
 	newPath := sideloadedPath(baseDir, rangeID)

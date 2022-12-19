@@ -227,7 +227,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		replicaID,
 		ssBase,
 		r.store.limiters.BulkIOWriteRate,
-		r.store.engine,
+		r.store.logEngine,
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}

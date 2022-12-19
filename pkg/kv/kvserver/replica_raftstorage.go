@@ -99,7 +99,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.Engine(), r.RangeID,
+	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.logEngine, r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
@@ -123,7 +123,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 		return r.mu.lastTerm, nil
 	}
 	ctx := r.AnnotateCtx(context.TODO())
-	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.Engine(), r.RangeID,
+	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.logEngine, r.RangeID,
 		r.store.raftEntryCache, i)
 }
 

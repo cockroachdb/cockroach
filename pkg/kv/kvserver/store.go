@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -740,10 +741,14 @@ increasing over time (see Replica.setTombstoneKey).
 NOTE: to the best of our knowledge, we don't rely on this invariant.
 */
 type Store struct {
-	Ident                *roachpb.StoreIdent // pointer to catch access before Start() is called
-	cfg                  StoreConfig
-	db                   *kv.DB
-	engine               storage.Engine          // The underlying key-value store
+	Ident *roachpb.StoreIdent // pointer to catch access before Start() is called
+	cfg   StoreConfig
+	db    *kv.DB
+
+	// TODO(sep-raft-log): use an interface with a marker method here.
+	engine    storage.Engine  // StateMachine access
+	logEngine logstore.Engine // LogStore access
+
 	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator            allocatorimpl.Allocator // Makes allocation decisions
 	replRankings         *ReplicaRankings
@@ -1221,9 +1226,11 @@ func NewStore(
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		cfg:                               cfg,
-		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:                            eng,
+		cfg:    cfg,
+		db:     cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine: eng,
+		// TODO(sep-raft-log): allow for this to be a separate engine (experimentally).
+		logEngine:                         logstore.NewLogEngine(eng),
 		nodeDesc:                          nodeDesc,
 		metrics:                           newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender:                          cfg.ClosedTimestampSender,

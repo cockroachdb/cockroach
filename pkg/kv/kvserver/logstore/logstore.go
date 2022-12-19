@@ -94,7 +94,7 @@ type Metrics struct {
 // LogStore is a stub of a separated Raft log storage.
 type LogStore struct {
 	RangeID     roachpb.RangeID
-	Engine      storage.Engine
+	Engine      Engine
 	Sideload    SideloadStorage
 	StateLoader StateLoader
 	EntryCache  *raftentry.Cache
@@ -275,7 +275,7 @@ func logAppend(
 func LoadTerm(
 	ctx context.Context,
 	rsl StateLoader,
-	eng storage.Engine,
+	eng Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index uint64,
@@ -346,7 +346,7 @@ func LoadTerm(
 func LoadEntries(
 	ctx context.Context,
 	rsl StateLoader,
-	eng storage.Engine,
+	eng Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
