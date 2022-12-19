@@ -955,7 +955,7 @@ func (i *intentInterleavingIter) UnsafeKey() MVCCKey {
 	return i.iterKey
 }
 
-func (i *intentInterleavingIter) UnsafeValue() []byte {
+func (i *intentInterleavingIter) UnsafeValue() ([]byte, error) {
 	if i.isCurAtIntentIter() {
 		return i.intentIter.UnsafeValue()
 	}
@@ -1297,7 +1297,10 @@ func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
 }
 
 func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
-	value := i.UnsafeValue()
+	value, err := i.UnsafeValue()
+	if err != nil {
+		return err
+	}
 	return protoutil.Unmarshal(value, msg)
 }
 

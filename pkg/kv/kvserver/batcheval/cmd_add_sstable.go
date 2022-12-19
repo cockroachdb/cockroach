@@ -411,12 +411,16 @@ func EvalAddSSTable(
 				break
 			}
 			key := pointIter.UnsafeKey()
+			v, err := pointIter.UnsafeValue()
+			if err != nil {
+				return result.Result{}, err
+			}
 			if key.Timestamp.IsEmpty() {
-				if err := readWriter.PutUnversioned(key.Key, pointIter.UnsafeValue()); err != nil {
+				if err := readWriter.PutUnversioned(key.Key, v); err != nil {
 					return result.Result{}, err
 				}
 			} else {
-				if err := readWriter.PutRawMVCC(key, pointIter.UnsafeValue()); err != nil {
+				if err := readWriter.PutRawMVCC(key, v); err != nil {
 					return result.Result{}, err
 				}
 			}
@@ -518,7 +522,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			return errors.AssertionFailedf("SST has unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, sstTimestamp, key.Key)
 		}
-		value, err := storage.DecodeMVCCValue(iter.UnsafeValue())
+		value, err := storage.DecodeMVCCValueAndErr(iter.UnsafeValue())
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"SST contains invalid value for key %s", key)

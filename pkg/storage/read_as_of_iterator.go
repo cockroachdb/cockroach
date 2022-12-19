@@ -105,7 +105,7 @@ func (f *ReadAsOfIterator) UnsafeKey() MVCCKey {
 
 // UnsafeValue returns the current value as a byte slice, but the memory is
 // invalidated on the next call to {NextKey,Seek}.
-func (f *ReadAsOfIterator) UnsafeValue() []byte {
+func (f *ReadAsOfIterator) UnsafeValue() ([]byte, error) {
 	return f.iter.UnsafeValue()
 }
 
@@ -177,19 +177,26 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 		if key := f.iter.UnsafeKey(); f.asOf.Less(key.Timestamp) {
 			// Skip keys above the asOf timestamp.
 			f.iter.Next()
-		} else if isTombstone, err := EncodedMVCCValueIsTombstone(f.iter.UnsafeValue()); err != nil {
-			f.valid, f.err = false, err
-			return
-		} else if isTombstone {
-			// Skip to the next MVCC key if we find a point tombstone.
-			f.iter.NextKey()
-		} else if key.Timestamp.LessEq(f.newestRangeTombstone) {
-			// The latest range key, as of system time, shadows the latest point key.
-			// This key is therefore deleted as of system time.
-			f.iter.NextKey()
 		} else {
-			// On a valid key that potentially shadows range key(s).
-			return
+			v, err := f.iter.UnsafeValue()
+			if err != nil {
+				f.valid, f.err = false, err
+				return
+			}
+			if isTombstone, err := EncodedMVCCValueIsTombstone(v); err != nil {
+				f.valid, f.err = false, err
+				return
+			} else if isTombstone {
+				// Skip to the next MVCC key if we find a point tombstone.
+				f.iter.NextKey()
+			} else if key.Timestamp.LessEq(f.newestRangeTombstone) {
+				// The latest range key, as of system time, shadows the latest point key.
+				// This key is therefore deleted as of system time.
+				f.iter.NextKey()
+			} else {
+				// On a valid key that potentially shadows range key(s).
+				return
+			}
 		}
 	}
 }
@@ -232,7 +239,7 @@ func (f *ReadAsOfIterator) assertInvariants() error {
 	}
 
 	// Tombstones should not be emitted.
-	if isTombstone, err := EncodedMVCCValueIsTombstone(f.UnsafeValue()); err != nil {
+	if _, isTombstone, err := f.MVCCValueLenAndIsTombstone(); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid value")
 	} else if isTombstone {
 		return errors.AssertionFailedf("emitted tombstone for key %s", key)

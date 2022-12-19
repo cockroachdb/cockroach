@@ -1435,7 +1435,10 @@ func cmdExport(e *evalCtx) error {
 		}
 		if hasPoint {
 			key := iter.UnsafeKey()
-			value := iter.UnsafeValue()
+			value, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
 			mvccValue, err := storage.DecodeMVCCValue(value)
 			if err != nil {
 				return err
@@ -1883,15 +1886,21 @@ func printIter(e *evalCtx) {
 		e.t.Fatalf("valid iterator at %s without point nor range keys", e.iter.UnsafeKey())
 	}
 
+	checkValErr := func(v []byte, err error) []byte {
+		if err != nil {
+			e.Fatalf("%v", err)
+		}
+		return v
+	}
 	if hasPoint {
 		if !e.iter.UnsafeKey().IsValue() {
 			meta := enginepb.MVCCMetadata{}
-			if err := protoutil.Unmarshal(e.iter.UnsafeValue(), &meta); err != nil {
+			if err := protoutil.Unmarshal(checkValErr(e.iter.UnsafeValue()), &meta); err != nil {
 				e.Fatalf("%v", err)
 			}
 			e.results.buf.Printf(" %s=%+v", e.iter.UnsafeKey(), &meta)
 		} else {
-			value, err := storage.DecodeMVCCValue(e.iter.UnsafeValue())
+			value, err := storage.DecodeMVCCValue(checkValErr(e.iter.UnsafeValue()))
 			if err != nil {
 				e.Fatalf("%v", err)
 			}
