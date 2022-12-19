@@ -47,7 +47,7 @@ type decommissioningNodeMap struct {
 // and target for a single range that has an extant replica on a node targeted
 // for decommission.
 type decommissionRangeCheckResult struct {
-	desc         *roachpb.RangeDescriptor
+	desc         roachpb.RangeDescriptor
 	action       string
 	tracingSpans tracingpb.Recording
 	err          error
@@ -300,7 +300,7 @@ func evaluateRangeCheckResult(
 	rErr error,
 ) (passed bool, _ decommissionRangeCheckResult) {
 	checkResult := decommissionRangeCheckResult{
-		desc:   desc,
+		desc:   *desc,
 		action: action.String(),
 		err:    rErr,
 	}
