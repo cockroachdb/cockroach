@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -248,8 +249,15 @@ func registerClusterToCluster(r registry.Registry) {
 			t.Status("starting replication stream")
 			streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
 				setup.dst.name, setup.src.name, setup.src.pgURL)
-			var ingestionJobID, streamProducerJobID int
-			setup.dst.sql.QueryRow(t, streamReplStmt).Scan(&ingestionJobID, &streamProducerJobID)
+			setup.dst.sql.Exec(t, streamReplStmt)
+
+			// Get the ingestion job id.
+			var tenantInfoBytes []byte
+			var tenantInfo descpb.TenantInfo
+			setup.dst.sql.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
+				setup.dst.name).Scan(&tenantInfoBytes)
+			require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
+			ingestionJobID := int(tenantInfo.TenantReplicationJobID)
 
 			// TODO(ssd): The job doesn't record the initial
 			// statement time, so we can't correctly measure the

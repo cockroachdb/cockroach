@@ -46,6 +46,7 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/streamingccl",
+        "//pkg/ccl/streamingccl/replicationutils",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

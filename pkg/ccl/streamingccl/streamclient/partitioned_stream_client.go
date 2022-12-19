@@ -41,7 +41,7 @@ type partitionedStreamClient struct {
 	}
 }
 
-func newPartitionedStreamClient(
+func NewPartitionedStreamClient(
 	ctx context.Context, remote *url.URL,
 ) (*partitionedStreamClient, error) {
 

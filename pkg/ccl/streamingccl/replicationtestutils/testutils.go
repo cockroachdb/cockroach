@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -151,9 +154,9 @@ func (c *TenantStreamingClusters) Cutover(
 }
 
 // StartStreamReplication producer job ID and ingestion job ID.
-func (c *TenantStreamingClusters) StartStreamReplication() (int, int) {
-	var ingestionJobID, streamProducerJobID int
-	c.DestSysSQL.QueryRow(c.T, c.BuildCreateTenantQuery()).Scan(&ingestionJobID, &streamProducerJobID)
+func (c *TenantStreamingClusters) StartStreamReplication(ctx context.Context) (int, int) {
+	c.DestSysSQL.Exec(c.T, c.BuildCreateTenantQuery())
+	streamProducerJobID, ingestionJobID := GetStreamJobIds(c.T, ctx, c.DestSysSQL, c.Args.DestTenantName)
 	return streamProducerJobID, ingestionJobID
 }
 
@@ -351,4 +354,21 @@ func ConfigureClusterSettings(setting map[string]string) []string {
 func RunningStatus(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
 	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
 	return p.RunningStatus
+}
+
+// GetStreamJobIds returns the jod ids of the producer and ingestion jobs.
+func GetStreamJobIds(
+	t *testing.T,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	destTenantName roachpb.TenantName,
+) (producer int, consumer int) {
+	var tenantInfoBytes []byte
+	var tenantInfo descpb.TenantInfo
+	sqlRunner.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
+		destTenantName).Scan(&tenantInfoBytes)
+	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
+
+	stats := replicationutils.TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(t, ctx, sqlRunner, int(tenantInfo.TenantReplicationJobID))
+	return int(stats.IngestionDetails.StreamID), int(tenantInfo.TenantReplicationJobID)
 }

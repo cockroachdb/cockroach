@@ -179,6 +179,23 @@ func GetStreamIngestionStats(
 	return stats, client.Close(ctx)
 }
 
+func TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(
+	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
+) *streampb.StreamIngestionStats {
+	var payloadBytes []byte
+	var progressBytes []byte
+	var payload jobspb.Payload
+	var progress jobspb.Progress
+	sqlRunner.QueryRow(t, "SELECT payload, progress FROM system.jobs WHERE id = $1",
+		ingestionJobID).Scan(&payloadBytes, &progressBytes)
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	details := payload.GetStreamIngestion()
+	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, *details, progress)
+	require.NoError(t, err)
+	return stats
+}
+
 func TestingGetStreamIngestionStatsFromReplicationJob(
 	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
 ) *streampb.StreamIngestionStats {
