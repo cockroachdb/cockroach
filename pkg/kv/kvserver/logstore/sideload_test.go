@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 

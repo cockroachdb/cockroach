@@ -299,7 +299,7 @@ go_library(
         "@com_github_nightlyone_lockfile//:lockfile",
         "@com_github_nytimes_gziphandler//:gziphandler",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@io_etcd_go_etcd_raft_v3//:raft",
+        "@io_etcd_go_raft_v3//:raft",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
