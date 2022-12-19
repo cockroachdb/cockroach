@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -417,7 +418,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 		return nil
 	}
 
-	if err := IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
+	if err := kvstorage.IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
 		t.Fatal(err)
 	}
 	placeholder := seenT{
@@ -452,7 +453,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := ReadStoreIdent(ctx, store.Engine()); err != nil {
+	if _, err := kvstorage.ReadStoreIdent(ctx, store.Engine()); err != nil {
 		t.Fatalf("unable to read store ident: %+v", err)
 	}
 
@@ -499,7 +500,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 
 	// Can't init as haven't bootstrapped.
 	err = store.Start(ctx, stopper)
-	require.ErrorIs(t, err, &NotBootstrappedError{})
+	require.ErrorIs(t, err, &kvstorage.NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.
 	err = InitEngine(ctx, eng, testIdent)

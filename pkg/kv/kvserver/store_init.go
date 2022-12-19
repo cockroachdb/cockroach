@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -39,11 +40,11 @@ const FirstStoreID = roachpb.StoreID(1)
 // already have been persisted to it. Returns an error if this is not
 // the case.
 func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
-	exIdent, err := ReadStoreIdent(ctx, eng)
+	exIdent, err := kvstorage.ReadStoreIdent(ctx, eng)
 	if err == nil {
 		return errors.Errorf("engine %s is already initialized with ident %s", eng, exIdent.String())
 	}
-	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
+	if !errors.HasType(err, (*kvstorage.NotBootstrappedError)(nil)) {
 		return err
 	}
 

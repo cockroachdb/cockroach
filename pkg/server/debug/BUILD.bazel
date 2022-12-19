@@ -14,8 +14,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
+        "//pkg/kv/kvserver/kvstorage",
         "//pkg/roachpb",
         "//pkg/server/debug/goroutineui",
         "//pkg/server/debug/pprofui",
