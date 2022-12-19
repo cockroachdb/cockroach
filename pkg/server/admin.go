@@ -1917,9 +1917,7 @@ func (s *adminServer) SetUIData(
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
 		rowsAffected, err := ie.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
-			sessiondata.InternalExecutorOverride{
-				User: username.RootUserName(),
-			},
+			sessiondata.RootUserSessionDataOverride,
 			query, makeUIKey(userName, key), val)
 		if err != nil {
 			return nil, serverError(ctx, err)

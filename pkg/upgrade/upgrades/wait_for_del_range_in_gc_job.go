@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,9 +123,7 @@ func collectJobIDsFromQuery(
 	ctx context.Context, ie sqlutil.InternalExecutor, opName string, query string,
 ) (jobIDs []jobspb.JobID, retErr error) {
 	it, err := ie.QueryIteratorEx(ctx, opName, nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query)
+		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return nil, err
 	}

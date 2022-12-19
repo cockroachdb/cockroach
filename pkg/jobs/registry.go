@@ -699,7 +699,7 @@ func (r *Registry) GetJobInfo(
 ) ([]byte, bool, error) {
 	row, err := r.ex.QueryRowEx(
 		ctx, "job-info-get", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 ORDER BY written DESC LIMIT 1",
 		jobID, infoKey,
 	)
@@ -732,7 +732,7 @@ func (r *Registry) IterateJobInfo(
 	// TODO(dt): verify this predicate hits the index.
 	rows, err := r.ex.QueryIteratorEx(
 		ctx, "job-info-iter", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		`SELECT info_key, value 
 		FROM system.job_info 
 		WHERE job_id = $1 AND substring(info_key for $2) = $3 
@@ -789,7 +789,7 @@ func (r *Registry) WriteJobInfo(
 	// First clear out any older revisions of this info.
 	_, err := r.ex.ExecEx(
 		ctx, "job-info-write", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		"DELETE FROM system.job_info WHERE job_id = $1 AND info_key = $2",
 		jobID, infoKey,
 	)
@@ -800,7 +800,7 @@ func (r *Registry) WriteJobInfo(
 	// Write the new info, using the same transaction.
 	_, err = r.ex.ExecEx(
 		ctx, "job-info-write", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.job_info (job_id, info_key, written, value) VALUES ($1, $2, now(), $3)`,
 		jobID, infoKey, value,
 	)

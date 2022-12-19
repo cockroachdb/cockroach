@@ -314,7 +314,7 @@ func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) (tree
 		ctx,
 		"get-all-db-names",
 		nil,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		`SELECT database_name FROM [SHOW DATABASES]`,
 	)
 	if err != nil {
