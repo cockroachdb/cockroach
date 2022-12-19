@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -537,13 +538,6 @@ func (r *Replica) applySnapshot(
 		}
 	}()
 
-	if raft.IsEmptyHardState(hs) {
-		// Raft will never provide an empty HardState if it is providing a
-		// nonempty snapshot because we discard snapshots that do not increase
-		// the commit index.
-		log.Fatalf(ctx, "found empty HardState for non-empty Snapshot %+v", nonemptySnap)
-	}
-
 	var stats struct {
 		// Time to process subsumed replicas.
 		subsumedReplicas time.Time
@@ -570,42 +564,17 @@ func (r *Replica) applySnapshot(
 	)
 	defer logStoreSSTWriter.Close()
 
-	// Clearing the unreplicated state.
-	//
-	// NB: We do not expect to see range keys in the unreplicated state, so
-	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
-	unreplicatedStart := unreplicatedPrefixKey
-	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err = logStoreSSTWriter.ClearRawRange(
-		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
+	if err := kvstorage.PrepareLogStoreSnapshotSST(ctx,
+		storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+		hs,
+		nonemptySnap.Metadata,
+		&logStoreSSTWriter,
 	); err != nil {
-		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
-	}
-
-	// Update HardState.
-	if err := r.raftMu.stateLoader.SetHardState(ctx, &logStoreSSTWriter, hs); err != nil {
-		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
-	}
-	// We've cleared all the raft state above, so we are forced to write the
-	// RaftReplicaID again here.
-	if err := r.raftMu.stateLoader.SetRaftReplicaID(
-		ctx, &logStoreSSTWriter, r.replicaID); err != nil {
-		return errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
+		return err
 	}
 
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
-
-	if err := r.raftMu.stateLoader.SetRaftTruncatedState(
-		ctx, &logStoreSSTWriter,
-		&roachpb.RaftTruncatedState{
-			Index: nonemptySnap.Metadata.Index,
-			Term:  nonemptySnap.Metadata.Term,
-		},
-	); err != nil {
-		return errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
-	}
 
 	if err := logStoreSSTWriter.Finish(); err != nil {
 		return err

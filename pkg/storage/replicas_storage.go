@@ -533,6 +533,8 @@ const (
 )
 
 // FullReplicaID is a fully-qualified replica ID.
+//
+// TODO(sep-raft-log): move this to kvstorage.
 type FullReplicaID struct {
 	// RangeID is the id of the range.
 	RangeID roachpb.RangeID
