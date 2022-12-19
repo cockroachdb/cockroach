@@ -191,7 +191,7 @@ func TestStoreRebalancer(t *testing.T) {
 			allocator := s.MakeAllocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
-			controller := op.NewController(changer, allocator, storePool, testSettings)
+			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
 			src := newStoreRebalancerControl(start, testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
 			s.TickClock(start)
 
@@ -294,7 +294,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			allocator := s.MakeAllocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
-			controller := op.NewController(changer, allocator, storePool, testSettings)
+			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
 			src := newStoreRebalancerControl(start, testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
 			s.TickClock(start)
 

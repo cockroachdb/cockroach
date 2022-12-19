@@ -15,7 +15,6 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/util/log",
     ],
 )
 

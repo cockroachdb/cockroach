@@ -11,23 +11,24 @@
 package metrics
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// MetricsTracker gathers metrics and prints those to stdout.
-type MetricsTracker struct {
+// ClusterMetricsTracker gathers metrics and prints those to stdout.
+type ClusterMetricsTracker struct {
 	writers []*csv.Writer
 }
 
-// NewMetricsTracker returns a MetricsTracker object that prints tick metrics to
+// NewClusterMetricsTracker returns a MetricsTracker object that prints tick metrics to
 // Stdout, in a CSV format.
-func NewMetricsTracker(writers ...io.Writer) *MetricsTracker {
-	m := &MetricsTracker{}
+func NewClusterMetricsTracker(writers ...io.Writer) *ClusterMetricsTracker {
+	m := &ClusterMetricsTracker{}
 
 	for _, w := range writers {
 		m.writers = append(m.writers, csv.NewWriter(w))
@@ -47,7 +48,7 @@ func NewMetricsTracker(writers ...io.Writer) *MetricsTracker {
 	return m
 }
 
-func (m *MetricsTracker) write(record []string) error {
+func (m *ClusterMetricsTracker) write(record []string) error {
 	for _, w := range m.writers {
 		if err := w.Write(record); err != nil {
 			return err
@@ -64,20 +65,30 @@ func max(a, b int64) int64 {
 	return b
 }
 
-// Tick collects cluster information and prints it.
-func (m *MetricsTracker) Tick(tick time.Time, state state.State) error {
-	usage := state.ClusterUsageInfo()
+// Listen implements the StoreMetricsListener interface.
+func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) {
 	var (
-		totalWriteKeys  int64
-		totalWriteBytes int64
-		totalReadKeys   int64
-		totalReadBytes  int64
-		maxWriteKeys    int64
-		maxWriteBytes   int64
-		maxReadKeys     int64
-		maxReadBytes    int64
+		tick                 time.Time
+		totalRangeCount      int64
+		totalLeaseTransfers  int64
+		totalRebalances      int64
+		totalBytesRebalanced int64
+		totalWriteKeys       int64
+		totalWriteBytes      int64
+		totalReadKeys        int64
+		totalReadBytes       int64
+		maxWriteKeys         int64
+		maxWriteBytes        int64
+		maxReadKeys          int64
+		maxReadBytes         int64
 	)
-	for _, u := range usage.StoreUsage {
+
+	for _, u := range sms {
+		tick = u.Tick
+		totalRangeCount += u.Leases
+		totalLeaseTransfers += u.LeaseTransfers
+		totalRebalances += u.Rebalances
+		totalBytesRebalanced += u.RebalanceRcvdBytes
 		totalWriteKeys += u.WriteKeys
 		totalWriteBytes += u.WriteBytes
 		totalReadKeys += u.ReadKeys
@@ -90,7 +101,7 @@ func (m *MetricsTracker) Tick(tick time.Time, state state.State) error {
 
 	record := make([]string, 0, 10)
 	record = append(record, tick.String())
-	record = append(record, fmt.Sprintf("%d", state.RangeCount()))
+	record = append(record, fmt.Sprintf("%d", totalRangeCount))
 	record = append(record, fmt.Sprintf("%d", totalWriteKeys))
 	record = append(record, fmt.Sprintf("%d", totalWriteBytes))
 	record = append(record, fmt.Sprintf("%d", totalReadKeys))
@@ -99,12 +110,11 @@ func (m *MetricsTracker) Tick(tick time.Time, state state.State) error {
 	record = append(record, fmt.Sprintf("%d", maxWriteBytes))
 	record = append(record, fmt.Sprintf("%d", maxReadKeys))
 	record = append(record, fmt.Sprintf("%d", maxReadBytes))
-	record = append(record, fmt.Sprintf("%d", usage.LeaseTransfers))
-	record = append(record, fmt.Sprintf("%d", usage.Rebalances))
-	record = append(record, fmt.Sprintf("%d", usage.BytesRebalanced))
+	record = append(record, fmt.Sprintf("%d", totalLeaseTransfers))
+	record = append(record, fmt.Sprintf("%d", totalRebalances))
+	record = append(record, fmt.Sprintf("%d", totalBytesRebalanced))
 
 	if err := m.write(record); err != nil {
-		return err
+		log.Errorf(ctx, "Error writing cluster metrics %s", err.Error())
 	}
-	return nil
 }
