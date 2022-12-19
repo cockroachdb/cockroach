@@ -240,11 +240,11 @@ test_suite(
 	}
 
 	if err := w.Flush(); err != nil {
-               log.Fatal(err)
-       }
-       if err := f.Close(); err != nil {
-               log.Fatal(err)
-       }
+		log.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // excludeReallyEnormousTargets removes the really enormous test targets
