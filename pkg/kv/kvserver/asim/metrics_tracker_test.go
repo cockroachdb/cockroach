@@ -110,7 +110,7 @@ func Example_workload() {
 	end := start.Add(200 * time.Second)
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
-	rwg[0] = testCreateWorkloadGenerator(start, 10, 10000)
+	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, start, 10, 10000)
 	m := asim.NewMetricsTracker(os.Stdout)
 
 	changer := state.NewReplicaChanger()
