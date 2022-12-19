@@ -1318,7 +1318,7 @@ which inserts it into the
 where it eventually ends up being [proposed to `raftGroup`](https://github.com/cockroachdb/cockroach/blob/8de3463817826d431bf0c6433ad3eb81bf06c9b3/pkg/kv/kvserver/replica_proposal_buf.go#L692).
 
 This `raftGroup` is a handle for the Raft consensus cluster, implemented by the
-[Etcd Raft library](https://github.com/coreos/etcd/tree/master/raft). We treat
+[Etcd Raft library](https://github.com/etcd-io/etcd/). We treat
 this as a black box that we submit command proposals to, and it deals with
 running them through Raft consensus, committing them to the replicated command
 log, and applying them onto every replica.
