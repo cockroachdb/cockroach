@@ -3141,7 +3141,7 @@ func (s *Store) AllocatorCheckRange(
 ) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, tracingpb.Recording, error) {
 	var spanOptions []tracing.SpanOption
 	if collectTraces {
-		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingStructured))
+		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingVerbose))
 	}
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
