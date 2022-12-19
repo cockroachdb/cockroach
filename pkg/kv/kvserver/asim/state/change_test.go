@@ -28,6 +28,7 @@ func testMakeReplicaChange(add, remove StoreID, rangeKey Key) func(s State) Chan
 		change.Add = add
 		change.Remove = remove
 		change.RangeID = rng.RangeID()
+		change.Author = 1
 		return &change
 	}
 }
@@ -39,6 +40,7 @@ func testMakeRangeSplitChange(splitKey Key) func(s State) Change {
 		change.Wait = testingDelay
 		change.RangeID = rng.RangeID()
 		change.SplitKey = splitKey
+		change.Author = 1
 		return &change
 	}
 }
