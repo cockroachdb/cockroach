@@ -313,6 +313,7 @@ go_test(
         "split_queue_test.go",
         "split_trigger_helper_test.go",
         "stats_test.go",
+        "store_gossip_test.go",
         "store_pool_test.go",
         "store_raft_test.go",
         "store_rebalancer_test.go",

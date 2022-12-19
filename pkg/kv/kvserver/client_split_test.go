@@ -2312,14 +2312,16 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue:                      true,
-				DisableSplitQueue:                      true,
-				DisableScanner:                         true,
-				GossipWhenCapacityDeltaExceedsFraction: 0.5, // 50% for testing
-				// We can't properly test how frequently changes in the number of ranges
-				// trigger the store to gossip its capacities if we have to worry about
-				// changes in the number of leases also triggering store gossip.
-				DisableLeaseCapacityGossip: true,
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
+				DisableScanner:    true,
+				GossipTestingKnobs: kvserver.StoreGossipTestingKnobs{
+					OverrideGossipWhenCapacityDeltaExceedsFraction: 0.5, // 50% for testing
+					// We can't properly test how frequently changes in the number of ranges
+					// trigger the store to gossip its capacities if we have to worry about
+					// changes in the number of leases also triggering store gossip.
+					DisableLeaseCapacityGossip: true,
+				},
 			},
 		},
 	})
