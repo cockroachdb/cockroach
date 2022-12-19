@@ -576,11 +576,11 @@ func (r *Replica) applySnapshot(
 		log.Infof(ctx, "applied %s (%s)", inSnap, logDetails)
 	}(timeutil.Now())
 
-	unreplicatedSSTFile := &storage.MemFile{}
-	unreplicatedSST := storage.MakeIngestionSSTWriter(
-		ctx, r.ClusterSettings(), unreplicatedSSTFile,
+	logstoreSSTMemFile := &storage.MemFile{}
+	logStoreSSTWriter := storage.MakeIngestionSSTWriter(
+		ctx, r.ClusterSettings(), logstoreSSTMemFile,
 	)
-	defer unreplicatedSST.Close()
+	defer logStoreSSTWriter.Close()
 
 	// Clearing the unreplicated state.
 	//
@@ -589,20 +589,20 @@ func (r *Replica) applySnapshot(
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err = unreplicatedSST.ClearRawRange(
+	if err = logStoreSSTWriter.ClearRawRange(
 		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 
 	// Update HardState.
-	if err := r.raftMu.stateLoader.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
+	if err := r.raftMu.stateLoader.SetHardState(ctx, &logStoreSSTWriter, hs); err != nil {
 		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
 	if err := r.raftMu.stateLoader.SetRaftReplicaID(
-		ctx, &unreplicatedSST, r.replicaID); err != nil {
+		ctx, &logStoreSSTWriter, r.replicaID); err != nil {
 		return errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
 	}
 
@@ -610,7 +610,7 @@ func (r *Replica) applySnapshot(
 	r.store.raftEntryCache.Drop(r.RangeID)
 
 	if err := r.raftMu.stateLoader.SetRaftTruncatedState(
-		ctx, &unreplicatedSST,
+		ctx, &logStoreSSTWriter,
 		&roachpb.RaftTruncatedState{
 			Index: nonemptySnap.Metadata.Index,
 			Term:  nonemptySnap.Metadata.Term,
@@ -619,13 +619,13 @@ func (r *Replica) applySnapshot(
 		return errors.Wrapf(err, "unable to write TruncatedState to unreplicated SST writer")
 	}
 
-	if err := unreplicatedSST.Finish(); err != nil {
+	if err := logStoreSSTWriter.Finish(); err != nil {
 		return err
 	}
-	if unreplicatedSST.DataSize > 0 {
-		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
+	if logStoreSSTWriter.DataSize > 0 {
+		// TODO(itsbilal): Write to SST directly in logStoreSSTWriter rather than
 		// buffering in a MemFile first.
-		if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+		if err := inSnap.SSTStorageScratch.WriteSST(ctx, logstoreSSTMemFile.Data()); err != nil {
 			return err
 		}
 	}
