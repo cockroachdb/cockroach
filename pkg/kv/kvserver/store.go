@@ -1939,6 +1939,7 @@ func loadFullReplicaIDsFromDisk(
 // store. It reconciles inconsistent state and runs validation checks.
 //
 // TODO(sep-raft-log): also load *uninitialized* Replicas.
+// TOOD(sep-raft-log): consider a callback-visitor pattern here.
 func loadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (*engineReplicas, error) {
 	ident, err := ReadStoreIdent(ctx, eng)
 	if err != nil {
