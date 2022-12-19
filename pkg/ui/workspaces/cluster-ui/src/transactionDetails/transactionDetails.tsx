@@ -197,16 +197,12 @@ export class TransactionDetails extends React.Component<
   componentDidMount(): void {
     this.refreshData("");
     this.props.refreshUserSQLRoles();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-    }
+    this.props.refreshNodes();
   }
 
   componentDidUpdate(prevProps: TransactionDetailsProps): void {
     this.getTransactionStateInfo(prevProps.transactionFingerprintId);
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-    }
+    this.props.refreshNodes();
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
