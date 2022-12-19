@@ -187,7 +187,10 @@ func (c *tenantStreamingClusters) cutover(
 	producerJobID, ingestionJobID int, cutoverTime time.Time,
 ) {
 	// Cut over the ingestion job and the job will stop eventually.
-	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, c.args.destTenantName, cutoverTime)
+	var cutoverOutput time.Time
+	c.destSysSQL.QueryRow(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.args.destTenantName, cutoverTime).Scan(&cutoverOutput)
+	require.Equal(c.t, cutoverTime.UnixMicro(), cutoverOutput.UnixMicro())
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 }
@@ -901,7 +904,10 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	var cutoverTime time.Time
 	alternateSrcSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 
-	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, c.args.destTenantName, cutoverTime)
+	var cutoverOutput time.Time
+	c.destSysSQL.QueryRow(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.args.destTenantName, cutoverTime).Scan(&cutoverOutput)
+	require.Equal(c.t, cutoverTime, cutoverOutput)
 	jobutils.WaitForJobToSucceed(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
 	// The destroyed address should have been removed from the topology
@@ -948,7 +954,10 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	// Destroy the source cluster
 	c.srcCleanup()
 
-	c.destSysSQL.Exec(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, c.args.destTenantName, cutoverTime.AsOfSystemTime())
+	var cutoverOutput time.Time
+	c.destSysSQL.QueryRow(c.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.args.destTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverOutput)
+	require.Equal(c.t, cutoverTime.GoTime().UnixMicro(), cutoverOutput.UnixMicro())
 
 	// Resume ingestion.
 	c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
