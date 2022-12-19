@@ -281,7 +281,7 @@ func TestRelocateRangeOp(t *testing.T) {
 			changer := state.NewReplicaChanger()
 			allocator := s.MakeAllocator(state.StoreID(1))
 			storePool := s.StorePool(state.StoreID(1))
-			controller := NewController(changer, allocator, storePool,  settings, 1 /* storeID */)
+			controller := NewController(changer, allocator, storePool, settings, 1 /* storeID */)
 
 			// Transfer the lease to store 1 for all ranges.
 			for i := 2; i < 4; i++ {
