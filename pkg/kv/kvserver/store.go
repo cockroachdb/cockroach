@@ -762,19 +762,7 @@ type Store struct {
 	sstSnapshotStorage SSTSnapshotStorage
 	protectedtsReader  spanconfig.ProtectedTSReader
 	ctSender           *sidetransport.Sender
-
-	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
-	// changes to range and leaseholder counts, after which the store
-	// descriptor will be re-gossiped earlier than the normal periodic
-	// gossip interval. Updated atomically.
-	gossipRangeCountdown int32
-	gossipLeaseCountdown int32
-	// gossipQueriesPerSecondVal and gossipWritesPerSecond serve similar
-	// purposes, but simply record the most recently gossiped value so that we
-	// can tell if a newly measured value differs by enough to justify
-	// re-gossiping the store.
-	gossipQueriesPerSecondVal syncutil.AtomicFloat64
-	gossipWritesPerSecondVal  syncutil.AtomicFloat64
+	storeGossip        *StoreGossip
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -956,13 +944,6 @@ type Store struct {
 	// reactively, i.e. will refresh on each tick loop iteration only.
 	ioThresholds *ioThresholds
 
-	// cachedCapacity caches information on store capacity to prevent
-	// expensive recomputations in case leases or replicas are rapidly
-	// rebalancing.
-	cachedCapacity struct {
-		syncutil.Mutex
-		roachpb.StoreCapacity
-	}
 	ioThreshold struct {
 		syncutil.Mutex
 		t *admissionpb.IOThreshold // never nil
@@ -1005,8 +986,8 @@ type StoreConfig struct {
 	DefaultSpanConfig    roachpb.SpanConfig
 	Settings             *cluster.Settings
 	Clock                *hlc.Clock
-	DB                   *kv.DB
 	Gossip               *gossip.Gossip
+	DB                   *kv.DB
 	NodeLiveness         *liveness.NodeLiveness
 	StorePool            *storepool.StorePool
 	Transport            *RaftTransport
@@ -1172,8 +1153,8 @@ func (sc *StoreConfig) SetDefaults() {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
 
-	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
-		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
+	if sc.TestingKnobs.GossipTestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
+		sc.TestingKnobs.GossipTestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
 	}
 }
 
@@ -1249,6 +1230,7 @@ func NewStore(
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
 	}
+
 	s.replRankings = NewReplicaRankings()
 
 	s.replRankingsByTenant = NewReplicaRankingsMap()
@@ -1384,6 +1366,8 @@ func NewStore(
 		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
+		s.storeGossip = NewStoreGossip(cfg.Gossip, s, cfg.TestingKnobs.GossipTestingKnobs)
+
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
@@ -2181,6 +2165,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.cfg.Gossip != nil {
+		s.storeGossip.stopper = stopper
+		s.storeGossip.Ident = *s.Ident
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
@@ -2527,6 +2513,11 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 	})
 }
 
+// GossipStore broadcasts the store on the gossip network.
+func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
+	return s.storeGossip.GossipStore(ctx, useCached)
+}
+
 // UpdateIOThreshold updates the IOThreshold reported in the StoreDescriptor.
 func (s *Store) UpdateIOThreshold(ioThreshold *admissionpb.IOThreshold) {
 	s.ioThreshold.Lock()
@@ -2864,9 +2855,7 @@ func (s *Store) Properties() roachpb.StoreProperties {
 // internal statistics about its replicas.
 func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapacity, error) {
 	if useCached {
-		s.cachedCapacity.Lock()
-		capacity := s.cachedCapacity.StoreCapacity
-		s.cachedCapacity.Unlock()
+		capacity := s.storeGossip.CachedCapacity()
 		if capacity != (roachpb.StoreCapacity{}) {
 			return capacity, nil
 		}
@@ -2935,13 +2924,11 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	}
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
-	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
+	s.storeGossip.RecordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
 	s.replRankings.Update(rankingsAccumulator)
 	s.replRankingsByTenant.Update(rankingsByTenantAccumulator)
 
-	s.cachedCapacity.Lock()
-	s.cachedCapacity.StoreCapacity = capacity
-	s.cachedCapacity.Unlock()
+	s.storeGossip.UpdateCachedCapacity(capacity)
 
 	return capacity, nil
 }
@@ -3183,7 +3170,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.AverageReadBytesPerSecond.Update(averageReadBytesPerSecond)
 	s.metrics.AverageWriteBytesPerSecond.Update(averageWriteBytesPerSecond)
 	s.metrics.AverageCPUNanosPerSecond.Update(averageCPUNanosPerSecond)
-	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
+	s.storeGossip.RecordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
