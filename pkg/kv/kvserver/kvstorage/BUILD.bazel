@@ -3,9 +3,24 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "kvstorage",
-    srcs = ["doc.go"],
+    srcs = [
+        "doc.go",
+        "init.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/logstore",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/util/buildutil",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 get_x_data(name = "get_x_data")
