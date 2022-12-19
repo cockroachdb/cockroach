@@ -8997,7 +8997,7 @@ def go_deps():
             "gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
             "gazelle:go_proto_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
             "gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-            "gazelle:proto_import_prefix etcd/raft/v3",
+            "gazelle:proto_import_prefix raft/v3",
         ],
         build_file_proto_mode = "default",
         importpath = "go.etcd.io/raft/v3",

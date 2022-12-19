@@ -285,7 +285,7 @@ func dumpBuildDirectivesForRepo(repoName string) {
 	} else if repoName == "io_etcd_go_raft_v3" {
 		directives = append(directives, protoDirectives...)
 		directives = append(directives,
-			"gazelle:proto_import_prefix etcd/raft/v3")
+			"gazelle:proto_import_prefix raft/v3")
 
 	} else if repoName == "io_opentelemetry_go_proto_otlp" {
 		directives = append(directives,
