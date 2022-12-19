@@ -532,8 +532,11 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	var cutoverTime time.Time
 	alternateSrcSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, cutoverTime)
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	// The destroyed address should have been removed from the topology
@@ -580,8 +583,11 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	// Destroy the source cluster
 	c.SrcCleanup()
 
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, cutoverTime.AsOfSystemTime())
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.Args.DestTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(c.T, cutoverTime, cutoverOutput)
 
 	// Resume ingestion.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))

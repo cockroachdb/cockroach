@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -147,8 +148,11 @@ func (c *TenantStreamingClusters) Cutover(
 	producerJobID, ingestionJobID int, cutoverTime time.Time,
 ) {
 	// Cut over the ingestion job and the job will stop eventually.
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, cutoverTime)
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
+	cutoverOutput := DecimalTimeToHLC(c.T, cutoverStr)
+	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 }
@@ -354,6 +358,15 @@ func ConfigureClusterSettings(setting map[string]string) []string {
 func RunningStatus(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
 	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
 	return p.RunningStatus
+}
+
+func DecimalTimeToHLC(t *testing.T, s string) hlc.Timestamp {
+	t.Helper()
+	d, _, err := apd.NewFromString(s)
+	require.NoError(t, err)
+	ts, err := hlc.DecimalToHLC(d)
+	require.NoError(t, err)
+	return ts
 }
 
 // GetStreamJobIds returns the jod ids of the producer and ingestion jobs.

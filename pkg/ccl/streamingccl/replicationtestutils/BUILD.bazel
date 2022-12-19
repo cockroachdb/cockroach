@@ -69,6 +69,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
