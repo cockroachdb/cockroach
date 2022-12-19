@@ -12,7 +12,6 @@ go_library(
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",
-        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

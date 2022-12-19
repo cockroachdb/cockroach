@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -318,13 +317,6 @@ func (ep *DummyEvalPlanner) Mon() *mon.BytesMonitor {
 // ExecutorConfig is part of the Planner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
-}
-
-// SynthesizePrivilegeDescriptor is part of the Planner interface.
-func (*DummyEvalPlanner) SynthesizePrivilegeDescriptor(
-	ctx context.Context, privilegeObjectPath string, privilegeObjectType privilege.ObjectType,
-) (privileges *catpb.PrivilegeDescriptor, retErr error) {
-	return nil, nil
 }
 
 var _ eval.Planner = &DummyEvalPlanner{}
