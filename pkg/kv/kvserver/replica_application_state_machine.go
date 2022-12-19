@@ -106,7 +106,7 @@ func replicaApplyTestingFilters(
 			}
 		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
 			var newRej int
-			newRej, newFR.ForcedError = filter(args)
+			newRej, newFR.ForcedError = feFilter(args)
 			if fr.Rejection == 0 {
 				newFR.Rejection = kvserverbase.ProposalRejectionType(newRej)
 			}
