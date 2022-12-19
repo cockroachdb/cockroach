@@ -186,6 +186,7 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/allocator/storepool:storepool_test",
     "//pkg/kv/kvserver/apply:apply_test",
     "//pkg/kv/kvserver/asim/gossip:gossip_test",
+    "//pkg/kv/kvserver/asim/metrics:metrics_test",
     "//pkg/kv/kvserver/asim/op:op_test",
     "//pkg/kv/kvserver/asim/queue:queue_test",
     "//pkg/kv/kvserver/asim/state:state_test",
@@ -1158,8 +1159,14 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/apply:apply",
     "//pkg/kv/kvserver/apply:apply_test",
     "//pkg/kv/kvserver/asim/config:config",
+<<<<<<< HEAD
     "//pkg/kv/kvserver/asim/gossip:gossip",
     "//pkg/kv/kvserver/asim/gossip:gossip_test",
+||||||| parent of 95ef40d5ff (asim: move metrics_*.go into metrics pkg)
+=======
+    "//pkg/kv/kvserver/asim/metrics:metrics",
+    "//pkg/kv/kvserver/asim/metrics:metrics_test",
+>>>>>>> 95ef40d5ff (asim: move metrics_*.go into metrics pkg)
     "//pkg/kv/kvserver/asim/op:op",
     "//pkg/kv/kvserver/asim/op:op_test",
     "//pkg/kv/kvserver/asim/queue:queue",
@@ -2550,7 +2557,12 @@ GET_X_DATA_TARGETS = [
     "//pkg/kv/kvserver/apply:get_x_data",
     "//pkg/kv/kvserver/asim:get_x_data",
     "//pkg/kv/kvserver/asim/config:get_x_data",
+<<<<<<< HEAD
     "//pkg/kv/kvserver/asim/gossip:get_x_data",
+||||||| parent of 95ef40d5ff (asim: move metrics_*.go into metrics pkg)
+=======
+    "//pkg/kv/kvserver/asim/metrics:get_x_data",
+>>>>>>> 95ef40d5ff (asim: move metrics_*.go into metrics pkg)
     "//pkg/kv/kvserver/asim/op:get_x_data",
     "//pkg/kv/kvserver/asim/queue:get_x_data",
     "//pkg/kv/kvserver/asim/state:get_x_data",
