@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -57,7 +56,7 @@ type Simulator struct {
 
 	state    state.State
 	changer  state.Changer
-	exchange gossip.Exchange
+	gossip   gossip.Gossip
 	shuffler func(n int, swap func(i, j int))
 
 	metrics *MetricsTracker
@@ -69,7 +68,6 @@ func NewSimulator(
 	interval, bgInterval time.Duration,
 	wgs []workload.Generator,
 	initialState state.State,
-	exchange gossip.Exchange,
 	changer state.Changer,
 	settings *config.SimulationSettings,
 	metrics *MetricsTracker,
@@ -139,7 +137,7 @@ func NewSimulator(
 		controllers: controllers,
 		srs:         srs,
 		pacers:      pacers,
-		exchange:    exchange,
+		gossip:      gossip.NewGossip(initialState, settings),
 		metrics:     metrics,
 		shuffler:    state.NewShuffler(settings.Seed),
 	}
@@ -175,6 +173,9 @@ func (s *Simulator) RunSim(ctx context.Context) {
 			break
 		}
 
+		// Update the store clocks with the current tick time.
+		s.tickStoreClocks(tick)
+
 		// Update the state with generated load.
 		s.tickWorkload(ctx, tick)
 
@@ -182,10 +183,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		s.tickStateChanges(ctx, tick)
 
 		// Update each allocators view of the stores in the cluster.
-		s.tickStateExchange(tick)
-
-		// Update the store clocks with the current tick time.
-		s.tickStoreClocks(tick)
+		s.tickGossip(ctx, tick)
 
 		// Done with config and load updates, the state is ready for the
 		// allocators.
@@ -236,19 +234,11 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
 	}
 }
 
-// tickStateExchange puts the current tick store descriptors into the state
+// tickGossip puts the current tick store descriptors into the state
 // exchange. It then updates the exchanged descriptors for each store's store
 // pool.
-func (s *Simulator) tickStateExchange(tick time.Time) {
-	if s.bgLastTick.Add(s.bgInterval).After(tick) {
-		return
-	}
-	storeDescriptors := s.state.StoreDescriptors()
-	s.exchange.Put(tick, storeDescriptors...)
-	for _, store := range s.state.Stores() {
-		storeID := store.StoreID()
-		s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
-	}
+func (s *Simulator) tickGossip(ctx context.Context, tick time.Time) {
+	s.gossip.Tick(ctx, tick, s.state)
 }
 
 func (s *Simulator) tickStoreClocks(tick time.Time) {

@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,11 +38,10 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = testCreateWorkloadGenerator(start, 1, 10)
 	m := asim.NewMetricsTracker(os.Stdout)
-	exchange := gossip.NewFixedDelayExhange(start, settings.StateExchangeInterval, settings.StateExchangeDelay)
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, exchange, changer, settings, m)
+	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, changer, settings, m)
 	sim.RunSim(ctx)
 }
 
@@ -68,16 +66,6 @@ func testCreateWorkloadGenerator(start time.Time, stores int, keySpan int64) wor
 	)
 }
 
-// testPreGossipStores populates the state exchange with the existing state.
-// This is done at the time given, which should be before the test start time
-// minus the gossip delay and interval. This alleviates a cold start, where the
-// allocator for each store does not have information to make a decision for
-// the ranges it holds leases for.
-func testPreGossipStores(s state.State, exchange gossip.Exchange, at time.Time) {
-	storeDescriptors := s.StoreDescriptors()
-	exchange.Put(at, storeDescriptors...)
-}
-
 // TestAllocatorSimulatorSpeed tests that the simulation runs at a rate of at
 // least 1.67 simulated minutes per wall clock second (1:100) for a 32 node
 // cluster, with 32000 replicas. The workload is generating 16000 keys per
@@ -97,7 +85,6 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	end := start.Add(5 * time.Minute)
 	bgInterval := 10 * time.Second
 	interval := 2 * time.Second
-	preGossipStart := start.Add(-settings.StateExchangeInterval - settings.StateExchangeDelay)
 
 	stores := 32
 	replsPerRange := 3
@@ -113,7 +100,6 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	sample := func() int64 {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
-		exchange := gossip.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
 		changer := state.NewReplicaChanger()
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
@@ -130,8 +116,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 		}
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
-		testPreGossipStores(s, exchange, preGossipStart)
-		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, exchange, changer, settings, m)
+		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, changer, settings, m)
 
 		startTime := timeutil.Now()
 		sim.RunSim(ctx)
@@ -170,7 +155,6 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	end := start.Add(15 * time.Minute)
 	bgInterval := 10 * time.Second
 	interval := 2 * time.Second
-	preGossipStart := start.Add(-settings.StateExchangeInterval - settings.StateExchangeDelay)
 
 	stores := 7
 	replsPerRange := 3
@@ -188,7 +172,6 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
-		exchange := gossip.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
 		changer := state.NewReplicaChanger()
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
@@ -205,12 +188,17 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 		}
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
-		testPreGossipStores(s, exchange, preGossipStart)
-		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, exchange, changer, settings, m)
+		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, changer, settings, m)
 
 		ctx := context.Background()
 		sim.RunSim(ctx)
-		descs := s.StoreDescriptors()
+
+		storeRefs := s.Stores()
+		storeIDs := make([]state.StoreID, len(storeRefs))
+		for i, store := range storeRefs {
+			storeIDs[i] = store.StoreID()
+		}
+		descs := s.StoreDescriptors(false /* cached */, storeIDs...)
 
 		if run == 0 {
 			refRun = descs
