@@ -172,11 +172,13 @@ func (s *state) Stores() []Store {
 
 // StoreDescriptors returns the descriptors for all stores that exist in
 // this state.
-func (s *state) StoreDescriptors() []roachpb.StoreDescriptor {
+func (s *state) StoreDescriptors(storeIDs ...StoreID) []roachpb.StoreDescriptor {
 	storeDescriptors := []roachpb.StoreDescriptor{}
-	for _, store := range s.Stores() {
-		s.updateStoreCapacity(store.StoreID())
-		storeDescriptors = append(storeDescriptors, store.Descriptor())
+	for _, storeID := range storeIDs {
+		if store, ok := s.Store(storeID); ok {
+			s.updateStoreCapacity(storeID)
+			storeDescriptors = append(storeDescriptors, store.Descriptor())
+		}
 	}
 	return storeDescriptors
 }
@@ -721,7 +723,12 @@ func (s *state) TickClock(tick time.Time) {
 func (s *state) UpdateStorePool(
 	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetail,
 ) {
-	s.stores[storeID].storepool.DetailsMu.StoreDetails = storeDescriptors
+	for gossipStoreID, detail := range storeDescriptors {
+		copiedDetail := *detail
+		copiedDesc := *detail.Desc
+		copiedDetail.Desc = &copiedDesc
+		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+	}
 }
 
 // NextReplicasFn returns a function, that when called will return the current

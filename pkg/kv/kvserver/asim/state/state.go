@@ -55,7 +55,7 @@ type State interface {
 	// incremental descriptor computation, when replicas, leases or load is
 	// changed.
 	// StoreDescriptors returns the descriptors for the StoreIDs given.
-	StoreDescriptors() []roachpb.StoreDescriptor
+	StoreDescriptors(...StoreID) []roachpb.StoreDescriptor
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
