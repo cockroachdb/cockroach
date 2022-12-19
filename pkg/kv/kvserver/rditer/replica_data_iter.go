@@ -353,7 +353,7 @@ func (ri *ReplicaMVCCDataIterator) RangeBounds() roachpb.Span {
 
 // UnsafeValue returns the same value as Value, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
-func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
+func (ri *ReplicaMVCCDataIterator) UnsafeValue() ([]byte, error) {
 	return ri.it.UnsafeValue()
 }
 

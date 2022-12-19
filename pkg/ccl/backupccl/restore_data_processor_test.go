@@ -91,7 +91,7 @@ func slurpSSTablesLatestKey(
 				break
 			}
 			key := sst.UnsafeKey()
-			value, err := storage.DecodeMVCCValue(sst.UnsafeValue())
+			value, err := storage.DecodeMVCCValueAndErr(sst.UnsafeValue())
 			if err != nil {
 				t.Fatal(err)
 			}

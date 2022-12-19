@@ -514,7 +514,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 					var err error
 					for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 						_, _ = iter.UnsafeEngineKey()
-						_ = iter.UnsafeValue()
+						_, _ = iter.UnsafeValue()
 					}
 					return err
 				})

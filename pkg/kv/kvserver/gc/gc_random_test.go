@@ -645,7 +645,9 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 				result = append(result, fmt.Sprintf("R:%s", rk.RangeKey.String()))
 			}
 		}
-		result = append(result, fmt.Sprintf("P:%s(%d)", it.UnsafeKey().String(), len(it.UnsafeValue())))
+		v, err := it.UnsafeValue()
+		require.NoError(t, err)
+		result = append(result, fmt.Sprintf("P:%s(%d)", it.UnsafeKey().String(), len(v)))
 		it.Next()
 	}
 

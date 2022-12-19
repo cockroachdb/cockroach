@@ -1793,7 +1793,11 @@ func getExpectedSnapshotSizeBytes(
 					if err != nil {
 						return err
 					}
-					if err := b.PutEngineKey(unsafeKey, iter.UnsafeValue()); err != nil {
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					if err := b.PutEngineKey(unsafeKey, v); err != nil {
 						return err
 					}
 

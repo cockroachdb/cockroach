@@ -907,7 +907,11 @@ func createSplitSSTable(
 		}
 		last = append(last[:0], key.Key...)
 
-		if err := w.Put(key, iter.UnsafeValue()); err != nil {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := w.Put(key, v); err != nil {
 			return nil, nil, err
 		}
 

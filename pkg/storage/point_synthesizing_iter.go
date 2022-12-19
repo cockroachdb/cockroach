@@ -698,21 +698,21 @@ func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 
 // Value implements MVCCIterator.
 func (i *PointSynthesizingIter) Value() []byte {
-	if v := i.UnsafeValue(); v != nil {
+	if v, _ := i.UnsafeValue(); v != nil {
 		return append([]byte{}, v...)
 	}
 	return nil
 }
 
 // UnsafeValue implements MVCCIterator.
-func (i *PointSynthesizingIter) UnsafeValue() []byte {
+func (i *PointSynthesizingIter) UnsafeValue() ([]byte, error) {
 	if i.atPoint {
 		return i.iter.UnsafeValue()
 	}
 	if i.rangeKeysIdx >= len(i.rangeKeys) || i.rangeKeysIdx < 0 {
-		return nil
+		return nil, nil
 	}
-	return i.rangeKeys[i.rangeKeysIdx].Value
+	return i.rangeKeys[i.rangeKeysIdx].Value, nil
 }
 
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
@@ -742,7 +742,11 @@ func (i *PointSynthesizingIter) ValueLen() int {
 
 // ValueProto implements MVCCIterator.
 func (i *PointSynthesizingIter) ValueProto(msg protoutil.Message) error {
-	return protoutil.Unmarshal(i.UnsafeValue(), msg)
+	v, err := i.UnsafeValue()
+	if err != nil {
+		return err
+	}
+	return protoutil.Unmarshal(v, msg)
 }
 
 // HasPointAndRange implements MVCCIterator.

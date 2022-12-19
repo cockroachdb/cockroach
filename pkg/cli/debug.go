@@ -476,7 +476,11 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 					if err != nil {
 						return err
 					}
-					kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					kvserver.PrintEngineKeyValue(key, v)
 					results++
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()

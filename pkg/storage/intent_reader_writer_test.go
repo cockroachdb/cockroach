@@ -71,8 +71,13 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			fmt.Fprintf(b, "error: %s\n", err.Error())
 			break
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			fmt.Fprintf(b, "error: %s\n", err.Error())
+			break
+		}
 		var meta enginepb.MVCCMetadata
-		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		if err := protoutil.Unmarshal(v, &meta); err != nil {
 			fmt.Fprintf(b, "error: %s\n", err.Error())
 			break
 		}
@@ -91,6 +96,7 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			}
 			fmt.Fprintf(b, "k: %s, v: %s\n", printLTKey(k), printMeta(&meta))
 		}
+		//lint:ignore SA4006 this value of err is never used
 		valid, err = iter.NextEngineKey()
 	}
 }

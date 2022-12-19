@@ -2203,7 +2203,8 @@ func fetchDescVersionModificationTime(
 			if tableID != uint64(dropColTblID) {
 				continue
 			}
-			unsafeValue := it.UnsafeValue()
+			unsafeValue, err := it.UnsafeValue()
+			require.NoError(t, err)
 			if unsafeValue == nil {
 				t.Fatal(errors.New(`value was dropped or truncated`))
 			}

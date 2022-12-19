@@ -1124,7 +1124,8 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	v3 := MVCCValue{Value: roachpb.MakeValueFromString("3")}
 	vx := MVCCValue{Value: roachpb.MakeValueFromString("x")}
 
-	decodeValue := func(encoded []byte) MVCCValue {
+	decodeValue := func(encoded []byte, err error) MVCCValue {
+		require.NoError(t, err)
 		value, err := DecodeMVCCValue(encoded)
 		require.NoError(t, err)
 		return value

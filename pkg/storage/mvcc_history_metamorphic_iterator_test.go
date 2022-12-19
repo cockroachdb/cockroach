@@ -316,7 +316,7 @@ func (m *metamorphicIterator) UnsafeKey() storage.MVCCKey {
 	return m.it.UnsafeKey()
 }
 
-func (m *metamorphicIterator) UnsafeValue() []byte {
+func (m *metamorphicIterator) UnsafeValue() ([]byte, error) {
 	return m.it.UnsafeValue()
 }
 

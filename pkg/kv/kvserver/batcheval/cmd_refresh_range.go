@@ -100,7 +100,11 @@ func refreshRange(
 		if !key.IsValue() {
 			// Found an intent. Check whether it is owned by this transaction.
 			// If so, proceed with iteration. Otherwise, return an error.
-			if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			if err := protoutil.Unmarshal(v, &meta); err != nil {
 				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", key)
 			}
 			if meta.IsInline() {
