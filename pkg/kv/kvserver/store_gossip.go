@@ -31,11 +31,28 @@ import (
 )
 
 const (
-	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the
+	// DefaultGossipWhenCapacityDeltaExceedsFraction specifies the fraction from the
 	// last gossiped store capacity values which need be exceeded before the
 	// store will gossip immediately without waiting for the periodic gossip
 	// interval.
-	defaultGossipWhenCapacityDeltaExceedsFraction = 0.05
+	DefaultGossipWhenCapacityDeltaExceedsFraction = 0.05
+
+	//GossipWhenLeaseCountDeltaExceeds specifies the absolute change from the
+	//last gossiped store capacity lease count which needs to be exceeded
+	//before the store will gossip immediately without waiting for the periodic
+	//gossip interval.
+	GossipWhenLeaseCountDeltaExceeds = 10
+
+	// GossipWhenRangeCountDeltaExceeds specifies the absolute change from the
+	// last gossiped store capacity range count which needs to be exceeded
+	// before the store will gossip immediately without waiting for the
+	// periodic gossip interval.
+	GossipWhenRangeCountDeltaExceeds = 10
+
+	//GossipWhenLoadDeltaExceedsFraction specifies the fraction from the last
+	//gossiped store capacity load which needs to be exceeded before the store
+	//will gossip immediately without waiting for the periodic gossip interval.
+	GossipWhenLoadDeltaExceedsFraction = 0.5
 
 	// systemDataGossipInterval is the interval at which range lease
 	// holders verify that the most recent system data is gossiped.
@@ -219,9 +236,9 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// interval was 60 seconds, such that gossiping semi-frequently on changes
 	// was required.
 	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
-	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 10))))
+	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, GossipWhenRangeCountDeltaExceeds))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction
-	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 10))))
+	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, GossipWhenLeaseCountDeltaExceeds))))
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, storeDesc.Capacity.QueriesPerSecond)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
 
@@ -290,8 +307,10 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 	}
 
 	const minAbsoluteChange = 100
-	updateForQPS := (newQPS < oldQPS*.5 || newQPS > oldQPS*1.5) && math.Abs(newQPS-oldQPS) > minAbsoluteChange
-	updateForWPS := (newWPS < oldWPS*.5 || newWPS > oldWPS*1.5) && math.Abs(newWPS-oldWPS) > minAbsoluteChange
+	updateForQPS := (newQPS < oldQPS*GossipWhenLoadDeltaExceedsFraction || newQPS > oldQPS*(1+GossipWhenLoadDeltaExceedsFraction)) &&
+		math.Abs(newQPS-oldQPS) > minAbsoluteChange
+	updateForWPS := (newWPS < oldWPS*GossipWhenLoadDeltaExceedsFraction || newWPS > oldWPS*(1+GossipWhenLoadDeltaExceedsFraction)) &&
+		math.Abs(newWPS-oldWPS) > minAbsoluteChange
 
 	if !updateForQPS && !updateForWPS {
 		return

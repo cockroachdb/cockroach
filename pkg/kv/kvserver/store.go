@@ -1173,7 +1173,7 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
-		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
+		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = DefaultGossipWhenCapacityDeltaExceedsFraction
 	}
 }
 
