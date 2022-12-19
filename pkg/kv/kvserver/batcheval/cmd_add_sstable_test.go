@@ -330,6 +330,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 3, "sst")},
 			expectErr:  &roachpb.WriteIntentError{},
 		},
+		"DisallowConflicts returns WriteIntentError below intent above range key": {
+			noConflict: true,
+			data:       kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
+			sst:        kvs{pointKV("b", 3, "sst")},
+			expectErr:  &roachpb.WriteIntentError{},
+		},
 		"DisallowConflicts ignores intents in span": { // inconsistent with blind writes
 			noConflict: true,
 			data:       kvs{pointKV("b", intentTS, "intent")},
@@ -419,6 +425,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			noShadow:  true,
 			data:      kvs{pointKV("a", intentTS, "intent")},
 			sst:       kvs{pointKV("a", 3, "sst")},
+			expectErr: &roachpb.WriteIntentError{},
+		},
+		"DisallowShadowing returns WriteIntentError below intent above range key": {
+			noShadow:  true,
+			data:      kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
+			sst:       kvs{pointKV("b", 3, "sst")},
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"DisallowShadowing ignores intents in span": { // inconsistent with blind writes
@@ -541,6 +553,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("a", intentTS, "intent")},
 			sst:           kvs{pointKV("a", 3, "sst")},
+			expectErr:     &roachpb.WriteIntentError{},
+		},
+		"DisallowShadowingBelow returns WriteIntentError below intent above range key": {
+			noShadowBelow: 5,
+			data:          kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
+			sst:           kvs{pointKV("b", 3, "sst")},
 			expectErr:     &roachpb.WriteIntentError{},
 		},
 		"DisallowShadowingBelow ignores intents in span": { // inconsistent with blind writes
