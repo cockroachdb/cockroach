@@ -34,7 +34,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 

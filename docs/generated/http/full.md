@@ -1246,7 +1246,7 @@ Support status: [reserved](#support-status)
 #### RaftState
 
 RaftState gives internal details about a Raft group's state.
-Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
+Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -1492,7 +1492,7 @@ Support status: [reserved](#support-status)
 #### RaftState
 
 RaftState gives internal details about a Raft group's state.
-Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
+Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -3710,7 +3710,7 @@ Support status: [reserved](#support-status)
 #### RaftState
 
 RaftState gives internal details about a Raft group's state.
-Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
+Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
