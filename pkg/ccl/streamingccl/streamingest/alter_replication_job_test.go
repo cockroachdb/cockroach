@@ -29,7 +29,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
-	producerJobID, ingestionJobID := c.startStreamReplication()
+	producerJobID, ingestionJobID := c.startStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))

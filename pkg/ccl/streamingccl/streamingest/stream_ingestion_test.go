@@ -190,8 +190,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
 	require.NoError(t, err)
 
-	var ingestionJobID, producerJobID int
-	require.NoError(t, conn.QueryRow(query).Scan(&ingestionJobID, &producerJobID))
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+	ingestionJobID := getStreamIngestionJobId(t, sqlDB, "30")
 
 	// Start the ingestion stream and wait for at least one AddSSTable to ensure the job is running.
 	allowResponse <- struct{}{}
