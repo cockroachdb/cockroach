@@ -344,10 +344,8 @@ export class StatementsPage extends React.Component<
 
     this.props.refreshUserSQLRoles();
     this.props.refreshNodes();
-    if (!this.props.isTenant) {
-      if (!this.props.hasViewActivityRedactedRole) {
-        this.props.refreshStatementDiagnosticsRequests();
-      }
+    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
+      this.props.refreshStatementDiagnosticsRequests();
     }
   }
 
@@ -386,10 +384,8 @@ export class StatementsPage extends React.Component<
   componentDidUpdate = (): void => {
     this.updateQueryParams();
     this.props.refreshNodes();
-    if (!this.props.isTenant) {
-      if (!this.props.hasViewActivityRedactedRole) {
-        this.props.refreshStatementDiagnosticsRequests();
-      }
+    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
+      this.props.refreshStatementDiagnosticsRequests();
     }
   };
 
