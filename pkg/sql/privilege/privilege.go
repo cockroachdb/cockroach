@@ -36,29 +36,34 @@ const (
 	DROP   Kind = 3
 	// DEPRECATEDGRANT is a placeholder to make sure that 4 is not reused.
 	// It was previously used for the GRANT privilege that has been replaced with the more granular Privilege.GrantOption.
-	DEPRECATEDGRANT          Kind = 4 // GRANT
-	SELECT                   Kind = 5
-	INSERT                   Kind = 6
-	DELETE                   Kind = 7
-	UPDATE                   Kind = 8
-	USAGE                    Kind = 9
-	ZONECONFIG               Kind = 10
-	CONNECT                  Kind = 11
-	RULE                     Kind = 12
-	MODIFYCLUSTERSETTING     Kind = 13
-	EXTERNALCONNECTION       Kind = 14
-	VIEWACTIVITY             Kind = 15
-	VIEWACTIVITYREDACTED     Kind = 16
-	VIEWCLUSTERSETTING       Kind = 17
-	CANCELQUERY              Kind = 18
-	NOSQLLOGIN               Kind = 19
-	EXECUTE                  Kind = 20
-	VIEWCLUSTERMETADATA      Kind = 21
-	VIEWDEBUG                Kind = 22
-	BACKUP                   Kind = 23
-	RESTORE                  Kind = 24
-	EXTERNALIOIMPLICITACCESS Kind = 25
-	CHANGEFEED               Kind = 26
+	DEPRECATEDGRANT Kind = 4 // GRANT
+	SELECT          Kind = 5
+	INSERT          Kind = 6
+	DELETE          Kind = 7
+	UPDATE          Kind = 8
+	USAGE           Kind = 9
+	ZONECONFIG      Kind = 10
+	CONNECT         Kind = 11
+	RULE            Kind = 12
+	EXECUTE         Kind = 20
+	CHANGEFEED      Kind = 26
+	// Add new descriptor-backed privileges here. At the time of writing, values
+	// from 13 to 19 and 21 to 25 are unclaimed, and can be used by
+	// descriptor-backed privileges that are added in the future.
+
+	MODIFYCLUSTERSETTING     Kind = 33
+	EXTERNALCONNECTION       Kind = 34
+	VIEWACTIVITY             Kind = 35
+	VIEWACTIVITYREDACTED     Kind = 36
+	VIEWCLUSTERSETTING       Kind = 37
+	CANCELQUERY              Kind = 38
+	NOSQLLOGIN               Kind = 39
+	VIEWCLUSTERMETADATA      Kind = 40
+	VIEWDEBUG                Kind = 41
+	BACKUP                   Kind = 42
+	RESTORE                  Kind = 43
+	EXTERNALIOIMPLICITACCESS Kind = 44
+	// Add new synthetic privileges here.
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
