@@ -154,7 +154,7 @@ var tenantNameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9---]{0,98}[a-z0-9])?$`)
 
 func (n TenantName) IsValid() error {
 	if !tenantNameRe.MatchString(string(n)) {
-		return errors.WithHint(errors.Newf("invalid tenant name"),
+		return errors.WithHint(errors.Newf("invalid tenant name: %q", n),
 			"Tenant names must start and end with a lowercase letter or digit, contain only lowercase letters, digits or hyphens, with a maximum of 100 characters.")
 	}
 	return nil
