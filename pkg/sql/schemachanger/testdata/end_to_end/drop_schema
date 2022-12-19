@@ -25,7 +25,7 @@ add synthetic descriptor #106:
      name: sc
      parentId: 104
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   +  state: DROP
      version: "1"
@@ -65,7 +65,7 @@ upsert descriptor #106
      id: 106
      modificationTime: {}
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  state: DROP
