@@ -428,8 +428,8 @@ func loadBackupSQLDescs(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
-	backupManifests, sz, err := backupinfo.LoadBackupManifests(ctx, mem, details.URIs,
-		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv)
+	backupManifests, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
+		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, details.EndTime)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
