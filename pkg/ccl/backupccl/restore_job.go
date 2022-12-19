@@ -1880,7 +1880,7 @@ func revalidateIndexes(
 				runner,
 				false, /* withFirstMutationPublic */
 				true,  /* gatherAllInvalid */
-				sessiondata.InternalExecutorOverride{},
+				sessiondata.NoSessionDataOverride,
 				execCfg.ProtectedTimestampManager,
 			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
@@ -1900,7 +1900,7 @@ func revalidateIndexes(
 				runner,
 				false, /* withFirstMutationPublic */
 				true,  /* gatherAllInvalid */
-				sessiondata.InternalExecutorOverride{},
+				sessiondata.NoSessionDataOverride,
 				execCfg.ProtectedTimestampManager,
 			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {

@@ -96,7 +96,7 @@ func LoadExternalConnection(
 	// privilege. We run the query as `node` since the user might not have
 	// `SELECT` on the system table.
 	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
 
 	if err != nil {
@@ -292,7 +292,7 @@ func (e *MutableExternalConnection) Create(
 	// since the user might not have `INSERT` on the system table.
 	createQuery := "INSERT INTO system.external_connections (%s) VALUES (%s) RETURNING connection_name"
 	row, retCols, err := ex.QueryRowExWithCols(ctx, "ExternalConnection.Create", txn,
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(createQuery, strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
 	)

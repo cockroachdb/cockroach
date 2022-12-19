@@ -59,7 +59,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(hash), nil
 			},
 			Info:       "Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.",
-			Volatility: volatility.Volatile,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -82,7 +82,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
 				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: volatility.Leakproof,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.Bytes}, {Name: "type", Typ: types.String}},
@@ -159,7 +159,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
 			},
 			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: volatility.Leakproof,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.Bytes}, {Name: "key", Typ: types.Bytes}, {Name: "type", Typ: types.String}},
