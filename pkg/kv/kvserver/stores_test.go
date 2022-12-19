@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func newStores(ambientCtx log.AmbientContext, clock *hlc.Clock) *Stores {
@@ -153,6 +155,8 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 			},
 		}
 
+		require.NoError(t,
+			logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
 		replica, err := newReplica(ctx, desc, store, replicaID)
 		if err != nil {
 			t.Fatalf("unexpected error when creating replica: %+v", err)

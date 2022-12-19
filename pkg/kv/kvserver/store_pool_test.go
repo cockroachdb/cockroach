@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -216,7 +217,11 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 		NextReplicaID: 1,
 	}
 	rg.AddReplica(1, 1, roachpb.VOTER_FULL)
-	replica, err := newReplica(ctx, &rg, store, 1)
+
+	const replicaID = 1
+	require.NoError(t,
+		logstore.NewStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
+	replica, err := newReplica(ctx, &rg, store, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)
 	}

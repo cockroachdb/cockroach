@@ -698,8 +698,8 @@ func (sp *Span) reset(
 			openChildren: h.childrenAlloc[:0],
 			goroutineID:  goroutineID,
 			recording: recordingState{
-				logs:             makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */),
-				structured:       makeSizeLimitedBuffer(maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
+				logs:             makeSizeLimitedBuffer[*tracingpb.LogRecord](maxLogBytesPerSpan, nil /* scratch */),
+				structured:       makeSizeLimitedBuffer[*tracingpb.StructuredRecord](maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
 				childrenMetadata: h.childrenMetadataAlloc,
 				finishedChildren: MakeTrace(tracingpb.RecordedSpan{}),
 			},

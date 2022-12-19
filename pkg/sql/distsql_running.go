@@ -282,7 +282,7 @@ type cancelFlowsCoordinator struct {
 	mu struct {
 		syncutil.Mutex
 		// deadFlowsByNode is a ring of pointers to deadFlowsOnNode objects.
-		deadFlowsByNode ring.Buffer
+		deadFlowsByNode ring.Buffer[*deadFlowsOnNode]
 	}
 	// workerWait should be used by canceling workers to block until there are
 	// some dead flows to cancel.
@@ -301,7 +301,7 @@ func (c *cancelFlowsCoordinator) getFlowsToCancel() (
 	if c.mu.deadFlowsByNode.Len() == 0 {
 		return nil, base.SQLInstanceID(0)
 	}
-	deadFlows := c.mu.deadFlowsByNode.GetFirst().(*deadFlowsOnNode)
+	deadFlows := c.mu.deadFlowsByNode.GetFirst()
 	c.mu.deadFlowsByNode.RemoveFirst()
 	req := &execinfrapb.CancelDeadFlowsRequest{
 		FlowIDs: deadFlows.ids,
@@ -322,7 +322,7 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(
 			// sufficiently fast.
 			found := false
 			for j := 0; j < c.mu.deadFlowsByNode.Len(); j++ {
-				deadFlows := c.mu.deadFlowsByNode.Get(j).(*deadFlowsOnNode)
+				deadFlows := c.mu.deadFlowsByNode.Get(j)
 				if sqlInstanceID == deadFlows.sqlInstanceID {
 					deadFlows.ids = append(deadFlows.ids, f.FlowID)
 					found = true
