@@ -235,6 +235,11 @@ message AutoStatsSettings {
   optional double fraction_stale_rows = 3;
 }
 
+message AutoPartialStatsSettings {
+  option (gogoproto.equal) = true;
+  // Enabled is
+}
+
 // InvertedIndexColumnKind is the kind of the inverted index on a column. The
 // reason this needs to be stored is that we need to be able to check that the
 // "opclass" passed into an inverted index declaration (for example,

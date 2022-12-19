@@ -53,6 +53,18 @@ const (
 	// AutoStatsFractionStaleTableSettingName is the name of the automatic stats
 	// collection fraction stale rows table setting.
 	AutoStatsFractionStaleTableSettingName = "sql_stats_automatic_collection_fraction_stale_rows"
+
+	// AutoPartialStatsEnabledSettingName is the name of the automatic partial stats collection
+	// enabled cluster setting
+	AutoPartialStatsEnabledSettingName = "sql.stats.automatic_partial_collection.enabled"
+
+	// AutoPartialStatsMinStaleSettingName is the name of the automatic partial stats
+	// collection min stale rows cluster setting
+	AutoPartialStatsMinStaleSettingName = "sql.stats.automatic_partial_collection.min_stale_rows"
+
+	// AutoPartialStatsFractionStaleSettingName is the name of the automatic partial
+	// stats collection fraction stale rows cluster setting
+	AutoPartialStatsFractionStaleSettingName = "sql.stats.automatic_partial_collection.fraction_stale_rows"
 )
 
 // AutoStatsCollectionEnabled indicates if automatic statistics collection is
