@@ -729,6 +729,9 @@ type TableDescriptor interface {
 	// AutoStatsCollectionEnabled indicates if automatic statistics collection is
 	// explicitly enabled or disabled for this table.
 	AutoStatsCollectionEnabled() catpb.AutoStatsCollectionStatus
+	// AutoPartialStatsCollectionEnabled indicates if automatic partial statistics
+	// collection is explicitly enabled or disabled for this table.
+	AutoPartialStatsCollectionEnabled() catpb.AutoPartialStatsCollectionStatus
 	// AutoStatsMinStaleRows indicates the setting of
 	// sql_stats_automatic_collection_min_stale_rows for this table.
 	// If ok is true, then the minStaleRows value is valid, otherwise this has not

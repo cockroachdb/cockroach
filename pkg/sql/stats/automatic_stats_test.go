@@ -77,7 +77,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */)
 
 	// There should not be any stats yet.
-	if err := checkStatsCount(ctx, cache, descA, 0 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descA, 0 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +86,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,7 +95,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +105,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +116,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descA, 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +125,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA, 2 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descA, 2 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -136,7 +136,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descRoleOptions.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descRoleOptions, 5 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descRoleOptions, 5 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -146,7 +146,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descLease.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -156,7 +156,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), descTableStats.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descTableStats, 0 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, descTableStats, 0 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -405,9 +405,9 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			stat := mostRecentAutomaticStat(stats)
+			stat := mostRecentAutomaticFullStat(stats)
 			if stat == nil {
-				return fmt.Errorf("no recent automatic statistic found")
+				return fmt.Errorf("no recent automatic full statistic found")
 			}
 			if !lessThan && stat.CreatedAt.After(curTime.Add(-1*expectedAge)) {
 				return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
@@ -479,7 +479,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkStatsCount(ctx, cache, table, 10 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, table, 10 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -511,7 +511,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -536,7 +536,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, table, 20 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -562,7 +562,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkStatsCount(ctx, cache, table, 30 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, table, 30 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -586,7 +586,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	refresher.maybeRefreshStats(
 		ctx, s.AppStopper(), table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, table, 10 /* expected */); err != nil {
+	if err := checkFullStatsCount(ctx, cache, table, 10 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -879,7 +879,7 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	}
 }
 
-func checkStatsCount(
+func checkFullStatsCount(
 	ctx context.Context, cache *TableStatisticsCache, table catalog.TableDescriptor, expected int,
 ) error {
 	return testutils.SucceedsSoonError(func() error {
@@ -889,12 +889,33 @@ func checkStatsCount(
 		}
 		var count int
 		for i := range stats {
-			if stats[i].Name != jobspb.ForecastStatsName {
+			if stats[i].Name != jobspb.ForecastStatsName && stats[i].Name != jobspb.MergedStatsName && stats[i].PartialPredicate == "" {
 				count++
 			}
 		}
 		if count != expected {
-			return fmt.Errorf("expected %d stat(s) but found %d", expected, count)
+			return fmt.Errorf("expected %d full stat(s) but found %d", expected, count)
+		}
+		return nil
+	})
+}
+
+func checkPartialStatsCount(
+	ctx context.Context, cache *TableStatisticsCache, table catalog.TableDescriptor, expected int,
+) error {
+	return testutils.SucceedsSoonError(func() error {
+		stats, err := cache.GetTableStats(ctx, table)
+		if err != nil {
+			return err
+		}
+		var count int
+		for i := range stats {
+			if stats[i].PartialPredicate == "" {
+				count++
+			}
+		}
+		if count != expected {
+			return fmt.Errorf("expected %d partial stat(s) but found %d", expected, count)
 		}
 		return nil
 	})
