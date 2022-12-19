@@ -173,6 +173,8 @@ func TableDescs(
 			}
 		}
 
+		// Rewrite unique_without_index in both `UniqueWithoutIndexConstraints`
+		// and `Mutations` slice.
 		origUniqueWithoutIndexConstraints := table.UniqueWithoutIndexConstraints
 		table.UniqueWithoutIndexConstraints = nil
 		for _, unique := range origUniqueWithoutIndexConstraints {
@@ -184,6 +186,18 @@ func TableDescs(
 				// we should always find a rewrite for the table being restored.
 				return errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
 					"UniqueWithoutIndexConstraint %d was not found", table.Name, unique.TableID)
+			}
+		}
+		for idx := range table.Mutations {
+			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+				c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
+				uwi := &c.UniqueWithoutIndexConstraint
+				if rewrite, ok := descriptorRewrites[uwi.TableID]; ok {
+					uwi.TableID = rewrite.ID
+				} else {
+					return errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
+						"UniqueWithoutIndexConstraint %d was not found", table.Name, uwi.TableID)
+				}
 			}
 		}
 
