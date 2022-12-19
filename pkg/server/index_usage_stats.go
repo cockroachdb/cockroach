@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -256,9 +258,7 @@ func getTableIndexUsageStats(
  		WHERE ti.descriptor_id = $::REGCLASS`,
 		tableID,
 	)
-
-	const expectedNumDatums = 7
-
+	
 	it, err := ie.QueryIteratorEx(ctx, "index-usage-stats", nil,
 		sessiondata.InternalExecutorOverride{
 			User:     userName,
@@ -279,13 +279,6 @@ func getTableIndexUsageStats(
 
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var row tree.Datums
-		if row = it.Cur(); row == nil {
-			return nil, errors.New("unexpected null row")
-		}
-
-		if row.Len() != expectedNumDatums {
-			return nil, errors.Newf("expected %d columns, received %d", expectedNumDatums, row.Len())
-		}
 
 		indexID := tree.MustBeDInt(row[0])
 		indexName := tree.MustBeDString(row[1])
@@ -324,7 +317,11 @@ func getTableIndexUsageStats(
 		}
 
 		statsRow := idxusage.IndexStatsRow{
-			Row:              idxStatsRow,
+			TableID:          idxStatsRow.Statistics.Key.TableID,
+			IndexID:          idxStatsRow.Statistics.Key.IndexID,
+			CreatedAt:        idxStatsRow.CreatedAt,
+			LastRead:         idxStatsRow.Statistics.Stats.LastRead,
+			IndexType:        idxStatsRow.IndexType,
 			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
 		}
 		recommendations := statsRow.GetRecommendationsFromIndexStats(req.Database, st)
@@ -372,4 +369,84 @@ func getTableIDFromDatabaseAndTableName(
 	}
 	tableID := tree.MustBeDOid(row[0]).Oid
 	return int(tableID), nil
+}
+
+func getDatabaseIndexRecommendations(
+	ctx context.Context,
+	dbName string,
+	ie *sql.InternalExecutor,
+	st *cluster.Settings,
+	execConfig *sql.ExecutorConfig,
+) ([]*serverpb.IndexRecommendation, error) {
+
+	// Omit fetching index recommendations for the 'system' database.
+	if dbName == catconstants.SystemDatabaseName {
+		return []*serverpb.IndexRecommendation{}, nil
+	}
+
+	userName, err := userFromContext(ctx)
+	if err != nil {
+		return []*serverpb.IndexRecommendation{}, err
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			ti.descriptor_id as table_id,
+			ti.index_id,
+			ti.index_type,
+			last_read,
+			ti.created_at
+		FROM %[1]s.crdb_internal.index_usage_statistics AS us
+		 JOIN %[1]s.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id AND index_type = 'secondary')
+		 JOIN %[1]s.crdb_internal.tables AS t ON (ti.descriptor_id = t.table_id AND t.database_name != 'system');`, dbName)
+
+	it, err := ie.QueryIteratorEx(ctx, "db-index-recommendations", nil,
+		sessiondata.InternalExecutorOverride{
+			User:     userName,
+			Database: dbName,
+		}, query)
+
+	if err != nil {
+		return []*serverpb.IndexRecommendation{}, err
+	}
+
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { err = errors.CombineErrors(err, it.Close()) }()
+
+	var ok bool
+	var idxRecommendations []*serverpb.IndexRecommendation
+
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var row tree.Datums
+
+		tableID := tree.MustBeDInt(row[0])
+		indexID := tree.MustBeDInt(row[1])
+		indexType := tree.MustBeDString(row[2])
+		lastRead := time.Time{}
+		if row[3] != tree.DNull {
+			lastRead = tree.MustBeDTimestampTZ(row[3]).Time
+		}
+		var createdAt *time.Time
+		if row[4] != tree.DNull {
+			ts := tree.MustBeDTimestamp(row[4])
+			createdAt = &ts.Time
+		}
+
+		if err != nil {
+			return []*serverpb.IndexRecommendation{}, err
+		}
+
+		statsRow := idxusage.IndexStatsRow{
+			TableID:          roachpb.TableID(tableID),
+			IndexID:          roachpb.IndexID(indexID),
+			CreatedAt:        createdAt,
+			LastRead:         lastRead,
+			IndexType:        string(indexType),
+			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
+		}
+		recommendations := statsRow.GetRecommendationsFromIndexStats(dbName, st)
+		idxRecommendations = append(idxRecommendations, recommendations...)
+	}
+	return idxRecommendations, nil
 }

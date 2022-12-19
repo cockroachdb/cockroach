@@ -642,7 +642,7 @@ func (s *adminServer) databaseDetailsHelper(
 		if err != nil {
 			return nil, err
 		}
-		resp.Stats.NumIndexRecommendations, err = s.getNumDatabaseIndexRecommendations(ctx, req.Database, resp.TableNames)
+		resp.Stats.NumIndexRecommendations, err = s.getNumDatabaseIndexRecommendations(ctx, req.Database)
 		if err != nil {
 			return nil, err
 		}
@@ -761,22 +761,13 @@ func (s *adminServer) getDatabaseStats(
 }
 
 func (s *adminServer) getNumDatabaseIndexRecommendations(
-	ctx context.Context, databaseName string, tableNames []string,
+	ctx context.Context, databaseName string,
 ) (int32, error) {
-	var numDatabaseIndexRecommendations int
-	idxUsageStatsProvider := s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
-	for _, tableName := range tableNames {
-		tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
-			Database: databaseName,
-			Table:    tableName,
-		}
-		tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.st, s.sqlServer.execCfg)
-		if err != nil {
-			return 0, err
-		}
-		numDatabaseIndexRecommendations += len(tableIndexStatsResponse.IndexRecommendations)
+	dbIndexRecommendations, err := getDatabaseIndexRecommendations(ctx, databaseName, s.ie, s.st, s.sqlServer.execCfg)
+	if err != nil {
+		return 0, err
 	}
-	return int32(numDatabaseIndexRecommendations), nil
+	return int32(len(dbIndexRecommendations)), nil
 }
 
 // getFullyQualifiedTableName, given a database name and a tableName that either
