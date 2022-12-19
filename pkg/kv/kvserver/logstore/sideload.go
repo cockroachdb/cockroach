@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -84,11 +83,11 @@ func MaybeSideloadEntries(
 ) {
 	var output []raftpb.Entry
 	for i := range input {
-		d, err := raftlog.DecomposeEntryData(input[i].Type, input[i].Data) // cheap
+		typ, err := raftlog.EncodingVersion(input[i])
 		if err != nil {
 			return nil, 0, 0, 0, err
 		}
-		if d.Version != kvserverbase.RaftVersionSideloaded {
+		if typ != kvserverbase.RaftVersionSideloaded {
 			otherEntriesSize += int64(len(input[i].Data))
 			continue
 		}
@@ -104,12 +103,11 @@ func MaybeSideloadEntries(
 		outputEnt := &output[i]
 
 		// Unmarshal the command into an object that we can mutate.
-		var strippedCmd kvserverpb.RaftCommand
-		if err := protoutil.Unmarshal(d.RaftCommandBytes, &strippedCmd); err != nil {
+		e, err := raftlog.NewEntry(input[i])
+		if err != nil {
 			return nil, 0, 0, 0, err
 		}
-
-		if strippedCmd.ReplicatedEvalResult.AddSSTable == nil {
+		if e.Cmd.ReplicatedEvalResult.AddSSTable == nil {
 			// Still no AddSSTable; someone must've proposed a v2 command
 			// but not because it contains an inlined SSTable. Strange, but
 			// let's be future proof.
@@ -119,14 +117,16 @@ func MaybeSideloadEntries(
 		numSideloaded++
 
 		// Actually strip the command.
-		dataToSideload := strippedCmd.ReplicatedEvalResult.AddSSTable.Data
-		strippedCmd.ReplicatedEvalResult.AddSSTable.Data = nil
+		dataToSideload := e.Cmd.ReplicatedEvalResult.AddSSTable.Data
+		e.Cmd.ReplicatedEvalResult.AddSSTable.Data = nil
 
 		// Marshal the command and attach to the Raft entry.
+		//
+		// TODO(tbg): this should be supported by a method as well.
 		{
-			data := make([]byte, kvserverbase.RaftCommandPrefixLen+strippedCmd.Size())
-			kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, d.CmdID)
-			_, err := protoutil.MarshalTo(&strippedCmd, data[kvserverbase.RaftCommandPrefixLen:])
+			data := make([]byte, kvserverbase.RaftCommandPrefixLen+e.Cmd.Size())
+			kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, e.ID)
+			_, err := protoutil.MarshalTo(&e.Cmd, data[kvserverbase.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
@@ -162,11 +162,11 @@ func MaybeInlineSideloadedRaftCommand(
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
-	d, err := raftlog.DecomposeEntryData(ent.Type, ent.Data)
+	typ, err := raftlog.EncodingVersion(ent)
 	if err != nil {
 		return nil, err
 	}
-	if d.Version != kvserverbase.RaftVersionSideloaded {
+	if typ != kvserverbase.RaftVersionSideloaded {
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
@@ -188,13 +188,12 @@ func MaybeInlineSideloadedRaftCommand(
 
 	log.Event(ctx, "inlined entry not cached")
 	// (Bad) luck, for whatever reason the inlined proposal isn't in the cache.
-
-	var command kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(d.RaftCommandBytes, &command); err != nil {
+	e, err := raftlog.NewEntry(ent)
+	if err != nil {
 		return nil, err
 	}
 
-	if len(command.ReplicatedEvalResult.AddSSTable.Data) > 0 {
+	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) > 0 {
 		// The entry we started out with was already "fat". This should never
 		// occur since it would imply that a) the entry was not properly
 		// sideloaded during append or b) the entry reached us through a
@@ -210,11 +209,13 @@ func MaybeInlineSideloadedRaftCommand(
 	if err != nil {
 		return nil, errors.Wrap(err, "loading sideloaded data")
 	}
-	command.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
+	e.Cmd.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
+	// TODO(tbg): there should be a helper that properly encodes a command, given
+	// the RaftCommandEncodingVersion.
 	{
-		data := make([]byte, kvserverbase.RaftCommandPrefixLen+command.Size())
-		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, d.CmdID)
-		_, err := protoutil.MarshalTo(&command, data[kvserverbase.RaftCommandPrefixLen:])
+		data := make([]byte, kvserverbase.RaftCommandPrefixLen+e.Cmd.Size())
+		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, e.ID)
+		_, err := protoutil.MarshalTo(&e.Cmd, data[kvserverbase.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}
@@ -228,22 +229,22 @@ func MaybeInlineSideloadedRaftCommand(
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	d, err := raftlog.DecomposeEntryData(ent.Type, ent.Data)
+	typ, err := raftlog.EncodingVersion(*ent)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	if d.Version != kvserverbase.RaftVersionSideloaded {
+	if typ != kvserverbase.RaftVersionSideloaded {
 		return
 	}
 
-	var command kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(d.RaftCommandBytes, &command); err != nil {
+	e, err := raftlog.NewEntry(*ent)
+	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	if len(command.ReplicatedEvalResult.AddSSTable.Data) == 0 {
+	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) == 0 {
 		// The entry is "thin", which is what this assertion is checking for.
-		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", command)
+		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
 	}
 }
 
