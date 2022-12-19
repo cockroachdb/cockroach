@@ -37,7 +37,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, start, 1, 10)
-	m := metrics.NewMetricsTracker(os.Stdout)
+	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout))
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
@@ -80,7 +80,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, start, stores, int64(keyspace))
 		changer := state.NewReplicaChanger()
-		m := metrics.NewMetricsTracker() // no output
+		m := metrics.NewTracker() // no output
 		replicaDistribution := make([]float64, stores)
 
 		// NB: Here create half of the stores with equal replica counts, the
@@ -152,7 +152,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, start, stores, int64(keyspace))
 		changer := state.NewReplicaChanger()
-		m := metrics.NewMetricsTracker() // no output
+		m := metrics.NewTracker() // no output
 		replicaDistribution := make([]float64, stores)
 
 		// NB: Here create half of the stores with equal replica counts, the

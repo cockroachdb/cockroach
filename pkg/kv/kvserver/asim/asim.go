@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
@@ -60,7 +59,7 @@ type Simulator struct {
 	gossip   gossip.Gossip
 	shuffler func(n int, swap func(i, j int))
 
-	metrics *metrics.MetricsTracker
+	metrics *metrics.Tracker
 }
 
 // NewSimulator constructs a valid Simulator.
@@ -71,7 +70,7 @@ func NewSimulator(
 	initialState state.State,
 	changer state.Changer,
 	settings *config.SimulationSettings,
-	metrics *metrics.MetricsTracker,
+	metrics *metrics.Tracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)
@@ -113,6 +112,7 @@ func NewSimulator(
 			allocator,
 			storePool,
 			settings,
+			storeID,
 		)
 		srs[storeID] = storerebalancer.NewStoreRebalancer(
 			start,
@@ -305,8 +305,6 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 // tickMetrics prints the metrics up to the given tick.
 func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
 	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		if err := s.metrics.Tick(tick, s.state); err != nil {
-			log.Errorf(ctx, "error writing to csv: %v", err)
-		}
+		s.metrics.Tick(ctx, tick, s.state)
 	}
 }
