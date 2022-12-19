@@ -83,14 +83,14 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
 			Req:                  cmd.proposal.Request,
-			ForcedError:          cmd.ForcedErr,
+			ForcedError:          cmd.ForcedError,
 		})
 		if cmd.Rejection == 0 {
 			cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
 		}
 	}
 	if pErr == nil {
-		pErr = cmd.ForcedErr
+		pErr = cmd.ForcedError
 	}
 
 	if cmd.Rejection != kvserverbase.ProposalRejectionPermanent && pErr == nil {

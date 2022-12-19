@@ -79,43 +79,40 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 	return sm
 }
 
-// shouldApplyCommand determines whether or not a command should be applied to
-// the replicated state machine after it has been committed to the Raft log. It
-// then sets the provided command's LeaseIndex, Rejection, and ForcedErr
-// fields and returns whether command should be applied or rejected.
-func (r *Replica) shouldApplyCommand(
-	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
-) bool {
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
-		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), replicaState,
-	)
-	// Consider testing-only filters.
-	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.ForcedErr != nil || filter != nil {
+// TODO(tbg): move this to replica_app_batch.go.
+func replicaApplyTestingFilters(
+	ctx context.Context, r *Replica, cmd *replicatedCmd, fr kvserverbase.ForcedErrResult,
+) kvserverbase.ForcedErrResult {
+	// By default, output is input.
+	newFR := fr
+
+	// Filters may change that.
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; fr.ForcedError != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
 			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
-			ForcedError:          cmd.ForcedErr,
+			ForcedError:          fr.ForcedError,
 		}
-		if cmd.ForcedErr == nil {
+		if fr.ForcedError == nil {
 			if cmd.IsLocal() {
 				args.Req = cmd.proposal.Request
 			}
-			newPropRetry, newForcedErr := filter(args)
-			cmd.ForcedErr = newForcedErr
-			if cmd.Rejection == 0 {
-				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
+			var newRej int
+			newRej, newFR.ForcedError = filter(args)
+			if fr.Rejection == 0 {
+				newFR.Rejection = kvserverbase.ProposalRejectionType(newRej)
 			}
 		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
-			newPropRetry, newForcedErr := filter(args)
-			cmd.ForcedErr = newForcedErr
-			if cmd.Rejection == 0 {
-				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
+			var newRej int
+			newRej, newFR.ForcedError = feFilter(args)
+			if fr.Rejection == 0 {
+				newFR.Rejection = kvserverbase.ProposalRejectionType(newRej)
 			}
 		}
 	}
-	return cmd.ForcedErr == nil
+	return newFR
 }
 
 // NewEphemeralBatch implements the apply.StateMachine interface.

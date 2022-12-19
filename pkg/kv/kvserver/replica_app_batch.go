@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -94,39 +95,32 @@ func (b *replicaAppBatch) Stage(
 	ctx context.Context, cmdI apply.Command,
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	if cmd.Index() == 0 {
-		return nil, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
-	}
-	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
-		// If we have an out of order index, there's corruption. No sense in
-		// trying to update anything or running the command. Simply return.
-		return nil, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
-	}
-	if log.V(4) {
-		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
-			cmd.ID, cmd.Index(), cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
+
+	// We'll follow the steps outlined in appBatch's comment here, and will call
+	// into appBatch at appropriate times.
+	var ab appBatch
+
+	fr, err := ab.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, &b.state, cmd.IsLocal())
+	if err != nil {
+		return nil, err
 	}
 
-	// Determine whether the command should be applied to the replicated state
-	// machine or whether it should be rejected (and replaced by an empty command).
-	// This check is deterministic on all replicas, so if one replica decides to
-	// reject a command, all will.
-	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
+	// Then, maybe override the result with testing knobs.
+	if b.r.store.TestingKnobs() != nil {
+		fr = replicaApplyTestingFilters(ctx, b.r, cmd, fr)
+	}
 
-		// Apply an empty command.
-		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
-		cmd.Cmd.WriteBatch = nil
-		cmd.Cmd.LogicalOpLog = nil
-		cmd.Cmd.ClosedTimestamp = nil
-	} else {
-		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
-			return nil, err
-		}
-		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
-			return nil, err
-		}
-		log.Event(ctx, "applying command")
+	// Now update cmd. We'll either put the lease index in it or zero out
+	// the cmd in case there's a forced error.
+	ab.toCheckedCmd(ctx, &cmd.ReplicatedCmd, fr)
+
+	// TODO(tbg): these assertions should be pushed into
+	// (*appBatch).assertAndCheckCommand.
+	if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
+		return nil, err
+	}
+	if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
+		return nil, err
 	}
 
 	// Acquire the split or merge lock, if necessary. If a split or merge
@@ -791,8 +785,12 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 
-	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
-	mb.state.LeaseAppliedIndex = cmd.LeaseIndex
+	fr := kvserverbase.CheckForcedErr(
+		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &mb.state,
+	)
+	fr = replicaApplyTestingFilters(ctx, mb.r, cmd, fr)
+	cmd.ForcedErrResult = fr
+
 	return cmd, nil
 }
 

@@ -9,6 +9,7 @@ go_library(
     srcs = [
         "addressing.go",
         "allocation_op.go",
+        "app_batch.go",
         "consistency_queue.go",
         "debug_print.go",
         "doc.go",
