@@ -723,7 +723,7 @@ func findTableContainingIndex(
 		if err != nil {
 			return false, nil, nil, err
 		}
-		if candidateTbl == nil || !(candidateTbl.IsTable() || candidateTbl.MaterializedView()) || candidateTbl.Offline() {
+		if candidateTbl == nil || !(candidateTbl.IsTable() || candidateTbl.MaterializedView()) {
 			continue
 		}
 
