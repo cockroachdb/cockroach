@@ -108,10 +108,18 @@ type tBridge struct {
 }
 
 func newTBridge(t *testing.T) *tBridge {
+	// NB: we're not using t.TempDir() because we want these to survive
+	// on failure.
 	td, err := os.MkdirTemp("", "kvnemesis")
 	if err != nil {
 		td = os.TempDir()
 	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			return
+		}
+		_ = os.RemoveAll(td)
+	})
 	t.Logf("kvnemesis logging to %s", td)
 	return &tBridge{
 		ti: t,
