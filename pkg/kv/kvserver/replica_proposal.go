@@ -398,9 +398,9 @@ func (r *Replica) leasePostApplyLocked(
 	currentOwner := newLease.OwnedBy(r.store.StoreID())
 	if leaseChangingHands && (prevOwner || currentOwner) {
 		if currentOwner {
-			r.store.maybeGossipOnCapacityChange(ctx, leaseAddEvent)
+			r.store.storeGossip.MaybeGossipOnCapacityChange(ctx, LeaseAddEvent)
 		} else if prevOwner {
-			r.store.maybeGossipOnCapacityChange(ctx, leaseRemoveEvent)
+			r.store.storeGossip.MaybeGossipOnCapacityChange(ctx, LeaseRemoveEvent)
 		}
 		if r.loadStats != nil {
 			r.loadStats.Reset()
