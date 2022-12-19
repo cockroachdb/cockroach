@@ -18,10 +18,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+)
+
+var (
+	// DisableCheckSSTRangeKeyMasking forcibly disables CheckSSTConflicts range
+	// key masking. This masking causes stats to be estimates, since we can't
+	// adjust stats for point keys masked by range keys, but when we disable this
+	// masking we expect accurate stats and can assert this in various tests
+	// (notably kvnemesis).
+	DisableCheckSSTRangeKeyMasking = util.ConstantWithMetamorphicTestBool(
+		"disable-checksstconflicts-range-key-masking", false)
 )
 
 // NewSSTIterator returns an MVCCIterator for the provided "levels" of
@@ -79,7 +90,9 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 //
 // sstTimestamp, if non-zero, represents the timestamp that all keys in the SST
 // are expected to be at. This method can make performance optimizations with
-// the expectation that no SST keys will be at any other timestamp.
+// the expectation that no SST keys will be at any other timestamp. If the
+// engine contains MVCC range keys in the ingested span then this will cause
+// MVCC stats to be estimates since we can't adjust stats for masked points.
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
 // timestamps), but this is only checked for keys that exist in both sides, for
@@ -114,6 +127,9 @@ func CheckSSTConflicts(
 	}
 	if rightPeekBound == nil {
 		rightPeekBound = keys.MaxKey
+	}
+	if DisableCheckSSTRangeKeyMasking {
+		sstTimestamp = hlc.Timestamp{}
 	}
 
 	// In some iterations below, we try to call Next() instead of SeekGE() for a
@@ -171,6 +187,7 @@ func CheckSSTConflicts(
 	})
 	rkIter.SeekGE(start)
 
+	var engineHasRangeKeys bool
 	if ok, err := rkIter.Valid(); err != nil {
 		rkIter.Close()
 		return enginepb.MVCCStats{}, err
@@ -178,6 +195,7 @@ func CheckSSTConflicts(
 		// If the engine contains range tombstones in this span, we cannot use prefix
 		// iteration.
 		usePrefixSeek = false
+		engineHasRangeKeys = true
 	}
 	rkIter.Close()
 
@@ -186,20 +204,24 @@ func CheckSSTConflicts(
 		// comment on the panic inside pebbleIterator.setOptions.
 		sstTimestamp = hlc.Timestamp{}
 	}
-	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: leftPeekBound,
-		UpperBound: rightPeekBound,
-		// NB: Range key masking is performant, but it skips instances where we need
-		// to adjust GCBytesAge in the returned stats diff. Consider an example
-		// where a point key is masked by a range tombstone, and we added a new
-		// revision of that key above the range tombstone in the SST. The GCBytesAge
-		// contribution of that range tombstone on the point key's key (as opposed
-		// to the version contribution) needs to be un-done as that key is now being
-		// used by the live key.
+	if engineHasRangeKeys && sstTimestamp.IsSet() {
+		// If range key masking is requested and the engine contains range keys
+		// then stats will be estimates. Range key masking is performant, but it
+		// skips instances where we need to adjust GCBytesAge in the returned stats
+		// diff. Consider an example where a point key is masked by a range
+		// tombstone, and we added a new revision of that key above the range
+		// tombstone in the SST. The GCBytesAge contribution of that range tombstone
+		// on the point key's key (as opposed to the version contribution) needs to
+		// be un-done as that key is now being used by the live key.
 		//
-		// TODO(bilal): Add tests that test for this case, and close this gap in
-		// GCBytesAge calculation.
+		// TODO(bilal): Close this gap in GCBytesAge calculation, see:
+		// https://github.com/cockroachdb/cockroach/issues/92254
+		statsDiff.ContainsEstimates++
+	}
+	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		LowerBound:           leftPeekBound,
+		UpperBound:           rightPeekBound,
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
