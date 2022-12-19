@@ -406,16 +406,83 @@ func IterateReplicaKeySpans(
 	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
-			iter := reader.NewEngineIterator(storage.IterOptions{
-				KeyTypes:   keyType,
-				LowerBound: span.Key,
-				UpperBound: span.EndKey,
-			})
-			ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
-			if err == nil && ok {
-				err = visitor(iter, span, keyType)
+			err := func() error {
+				iter := reader.NewEngineIterator(storage.IterOptions{
+					KeyTypes:   keyType,
+					LowerBound: span.Key,
+					UpperBound: span.EndKey,
+				})
+				defer iter.Close()
+				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
+				if err == nil && ok {
+					err = visitor(iter, span, keyType)
+				}
+				return err
+			}()
+			if err != nil {
+				return iterutil.Map(err)
 			}
-			iter.Close()
+		}
+	}
+	return nil
+}
+
+// IterateOptions instructs how points and ranges should be presented to visitor
+// and if iterators should be visited in forward or reverse order.
+// Reverse iterator are also positioned at the end of the range prior to being
+// passed to visitor.
+type IterateOptions struct {
+	CombineRangesAndPoints bool
+	Reverse                bool
+	ExcludeUserKeySpan     bool
+}
+
+// IterateMVCCReplicaKeySpans iterates over replica's key spans in the similar
+// way to IterateReplicaKeySpans, but uses MVCCIterator and gives additional
+// options to create reverse iterators and to combine keys are ranges.
+func IterateMVCCReplicaKeySpans(
+	desc *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	options IterateOptions,
+	visitor func(storage.MVCCIterator, roachpb.Span, storage.IterKeyType) error,
+) error {
+	if !reader.ConsistentIterators() {
+		panic("reader must provide consistent iterators")
+	}
+	spans := MakeReplicatedKeySpansExceptLockTable(desc)
+	if options.ExcludeUserKeySpan {
+		spans = MakeReplicatedKeySpansExcludingUserAndLockTable(desc)
+	}
+	if options.Reverse {
+		spanMax := len(spans) - 1
+		for i := 0; i < len(spans)/2; i++ {
+			spans[spanMax-i], spans[i] = spans[i], spans[spanMax-i]
+		}
+	}
+	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
+	if options.CombineRangesAndPoints {
+		keyTypes = []storage.IterKeyType{storage.IterKeyTypePointsAndRanges}
+	}
+	for _, span := range spans {
+		for _, keyType := range keyTypes {
+			err := func() error {
+				iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+					LowerBound: span.Key,
+					UpperBound: span.EndKey,
+					KeyTypes:   keyType,
+				})
+				defer iter.Close()
+				if options.Reverse {
+					iter.SeekLT(storage.MakeMVCCMetadataKey(span.EndKey))
+				} else {
+					iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+				}
+				ok, err := iter.Valid()
+				if err == nil && ok {
+					err = visitor(iter, span, keyType)
+				}
+				return err
+			}()
 			if err != nil {
 				return iterutil.Map(err)
 			}

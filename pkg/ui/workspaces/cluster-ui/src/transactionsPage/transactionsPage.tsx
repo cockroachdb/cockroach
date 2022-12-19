@@ -237,9 +237,7 @@ export class TransactionsPage extends React.Component<
       );
     }
 
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-    }
+    this.props.refreshNodes();
   }
 
   componentWillUnmount(): void {
@@ -280,9 +278,7 @@ export class TransactionsPage extends React.Component<
 
   componentDidUpdate(): void {
     this.updateQueryParams();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-    }
+    this.props.refreshNodes();
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
