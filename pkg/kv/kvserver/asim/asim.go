@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -59,7 +60,7 @@ type Simulator struct {
 	gossip   gossip.Gossip
 	shuffler func(n int, swap func(i, j int))
 
-	metrics *MetricsTracker
+	metrics *metrics.MetricsTracker
 }
 
 // NewSimulator constructs a valid Simulator.
@@ -69,7 +70,7 @@ func NewSimulator(
 	wgs []workload.Generator,
 	initialState state.State,
 	settings *config.SimulationSettings,
-	metrics *MetricsTracker,
+	metrics *metrics.MetricsTracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)

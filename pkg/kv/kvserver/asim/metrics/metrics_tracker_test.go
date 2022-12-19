@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim_test
+package metrics_test
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ import (
 func Example_noWriters() {
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker()
+	m := metrics.NewMetricsTracker()
 
 	_ = m.Tick(start, s)
 	// Output:
@@ -36,7 +37,7 @@ func Example_noWriters() {
 func Example_tickEmptyState() {
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewMetricsTracker(os.Stdout)
 
 	_ = m.Tick(start, s)
 	// Output:
@@ -49,7 +50,7 @@ func TestTickEmptyState(t *testing.T) {
 	s := state.LoadConfig(state.ComplexConfig)
 
 	var buf bytes.Buffer
-	m := asim.NewMetricsTracker(&buf)
+	m := metrics.NewMetricsTracker(&buf)
 
 	_ = m.Tick(start, s)
 
@@ -62,7 +63,7 @@ func TestTickEmptyState(t *testing.T) {
 func Example_multipleWriters() {
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout, os.Stdout)
+	m := metrics.NewMetricsTracker(os.Stdout, os.Stdout)
 
 	_ = m.Tick(start, s)
 	// Output:
@@ -75,7 +76,7 @@ func Example_multipleWriters() {
 func Example_leaseTransfer() {
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewMetricsTracker(os.Stdout)
 	s.TransferLease(1, 2)
 
 	_ = m.Tick(start, s)
@@ -87,7 +88,7 @@ func Example_leaseTransfer() {
 func Example_rebalance() {
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewMetricsTracker(os.Stdout)
 
 	// Apply load, to get a replica size greater than 0.
 	le := workload.LoadBatch{workload.LoadEvent{Writes: 1, WriteSize: 7, Reads: 2, ReadSize: 9, Key: 5}}
@@ -110,7 +111,7 @@ func Example_workload() {
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewMetricsTracker(os.Stdout)
 
 	s := state.LoadConfig(state.ComplexConfig)
 
