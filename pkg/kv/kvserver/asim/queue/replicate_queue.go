@@ -152,6 +152,7 @@ func (rq *replicateQueue) considerRebalance(
 		Add:     state.StoreID(add.StoreID),
 		Remove:  state.StoreID(remove.StoreID),
 		Wait:    rq.delay(rng.Size(), true),
+		Author:  rq.storeID,
 	}
 	if completeAt, ok := rq.stateChanger.Push(tick, &change); ok {
 		rq.next = completeAt
