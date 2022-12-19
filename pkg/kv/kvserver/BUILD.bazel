@@ -80,6 +80,7 @@ go_library(
         "storage_engine_client.go",
         "store.go",
         "store_create_replica.go",
+        "store_gossip.go",
         "store_init.go",
         "store_merge.go",
         "store_raft.go",
