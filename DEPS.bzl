@@ -9454,10 +9454,10 @@ def go_deps():
         name = "org_golang_google_grpc",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/grpc",
-        sha256 = "f7bd2af40f0d6b16f7d771099e0ae7ed3468b9e40faf88be9d9759fffaff2a4a",
-        strip_prefix = "google.golang.org/grpc@v1.46.0",
+        sha256 = "8076556551a2901cc0a7c96b8bdd8de1f8e33172744c829056dbd3b8fd58e096",
+        strip_prefix = "google.golang.org/grpc@v1.51.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/org_golang_google_grpc-v1.46.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/org_golang_google_grpc-v1.51.0.zip",
         ],
     )
     go_repository(
@@ -9634,10 +9634,10 @@ def go_deps():
         name = "org_golang_x_text",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/text",
-        sha256 = "e1a9115e61a38da8bdc893d0ba83b65f89cc1114f152a98eb572c5ea6551e8d4",
-        strip_prefix = "golang.org/x/text@v0.3.7",
+        sha256 = "16af01ae1aacbb027662d39662bd52e92e288ba4ce104ea0116534a81dfd3c30",
+        strip_prefix = "golang.org/x/text@v0.4.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/text/org_golang_x_text-v0.3.7.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/text/org_golang_x_text-v0.4.0.zip",
         ],
     )
     go_repository(
