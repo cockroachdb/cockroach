@@ -270,3 +270,14 @@ func ObjectLookupFlagsWithRequiredTableKind(kind RequiredTableKind) ObjectLookup
 		DesiredTableDescKind: kind,
 	}
 }
+
+// IndexLookupFlags is the flag struct used for resolver.ResolveIndex() only.
+type IndexLookupFlags struct {
+	// Control if the lookup can return nil index without returning an error if
+	// the index does not exist.
+	Required bool
+	// Control if the lookup only considers active indexes.
+	RequireActiveIndex bool
+	// Control if the lookup considers offline tables.
+	IncludeOfflineTable bool
+}
