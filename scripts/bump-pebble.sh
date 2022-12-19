@@ -72,8 +72,7 @@ popd
 
 COCKROACH_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 
-# Pull in the Pebble module at the desired SHA and rebuild the vendor
-# directory.
+# Pull in the Pebble module at the desired SHA.
 pushd "$COCKROACH_DIR"
 go get "github.com/cockroachdb/pebble@${NEW_SHA}"
 go mod tidy
@@ -83,10 +82,9 @@ popd
 pushd "$COCKROACH_DIR"
 ./dev generate bazel --mirror
 git add go.mod go.sum DEPS.bzl build/bazelutil/distdir_files.bzl
-git add vendor
 git branch -D "$COCKROACH_BRANCH" || true
 git checkout -b "$COCKROACH_BRANCH"
-git commit -m "vendor: bump Pebble to ${NEW_SHA:0:12}
+git commit -m "go.mod: bump Pebble to ${NEW_SHA:0:12}
 
 $COMMITS
 
