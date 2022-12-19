@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/btree/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -72,6 +73,9 @@ type scopedManager struct {
 	trees   [spanset.NumSpanAccess]btree
 }
 
+type btreeCfg = interval.WithBytesSpanAndID[*latch, roachpb.Key, uint64]
+type btree = interval.Set[btreeCfg, *latch, roachpb.Key]
+
 // Make returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
 func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
@@ -91,21 +95,17 @@ type latch struct {
 	next, prev *latch // readSet linked-list.
 }
 
-func (la *latch) inReadSet() bool {
-	return la.next != nil
+func (la *latch) inReadSet() bool { return la.next != nil }
+
+func (la *latch) String() string {
+	return fmt.Sprintf("%s@%s", la.span, la.ts)
 }
 
-//go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
+// Methods required by util/btree/ordered.BytesSpanAndID type contract.
 
-// Methods required by util/interval/generic type contract.
-func (la *latch) ID() uint64         { return la.id }
-func (la *latch) Key() []byte        { return la.span.Key }
-func (la *latch) EndKey() []byte     { return la.span.EndKey }
-func (la *latch) String() string     { return fmt.Sprintf("%s@%s", la.span, la.ts) }
-func (la *latch) New() *latch        { return new(latch) }
-func (la *latch) SetID(v uint64)     { la.id = v }
-func (la *latch) SetKey(v []byte)    { la.span.Key = v }
-func (la *latch) SetEndKey(v []byte) { la.span.EndKey = v }
+func (la *latch) Key() roachpb.Key    { return la.span.Key }
+func (la *latch) EndKey() roachpb.Key { return la.span.EndKey }
+func (la *latch) ID() uint64          { return la.id }
 
 type signals struct {
 	done   signal
@@ -214,10 +214,11 @@ func newGuard(spans *spanset.SpanSet, pp poison.Policy) *Guard {
 func (m *Manager) Acquire(
 	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy,
 ) (*Guard, error) {
-	lg, snap := m.sequence(spans, pp)
+	var snap snapshot
+	lg := m.sequence(spans, pp, &snap)
 	defer snap.close()
 
-	err := m.wait(ctx, lg, snap)
+	err := m.wait(ctx, lg, &snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -238,8 +239,9 @@ func (m *Manager) Acquire(
 // The method returns a Guard which must be provided to the
 // CheckOptimisticNoConflicts, Release methods.
 func (m *Manager) AcquireOptimistic(spans *spanset.SpanSet, pp poison.Policy) *Guard {
-	lg, snap := m.sequence(spans, pp)
-	lg.snap = &snap
+	snap := new(snapshot)
+	lg := m.sequence(spans, pp, snap)
+	lg.snap = snap
 	return lg
 }
 
@@ -251,12 +253,13 @@ func (m *Manager) WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison
 	// are not actually inserted using insertLocked.
 	lg := newGuard(spans, pp)
 
-	m.mu.Lock()
-	snap := m.snapshotLocked(spans)
+	var snap snapshot
 	defer snap.close()
+	m.mu.Lock()
+	m.snapshotLocked(spans, &snap)
 	m.mu.Unlock()
 
-	return m.wait(ctx, lg, snap)
+	return m.wait(ctx, lg, &snap)
 }
 
 // CheckOptimisticNoConflicts returns true iff the spans in the provided
@@ -309,6 +312,8 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 	return true
 }
 
+type iterator = interval.Iterator[btreeCfg, *latch, roachpb.Key, struct{}]
+
 func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
 	for it.FirstOverlap(search); it.Valid(); it.NextOverlap(search) {
 		// The held latch may have already been signaled, but that doesn't allow
@@ -333,7 +338,7 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 		lg.snap.close()
 		lg.snap = nil
 	}()
-	err := m.wait(ctx, lg, *lg.snap)
+	err := m.wait(ctx, lg, lg.snap)
 	if err != nil {
 		m.Release(lg)
 		return nil, err
@@ -345,14 +350,14 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 // for each of the specified spans into the manager's interval trees, and
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
-func (m *Manager) sequence(spans *spanset.SpanSet, pp poison.Policy) (*Guard, snapshot) {
+func (m *Manager) sequence(spans *spanset.SpanSet, pp poison.Policy, snap *snapshot) (_ *Guard) {
 	lg := newGuard(spans, pp)
 
 	m.mu.Lock()
-	snap := m.snapshotLocked(spans)
+	m.snapshotLocked(spans, snap)
 	m.insertLocked(lg)
 	m.mu.Unlock()
-	return lg, snap
+	return lg
 }
 
 // snapshot is an immutable view into the latch manager's state.
@@ -371,8 +376,7 @@ func (sn *snapshot) close() {
 
 // snapshotLocked captures an immutable snapshot of the latch manager. It takes
 // a spanset to limit the amount of state captured.
-func (m *Manager) snapshotLocked(spans *spanset.SpanSet) snapshot {
-	var snap snapshot
+func (m *Manager) snapshotLocked(spans *spanset.SpanSet, snap *snapshot) {
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		sm := &m.scopes[s]
 		reading := len(spans.GetSpans(spanset.SpanReadOnly, s)) > 0
@@ -386,7 +390,6 @@ func (m *Manager) snapshotLocked(spans *spanset.SpanSet) snapshot {
 			snap.trees[s][spanset.SpanReadWrite] = sm.trees[spanset.SpanReadWrite].Clone()
 		}
 	}
-	return snap
 }
 
 // flushReadSetLocked flushes the read set into the read interval tree.
@@ -394,7 +397,7 @@ func (sm *scopedManager) flushReadSetLocked() {
 	for sm.readSet.len > 0 {
 		latch := sm.readSet.front()
 		sm.readSet.remove(latch)
-		sm.trees[spanset.SpanReadOnly].Set(latch)
+		sm.trees[spanset.SpanReadOnly].Upsert(latch)
 	}
 }
 
@@ -416,7 +419,7 @@ func (m *Manager) insertLocked(lg *Guard) {
 					sm.readSet.pushBack(latch)
 				case spanset.SpanReadWrite:
 					// Add writes directly to the write tree.
-					sm.trees[spanset.SpanReadWrite].Set(latch)
+					sm.trees[spanset.SpanReadWrite].Upsert(latch)
 				default:
 					panic("unknown access")
 				}
@@ -448,7 +451,7 @@ func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
-func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
+func (m *Manager) wait(ctx context.Context, lg *Guard, snap *snapshot) error {
 	timer := timeutil.NewTimer()
 	timer.Reset(base.SlowRequestThreshold)
 	defer timer.Stop()

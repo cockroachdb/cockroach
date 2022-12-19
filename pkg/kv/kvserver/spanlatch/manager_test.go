@@ -122,7 +122,8 @@ func (m *Manager) MustAcquireChExt(
 	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy,
 ) Attempt {
 	errCh := make(chan error, 1)
-	lg, snap := m.sequence(spans, pp)
+	snap := new(snapshot)
+	lg := m.sequence(spans, pp, snap)
 	go func() {
 		err := m.wait(ctx, lg, snap)
 		if err != nil {
@@ -722,7 +723,8 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 
 			b.ResetTimer()
 			for i := range spans {
-				lg, snap := m.sequence(&spans[i], poison.Policy_Error)
+				var snap snapshot
+				lg := m.sequence(&spans[i], poison.Policy_Error, &snap)
 				snap.close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(<-lgBuf)
