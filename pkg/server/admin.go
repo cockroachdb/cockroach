@@ -2648,7 +2648,88 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 func (s *systemAdminServer) DecommissionPreCheck(
 	ctx context.Context, req *serverpb.DecommissionPreCheckRequest,
 ) (*serverpb.DecommissionPreCheckResponse, error) {
-	return nil, grpcstatus.Errorf(codes.Unimplemented, "method DecommissionPreCheck not implemented")
+	var collectTraces bool
+	if s := tracing.SpanFromContext(ctx); (s != nil && s.RecordingType() != tracingpb.RecordingOff) || req.CollectTraces {
+		collectTraces = true
+	}
+
+	// Initially evaluate node liveness status, so we filter the nodes to check.
+	var nodesToCheck []roachpb.NodeID
+	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now().GoTime(), s.st)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	resp := &serverpb.DecommissionPreCheckResponse{}
+
+	// Any nodes that are already decommissioned or have unknown liveness should
+	// not be checked, and are added to response without replica counts or errors.
+	for _, nID := range req.NodeIDs {
+		livenessStatus := livenessStatusByNodeID[nID]
+		if livenessStatus == livenesspb.NodeLivenessStatus_UNKNOWN {
+			resp.CheckedNodes = append(resp.CheckedNodes, serverpb.DecommissionPreCheckResponse_NodeCheckResult{
+				NodeID:                nID,
+				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
+				LivenessStatus:        livenessStatus,
+			})
+		} else if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+			resp.CheckedNodes = append(resp.CheckedNodes, serverpb.DecommissionPreCheckResponse_NodeCheckResult{
+				NodeID:                nID,
+				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_ALREADY_DECOMMISSIONED,
+				LivenessStatus:        livenessStatus,
+			})
+		} else {
+			nodesToCheck = append(nodesToCheck, nID)
+		}
+	}
+
+	results, err := s.server.DecommissionPreCheck(ctx, nodesToCheck, req.StrictReadiness, collectTraces, int(req.NumReplicaReport))
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect ranges that encountered errors by the nodes on which their replicas
+	// exist. Ranges with replicas on multiple checked nodes will result in the
+	// error being reported for each nodeID.
+	rangeCheckErrsByNode := make(map[roachpb.NodeID][]serverpb.DecommissionPreCheckResponse_RangeCheckResult)
+	for _, rangeWithErr := range results.rangesNotReady {
+		rangeCheckResult := serverpb.DecommissionPreCheckResponse_RangeCheckResult{
+			RangeID: rangeWithErr.desc.RangeID,
+			Action:  rangeWithErr.action,
+			Events:  recordedSpansToTraceEvents(rangeWithErr.tracingSpans),
+			Error:   rangeWithErr.err.Error(),
+		}
+
+		for _, nID := range nodesToCheck {
+			if rangeWithErr.desc.Replicas().HasReplicaOnNode(nID) {
+				rangeCheckErrsByNode[nID] = append(rangeCheckErrsByNode[nID], rangeCheckResult)
+			}
+		}
+	}
+
+	// Evaluate readiness for each node to check based on how many ranges have
+	// replicas on the node that did not pass checks.
+	for _, nID := range nodesToCheck {
+		numReplicas := len(results.replicasByNode[nID])
+		var readiness serverpb.DecommissionPreCheckResponse_NodeReadiness
+		if len(rangeCheckErrsByNode[nID]) > 0 {
+			readiness = serverpb.DecommissionPreCheckResponse_ALLOCATION_ERRORS
+		} else {
+			readiness = serverpb.DecommissionPreCheckResponse_READY
+		}
+
+		nodeCheckResult := serverpb.DecommissionPreCheckResponse_NodeCheckResult{
+			NodeID:                nID,
+			DecommissionReadiness: readiness,
+			LivenessStatus:        livenessStatusByNodeID[nID],
+			ReplicaCount:          int64(numReplicas),
+			CheckedRanges:         rangeCheckErrsByNode[nID],
+		}
+
+		resp.CheckedNodes = append(resp.CheckedNodes, nodeCheckResult)
+	}
+
+	return resp, nil
 }
 
 // DecommissionStatus returns the DecommissionStatus for all or the given nodes.
