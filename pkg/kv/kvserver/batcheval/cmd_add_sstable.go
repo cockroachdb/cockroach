@@ -174,13 +174,18 @@ func EvalAddSSTable(
 	// and closed timestamp, i.e. by not writing to timestamps that have already
 	// been observed or closed.
 	var sstReqStatsDelta enginepb.MVCCStats
-	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS || forceRewrite) {
-		st := cArgs.EvalCtx.ClusterSettings()
-		// TODO(dt): use a quotapool.
-		conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
-		sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
-		if err != nil {
-			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
+	var sstTimestamp hlc.Timestamp
+	if sstToReqTS.IsSet() {
+		sstTimestamp = h.Timestamp
+		if h.Timestamp != sstToReqTS || forceRewrite {
+			st := cArgs.EvalCtx.ClusterSettings()
+			// TODO(dt): use a quotapool.
+			conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
+			sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(
+				ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
+			if err != nil {
+				return result.Result{}, errors.Wrap(err, "updating SST timestamps")
+			}
 		}
 	}
 
@@ -219,7 +224,7 @@ func EvalAddSSTable(
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
-			args.DisallowShadowing, args.DisallowShadowingBelow, sstToReqTS, maxIntents, usePrefixSeek)
+			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxIntents, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
