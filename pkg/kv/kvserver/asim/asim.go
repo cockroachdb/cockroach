@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -56,7 +57,7 @@ type Simulator struct {
 
 	state    state.State
 	changer  state.Changer
-	exchange state.Exchange
+	exchange gossip.Exchange
 	shuffler func(n int, swap func(i, j int))
 
 	metrics *MetricsTracker
@@ -68,7 +69,7 @@ func NewSimulator(
 	interval, bgInterval time.Duration,
 	wgs []workload.Generator,
 	initialState state.State,
-	exchange state.Exchange,
+	exchange gossip.Exchange,
 	changer state.Changer,
 	settings *config.SimulationSettings,
 	metrics *MetricsTracker,

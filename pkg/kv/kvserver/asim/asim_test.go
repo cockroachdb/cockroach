@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,7 +39,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = testCreateWorkloadGenerator(start, 1, 10)
 	m := asim.NewMetricsTracker(os.Stdout)
-	exchange := state.NewFixedDelayExhange(start, settings.StateExchangeInterval, settings.StateExchangeDelay)
+	exchange := gossip.NewFixedDelayExhange(start, settings.StateExchangeInterval, settings.StateExchangeDelay)
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
@@ -72,7 +73,7 @@ func testCreateWorkloadGenerator(start time.Time, stores int, keySpan int64) wor
 // minus the gossip delay and interval. This alleviates a cold start, where the
 // allocator for each store does not have information to make a decision for
 // the ranges it holds leases for.
-func testPreGossipStores(s state.State, exchange state.Exchange, at time.Time) {
+func testPreGossipStores(s state.State, exchange gossip.Exchange, at time.Time) {
 	storeDescriptors := s.StoreDescriptors()
 	exchange.Put(at, storeDescriptors...)
 }
@@ -112,7 +113,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	sample := func() int64 {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
-		exchange := state.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
+		exchange := gossip.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
 		changer := state.NewReplicaChanger()
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
@@ -187,7 +188,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
-		exchange := state.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
+		exchange := gossip.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
 		changer := state.NewReplicaChanger()
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
