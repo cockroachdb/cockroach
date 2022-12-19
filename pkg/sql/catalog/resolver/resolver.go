@@ -483,8 +483,7 @@ func ResolveIndex(
 	ctx context.Context,
 	schemaResolver SchemaResolver,
 	tableIndexName *tree.TableIndexName,
-	required bool,
-	requireActiveIndex bool,
+	flag tree.IndexLookupFlags,
 ) (
 	found bool,
 	prefix catalog.ResolvedObjectPrefix,
@@ -494,7 +493,7 @@ func ResolveIndex(
 ) {
 	if tableIndexName.Table.ObjectName != "" {
 		lflags := tree.ObjectLookupFlags{
-			CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+			CommonLookupFlags:    tree.CommonLookupFlags{Required: flag.Required},
 			DesiredObjectKind:    tree.TableObject,
 			DesiredTableDescKind: tree.ResolveRequireTableOrViewDesc,
 		}
@@ -504,7 +503,7 @@ func ResolveIndex(
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
 		}
 		if candidateTbl == nil {
-			if required {
+			if flag.Required {
 				err = pgerror.Newf(
 					pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
 				)
@@ -524,7 +523,7 @@ func ResolveIndex(
 
 		idx, err := candidateTbl.FindNonDropIndexWithName(string(tableIndexName.Index))
 		// err == nil indicates that the index is found.
-		if err == nil && (!requireActiveIndex || idx.Public()) {
+		if err == nil && (!flag.RequireActiveIndex || idx.Public()) {
 			return true, resolvedPrefix, candidateTbl, idx, nil
 		}
 
@@ -534,7 +533,7 @@ func ResolveIndex(
 			return true, resolvedPrefix, candidateTbl, candidateTbl.GetPrimaryIndex(), nil
 		}
 
-		if required {
+		if flag.Required {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
 				pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
 			)
@@ -549,7 +548,7 @@ func ResolveIndex(
 		}
 
 		tblFound, tbl, idx, err := findTableContainingIndex(
-			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, schemaResolver, requireActiveIndex,
+			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, schemaResolver, flag.RequireActiveIndex, flag.IncludeOfflineTable,
 		)
 		if err != nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
@@ -557,7 +556,7 @@ func ResolveIndex(
 		if tblFound {
 			return true, resolvedPrefix, tbl, idx, nil
 		}
-		if required {
+		if flag.Required {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
 				pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
 			)
@@ -592,7 +591,7 @@ func ResolveIndex(
 		schemaFound = true
 
 		candidateFound, tbl, idx, curErr := findTableContainingIndex(
-			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, schemaResolver, requireActiveIndex,
+			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, schemaResolver, flag.RequireActiveIndex, flag.IncludeOfflineTable,
 		)
 		if curErr != nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, curErr
@@ -609,7 +608,7 @@ func ResolveIndex(
 		)
 	}
 
-	if required {
+	if flag.Required {
 		return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
 			pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
 		)
@@ -704,6 +703,7 @@ func findTableContainingIndex(
 	resolvedPrefix catalog.ResolvedObjectPrefix,
 	schemaResolver SchemaResolver,
 	requireActiveIndex bool,
+	includeOfflineTable bool,
 ) (found bool, tblDesc catalog.TableDescriptor, idxDesc catalog.Index, err error) {
 	dsNames, _, err := schemaResolver.GetObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
 
@@ -723,7 +723,10 @@ func findTableContainingIndex(
 		if err != nil {
 			return false, nil, nil, err
 		}
-		if candidateTbl == nil || !(candidateTbl.IsTable() || candidateTbl.MaterializedView()) || candidateTbl.Offline() {
+		if candidateTbl == nil ||
+			!(candidateTbl.IsTable() ||
+				candidateTbl.MaterializedView()) ||
+			(!includeOfflineTable && candidateTbl.Offline()) {
 			continue
 		}
 
