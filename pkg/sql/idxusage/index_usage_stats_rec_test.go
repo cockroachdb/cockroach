@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -46,40 +45,40 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 	}{
 		// Database name "system", expect no index recommendation.
 		{
-			idxStats:            IndexStatsRow{},
+			idxStats: IndexStatsRow{
+				TableID:          1,
+				IndexID:          2,
+				LastRead:         anHourBefore,
+				IndexType:        "secondary",
+				CreatedAt:        nil,
+				UnusedIndexKnobs: nil,
+			},
 			dbName:              "system",
-			unusedIndexDuration: defaultUnusedIndexDuration,
+			unusedIndexDuration: time.Hour,
 			expectedReturn:      []*serverpb.IndexRecommendation{},
 		},
 		// Index is primary index, expect no index recommendation.
 		{
 			idxStats: IndexStatsRow{
-				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
-					IndexType: "primary",
-				},
+				TableID:          1,
+				IndexID:          2,
+				LastRead:         anHourBefore,
+				CreatedAt:        nil,
+				UnusedIndexKnobs: nil,
+				IndexType:        "primary",
 			},
 			dbName:              "testdb",
-			unusedIndexDuration: defaultUnusedIndexDuration,
+			unusedIndexDuration: time.Hour,
 			expectedReturn:      []*serverpb.IndexRecommendation{},
 		},
 		// Index exceeds the unused index duration, expect index recommendation.
 		{
 			idxStats: IndexStatsRow{
-				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
-					Statistics: &roachpb.CollectedIndexUsageStatistics{
-						Key: roachpb.IndexUsageKey{
-							TableID: 1,
-							IndexID: 2,
-						},
-						Stats: roachpb.IndexUsageStatistics{
-							LastRead: anHourBefore,
-						},
-					},
-					IndexName:       "test_idx",
-					IndexType:       "secondary",
-					CreatedAt:       nil,
-					CreateStatement: "",
-				},
+				TableID:          1,
+				IndexID:          2,
+				LastRead:         anHourBefore,
+				IndexType:        "secondary",
+				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
 			dbName:              "testdb",
@@ -96,21 +95,12 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 		// Index has never been used and has no creation time, expect never used index recommendation.
 		{
 			idxStats: IndexStatsRow{
-				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
-					Statistics: &roachpb.CollectedIndexUsageStatistics{
-						Key: roachpb.IndexUsageKey{
-							TableID: 1,
-							IndexID: 3,
-						},
-						Stats: roachpb.IndexUsageStatistics{
-							LastRead: time.Time{},
-						},
-					},
-					IndexName:       "test_idx",
-					IndexType:       "secondary",
-					CreatedAt:       nil,
-					CreateStatement: "",
-				},
+				TableID:  1,
+				IndexID:  3,
+				LastRead: time.Time{},
+
+				IndexType:        "secondary",
+				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
 			dbName:              "testdb",
@@ -127,21 +117,11 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 		// Index has been used recently, expect no index recommendations.
 		{
 			idxStats: IndexStatsRow{
-				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
-					Statistics: &roachpb.CollectedIndexUsageStatistics{
-						Key: roachpb.IndexUsageKey{
-							TableID: 1,
-							IndexID: 4,
-						},
-						Stats: roachpb.IndexUsageStatistics{
-							LastRead: aMinuteBefore,
-						},
-					},
-					IndexName:       "test_idx",
-					IndexType:       "secondary",
-					CreatedAt:       nil,
-					CreateStatement: "",
-				},
+				TableID:          1,
+				IndexID:          4,
+				LastRead:         aMinuteBefore,
+				IndexType:        "secondary",
+				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
 			dbName:              "testdb",
@@ -168,17 +148,9 @@ func TestRecommendDropUnusedIndex(t *testing.T) {
 		recommendation *serverpb.IndexRecommendation
 	}
 
-	stubIndexStatsRow := &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
-		Statistics: &roachpb.CollectedIndexUsageStatistics{
-			Key: roachpb.IndexUsageKey{
-				TableID: 1,
-				IndexID: 1,
-			},
-		},
-	}
-
 	indexStatsRow := IndexStatsRow{
-		Row: stubIndexStatsRow,
+		TableID: 1,
+		IndexID: 1,
 	}
 
 	testData := []struct {

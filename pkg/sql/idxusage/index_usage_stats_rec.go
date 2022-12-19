@@ -15,9 +15,11 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -26,7 +28,11 @@ import (
 // implements additional methods to support unused index recommendations and
 // hold testing knobs.
 type IndexStatsRow struct {
-	Row              *serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics
+	TableID          roachpb.TableID
+	IndexID          roachpb.IndexID
+	CreatedAt        *time.Time
+	LastRead         time.Time
+	IndexType        string
 	UnusedIndexKnobs *UnusedIndexRecommendationTestingKnobs
 }
 
@@ -65,7 +71,8 @@ func (i IndexStatsRow) GetRecommendationsFromIndexStats(
 	dbName string, st *cluster.Settings,
 ) []*serverpb.IndexRecommendation {
 	var recommendations = []*serverpb.IndexRecommendation{}
-	if dbName == "system" || i.Row.IndexType == "primary" {
+	// Omit fetching index recommendations for the 'system' database.
+	if dbName == catconstants.SystemDatabaseName {
 		return recommendations
 	}
 	rec := i.maybeAddUnusedIndexRecommendation(DropUnusedIndexDuration.Get(&st.SV))
@@ -78,11 +85,15 @@ func (i IndexStatsRow) GetRecommendationsFromIndexStats(
 func (i IndexStatsRow) maybeAddUnusedIndexRecommendation(
 	unusedIndexDuration time.Duration,
 ) *serverpb.IndexRecommendation {
+	if i.IndexType == "primary" {
+		return nil
+	}
+
 	var rec *serverpb.IndexRecommendation
 
 	if i.UnusedIndexKnobs == nil {
-		rec = i.recommendDropUnusedIndex(timeutil.Now(), i.Row.CreatedAt,
-			i.Row.Statistics.Stats.LastRead, unusedIndexDuration)
+		rec = i.recommendDropUnusedIndex(timeutil.Now(), i.CreatedAt,
+			i.LastRead, unusedIndexDuration)
 	} else {
 		rec = i.recommendDropUnusedIndex(i.UnusedIndexKnobs.GetCurrentTime(),
 			i.UnusedIndexKnobs.GetCreatedAt(), i.UnusedIndexKnobs.GetLastRead(), unusedIndexDuration)
@@ -106,8 +117,8 @@ func (i IndexStatsRow) recommendDropUnusedIndex(
 	// dropping with a "never used" reason.
 	if lastActive.Equal(time.Time{}) {
 		return &serverpb.IndexRecommendation{
-			TableID: i.Row.Statistics.Key.TableID,
-			IndexID: i.Row.Statistics.Key.IndexID,
+			TableID: i.TableID,
+			IndexID: i.IndexID,
 			Type:    serverpb.IndexRecommendation_DROP_UNUSED,
 			Reason:  indexNeverUsedReason,
 		}
@@ -115,8 +126,8 @@ func (i IndexStatsRow) recommendDropUnusedIndex(
 	// Last usage of the index exceeds the unused index duration.
 	if currentTime.Sub(lastActive) >= unusedIndexDuration {
 		return &serverpb.IndexRecommendation{
-			TableID: i.Row.Statistics.Key.TableID,
-			IndexID: i.Row.Statistics.Key.IndexID,
+			TableID: i.TableID,
+			IndexID: i.IndexID,
 			Type:    serverpb.IndexRecommendation_DROP_UNUSED,
 			Reason:  fmt.Sprintf(indexExceedUsageDurationReasonPlaceholder, formatDuration(unusedIndexDuration)),
 		}
