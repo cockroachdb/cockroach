@@ -1115,7 +1115,7 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 	lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 	lt.enabled = true
 	return &workloadExecutor{
-		lm:           spanlatch.Manager{},
+		lm:           spanlatch.MakeForTesting(),
 		lt:           lt,
 		items:        items,
 		transactions: make(map[uuid.UUID]*transactionState),
@@ -1677,8 +1677,9 @@ func BenchmarkLockTable(b *testing.B) {
 						const maxLocks = 100000
 						lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
 						lt.enabled = true
+						lm := spanlatch.MakeForTesting()
 						env := benchEnv{
-							lm:                &spanlatch.Manager{},
+							lm:                &lm,
 							lt:                lt,
 							numRequestsWaited: &numRequestsWaited,
 							numScanCalls:      &numScanCalls,

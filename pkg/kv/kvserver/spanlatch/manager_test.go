@@ -122,7 +122,8 @@ func (m *Manager) MustAcquireChExt(
 	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy,
 ) Attempt {
 	errCh := make(chan error, 1)
-	lg, snap := m.sequence(spans, pp)
+	snap := new(snapshot)
+	lg := m.sequence(spans, pp, snap)
 	go func() {
 		err := m.wait(ctx, lg, snap)
 		if err != nil {
@@ -135,7 +136,7 @@ func (m *Manager) MustAcquireChExt(
 
 func TestLatchManager(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Try latches with no overlapping already-acquired latches.
 	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
@@ -158,7 +159,7 @@ func TestLatchManager(t *testing.T) {
 
 func TestLatchManagerAcquireOverlappingSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire overlapping latches with different access patterns.
 	//    |----------|        <- Read latch [a-c)@t1
@@ -202,7 +203,7 @@ func TestLatchManagerAcquireOverlappingSpans(t *testing.T) {
 
 func TestLatchManagerAcquiringReadsVaryingTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	var ts0, ts1 = hlc.Timestamp{WallTime: 0}, hlc.Timestamp{WallTime: 1}
 	var spanSet spanset.SpanSet
@@ -236,7 +237,7 @@ func TestLatchManagerAcquiringReadsVaryingTimestamps(t *testing.T) {
 
 func TestLatchManagerNoWaitOnReadOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire latch for read-only span.
 	m.MustAcquire(spans("a", "", read, zeroTS))
@@ -247,7 +248,7 @@ func TestLatchManagerNoWaitOnReadOnly(t *testing.T) {
 
 func TestLatchManagerWriteWaitForMultipleReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire latch for read-only span.
 	lg1 := m.MustAcquire(spans("a", "", read, zeroTS))
@@ -275,7 +276,7 @@ func TestLatchManagerWriteWaitForMultipleReads(t *testing.T) {
 
 func TestLatchManagerMultipleOverlappingLatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire multiple latches.
 	a1 := m.MustAcquireCh(spans("a", "", write, zeroTS))
@@ -295,7 +296,7 @@ func TestLatchManagerMultipleOverlappingLatches(t *testing.T) {
 
 func TestLatchManagerMultipleOverlappingSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire multiple latches.
 	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
@@ -502,7 +503,7 @@ func TestLatchManagerDependentLatches(t *testing.T) {
 					c.sp1, c.sp2 = c.sp2, c.sp1
 				}
 
-				var m Manager
+				m := MakeForTesting()
 				lg1 := m.MustAcquire(c.sp1)
 				lg2C := m.MustAcquireCh(c.sp2)
 				if c.dependent {
@@ -534,7 +535,7 @@ func TestLatchManagerPoison(t *testing.T) {
 		}
 	}
 
-	var m Manager
+	m := MakeForTesting()
 	a1 := m.MustAcquireChExt(ctx, spans("a", "", write, zeroTS), poison.Policy_Wait)
 	a2 := m.MustAcquireChExt(ctx, spans("a", "", write, zeroTS), poison.Policy_Error)
 	a3 := m.MustAcquireChExt(ctx, spans("a", "", write, zeroTS), poison.Policy_Error)
@@ -577,7 +578,7 @@ func TestLatchManagerPoison(t *testing.T) {
 
 func TestLatchManagerContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Attempt to acquire three latches that all block on each other.
 	lg1 := m.MustAcquire(spans("a", "", write, zeroTS))
@@ -604,7 +605,7 @@ func TestLatchManagerContextCancellation(t *testing.T) {
 
 func TestLatchManagerOptimistic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire latches, no conflict.
 	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS), poison.Policy_Error)
@@ -653,7 +654,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 
 func TestLatchManagerWaitFor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var m Manager
+	m := MakeForTesting()
 
 	// Acquire latches, no conflict.
 	lg1, err := m.Acquire(context.Background(), spans("d", "f", write, zeroTS), poison.Policy_Error)
@@ -684,7 +685,7 @@ func TestLatchManagerWaitFor(t *testing.T) {
 func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 	for _, size := range []int{1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
-			var m Manager
+			m := MakeForTesting()
 			ss := spans("a", "b", read, zeroTS)
 			for i := 0; i < size; i++ {
 				_ = m.MustAcquire(ss)
@@ -701,7 +702,7 @@ func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
 func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 	for _, readsPerWrite := range []int{0, 1, 4, 16, 64, 128, 256} {
 		b.Run(fmt.Sprintf("readsPerWrite=%d", readsPerWrite), func(b *testing.B) {
-			var m Manager
+			m := MakeForTesting()
 			lgBuf := make(chan *Guard, 16)
 
 			spans := make([]spanset.SpanSet, b.N)
@@ -722,7 +723,8 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 
 			b.ResetTimer()
 			for i := range spans {
-				lg, snap := m.sequence(&spans[i], poison.Policy_Error)
+				var snap snapshot
+				lg := m.sequence(&spans[i], poison.Policy_Error, &snap)
 				snap.close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(<-lgBuf)
