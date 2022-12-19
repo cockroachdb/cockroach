@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tpch",
@@ -25,6 +25,19 @@ go_library(
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
+    ],
+)
+
+go_test(
+    name = "tpch_test",
+    srcs = ["random_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":tpch"],
+    deps = [
+        "//pkg/util/bufalloc",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//assert",
         "@org_golang_x_exp//rand",
     ],
 )

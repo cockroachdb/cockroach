@@ -119,6 +119,7 @@ var (
 // clear_time_range k=<key> end=<key> ts=<int>[,<int>] targetTs=<int>[,<int>] [clearRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchByteSize=<int>]
 //
 // gc_clear_range k=<key> end=<key> startTs=<int>[,<int>] ts=<int>[,<int>]
+// gc_points_clear_range k=<key> end=<key> startTs=<int>[,<int>] ts=<int>[,<int>]
 // replace_point_tombstones_with_range_tombstones k=<key> [end=<key>]
 //
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
@@ -693,25 +694,26 @@ var commands = map[string]cmd{
 	"check_intent":         {typReadOnly, cmdCheckIntent},
 	"add_lock":             {typLocksUpdate, cmdAddLock},
 
-	"clear":            {typDataUpdate, cmdClear},
-	"clear_range":      {typDataUpdate, cmdClearRange},
-	"clear_rangekey":   {typDataUpdate, cmdClearRangeKey},
-	"clear_time_range": {typDataUpdate, cmdClearTimeRange},
-	"cput":             {typDataUpdate, cmdCPut},
-	"del":              {typDataUpdate, cmdDelete},
-	"del_range":        {typDataUpdate, cmdDeleteRange},
-	"del_range_ts":     {typDataUpdate, cmdDeleteRangeTombstone},
-	"del_range_pred":   {typDataUpdate, cmdDeleteRangePredicate},
-	"export":           {typReadOnly, cmdExport},
-	"get":              {typReadOnly, cmdGet},
-	"gc_clear_range":   {typDataUpdate, cmdGCClearRange},
-	"increment":        {typDataUpdate, cmdIncrement},
-	"initput":          {typDataUpdate, cmdInitPut},
-	"merge":            {typDataUpdate, cmdMerge},
-	"put":              {typDataUpdate, cmdPut},
-	"put_rangekey":     {typDataUpdate, cmdPutRangeKey},
-	"scan":             {typReadOnly, cmdScan},
-	"is_span_empty":    {typReadOnly, cmdIsSpanEmpty},
+	"clear":                 {typDataUpdate, cmdClear},
+	"clear_range":           {typDataUpdate, cmdClearRange},
+	"clear_rangekey":        {typDataUpdate, cmdClearRangeKey},
+	"clear_time_range":      {typDataUpdate, cmdClearTimeRange},
+	"cput":                  {typDataUpdate, cmdCPut},
+	"del":                   {typDataUpdate, cmdDelete},
+	"del_range":             {typDataUpdate, cmdDeleteRange},
+	"del_range_ts":          {typDataUpdate, cmdDeleteRangeTombstone},
+	"del_range_pred":        {typDataUpdate, cmdDeleteRangePredicate},
+	"export":                {typReadOnly, cmdExport},
+	"get":                   {typReadOnly, cmdGet},
+	"gc_clear_range":        {typDataUpdate, cmdGCClearRange},
+	"gc_points_clear_range": {typDataUpdate, cmdGCPointsClearRange},
+	"increment":             {typDataUpdate, cmdIncrement},
+	"initput":               {typDataUpdate, cmdInitPut},
+	"merge":                 {typDataUpdate, cmdMerge},
+	"put":                   {typDataUpdate, cmdPut},
+	"put_rangekey":          {typDataUpdate, cmdPutRangeKey},
+	"scan":                  {typReadOnly, cmdScan},
+	"is_span_empty":         {typReadOnly, cmdIsSpanEmpty},
 
 	"iter_new":                    {typReadOnly, cmdIterNew},
 	"iter_new_incremental":        {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
@@ -1018,6 +1020,15 @@ func cmdGCClearRange(e *evalCtx) error {
 		cms, err := storage.ComputeStats(rw, key, endKey, 100e9)
 		require.NoError(e.t, err, "failed to compute range stats")
 		return storage.MVCCGarbageCollectWholeRange(e.ctx, rw, e.ms, key, endKey, gcTs, cms)
+	})
+}
+
+func cmdGCPointsClearRange(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	gcTs := e.getTs(nil)
+	startTs := e.getTsWithName("startTs")
+	return e.withWriter("gc_clear_range", func(rw storage.ReadWriter) error {
+		return storage.MVCCGarbageCollectPointsWithClearRange(e.ctx, rw, e.ms, key, endKey, startTs, gcTs)
 	})
 }
 

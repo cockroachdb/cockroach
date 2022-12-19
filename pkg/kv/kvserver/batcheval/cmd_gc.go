@@ -54,11 +54,30 @@ func declareKeysGC(
 			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
-	// For ClearRangeKey request we still obtain a wide write lock as we don't
-	// expect any operations running on the range.
-	if rk := gcr.ClearRangeKey; rk != nil {
-		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: rk.StartKey, EndKey: rk.EndKey},
-			hlc.MaxTimestamp)
+	// We have three distinct cases for GCClearRange.
+	// First is when range has no timestamp which means we will attempt to delete
+	// all data in range and that requires wide lock of the whole key span. This
+	// is fine as we are discarding all data in range.
+	// Second is deleting multiple versions of a single key when most recent data
+	// remains. This case is not different from non-ranged GC for individual keys.
+	// See explanation of correctness below why we can avoid obtaining locks.
+	// Thirs case is deleting multiple keys, and for it we need to obtain a write
+	// lock to prevent any addition of the keys that would be covered by the
+	// request range span. We will obtain it on highest timestamp to avoid
+	// interference with readers that want to read keys. It is safe to read as per
+	// correctness explanation below because we only delete data below threshold
+	// and that data is not readable.
+	// This lock could create contention for writers, but in practice if range
+	// contain live data, we will not create wide GCClearRange requests. And if
+	// there's no live data for at least gc.ttl period, then it is not likely
+	// there would be other writes to the range.
+	// A corner case could be if writes were stopped for GCTTL and then resumed,
+	// they could hit contention on the first GC run.
+	if rk := gcr.ClearRange; rk != nil {
+		if rk.StartKeyTimestamp.IsEmpty() || !rk.StartKey.Next().Equal(rk.EndKey) {
+			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: rk.StartKey, EndKey: rk.EndKey},
+				hlc.MaxTimestamp)
+		}
 	}
 	// The RangeGCThresholdKey is only written to if the
 	// req.(*GCRequest).Threshold is set. However, we always declare an exclusive
@@ -143,7 +162,7 @@ func GC(
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
 	if !args.Threshold.IsEmpty() &&
-		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil) &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRange != nil) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
@@ -151,9 +170,10 @@ func GC(
 
 	// We do not allow removal of point or range keys combined with clear range
 	// operation as they could cover the same set of keys.
-	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0) && args.ClearRangeKey != nil {
+	if (len(args.Keys) != 0 || len(args.RangeKeys) != 0) &&
+		args.ClearRange != nil {
 		return result.Result{}, errors.AssertionFailedf(
-			"GC request can remove point and range keys or clear entire range, but it is unsafe for it to do both")
+			"GC request can remove point and range keys or clear range, but it is unsafe for it to do both")
 	}
 
 	// All keys must be inside the current replica range. Keys outside
@@ -184,10 +204,36 @@ func GC(
 		}
 	}
 
+	desc := cArgs.EvalCtx.Desc()
+
+	if cr := args.ClearRange; cr != nil {
+		// Check if we are performing a fast path operation to try to remove all user
+		// key data from the range. All data must be deleted by a range tombstone for
+		// the operation to succeed.
+		if cr.StartKeyTimestamp.IsEmpty() {
+			if !cr.StartKey.Equal(desc.StartKey.AsRawKey()) || !cr.EndKey.Equal(desc.EndKey.AsRawKey()) {
+				return result.Result{}, errors.Errorf("gc with clear range operation could only be used on the full range")
+			}
+
+			if err := storage.MVCCGarbageCollectWholeRange(ctx, readWriter, cArgs.Stats,
+				cr.StartKey, cr.EndKey, cArgs.EvalCtx.GetGCThreshold(),
+				cArgs.EvalCtx.GetMVCCStats()); err != nil {
+				return result.Result{}, err
+			}
+		} else {
+			// Otherwise garbage collect specified keys defined by clear range i.e. parts
+			// of the whole range containing no live data.
+			if err := storage.MVCCGarbageCollectPointsWithClearRange(ctx, readWriter, cArgs.Stats,
+				cr.StartKey, cr.EndKey, cr.StartKeyTimestamp,
+				cArgs.EvalCtx.GetGCThreshold()); err != nil {
+				return result.Result{}, err
+			}
+		}
+	}
+
 	// Garbage collect range keys. Note that we pass latch range boundaries for
 	// each key as we may need to merge range keys with adjacent ones, but we
 	// are restricted on how far we are allowed to read.
-	desc := cArgs.EvalCtx.Desc()
 	rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
 		desc.EndKey.AsRawKey(), args.RangeKeys)
 	if err := storage.MVCCGarbageCollectRangeKeys(ctx, readWriter, cArgs.Stats, rangeKeys); err != nil {
@@ -195,18 +241,6 @@ func GC(
 	}
 
 	var res result.Result
-
-	// Fast path operation to try to remove all user key data from the range.
-	if rk := args.ClearRangeKey; rk != nil {
-		if !rk.StartKey.Equal(desc.StartKey.AsRawKey()) || !rk.EndKey.Equal(desc.EndKey.AsRawKey()) {
-			return result.Result{}, errors.Errorf("gc with clear range operation could only be used on the full range")
-		}
-
-		if err := storage.MVCCGarbageCollectWholeRange(ctx, readWriter, cArgs.Stats,
-			rk.StartKey, rk.EndKey, cArgs.EvalCtx.GetGCThreshold(), cArgs.EvalCtx.GetMVCCStats()); err != nil {
-			return result.Result{}, err
-		}
-	}
 
 	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
 	// Optionally bump the GC threshold timestamp.
@@ -234,7 +268,7 @@ func GC(
 	// unnecessarily GC'd with high priority again.
 	// We should only do that when we are doing actual cleanup as we want to have
 	// a hint when request is being handled.
-	if len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil {
+	if len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRange != nil {
 		sl := MakeStateLoader(cArgs.EvalCtx)
 		hint, err := sl.LoadGCHint(ctx, readWriter)
 		if err != nil {

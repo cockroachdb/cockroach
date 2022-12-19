@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -46,6 +48,19 @@ const (
 	// Raft command for each GCRequest does not significantly exceed
 	// this threshold.
 	KeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
+	// defaultClearRangeMinKeys is min number of versions we will try to
+	// remove using clear range. If we have less than this number, using pebble
+	// range tombstone is more expensive than using multiple point deletions.
+	defaultClearRangeMinKeys = 2000
+	// defaultMaxPendingKeysSize is a max amount of memory used to store pending
+	// keys while trying to decide if clear range operation is feasible. If we
+	// don't have enough keys when this value is reached, points GC operation
+	// will be flushed to free memory even if we still can potentially issue
+	// clear range in the future.
+	defaultMaxPendingKeysSize = 64 << 20
+	// hlcTimestampSize is the size of hlc timestamp used for mem usage
+	// calculations.
+	hlcTimestampSize = 16
 )
 
 // IntentAgeThreshold is the threshold after which an extant intent
@@ -116,6 +131,16 @@ var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// ClearRangeMinKeys is a minimum number of keys that GC will consider
+// for executing a ClearRange request. Since ClearRange requests translate into
+// pebble tombstones, they should be used on large sequence of keys only.
+var ClearRangeMinKeys = settings.RegisterIntSetting(settings.SystemOnly,
+	"kv.gc.clear_range_min_keys",
+	"if non zero, gc will issue clear range requests if number of consecutive garbage keys exceeds this threshold",
+	defaultClearRangeMinKeys,
+	settings.NonNegativeInt,
+)
+
 // AdmissionPriority determines the admission priority level to use for MVCC GC
 // work.
 var AdmissionPriority = settings.RegisterEnumSetting(
@@ -152,7 +177,7 @@ type Thresholder interface {
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
 	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
-		*roachpb.GCRequest_GCClearRangeKey,
+		*roachpb.GCRequest_GCClearRange,
 	) error
 }
 
@@ -175,7 +200,7 @@ func (NoopGCer) GC(
 	context.Context,
 	[]roachpb.GCRequest_GCKey,
 	[]roachpb.GCRequest_GCRangeKey,
-	*roachpb.GCRequest_GCClearRangeKey,
+	*roachpb.GCRequest_GCClearRange,
 ) error {
 	return nil
 }
@@ -236,12 +261,12 @@ type Info struct {
 	// AffectedVersionsRangeValBytes is the number of (fully encoded) bytes deleted from values that
 	// belong to removed range keys.
 	AffectedVersionsRangeValBytes int64
-	// ClearRangeKeyOperations reports 1 if GC succeeded performing collection with
-	// ClearRange operation.
-	ClearRangeKeyOperations int
-	// ClearRangeKeyFailures reports 1 if GC identified a possibility to collect
-	// with ClearRange operation, but request failed.
-	ClearRangeKeyFailures int
+	// ClearRangeSpanOperations number of ClearRange requests performed by GC. This
+	// number includes full range clear requests as well as requests covering
+	// multiple keys or versions of the same key.
+	ClearRangeSpanOperations int
+	// ClearRangeSpanFailures number of ClearRange requests GC failed to perform.
+	ClearRangeSpanFailures int
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -265,6 +290,22 @@ type RunOptions struct {
 	// considered abandoned and fit for removal, as measured by the maximum of
 	// its last heartbeat and read timestamp.
 	TxnCleanupThreshold time.Duration
+	// ClearRangeMinKeys is minimum number of keys to delete with a ClearRange
+	// operation. If there's less than this number of keys to delete, GC would
+	// fall back to point deletions.
+	// 0 means usage of clear range requests is disabled.
+	ClearRangeMinKeys int64
+	// MaxKeyVersionChunkBytes is the max size of keys for all versions of objects a single gc
+	// batch would contain. This includes not only keys within the request, but also all versions
+	// covered below request keys. This is important because of the resulting raft command size
+	// generated in response to GC request.
+	MaxKeyVersionChunkBytes int64
+	// MaxPendingKeysSize maximum amount of bytes of pending GC batches kept in
+	// memory while searching for eligible clear range span. If span of minimum
+	// configured length is not found before this limit is reached, gc will resort
+	// to issuing point delete requests for the oldest batch to free up memory
+	// before resuming further iteration.
+	MaxPendingKeysSize int64
 }
 
 // CleanupIntentsFunc synchronously resolves the supplied intents
@@ -310,7 +351,9 @@ func Run(
 		Threshold: newThreshold,
 	}
 
-	fastPath, err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold, gcer,
+	fastPath, err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold,
+		populateBatcherOptions(options),
+		gcer,
 		intentBatcherOptions{
 			maxIntentsPerIntentCleanupBatch:        options.MaxIntentsPerIntentCleanupBatch,
 			maxIntentKeyBytesPerIntentCleanupBatch: options.MaxIntentKeyBytesPerIntentCleanupBatch,
@@ -328,7 +371,8 @@ func Run(
 	// From now on, all keys processed are range-local and inline (zero timestamp).
 
 	// Process local range key entries (txn records, queue last processed times).
-	if err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn, gcer); err != nil {
+	if err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn,
+		gcer); err != nil {
 		if errors.Is(err, ctx.Err()) {
 			return Info{}, err
 		}
@@ -349,6 +393,24 @@ func Run(
 	return info, nil
 }
 
+func populateBatcherOptions(options RunOptions) gcKeyBatcherThresholds {
+	batcherOptions := gcKeyBatcherThresholds{
+		clearRangeMinKeys:         int(options.ClearRangeMinKeys),
+		batchGCKeysBytesThreshold: options.MaxKeyVersionChunkBytes,
+		maxPendingKeysSize:        int(options.MaxPendingKeysSize),
+	}
+	if batcherOptions.clearRangeMinKeys > 0 {
+		batcherOptions.clearRangeEnabled = true
+	}
+	if batcherOptions.batchGCKeysBytesThreshold == 0 {
+		batcherOptions.batchGCKeysBytesThreshold = KeyVersionChunkBytes
+	}
+	if batcherOptions.maxPendingKeysSize == 0 {
+		batcherOptions.maxPendingKeysSize = defaultMaxPendingKeysSize
+	}
+	return batcherOptions
+}
+
 // processReplicatedKeyRange identifies garbage and sends GC requests to
 // remove it.
 //
@@ -362,7 +424,8 @@ func processReplicatedKeyRange(
 	now hlc.Timestamp,
 	threshold hlc.Timestamp,
 	intentAgeThreshold time.Duration,
-	gcer GCer,
+	batcherThresholds gcKeyBatcherThresholds,
+	gcer PureGCer,
 	options intentBatcherOptions,
 	cleanupIntentsFn CleanupIntentsFunc,
 	info *Info,
@@ -376,154 +439,514 @@ func processReplicatedKeyRange(
 		end := desc.EndKey.AsRawKey()
 		if coveredByRangeTombstone, err := storage.CanGCEntireRange(ctx, snap, start, end,
 			threshold); err == nil && coveredByRangeTombstone {
-			if err = gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRangeKey{
+			if err = gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRange{
 				StartKey: start,
 				EndKey:   end,
 			}); err == nil {
 				excludeUserKeySpan = true
-				info.ClearRangeKeyOperations++
+				info.ClearRangeSpanOperations++
 			} else {
 				log.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s",
 					desc.String(), err)
-				info.ClearRangeKeyFailures++
+				info.ClearRangeSpanFailures++
 			}
 		}
 	}
 
-	var alloc bufalloc.ByteAllocator
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 
-	intentBatcher := newIntentBatcher(cleanupIntentsFn, options, info)
+	return excludeUserKeySpan, rditer.IterateMVCCReplicaKeySpans(desc, snap, rditer.IterateOptions{
+		CombineRangesAndPoints: true,
+		Reverse:                true,
+		ExcludeUserKeySpan:     excludeUserKeySpan,
+	}, func(iterator storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+		intentBatcher := newIntentBatcher(cleanupIntentsFn, options, info)
 
-	// handleIntent will deserialize transaction info and if intent is older than
-	// threshold enqueue it to batcher, otherwise ignore it.
-	handleIntent := func(keyValue *mvccKeyValue) error {
-		meta := &enginepb.MVCCMetadata{}
-		if err := protoutil.Unmarshal(keyValue.metaValue, meta); err != nil {
-			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keyValue.key, err)
-			return nil
-		}
-		if meta.Txn != nil {
-			// Keep track of intent to resolve if older than the intent
-			// expiration threshold.
-			if meta.Timestamp.ToTimestamp().Less(intentExp) {
-				info.IntentsConsidered++
-				if err := intentBatcher.addAndMaybeFlushIntents(ctx, keyValue.key.Key, meta); err != nil {
-					if errors.Is(err, ctx.Err()) {
-						return err
+		// handleIntent will deserialize transaction info and if intent is older than
+		// threshold enqueue it to batcher, otherwise ignore it.
+		handleIntent := func(keyValue *mvccKeyValue) error {
+			meta := &enginepb.MVCCMetadata{}
+			if err := protoutil.Unmarshal(keyValue.metaValue, meta); err != nil {
+				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keyValue.key, err)
+				return nil
+			}
+			if meta.Txn != nil {
+				// Keep track of intent to resolve if older than the intent
+				// expiration threshold.
+				if meta.Timestamp.ToTimestamp().Less(intentExp) {
+					info.IntentsConsidered++
+					if err := intentBatcher.addAndMaybeFlushIntents(ctx, keyValue.key.Key, meta); err != nil {
+						if errors.Is(err, ctx.Err()) {
+							return err
+						}
+						log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 					}
-					log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 				}
 			}
+			return nil
 		}
+
+		// Iterate all versions of all keys from oldest to newest. If a version is an
+		// intent it will have the highest timestamp of any versions and will be
+		// followed by a metadata entry.
+		// The loop determines if next object is garbage, non-garbage or intent and
+		// notifies batcher with its detail. Batcher is responsible for accumulating
+		// pending key data and sending sending keys to GCer as needed.
+		// It could also request the main loop to rewind to a previous point to
+		// retry (this is needed when attempt to collect a clear range batch fails
+		// in the middle of key versions).
+		it := makeGCIterator(iterator, threshold)
+
+		b := gcKeyBatcher{
+			gcKeyBatcherThresholds: batcherThresholds,
+			gcer:                   gcer,
+			info:                   info,
+			pointsBatches:          make([]pointsBatch, 1),
+			// We must clone here as we reuse key slice to avoid realocating on every
+			// key.
+			clearRangeEndKey: span.EndKey.Clone(),
+			prevWasNewest:    true,
+		}
+
+		for ; ; it.step() {
+			var err error
+
+			s, ok := it.state()
+			if !ok {
+				if it.err != nil {
+					return it.err
+				}
+				break
+			}
+
+			switch {
+			case s.curIsNotValue():
+				// Skip over non mvcc data and intents.
+				err = b.foundNonGCableData(ctx, s.cur, true /* isNewestPoint */)
+			case s.curIsIntent():
+				err = b.foundNonGCableData(ctx, s.cur, true /* isNewestPoint */)
+				if err != nil {
+					return err
+				}
+				if err = handleIntent(s.next); err != nil {
+					return err
+				}
+				// For intents, we force step over the intent metadata after provisional
+				// value is found.
+				it.step()
+			default:
+				if isGarbage(threshold, s.cur, s.next, s.curIsNewest(), s.firstRangeTombstoneTsAtOrBelowGC) {
+					err = b.foundGarbage(ctx, s.cur, s.curLastKeyVersion())
+				} else {
+					err = b.foundNonGCableData(ctx, s.cur, s.curLastKeyVersion())
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
+
+		err := b.flushLastBatch(ctx)
+		if err != nil {
+			return err
+		}
+
+		// We need to send out last intent cleanup batch.
+		if err := intentBatcher.maybeFlushPendingIntents(ctx); err != nil {
+			if errors.Is(err, ctx.Err()) {
+				return err
+			}
+			log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+		}
+		return nil
+	})
+}
+
+// gcBatchCounters contain statistics about garbage that is collected for the
+// range of keys.
+type gcBatchCounters struct {
+	keyBytes, valBytes int64
+	// keysAffected includes key when it is first encountered, but would not be
+	// included if key versions were split between batches.
+	keysAffected int
+	// memUsed is amount of bytes batch takes in memory (sum of all keys and
+	// timestamps excluding any supporting structures).
+	memUsed int
+	// versionsAffected is a number of key versions covered by batch. This is
+	// used for clear range accounting.
+	versionsAffected int
+}
+
+func (c gcBatchCounters) updateGcInfo(info *Info) {
+	info.AffectedVersionsKeyBytes += c.keyBytes
+	info.AffectedVersionsValBytes += c.valBytes
+	info.NumKeysAffected += c.keysAffected
+}
+
+func (c gcBatchCounters) String() string {
+	return fmt.Sprintf("Counters{keyBytes=%d, valBytes=%d, keys=%d, versions=%d, memUsed=%d}",
+		c.keyBytes, c.valBytes, c.keysAffected, c.versionsAffected, c.memUsed)
+}
+
+// gcKeyBatcherThresholds collection configuration options.
+type gcKeyBatcherThresholds struct {
+	batchGCKeysBytesThreshold int64
+	clearRangeMinKeys         int
+	clearRangeEnabled         bool
+	maxPendingKeysSize        int
+}
+
+type pointsBatch struct {
+	gcBatchCounters
+	batchGCKeys []roachpb.GCRequest_GCKey
+	alloc       bufalloc.ByteAllocator
+}
+
+func (b pointsBatch) String() string {
+	return fmt.Sprintf("PointsBatch{keyCount=%d, counters=%s}",
+		len(b.batchGCKeys), b.gcBatchCounters.String())
+}
+
+// gcKeyBatcher is responsible for collecting MVCCKeys and feeding them to GCer
+// for removal.
+// It is receiving notifications if next key is garbage or not and makes decision
+// how to batch the data and weather to use point deletion requests or clear
+// range requests.
+// Batcher will create GC requests containing either collection of individual
+// mvcc keys (batch) or clear range span. It will look on three thresholds when
+// building a request:
+//   - clearRangeMinKeys - minimum number of sequential keys eligible for clear
+//     range
+//   - batchGCKeysBytesThreshold - maximum byte size of all deleted key versions
+//     per request
+//   - maxPendingKeysSize - maximum number of bytes taken by pending requests in
+//     memory
+//
+// Batcher tries to find the longest sequence of keys to delete and if the
+// sequence is not found (because of non collectable data inbetween) it will
+// resort to sending request with point deletions.
+// To achieve this behaviour batcher will collect point batches in parallel to
+// tracking the sequence length. Once minimum sequence length is reached, it
+// stops collecting point batches since we are guaranteed to send a clear range.
+// If however it reaches maxPendingKeysSize limit before clearRangeMinKeys is
+// met (that would happen if keys are particularly large) then the oldest batch
+// is sent, and clear range end is moved to the lowest key if sent batch.
+// Once non-garbage key is found, if sequence length is at or above
+// clearRangeMinKeys threshold, GC will first send relevant portion of first
+// points batch (up to the first key covered by clear range) and then clear
+// range request for the remainder of keys. After that it drops all pending
+// batches.
+// If however the sequence is too short then batcher will send all previous
+// batches up to the current one. Record current key as an end of clear range
+// span (remember that we are iterating from back to front), record current
+// batch counters in partialPointBatchCounters and restart sequence
+// search. partialPointBatchCounters is required to make accurate counter
+// updates when clear range starts mid points batch. It covers part of the
+// first batch from its beginning to the point where clear range could start,
+// and remainder of the batch is covered by counters for clear range span.
+// Described behaviour support the following pending batches invariant:
+//   - only the oldest batch in the history could be split by non-garbage key in
+//     the middle, other batches always cover contiguous sets of keys.
+type gcKeyBatcher struct {
+	gcKeyBatcherThresholds
+
+	// prevWasNewest indicates that we are at oldest version of the key.
+	// its value is a saved isNewest from previous key.
+	prevWasNewest bool
+	// Points batches are accumulated until we cross clear range threshold.
+	// There's always at least one points batch initialized.
+	pointsBatches []pointsBatch
+	// totalMemUsed sum of memUsed of all points batches cached to avoid
+	// recomputing on every check.
+	totalMemUsed int
+
+	// Tracking of clear range requests, only used if clearRangeEnabled is true.
+
+	// clearRangeEndKey contains a key following first garbage key found. It would
+	// be greater or equal to the last key (lowest, collected last) of the first
+	// (collected first, containing highest keys) points batch. It is guaranteed
+	// that there are no non-garbage keys between this key and the start of first
+	// batch.
+	// Updated whenever batcher is provided with latest version of non garbage
+	// key or when oldest points batch is flushed.
+	clearRangeEndKey roachpb.Key
+	// Last garbage key found. Its Key component is updated whenever new key is
+	// found, timestamp component updated on each garbage key. Its slice is shared
+	// with points batch allocator if batcher didn't reach min key size, or shared
+	// with clearRangeStartKeyAlloc which is used to eliminate unnecessary
+	// allocations for the start key.
+	clearRangeStartKey storage.MVCCKey
+	// We use this key slice to avoid allocating for every new key. We can't
+	// blindly reuse slice in clearRangeStartKey because we avoid allocations
+	// for clearRangeStartKey if they could be shared with points batch.
+	// This is saving us any extra key copying if we can't find enough consecutive
+	// keys.
+	clearRangeStartKeyAlloc roachpb.Key
+	// GC Counters for data covered by currently tracked clear range span.
+	clearRangeCounters gcBatchCounters
+	// Stats counters saved from points batch when clear range tracking started.
+	// Those stats combined with clearRangeCounters cover all unprocessed keys
+	// since last sent request.
+	partialPointBatchCounters gcBatchCounters
+
+	gcer PureGCer
+	info *Info
+}
+
+func (b *gcKeyBatcher) String() string {
+	pbs := make([]string, len(b.pointsBatches))
+	for i, pb := range b.pointsBatches {
+		pbs[i] = pb.String()
+	}
+	return fmt.Sprintf("gcKeyBatcher{batches=[%s], clearRangeCnt=%s, partialBatchCnt=%s, totalMem=%d}",
+		strings.Join(pbs, ", "),
+		b.clearRangeCounters.String(),
+		b.partialPointBatchCounters.String(),
+		b.totalMemUsed)
+}
+
+func (b *gcKeyBatcher) foundNonGCableData(
+	ctx context.Context, cur *mvccKeyValue, isNewestPoint bool,
+) (err error) {
+	b.prevWasNewest = isNewestPoint
+	if !b.clearRangeEnabled {
 		return nil
 	}
 
-	// Iterate all versions of all keys from oldest to newest. If a version is an
-	// intent it will have the highest timestamp of any versions and will be
-	// followed by a metadata entry. The loop will determine whether a given key
-	// has garbage and, if so, will determine the timestamp of the latest version
-	// which is garbage to be added to the current batch. If the current version
-	// pushes the size of keys to be removed above the limit, the current key will
-	// be added with that version and the batch will be sent. When the newest
-	// version for a key has been reached, if haveGarbageForThisKey, we'll add the
-	// current key to the batch with the gcTimestampForThisKey.
-	var (
-		batchGCKeys           []roachpb.GCRequest_GCKey
-		batchGCKeysBytes      int64
-		haveGarbageForThisKey bool
-		gcTimestampForThisKey hlc.Timestamp
-		sentBatchForThisKey   bool
-	)
-	it := makeGCIterator(desc, snap, threshold, excludeUserKeySpan)
-	defer it.close()
-	for ; ; it.step() {
-		s, ok := it.state()
-		if !ok {
-			if it.err != nil {
-				return false, it.err
-			}
-			break
-		}
-		if s.curIsNotValue() { // Step over metadata or other system keys
-			continue
-		}
-		if s.curIsIntent() {
-			if err := handleIntent(s.next); err != nil {
-				return false, err
-			}
-			continue
-		}
-		// No more values in buffer or next value has different key.
-		isNewestPoint := s.curIsNewest()
-		if garbage, err :=
-			isGarbage(threshold, s.cur, s.next, isNewestPoint, s.firstRangeTombstoneTsAtOrBelowGC); garbage && err == nil {
-			keyBytes := int64(s.cur.key.EncodedSize())
-			batchGCKeysBytes += keyBytes
-			haveGarbageForThisKey = true
-			gcTimestampForThisKey = s.cur.key.Timestamp
-			info.AffectedVersionsKeyBytes += keyBytes
-			info.AffectedVersionsValBytes += int64(s.cur.mvccValueLen)
-		} else if err != nil {
-			return false, err
-		}
-		// We bump how many keys were processed when we reach newest key and looking
-		// if key has garbage or if garbage for this key was included in previous
-		// batch.
-		if affected := isNewestPoint && (sentBatchForThisKey || haveGarbageForThisKey); affected {
-			info.NumKeysAffected++
-			// If we reached newest timestamp for the key then we should reset sent
-			// batch to ensure subsequent keys are not included in affected keys if
-			// they don't have garbage.
-			sentBatchForThisKey = false
-		}
-		shouldSendBatch := batchGCKeysBytes >= KeyVersionChunkBytes
-		if shouldSendBatch || isNewestPoint && haveGarbageForThisKey {
-			alloc, s.cur.key.Key = alloc.Copy(s.cur.key.Key, 0)
-			batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{
-				Key:       s.cur.key.Key,
-				Timestamp: gcTimestampForThisKey,
-			})
-			haveGarbageForThisKey = false
-			gcTimestampForThisKey = hlc.Timestamp{}
+	// Check if there are any complete clear range or point batches collected
+	// and flush them as we reached end of current consecutive key span.
+	err = b.maybeFlushPendingBatches(ctx)
+	if err != nil {
+		return err
+	}
 
-			// Mark that we sent a batch for this key so we know that we had garbage
-			// even if it turns out that there's no more garbage for this key.
-			// We want to count a key as affected once even if we paginate the
-			// deletion of its versions.
-			sentBatchForThisKey = shouldSendBatch && !isNewestPoint
-		}
-		// If limit was reached, delegate to GC'r to remove collected batch.
-		if shouldSendBatch {
-			if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
-				if errors.Is(err, ctx.Err()) {
-					return false, err
+	if isNewestPoint {
+		b.clearRangeEndKey = append(b.clearRangeEndKey[:0], cur.key.Key...)
+	}
+	return nil
+}
+
+func (b *gcKeyBatcher) foundGarbage(
+	ctx context.Context, cur *mvccKeyValue, isNewestPoint bool,
+) (err error) {
+	// If we are restarting clear range collection, then last points batch might
+	// be reverted to partial at the time of flush. We will save its
+	// pre-clear-range state and use for GC stats update.
+	if b.clearRangeEnabled && b.prevWasNewest && b.clearRangeCounters.versionsAffected == 0 {
+		b.partialPointBatchCounters = b.pointsBatches[len(b.pointsBatches)-1].gcBatchCounters
+	}
+
+	var key roachpb.Key
+	var keySize = int64(cur.key.EncodedSize())
+	// If still collecting points, add to points first.
+	if !b.clearRangeEnabled || b.clearRangeCounters.versionsAffected < b.clearRangeMinKeys {
+		// First check if current batch is full and add a new points batch.
+		i := len(b.pointsBatches) - 1
+		if b.pointsBatches[i].gcBatchCounters.keyBytes >= b.batchGCKeysBytesThreshold {
+			// If clear range is disabled, flush batches immediately as they are
+			// formed.
+			if !b.clearRangeEnabled {
+				if err = b.flushPointsBatch(ctx, &b.pointsBatches[i]); err != nil {
+					return err
 				}
-				// Even though we are batching the GC process, it's
-				// safe to continue because we bumped the GC
-				// thresholds. We may leave some inconsistent history
-				// behind, but nobody can read it.
-				log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
+			} else {
+				b.pointsBatches = append(b.pointsBatches, pointsBatch{})
+				i++
 			}
-			batchGCKeys = nil
-			batchGCKeysBytes = 0
-			alloc = bufalloc.ByteAllocator{}
+		}
+		if b.prevWasNewest {
+			b.pointsBatches[i].gcBatchCounters.keysAffected++
+		}
+		// Whenever new key is started or new batch is started with the same key in
+		// it, record key value using batches' allocator.
+		if b.prevWasNewest || len(b.pointsBatches[i].batchGCKeys) == 0 {
+			b.pointsBatches[i].alloc, key = b.pointsBatches[i].alloc.Copy(cur.key.Key, 0)
+			b.pointsBatches[i].batchGCKeys = append(b.pointsBatches[i].batchGCKeys,
+				roachpb.GCRequest_GCKey{Key: key, Timestamp: cur.key.Timestamp})
+			keyMemUsed := len(key) + hlcTimestampSize
+			b.pointsBatches[i].memUsed += keyMemUsed
+			b.totalMemUsed += keyMemUsed
+		} else {
+			// For already registered key just bump the timestamp to the newer one.
+			b.pointsBatches[i].batchGCKeys[len(b.pointsBatches[i].batchGCKeys)-1].Timestamp = cur.key.Timestamp
+		}
+		b.pointsBatches[i].gcBatchCounters.keyBytes += keySize
+		b.pointsBatches[i].gcBatchCounters.valBytes += int64(cur.mvccValueLen)
+		b.pointsBatches[i].gcBatchCounters.versionsAffected++
+
+		// Check if we exceeded in memory bytes limit allowed for points collection.
+		if i > 0 && b.totalMemUsed >= b.maxPendingKeysSize {
+			lastKey := b.pointsBatches[0].batchGCKeys[len(b.pointsBatches[0].batchGCKeys)-1].Key
+			// If oldest batch intersected with currently tracked clear range request
+			// then bump clear range end key to the one that follows lowest key of the
+			// cleared batch. We know that all keys for current key with lower
+			// timestamps are eligible for collection and end range is exclusive.
+			// The check is needed because clearRangeEndKey cloud be bumped already
+			// to current key by non gc data on the previous key, but only now we
+			// exceeded the size threshold and trying to remove oldest batch.
+			if b.clearRangeEndKey.Compare(lastKey) > 0 {
+				flushedCounters := b.pointsBatches[0].gcBatchCounters
+				// If flushed batch was split by start of the range, then we must remove
+				// preceding part from clear range total to avoid.
+				b.clearRangeCounters.keyBytes += b.partialPointBatchCounters.keyBytes - flushedCounters.keyBytes
+				b.clearRangeCounters.valBytes += b.partialPointBatchCounters.valBytes - flushedCounters.valBytes
+				b.clearRangeCounters.keysAffected += b.partialPointBatchCounters.keysAffected - flushedCounters.keysAffected
+				b.clearRangeCounters.versionsAffected += b.partialPointBatchCounters.versionsAffected - flushedCounters.versionsAffected
+				b.clearRangeCounters.memUsed += b.partialPointBatchCounters.memUsed - flushedCounters.memUsed
+				b.clearRangeEndKey = lastKey[:len(lastKey):len(lastKey)].Next()
+			}
+			b.partialPointBatchCounters = gcBatchCounters{}
+
+			// We accumulated more keys in memory than allowed by thresholds, we need
+			// to flush oldest batch to protect node from exhausting memory.
+			err := b.flushOldestPointBatches(ctx, 1)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	// We need to send out last intent cleanup batch.
-	if err := intentBatcher.maybeFlushPendingIntents(ctx); err != nil {
+
+	if b.clearRangeEnabled {
+		if b.prevWasNewest {
+			if key == nil {
+				// Reuse key slice for start range to avoid allocating on every key
+				// change while tracking clear range.
+				b.clearRangeStartKeyAlloc = append(b.clearRangeStartKeyAlloc[:0], cur.key.Key...)
+				key = b.clearRangeStartKeyAlloc
+			}
+			b.clearRangeStartKey = storage.MVCCKey{Key: key}
+			b.clearRangeCounters.keysAffected++
+		}
+		b.clearRangeStartKey.Timestamp = cur.key.Timestamp
+		b.clearRangeCounters.keyBytes += keySize
+		b.clearRangeCounters.valBytes += int64(cur.mvccValueLen)
+		b.clearRangeCounters.versionsAffected++
+	}
+
+	b.prevWasNewest = isNewestPoint
+	return nil
+}
+
+// maybeFlushPendingBatches flushes accumulated GC requests. If clear range is
+// used and current data is eligible for deletion then pending points batch and
+// clear range request are flushed.
+// If there's not enough point keys to justify clear range, then point point
+// batches may be flushed:
+//   - if there's a single batch and it didn't reach desired size, nothing is
+//     flushed
+//   - if there's more than single points batch accumulated, then all batches
+//     except for last are flushed
+func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error) {
+	if b.clearRangeEnabled && b.clearRangeCounters.versionsAffected >= b.clearRangeMinKeys {
+		// Optionally flush parts of the first batch if it is not fully covered by
+		// pending clear range span.
+		batchLen := len(b.pointsBatches[0].batchGCKeys)
+		// Find a key that is equal or less than end of clear range key.
+		// Batch is sorted in the reverse order, timestamps are not relevant since
+		// we can't have the same key more than once within single points batch.
+		lastIdx := sort.Search(batchLen, func(i int) bool {
+			return b.pointsBatches[0].batchGCKeys[i].Key.Compare(b.clearRangeEndKey) < 0
+		})
+		if lastIdx == 0 {
+			// If lastIdx == 0 we can have a clear range request which goes back to
+			// previous key completely covering this range. If this is true then we
+			// don't need to handle this batch and can tighten the clear range span
+			// to cover only up to the start of first batch.
+			b.clearRangeEndKey = b.pointsBatches[0].batchGCKeys[0].Key.Next()
+		} else {
+			b.pointsBatches[0].batchGCKeys = b.pointsBatches[0].batchGCKeys[:lastIdx]
+			b.pointsBatches[0].gcBatchCounters = b.partialPointBatchCounters
+			err := b.flushPointsBatch(ctx, &b.pointsBatches[0])
+			if err != nil {
+				return err
+			}
+		}
+		b.pointsBatches = make([]pointsBatch, 1)
+
+		// Flush clear range.
+		// To reduce locking contention between keys, if we have a range that only
+		// covers multiple versions of a single key we could avoid latching range
+		// and fall back to poing GC behaviour where gc threshold guards against
+		// key interference. We do it by setting end key to StartKey.Next() and thus
+		// signalling gc request handler to skip locking.
+		endRange := b.clearRangeEndKey
+		if b.clearRangeCounters.keysAffected == 1 {
+			endRange = b.clearRangeStartKey.Key.Next()
+		}
+		if err := b.gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRange{
+			StartKey:          b.clearRangeStartKey.Key,
+			StartKeyTimestamp: b.clearRangeStartKey.Timestamp,
+			EndKey:            endRange,
+		}); err != nil {
+			if errors.Is(err, ctx.Err()) {
+				return err
+			}
+			// Even though we are batching the GC process, it's
+			// safe to continue because we bumped the GC
+			// thresholds. We may leave some inconsistent history
+			// behind, but nobody can read it.
+			log.Warningf(ctx, "failed to GC keys with clear range: %v", err)
+			b.info.ClearRangeSpanFailures++
+		}
+		b.clearRangeCounters.updateGcInfo(b.info)
+		b.info.ClearRangeSpanOperations++
+		b.totalMemUsed = 0
+	} else if flushTo := len(b.pointsBatches) - 1; flushTo > 0 {
+		err := b.flushOldestPointBatches(ctx, flushTo)
+		if err != nil {
+			return err
+		}
+	}
+	b.clearRangeCounters = gcBatchCounters{}
+	b.clearRangeEndKey = nil
+	return nil
+}
+
+// flushOldestPointBatches flushes oldest points batch and returns its counters.
+// unsafeLastKey must not be retained as it will prevent batch allocator to be
+// released.
+func (b *gcKeyBatcher) flushOldestPointBatches(ctx context.Context, count int) (err error) {
+	var i int
+	for i = 0; i < count; i++ {
+		if err = b.flushPointsBatch(ctx, &b.pointsBatches[i]); err != nil {
+			return err
+		}
+	}
+	remaining := len(b.pointsBatches) - i
+	copy(b.pointsBatches[0:remaining], b.pointsBatches[i:])
+	// Zero out remaining batches to free app allocators.
+	for i = remaining; i < len(b.pointsBatches); i++ {
+		b.pointsBatches[i] = pointsBatch{}
+	}
+	b.pointsBatches = b.pointsBatches[:remaining]
+	return nil
+}
+
+// flushPointsBatch flushes points batch and zeroes out its content.
+func (b *gcKeyBatcher) flushPointsBatch(ctx context.Context, batch *pointsBatch) (err error) {
+	if err := b.gcer.GC(ctx, batch.batchGCKeys, nil, nil); err != nil {
 		if errors.Is(err, ctx.Err()) {
-			return false, err
+			return err
 		}
-		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+		// Even though we are batching the GC process, it's
+		// safe to continue because we bumped the GC
+		// thresholds. We may leave some inconsistent history
+		// behind, but nobody can read it.
+		log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
 	}
-	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys, nil, nil); err != nil {
-			return false, err
-		}
+	batch.gcBatchCounters.updateGcInfo(b.info)
+	b.totalMemUsed -= batch.gcBatchCounters.memUsed
+	*batch = pointsBatch{}
+	return nil
+}
+
+func (b *gcKeyBatcher) flushLastBatch(ctx context.Context) (err error) {
+	if len(b.pointsBatches[0].batchGCKeys) == 0 {
+		return nil
 	}
-	return excludeUserKeySpan, nil
+	b.pointsBatches = append(b.pointsBatches, pointsBatch{})
+	return b.maybeFlushPendingBatches(ctx)
 }
 
 type intentBatcher struct {
@@ -668,10 +1091,10 @@ func isGarbage(
 	cur, next *mvccKeyValue,
 	isNewestPoint bool,
 	firstRangeTombstoneTsAtOrBelowGC hlc.Timestamp,
-) (bool, error) {
+) bool {
 	// If the value is not at or below the threshold then it's not garbage.
 	if belowThreshold := cur.key.Timestamp.LessEq(threshold); !belowThreshold {
-		return false, nil
+		return false
 	}
 	if cur.key.Timestamp.Less(firstRangeTombstoneTsAtOrBelowGC) {
 		if util.RaceEnabled {
@@ -680,11 +1103,11 @@ func isGarbage(
 					firstRangeTombstoneTsAtOrBelowGC.String(), threshold.String()))
 			}
 		}
-		return true, nil
+		return true
 	}
 	isDelete := cur.mvccValueIsTombstone
 	if isNewestPoint && !isDelete {
-		return false, nil
+		return false
 	}
 	// INVARIANT: !isNewestPoint || isDelete
 	// Therefore !isDelete => !isNewestPoint, which can be restated as
@@ -696,7 +1119,7 @@ func isGarbage(
 	if !isDelete && next == nil {
 		panic("huh")
 	}
-	return isDelete || next.key.Timestamp.LessEq(threshold), nil
+	return isDelete || next.key.Timestamp.LessEq(threshold)
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of

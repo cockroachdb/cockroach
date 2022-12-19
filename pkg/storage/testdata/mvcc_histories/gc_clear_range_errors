@@ -1,0 +1,94 @@
+# 1. Fail to clear non deleted key
+run ok
+put k=a v=12 ts=2,0
+----
+>> at end:
+data: "a"/2.000000000,0 -> /BYTES/12
+
+run error
+gc_points_clear_range k=a startTs=2 end=z ts=5
+----
+>> at end:
+data: "a"/2.000000000,0 -> /BYTES/12
+error: (*withstack.withStack:) attempt to GC data "a"/2.000000000,0 still visible at GC threshold 5.000000000,0 with clear range
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 2. Fail to clear intent
+run ok
+with t=A k=a
+  txn_begin ts=4,0
+  put v=1
+----
+>> at end:
+txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/1
+
+run error
+gc_points_clear_range k=a end=z ts=5
+----
+>> at end:
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/4.000000000,0 -> /BYTES/1
+error: (*withstack.withStack:) attempt to GC intent "a" using clear range
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 3. Fail to delete key above gc threshold
+run ok
+put k=a v=11 ts=2,0
+del k=a ts=5,0
+----
+del: "a": found key true
+>> at end:
+data: "a"/5.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/11
+
+run error
+gc_points_clear_range k=a startTs=2 end=z ts=4
+----
+>> at end:
+data: "a"/5.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/11
+error: (*withstack.withStack:) attempt to GC data "a"/2.000000000,0 still visible at GC threshold 4.000000000,0 with clear range
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# 4. Fail to delete key above range tombstone (checking if range tombstones are not breaking timestamp check logic)
+run ok
+put k=a v=11 ts=2,0
+del_range_ts k=a end=b ts=3,0
+put k=a v=12 ts=5,0
+----
+>> at end:
+rangekey: {a-b}/[3.000000000,0=/<empty>]
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+
+run error
+gc_points_clear_range k=a startTs=5 end=z ts=5
+----
+>> at end:
+rangekey: {a-b}/[3.000000000,0=/<empty>]
+data: "a"/5.000000000,0 -> /BYTES/12
+data: "a"/2.000000000,0 -> /BYTES/11
+error: (*withstack.withStack:) attempt to GC data "a"/5.000000000,0 still visible at GC threshold 5.000000000,0 with clear range
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>

@@ -1,0 +1,121 @@
+run ok
+put k=A v=B ts=10
+----
+>> at end:
+data: "A"/10.000000000,0 -> /BYTES/B
+
+# Check that we can't invoke gc_clear_range if we have live data.
+run error
+gc_clear_range k=A end=Z ts=30
+----
+>> at end:
+data: "A"/10.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) range contains live data, can't use GC clear range
+
+run ok
+del k=A ts=30
+----
+del: "A": found key true
+>> at end:
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+
+# Check that we can't invoke gc_clear_range if we are not covered by range tombstones.
+run error
+gc_clear_range k=A end=Z ts=30
+----
+>> at end:
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) found key not covered by range tombstone "A"/30.000000000,0
+
+run ok stats
+del_range_ts k=A endKey=Z ts=50
+----
+>> del_range_ts k=A endKey=Z ts=50
+stats: range_key_count=+1 range_key_bytes=+14 range_val_count=+1 gc_bytes_age=+700
+>> at end:
+rangekey: A{-\x00}/[50.000000000,0=/<empty>]
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=6 range_key_count=1 range_key_bytes=14 range_val_count=1 gc_bytes_age=2940
+
+# Check that we can't delete if range tombstone covering all range is above gc threshold.
+run error
+gc_clear_range k=A end=Z ts=40
+----
+>> at end:
+rangekey: A{-\x00}/[50.000000000,0=/<empty>]
+data: "A"/30.000000000,0 -> /<empty>
+data: "A"/10.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) range tombstones above gc threshold. GC=40.000000000,0, range=50.000000000,0
+
+# Check that we can delete if range tombstone covers all range.
+run stats ok
+gc_clear_range k=A end=Z ts=60
+----
+>> gc_clear_range k=A end=Z ts=60
+stats: key_count=-1 key_bytes=-26 val_count=-2 val_bytes=-6 range_key_count=-1 range_key_bytes=-14 range_val_count=-1 gc_bytes_age=-2940
+>> at end:
+<no data>
+stats: 
+
+# Check that is we have range tombstone coverage that covers subset but there's no other data we can still clear.
+run ok
+put k=A v=B ts=10
+del_range_ts k=A endKey=D ts=20
+----
+>> at end:
+rangekey: A{-\x00}/[20.000000000,0=/<empty>]
+data: "A"/10.000000000,0 -> /BYTES/B
+
+run stats ok
+gc_clear_range k=A end=Z ts=60
+----
+>> gc_clear_range k=A end=Z ts=60
+stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-6 range_key_count=-1 range_key_bytes=-14 range_val_count=-1 gc_bytes_age=-2720
+>> at end:
+<no data>
+stats: 
+
+# Check that we can't delete range if there's some data that is outside of range tombstone
+run ok
+put k=A v=B ts=5
+del_range_ts k=C endKey=Z ts=6
+----
+>> at end:
+rangekey: C{-\x00}/[6.000000000,0=/<empty>]
+data: "A"/5.000000000,0 -> /BYTES/B
+
+run error
+gc_clear_range k=A end=Z ts=6
+----
+>> at end:
+rangekey: C{-\x00}/[6.000000000,0=/<empty>]
+data: "A"/5.000000000,0 -> /BYTES/B
+error: (*withstack.withStack:) range contains live data, can't use GC clear range
+
+run ok
+clear_range k=A end=Z
+----
+>> at end:
+<no data>
+
+# Check that gc clear range can't be performed over intents
+run ok
+with t=A
+  txn_begin ts=10
+  put k=B v=O
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+meta: "B"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "B"/10.000000000,0 -> /BYTES/O
+
+run error
+gc_clear_range k=A end=Z ts=40
+----
+>> at end:
+meta: "B"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "B"/10.000000000,0 -> /BYTES/O
+error: (*withstack.withStack:) range contains live data, can't use GC clear range
