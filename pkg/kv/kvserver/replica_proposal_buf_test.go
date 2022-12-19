@@ -97,17 +97,11 @@ func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	}
 	// Decode and save all the commands.
 	for _, e := range msg.Entries {
-		d, err := raftlog.DecomposeEntryData(e.Type, e.Data)
+		ent, err := raftlog.NewEntry(e)
 		if err != nil {
 			return err
 		}
-		if d.Type != raftpb.EntryNormal {
-			return errors.Errorf("testProposer doesn't understand ConfChange entries")
-		}
-		t.proposals = append(t.proposals, kvserverpb.RaftCommand{})
-		if err := protoutil.Unmarshal(d.RaftCommandBytes, &t.proposals[len(t.proposals)-1]); err != nil {
-			return err
-		}
+		t.proposals = append(t.proposals, ent.Cmd)
 	}
 	return nil
 }

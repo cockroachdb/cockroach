@@ -200,7 +200,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	var idx int
 	for idx = 0; idx < len(ents); idx++ {
 		// Get the SST back from the raft log.
-		if d, _ := raftlog.DecomposeEntryData(ents[idx].Type, ents[idx].Data); d.Version != kvserverbase.RaftVersionSideloaded {
+		if typ, _ := raftlog.EncodingVersion(ents[idx]); typ != kvserverbase.RaftVersionSideloaded {
 			continue
 		}
 		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)

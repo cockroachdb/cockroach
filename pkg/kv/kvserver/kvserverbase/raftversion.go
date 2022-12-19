@@ -13,22 +13,48 @@ package kvserverbase
 import "fmt"
 
 // RaftCommandEncodingVersion versions CockroachDB's raft entries.
+// A raftpb.Entry's RaftCommandEncodingVersion is a function of the
+// Entry's raftpb.EntryType and, in some cases, the first byte of the
+// Entry's Data payload.
+//
+// TODO(tbg): it versions them, but there are really different types
+// and none of them is deprecated, so consider renaming this.
 type RaftCommandEncodingVersion byte
 
-// Raft commands are encoded with a 1-byte version (currently 0 or 1), an 8-byte
-// ID, followed by the payload. This inflexible encoding is used so we can
-// efficiently parse the command id while processing the logs.
-//
-// TODO(bdarnell): is this commandID still appropriate for our needs?
 const (
-	// RaftVersionStandard is the initial Raft command version, used for all regular Raft traffic.
+	// RaftVersionStandard is the initial Raft command version, used for all
+	// regular Raft traffic.
+	//
+	// This is a raftpb.Entry of type EntryNormal whose Data slice is either
+	// empty or whose first byte matches RaftVersionStandard. The subsequent
+	// eight bytes represent a CmdIDKey. The remaining bytes represent a
+	// kvserverpb.RaftCommand.
 	RaftVersionStandard RaftCommandEncodingVersion = 0
-	// RaftVersionSideloaded indicates a proposal containing an SSTable which
-	// preferably should be sideloaded (i.e. not stored in the Raft log
-	// wholesale). Can be treated as a regular proposal when arriving on the wire,
-	// but when retrieved from the local Raft log it necessary to inline the
-	// payload first as it has usually been sideloaded.
+	// RaftVersionSideloaded indicates a proposal representing the result of a
+	// roachpb.AddSSTableRequest for which the payload (the SST) is stored outside
+	// the LSM to improve storage performance.
+	//
+	// This is a raftpb.Entry of type EntryNormal whose data slice is either
+	// empty or whose first byte matches RaftVersionSideloaded. The remaining
+	// bytes represent a kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult
+	// holds a nontrival kvserverpb.ReplicatedEvalResult_AddSSTable, the Data
+	// field of which is an SST to be ingested (and which is present in memory
+	// but made durable via direct storage on the filesystem, bypassing the LSM).
 	RaftVersionSideloaded RaftCommandEncodingVersion = 1
+	// RaftVersionEmptyEntry is an empty entry. These are used by raft after
+	// leader election. Since they hold no data, there is nothing in them to
+	// decode.
+	RaftVersionEmptyEntry RaftCommandEncodingVersion = 253
+	// RaftVersionConfChange is a raftpb.Entry whose raftpb.EntryType is
+	// raftpb.EntryConfChange. The Entry's Data field holds a raftpb.ConfChange
+	// whose Context field is a kvserverpb.ConfChangeContext whose Payload is a
+	// kvserverpb.RaftCommand. In particular, the CmdIDKey requires a round of
+	// protobuf unmarshaling.
+	RaftVersionConfChange RaftCommandEncodingVersion = 254
+	// RaftVersionConfChangeV2 is analogous to RaftVersionConfChange, with
+	// the replacements raftpb.EntryConfChange{,V2} and raftpb.ConfChange{,V2}
+	// applied.
+	RaftVersionConfChangeV2 RaftCommandEncodingVersion = 255
 	// RaftCommandIDLen is the length for each command ID.
 	RaftCommandIDLen = 8
 	// RaftCommandPrefixLen is the prescribed length of each encoded command's prefix.

@@ -37,38 +37,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 
-func entryEq(l, r raftpb.Entry) error {
-	d1, err := raftlog.DecomposeEntryData(l.Type, l.Data)
-	if err != nil {
-		return err
-	}
-	d2, err := raftlog.DecomposeEntryData(r.Type, r.Data)
-	if err != nil {
-		return err
-	}
-
-	// This helper was only written to compare regular entries, not ConfChanges.
-	if d1.Type != raftpb.EntryNormal || d2.Type != raftpb.EntryNormal {
-		return errors.Errorf("comparing %s and %s is unsupported", d1.Type, d2.Type)
-	}
-
-	var lc, rc kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(d1.RaftCommandBytes, &lc); err != nil {
-		return errors.Wrap(err, "unmarshalling LHS")
-	}
-	if err := protoutil.Unmarshal(d2.RaftCommandBytes, &rc); err != nil {
-		return errors.Wrap(err, "unmarshalling RHS")
-	}
-	if !reflect.DeepEqual(lc, rc) {
-		return errors.Newf("unexpected:\n%s", strings.Join(pretty.Diff(lc, rc), "\n"))
-	}
-	return nil
+func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
+	el, err := raftlog.NewEntry(l)
+	require.NoError(t, err)
+	er, err := raftlog.NewEntry(r)
+	require.NoError(t, err)
+	require.Equal(t, el, er)
 }
 
 func mkEnt(
@@ -464,16 +443,14 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			}
 		} else if test.expErr != "" {
 			t.Fatalf("%s: success, but expected error: %s", k, test.expErr)
-		} else if err := entryEq(thinCopy, test.thin); err != nil {
-			t.Fatalf("%s: mutated the original entry: %s", k, pretty.Diff(thinCopy, test.thin))
+		} else {
+			mustEntryEq(t, thinCopy, test.thin)
 		}
 
 		if newEnt == nil {
 			newEnt = &thinCopy
 		}
-		if err := entryEq(*newEnt, test.fat); err != nil {
-			t.Fatalf("%s: %+v", k, err)
-		}
+		mustEntryEq(t, *newEnt, test.fat)
 
 		if dump := getRecAndFinish().String(); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {

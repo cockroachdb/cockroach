@@ -216,16 +216,15 @@ func raftDescribeMessage(m raftpb.Message, f raft.EntryFormatter) string {
 }
 
 func raftEntryFormatter(data []byte) string {
-	// NB: a raft.EntryFormatter is only invoked for EntryNormal by convention
-	d, err := raftlog.DecomposeEntryData(raftpb.EntryNormal, data)
-	if err != nil {
-		return err.Error()
-	}
-
-	if len(d.RaftCommandBytes) == 0 {
+	if len(data) == 0 {
 		return "[empty]"
 	}
-	return fmt.Sprintf("[%x] [%d]", d.CmdID, len(data))
+	// NB: a raft.EntryFormatter is only invoked for EntryNormal (raft methods
+	// that call this take care of unwrapping the ConfChange), and since
+	// len(data)>0 it has to be RaftVersionStandard or RaftVersionSideloaded and
+	// they are encoded identically.
+	cmdID, data := raftlog.DecomposeRaftVersionStandard(data)
+	return fmt.Sprintf("[%x] [%d]", cmdID, len(data))
 }
 
 var raftMessageRequestPool = sync.Pool{
@@ -270,10 +269,25 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 // in ents to ids and returns the result.
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
-		// NB: this won't work for ConfChange entries since the command ID is buried inside
-		// nested marshaled protobufs.
-		if d, err := raftlog.DecomposeEntryData(e.Type, e.Data); err == nil && d.CmdID != "" {
-			ids = append(ids, d.CmdID)
+		typ, err := raftlog.EncodingVersion(e)
+		if err != nil {
+			continue
+		}
+		switch typ {
+		case kvserverbase.RaftVersionStandard:
+			id, _ := raftlog.DecomposeRaftVersionStandard(e.Data)
+			ids = append(ids, id)
+		case kvserverbase.RaftVersionSideloaded:
+			id, _ := raftlog.DecomposeRaftVersionSideloaded(e.Data)
+			ids = append(ids, id)
+		case kvserverbase.RaftVersionConfChange, kvserverbase.RaftVersionConfChangeV2:
+			// Configuration changes don't have the CmdIDKey easily accessible but are
+			// rare, so fully decode the entry.
+			ent, err := raftlog.NewEntry(e)
+			if err != nil {
+				continue
+			}
+			ids = append(ids, ent.ID)
 		}
 	}
 	return ids
