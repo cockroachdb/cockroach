@@ -33,7 +33,7 @@ func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
 		grpc.MaxCallRecvMsgSize(math.MaxInt32),
 		grpc.MaxCallSendMsgSize(math.MaxInt32),
 	))
-	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
+	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((*snappyCompressor)(nil).Name())))
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 	backoffConfig := backoff.DefaultConfig
 	backoffConfig.MaxDelay = time.Second

@@ -25,6 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -280,6 +281,20 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 
 	s := grpc.NewServer(grpcOpts...)
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
+
+	// Use the supplied cluster settings to determine whether length prefixing is
+	// supported for the snappy compressor. This is a bit awkward because the
+	// snappy compressor is a global object registered with gRPC at init time.
+	const lenPrefixVersion = clusterversion.V23_1SnappyLengthPrefixEncoding
+	if rpcCtx.Settings.Version.ActiveVersionOrEmpty(context.Background()).IsActive(lenPrefixVersion) {
+		globalSnappyCompressor.setLengthPrefixingEnabled(true)
+	}
+	rpcCtx.Settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
+		if newVersion.IsActive(lenPrefixVersion) {
+			globalSnappyCompressor.setLengthPrefixingEnabled(true)
+		}
+	})
+
 	return s, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
@@ -1536,7 +1551,7 @@ func (rpcCtx *Context) dialOptsNetwork(
 	// each client to decide changing this will not require much
 	// cross-version compatibility dance.
 	if rpcCtx.rpcCompression {
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((*snappyCompressor)(nil).Name())))
 	}
 
 	// GRPC uses the HTTPS_PROXY environment variable by default[1]. This is

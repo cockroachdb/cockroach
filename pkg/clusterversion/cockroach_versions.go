@@ -363,6 +363,10 @@ const (
 	// column in the system.jobs table.
 	V23_1BackfillTypeColumnInJobsTable
 
+	// V23_1SnappyLengthPrefixEncoding extends the snappy encoding format to
+	// prefix compressed bytes with their uncompressed legnth.
+	V23_1SnappyLengthPrefixEncoding
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -628,6 +632,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1BackfillTypeColumnInJobsTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 20},
+	},
+	{
+		Key:     V23_1SnappyLengthPrefixEncoding,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
 	},
 
 	// *************************************************
