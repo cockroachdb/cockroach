@@ -5,7 +5,6 @@ go_library(
     name = "asim",
     srcs = [
         "asim.go",
-        "metrics_tracker.go",
         "pacer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
@@ -13,12 +12,12 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/gossip",
+        "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/queue",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/util/encoding/csv",
         "//pkg/util/log",
     ],
 )
@@ -27,13 +26,13 @@ go_test(
     name = "asim_test",
     srcs = [
         "asim_test.go",
-        "metrics_tracker_test.go",
         "pacer_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":asim"],
     deps = [
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
