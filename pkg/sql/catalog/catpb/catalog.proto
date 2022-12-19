@@ -235,6 +235,16 @@ message AutoStatsSettings {
   optional double fraction_stale_rows = 3;
 }
 
+message AutoPartialStatsSettings {
+  option (gogoproto.equal) = true;
+  // Enabled is table setting sql_stats_automatic_partial_collection_enabled.
+  optional bool enabled = 1;
+  // MinStaleRows is the table setting sql_stats_automatic_partial_collection_min_stale_rows.
+  optional int64  min_stale_rows = 2;
+  // FractionStaleRows is table setting sql_stats_automatic_collection_fraction_stale_rows.
+  optional double fraction_stale_rows = 3;
+}
+
 // InvertedIndexColumnKind is the kind of the inverted index on a column. The
 // reason this needs to be stored is that we need to be able to check that the
 // "opclass" passed into an inverted index declaration (for example,

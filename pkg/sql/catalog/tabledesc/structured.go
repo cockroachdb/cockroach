@@ -2388,6 +2388,23 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 				fmt.Sprintf("%g", value))
 		}
 	}
+	if settings := desc.AutoPartialStatsSettings; settings != nil {
+		if settings.Enabled != nil {
+			value := *settings.Enabled
+			appendStorageParam(catpb.AutoPartialStatsEnabledTableSettingName,
+				fmt.Sprintf("%v", value))
+		}
+		if settings.MinStaleRows != nil {
+			value := *settings.MinStaleRows
+			appendStorageParam(catpb.AutoPartialStatsMinStaleTableSettingName,
+				fmt.Sprintf("%d", value))
+		}
+		if settings.FractionStaleRows != nil {
+			value := *settings.FractionStaleRows
+			appendStorageParam(catpb.AutoPartialStatsFractionStaleTableSettingName,
+				fmt.Sprintf("%g", value))
+		}
+	}
 	if enabled, ok := desc.ForecastStatsEnabled(); ok {
 		appendStorageParam(`sql_stats_forecasts_enabled`, strconv.FormatBool(enabled))
 	}
