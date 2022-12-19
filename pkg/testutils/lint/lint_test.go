@@ -1818,6 +1818,45 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestUnused", func(t *testing.T) {
+		skip.UnderShort(t)
+		if !bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "staticcheck takes care of U1000 in non-Bazel builds")
+		}
+		unusedBinary, err := bazel.Runfile("external/co_honnef_go_tools/cmd/unused/unused_/unused")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd, stderr, filter, err := dirCmd(
+			crdbDir,
+			unusedBinary,
+			pkgScope,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := stream.ForEach(stream.Sequence(filter,
+			stream.Grep(crdbDir), // Only capture in-tree unused objects.
+			stream.GrepNot(`pkg/util/goschedstats/runtime_go1.19\.go`), // data structures contain "unused" fields (written/read by the runtime, but not us)
+			stream.GrepNot(`\.pb\.go`),
+			stream.GrepNot(`\.pb\.gw\.go`),
+			stream.GrepNot(`\.og\.go`),
+			stream.GrepNot(`\.eg\.go`),
+		), func(s string) {
+			t.Errorf("\n%s", s)
+		}); err != nil {
+			t.Error(err)
+		}
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestVectorizedPanics", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(

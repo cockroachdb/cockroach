@@ -19,7 +19,10 @@ go_test(
         "nightly_lint_test.go",
     ],
     args = ["-test.timeout=295s"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@co_honnef_go_tools//cmd/unused",
+        "@go_sdk//:files",
+    ],
     embed = [":lint"],
     embedsrcs = ["gcassert_paths.txt"],
     gotags = ["lint"],

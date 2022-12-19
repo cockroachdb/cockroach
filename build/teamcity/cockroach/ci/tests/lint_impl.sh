@@ -2,11 +2,11 @@
 
 set -xeuo pipefail
 
-# GCAssert requirements -- start
-export PATH="$(dirname $(bazel run @go_sdk//:bin/go --run_under=realpath)):$PATH"
+# GCAssert and unused need generated files in the workspace to work properly.
+# generated files requirements -- begin
 bazel run //pkg/gen:code
 bazel run //pkg/cmd/generate-cgo:generate-cgo --run_under="cd $(bazel info workspace) && "
-# GCAssert requirements -- end
+# generated files requirements -- end
 
 bazel build //pkg/cmd/bazci --config=ci
 XML_OUTPUT_FILE=/artifacts/test.xml GO_TEST_WRAP_TESTV=1 GO_TEST_WRAP=1 CC=$(which gcc) CXX=$(which gcc) bazel \

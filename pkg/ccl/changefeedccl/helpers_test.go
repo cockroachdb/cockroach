@@ -623,6 +623,8 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 		// future to ensure we can handle that. Always chooses an integer number of
 		// seconds for easier debugging and so that 0 is a possibility.
 		offset := int64(rand.Intn(6)) * time.Second.Nanoseconds()
+		// TODO(#105053): Remove this line
+		_ = offset
 		oldKnobsFn := options.knobsFn
 		options.knobsFn = func(knobs *base.TestingKnobs) {
 			if oldKnobsFn != nil {
@@ -630,7 +632,12 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 			}
 			knobs.DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs).FeedKnobs.ModifyTimestamps = func(t *hlc.Timestamp) {
-				t.Add(offset, 0)
+				// NOTE(ricky): This line of code should be uncommented.
+				// It used to be just t.Add(offset, 0), but t.Add() has no side
+				// effects so this was a no-op. *t = t.Add(offset, 0) is correct,
+				// but causes test failures.
+				// TODO(#105053): Uncomment and fix test failures
+				//*t = t.Add(offset, 0)
 				t.Synthetic = true
 			}
 		}

@@ -260,7 +260,8 @@
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "cockroach/pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/sql/sem/builtins/aggregate_builtins_test\\.go": "false positive, apparently"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
