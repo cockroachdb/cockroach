@@ -13,9 +13,7 @@ syntax = "proto3";
 package cockroach.kv.bulk.bulkpb;
 option go_package = "bulkpb";
 
-import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
-
 
 // IngestionPerformanceStats is a message containing information about the
 // creation of SSTables by an SSTBatcher or BufferingAdder.
