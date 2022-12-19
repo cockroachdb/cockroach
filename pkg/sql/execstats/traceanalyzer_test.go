@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,6 +45,7 @@ import (
 // constructing a TraceAnalyzer from the resulting trace and physical plan.
 func TestTraceAnalyzer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 93498, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const (
