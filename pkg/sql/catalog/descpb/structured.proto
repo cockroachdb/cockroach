@@ -1172,7 +1172,7 @@ message TableDescriptor {
   // This field is non zero if this table is offline during an import.
   optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
 
-  // Next ID: 55
+  // Next ID: 56
 }
 
 // SurvivalGoal is the survival goal for a database.

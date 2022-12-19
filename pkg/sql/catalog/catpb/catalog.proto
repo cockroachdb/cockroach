@@ -233,6 +233,12 @@ message AutoStatsSettings {
   optional int64 min_stale_rows = 2;
   // FractionStaleRows is table setting sql_stats_automatic_collection_fraction_stale_rows.
   optional double fraction_stale_rows = 3;
+  // PartialEnabled is table setting sql_stats_automatic_partial_collection_enabled.
+  optional bool partial_enabled = 4;
+  // PartialMinStaleRows is the table setting sql_stats_automatic_partial_collection_min_stale_rows.
+  optional int64  partial_min_stale_rows = 5;
+  // PartialFractionStaleRows is table setting sql_stats_automatic_collection_fraction_stale_rows.
+  optional double partial_fraction_stale_rows = 6;
 }
 
 // InvertedIndexColumnKind is the kind of the inverted index on a column. The

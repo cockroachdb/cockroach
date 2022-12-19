@@ -94,6 +94,10 @@ const ForecastStatsName = "__forecast__"
 // table statistic.
 const MergedStatsName = "__merged__"
 
+// AutoPartialStatsName is the name to use for partial statistics created
+// automatically.
+const AutoPartialStatsName = "__auto_partial__"
+
 // AutomaticJobTypes is a list of automatic job types that currently exist.
 var AutomaticJobTypes = [...]Type{
 	TypeAutoCreateStats,

@@ -588,6 +588,13 @@ func TestTenantLogic_distinct_on(
 	runLogicTest(t, "distinct_on")
 }
 
+func TestTenantLogic_distsql_automatic_partial_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_automatic_partial_stats")
+}
+
 func TestTenantLogic_distsql_automatic_stats(
 	t *testing.T,
 ) {
