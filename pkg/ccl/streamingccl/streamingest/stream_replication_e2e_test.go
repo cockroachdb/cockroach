@@ -1280,6 +1280,14 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	defer cleanup()
 	producerJobID, ingestionJobID := c.startStreamReplication(ctx)
 
+	rowStr := c.destSysSQL.QueryStr(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.destTenantName))
+	require.Equal(t, "2", rowStr[0][0])
+	require.Equal(t, "destination", rowStr[0][1])
+	if rowStr[0][3] == "NULL" {
+		// There is no source yet, therefore the replication is not fully initialized.
+		require.Equal(t, "INITIALIZING REPLICATION", rowStr[0][2])
+	}
+
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	highWatermark := c.srcCluster.Server(0).Clock().Now()
