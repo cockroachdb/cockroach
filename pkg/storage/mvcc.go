@@ -1823,7 +1823,10 @@ func mvccPutInternal(
 
 					// NOTE: we use Value instead of UnsafeValue so that we can move the
 					// iterator below without invalidating this byte slice.
-					curProvValRaw = iter.Value()
+					curProvValRaw, err = iter.Value()
+					if err != nil {
+						return false, err
+					}
 					curIntentVal, err := DecodeMVCCValue(curProvValRaw)
 					if err != nil {
 						return false, err

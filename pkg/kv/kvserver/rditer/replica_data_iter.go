@@ -334,7 +334,7 @@ func (ri *ReplicaMVCCDataIterator) Key() storage.MVCCKey {
 }
 
 // Value returns the current value. Only called in tests.
-func (ri *ReplicaMVCCDataIterator) Value() []byte {
+func (ri *ReplicaMVCCDataIterator) Value() ([]byte, error) {
 	return ri.it.Value()
 }
 

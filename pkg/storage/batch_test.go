@@ -752,8 +752,12 @@ func TestBatchIteration(t *testing.T) {
 	if !reflect.DeepEqual(iter.Key(), k1) {
 		t.Fatalf("expected %s, got %s", k1, iter.Key())
 	}
-	if !reflect.DeepEqual(iter.Value(), v1) {
-		t.Fatalf("expected %s, got %s", v1, iter.Value())
+	checkValErr := func(v []byte, err error) []byte {
+		require.NoError(t, err)
+		return v
+	}
+	if !reflect.DeepEqual(checkValErr(iter.Value()), v1) {
+		t.Fatalf("expected %s, got %s", v1, checkValErr(iter.Value()))
 	}
 	iter.Next()
 	if ok, err := iter.Valid(); !ok {
@@ -762,8 +766,8 @@ func TestBatchIteration(t *testing.T) {
 	if !reflect.DeepEqual(iter.Key(), k2) {
 		t.Fatalf("expected %s, got %s", k2, iter.Key())
 	}
-	if !reflect.DeepEqual(iter.Value(), v2) {
-		t.Fatalf("expected %s, got %s", v2, iter.Value())
+	if !reflect.DeepEqual(checkValErr(iter.Value()), v2) {
+		t.Fatalf("expected %s, got %s", v2, checkValErr(iter.Value()))
 	}
 	iter.Next()
 	if ok, err := iter.Valid(); err != nil {
@@ -780,8 +784,8 @@ func TestBatchIteration(t *testing.T) {
 	if !reflect.DeepEqual(iter.Key(), k2) {
 		t.Fatalf("expected %s, got %s", k2, iter.Key())
 	}
-	if !reflect.DeepEqual(iter.Value(), v2) {
-		t.Fatalf("expected %s, got %s", v2, iter.Value())
+	if !reflect.DeepEqual(checkValErr(iter.Value()), v2) {
+		t.Fatalf("expected %s, got %s", v2, checkValErr(iter.Value()))
 	}
 
 	iter.Prev()
@@ -791,8 +795,8 @@ func TestBatchIteration(t *testing.T) {
 	if !reflect.DeepEqual(iter.Key(), k1) {
 		t.Fatalf("expected %s, got %s", k1, iter.Key())
 	}
-	if !reflect.DeepEqual(iter.Value(), v1) {
-		t.Fatalf("expected %s, got %s", v1, iter.Value())
+	if !reflect.DeepEqual(checkValErr(iter.Value()), v1) {
+		t.Fatalf("expected %s, got %s", v1, checkValErr(iter.Value()))
 	}
 }
 

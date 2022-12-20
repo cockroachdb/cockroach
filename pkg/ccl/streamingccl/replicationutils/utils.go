@@ -70,9 +70,13 @@ func ScanSST(
 		} else if !valid {
 			break
 		}
+		v, err := pointIter.Value()
+		if err != nil {
+			return err
+		}
 		if err = mvccKeyValOp(storage.MVCCKeyValue{
 			Key:   pointIter.Key(),
-			Value: pointIter.Value(),
+			Value: v,
 		}); err != nil {
 			return err
 		}

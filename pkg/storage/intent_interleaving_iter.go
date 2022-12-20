@@ -984,7 +984,7 @@ func (i *intentInterleavingIter) Key() MVCCKey {
 	return key
 }
 
-func (i *intentInterleavingIter) Value() []byte {
+func (i *intentInterleavingIter) Value() ([]byte, error) {
 	if i.isCurAtIntentIter() {
 		return i.intentIter.Value()
 	}

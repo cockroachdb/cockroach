@@ -697,11 +697,15 @@ func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 }
 
 // Value implements MVCCIterator.
-func (i *PointSynthesizingIter) Value() []byte {
-	if v, _ := i.UnsafeValue(); v != nil {
-		return append([]byte{}, v...)
+func (i *PointSynthesizingIter) Value() ([]byte, error) {
+	v, err := i.UnsafeValue()
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if v != nil {
+		return append([]byte{}, v...), nil
+	}
+	return nil, nil
 }
 
 // UnsafeValue implements MVCCIterator.

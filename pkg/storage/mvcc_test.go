@@ -6773,7 +6773,7 @@ func mvccGetRawWithError(t *testing.T, r Reader, key MVCCKey) ([]byte, error) {
 	if ok, err := iter.Valid(); err != nil || !ok {
 		return nil, err
 	}
-	return iter.Value(), nil
+	return iter.Value()
 }
 
 func TestMVCCLookupRangeKeyValue(t *testing.T) {
