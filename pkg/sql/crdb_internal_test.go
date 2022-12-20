@@ -499,9 +499,9 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
 			fmt.Sprintf(`schema "public" (%d): referenced database ID %d: referenced descriptor not found`, schemaID, databaseID),
 		},
-		{fmt.Sprintf("%d", databaseID), "t", "", "", `descriptor not found`},
-		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `descriptor not found`},
-		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `descriptor not found`},
+		{fmt.Sprintf("%d", databaseID), "t", "", "", `referenced descriptor not found`},
+		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `referenced descriptor not found`},
+		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `referenced descriptor not found`},
 	})
 }
 

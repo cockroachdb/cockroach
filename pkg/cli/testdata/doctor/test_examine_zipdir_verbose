@@ -50,7 +50,7 @@ Examining 37 descriptors and 42 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: referenced descriptor not found
   ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): processed
   ParentID   0, ParentSchemaID  0: namespace entry "defaultdb" (50): processed
-  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): descriptor not found
+  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): referenced descriptor not found
   ParentID   0, ParentSchemaID  0: namespace entry "postgres" (51): processed
   ParentID   0, ParentSchemaID  0: namespace entry "system" (1): processed
   ParentID   1, ParentSchemaID  0: namespace entry "public" (29): processed

@@ -9,7 +9,7 @@ Examining 37 descriptors and 42 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): referenced database ID 52: referenced descriptor not found
   ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): referenced database ID 52: referenced descriptor not found
   ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: referenced descriptor not found
-  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): descriptor not found
+  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): referenced descriptor not found
 Examining 2 jobs...
 job 587337426984566785: running schema change GC refers to missing table descriptor(s) [59]; existing descriptors that still need to be dropped []; job safe to delete: true.
 ERROR: validation failed
