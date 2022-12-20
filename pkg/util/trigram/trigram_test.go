@@ -81,3 +81,12 @@ func TestSimilarity(t *testing.T) {
 		assert.InDelta(t, tc.want, Similarity(tc.l, tc.r), 0.0001, "for %s %% %s", tc.l, tc.r)
 	}
 }
+
+func BenchmarkSimilarity(b *testing.B) {
+	x := "trigram"
+	y := "trigarm"
+	for i := 0; i < b.N; i++ {
+		s := Similarity(x, y)
+		assert.InDelta(b, s, .3333, 0.0001)
+	}
+}
