@@ -4010,9 +4010,10 @@ argparse@^1.0.7:
   dependencies:
     sprintf-js "~1.0.2"
 
-aria-query@^5.0.0, "aria-query@file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz":
-  version "5.0.0"
-  resolved "file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz#4f643d272248b0c3df08fee7317e761fe83e9498"
+aria-query@5.0.1, aria-query@^5.0.0:
+  version "5.0.1"
+  resolved "https://registry.yarnpkg.com/aria-query/-/aria-query-5.0.1.tgz#7b540d2d255ada22d861a4ee97d1e3f083e93894"
+  integrity sha512-bb1lJcEgfLvrfoCL9yn9/KQnpjK+B3T/ASg8qkJtzvkDMOZyPgPn7EL1rmR13tadpdaPXfPqqqd/wbnLxZLbYw==
 
 arr-diff@^4.0.0:
   version "4.0.0"

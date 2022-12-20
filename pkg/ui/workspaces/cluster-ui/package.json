@@ -166,7 +166,7 @@
     "yargs-parser": "~13.1.2",
     "protobufjs": "6.8.6",
     "**/jest-environment-jsdom": "^27.5.1",
-    "aria-query": "file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz",
+    "aria-query": "5.0.1",
     "esbuild": "0.14.43"
   }
 }
