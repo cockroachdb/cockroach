@@ -69,12 +69,12 @@ const syncWarnDuration = 10 * time.Second
 // Syncs ensure that the OS commits the data to disk. Syncs are less
 // frequent because they can incur more significant I/O costs.
 func flushDaemon() {
-	syncCounter := 1
+	syncCounter := 0
 
 	// This doesn't need to be Stop()'d as the loop never escapes.
 	for range time.Tick(flushInterval) {
-		doSync := syncCounter == syncInterval
 		syncCounter = (syncCounter + 1) % syncInterval
+		doSync := syncCounter == 0
 
 		// Is flushing disabled?
 		logging.mu.Lock()
