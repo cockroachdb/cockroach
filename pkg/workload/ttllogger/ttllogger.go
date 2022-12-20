@@ -45,18 +45,17 @@ type ttlLogger struct {
 }
 
 var ttlLoggerMeta = workload.Meta{
-	Name:         "ttllogger",
-	Description:  "Generates a simple log table with rows expiring after the given TTL.",
-	Version:      "0.0.1",
-	PublicFacing: true,
+	Name:        "ttllogger",
+	Description: "Generates a simple log table with rows expiring after the given TTL.",
+	Version:     "0.0.1",
 	New: func() workload.Generator {
 		g := &ttlLogger{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ttllogger`, pflag.ContinueOnError)
-		g.flags.DurationVar(&g.ttl, "ttl", time.Minute, `duration for the TTL to expire`)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `seed for randomization operations`)
-		g.flags.IntVar(&g.minRowsPerInsert, `min-rows-per-insert`, 1, `minimum rows per insert per query`)
-		g.flags.IntVar(&g.maxRowsPerInsert, `max-rows-per-insert`, 100, `maximum rows per insert per query`)
-		g.flags.BoolVar(&g.tsAsPrimaryKey, `ts-as-primary-key`, true, `whether timestamp column for the table should be part of the primary key`)
+		g.flags.DurationVar(&g.ttl, "ttl", time.Minute, `Duration for the TTL to expire.`)
+		g.flags.Int64Var(&g.seed, `seed`, 1, `Seed for randomization operations.`)
+		g.flags.IntVar(&g.minRowsPerInsert, `min-rows-per-insert`, 1, `Minimum rows per insert per query.`)
+		g.flags.IntVar(&g.maxRowsPerInsert, `max-rows-per-insert`, 100, `Maximum rows per insert per query.`)
+		g.flags.BoolVar(&g.tsAsPrimaryKey, `ts-as-primary-key`, true, `Whether timestamp column for the table should be part of the primary key.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},

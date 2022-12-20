@@ -115,8 +115,8 @@ func init() {
 			genInitCmd.Flags().AddFlagSet(genFlags)
 			genInitCmd.Flags().AddFlagSet(securityFlags)
 			genInitCmd.Run = CmdHelper(gen, runInit)
-			if userFacing && !meta.PublicFacing {
-				genInitCmd.Hidden = true
+			if meta.TestInfraOnly {
+				genInitCmd.Long = "THIS COMMAND WAS DEVELOPED FOR INTERNAL TESTING ONLY.\n\n" + genInitCmd.Long
 			}
 			initCmd.AddCommand(genInitCmd)
 		}
@@ -156,10 +156,10 @@ func init() {
 				f.Usage += ` (implies --init)`
 				genRunCmd.Flags().AddFlag(&f)
 			})
-			genRunCmd.Run = CmdHelper(gen, runRun)
-			if userFacing && !meta.PublicFacing {
-				genRunCmd.Hidden = true
+			if meta.TestInfraOnly {
+				genRunCmd.Long = "THIS COMMAND WAS DEVELOPED FOR INTERNAL TESTING ONLY.\n\n" + genRunCmd.Long
 			}
+			genRunCmd.Run = CmdHelper(gen, runRun)
 			runCmd.AddCommand(genRunCmd)
 		}
 		return runCmd
@@ -326,7 +326,7 @@ func runInitImpl(
 		// For example, at the time of writing, neither roachmart and ledger are
 		// public-facing, but both support fixtures. However, returning true here
 		// would result in "pq: unknown generator: roachmart" from the cluster.
-		if workload.SupportsFixtures(gen) && gen.Meta().PublicFacing {
+		if workload.SupportsFixtures(gen) {
 			lc = "import"
 		}
 	}

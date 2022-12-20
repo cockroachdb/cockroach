@@ -154,9 +154,8 @@ func FromWarehouses(warehouses int) workload.Generator {
 var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
-		` using a rich schema of multiple tables`,
-	Version:      `2.2.0`,
-	PublicFacing: true,
+		` using a rich schema of multiple tables.`,
+	Version: `2.2.0`,
 	New: func() workload.Generator {
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
