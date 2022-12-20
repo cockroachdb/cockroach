@@ -12,7 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
 import { ErrorWithKey } from "src/api/statementsApi";
-import { TxnContentionInsightDetailsRequest } from "src/api/txnInsightsApi";
+import { TxnContentionReq } from "src/api/txnInsightsApi";
 import { TxnContentionInsightDetails } from "src/insights";
 
 export type TransactionInsightDetailsState = {
@@ -64,14 +64,8 @@ const transactionInsightDetailsSlice = createSlice({
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
       delete state.cachedData[action.payload.key];
     },
-    refresh: (
-      _,
-      _action: PayloadAction<TxnContentionInsightDetailsRequest>,
-    ) => {},
-    request: (
-      _,
-      _action: PayloadAction<TxnContentionInsightDetailsRequest>,
-    ) => {},
+    refresh: (_, _action: PayloadAction<TxnContentionReq>) => {},
+    request: (_, _action: PayloadAction<TxnContentionReq>) => {},
   },
 });
 
