@@ -99,6 +99,24 @@ case "${1-}" in
       LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
       SUFFIX=-linux-2.6.32-gnu-s390x
     ) ;;
+
+  ?(ppc64le-)linux?(-gnu))
+    # Manually set the correct values for configure checks that libkrb5 will not be
+    # able to perform because we are cross-compiling.
+    export krb5_cv_attr_constructor_destructor=yes
+    export ac_cv_func_regcomp=yes
+    export ac_cv_printf_positional=yes
+    args=(
+      XGOOS=linux
+      XGOARCH=ppc64le
+      XCMAKE_SYSTEM_NAME=Linux
+      TARGET_TRIPLE=ppc64le-redhat-linux-gnu
+      # -lrt is needed as clock_gettime is not part of glibc prior to 2.17.
+      # If we update to a newer glibc, the -lrt can be removed.
+      LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
+      SUFFIX=-linux-2.6.32-gnu-ppc64le
+    ) ;;
+
   *)  die "unknown release configuration: $1" ;;
 esac
 
