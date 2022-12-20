@@ -412,8 +412,11 @@ func (tpccIncData) runRestoreDetached(
 }
 
 func registerRestore(r registry.Registry) {
+	// TODO(msbutler): delete the tests created by the loop below. Specifically
+	// - restore2TB/nodes=10
+	// - restore2TB/nodes=32
+	// - restore2TB/nodes=6/cpus=8/pd-volume=2500GB
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
-
 	for _, item := range []struct {
 		nodes        int
 		cpus         int
@@ -660,6 +663,218 @@ func registerRestore(r registry.Registry) {
 			require.NotEqual(t, 3, maxPauses, "the job should have paused at least once")
 		},
 	})
+
+	for _, sp := range []restoreSpecs{
+		{
+			name:     "restore/nodes=4",
+			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			backup:   makeBackupSpecs(backupSpecs{}),
+			timeout:  2 * time.Hour,
+		},
+		{
+			name: "restore/gce",
+			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
+			// by default.
+			hardware: makeHardwareSpecs(hardwareSpecs{cloud: spec.GCE}),
+			backup:   makeBackupSpecs(backupSpecs{}),
+			timeout:  2 * time.Hour,
+		},
+		// TODO(msbutler): add the following tests once roachperf is hooked up and old tests are
+		// removed:
+		// - restore/nodes=4
+		// - restore/nodes=10
+		// - restore/cpu=16
+		// - restore/gce/8TB
+		// - restore/45TB
+		// - restore/encryption
+	} {
+		sp := sp
+		clusterOpts := make([]spec.Option, 0)
+		clusterOpts = append(clusterOpts, spec.CPU(sp.hardware.cpus))
+		if sp.hardware.volumeSize != 0 {
+			clusterOpts = append(clusterOpts, spec.VolumeSize(sp.hardware.volumeSize))
+		}
+		r.Add(registry.TestSpec{
+			Name:    sp.name,
+			Owner:   registry.OwnerDisasterRecovery,
+			Cluster: r.MakeClusterSpec(sp.hardware.nodes, clusterOpts...),
+			Timeout: sp.timeout,
+			// These tests measure performance. To ensure consistent perf,
+			// disable metamorphic encryption.
+			EncryptionSupport: registry.EncryptionAlwaysDisabled,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+
+				if c.Spec().Cloud != sp.hardware.cloud {
+					t.Skip("test configured to run on %s", sp.hardware.cloud)
+				}
+				c.Put(ctx, t.Cockroach(), "./cockroach")
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				m := c.NewMonitor(ctx)
+
+				// Run the disk usage logger in the monitor to guarantee its
+				// having terminated when the test ends.
+				dul := NewDiskUsageLogger(t, c)
+				m.Go(dul.Runner)
+				hc := NewHealthChecker(t, c, c.All())
+				m.Go(hc.Runner)
+
+				// TODO(msbutler): export to prom/grafana
+				tick, perfBuf := initBulkJobPerfArtifacts(sp.name, sp.timeout)
+				m.Go(func(ctx context.Context) error {
+					defer dul.Done()
+					defer hc.Done()
+					t.Status(`running restore`)
+					tick()
+					sp.run(ctx, c)
+					tick()
+
+					// Upload the perf artifacts to any one of the nodes so that the test
+					// runner copies it into an appropriate directory path.
+					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+					if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+						log.Errorf(ctx, "failed to create perf dir: %+v", err)
+					}
+					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
+						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					}
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
+}
+
+type hardwareSpecs struct {
+	// cloud is the cloud provider the test will run on.
+	cloud string
+
+	// cpus is the per node cpu count.
+	cpus int
+
+	// nodes is the number of nodes in the restore.
+	nodes int
+
+	// volumeSize indicates the size of per node block storage (pd-ssd for gcs,
+	// ebs for aws). If zero, local ssd's are used.
+	volumeSize int
+}
+
+// makeHardwareSpecs instantiates hardware specs for a restore roachtest.
+// Unless the caller provides any explicit specs, the default specs are used.
+func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
+	specs := hardwareSpecs{
+		cloud:      spec.AWS,
+		cpus:       8,
+		nodes:      4,
+		volumeSize: 1000,
+	}
+
+	if override.cloud != "" {
+		specs.cloud = override.cloud
+	}
+	if override.cpus != 0 {
+		specs.cpus = override.cpus
+	}
+	if override.nodes != 0 {
+		specs.nodes = override.nodes
+	}
+	if override.volumeSize != 0 {
+		specs.volumeSize = override.volumeSize
+	}
+	return specs
+}
+
+type backupSpecs struct {
+	// version specifies the crdb version the backup was taken on.
+	version string
+
+	backupProperties string
+
+	// specifies the full backup directory in the collection to restore from.
+	fullBackupDir string
+
+	// aost specifies the as of system time restore to.
+	aost string
+
+	// workload defines the backed up workload.
+	workload backupWorkload
+}
+
+// makeBackupSpecs initializes the default backup specs. The caller can override
+// any of the default backup specs by passing any non-nil params.
+func makeBackupSpecs(override backupSpecs) backupSpecs {
+	// restoring as of from the 24th incremental backup in the chain
+	specs := backupSpecs{
+		// TODO(msbutler): write a script that automatically finds the latest versioned fixture for
+		// the given spec and a reasonable aost.
+		version:          "v22.2.0",
+		backupProperties: "inc-count=48",
+		fullBackupDir:    "LATEST",
+		aost:             "'2022-12-21 05:15:00'",
+		workload:         tpceRestore{customers: 25000},
+	}
+
+	if override.version != "" {
+		specs.version = override.version
+	}
+
+	if override.backupProperties != "" {
+		specs.backupProperties = override.backupProperties
+	}
+
+	if override.fullBackupDir != "" {
+		specs.fullBackupDir = override.fullBackupDir
+	}
+
+	if override.aost != "" {
+		specs.aost = override.aost
+	}
+
+	if override.workload != nil {
+		specs.workload = override.workload
+	}
+	return specs
+}
+
+type backupWorkload interface {
+	fixtureDir() string
+}
+
+type tpceRestore struct {
+	customers int
+}
+
+func (tpce tpceRestore) fixtureDir() string {
+	return fmt.Sprintf(`tpc-e/customers=%d`, tpce.customers)
+}
+
+type restoreSpecs struct {
+	name     string
+	hardware hardwareSpecs
+	backup   backupSpecs
+	timeout  time.Duration
+}
+
+func (sp restoreSpecs) storagePrefix() string {
+	if sp.hardware.cloud == spec.AWS {
+		return "s3"
+	}
+	return "gs"
+}
+
+func (sp restoreSpecs) backupDir() string {
+	return fmt.Sprintf(`'%s://cockroach-fixtures/backups/%s/%s/%s?AUTH=implicit'`,
+		sp.storagePrefix(), sp.backup.workload.fixtureDir(), sp.backup.version, sp.backup.backupProperties)
+}
+
+func (sp restoreSpecs) restoreCmd() string {
+	return fmt.Sprintf(`./cockroach sql --insecure -e "RESTORE FROM %s IN %s AS OF SYSTEM TIME %s"`,
+		sp.backup.fullBackupDir, sp.backupDir(), sp.backup.aost)
+}
+
+func (sp restoreSpecs) run(ctx context.Context, c cluster.Cluster) {
+	c.Run(ctx, c.Node(1), sp.restoreCmd())
 }
 
 // verifyMetrics loops, retrieving the timeseries metrics specified in m every
