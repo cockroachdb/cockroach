@@ -1,6 +1,6 @@
 # DB Console
 
-This directory contains the client-side code for CockroachDB's web-based DB 
+This directory contains the client-side code for CockroachDB's web-based DB
 Console, which provides details about a cluster's performance and health. See the
 [DB Console docs](https://www.cockroachlabs.com/docs/stable/ui-overview.html)
 for an expanded overview.
@@ -11,7 +11,7 @@ To start developing the UI, be sure you're able to build and run a CockroachDB
 node. Instructions for this are located in the top-level README. Every Cockroach
 node serves the UI, by default on port 8080, but you can customize the port with
 the `--http-port` flag. If you've started a node with the default options,
-you'll be able to access the UI at <http://localhost:8080>. If you've started 
+you'll be able to access the UI at <http://localhost:8080>. If you've started
 a node using `demo`, the default port is 8081 and you'll be able to access the UI
 at <http://localhost:8081>.
 
@@ -73,7 +73,7 @@ run `./dev ui watch` in one shell and `./dev build` in another.
 Many page-level components have been extracted into a
 separate repository for sharing with other applications.
 You can read all about this division in the [README for the
-package](https://github.com/cockroachdb/ui/blob/master/packages/cluster-ui/README.md)
+package](https://github.com/cockroachdb/cockroach/blob/master/pkg/ui/workspaces/cluster-ui/README.md)
 which describes a dev workflow that fits well with this package.
 
 ### Clearing the local cache
