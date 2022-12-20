@@ -4,7 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "mirror_lib",
     srcs = ["mirror.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/mirror",
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/mirror/go",
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build/bazel",
@@ -25,7 +25,7 @@ go_binary(
         "//build/patches:all_patches",
         "@go_sdk//:files",
     ],
-    embed = [":mirror_lib"],
+    embed = [":go_lib"],
     visibility = ["//visibility:public"],
 )
 
@@ -34,6 +34,29 @@ go_test(
     srcs = ["mirror_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":mirror_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
+
+go_library(
+    name = "go_lib",
+    srcs = ["mirror.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/mirror/go",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/build/starlarkutil",
+        "//pkg/util/envutil",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//googleapi",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "go_test",
+    srcs = ["mirror_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":go_lib"],
     deps = ["@com_github_stretchr_testify//require"],
 )
 
