@@ -1589,7 +1589,7 @@ CREATE TABLE table_desc_inverted_index (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE table_desc_inverted_index];
+SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----
 CREATE TABLE public.table_desc_inverted_index (
   id INT8 NOT NULL,

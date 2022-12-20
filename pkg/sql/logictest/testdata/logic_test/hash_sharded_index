@@ -1,5 +1,5 @@
 # Tests for creating a hash sharded primary key
-statement ok 
+statement ok
 CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=10))
 
 query TT
@@ -769,7 +769,7 @@ statement ok
 $create_statement
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t]
+SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
@@ -792,7 +792,7 @@ CREATE TABLE public.t (
 )
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t]
+SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
@@ -856,7 +856,7 @@ CREATE TABLE t_default_bucket_16 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_16]
+SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_16]
 ----
 CREATE TABLE public.t_default_bucket_16 (
   crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
@@ -879,7 +879,7 @@ statement ok
 CREATE TABLE t_default_bucket_8 (a INT PRIMARY KEY USING HASH);
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_8]
+SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_8]
 ----
 CREATE TABLE public.t_default_bucket_8 (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,

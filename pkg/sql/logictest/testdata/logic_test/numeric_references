@@ -144,7 +144,7 @@ SELECT * FROM [$num_ref_id as num_ref_alias]
 5     NULL  NULL
 
 statement OK
-DELETE FROM [$num_ref_id AS num_ref_alias]@bc WHERE @1=5
+DELETE FROM [$num_ref_id AS num_ref_alias]@bc WHERE p=5
 
 query I
 DELETE FROM [$num_ref_id AS num_ref_alias] WHERE d=40 RETURNING num_ref_alias.c

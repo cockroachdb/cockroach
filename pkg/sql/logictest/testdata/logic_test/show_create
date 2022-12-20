@@ -119,7 +119,7 @@ statement ok
 COMMENT ON COLUMN t.c IS 'first comment';
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t];
+SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
   c INT8 NULL,
@@ -132,7 +132,7 @@ statement ok
 ALTER TABLE t ALTER COLUMN c TYPE character varying;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t];
+SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
   c VARCHAR NULL,

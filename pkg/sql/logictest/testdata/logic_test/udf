@@ -95,7 +95,7 @@ statement ok
 CREATE FUNCTION f_no_ref(a int) RETURNS INT IMMUTABLE AS 'SELECT 1' LANGUAGE SQL
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_no_ref];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_no_ref];
 ----
 CREATE FUNCTION public.f_no_ref(IN a INT8)
   RETURNS INT8
@@ -133,7 +133,7 @@ SELECT nextval('sq1');
 $$
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
 CREATE FUNCTION public.f(IN a test.public.notmyworkday)
   RETURNS INT8
@@ -273,7 +273,7 @@ $$  122  test_cross_db  123  public  124  f_cross_db
 subtest show_create_function
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION proc_f];
+SELECT create_statement FROM [SHOW CREATE FUNCTION proc_f];
 ----
 CREATE FUNCTION public.proc_f(IN INT8)
   RETURNS INT8
@@ -298,7 +298,7 @@ statement error pq: unknown function: proc_f_2()
 SHOW CREATE FUNCTION proc_f_2;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION sc.proc_f_2];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc.proc_f_2];
 ----
 CREATE FUNCTION sc.proc_f_2(IN STRING)
   RETURNS STRING
@@ -314,7 +314,7 @@ statement ok
 SET search_path = sc;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION proc_f_2];
+SELECT create_statement FROM [SHOW CREATE FUNCTION proc_f_2];
 ----
 CREATE FUNCTION sc.proc_f_2(IN STRING)
   RETURNS STRING
@@ -385,7 +385,7 @@ statement ok
 SET search_path = public,sc1
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
 CREATE FUNCTION public.f_test_drop()
   RETURNS INT8
@@ -407,7 +407,7 @@ CREATE FUNCTION public.f_test_drop(IN INT8)
 $$
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop(IN INT8)
   RETURNS INT8
@@ -442,7 +442,7 @@ statement ok
 DROP FUNCTION f_test_drop();
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
 CREATE FUNCTION public.f_test_drop(IN INT8)
   RETURNS INT8
@@ -455,7 +455,7 @@ CREATE FUNCTION public.f_test_drop(IN INT8)
 $$
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop(IN INT8)
   RETURNS INT8
@@ -473,10 +473,10 @@ statement ok
 DROP FUNCTION f_test_drop(INT), f_test_drop(INT);
 
 statement error pq: unknown function: public.f_test_drop\(\): function undefined
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop(IN INT8)
   RETURNS INT8
@@ -492,7 +492,7 @@ statement ok
 DROP FUNCTION f_test_drop(INT);
 
 statement error pq: unknown function: sc1.f_test_drop\(\): function undefined
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 # If there are identical function signatures in different schemas, multiple drop
 # statements should drop them all. This matches postgres behavior.
@@ -501,7 +501,7 @@ CREATE FUNCTION public.f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE FUNCTION sc1.f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 ----
 CREATE FUNCTION public.f_test_drop()
   RETURNS INT8
@@ -514,7 +514,7 @@ CREATE FUNCTION public.f_test_drop()
 $$
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 ----
 CREATE FUNCTION sc1.f_test_drop()
   RETURNS INT8
@@ -533,10 +533,10 @@ DROP FUNCTION f_test_drop();
 COMMIT;
 
 statement error pq: unknown function: public.f_test_drop\(\): function undefined
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
 statement error pq: unknown function: sc1.f_test_drop\(\): function undefined
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 statement ok
 SET search_path = public
@@ -606,7 +606,7 @@ statement ok
 CREATE VIEW v AS SELECT lower('hello');
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION test_vf_f];
+SELECT create_statement FROM [SHOW CREATE FUNCTION test_vf_f];
 ----
 CREATE FUNCTION public.test_vf_f()
   RETURNS STRING
@@ -1059,7 +1059,7 @@ statement ok
 CREATE FUNCTION f_test_alter_opt(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_opt];
 ----
 CREATE FUNCTION public.f_test_alter_opt(IN INT8)
   RETURNS INT8
@@ -1081,7 +1081,7 @@ statement ok
 ALTER FUNCTION f_test_alter_opt IMMUTABLE LEAKPROOF STRICT;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_opt];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_opt];
 ----
 CREATE FUNCTION public.f_test_alter_opt(IN INT8)
   RETURNS INT8
@@ -1105,7 +1105,7 @@ statement ok
 CREATE FUNCTION f_test_alter_name_diff_in() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 ----
 CREATE FUNCTION public.f_test_alter_name(IN INT8)
   RETURNS INT8
@@ -1127,10 +1127,10 @@ statement ok
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
 
 statement error pq: unknown function: f_test_alter_name\(\): function undefined
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 ----
 CREATE FUNCTION public.f_test_alter_name_new(IN INT8)
   RETURNS INT8
@@ -1146,10 +1146,10 @@ statement ok
 ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
 
 statement error pq: unknown function: f_test_alter_name_new\(\): function undefined
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in];
 ----
 CREATE FUNCTION public.f_test_alter_name_diff_in()
   RETURNS INT8
@@ -1319,7 +1319,7 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
 153  152
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc];
 ----
 CREATE FUNCTION public.f_test_sc()
   RETURNS INT8
@@ -1369,7 +1369,7 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
 153  152
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_sc];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc];
 ----
 CREATE FUNCTION public.f_test_sc()
   RETURNS INT8
@@ -1382,7 +1382,7 @@ CREATE FUNCTION public.f_test_sc()
 $$
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc];
+SELECT create_statement FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc];
 ----
 CREATE FUNCTION test_alter_sc.f_test_sc()
   RETURNS INT8
@@ -1431,7 +1431,7 @@ statement error pq: cannot set leakproof on function with non-immutable volatili
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
 CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
   RETURNS INT8
@@ -1449,7 +1449,7 @@ statement ok
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
 CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
   RETURNS INT8
@@ -1465,7 +1465,7 @@ statement ok
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT LANGUAGE SQL AS $$ SELECT 3 $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_test_cor];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_cor];
 ----
 CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
   RETURNS INT8
@@ -1508,7 +1508,7 @@ statement ok
 CREATE FUNCTION f_udt_rewrite() RETURNS notmyworkday LANGUAGE SQL AS $$ SELECT 'Monday':: notmyworkday $$;
 
 query T
-SELECT @2 FROM [SHOW CREATE FUNCTION f_udt_rewrite];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_udt_rewrite];
 ----
 CREATE FUNCTION public.f_udt_rewrite()
   RETURNS test.public.notmyworkday
