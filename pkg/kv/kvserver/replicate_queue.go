@@ -736,34 +736,6 @@ func (rq *replicateQueue) process(
 			}
 		}
 
-		// After we made a replica change, make sure the lease is still on the
-		// correct store.
-		//
-		// TODO(kvoli): This lease transfer occurs outside of the planning
-		// ProcessOneChange planning and application logic. It should be moved
-		// into the planning phase and returned as a follow up change.
-		if rq.canTransferLeaseFrom(ctx, repl) {
-			transferStatus, err := rq.shedLease(
-				ctx,
-				repl,
-				repl.Desc(),
-				repl.SpanConfig(),
-				allocator.TransferLeaseOptions{
-					Goal:                   allocator.FollowTheWorkload,
-					ExcludeLeaseRepl:       false,
-					CheckCandidateFullness: true,
-				},
-			)
-			if err != nil {
-				return false, err
-			}
-			// If we successfully transferred the lease, we can't requeue, let the new
-			// leaseholder do it.
-			if transferStatus == allocator.TransferOK {
-				requeue = false
-			}
-		}
-
 		if requeue {
 			log.KvDistribution.VEventf(ctx, 1, "re-processing")
 			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
@@ -1823,8 +1795,24 @@ func (rq *replicateQueue) considerRebalance(
 		}
 	}
 
+	// No rebalance target was found, check whether we are able and should
+	// transfer the lease away to another store.
 	if !ok {
-		return nil, nil
+		if !canTransferLeaseFrom(ctx, repl) {
+			return nil, nil
+		}
+		return rq.shedLeaseTarget(
+			ctx,
+			repl,
+			desc,
+			conf,
+			allocator.TransferLeaseOptions{
+				Goal:                   allocator.FollowTheWorkload,
+				ExcludeLeaseRepl:       false,
+				CheckCandidateFullness: true,
+			},
+		), nil
+
 	}
 
 	// If we have a valid rebalance action (ok == true) and we haven't
@@ -1960,6 +1948,42 @@ func replicationChangesForRebalance(
 		}
 	}
 	return chgs, performingSwap, nil
+}
+
+// shedLeaseTarget takes in a leaseholder replica, looks for a target for
+// transferring the lease and, if a suitable target is found (e.g. alive, not
+// draining), returns an allocation op to transfer the lease away.
+func (rq *replicateQueue) shedLeaseTarget(
+	ctx context.Context,
+	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
+	opts allocator.TransferLeaseOptions,
+) (op AllocationOp) {
+	usage := RangeUsageInfoForRepl(repl)
+	// Learner replicas aren't allowed to become the leaseholder or raft leader,
+	// so only consider the `VoterDescriptors` replicas.
+	target := rq.allocator.TransferLeaseTarget(
+		ctx,
+		rq.storePool,
+		conf,
+		desc.Replicas().VoterDescriptors(),
+		repl,
+		usage,
+		false, /* forceDecisionWithoutStats */
+		opts,
+	)
+	if target == (roachpb.ReplicaDescriptor{}) {
+		return nil
+	}
+
+	op = AllocationTransferLeaseOp{
+		source:             repl.StoreID(),
+		target:             target.StoreID,
+		usage:              usage,
+		bypassSafetyChecks: false,
+	}
+	return op
 }
 
 // shedLease takes in a leaseholder replica, looks for a target for transferring
