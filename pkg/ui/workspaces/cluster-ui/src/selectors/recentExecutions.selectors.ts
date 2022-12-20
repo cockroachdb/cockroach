@@ -9,7 +9,11 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { RecentExecutions } from "src/recentExecutions/types";
+import {
+  RecentExecutions,
+  RecentStatement,
+  RecentTransaction,
+} from "src/recentExecutions/types";
 import { AppState } from "src/store";
 import { selectRecentExecutionsCombiner } from "src/selectors/recentExecutionsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";
@@ -39,6 +43,12 @@ export const selectRecentStatements = createSelector(
   (executions: RecentExecutions) => executions.statements,
 );
 
+export const selectStatementExecutionStatus = createSelector(
+  selectRecentStatements,
+  (statements: RecentStatement[]) =>
+    Array.from(new Set(statements.map(statement => statement.status))),
+);
+
 export const selecteRecentStatement = createSelector(
   selectRecentStatements,
   selectExecutionID,
@@ -48,6 +58,12 @@ export const selecteRecentStatement = createSelector(
 export const selectRecentTransactions = createSelector(
   selectRecentExecutions,
   (executions: RecentExecutions) => executions.transactions,
+);
+
+export const selectTransactionExecutionStatus = createSelector(
+  selectRecentTransactions,
+  (transactions: RecentTransaction[]) =>
+    Array.from(new Set(transactions.map(transaction => transaction.status))),
 );
 
 export const selectRecentTransaction = createSelector(

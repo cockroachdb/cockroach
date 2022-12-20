@@ -310,7 +310,10 @@ export const InsightExecOptions = new Map<string, string>([
   [InsightExecEnum.STATEMENT.toString(), "Statement Executions"],
 ]);
 
-export type WorkloadInsightEventFilters = Pick<Filters, "app">;
+export type WorkloadInsightEventFilters = Pick<
+  Filters,
+  "app" | "workloadInsightType"
+>;
 
 export type SchemaInsightEventFilters = Pick<
   Filters,

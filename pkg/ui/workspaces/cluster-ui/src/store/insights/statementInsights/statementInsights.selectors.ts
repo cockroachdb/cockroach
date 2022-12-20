@@ -31,6 +31,27 @@ export const selectStatementInsightDetails = createSelector(
   selectStatementInsightDetailsCombiner,
 );
 
+export const selectStatementInsightTypes = createSelector(
+  selectStatementInsights,
+  statementInsights => {
+    if (!statementInsights) return [];
+
+    const insightTypes = new Set<string>();
+
+    statementInsights.forEach(stmtInsightEvent => {
+      if (stmtInsightEvent.insights) {
+        stmtInsightEvent.insights.forEach(insight => {
+          if (!insightTypes.has(insight.label)) {
+            insightTypes.add(insight.label);
+          }
+        });
+      }
+    });
+
+    return Array.from(insightTypes).sort();
+  },
+);
+
 export const selectColumns = createSelector(
   localStorageSelector,
   localStorage =>

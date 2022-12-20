@@ -11,8 +11,8 @@
 import React, { useMemo } from "react";
 import classNames from "classnames/bind";
 import {
-  RecentStatementFilters,
   RecentTransaction,
+  RecentTransactionFilters,
 } from "src/recentExecutions/types";
 import ColumnsSelector, {
   SelectOption,
@@ -36,7 +36,7 @@ import { SortedTable } from "src/sortedtable";
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 type RecentTransactionsSectionProps = {
-  filters: RecentStatementFilters;
+  filters: RecentTransactionFilters;
   isTenant?: boolean;
   pagination: ISortedTablePagination;
   search: string;

@@ -20,6 +20,7 @@ import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
 import {
   calculateActiveFilters,
+  defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
@@ -53,6 +54,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export type StatementInsightsViewStateProps = {
   statements: FlattenedStmtInsights;
   statementsError: Error | null;
+  insightTypes: string[];
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
   selectedColumnNames: string[];
@@ -80,6 +82,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     sortSetting,
     statements,
     statementsError,
+    insightTypes,
     filters,
     refreshStatementInsights,
     onFiltersChange,
@@ -187,7 +190,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
 
   const clearFilters = () =>
     onSubmitFilters({
-      app: "",
+      app: defaultFilters.app,
+      workloadInsightType: defaultFilters.workloadInsightType,
     });
 
   const apps = getAppsFromStatementInsights(
@@ -230,6 +234,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
             onSubmitFilters={onSubmitFilters}
             appNames={apps}
             filters={filters}
+            workloadInsightTypes={insightTypes}
+            showWorkloadInsightTypes={true}
           />
         </PageConfigItem>
       </PageConfig>

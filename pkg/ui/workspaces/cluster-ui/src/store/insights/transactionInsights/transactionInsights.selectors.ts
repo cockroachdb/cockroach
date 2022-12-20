@@ -25,6 +25,27 @@ export const selectTransactionInsights = createSelector(
 export const selectTransactionInsightsError = (state: AppState) =>
   state.adminUI.transactionInsights?.lastError;
 
+export const selectTransactionInsightTypes = createSelector(
+  selectTransactionInsightsData,
+  transactionInsights => {
+    if (!transactionInsights) return [];
+
+    const transactionInsightTypes = new Set<string>();
+
+    transactionInsights.forEach(transactionInsightEvent => {
+      if (transactionInsightEvent.insights) {
+        transactionInsightEvent.insights.forEach(insight => {
+          if (!transactionInsightTypes.has(insight.label)) {
+            transactionInsightTypes.add(insight.label);
+          }
+        });
+      }
+    });
+
+    return Array.from(transactionInsightTypes).sort();
+  },
+);
+
 export const selectSortSetting = createSelector(
   localStorageSelector,
   localStorage => localStorage["sortSetting/InsightsPage"],
