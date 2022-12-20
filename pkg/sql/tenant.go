@@ -221,6 +221,9 @@ func updateTenantRecord(
 
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("create_tenant()")
+	}
 	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
 		return err
 	}
@@ -399,6 +402,9 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 
 // DestroyTenant implements the tree.TenantOperator interface.
 func (p *planner) DestroyTenant(ctx context.Context, tenID uint64, synchronous bool) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("destroy_tenant()")
+	}
 	const op = "destroy"
 	if err := p.RequireAdminRole(ctx, "destroy tenant"); err != nil {
 		return err
