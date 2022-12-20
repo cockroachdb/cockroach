@@ -32,11 +32,10 @@ func init() {
 }
 
 var geospatialMeta = workload.Meta{
-	Name:         `geospatial`,
-	Description:  `geospatial contains PostGIS tutorial tables`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
-	New:          func() workload.Generator { return geospatial{} },
+	Name:        `geospatial`,
+	Description: `geospatial contains PostGIS tutorial tables.`,
+	Version:     `1.0.0`,
+	New:         func() workload.Generator { return geospatial{} },
 }
 
 // Meta implements the Generator interface.
