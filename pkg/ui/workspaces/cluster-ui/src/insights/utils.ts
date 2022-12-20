@@ -10,12 +10,8 @@
 
 import { limitStringArray, unset } from "src/util";
 import {
-  ExecutionInsightsRequest,
-  FlattenedStmtInsights,
-} from "src/api/txnInsightsApi";
-import {
   ExecutionDetails,
-  FlattenedStmtInsightEvent,
+  StmtInsightEvent,
   getInsightFromCause,
   Insight,
   InsightExecEnum,
@@ -24,14 +20,13 @@ import {
   InsightType,
   MergedTxnInsightEvent,
   SchemaInsightEventFilters,
-  StmtInsightEvent,
   TxnContentionInsightDetails,
-  TxnContentionInsightEvent,
   TxnInsightDetails,
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
 import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import { StmtInsightsReq } from "src/api";
 
 export const filterTransactionInsights = (
   transactions: MergedTxnInsightEvent[] | null,
@@ -171,11 +166,11 @@ export function insightType(type: InsightType): string {
 }
 
 export const filterStatementInsights = (
-  statements: FlattenedStmtInsights | null,
+  statements: StmtInsightEvent[] | null,
   filters: WorkloadInsightEventFilters,
   internalAppNamePrefix: string,
   search?: string,
-): FlattenedStmtInsights => {
+): StmtInsightEvent[] => {
   if (statements == null) return [];
 
   let filteredStatements = statements;
@@ -183,23 +178,21 @@ export const filterStatementInsights = (
   const isInternal = (appName: string) =>
     appName.startsWith(internalAppNamePrefix);
   if (filters.app) {
-    filteredStatements = filteredStatements.filter(
-      (stmt: FlattenedStmtInsightEvent) => {
-        const apps = filters.app.toString().split(",");
-        let showInternal = false;
-        if (apps.includes(internalAppNamePrefix)) {
-          showInternal = true;
-        }
-        if (apps.includes(unset)) {
-          apps.push("");
-        }
+    filteredStatements = filteredStatements.filter((stmt: StmtInsightEvent) => {
+      const apps = filters.app.toString().split(",");
+      let showInternal = false;
+      if (apps.includes(internalAppNamePrefix)) {
+        showInternal = true;
+      }
+      if (apps.includes(unset)) {
+        apps.push("");
+      }
 
-        return (
-          (showInternal && isInternal(stmt.application)) ||
-          apps.includes(stmt.application)
-        );
-      },
-    );
+      return (
+        (showInternal && isInternal(stmt.application)) ||
+        apps.includes(stmt.application)
+      );
+    });
   } else {
     filteredStatements = filteredStatements.filter(
       stmt => !isInternal(stmt.application),
@@ -218,7 +211,7 @@ export const filterStatementInsights = (
 };
 
 export function getAppsFromStatementInsights(
-  statements: FlattenedStmtInsights | null,
+  statements: StmtInsightEvent[] | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (statements == null || statements?.length === 0) return [];
@@ -275,97 +268,6 @@ export function getInsightsFromProblemsAndCauses(
   }
 
   return insights;
-}
-
-/**
- * flattenTxnInsightsToStmts flattens the txn insights array
- * into its stmt insights, including the txn level information.
- * Only stmts with non-empty insights array will be included.
- * @param txnInsights array of transaction insights
- * @returns An array of FlattenedStmtInsightEvent where each elem
- * includes stmt and txn info. All elements have a non-empty
- * insights array.
- */
-export function flattenTxnInsightsToStmts(
-  txnInsights: TxnInsightEvent[],
-): FlattenedStmtInsightEvent[] {
-  if (!txnInsights?.length) return [];
-  const stmtInsights: FlattenedStmtInsightEvent[] = [];
-  const seenExecutions = new Set<string>();
-  txnInsights.forEach(txnInsight => {
-    const { statementInsights, ...txnInfo } = txnInsight;
-    statementInsights?.forEach(stmt => {
-      if (
-        !stmt.insights?.length ||
-        seenExecutions.has(stmt.statementExecutionID)
-      ) {
-        return;
-      }
-      stmtInsights.push({ ...txnInfo, ...stmt, query: stmt.query });
-      seenExecutions.add(stmt.statementExecutionID);
-    });
-  });
-  return stmtInsights;
-}
-
-/**
- * mergeTxnContentionAndStmtInsights merges a list of txn insights
- * aggregated from stmt insights, and a list of txn contention insights.
- * If a txn exists in both lists, its information will be merged.
- * @param txnInsightsFromStmts txn insights aggregated from stmts
- * @param txnContentionInsights txn contention insights
- * @returns list of merged txn insights
- */
-export function mergeTxnContentionAndStmtInsights(
-  txnInsightsFromStmts: TxnInsightEvent[],
-  txnContentionInsights: TxnContentionInsightEvent[],
-): MergedTxnInsightEvent[] {
-  const eventByTxnFingerprint: Record<string, MergedTxnInsightEvent> = {};
-  txnContentionInsights?.forEach(txn => {
-    const formattedTxn = {
-      transactionExecutionID: txn.transactionID,
-      transactionFingerprintID: txn.transactionFingerprintID,
-      contention: txn.contentionDuration,
-      statementInsights: [] as StmtInsightEvent[],
-      insights: txn.insights,
-      queries: txn.queries,
-      startTime: txn.startTime,
-      application: txn.application,
-    };
-    eventByTxnFingerprint[txn.transactionFingerprintID] = formattedTxn;
-  });
-
-  txnInsightsFromStmts?.forEach(txn => {
-    const existingContentionEvent =
-      eventByTxnFingerprint[txn.transactionFingerprintID];
-    if (existingContentionEvent) {
-      if (
-        existingContentionEvent.transactionExecutionID !==
-        txn.transactionExecutionID
-      ) {
-        // Not the same execution - for now we opt to return the contention event.
-        // TODO (xinhaoz) return the txn that executed more recently once
-        // we have txn start and end in the insights table. For now let's
-        // take the entry from the contention registry.
-        return; // Continue
-      }
-      // Merge the two results.
-      eventByTxnFingerprint[txn.transactionFingerprintID] = {
-        ...txn,
-        contention: existingContentionEvent.contention,
-        startTime: existingContentionEvent.startTime,
-        insights: dedupInsights(
-          txn.insights.concat(existingContentionEvent.insights),
-        ),
-      };
-      return; // Continue
-    }
-
-    // This is a new key.
-    eventByTxnFingerprint[txn.transactionFingerprintID] = txn;
-  });
-
-  return Object.values(eventByTxnFingerprint);
 }
 
 export function mergeTxnInsightDetails(
@@ -460,7 +362,7 @@ export function getRecommendationForExecInsight(
 }
 
 export function getStmtInsightRecommendations(
-  insightDetails: Partial<FlattenedStmtInsightEvent> | null,
+  insightDetails: Partial<StmtInsightEvent> | null,
 ): InsightRecommendation[] {
   if (!insightDetails) return [];
 
@@ -471,7 +373,7 @@ export function getStmtInsightRecommendations(
     indexRecommendations: insightDetails.indexRecommendations,
     databaseName: insightDetails.databaseName,
     elapsedTimeMillis: insightDetails.elapsedTimeMillis,
-    contentionTime: insightDetails.totalContentionTime?.asMilliseconds(),
+    contentionTime: insightDetails.contentionTime?.asMilliseconds(),
   };
 
   const recs: InsightRecommendation[] = insightDetails.insights?.map(insight =>
@@ -497,6 +399,7 @@ export function getTxnInsightRecommendations(
     getStmtInsightRecommendations({
       ...stmt,
       ...execDetails,
+      contentionTime: stmt.contentionTime,
     })?.forEach(rec => recs.push(rec)),
   );
 
@@ -524,7 +427,7 @@ export function dedupInsights(insights: Insight[]): Insight[] {
 
 export function executionInsightsRequestFromTimeScale(
   ts: TimeScale,
-): ExecutionInsightsRequest {
+): StmtInsightsReq {
   if (ts === null) return {};
   const [startTime, endTime] = toDateRange(ts);
   return {
