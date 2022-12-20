@@ -377,6 +377,10 @@ func newFamilyTableDescriptor(
 		includeSet.Add(id)
 	}
 
+	// Add system columns -- those are always available.
+	includeSet.Add(colinfo.MVCCTimestampColumnID)
+	includeSet.Add(colinfo.TableOIDColumnID)
+
 	return &familyTableDescriptor{
 		TableDescriptor: original,
 		includeSet:      includeSet,
@@ -416,12 +420,6 @@ func (d *familyTableDescriptor) AllColumns() []catalog.Column {
 // only include columns referenced by the target column family.
 func (d *familyTableDescriptor) VisibleColumns() []catalog.Column {
 	return d.filterColumns(d.TableDescriptor.VisibleColumns())
-}
-
-// SystemColumns implements catalog.TableDescriptor interface.
-// TODO(yevgeniy): Support system columns
-func (d *familyTableDescriptor) SystemColumns() []catalog.Column {
-	return nil
 }
 
 // EnforcedUniqueConstraintsWithoutIndex implements catalog.TableDescriptor interface.
