@@ -16,6 +16,7 @@ import {
   SessionStatusType,
   RecentStatementFilters,
   RecentTransactionFilters,
+  ExecutionStatus,
 } from "./types";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment";
@@ -50,7 +51,7 @@ const defaultActiveStatement: RecentStatement = {
   transactionID: "transactionID",
   sessionID: "sessionID",
   query: defaultActiveQuery.sql,
-  status: "Executing",
+  status: ExecutionStatus.Executing,
   start: MOCK_START_TIME,
   elapsedTime: moment.duration(60),
   application: "test",
@@ -87,7 +88,7 @@ function makeActiveTxn(
     lastAutoRetryReason: null,
     priority: "Normal",
     statementCount: 5,
-    status: "Executing",
+    status: ExecutionStatus.Executing,
     ...props,
   };
 }
@@ -231,7 +232,7 @@ describe("test activeStatementUtils", () => {
           fail(`stmt user should be foo or bar, got ${stmt.user}`);
         }
         // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
-        expect(stmt.status).toBe("Executing");
+        expect(stmt.status).toBe(ExecutionStatus.Executing);
         expect(stmt.start.unix()).toBe(
           TimestampToMoment(defaultActiveQuery.start).unix(),
         );
@@ -302,7 +303,7 @@ describe("test activeStatementUtils", () => {
         expect(txn.application).toBe(
           sessionsResponse.sessions[i].application_name,
         );
-        expect(txn.status).toBe("Executing");
+        expect(txn.status).toBe(ExecutionStatus.Executing);
         expect(txn.query).toBeTruthy();
         expect(txn.start.unix()).toBe(
           TimestampToMoment(defaultActiveQuery.start).unix(),

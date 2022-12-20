@@ -30,6 +30,7 @@ import {
   selectStatementInsights,
   sortSettingLocalSetting,
   selectTransactionInsights,
+  selectInsightTypes,
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
@@ -50,6 +51,7 @@ const transactionMapStateToProps = (
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
   transactionsError: state.cachedData?.transactionInsights?.lastError,
+  insightTypes: selectInsightTypes(),
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
 });
@@ -61,6 +63,7 @@ const statementMapStateToProps = (
   statements: selectStatementInsights(state),
   statementsError: state.cachedData?.executionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
+  insightTypes: selectInsightTypes(),
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
     insightStatementColumnsLocalSetting.selectorToArray(state),
