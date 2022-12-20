@@ -17,7 +17,6 @@ import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
-import { TxnContentionInsightDetailsRequest } from "src/api";
 import { NO_SAMPLES_FOUND } from "src/util";
 import {
   InsightsSortedTable,

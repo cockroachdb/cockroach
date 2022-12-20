@@ -10,24 +10,20 @@
 
 import moment from "moment";
 import {
-  mergeTxnContentionAndStmtInsights,
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   filterStatementInsights,
   getAppsFromStatementInsights,
   getInsightsFromProblemsAndCauses,
-  flattenTxnInsightsToStmts,
   mergeTxnInsightDetails,
   dedupInsights,
 } from "./utils";
 import {
   TxnInsightEvent,
-  StmtInsightEvent,
   InsightNameEnum,
   failedExecutionInsight,
-  FlattenedStmtInsightEvent,
+  StmtInsightEvent,
   InsightExecEnum,
-  TxnContentionInsightEvent,
   highContentionInsight,
   slowExecutionInsight,
   planRegressionInsight,
@@ -38,18 +34,6 @@ import {
 } from "./types";
 
 const INTERNAL_APP_PREFIX = "$ internal";
-
-const txnContentionEventMock: TxnContentionInsightEvent = {
-  transactionID: "execution",
-  transactionFingerprintID: "fingerprint",
-  queries: ["select 1"],
-  insights: [highContentionInsight(InsightExecEnum.TRANSACTION)],
-  startTime: moment(),
-  contentionDuration: moment.duration(100, "millisecond"),
-  contentionThreshold: 100,
-  application: "sql_obs_fun_times",
-  execType: InsightExecEnum.TRANSACTION,
-};
 
 const blockedContentionMock: BlockedContentionDetails = {
   collectionTimeStamp: moment(),
@@ -64,37 +48,35 @@ const blockedContentionMock: BlockedContentionDetails = {
   contentionTimeMs: 500,
 };
 
-function mockTxnContentionInsightEvent(
-  fields: Partial<TxnContentionInsightEvent> = {},
-): TxnContentionInsightEvent {
-  return { ...txnContentionEventMock, ...fields };
-}
-
 const statementInsightMock: StmtInsightEvent = {
+  databaseName: "defaultDb",
+  username: "craig",
+  priority: "high",
+  retries: 0,
+  implicitTxn: false,
+  sessionID: "123",
+  transactionExecutionID: "execution",
+  transactionFingerprintID: "fingerprint",
+  application: "sql_obs_fun_times",
+  lastRetryReason: null,
   statementExecutionID: "execution",
   statementFingerprintID: "fingerprint",
   startTime: moment(),
   isFullScan: false,
   elapsedTimeMillis: 100,
-  totalContentionTime: moment.duration(100, "millisecond"),
+  contentionTime: moment.duration(100, "millisecond"),
   endTime: moment(),
   rowsRead: 4,
   rowsWritten: 1,
-  causes: ["FailedExecution"],
-  problem: "SlowExecution",
   query: "select 1",
   insights: [failedExecutionInsight(InsightExecEnum.STATEMENT)],
   indexRecommendations: [],
   planGist: "gist",
 };
 
-function mockStmtInsight(fields: Partial<StmtInsightEvent>) {
-  return { ...statementInsightMock, ...fields };
-}
-
-function mockFlattenedStmtInsightEvent(
-  fields: Partial<FlattenedStmtInsightEvent> = {},
-): FlattenedStmtInsightEvent {
+function mockStmtInsightEvent(
+  fields: Partial<StmtInsightEvent> = {},
+): StmtInsightEvent {
   return {
     ...statementInsightMock,
     transactionExecutionID: "transactionExecution",
@@ -266,14 +248,14 @@ describe("test workload insights utils", () => {
 
   describe("filterStatementInsights", () => {
     const stmts = [
-      mockFlattenedStmtInsightEvent({ application: "hello" }),
-      mockFlattenedStmtInsightEvent({ application: "world" }),
-      mockFlattenedStmtInsightEvent({ application: "cat" }),
-      mockFlattenedStmtInsightEvent({ application: "frog" }),
-      mockFlattenedStmtInsightEvent({ application: "cockroach" }),
-      mockFlattenedStmtInsightEvent({ application: "cockroach" }),
-      mockFlattenedStmtInsightEvent({ application: "db" }),
-      mockFlattenedStmtInsightEvent({ application: "db" }),
+      mockStmtInsightEvent({ application: "hello" }),
+      mockStmtInsightEvent({ application: "world" }),
+      mockStmtInsightEvent({ application: "cat" }),
+      mockStmtInsightEvent({ application: "frog" }),
+      mockStmtInsightEvent({ application: "cockroach" }),
+      mockStmtInsightEvent({ application: "cockroach" }),
+      mockStmtInsightEvent({ application: "db" }),
+      mockStmtInsightEvent({ application: "db" }),
     ];
 
     it("should filter out stmts not matching provided filters", () => {
@@ -289,8 +271,8 @@ describe("test workload insights utils", () => {
     it("should filter out or include internal stmts depending on filters", () => {
       const stmtsWithInternal = [
         ...stmts,
-        mockFlattenedStmtInsightEvent({ application: "$ internal-my-app" }),
-        mockFlattenedStmtInsightEvent({ application: "$ internal-my-app" }),
+        mockStmtInsightEvent({ application: "$ internal-my-app" }),
+        mockStmtInsightEvent({ application: "$ internal-my-app" }),
       ];
       // If internal app name not included in filter, internal apps should be
       // filtered out.
@@ -314,8 +296,8 @@ describe("test workload insights utils", () => {
 
     it("should filter out txns not matching search", () => {
       const stmtsWithQueries = [
-        mockFlattenedStmtInsightEvent({ query: "select foo" }),
-        mockFlattenedStmtInsightEvent({ query: "hello" }),
+        mockStmtInsightEvent({ query: "select foo" }),
+        mockStmtInsightEvent({ query: "hello" }),
       ];
 
       let filtered = filterStatementInsights(
@@ -346,21 +328,21 @@ describe("test workload insights utils", () => {
     it("should filter txns given a mix of requirements", () => {
       const stmtsMixed = [
         // This should be the only txn remaining.
-        mockFlattenedStmtInsightEvent({
+        mockStmtInsightEvent({
           application: "myApp",
           query: "select foo",
         }),
         // No required search term.
-        mockFlattenedStmtInsightEvent({
+        mockStmtInsightEvent({
           application: "myApp",
           query: "update bar",
         }),
         // No required app.
-        mockFlattenedStmtInsightEvent({
+        mockStmtInsightEvent({
           query: "hello world",
         }),
         // Internal app should be filtered out.
-        mockFlattenedStmtInsightEvent({
+        mockStmtInsightEvent({
           application: INTERNAL_APP_PREFIX,
           query: "select foo",
         }),
@@ -380,15 +362,15 @@ describe("test workload insights utils", () => {
   describe("getAppsFromStatementInsights", () => {
     const appNames = ["one", "two", "three"];
     const stmts = appNames.map(app =>
-      mockFlattenedStmtInsightEvent({ application: app }),
+      mockStmtInsightEvent({ application: app }),
     );
 
     // Internal app name should all be consolidated to the prefix..
     stmts.push(
-      mockFlattenedStmtInsightEvent({
+      mockStmtInsightEvent({
         application: "$ internal-name",
       }),
-      mockFlattenedStmtInsightEvent({
+      mockStmtInsightEvent({
         application: "$ internal-another-app",
       }),
     );
@@ -456,114 +438,6 @@ describe("test workload insights utils", () => {
         });
       });
     });
-  });
-
-  describe("flattenTxnInsightsToStmts", () => {
-    // Mock transactions, where each txn will have 2 stmt insights
-    // with problems and 2 with no problems.
-    // The 2 with no problems should NOT be included in the
-    // flattened array.
-    const txns = new Array(4).map((_, i) =>
-      mockTxnInsightEvent({
-        transactionExecutionID: `exec${i}`,
-        statementInsights: [
-          mockStmtInsight({ statementExecutionID: `exec${i * 2}` }),
-          mockStmtInsight({ statementExecutionID: `exec${i * 2 + 1}` }),
-          mockStmtInsight({ insights: [] }), // should be excluded
-          mockStmtInsight({ insights: [] }), // should be excluded
-        ],
-      }),
-    );
-
-    const numStmts = txns.reduce(
-      (sum, txn) => (sum += txn.statementInsights.length),
-      0,
-    );
-
-    const flattened = flattenTxnInsightsToStmts(txns);
-    expect(flattened.length).toEqual(numStmts);
-
-    txns.forEach((txn, ti) => {
-      txn.statementInsights.forEach((stmt, si) => {
-        const flattenedStmt = flattened[ti * 2 + si];
-        expect(stmt.statementExecutionID).toEqual(
-          flattenedStmt.statementExecutionID,
-        );
-        expect(stmt.elapsedTimeMillis).toEqual(
-          flattenedStmt.statementExecutionID,
-        );
-        expect(stmt.startTime.unix()).toEqual(flattenedStmt.startTime.unix());
-        expect(stmt.endTime.unix()).toEqual(flattenedStmt.endTime.unix());
-        expect(txn.transactionFingerprintID).toEqual(
-          flattenedStmt.transactionExecutionID,
-        );
-        expect(txn.transactionExecutionID).toEqual(
-          flattenedStmt.transactionExecutionID,
-        );
-        expect(txn.sessionID).toEqual(flattenedStmt.sessionID);
-        expect(txn.application).toEqual(flattenedStmt.application);
-        expect(txn.databaseName).toEqual(flattenedStmt.databaseName);
-        expect(txn.implicitTxn).toEqual(flattenedStmt.implicitTxn);
-        expect(txn.username).toEqual(flattenedStmt.username);
-        expect(txn.priority).toEqual(flattenedStmt.priority);
-        expect(txn.retries).toEqual(flattenedStmt.retries);
-      });
-    });
-  });
-
-  describe("mergeTxnContentionAndStmtInsights", () => {
-    const txnInsights = [
-      mockTxnInsightEvent({
-        transactionExecutionID: "hello",
-        transactionFingerprintID: "world",
-        insights: [...txnContentionEventMock.insights],
-      }),
-      mockTxnInsightEvent({
-        transactionExecutionID: "cockroach",
-        transactionFingerprintID: "labs",
-      }),
-    ];
-
-    const txnContentionInsights = [
-      mockTxnContentionInsightEvent({
-        // This entry should be merged with above.
-        transactionID: "hello",
-        transactionFingerprintID: "world",
-        insights: txnContentionEventMock.insights,
-      }),
-      mockTxnContentionInsightEvent({
-        transactionID: "just",
-        transactionFingerprintID: "by myself",
-      }),
-    ];
-
-    const merged = mergeTxnContentionAndStmtInsights(
-      txnInsights,
-      txnContentionInsights,
-    );
-
-    expect(merged.length).toEqual(3);
-
-    const mergedTxn = merged.find(
-      txn => txn.transactionExecutionID === "hello",
-    );
-
-    expect(mergedTxn.contention.asMilliseconds()).toEqual(
-      txnContentionEventMock.contentionDuration.asMilliseconds(),
-    );
-
-    // These fields are not available on the contention event but are on
-    // the txn insight event from stmts.
-    expect(mergedTxn.sessionID).toEqual(txnInsightEventMock.sessionID);
-    expect(mergedTxn.databaseName).toEqual(txnInsightEventMock.databaseName);
-    expect(mergedTxn.username).toEqual(txnInsightEventMock.username);
-    expect(mergedTxn.priority).toEqual(txnInsightEventMock.priority);
-    expect(mergedTxn.retries).toEqual(txnInsightEventMock.retries);
-    expect(mergedTxn.implicitTxn).toEqual(txnInsightEventMock.implicitTxn);
-    expect(mergedTxn.sessionID).toEqual(txnInsightEventMock.sessionID);
-
-    // Check insights are de-duplicated.
-    expect(mergedTxn.insights.length).toEqual(1);
   });
 
   describe("mergeTxnInsightDetails", () => {
