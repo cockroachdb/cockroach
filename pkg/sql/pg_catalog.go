@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -846,22 +847,22 @@ var (
 	fkActionSetNull    = tree.NewDString("n")
 	fkActionSetDefault = tree.NewDString("d")
 
-	fkActionMap = map[catpb.ForeignKeyAction]tree.Datum{
-		catpb.ForeignKeyAction_NO_ACTION:   fkActionNone,
-		catpb.ForeignKeyAction_RESTRICT:    fkActionRestrict,
-		catpb.ForeignKeyAction_CASCADE:     fkActionCascade,
-		catpb.ForeignKeyAction_SET_NULL:    fkActionSetNull,
-		catpb.ForeignKeyAction_SET_DEFAULT: fkActionSetDefault,
+	fkActionMap = map[semenumpb.ForeignKeyAction]tree.Datum{
+		semenumpb.ForeignKeyAction_NO_ACTION:   fkActionNone,
+		semenumpb.ForeignKeyAction_RESTRICT:    fkActionRestrict,
+		semenumpb.ForeignKeyAction_CASCADE:     fkActionCascade,
+		semenumpb.ForeignKeyAction_SET_NULL:    fkActionSetNull,
+		semenumpb.ForeignKeyAction_SET_DEFAULT: fkActionSetDefault,
 	}
 
 	fkMatchTypeFull    = tree.NewDString("f")
 	fkMatchTypePartial = tree.NewDString("p")
 	fkMatchTypeSimple  = tree.NewDString("s")
 
-	fkMatchMap = map[descpb.ForeignKeyReference_Match]tree.Datum{
-		descpb.ForeignKeyReference_SIMPLE:  fkMatchTypeSimple,
-		descpb.ForeignKeyReference_FULL:    fkMatchTypeFull,
-		descpb.ForeignKeyReference_PARTIAL: fkMatchTypePartial,
+	fkMatchMap = map[semenumpb.Match]tree.Datum{
+		semenumpb.Match_SIMPLE:  fkMatchTypeSimple,
+		semenumpb.Match_FULL:    fkMatchTypeFull,
+		semenumpb.Match_PARTIAL: fkMatchTypePartial,
 	}
 )
 
