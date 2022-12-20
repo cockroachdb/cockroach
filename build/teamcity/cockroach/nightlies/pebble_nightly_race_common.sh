@@ -40,7 +40,7 @@ chmod a+w bin/roachtest
 # latest version of the module, and then running `mirror` to update `DEPS.bzl`
 # accordingly.
 bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@latest
-NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror)
+NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 bazel build @com_github_cockroachdb_pebble//cmd/pebble --config race --config ci -c opt
 BAZEL_BIN=$(bazel info bazel-bin --config race --config ci -c opt)
