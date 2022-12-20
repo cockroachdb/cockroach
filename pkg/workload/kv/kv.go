@@ -64,6 +64,11 @@ const (
 	)`
 )
 
+var kvTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+}
+
 type kv struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
@@ -87,6 +92,13 @@ type kv struct {
 	targetCompressionRatio               float64
 	enum                                 bool
 	insertCount                          int
+	dynamic                              bool
+	dynamicInterval                      string
+	hotkey                               bool
+	hotkeyTail                           int64
+	periodic                             bool
+	shuffle                              bool
+	shuffleChunk                         int64
 }
 
 func init() {
@@ -104,7 +116,8 @@ var kvMeta = workload.Meta{
 	sequentially if --sequential is specified). Reads select a random batch of ids
 	out of the ones previously written.
 	--write-seq can be used to incorporate data produced by a previous run into
-	the current run.
+	the current run. The key acceess distribution may be updated dynamically be
+	specifying --dyanmic and a corresponding dynamic distribution.
 	`,
 	Version:      `1.0.0`,
 	PublicFacing: true,
@@ -155,6 +168,26 @@ var kvMeta = workload.Meta{
 			`Number of rows to insert before beginning the workload. Keys are inserted `+
 				`uniformly over the key range.`)
 		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout`)
+		g.flags.BoolVar(&g.dynamic, `dynamic`, false,
+			`Use a dynamic key distribution function (hotkey,periodic or shuffle).`)
+		g.flags.BoolVar(&g.hotkey, `hotkey`, false,
+			`Pick keys in a moving hotkey instead of randomly. --dynamic must also be set.`)
+		g.flags.BoolVar(&g.periodic, `periodic`, false,
+			`Pick keys in a periodic distribution instead of randomly. --dynamic must also be set. `+
+				`A value for --dynamic-interval may be set.`)
+		g.flags.BoolVar(&g.shuffle, `shuffle`, false,
+			`Pick keys in a shuffled distribution instead of randomly. --dynamic must also be set. `+
+				` A value for --dynamic-interval and --shuffle-chunk may be set.`)
+		g.flags.StringVar(&g.dynamicInterval, `dynamic-interval`, "1m",
+			`The interval to wait before moving the distribution for --shuffle or --periodic.`)
+		g.flags.Int64Var(&g.shuffleChunk, `shuffle-chunk`, g.cycleLength/16,
+			`The size of a key span that is shuffled together, remaining in the original order. `+
+				`--shuffle must be set.`)
+		g.flags.Int64Var(&g.hotkeyTail, `hotkey-tail`, 1000,
+			`The skew applied to the length of reads that trail the current write in a moving`+
+				` hotspot workload. Given the read-write ratio (rw) is (read-percent/(100-read-percent))`+
+				` and the last written key is x. e.g. When read-percent is 90, A hotkey-tail=1, then`+
+				` reads occur in (x-9, x]; A hotkey-tail=1000 then, then reads occur in (x - 9000, x].`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -211,6 +244,14 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 				return errors.Errorf(
 					"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
 					w.insertCount, rangeMin, rangeMax)
+			}
+			if w.dynamic {
+				if (w.shuffle && w.periodic) || (w.hotkey && w.periodic) || (w.hotkey && w.shuffle) {
+					return errors.New("only one of --periodic, --hotkey and --shuffle can be enabled")
+				}
+				if !w.shuffle && !w.periodic && !w.hotkey {
+					return errors.New("one of --periodic, --hotkey or --shuffle must be enabled")
+				}
 			}
 			return nil
 		},
@@ -489,12 +530,27 @@ func (w *kv) Ops(
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
-		if w.sequential {
-			op.g = newSequentialGenerator(seq)
-		} else if w.zipfian {
-			op.g = newZipfianGenerator(seq)
+		if w.dynamic {
+			var g keyGenerator
+			if w.shuffle {
+				g = shuffleGenerator(seq, nil)
+			} else if w.periodic {
+				g = periodicKeyGenerator(seq, nil)
+			} else {
+				g = movingHotKeyGenerator(seq, nil)
+			}
+			if g == nil {
+				return workload.QueryLoad{}, errors.Errorf("Unable to initialize workload key generator")
+			}
+			op.g = g
 		} else {
-			op.g = newHashGenerator(seq)
+			if w.sequential {
+				op.g = newSequentialGenerator(seq)
+			} else if w.zipfian {
+				op.g = newZipfianGenerator(seq)
+			} else {
+				op.g = newHashGenerator(seq)
+			}
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
