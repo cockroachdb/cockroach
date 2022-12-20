@@ -149,12 +149,12 @@ type Meta struct {
 	// Version is a semantic version for this generator. It should be bumped
 	// whenever InitialRowFn or InitialRowCount change for any of the tables.
 	Version string
-	// PublicFacing indicates that this workload is also intended for use by
-	// users doing their own testing and evaluations. This allows hiding workloads
-	// that are only expected to be used in CockroachDB's internal development to
-	// avoid confusion. Workloads setting this to true should pay added attention
-	// to their documentation and help-text.
-	PublicFacing bool
+
+	// TestInfraOnly indicates that a workload was primarily designed for
+	// internal testing by one team Cockroach Labs, and is expected to
+	// be of limited teaching value to other teams or end-users.
+	TestInfraOnly bool
+
 	// New returns an unconfigured instance of this generator.
 	New func() Generator
 }

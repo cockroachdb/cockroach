@@ -186,6 +186,28 @@ func (f *Factory) DisableOptimizations() {
 	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
+// DisableOptimizationRules disables a specific set of transformation rules.
+func (f *Factory) DisableOptimizationRules(disabledRules intsets.Fast) {
+	f.NotifyOnMatchedRule(func(rule opt.RuleName) bool {
+		if disabledRules.Contains(int(rule)) {
+			return false
+		} else {
+			return true
+		}
+	})
+}
+
+// DisableOptimizationRulesTemporarily disables a specific set transformation
+// rules during the execution of the given function fn. A MatchedRuleFunc
+// previously set by NotifyOnMatchedRule is not invoked during execution of fn,
+// but will be invoked for future rule matches after fn returns.
+func (f *Factory) DisableOptimizationRulesTemporarily(disabledRules intsets.Fast, fn func()) {
+	originalMatchedRule := f.matchedRule
+	f.DisableOptimizationRules(disabledRules)
+	fn()
+	f.matchedRule = originalMatchedRule
+}
+
 // DisableOptimizationsTemporarily disables all transformation rules during the
 // execution of the given function fn. A MatchedRuleFunc previously set by
 // NotifyOnMatchedRule is not invoked during execution of fn, but will be

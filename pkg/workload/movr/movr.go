@@ -200,10 +200,9 @@ func init() {
 }
 
 var movrMeta = workload.Meta{
-	Name:         `movr`,
-	Description:  `MovR is a fictional vehicle sharing company`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
+	Name:        `movr`,
+	Description: `MovR is a fictional vehicle sharing company`,
+	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &movr{}
 		g.flags.FlagSet = pflag.NewFlagSet(`movr`, pflag.ContinueOnError)
