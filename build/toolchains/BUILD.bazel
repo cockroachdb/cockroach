@@ -159,6 +159,31 @@ toolchain(
 )
 
 toolchain(
+    name = "cross_ppc_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_ppc-unknown-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_linux_ppc",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc",
+    ],
+)
+
+toolchain(
     name = "cross_arm64_linux_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
