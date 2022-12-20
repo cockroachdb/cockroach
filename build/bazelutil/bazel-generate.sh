@@ -46,11 +46,11 @@ find_relevant() {
     find "$DIR" -name node_modules -prune -o "$@"
 }
 
-if files_unchanged_from_upstream go.mod go.sum DEPS.bzl $(find_relevant ./pkg/cmd/mirror -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/cmd/generate-staticcheck -name BUILD.bazel -or -name '*.go') $(find_relevant ./build/patches -name '*.patch'); then
-  echo "Skipping //pkg/cmd/mirror (relevant files are unchanged from upstream)."
+if files_unchanged_from_upstream go.mod go.sum DEPS.bzl $(find_relevant ./pkg/cmd/mirror/go -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/cmd/generate-staticcheck -name BUILD.bazel -or -name '*.go') $(find_relevant ./build/patches -name '*.patch'); then
+  echo "Skipping //pkg/cmd/mirror/go:mirror (relevant files are unchanged from upstream)."
   echo "Skipping //pkg/cmd/generate-staticcheck (relevant files are unchanged from upstream)."
 else
-  CONTENTS=$(bazel run //pkg/cmd/mirror)
+  CONTENTS=$(bazel run //pkg/cmd/mirror/go:mirror)
   echo "$CONTENTS" > DEPS.bzl
   bazel run pkg/cmd/generate-staticcheck --run_under="cd $PWD && "
 fi
