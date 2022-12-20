@@ -18,7 +18,6 @@
     "clean": "rm -rf  ./dist/*",
     "lint": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe",
     "lint:fix": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe --fix",
-    "prepublishOnly": "npm-run-all clean build",
     "test": "jest --watch",
     "start": "npm-run-all -p build:watch tsc:watch",
     "storybook": "start-storybook -p 6006",
