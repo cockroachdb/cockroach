@@ -443,6 +443,10 @@ type StoreTestingKnobs struct {
 	// Replica.executeReadOnlyBatch after checks have successfully determined
 	// execution can proceed but a storage snapshot has not been acquired.
 	PreStorageSnapshotButChecksCompleteInterceptor func(replica *Replica)
+
+	// DisableMergeWaitForReplicasInit skips the waitForReplicasInit calls
+	// during merges. Useful for testContext tests that want to use merges.
+	DisableMergeWaitForReplicasInit bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

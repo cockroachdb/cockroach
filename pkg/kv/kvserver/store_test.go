@@ -202,7 +202,15 @@ func createTestStoreWithoutStart(
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	require.Nil(t, cfg.Transport)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+
+	require.NotNil(t, cfg.Gossip) // was set above already
+	// Even though testContext is fundamentally a single-store test, some tests
+	// will try config changes, etc, so we will see some use of the transport
+	// and it's important that this doesn't cause crashes. Just set up the
+	// "real thing" since it's straightforward enough.
+	cfg.NodeDialer = nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip))
+	cfg.Transport = NewRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Tracer(), cfg.NodeDialer, server, stopper)
+
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
