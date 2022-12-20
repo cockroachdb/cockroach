@@ -190,9 +190,10 @@ func TestStoreRebalancer(t *testing.T) {
 			s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
 
 			allocator := s.MakeAllocator(testingStore)
+			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
-			controller := op.NewController(changer, allocator, testSettings)
-			src := newStoreRebalancerControl(start, testingStore, controller, allocator, testSettings, GetStateRaftStatusFn(s))
+			controller := op.NewController(changer, allocator, storePool, testSettings)
+			src := newStoreRebalancerControl(start, testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
 			s.TickClock(start)
 
 			resultsQPS := []map[state.StoreID]float64{}
@@ -298,9 +299,10 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
 
 			allocator := s.MakeAllocator(testingStore)
+			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
-			controller := op.NewController(changer, allocator, testSettings)
-			src := newStoreRebalancerControl(start, testingStore, controller, allocator, testSettings, GetStateRaftStatusFn(s))
+			controller := op.NewController(changer, allocator, storePool, testSettings)
+			src := newStoreRebalancerControl(start, testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
 			s.TickClock(start)
 
 			results := []map[state.StoreID]float64{}
