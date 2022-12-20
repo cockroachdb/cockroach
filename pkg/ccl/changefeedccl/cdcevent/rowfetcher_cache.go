@@ -177,7 +177,10 @@ var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 // RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
 // Returns ErrUnwatchedFamily error if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
-	tableDesc catalog.TableDescriptor, family descpb.FamilyID, keyOnly bool,
+	tableDesc catalog.TableDescriptor,
+	family descpb.FamilyID,
+	sysCols []descpb.ColumnDescriptor,
+	keyOnly bool,
 ) (*row.Fetcher, *descpb.ColumnFamilyDescriptor, error) {
 	idVer := CacheKey{ID: tableDesc.GetID(), Version: tableDesc.GetVersion(), FamilyID: family}
 	if v, ok := c.fetchers.Get(idVer); ok {
@@ -233,6 +236,16 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
 	); err != nil {
 		return nil, nil, err
+	}
+
+	//Add system columns.
+	for _, sc := range sysCols {
+		spec.FetchedColumns = append(spec.FetchedColumns, fetchpb.IndexFetchSpec_Column{
+			ColumnID:      sc.ID,
+			Name:          sc.Name,
+			Type:          sc.Type,
+			IsNonNullable: !sc.Nullable,
+		})
 	}
 
 	if err := rf.Init(
