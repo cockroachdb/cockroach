@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -79,10 +80,11 @@ func NewStoreRebalancer(
 	storeID state.StoreID,
 	controller op.Controller,
 	allocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
 	settings *config.SimulationSettings,
 	getRaftStatusFn func(replica kvserver.CandidateReplica) *raft.Status,
 ) StoreRebalancer {
-	return newStoreRebalancerControl(start, storeID, controller, allocator, settings, getRaftStatusFn)
+	return newStoreRebalancerControl(start, storeID, controller, allocator, storePool, settings, getRaftStatusFn)
 }
 
 func newStoreRebalancerControl(
@@ -90,12 +92,14 @@ func newStoreRebalancerControl(
 	storeID state.StoreID,
 	controller op.Controller,
 	allocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
 	settings *config.SimulationSettings,
 	getRaftStatusFn func(replica kvserver.CandidateReplica) *raft.Status,
 ) *storeRebalancerControl {
 	sr := kvserver.SimulatorStoreRebalancer(
 		roachpb.StoreID(storeID),
 		allocator,
+		storePool,
 		getRaftStatusFn,
 	)
 

@@ -1084,8 +1084,7 @@ func (sp *StorePool) GetStoreListFromIDs(
 // from the subset of stores present in the passed in replication targets,
 // converting to a StoreList.
 func (sp *StorePool) GetStoreListForTargets(
-	candidates []roachpb.ReplicationTarget,
-	filter StoreFilter,
+	candidates []roachpb.ReplicationTarget, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()

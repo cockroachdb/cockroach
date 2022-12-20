@@ -479,7 +479,6 @@ type AllocatorMetrics struct {
 type Allocator struct {
 	st            *cluster.Settings
 	deterministic bool
-	StorePool     storepool.AllocatorStorePool
 	nodeLatencyFn func(addr string) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
 	// wrapped inside a mutex, to avoid misuse.
@@ -509,28 +508,28 @@ func makeAllocatorMetrics() AllocatorMetrics {
 	}
 }
 
-// MakeAllocator creates a new allocator using the specified StorePool.
+// MakeAllocator creates a new allocator.
+// The deterministic flag indicates that this allocator is intended to be used
+// with a deterministic store pool.
+//
+// In test cases where the store pool is nil, deterministic should be false.
+// TODO(sarkesian): Eliminate the need for this flag, which is a remnant of
+// close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
-	storePool storepool.AllocatorStorePool,
+	deterministic bool,
 	nodeLatencyFn func(addr string) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
 ) Allocator {
 	var randSource rand.Source
-	var deterministic bool
-	// There are number of test cases that make a test store but don't add
-	// gossip or a store pool. So we can't rely on the existence of the
-	// store pool in those cases.
-	if storePool != nil && storePool.IsDeterministic() {
+	if deterministic {
 		randSource = rand.NewSource(777)
-		deterministic = true
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
 	allocator := Allocator{
 		st:            st,
 		deterministic: deterministic,
-		StorePool:     storePool,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
 		Metrics:       makeAllocatorMetrics(),
@@ -2349,7 +2348,9 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 // PreferredLeaseholders returns a slice of replica descriptors corresponding to
 // replicas that meet lease preferences (among the `existing` replicas).
 func (a Allocator) PreferredLeaseholders(
-	storePool storepool.AllocatorStorePool, conf roachpb.SpanConfig, existing []roachpb.ReplicaDescriptor,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a
 	// preference, we don't need to look at the later preferences, because
