@@ -97,6 +97,8 @@ statement ok
 INSERT INTO data SELECT a, b, c::FLOAT, 1
 FROM generate_series(1,10) AS a, generate_series(1,10) AS b, generate_series(1,10) AS c;
 
+# Skip on 22.2 due to flakiness (issue #92989).
+skipif cockroachdb
 query T
 EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON a FROM data
 ----
