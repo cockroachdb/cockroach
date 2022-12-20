@@ -200,7 +200,7 @@ export const highContentionInsight = (
   const description = `This ${execType} waited on other ${execType}s to execute for ${waitDuration}.`;
   return {
     name: InsightNameEnum.highContention,
-    label: "High Contention",
+    label: InsightEnumToLabel.get(InsightNameEnum.highContention),
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -219,7 +219,7 @@ export const slowExecutionInsight = (
   const description = `This ${execType} took longer than ${threshold} to execute.`;
   return {
     name: InsightNameEnum.slowExecution,
-    label: "Slow Execution",
+    label: InsightEnumToLabel.get(InsightNameEnum.slowExecution),
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -233,7 +233,7 @@ export const planRegressionInsight = (execType: InsightExecEnum): Insight => {
     `search conditions, or a change in the database schema.`;
   return {
     name: InsightNameEnum.planRegression,
-    label: "Plan Regression",
+    label: InsightEnumToLabel.get(InsightNameEnum.planRegression),
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -246,7 +246,7 @@ export const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
     `due to outdated statistics or missing indexes.`;
   return {
     name: InsightNameEnum.suboptimalPlan,
-    label: "Suboptimal Plan",
+    label: InsightEnumToLabel.get(InsightNameEnum.suboptimalPlan),
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -259,7 +259,7 @@ export const highRetryCountInsight = (execType: InsightExecEnum): Insight => {
     `'sql.insights.high_retry_count.threshold' cluster setting.`;
   return {
     name: InsightNameEnum.highRetryCount,
-    label: "High Retry Count",
+    label: InsightEnumToLabel.get(InsightNameEnum.highRetryCount),
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -272,7 +272,7 @@ export const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
     `saturation, or syntax errors.`;
   return {
     name: InsightNameEnum.failedExecution,
-    label: "Failed Execution",
+    label: InsightEnumToLabel.get(InsightNameEnum.failedExecution),
     description: description,
     tooltipDescription:
       description + ` Click the ${execType} execution ID to see more details.`,
@@ -310,7 +310,18 @@ export const InsightExecOptions = new Map<string, string>([
   [InsightExecEnum.STATEMENT.toString(), "Statement Executions"],
 ]);
 
-export type WorkloadInsightEventFilters = Pick<Filters, "app">;
+export const InsightEnumToLabel = new Map<string, string>([
+  [InsightNameEnum.highContention.toString(), "High Contention"],
+  [InsightNameEnum.slowExecution.toString(), "Slow Execution"],
+  [InsightNameEnum.suboptimalPlan.toString(), "Suboptimal Plan"],
+  [InsightNameEnum.highRetryCount.toString(), "High Retry Count"],
+  [InsightNameEnum.failedExecution.toString(), "Failed Execution"],
+]);
+
+export type WorkloadInsightEventFilters = Pick<
+  Filters,
+  "app" | "workloadInsightType"
+>;
 
 export type SchemaInsightEventFilters = Pick<
   Filters,

@@ -23,13 +23,15 @@ import {
   selectTxnInsightsCombiner,
   TxnContentionInsightDetails,
   selectTxnInsightDetailsCombiner,
+  InsightEnumToLabel,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
   WorkloadInsightEventFilters
 >("filters/InsightsPage", (state: AdminUIState) => state.localSettings, {
-  app: "",
+  app: defaultFilters.app,
+  workloadInsightType: defaultFilters.workloadInsightType,
 });
 
 export const sortSettingLocalSetting = new LocalSetting<
@@ -105,6 +107,14 @@ export const selectExecutionInsights = createSelector((state: AdminUIState) => {
     return state.cachedData?.executionInsights?.data;
   } else return null;
 }, selectFlattenedStmtInsightsCombiner);
+
+export const selectInsightTypes = () => {
+  const insights: string[] = [];
+  InsightEnumToLabel.forEach(insight => {
+    insights.push(insight);
+  });
+  return insights;
+};
 
 export const selectStatementInsightDetails = createSelector(
   selectExecutionInsights,
