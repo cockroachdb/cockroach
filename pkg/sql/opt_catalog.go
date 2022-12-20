@@ -1961,17 +1961,17 @@ func (fk *optForeignKeyConstraint) Validated() bool {
 
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
-	return descpb.ForeignKeyReferenceMatchValue[fk.match]
+	return descpb.BuildEquivFKMatchMethod(fk.match).AsTree
 }
 
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
-	return descpb.ForeignKeyReferenceActionType[fk.deleteAction]
+	return descpb.BuildEquivFKAction(fk.deleteAction).AsTree
 }
 
 // UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
-	return descpb.ForeignKeyReferenceActionType[fk.updateAction]
+	return descpb.BuildEquivFKAction(fk.updateAction).AsTree
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.

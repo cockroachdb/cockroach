@@ -1041,9 +1041,9 @@ func ResolveFK(
 		ReferencedTableID:   target.ID,
 		Name:                constraintName,
 		Validity:            validity,
-		OnDelete:            descpb.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:            descpb.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:               descpb.CompositeKeyMatchMethodValue[d.Match],
+		OnDelete:            descpb.BuildEquivFKAction(d.Actions.Delete).AsCatpb,
+		OnUpdate:            descpb.BuildEquivFKAction(d.Actions.Update).AsCatpb,
+		Match:               descpb.BuildEquivFKMatchMethod(d.Match).AsDescpb,
 		ConstraintID:        tbl.NextConstraintID,
 	}
 	tbl.NextConstraintID++

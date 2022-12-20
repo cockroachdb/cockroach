@@ -638,11 +638,14 @@ func (w *walkCtx) walkForeignKeyConstraint(
 ) {
 	// TODO(postamar): proper handling of constraint status
 	w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraint{
-		TableID:             tbl.GetID(),
-		ConstraintID:        c.GetConstraintID(),
-		ColumnIDs:           c.ForeignKeyDesc().OriginColumnIDs,
-		ReferencedTableID:   c.GetReferencedTableID(),
-		ReferencedColumnIDs: c.ForeignKeyDesc().ReferencedColumnIDs,
+		TableID:                 tbl.GetID(),
+		ConstraintID:            c.GetConstraintID(),
+		ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
+		ReferencedTableID:       c.GetReferencedTableID(),
+		ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
+		OnUpdateAction:          descpb.BuildEquivFKAction(c.OnUpdate()).AsScpb,
+		OnDeleteAction:          descpb.BuildEquivFKAction(c.OnDelete()).AsScpb,
+		CompositeKeyMatchMethod: descpb.BuildEquivFKMatchMethod(c.Match()).AsScpb,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),

@@ -335,11 +335,37 @@ message CheckConstraint {
 }
 
 message ForeignKeyConstraint {
+  // Action describes the action which should be taken when a foreign
+  // key constraint reference is acted upon.
+  enum Action {
+    option (gogoproto.goproto_enum_stringer) = true;
+    NO_ACTION = 0;
+    RESTRICT = 1;
+    SET_NULL = 2;
+    SET_DEFAULT = 3;
+    CASCADE = 4;
+  }
+
+  // Match is the algorithm used to compare composite keys.
+  enum Match {
+    option (gogoproto.goproto_enum_stringer) = true;
+    SIMPLE = 0;
+    FULL = 1;
+    PARTIAL = 2; // Note: not actually supported, but we reserve the value for future use.
+  }
+
+
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 referenced_table_id = 4 [(gogoproto.customname) = "ReferencedTableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 referenced_column_ids = 5 [(gogoproto.customname) = "ReferencedColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  Action on_update_action = 6 [(gogoproto.customname) = "OnUpdateAction"];
+  Action on_delete_action = 7 [(gogoproto.customname) = "OnDeleteAction"];
+  Match composite_key_match_method = 8 [(gogoproto.customname) = "CompositeKeyMatchMethod"];
+  // IndexIDForValidation is the index id to hint to the foreign key constraint validation SQL query about which index
+  // to validate against. It is used exclusively by sql.validateFKExpr.
+  uint32 index_id_for_validation = 9 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message EnumType {
