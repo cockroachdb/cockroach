@@ -68,6 +68,12 @@ type Flags struct {
 	// which we also want to show valid ranges when a table is being imported
 	// (offline).
 	IncludeOfflineTables bool
+
+	// IndexFlag contain index flags specified when accessing table (if any).
+	IndexFlags *tree.IndexFlags
+
+	// RequiredPrivilege contains required privilege.
+	RequiredPrivilege privilege.Kind
 }
 
 // Catalog is an interface to a database catalog, exposing only the information

@@ -41,8 +41,12 @@ func (n *NormalizedSelectClause) RequiresPrev() bool {
 	return len(n.From.Tables) > 1
 }
 
-// SelectStatement returns tree.Select representing this object.
-func (n *NormalizedSelectClause) SelectStatement() *tree.Select {
+// SelectStatementForFamily returns tree.Select representing this object.
+func (n *NormalizedSelectClause) SelectStatementForFamily(familyID descpb.FamilyID) *tree.Select {
+	n.SelectClause.From.Tables[0] = &tree.AliasedTableExpr{
+		Expr:       n.SelectClause.From.Tables[0],
+		IndexFlags: &tree.IndexFlags{FamilyID: &familyID},
+	}
 	return &tree.Select{Select: n.SelectClause}
 }
 
@@ -376,7 +380,7 @@ func normalizeSelectClause(
 	var norm *NormalizedSelectClause
 	switch t := stmt.(type) {
 	case *tree.SelectClause:
-		if err := scopeAndRewrite(t, desc, requiresPrev); err != nil {
+		if err := scopeAndRewrite(t, requiresPrev); err != nil {
 			return nil, err
 		}
 		norm = &NormalizedSelectClause{
@@ -451,24 +455,11 @@ func (c *checkColumnsVisitor) FindColumnFamilies(sc *tree.SelectClause) error {
 
 // scopeAndRewrite restricts this expression scope only to the columns
 // being accessed, and rewrites select clause as needed to reflect that.
-func scopeAndRewrite(
-	sc *tree.SelectClause, desc *cdcevent.EventDescriptor, requiresPrev bool,
-) error {
+func scopeAndRewrite(sc *tree.SelectClause, requiresPrev bool) error {
 	tables := append(tree.TableExprs(nil), sc.From.Tables...)
 	if len(tables) != 1 {
 		return errors.AssertionFailedf("expected single table")
 	}
-
-	table := tables[0]
-	if aliased, ok := table.(*tree.AliasedTableExpr); ok {
-		table = aliased.Expr
-	}
-	tableRef, ok := table.(*tree.TableRef)
-	if !ok {
-		return errors.AssertionFailedf("expected table reference, found %T", tables[0])
-	}
-
-	tables[0] = maybeScopeTable(desc, tableRef)
 
 	if requiresPrev {
 		// prevTupleTableExpr is a table expression to select contents of tuple
@@ -507,51 +498,4 @@ func scopeAndRewrite(
 
 	sc.From = tree.From{Tables: tables}
 	return nil
-}
-
-// maybeScopeTable returns possibly "scoped" table expression.
-// If event descriptor targets all columns, then table expression returned
-// unmodified. However, if the event descriptor targets a subset of columns,
-// then returns table expression restricted to targeted columns.
-func maybeScopeTable(ed *cdcevent.EventDescriptor, tableRef *tree.TableRef) tree.TableExpr {
-	// If the event descriptor targets all columns in the table, we can use
-	// table as is.
-	if ed.FamilyID == 0 && !ed.HasVirtual && !ed.HasOtherFamilies {
-		return tableRef
-	}
-
-	// If the event descriptor targets specific column family, we need to scope
-	// expression to select only the columns in the event descriptor.
-	// The code below is a bit of a mouth full.  Assuming that we were selecting from
-	// table named 'tbl', all we're doing here is turning
-	// from clause (FROM tbl) into something that looks like:
-	//  FROM (SELECT col1, col2, ... FROM [tableID AS t]) AS tbl
-	// Where col1, col2, ... are columns in the target column family, tableID is the table
-	// ID of the target table.
-	scopedTable := &tree.SelectClause{
-		From: tree.From{
-			Tables: tree.TableExprs{&tree.TableRef{
-				TableID: tableRef.TableID,
-				As:      tree.AliasClause{Alias: "t"},
-			}},
-		},
-		Exprs: func() (exprs tree.SelectExprs) {
-			exprs = make(tree.SelectExprs, len(ed.ResultColumns()))
-			for i, c := range ed.ResultColumns() {
-				exprs[i] = tree.SelectExpr{Expr: &tree.ColumnItem{ColumnName: tree.Name(c.Name)}}
-			}
-			return exprs
-		}(),
-	}
-
-	return &tree.AliasedTableExpr{
-		Expr: &tree.Subquery{
-			Select: &tree.ParenSelect{
-				Select: &tree.Select{
-					Select: scopedTable,
-				},
-			},
-		},
-		As: tableRef.As,
-	}
 }

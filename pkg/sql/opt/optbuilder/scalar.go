@@ -598,7 +598,7 @@ func (b *Builder) buildFunction(
 				if err != nil {
 					panic(err)
 				}
-				ds, _, _ = b.resolveDataSource(tn, privilege.SELECT)
+				ds, _, _ = b.resolveDataSource(tn, cat.Flags{RequiredPrivilege: privilege.SELECT})
 			}
 			b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
 				DataSource: ds,

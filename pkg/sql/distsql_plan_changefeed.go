@@ -18,14 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,8 +66,8 @@ func PlanCDCExpression(
 	}, clusterunique.ID{} /* queryID */)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)
-	p.optPlanningCtx.init(p)
 	opc := &p.optPlanningCtx
+	opc.init(p)
 	opc.reset(ctx)
 
 	cdcCat := &cdcOptCatalog{
@@ -286,6 +285,13 @@ type cdcOptCatalog struct {
 
 var _ cat.Catalog = (*cdcOptCatalog)(nil)
 
+func familyIDFromFlags(flags cat.Flags) catid.FamilyID {
+	if flags.IndexFlags != nil && flags.IndexFlags.FamilyID != nil {
+		return *flags.IndexFlags.FamilyID
+	}
+	return 0
+}
+
 // ResolveDataSource implements cat.Catalog interface.
 // We provide custom implementation to ensure that we return data source for
 // primary index.
@@ -298,7 +304,7 @@ func (c *cdcOptCatalog) ResolveDataSource(
 		return nil, cat.DataSourceName{}, err
 	}
 
-	ds, err := c.newCDCDataSource(desc)
+	ds, err := c.newCDCDataSource(desc, familyIDFromFlags(flags))
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -315,7 +321,8 @@ func (c *cdcOptCatalog) ResolveDataSourceByID(
 	if err != nil {
 		return nil, false, err
 	}
-	ds, err := c.newCDCDataSource(desc)
+
+	ds, err := c.newCDCDataSource(desc, familyIDFromFlags(flags))
 	if err != nil {
 		return nil, false, err
 	}
@@ -337,14 +344,132 @@ func (c *cdcOptCatalog) ResolveFunction(
 	return c.optCatalog.ResolveFunction(ctx, fnName, path)
 }
 
-// newCDCDataSource builds an optTable for the target cdc table.
-// The descriptor presented to the optimizer hides all but the primary index.
+// newCDCDataSource builds an optTable for the target cdc table and family.
+func (c *cdcOptCatalog) newCDCDataSource(
+	original catalog.TableDescriptor, familyID catid.FamilyID,
+) (cat.DataSource, error) {
+	d, err := newFamilyTableDescriptor(original, familyID)
+	if err != nil {
+		return nil, err
+	}
+	return newOptTable(d, c.codec(), nil /* stats */, emptyZoneConfig)
+}
+
+// familyTableDescriptor wraps underlying catalog.TableDescriptor,
+// but restricts access to a single column family.
+type familyTableDescriptor struct {
+	catalog.TableDescriptor
+	includeSet catalog.TableColSet
+}
+
+func newFamilyTableDescriptor(
+	original catalog.TableDescriptor, familyID catid.FamilyID,
+) (catalog.TableDescriptor, error) {
+	// Build the set of columns in the family, along with the primary
+	// key columns.
+	fam, err := original.FindFamilyByID(familyID)
+	if err != nil {
+		return nil, err
+	}
+
+	includeSet := original.GetPrimaryIndex().CollectKeyColumnIDs()
+	for _, id := range fam.ColumnIDs {
+		includeSet.Add(id)
+	}
+
+	return &familyTableDescriptor{
+		TableDescriptor: original,
+		includeSet:      includeSet,
+	}, nil
+}
+
+// DeletableNonPrimaryIndexes implements catalog.TableDescriptor interface.
+// CDC currently supports primary index only.
 // TODO(yevgeniy): We should be able to use secondary indexes provided
 // the CDC expression access only the columns available in that secondary index.
-func (c *cdcOptCatalog) newCDCDataSource(original catalog.TableDescriptor) (cat.DataSource, error) {
-	// Build descriptor with all indexes other than primary removed.
-	desc := protoutil.Clone(original.TableDesc()).(*descpb.TableDescriptor)
-	desc.Indexes = desc.Indexes[:0]
-	updated := tabledesc.NewBuilder(desc).BuildImmutableTable()
-	return newOptTable(updated, c.codec(), nil /* stats */, emptyZoneConfig)
+func (d *familyTableDescriptor) DeletableNonPrimaryIndexes() []catalog.Index {
+	return nil
+}
+
+// ActiveIndexes implements catalog.TableDescriptor.
+// Only primary index supported for now.
+func (d *familyTableDescriptor) ActiveIndexes() []catalog.Index {
+	return d.TableDescriptor.ActiveIndexes()[:1]
+}
+
+// DeletableColumns implements catalog.TableDescriptor interface.
+// This implementation filters out underlying descriptor DeletableColumns to
+// only include columns referenced by the target column family.
+func (d *familyTableDescriptor) DeletableColumns() []catalog.Column {
+	return d.filterColumns(d.TableDescriptor.DeletableColumns())
+}
+
+// AllColumns implements catalog.TableDescriptor interface.
+// This implementation filters out underlying descriptor AllColumns to
+// only include columns referenced by the target column family.
+func (d *familyTableDescriptor) AllColumns() []catalog.Column {
+	return d.filterColumns(d.TableDescriptor.AllColumns())
+}
+
+// VisibleColumns implements catalog.TableDescriptor interface.
+// This implementation filters out underlying descriptor AllColumns to
+// only include columns referenced by the target column family.
+func (d *familyTableDescriptor) VisibleColumns() []catalog.Column {
+	return d.filterColumns(d.TableDescriptor.VisibleColumns())
+}
+
+// SystemColumns implements catalog.TableDescriptor interface.
+// TODO(yevgeniy): Support system columns
+func (d *familyTableDescriptor) SystemColumns() []catalog.Column {
+	return nil
+}
+
+// EnforcedUniqueConstraintsWithoutIndex implements catalog.TableDescriptor interface.
+// This implementation filters out constraints that reference columns outside of
+// target column family.
+func (d *familyTableDescriptor) EnforcedUniqueConstraintsWithoutIndex() []catalog.UniqueWithoutIndexConstraint {
+	constraints := d.TableDescriptor.EnforcedUniqueConstraintsWithoutIndex()
+	filtered := make([]catalog.UniqueWithoutIndexConstraint, 0, len(constraints))
+	for _, c := range constraints {
+		if c.CollectKeyColumnIDs().SubsetOf(d.includeSet) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+// EnforcedCheckConstraints implements catalog.TableDescriptor interface.
+// This implementation filters out constraints that reference columns outside of
+// target column family.
+func (d *familyTableDescriptor) EnforcedCheckConstraints() []catalog.CheckConstraint {
+	constraints := d.TableDescriptor.EnforcedCheckConstraints()
+	filtered := make([]catalog.CheckConstraint, 0, len(constraints))
+	for _, c := range constraints {
+		if c.CollectReferencedColumnIDs().SubsetOf(d.includeSet) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+func (d *familyTableDescriptor) filterColumns(cols []catalog.Column) []catalog.Column {
+	filtered := make([]catalog.Column, 0, len(cols))
+	for _, col := range cols {
+		if d.includeSet.Contains(col.GetID()) {
+			filtered = append(filtered, &remappedOrdinalColumn{Column: col, ord: len(filtered)})
+		}
+	}
+	return filtered
+}
+
+// remappedOrdinalColumn wraps underlying catalog.Column
+// but changes its ordinal position.
+type remappedOrdinalColumn struct {
+	catalog.Column
+	ord int
+}
+
+// Ordinal implements catalog.Column interface.
+func (c *remappedOrdinalColumn) Ordinal() int {
+	return c.ord
 }

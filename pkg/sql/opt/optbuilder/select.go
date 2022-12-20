@@ -110,7 +110,10 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
+		ds, depName, resName := b.resolveDataSource(tn, cat.Flags{
+			IndexFlags:        indexFlags,
+			RequiredPrivilege: privilege.SELECT,
+		})
 
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
@@ -217,7 +220,8 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		ds, depName := b.resolveDataSourceRef(source, privilege.SELECT)
+		ds, depName := b.resolveDataSourceRef(source,
+			cat.Flags{RequiredPrivilege: privilege.SELECT, IndexFlags: indexFlags})
 
 		locking = locking.filter(source.As.Alias)
 		if locking.isSet() {
