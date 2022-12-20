@@ -33,7 +33,6 @@ go_library(
         "point_synthesizing_iter.go",
         "read_as_of_iterator.go",
         "replicas_storage.go",
-        "resource_limiter.go",
         "row_counter.go",
         "slice.go",
         "slice_go1.9.go",
@@ -42,7 +41,6 @@ go_library(
         "store_properties.go",
         "temp_engine.go",
         "verifying_iterator.go",
-        ":gen-resourcelimitreached-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage",
     visibility = ["//visibility:public"],
@@ -128,7 +126,6 @@ go_test(
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
         "read_as_of_iterator_test.go",
-        "resource_limiter_test.go",
         "sst_test.go",
         "sst_writer_test.go",
         "temp_engine_test.go",
@@ -185,12 +182,6 @@ go_test(
         "@org_golang_google_protobuf//proto",
         "@org_golang_x_sync//errgroup",
     ],
-)
-
-stringer(
-    name = "gen-resourcelimitreached-stringer",
-    src = "resource_limiter.go",
-    typ = "ResourceLimitReached",
 )
 
 get_x_data(name = "get_x_data")
