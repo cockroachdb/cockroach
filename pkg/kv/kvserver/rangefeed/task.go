@@ -125,7 +125,11 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			return errors.Wrapf(err, "decoding LockTable key: %s", lockedKey)
 		}
 
-		if err := protoutil.Unmarshal(s.iter.UnsafeValue(), &meta); err != nil {
+		v, err := s.iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		if err := protoutil.Unmarshal(v, &meta); err != nil {
 			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", lockedKey)
 		}
 		if meta.Txn == nil {
@@ -190,7 +194,11 @@ func (l *LegacyIntentScanner) ConsumeIntents(
 		}
 
 		// Found a metadata key. Unmarshal.
-		if err := protoutil.Unmarshal(l.iter.UnsafeValue(), &meta); err != nil {
+		v, err := l.iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		if err := protoutil.Unmarshal(v, &meta); err != nil {
 			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
 		}
 

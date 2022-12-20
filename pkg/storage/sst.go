@@ -377,8 +377,16 @@ func CheckSSTConflicts(
 			// pressing optimization since currently the value is cheap to retrieve
 			// for the latest version of a key, and we are seeing the latest version
 			// because of the extIter.SeekGE call above.
-			extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
-			sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+			extValueRaw, err := extIter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			sstValueRaw, err := sstIter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			extKey := extIter.UnsafeKey()
+			sstKey := sstIter.UnsafeKey()
 
 			// We just seeked the engine iter. If it has a mismatching prefix, the
 			// iterator is not obeying its contract.
@@ -765,7 +773,11 @@ func CheckSSTConflicts(
 		}
 
 		extKey := extIter.UnsafeKey()
-		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+		sstValueRaw, err := sstIter.UnsafeValue()
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		sstKey := sstIter.UnsafeKey()
 
 		// Keep seeking the iterators until both keys are equal.
 		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
@@ -803,7 +815,10 @@ func CheckSSTConflicts(
 			// TODO(sumeer): extValueRaw is not always needed below. In many cases
 			// MVCCValueLenAndIsTombstone() suffices. This will require some
 			// rearrangement of the logic in compareForCollision.
-			extValueRaw := extIter.UnsafeValue()
+			extValueRaw, err := extIter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
 			if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
@@ -1149,7 +1164,11 @@ func UpdateSSTTimestamps(
 			return nil, enginepb.MVCCStats{}, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, from, key.Key)
 		}
-		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, iter.UnsafeValue())
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, enginepb.MVCCStats{}, err
+		}
+		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, v)
 		if err != nil {
 			return nil, enginepb.MVCCStats{}, err
 		}

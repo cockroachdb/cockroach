@@ -46,8 +46,8 @@ func (m *mockStorageIter) Next() {}
 
 func (m *mockStorageIter) Close() {}
 
-func (m *mockStorageIter) UnsafeValue() []byte {
-	return m.val
+func (m *mockStorageIter) UnsafeValue() ([]byte, error) {
+	return m.val, nil
 }
 
 type mockReader struct {

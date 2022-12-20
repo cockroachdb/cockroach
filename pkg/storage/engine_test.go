@@ -158,8 +158,8 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)
 		} else if ok {
-			t.Fatalf("iterator unexpectedly valid: %v -> %v",
-				iter.UnsafeKey(), iter.UnsafeValue())
+			v, _ := iter.UnsafeValue()
+			t.Fatalf("iterator unexpectedly valid: %v -> %v", iter.UnsafeKey(), v)
 		}
 
 		iter.Close()
@@ -2129,7 +2129,9 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 
 					require.True(t, ok)
 					require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
-					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
+					v, err := iter.UnsafeValue()
+					require.NoError(t, err)
+					require.Equal(t, stringValueRaw("a1"), v)
 
 					hasPoint, hasRange := iter.HasPointAndRange()
 					require.True(t, hasPoint)
@@ -2168,7 +2170,9 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 					key, err := iter.UnsafeEngineKey()
 					require.NoError(t, err)
 					require.Equal(t, engineKey("a", 1), key)
-					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
+					v, err := iter.UnsafeValue()
+					require.NoError(t, err)
+					require.Equal(t, stringValueRaw("a1"), v)
 
 					hasPoint, hasRange := iter.HasPointAndRange()
 					require.True(t, hasPoint)
@@ -2278,9 +2282,11 @@ func scanIter(t *testing.T, iter SimpleMVCCIterator) []interface{} {
 			}
 		}
 		if hasPoint {
+			v, err := iter.UnsafeValue()
+			require.NoError(t, err)
 			keys = append(keys, MVCCKeyValue{
 				Key:   iter.UnsafeKey().Clone(),
-				Value: append([]byte{}, iter.UnsafeValue()...),
+				Value: append([]byte{}, v...),
 			})
 		}
 		iter.Next()
