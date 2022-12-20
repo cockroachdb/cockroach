@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -216,7 +216,7 @@ func (b *ConstraintBuilder) Build(
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
-	var filterOrdsToExclude util.FastIntSet
+	var filterOrdsToExclude intsets.Fast
 	foundLookupCols := false
 	lookupExprRequired := false
 	remainingFilters := make(memo.FiltersExpr, 0, len(onFilters))

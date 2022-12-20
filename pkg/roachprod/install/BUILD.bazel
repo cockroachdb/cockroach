@@ -31,7 +31,7 @@ go_library(
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/local",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/syncutil",

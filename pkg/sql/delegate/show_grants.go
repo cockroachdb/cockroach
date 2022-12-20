@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // delegateShowGrants implements SHOW GRANTS which returns grant details for the
@@ -251,7 +251,7 @@ SELECT database_name,
 	} else if n.Targets != nil && len(n.Targets.Functions) > 0 {
 		fmt.Fprint(&source, udfQuery)
 		orderBy = "1,2,3,4,5,6"
-		fnResolved := util.MakeFastIntSet()
+		fnResolved := intsets.MakeFast()
 		for _, fn := range n.Targets.Functions {
 			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
 			fd, err := d.catalog.ResolveFunction(d.ctx, un, &d.evalCtx.SessionData().SearchPath)

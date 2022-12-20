@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -417,8 +417,8 @@ func ExtractStatsFromSpans(
 
 // ExtractNodesFromSpans extracts a list of node ids from a set of tracing
 // spans.
-func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) util.FastIntSet {
-	var nodes util.FastIntSet
+func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) intsets.Fast {
+	var nodes intsets.Fast
 	// componentStats is only used to check whether a structured payload item is
 	// of ComponentStats type.
 	var componentStats ComponentStats

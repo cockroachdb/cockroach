@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -61,7 +61,7 @@ type SampleReservoir struct {
 	// sampleCols contains the ordinals of columns that should be sampled from
 	// each row. Note that the sampled rows still contain all columns, but
 	// any columns not part of this set are given a null value.
-	sampleCols util.FastIntSet
+	sampleCols intsets.Fast
 }
 
 var _ heap.Interface = &SampleReservoir{}
@@ -71,7 +71,7 @@ func (sr *SampleReservoir) Init(
 	numSamples, minNumSamples int,
 	colTypes []*types.T,
 	memAcc *mon.BoundAccount,
-	sampleCols util.FastIntSet,
+	sampleCols intsets.Fast,
 ) {
 	if minNumSamples < 1 || minNumSamples > numSamples {
 		minNumSamples = numSamples

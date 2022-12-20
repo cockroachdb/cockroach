@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,7 +53,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
-		b.schemaTypeDeps = util.FastIntSet{}
+		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 
 		b.semaCtx.FunctionResolver = preFuncResolver
@@ -164,7 +164,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typeDeps.UnionWith(b.schemaTypeDeps)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
-		b.schemaTypeDeps = util.FastIntSet{}
+		b.schemaTypeDeps = intsets.Fast{}
 	}
 
 	// Override the function body so that references are fully qualified.

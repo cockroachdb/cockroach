@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -158,7 +158,7 @@ func (p *Provider) Create(
 
 	// We will need to assign ports to the nodes, and they must not conflict with
 	// any other local clusters.
-	var portsTaken util.FastIntSet
+	var portsTaken intsets.Fast
 	for _, c := range p.clusters {
 		for i := range c.VMs {
 			portsTaken.Add(c.VMs[i].SQLPort)

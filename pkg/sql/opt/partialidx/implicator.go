@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -208,7 +208,7 @@ func (im *Implicator) FiltersImplyPredicate(
 func (im *Implicator) filtersImplyPredicateFastPath(
 	filters memo.FiltersExpr, pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
-	var filtersToRemove util.FastIntSet
+	var filtersToRemove intsets.Fast
 
 	// For every FiltersItem in pred, search for a matching FiltersItem in
 	// filters.

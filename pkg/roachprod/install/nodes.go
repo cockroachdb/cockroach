@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,7 +48,7 @@ func ListNodes(s string, numNodesInCluster int) (Nodes, error) {
 		return allNodes(numNodesInCluster), nil
 	}
 
-	var set util.FastIntSet
+	var set intsets.Fast
 	for _, p := range strings.Split(s, ",") {
 		parts := strings.Split(p, "-")
 		switch len(parts) {

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -564,9 +564,9 @@ type overloadTypeChecker struct {
 	overloadIdxs    []uint8 // index into overloads
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	resolvableIdxs  util.FastIntSet // index into exprs/typedExprs
-	constIdxs       util.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs util.FastIntSet // index into exprs/typedExprs
+	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
+	constIdxs       intsets.Fast // index into exprs/typedExprs
+	placeholderIdxs intsets.Fast // index into exprs/typedExprs
 	overloadsIdxArr [16]uint8
 }
 
@@ -617,9 +617,9 @@ func (s *overloadTypeChecker) release() {
 	}
 	s.typedExprs = s.typedExprs[:0]
 	s.overloadIdxs = s.overloadIdxs[:0]
-	s.resolvableIdxs = util.FastIntSet{}
-	s.constIdxs = util.FastIntSet{}
-	s.placeholderIdxs = util.FastIntSet{}
+	s.resolvableIdxs = intsets.Fast{}
+	s.constIdxs = intsets.Fast{}
+	s.placeholderIdxs = intsets.Fast{}
 	overloadTypeCheckerPool.Put(s)
 }
 
@@ -720,7 +720,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types. This includes resolved placeholders
 	// and any other resolvable exprs.
-	var typeableIdxs = util.FastIntSet{}
+	var typeableIdxs intsets.Fast
 	for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
 		typeableIdxs.Add(i)
 	}

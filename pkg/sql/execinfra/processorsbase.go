@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -982,7 +982,7 @@ type LocalProcessor interface {
 // HasParallelProcessors returns whether flow contains multiple processors in
 // the same stage.
 func HasParallelProcessors(flow *execinfrapb.FlowSpec) bool {
-	var seen util.FastIntSet
+	var seen intsets.Fast
 	for _, p := range flow.Processors {
 		if seen.Contains(int(p.StageID)) {
 			return true

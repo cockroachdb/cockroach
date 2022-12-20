@@ -13,7 +13,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,11 +26,11 @@ type arbiterSet struct {
 
 	// indexes contains the index arbiters in the set, as ordinals into the
 	// table's indexes.
-	indexes util.FastIntSet
+	indexes intsets.Fast
 
 	// uniqueConstraints contains the unique constraint arbiters in the set, as
 	// ordinals into the table's unique constraints.
-	uniqueConstraints util.FastIntSet
+	uniqueConstraints intsets.Fast
 }
 
 // makeArbiterSet returns an initialized arbiterSet.
@@ -106,7 +106,7 @@ func (a *arbiterSet) ContainsUniqueConstraint(uniq cat.UniqueOrdinal) bool {
 //   - canaryOrd is the table column ordinal of a not-null column in the
 //     constraint's table.
 func (a *arbiterSet) ForEach(
-	f func(name string, conflictOrds util.FastIntSet, pred tree.Expr, canaryOrd int),
+	f func(name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int),
 ) {
 	// Call the callback for each index arbiter.
 	a.indexes.ForEach(func(i int) {
@@ -187,7 +187,7 @@ type minArbiterSet struct {
 
 	// indexConflictOrdsCache caches the conflict column sets of arbiter indexes
 	// in the set.
-	indexConflictOrdsCache map[cat.IndexOrdinal]util.FastIntSet
+	indexConflictOrdsCache map[cat.IndexOrdinal]intsets.Fast
 }
 
 // makeMinArbiterSet returns an initialized arbiterSet.
@@ -258,7 +258,7 @@ func (m *minArbiterSet) initCache() {
 		return
 	}
 	// Cache each index's conflict columns.
-	m.indexConflictOrdsCache = make(map[cat.IndexOrdinal]util.FastIntSet, m.as.indexes.Len())
+	m.indexConflictOrdsCache = make(map[cat.IndexOrdinal]intsets.Fast, m.as.indexes.Len())
 	m.as.indexes.ForEach(func(i int) {
 		index := m.as.mb.tab.Index(i)
 		m.indexConflictOrdsCache[i] = getIndexLaxKeyOrdinals(index)

@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -126,7 +127,7 @@ func (q *Query) putEvalContext(ec *evalContext) {
 // Entities returns the entities in the query in their join order.
 // This method exists primarily for introspection.
 func (q *Query) Entities() []Var {
-	var entitySlots util.FastIntSet
+	var entitySlots intsets.Fast
 	for _, slotIdx := range q.entities {
 		entitySlots.Add(int(slotIdx))
 	}

@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -821,7 +821,7 @@ type SetAccountingHelper struct {
 	allFixedLength bool
 
 	// bytesLikeVecIdxs stores the indices of all bytes-like vectors.
-	bytesLikeVecIdxs util.FastIntSet
+	bytesLikeVecIdxs intsets.Fast
 	// bytesLikeVectors stores all actual bytes-like vectors. It is updated
 	// every time a new batch is allocated.
 	bytesLikeVectors []*coldata.Bytes
@@ -830,7 +830,7 @@ type SetAccountingHelper struct {
 	prevBytesLikeTotalSize int64
 
 	// decimalVecIdxs stores the indices of all decimal vectors.
-	decimalVecIdxs util.FastIntSet
+	decimalVecIdxs intsets.Fast
 	// decimalVecs stores all decimal vectors. They are updated every time a new
 	// batch is allocated.
 	decimalVecs []coldata.Decimals
@@ -849,7 +849,7 @@ type SetAccountingHelper struct {
 
 	// varLenDatumVecIdxs stores the indices of all datum-backed vectors with
 	// variable-length values.
-	varLenDatumVecIdxs util.FastIntSet
+	varLenDatumVecIdxs intsets.Fast
 	// varLenDatumVecs stores all variable-sized datum-backed vectors. They are
 	// updated every time a new batch is allocated.
 	varLenDatumVecs []coldata.DatumVec

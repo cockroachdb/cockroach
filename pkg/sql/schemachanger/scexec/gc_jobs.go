@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -82,7 +82,7 @@ func (gj gcJobs) makeRecords(
 ) (dbZoneConfigsToRemove catalog.DescriptorIDSet, gcJobRecords []jobs.Record) {
 	type stmts struct {
 		s   []scop.StatementForDropJob
-		set util.FastIntSet
+		set intsets.Fast
 	}
 	addStmt := func(s *stmts, stmt scop.StatementForDropJob) {
 		if id := int(stmt.StatementID); !s.set.Contains(id) {

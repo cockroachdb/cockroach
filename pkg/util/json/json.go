@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -404,7 +404,7 @@ func (b *ObjectBuilder) Build() JSON {
 type FixedKeysObjectBuilder struct {
 	pairs   []jsonKeyValuePair
 	keyOrd  map[string]int
-	updated util.FastIntSet
+	updated intsets.Fast
 }
 
 // NewFixedKeysObjectBuilder creates JSON object builder for the specified
@@ -448,7 +448,7 @@ func (b *FixedKeysObjectBuilder) Build() (JSON, error) {
 			"expected all %d keys to be updated, %d updated",
 			len(b.pairs), b.updated.Len())
 	}
-	b.updated = util.FastIntSet{}
+	b.updated = intsets.Fast{}
 	// Must copy b.pairs in case builder is reused.
 	return jsonObject(append([]jsonKeyValuePair(nil), b.pairs...)), nil
 }

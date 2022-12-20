@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -93,7 +93,7 @@ func TestPrefixSorter(t *testing.T) {
 			// only has the partitions and ps (PrefixSorter) elements populated.
 			partKeys := parsePartitionKeys(&evalCtx, tc.partitionKeys)
 			partitions := make([]testcat.Partition, len(partKeys))
-			localPartitions := util.FastIntSet{}
+			localPartitions := intsets.Fast{}
 			for j, partitionKey := range partKeys {
 				partitionDatums := make([]tree.Datums, 1)
 				partitionDatums[0] = partitionKey

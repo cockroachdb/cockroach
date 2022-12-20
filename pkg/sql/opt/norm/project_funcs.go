@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -754,7 +754,7 @@ func (c *CustomFuncs) PushAssignmentCastsIntoValues(
 	// will map a new column produced by the new values expression to their
 	// output column. castOrds tracks the column ordinals in the values
 	// expression to push assignment casts down to.
-	var castOrds util.FastIntSet
+	var castOrds intsets.Fast
 	newProjections := make(memo.ProjectionsExpr, 0, len(projections))
 	for i := range projections {
 		col, targetType, ok := extractAssignmentCastInputColAndTargetType(projections[i].Element)

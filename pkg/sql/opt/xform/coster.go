@@ -24,10 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"golang.org/x/tools/container/intsets"
 )
 
 // Coster is used by the optimizer to assign a cost to a candidate expression
@@ -797,7 +796,7 @@ func (c *coster) computeSelectCost(sel *memo.SelectExpr, required *physical.Requ
 		inputRowCount = math.Min(inputRowCount, required.LimitHint/selectivity)
 	}
 
-	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, util.FastIntSet{})
+	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, intsets.Fast{})
 	cost := memo.Cost(inputRowCount) * filterPerRow
 	cost += filterSetup
 	return cost
@@ -895,7 +894,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	// smaller right side is preferred to the symmetric join.
 	cost := memo.Cost(0.9*leftRowCount+1.1*rightRowCount) * cpuCostFactor
 
-	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntSet{})
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, intsets.Fast{})
 	cost += filterSetup
 
 	// Add the CPU cost of emitting the rows.
@@ -1018,7 +1017,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	}
 	cost := memo.Cost(lookupCount) * perLookupCost
 
-	filterSetup, filterPerRow := c.computeFiltersCost(on, util.FastIntSet{})
+	filterSetup, filterPerRow := c.computeFiltersCost(on, intsets.Fast{})
 	cost += filterSetup
 
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
@@ -1097,7 +1096,7 @@ func (c *coster) computeInvertedJoinCost(
 	perLookupCost *= 5
 	cost := memo.Cost(lookupCount) * perLookupCost
 
-	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntSet{})
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, intsets.Fast{})
 	cost += filterSetup
 
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
@@ -1147,7 +1146,7 @@ func (c *coster) computeExprCost(expr opt.Expr) memo.Cost {
 // because they do not add to the cost. This can happen when a condition still
 // exists in the filters even though it is handled by the join.
 func (c *coster) computeFiltersCost(
-	filters memo.FiltersExpr, filtersToSkip util.FastIntSet,
+	filters memo.FiltersExpr, filtersToSkip intsets.Fast,
 ) (setupCost, perRowCost memo.Cost) {
 	// Add a base perRowCost so that callers do not need to have their own
 	// base per-row cost.
@@ -1183,7 +1182,7 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	scanCost := c.rowScanCost(join.LeftTable, join.LeftIndex, leftCols)
 	scanCost += c.rowScanCost(join.RightTable, join.RightIndex, rightCols)
 
-	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntSet{})
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, intsets.Fast{})
 
 	// It is much more expensive to do a seek in zigzag join vs. lookup join
 	// because zigzag join starts a new scan for every seek via

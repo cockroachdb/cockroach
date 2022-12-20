@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -7425,7 +7425,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 		}
 
 		// Find all argument indexes that have the Geometry type.
-		var argsToCast util.FastIntSet
+		var argsToCast intsets.Fast
 		for i, paramType := range paramTypes {
 			if paramType.Typ.Equal(types.Geometry) {
 				argsToCast.Add(i)

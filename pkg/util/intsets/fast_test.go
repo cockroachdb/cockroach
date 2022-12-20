@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package util
+package intsets
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestFastIntSet(t *testing.T) {
+func TestFast(t *testing.T) {
 	for _, minVal := range []int{-10, -1, 0, 8, smallCutoff, 2 * smallCutoff} {
 		for _, maxVal := range []int{-1, 1, 8, 30, smallCutoff, 2 * smallCutoff, 4 * smallCutoff} {
 			if maxVal <= minVal {
@@ -35,7 +35,7 @@ func TestFastIntSet(t *testing.T) {
 				in := make(map[int]bool)
 				forEachRes := make(map[int]bool)
 
-				var s FastIntSet
+				var s Fast
 				for i := 0; i < 1000; i++ {
 					v := minVal + rng.Intn(maxVal-minVal)
 					if rng.Intn(2) == 0 {
@@ -77,7 +77,7 @@ func TestFastIntSet(t *testing.T) {
 					if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
 						t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
 					}
-					assertSame := func(orig, copy FastIntSet) {
+					assertSame := func(orig, copy Fast) {
 						t.Helper()
 						if !orig.Equals(copy) || !copy.Equals(orig) {
 							t.Fatalf("expected equality: %v, %v", orig, copy)
@@ -97,7 +97,7 @@ func TestFastIntSet(t *testing.T) {
 					s2 := s.Copy()
 					assertSame(s, s2)
 					// Test CopyFrom.
-					var s3 FastIntSet
+					var s3 Fast
 					s3.CopyFrom(s)
 					assertSame(s, s3)
 					// Make sure CopyFrom into a non-empty set still works.
@@ -112,13 +112,13 @@ func TestFastIntSet(t *testing.T) {
 							t.Fatalf("error during Encode: %v", err)
 						}
 						encoded := buf.String()
-						var s2 FastIntSet
+						var s2 Fast
 						if err := s2.Decode(bytes.NewReader([]byte(encoded))); err != nil {
 							t.Fatalf("error during Decode: %v", err)
 						}
 						assertSame(s, s2)
 						// Verify that decoding into a non-empty set still works.
-						var s3 FastIntSet
+						var s3 Fast
 						s3.Add(minVal + rng.Intn(maxVal-minVal))
 						if err := s3.Decode(bytes.NewReader([]byte(encoded))); err != nil {
 							t.Fatalf("error during Decode: %v", err)
@@ -131,12 +131,12 @@ func TestFastIntSet(t *testing.T) {
 	}
 }
 
-func TestFastIntSetTwoSetOps(t *testing.T) {
+func TestFastTwoSetOps(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	// genSet creates a set of numElem values in [minVal, minVal + valRange)
 	// It also adds and then removes numRemoved elements.
-	genSet := func(numElem, numRemoved, minVal, valRange int) (FastIntSet, map[int]bool) {
-		var s FastIntSet
+	genSet := func(numElem, numRemoved, minVal, valRange int) (Fast, map[int]bool) {
+		var s Fast
 		vals := rng.Perm(valRange)[:numElem+numRemoved]
 		used := make(map[int]bool, len(vals))
 		for _, i := range vals {
@@ -266,8 +266,8 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 	}
 }
 
-func TestFastIntSetAddRange(t *testing.T) {
-	assertSet := func(set *FastIntSet, from, to int) {
+func TestFastAddRange(t *testing.T) {
+	assertSet := func(set *Fast, from, to int) {
 		t.Helper()
 		// Iterate through the set and ensure that the values
 		// it contain are the values from 'from' to 'to' (inclusively).
@@ -275,10 +275,10 @@ func TestFastIntSetAddRange(t *testing.T) {
 		set.ForEach(func(actual int) {
 			t.Helper()
 			if actual > to {
-				t.Fatalf("expected last value in FastIntSet to be %d, got %d", to, actual)
+				t.Fatalf("expected last value in Fast to be %d, got %d", to, actual)
 			}
 			if expected != actual {
-				t.Fatalf("expected next value in FastIntSet to be %d, got %d", expected, actual)
+				t.Fatalf("expected next value in Fast to be %d, got %d", expected, actual)
 			}
 			expected++
 		})
@@ -289,14 +289,14 @@ func TestFastIntSetAddRange(t *testing.T) {
 	// [-5, smallCutoff + 20].
 	for from := -5; from <= max; from++ {
 		for to := from; to <= max; to++ {
-			var set FastIntSet
+			var set Fast
 			set.AddRange(from, to)
 			assertSet(&set, from, to)
 		}
 	}
 }
 
-func TestFastIntSetString(t *testing.T) {
+func TestFastString(t *testing.T) {
 	testCases := []struct {
 		vals []int
 		exp  string
@@ -320,7 +320,7 @@ func TestFastIntSetString(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			s := MakeFastIntSet(tc.vals...)
+			s := MakeFast(tc.vals...)
 			if str := s.String(); str != tc.exp {
 				t.Errorf("expected %s, got %s", tc.exp, str)
 			}

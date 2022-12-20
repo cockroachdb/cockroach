@@ -49,10 +49,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -1937,7 +1937,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		groupCols[i] = uint32(p.PlanToStreamColMap[idx])
 	}
 	orderedGroupCols := make([]uint32, len(info.groupColOrdering))
-	var orderedGroupColSet util.FastIntSet
+	var orderedGroupColSet intsets.Fast
 	for i, c := range info.groupColOrdering {
 		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[c.ColIdx])
 		orderedGroupColSet.Add(c.ColIdx)
@@ -2002,7 +2002,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 			// left and right inputs of the join, respectively, then columns
 			// 0, 1, ..., m-1 refer to the corresponding "left" columns whereas
 			// m, m+1, ..., m+n-1 refer to the "right" ones.
-			var joinEqCols util.FastIntSet
+			var joinEqCols intsets.Fast
 			m := len(prevStageProc.Input[0].ColumnTypes)
 			for _, leftEqCol := range hjSpec.LeftEqColumns {
 				joinEqCols.Add(int(leftEqCol))
@@ -2033,7 +2033,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		}
 	}
 	if allDistinct {
-		var distinctColumnsSet util.FastIntSet
+		var distinctColumnsSet intsets.Fast
 		for _, e := range info.aggregations {
 			for _, colIdx := range e.ColIdx {
 				distinctColumnsSet.Add(int(colIdx))
@@ -2588,7 +2588,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.cols))
-	var fetchOrdinals util.FastIntSet
+	var fetchOrdinals intsets.Fast
 	for i := range n.cols {
 		fetchColIDs[i] = n.cols[i].GetID()
 		fetchOrdinals.Add(n.cols[i].Ordinal())
@@ -2671,7 +2671,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
-	var fetchOrdinals util.FastIntSet
+	var fetchOrdinals intsets.Fast
 	for i := range n.table.cols {
 		fetchColIDs[i] = n.table.cols[i].GetID()
 		fetchOrdinals.Add(n.table.cols[i].Ordinal())

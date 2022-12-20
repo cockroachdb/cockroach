@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -94,7 +95,7 @@ type ColIndexJoin struct {
 
 		// Fields that deal with variable-size types.
 		hasVarSizeCols bool
-		varSizeVecIdxs util.FastIntSet
+		varSizeVecIdxs intsets.Fast
 		byteLikeCols   []*coldata.Bytes
 		decimalCols    []coldata.Decimals
 		datumCols      []coldata.DatumVec

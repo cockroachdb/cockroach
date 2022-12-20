@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -30,7 +30,7 @@ func TestSpanSplitterDoesNotSplitSystemTableFamilySpans(t *testing.T) {
 	splitter := span.MakeSplitter(
 		systemschema.DescriptorTable,
 		systemschema.DescriptorTable.GetPrimaryIndex(),
-		util.MakeFastIntSet(0),
+		intsets.MakeFast(0),
 	)
 
 	if res := splitter.CanSplitSpanIntoFamilySpans(1, false); res {
@@ -49,7 +49,7 @@ func TestSpanSplitterCanSplitSpan(t *testing.T) {
 		sql           string
 		index         string
 		prefixLen     int
-		neededColumns util.FastIntSet
+		neededColumns intsets.Fast
 		containsNull  bool
 		canSplit      bool
 	}{
@@ -57,35 +57,35 @@ func TestSpanSplitterCanSplitSpan(t *testing.T) {
 			sql:           "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
 			index:         "t_pkey",
 			prefixLen:     2,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			canSplit:      true,
 		},
 		{
 			sql:           "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
 			index:         "t_pkey",
 			prefixLen:     1,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			canSplit:      false,
 		},
 		{
 			sql:           "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c, d)",
 			index:         "t_pkey",
 			prefixLen:     2,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			canSplit:      true,
 		},
 		{
 			sql:           "a INT, b INT, c INT, INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
 			index:         "i",
 			prefixLen:     1,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			canSplit:      false,
 		},
 		{
 			sql:           "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
 			index:         "i",
 			prefixLen:     1,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			containsNull:  true,
 			canSplit:      false,
 		},
@@ -93,7 +93,7 @@ func TestSpanSplitterCanSplitSpan(t *testing.T) {
 			sql:           "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
 			index:         "i",
 			prefixLen:     1,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			containsNull:  false,
 			canSplit:      true,
 		},
@@ -101,7 +101,7 @@ func TestSpanSplitterCanSplitSpan(t *testing.T) {
 			sql:           "a INT, b INT, c INT, UNIQUE INDEX i (b), FAMILY (a), FAMILY (b), FAMILY (c)",
 			index:         "i",
 			prefixLen:     1,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			containsNull:  false,
 			canSplit:      true,
 		},
@@ -109,7 +109,7 @@ func TestSpanSplitterCanSplitSpan(t *testing.T) {
 			sql:           "a INT, b INT, c INT, UNIQUE INDEX i (b), FAMILY (a), FAMILY (b), FAMILY (c)",
 			index:         "i",
 			prefixLen:     1,
-			neededColumns: util.MakeFastIntSet(0),
+			neededColumns: intsets.MakeFast(0),
 			containsNull:  true,
 			canSplit:      false,
 		},

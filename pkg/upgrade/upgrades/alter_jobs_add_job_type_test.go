@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -171,7 +171,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	var typStr string
 	rows, err := sqlDB.Query("SELECT distinct(job_type) FROM system.jobs")
 	require.NoError(t, err)
-	seenTypes := util.FastIntSet{}
+	var seenTypes intsets.Fast
 	for rows.Next() {
 		err = rows.Scan(&typStr)
 		require.NoError(t, err)

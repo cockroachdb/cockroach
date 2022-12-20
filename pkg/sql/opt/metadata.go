@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -722,7 +722,7 @@ func (md *Metadata) AllViews() []cat.View {
 func (md *Metadata) getAllReferencedTables(
 	ctx context.Context, catalog cat.Catalog,
 ) []cat.DataSource {
-	var tableSet util.FastIntSet
+	var tableSet intsets.Fast
 	var tableList []cat.DataSource
 	var addForeignKeyReferencedTables func(tab cat.Table)
 	addForeignKeyReferencedTables = func(tab cat.Table) {

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -1149,7 +1149,7 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(
 	forceSerialization bool, post execinfrapb.PostProcessSpec,
 ) {
 	// Fast path - check if we need to do anything.
-	var nodes util.FastIntSet
+	var nodes intsets.Fast
 	var foundDuplicates bool
 	for _, pIdx := range p.ResultRouters {
 		proc := &p.Processors[pIdx]

@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -91,7 +91,7 @@ func TestSpanAssembler(t *testing.T) {
 									if err != nil {
 										t.Fatal(err)
 									}
-									neededColumns := util.MakeFastIntSet(1, 2, 3, 4)
+									neededColumns := intsets.MakeFast(1, 2, 3, 4)
 
 									cols := make([]coldata.Vec, len(typs))
 									for i, typ := range typs {

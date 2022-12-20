@@ -12,12 +12,12 @@ package catalog
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // DescriptorIDSet efficiently stores an unordered set of descriptor ids.
 type DescriptorIDSet struct {
-	set util.FastIntSet
+	set intsets.Fast
 }
 
 // MakeDescriptorIDSet returns a set initialized with the given values.

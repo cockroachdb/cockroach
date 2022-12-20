@@ -11,12 +11,12 @@
 //go:build fast_int_set_small || fast_int_set_large
 // +build fast_int_set_small fast_int_set_large
 
-// This file implements two variants of FastIntSet used for testing which always
+// This file implements two variants of Fast used for testing which always
 // behaves like in either the "small" or "large" case (depending on
 // fastIntSetAlwaysSmall). Tests that exhibit a difference when using one of
 // these variants indicates a bug.
 
-package util
+package intsets
 
 import (
 	"bytes"
@@ -24,38 +24,37 @@ import (
 	"io"
 
 	"github.com/cockroachdb/errors"
-	"golang.org/x/tools/container/intsets"
 )
 
-// FastIntSet keeps track of a set of integers. It does not perform any
+// Fast keeps track of a set of integers. It does not perform any
 // allocations when the values are small. It is not thread-safe.
-type FastIntSet struct {
+type Fast struct {
 	// Used to keep the size of the struct the same.
 	_ struct{ lo, hi uint64 }
-	s *intsets.Sparse
+	s *Sparse
 }
 
-// MakeFastIntSet returns a set initialized with the given values.
-func MakeFastIntSet(vals ...int) FastIntSet {
-	var res FastIntSet
+// MakeFast returns a set initialized with the given values.
+func MakeFast(vals ...int) Fast {
+	var res Fast
 	for _, v := range vals {
 		res.Add(v)
 	}
 	return res
 }
 
-func (s *FastIntSet) prepareForMutation() {
+func (s *Fast) prepareForMutation() {
 	if s.s == nil {
-		s.s = &intsets.Sparse{}
+		s.s = &Sparse{}
 	} else if fastIntSetAlwaysSmall {
 		// We always make a full copy to prevent any aliasing; this simulates the
-		// semantics of the "small" regime of FastIntSet.
+		// semantics of the "small" regime of Fast.
 		*s = s.Copy()
 	}
 }
 
 // Add adds a value to the set. No-op if the value is already in the set.
-func (s *FastIntSet) Add(i int) {
+func (s *Fast) Add(i int) {
 	s.prepareForMutation()
 	s.s.Insert(i)
 }
@@ -64,7 +63,7 @@ func (s *FastIntSet) Add(i int) {
 // E.g. AddRange(1,5) adds the values 1, 2, 3, 4, 5 to the set.
 // 'to' must be >= 'from'.
 // AddRange is always more efficient than individual Adds.
-func (s *FastIntSet) AddRange(from, to int) {
+func (s *Fast) AddRange(from, to int) {
 	s.prepareForMutation()
 	for i := from; i <= to; i++ {
 		s.s.Insert(i)
@@ -72,23 +71,23 @@ func (s *FastIntSet) AddRange(from, to int) {
 }
 
 // Remove removes a value from the set. No-op if the value is not in the set.
-func (s *FastIntSet) Remove(i int) {
+func (s *Fast) Remove(i int) {
 	s.prepareForMutation()
 	s.s.Remove(i)
 }
 
 // Contains returns true if the set contains the value.
-func (s FastIntSet) Contains(i int) bool {
+func (s Fast) Contains(i int) bool {
 	return s.s != nil && s.s.Has(i)
 }
 
 // Empty returns true if the set is empty.
-func (s FastIntSet) Empty() bool {
+func (s Fast) Empty() bool {
 	return s.s == nil || s.s.IsEmpty()
 }
 
 // Len returns the number of the elements in the set.
-func (s FastIntSet) Len() int {
+func (s Fast) Len() int {
 	if s.s == nil {
 		return 0
 	}
@@ -97,26 +96,26 @@ func (s FastIntSet) Len() int {
 
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
-func (s FastIntSet) Next(startVal int) (int, bool) {
+func (s Fast) Next(startVal int) (int, bool) {
 	if s.s == nil {
-		return intsets.MaxInt, false
+		return MaxInt, false
 	}
 	res := s.s.LowerBound(startVal)
-	return res, res != intsets.MaxInt
+	return res, res != MaxInt
 }
 
 // ForEach calls a function for each value in the set (in increasing order).
-func (s FastIntSet) ForEach(f func(i int)) {
+func (s Fast) ForEach(f func(i int)) {
 	if s.s == nil {
 		return
 	}
-	for x := s.s.Min(); x != intsets.MaxInt; x = s.s.LowerBound(x + 1) {
+	for x := s.s.Min(); x != MaxInt; x = s.s.LowerBound(x + 1) {
 		f(x)
 	}
 }
 
 // Ordered returns a slice with all the integers in the set, in increasing order.
-func (s FastIntSet) Ordered() []int {
+func (s Fast) Ordered() []int {
 	if s.Empty() {
 		return nil
 	}
@@ -124,22 +123,22 @@ func (s FastIntSet) Ordered() []int {
 }
 
 // Copy returns a copy of s which can be modified independently.
-func (s FastIntSet) Copy() FastIntSet {
-	n := &intsets.Sparse{}
+func (s Fast) Copy() Fast {
+	n := &Sparse{}
 	if s.s != nil {
 		n.Copy(s.s)
 	}
-	return FastIntSet{s: n}
+	return Fast{s: n}
 }
 
 // CopyFrom sets the receiver to a copy of other, which can then be modified
 // independently.
-func (s *FastIntSet) CopyFrom(other FastIntSet) {
+func (s *Fast) CopyFrom(other Fast) {
 	*s = other.Copy()
 }
 
 // UnionWith adds all the elements from rhs to this set.
-func (s *FastIntSet) UnionWith(rhs FastIntSet) {
+func (s *Fast) UnionWith(rhs Fast) {
 	if rhs.s == nil {
 		return
 	}
@@ -148,16 +147,16 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 }
 
 // Union returns the union of s and rhs as a new set.
-func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
+func (s Fast) Union(rhs Fast) Fast {
 	r := s.Copy()
 	r.UnionWith(rhs)
 	return r
 }
 
 // IntersectionWith removes any elements not in rhs from this set.
-func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
+func (s *Fast) IntersectionWith(rhs Fast) {
 	if rhs.s == nil {
-		*s = FastIntSet{}
+		*s = Fast{}
 		return
 	}
 	s.prepareForMutation()
@@ -165,14 +164,14 @@ func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
 }
 
 // Intersection returns the intersection of s and rhs as a new set.
-func (s FastIntSet) Intersection(rhs FastIntSet) FastIntSet {
+func (s Fast) Intersection(rhs Fast) Fast {
 	r := s.Copy()
 	r.IntersectionWith(rhs)
 	return r
 }
 
 // Intersects returns true if s has any elements in common with rhs.
-func (s FastIntSet) Intersects(rhs FastIntSet) bool {
+func (s Fast) Intersects(rhs Fast) bool {
 	if s.s == nil || rhs.s == nil {
 		return false
 	}
@@ -180,7 +179,7 @@ func (s FastIntSet) Intersects(rhs FastIntSet) bool {
 }
 
 // DifferenceWith removes any elements in rhs from this set.
-func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
+func (s *Fast) DifferenceWith(rhs Fast) {
 	if rhs.s == nil {
 		return
 	}
@@ -189,14 +188,14 @@ func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
 }
 
 // Difference returns the elements of s that are not in rhs as a new set.
-func (s FastIntSet) Difference(rhs FastIntSet) FastIntSet {
+func (s Fast) Difference(rhs Fast) Fast {
 	r := s.Copy()
 	r.DifferenceWith(rhs)
 	return r
 }
 
 // Equals returns true if the two sets are identical.
-func (s FastIntSet) Equals(rhs FastIntSet) bool {
+func (s Fast) Equals(rhs Fast) bool {
 	if s.Empty() || rhs.Empty() {
 		return s.Empty() == rhs.Empty()
 	}
@@ -204,7 +203,7 @@ func (s FastIntSet) Equals(rhs FastIntSet) bool {
 }
 
 // SubsetOf returns true if rhs contains all the elements in s.
-func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
+func (s Fast) SubsetOf(rhs Fast) bool {
 	if s.Empty() {
 		return true
 	}
@@ -216,12 +215,12 @@ func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 
 // Shift generates a new set which contains elements i+delta for elements i in
 // the original set.
-func (s *FastIntSet) Shift(delta int) FastIntSet {
-	n := &intsets.Sparse{}
+func (s *Fast) Shift(delta int) Fast {
+	n := &Sparse{}
 	s.ForEach(func(i int) {
 		n.Insert(i + delta)
 	})
-	return FastIntSet{s: n}
+	return Fast{s: n}
 }
 
 // Encode the set and write it to a bytes.Buffer using binary.varint byte
@@ -234,7 +233,7 @@ func (s *FastIntSet) Shift(delta int) FastIntSet {
 //
 // WARNING: this is used by plan gists, so if this encoding changes,
 // explain.gistVersion needs to be bumped.
-func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
+func (s *Fast) Encode(buf *bytes.Buffer) error {
 	if s.s != nil && s.s.Min() < 0 {
 		return errors.AssertionFailedf("Encode used with negative elements")
 	}
@@ -265,7 +264,7 @@ func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
 
 // Decode does the opposite of Encode. The contents of the receiver are
 // overwritten.
-func (s *FastIntSet) Decode(br io.ByteReader) error {
+func (s *Fast) Decode(br io.ByteReader) error {
 	length, err := binary.ReadUvarint(br)
 	if err != nil {
 		return err
@@ -289,7 +288,7 @@ func (s *FastIntSet) Decode(br io.ByteReader) error {
 		for i := 0; i < int(length); i++ {
 			elem, err := binary.ReadUvarint(br)
 			if err != nil {
-				*s = FastIntSet{}
+				*s = Fast{}
 				return err
 			}
 			s.Add(int(elem))

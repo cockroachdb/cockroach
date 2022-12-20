@@ -23,7 +23,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",

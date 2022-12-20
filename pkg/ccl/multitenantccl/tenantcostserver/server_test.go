@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -327,7 +327,7 @@ func TestInstanceCleanup(t *testing.T) {
 
 	// Note: this number needs to be at most maxInstancesCleanup.
 	const maxInstances = 10
-	var liveset, prev util.FastIntSet
+	var liveset, prev intsets.Fast
 
 	for steps := 0; steps < 100; steps++ {
 		// Keep the previous set for debugging.
@@ -370,7 +370,7 @@ func TestInstanceCleanup(t *testing.T) {
 		rows := ts.r.Query(t,
 			"SELECT instance_id FROM system.tenant_usage WHERE tenant_id = 5 AND instance_id > 0",
 		)
-		var serverSet util.FastIntSet
+		var serverSet intsets.Fast
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {

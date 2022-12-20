@@ -13,7 +13,7 @@ package row
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // PartialIndexUpdateHelper keeps track of partial indexes that should be not
@@ -24,10 +24,10 @@ import (
 // index.
 type PartialIndexUpdateHelper struct {
 	// IgnoreForPut is a set of index IDs to ignore for Put operations.
-	IgnoreForPut util.FastIntSet
+	IgnoreForPut intsets.Fast
 
 	// IgnoreForDel is a set of index IDs to ignore for Del operations.
-	IgnoreForDel util.FastIntSet
+	IgnoreForDel intsets.Fast
 }
 
 // Init initializes a PartialIndexUpdateHelper to track partial index IDs that

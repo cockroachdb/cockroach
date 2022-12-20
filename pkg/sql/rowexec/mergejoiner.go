@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +40,7 @@ type mergeJoiner struct {
 	leftIdx, rightIdx       int
 	trackMatchedRight       bool
 	emitUnmatchedRight      bool
-	matchedRight            util.FastIntSet
+	matchedRight            intsets.Fast
 	matchedRightCount       int
 
 	streamMerger streamMerger
@@ -246,7 +246,7 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
 		m.leftIdx, m.rightIdx = 0, 0
 		if m.trackMatchedRight {
-			m.matchedRight = util.FastIntSet{}
+			m.matchedRight = intsets.Fast{}
 		}
 	}
 }

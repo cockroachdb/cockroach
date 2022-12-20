@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // distinctNode de-duplicates rows returned by a wrapped planNode.
@@ -28,11 +28,11 @@ type distinctNode struct {
 	// Otherwise, distinctOnColIdxs is a strict subset of the child
 	// planNode's column indices indicating which columns are specified in
 	// the DISTINCT ON (<exprs>) clause.
-	distinctOnColIdxs util.FastIntSet
+	distinctOnColIdxs intsets.Fast
 
 	// Subset of distinctOnColIdxs on which the input guarantees an ordering.
 	// All rows that are equal on these columns appear contiguously in the input.
-	columnsInOrder util.FastIntSet
+	columnsInOrder intsets.Fast
 
 	reqOrdering ReqOrdering
 

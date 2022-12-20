@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,7 +67,7 @@ func (hi *hypotheticalIndex) init(
 	hi.zone = zone
 
 	// Build an index column ordinal set.
-	var colsOrdSet util.FastIntSet
+	var colsOrdSet intsets.Fast
 	for _, col := range hi.cols {
 		colsOrdSet.Add(col.Ordinal())
 	}

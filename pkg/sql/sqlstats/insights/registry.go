@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // This registry is the central object in the insights subsystem. It observes
@@ -73,7 +73,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	delete(r.statements, sessionID)
 	defer statements.release()
 
-	var slowStatements util.FastIntSet
+	var slowStatements intsets.Fast
 	for i, s := range *statements {
 		if r.detector.isSlow(s) {
 			slowStatements.Add(i)

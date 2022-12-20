@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -52,7 +52,7 @@ type cTableInfo struct {
 
 	// The set of required value-component column ordinals among only needed
 	// columns.
-	neededValueColsByIdx util.FastIntSet
+	neededValueColsByIdx intsets.Fast
 
 	// Map used to get the column index based on the descpb.ColumnID.
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
@@ -66,7 +66,7 @@ type cTableInfo struct {
 
 	// The set of column ordinals which are both composite and part of the index
 	// key.
-	compositeIndexColOrdinals util.FastIntSet
+	compositeIndexColOrdinals intsets.Fast
 
 	// One number per column coming from the "key suffix" that is part of the
 	// value; each number is a column ordinal among only needed columns; -1 if
@@ -246,7 +246,7 @@ type cFetcher struct {
 
 		// remainingValueColsByIdx is the set of value columns that are yet to be
 		// seen during the decoding of the current row.
-		remainingValueColsByIdx util.FastIntSet
+		remainingValueColsByIdx intsets.Fast
 		// lastRowPrefix is the row prefix for the last row we saw a key for. New
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
