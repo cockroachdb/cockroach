@@ -9,7 +9,11 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { RecentExecutions } from "src/recentExecutions/types";
+import {
+  RecentExecutions,
+  RecentTransaction,
+  ExecutionStatus,
+} from "src/recentExecutions/types";
 import { AppState } from "src/store";
 import { selectRecentExecutionsCombiner } from "src/selectors/recentExecutionsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";
@@ -38,6 +42,16 @@ export const selectRecentStatements = createSelector(
   selectRecentExecutions,
   (executions: RecentExecutions) => executions.statements,
 );
+
+// Recent Statement and Transaction executions share the same set of executions
+// statuses so we're able to select them from a single function.
+export const selectExecutionStatus = () => {
+  const execTypes: string[] = [];
+  for (const execType in ExecutionStatus) {
+    execTypes.push(execType);
+  }
+  return execTypes;
+};
 
 export const selecteRecentStatement = createSelector(
   selectRecentStatements,

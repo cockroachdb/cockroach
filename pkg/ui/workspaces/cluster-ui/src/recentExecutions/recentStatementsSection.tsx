@@ -101,7 +101,7 @@ export const RecentStatementsSection: React.FC<
         onChangeSortSetting={onChangeSortSetting}
         renderNoResult={
           <EmptyStatementsPlaceholder
-            isEmptySearchResults={search?.length > 0 && statements.length > 0}
+            isEmptySearchResults={search?.length > 0 || activeFilters > 0}
             statementView={StatementViewType.ACTIVE}
           />
         }

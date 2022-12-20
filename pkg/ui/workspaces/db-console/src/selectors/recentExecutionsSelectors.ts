@@ -15,6 +15,7 @@ import {
   getRecentTransaction,
   getContentionDetailsFromLocksAndTxns,
   selectExecutionID,
+  ExecutionStatus,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 import { CachedDataReducerState } from "src/redux/apiReducers";
@@ -36,6 +37,14 @@ export const selectRecentStatements = createSelector(
   selectRecentExecutions,
   (executions: RecentExecutions) => executions.statements,
 );
+
+export const selectExecutionStatus = () => {
+  return [
+    "Waiting" as ExecutionStatus,
+    "Executing" as ExecutionStatus,
+    "Preperating" as ExecutionStatus,
+  ];
+};
 
 export const selectRecentStatement = createSelector(
   selectRecentStatements,

@@ -17,6 +17,7 @@ import {
   selectStatementInsightDetailsCombiner,
 } from "src/selectors/insightsCommon.selectors";
 import { selectID } from "src/selectors/common";
+import { InsightEnumToLabel } from "src/insights";
 export const selectStatementInsights = createSelector(
   (state: AppState) => state.adminUI.executionInsights?.data,
   selectFlattenedStmtInsightsCombiner,
@@ -30,6 +31,16 @@ export const selectStatementInsightDetails = createSelector(
   selectID,
   selectStatementInsightDetailsCombiner,
 );
+
+// Statement Insights and Transaction Insights share the same set of Insight
+// Types so we're able to select them from a single function.
+export const selectInsightTypes = () => {
+  const insights: string[] = [];
+  InsightEnumToLabel.forEach(insight => {
+    insights.push(insight);
+  });
+  return insights;
+};
 
 export const selectColumns = createSelector(
   localStorageSelector,

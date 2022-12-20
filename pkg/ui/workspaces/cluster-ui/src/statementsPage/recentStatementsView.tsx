@@ -53,6 +53,7 @@ export type RecentStatementsViewStateProps = {
   sortSetting: SortSetting;
   sessionsError: Error | null;
   filters: RecentStatementFilters;
+  executionStatus: string[];
   internalAppNamePrefix: string;
   isTenant?: boolean;
 };
@@ -70,6 +71,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   statements,
   sessionsError,
   filters,
+  executionStatus,
   internalAppNamePrefix,
   isTenant,
 }: RecentStatementsViewProps) => {
@@ -154,7 +156,11 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   };
 
   const clearSearch = () => onSubmitSearch("");
-  const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
+  const clearFilters = () =>
+    onSubmitFilters({
+      app: inactiveFiltersState.app,
+      executionStatus: inactiveFiltersState.executionStatus,
+    });
 
   const apps = getAppsFromRecentExecutions(statements, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
@@ -180,6 +186,8 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
+            executionStatuses={executionStatus}
+            showExecutionStatus={true}
             appNames={apps}
             filters={filters}
           />

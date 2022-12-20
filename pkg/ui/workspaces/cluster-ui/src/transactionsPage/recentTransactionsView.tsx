@@ -52,6 +52,7 @@ export type RecentTransactionsViewStateProps = {
   transactions: RecentTransaction[];
   sessionsError: Error | null;
   filters: RecentTransactionFilters;
+  executionStatus: string[];
   sortSetting: SortSetting;
   internalAppNamePrefix: string;
   isTenant?: boolean;
@@ -73,12 +74,14 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   transactions,
   sessionsError,
   filters,
+  executionStatus,
   internalAppNamePrefix,
 }: RecentTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
     pageSize: 20,
   });
+
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, RECENT_TXN_SEARCH_PARAM),
@@ -155,7 +158,11 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   };
 
   const clearSearch = () => onSubmitSearch("");
-  const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
+  const clearFilters = () =>
+    onSubmitFilters({
+      app: inactiveFiltersState.app,
+      executionStatus: inactiveFiltersState.executionStatus,
+    });
 
   const apps = getAppsFromRecentExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
@@ -181,6 +188,8 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
+            executionStatuses={executionStatus}
+            showExecutionStatus={true}
             appNames={apps}
             filters={filters}
           />

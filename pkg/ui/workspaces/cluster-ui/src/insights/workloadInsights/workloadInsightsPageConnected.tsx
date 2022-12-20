@@ -31,6 +31,7 @@ import {
   selectColumns,
   selectStatementInsights,
   selectStatementInsightsError,
+  selectInsightTypes,
 } from "src/store/insights/statementInsights";
 import {
   actions as transactionInsights,
@@ -49,6 +50,7 @@ const transactionMapStateToProps = (
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
   transactionsError: selectTransactionInsightsError(state),
+  insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
 });
@@ -59,6 +61,7 @@ const statementMapStateToProps = (
 ): StatementInsightsViewStateProps => ({
   statements: selectStatementInsights(state),
   statementsError: selectStatementInsightsError(state),
+  insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),

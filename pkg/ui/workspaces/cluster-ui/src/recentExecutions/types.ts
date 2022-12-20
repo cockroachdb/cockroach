@@ -16,7 +16,11 @@ export type SessionsResponse =
   protos.cockroach.server.serverpb.ListSessionsResponse;
 export type ActiveStatementResponse =
   protos.cockroach.server.serverpb.ActiveQuery;
-export type ExecutionStatus = "Waiting" | "Executing" | "Preparing";
+export enum ExecutionStatus {
+  Waiting = "Waiting",
+  Executing = "Executing",
+  Preparing = "Preparing",
+};
 export type ExecutionType = "statement" | "transaction";
 
 export const ActiveStatementPhase =
