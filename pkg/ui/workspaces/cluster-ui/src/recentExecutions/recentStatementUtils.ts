@@ -65,6 +65,16 @@ export function filterRecentStatements(
     );
   }
 
+  if (filters.executionStatus) {
+    filteredStatements = filteredStatements.filter(
+      (statement: RecentStatement) => {
+        const executionStatuses = filters.executionStatus.toString().split(",");
+
+        return executionStatuses.includes(statement.status);
+      },
+    );
+  }
+
   if (search) {
     const searchCaseInsensitive = search.toLowerCase();
     filteredStatements = filteredStatements.filter(stmt =>
@@ -113,8 +123,8 @@ export function getRecentExecutionsFromSessions(
           query: query.sql?.length > 0 ? query.sql : query.sql_no_constants,
           status:
             query.phase === ActiveStatementPhase.EXECUTING
-              ? "Executing"
-              : "Preparing",
+              ? ExecutionStatus.Executing
+              : ExecutionStatus.Preparing,
           start: TimestampToMoment(query.start),
           elapsedTime: DurationToMomentDuration(query.elapsed_time),
           application: session.application_name,
@@ -204,6 +214,14 @@ export function filterRecentTransactions(
     });
   } else {
     filteredTxns = filteredTxns.filter(txn => !isInternal(txn));
+  }
+
+  if (filters.executionStatus) {
+    filteredTxns = filteredTxns.filter((txn: RecentTransaction) => {
+      const executionStatuses = filters.executionStatus.toString().split(",");
+
+      return executionStatuses.includes(txn.status);
+    });
   }
 
   if (search) {
