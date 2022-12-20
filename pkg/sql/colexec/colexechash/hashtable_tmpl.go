@@ -594,11 +594,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 			_CHECK_BODY(false, false, false)
 		}
 	case HashTableDeletingProbeMode:
-		if ht.Same != nil {
-			_CHECK_BODY(true, true, false)
-		} else {
-			_CHECK_BODY(false, true, false)
-		}
+		_CHECK_BODY(false, true, false)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode"))
 	}
