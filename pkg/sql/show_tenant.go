@@ -36,6 +36,7 @@ const (
 	initReplication   tenantStatus = "INITIALIZING REPLICATION"
 	replicating       tenantStatus = "REPLICATING"
 	replicationPaused tenantStatus = "REPLICATION PAUSED"
+	cuttingOver       tenantStatus = "REPLICATION CUTTING OVER"
 	// Users should not see this status normally.
 	replicationUnknownFormat tenantStatus = "REPLICATION UNKNOWN (%s)"
 )
@@ -131,6 +132,30 @@ func (n *showTenantNode) initReplicationStats(params runParams, job *jobs.Job) e
 	return nil
 }
 
+func getTenantStatus(
+	jobStatus jobs.Status, replicationInfo *streampb.StreamIngestionStats,
+) tenantStatus {
+	switch jobStatus {
+	case jobs.StatusPending, jobs.StatusRunning, jobs.StatusPauseRequested:
+		if replicationInfo == nil || replicationInfo.ReplicationLagInfo == nil {
+			// Still no lag info which means we never recorded progress, and
+			// replication did not complete the initial scan yet.
+			return initReplication
+		} else {
+			progress := replicationInfo.IngestionProgress
+			if progress != nil && !progress.CutoverTime.IsEmpty() {
+				return cuttingOver
+			} else {
+				return replicating
+			}
+		}
+	case jobs.StatusPaused:
+		return replicationPaused
+	default:
+		return tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), jobStatus))
+	}
+}
+
 func (n *showTenantNode) startExec(params runParams) error {
 	tenantName, err := n.getTenantName(params)
 	if err != nil {
@@ -164,20 +189,7 @@ func (n *showTenantNode) startExec(params runParams) error {
 			return err
 		}
 
-		switch job.Status() {
-		case jobs.StatusPending, jobs.StatusRunning, jobs.StatusPauseRequested:
-			if n.replicationInfo == nil || n.replicationInfo.ReplicationLagInfo == nil {
-				// Still no lag info which means we never recorded progress, and
-				// replication did not complete the initial scan yet.
-				n.tenantStatus = initReplication
-			} else {
-				n.tenantStatus = replicating
-			}
-		case jobs.StatusPaused:
-			n.tenantStatus = replicationPaused
-		default:
-			n.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), job.Status()))
-		}
+		n.tenantStatus = getTenantStatus(job.Status(), n.replicationInfo)
 	case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
 		n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
 	default:
@@ -214,6 +226,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	replicationJobId := tree.NewDInt(tree.DInt(n.tenantInfo.TenantReplicationJobID))
 	replicatedTimestamp := tree.DNull
 	retainedTimestamp := tree.DNull
+	cutoverTimestamp := tree.DNull
 
 	if n.replicationInfo != nil {
 		sourceTenantName = tree.NewDString(string(n.replicationInfo.IngestionDetails.SourceTenantName))
@@ -234,6 +247,10 @@ func (n *showTenantNode) Values() tree.Datums {
 		// (it's not exactly ceil but close enough).
 		retainedCeil := n.protectedTimestamp.GoTime().Truncate(time.Microsecond).Add(time.Microsecond)
 		retainedTimestamp, _ = tree.MakeDTimestampTZ(retainedCeil, time.Nanosecond)
+		progress := n.replicationInfo.IngestionProgress
+		if progress != nil && !progress.CutoverTime.IsEmpty() {
+			cutoverTimestamp = eval.TimestampToDecimalDatum(progress.CutoverTime)
+		}
 	}
 
 	return tree.Datums{
@@ -245,6 +262,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		replicationJobId,
 		replicatedTimestamp,
 		retainedTimestamp,
+		cutoverTimestamp,
 	}
 }
 
