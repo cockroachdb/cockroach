@@ -12,7 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshTransactionInsights,
-  refreshExecutionInsights,
+  refreshStmtInsights,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -27,10 +27,10 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import {
   filtersLocalSetting,
-  selectExecutionInsights,
+  selectStmtInsights,
   sortSettingLocalSetting,
   selectTransactionInsights,
-  selectExecutionInsightsLoading,
+  selectStmtInsightsLoading,
   selectTransactionInsightsLoading,
   selectInsightTypes,
 } from "src/views/insights/insightsSelectors";
@@ -65,15 +65,15 @@ const statementMapStateToProps = (
   state: AdminUIState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  statements: selectExecutionInsights(state),
-  statementsError: state.cachedData?.executionInsights?.lastError,
+  statements: selectStmtInsights(state),
+  statementsError: state.cachedData?.stmtInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   insightTypes: selectInsightTypes(),
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
     insightStatementColumnsLocalSetting.selectorToArray(state),
   timeScale: selectTimeScale(state),
-  isLoading: selectExecutionInsightsLoading(state),
+  isLoading: selectStmtInsightsLoading(state),
 });
 
 const TransactionDispatchProps = {
@@ -88,7 +88,7 @@ const StatementDispatchProps: StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-  refreshStatementInsights: refreshExecutionInsights,
+  refreshStatementInsights: refreshStmtInsights,
   onColumnsChange: (value: string[]) =>
     insightStatementColumnsLocalSetting.set(value.join(",")),
   setTimeScale: setGlobalTimeScaleAction,
