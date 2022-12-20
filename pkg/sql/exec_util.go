@@ -1638,10 +1638,6 @@ type StreamingTestingKnobs struct {
 	// frontier specs generated for the replication job.
 	AfterReplicationFlowPlan func([]*execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
-
-	// OverrideReplicationTTLSeconds will override the default value of the
-	// `ReplicationTTLSeconds` field on the StreamIngestion job details.
-	OverrideReplicationTTLSeconds int
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

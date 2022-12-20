@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
@@ -31,6 +32,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// defaultRetentionTTLSeconds is the default value for how long
+// replicated data will be retained.
+const defaultRetentionTTLSeconds = 25 * 60 * 60
+
 func streamIngestionJobDescription(
 	p sql.PlanHookState, streamIngestion *tree.CreateTenantFromReplication,
 ) (string, error) {
@@ -51,9 +56,12 @@ func ingestionTypeCheck(
 		return false, nil, nil
 	}
 	if err := exprutil.TypeCheck(ctx, "INGESTION", p.SemaCtx(),
-		exprutil.Strings{ingestionStmt.ReplicationSourceAddress}); err != nil {
+		exprutil.Strings{
+			ingestionStmt.ReplicationSourceAddress,
+			ingestionStmt.Options.Retention}); err != nil {
 		return false, nil, err
 	}
+
 	return true, resultColumns, nil
 }
 
@@ -89,6 +97,21 @@ func ingestionPlanHook(
 	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceAddress)
 	if err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	retentionTTLSeconds := defaultRetentionTTLSeconds
+	if ingestionStmt.Options.Retention != nil {
+		retentionStr, err := exprEval.String(ctx, ingestionStmt.Options.Retention)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		if retentionStr != "" {
+			r, err := time.ParseDuration(retentionStr)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			retentionTTLSeconds = int(r.Seconds())
+		}
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -170,11 +193,6 @@ func ingestionPlanHook(
 		}
 
 		prefix := keys.MakeTenantPrefix(destinationTenantID)
-		// TODO(adityamaru): Wire this up to the user configurable option.
-		replicationTTLSeconds := 25 * 60 * 60
-		if knobs := p.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.OverrideReplicationTTLSeconds != 0 {
-			replicationTTLSeconds = knobs.OverrideReplicationTTLSeconds
-		}
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress:         string(streamAddress),
 			StreamID:              uint64(replicationProducerSpec.StreamID),
@@ -182,7 +200,7 @@ func ingestionPlanHook(
 			DestinationTenantID:   destinationTenantID,
 			SourceTenantName:      roachpb.TenantName(sourceTenant),
 			DestinationTenantName: roachpb.TenantName(destinationTenant),
-			ReplicationTTLSeconds: int32(replicationTTLSeconds),
+			ReplicationTTLSeconds: int32(retentionTTLSeconds),
 			ReplicationStartTime:  replicationProducerSpec.ReplicationStartTime,
 		}
 

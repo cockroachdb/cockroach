@@ -2220,7 +2220,16 @@ type CreateTenantFromReplication struct {
 	// ReplicationSourceAddress is the address of the source cluster that we are
 	// replicating data from.
 	ReplicationSourceAddress Expr
+
+	Options TenantReplicationOptions
 }
+
+// TenantReplicationOptions  options for the CREATE TENANT FROM REPLICATION command.
+type TenantReplicationOptions struct {
+	Retention Expr
+}
+
+var _ NodeFormatter = &TenantReplicationOptions{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
@@ -2235,4 +2244,35 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ON ")
 		ctx.FormatNode(node.ReplicationSourceAddress)
 	}
+	if !node.Options.IsDefault() {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
+}
+
+// Format implements the NodeFormatter interface
+func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
+	if o.Retention != nil {
+		ctx.WriteString("RETENTION = ")
+		ctx.FormatNode(o.Retention)
+	}
+}
+
+// CombineWith merges other TenantReplicationOptions into this struct.
+// An error is returned if the same option merged multiple times.
+func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) error {
+	if o.Retention != nil {
+		if other.Retention != nil {
+			return errors.New("RETENTION option specified multiple times")
+		}
+	} else {
+		o.Retention = other.Retention
+	}
+	return nil
+}
+
+// IsDefault returns true if this backup options struct has default value.
+func (o TenantReplicationOptions) IsDefault() bool {
+	options := TenantReplicationOptions{}
+	return o.Retention == options.Retention
 }
