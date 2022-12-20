@@ -13,7 +13,11 @@ import {
   defaultFilters,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
-import { selectRecentStatements, selectAppName } from "src/selectors";
+import {
+  selectRecentStatements,
+  selectAppName,
+  selectStatementExecutionStatus,
+} from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -27,7 +31,10 @@ const selectedColumnsLocalSetting = new LocalSetting<
   null,
 );
 
-const defaultActiveFilters = { app: defaultFilters.app };
+const defaultActiveFilters = {
+  app: defaultFilters.app,
+  executionStatus: defaultFilters.executionStatus,
+};
 
 const filtersLocalSetting = new LocalSetting<
   AdminUIState,
@@ -49,6 +56,7 @@ export const mapStateToRecentStatementViewProps = (state: AdminUIState) => ({
   selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   statements: selectRecentStatements(state),
+  executionStatus: selectStatementExecutionStatus(state),
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
 });

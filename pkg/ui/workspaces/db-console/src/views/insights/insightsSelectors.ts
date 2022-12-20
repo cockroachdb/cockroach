@@ -23,13 +23,16 @@ import {
   selectTxnInsightsCombiner,
   TxnContentionInsightDetails,
   selectTxnInsightDetailsCombiner,
+  Insight,
+  FlattenedStmtInsightEvent,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
   WorkloadInsightEventFilters
 >("filters/InsightsPage", (state: AdminUIState) => state.localSettings, {
-  app: "",
+  app: defaultFilters.app,
+  workloadInsightType: defaultFilters.workloadInsightType,
 });
 
 export const sortSettingLocalSetting = new LocalSetting<
@@ -44,6 +47,26 @@ export const selectTransactionInsights = createSelector(
   (state: AdminUIState) => state.cachedData.executionInsights?.data,
   (state: AdminUIState) => state.cachedData.transactionInsights?.data,
   selectTxnInsightsCombiner,
+);
+
+export const selectTransactionInsightTypes = createSelector(
+  selectTransactionInsights,
+  transactionInsights => {
+    if (!transactionInsights) return [];
+
+    const transactionInsightTypes = new Set<string>();
+    transactionInsights.forEach(transactionInsightEvent => {
+      if (transactionInsightEvent.insights) {
+        transactionInsightEvent.insights.forEach((insight: Insight) => {
+          if (!transactionInsightTypes.has(insight.label)) {
+            transactionInsightTypes.add(insight.label);
+          }
+        });
+      }
+    });
+
+    return Array.from(transactionInsightTypes).sort();
+  },
 );
 
 const selectTxnContentionInsightDetails = createSelector(
@@ -87,6 +110,26 @@ export const selectTransactionInsightDetailsError = createSelector(
 export const selectStatementInsights = createSelector(
   (state: AdminUIState) => state.cachedData.executionInsights?.data,
   selectFlattenedStmtInsightsCombiner,
+);
+
+export const selectStatementInsightTypes = createSelector(
+  selectStatementInsights,
+  statementInsights => {
+    if (!statementInsights) return [];
+    const insightTypes = new Set<string>();
+
+    statementInsights.forEach((stmtInsightEvent: FlattenedStmtInsightEvent) => {
+      if (stmtInsightEvent.insights) {
+        stmtInsightEvent.insights.forEach(insight => {
+          if (!insightTypes.has(insight.label)) {
+            insightTypes.add(insight.label);
+          }
+        });
+      }
+    });
+
+    return Array.from(insightTypes).sort();
+  },
 );
 
 export const selectStatementInsightDetails = createSelector(

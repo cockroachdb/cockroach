@@ -65,6 +65,17 @@ export function filterRecentStatements(
     );
   }
 
+  if (filters.executionStatus) {
+    filteredStatements = filteredStatements.filter((statement: RecentStatement) => {
+      const executionStatuses = filters.executionStatus.toString().split(",");
+      if (executionStatuses.includes(unset)) {
+        executionStatuses.push("");
+      }
+
+      return executionStatuses.includes(statement.status);
+    })
+  }
+
   if (search) {
     const searchCaseInsensitive = search.toLowerCase();
     filteredStatements = filteredStatements.filter(stmt =>
@@ -204,6 +215,17 @@ export function filterRecentTransactions(
     });
   } else {
     filteredTxns = filteredTxns.filter(txn => !isInternal(txn));
+  }
+
+  if (filters.executionStatus) {
+    filteredTxns = filteredTxns.filter((txn: RecentTransaction) => {
+      const executionStatuses = filters.executionStatus.toString().split(",");
+      if (executionStatuses.includes(unset)) {
+        executionStatuses.push("");
+      }
+
+      return executionStatuses.includes(txn.status);
+    })
   }
 
   if (search) {

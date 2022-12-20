@@ -79,6 +79,7 @@ export function getWorkloadInsightEventFiltersFromURL(
 
   const appFilters = {
     app: filters.app,
+    workloadInsightType: filters.workloadInsightType,
   };
 
   // If every entry is null, there were no active filters. Return null.

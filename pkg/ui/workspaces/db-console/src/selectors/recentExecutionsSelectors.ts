@@ -10,11 +10,13 @@
 
 import {
   RecentExecutions,
+  RecentTransaction,
   selectRecentExecutionsCombiner,
   getRecentStatement,
   getRecentTransaction,
   getContentionDetailsFromLocksAndTxns,
   selectExecutionID,
+  RecentStatement,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 import { CachedDataReducerState } from "src/redux/apiReducers";
@@ -37,6 +39,12 @@ export const selectRecentStatements = createSelector(
   (executions: RecentExecutions) => executions.statements,
 );
 
+export const selectStatementExecutionStatus = createSelector(
+  selectRecentStatements,
+  (statements: RecentStatement[]) =>
+    Array.from(new Set(statements.map(statement => statement.status))),
+);
+
 export const selectRecentStatement = createSelector(
   selectRecentStatements,
   selectExecutionID,
@@ -56,6 +64,12 @@ export const selectAppName = createSelector(
 export const selectRecentTransactions = createSelector(
   selectRecentExecutions,
   (executions: RecentExecutions) => executions.transactions,
+);
+
+export const selectTransactionExecutionStatus = createSelector(
+  selectRecentTransactions,
+  (transactions: RecentTransaction[]) =>
+    Array.from(new Set(transactions.map(transaction => transaction.status))),
 );
 
 export const selectRecentTransaction = createSelector(
