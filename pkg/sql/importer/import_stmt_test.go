@@ -2944,8 +2944,8 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	setSmallIngestBufferSizes(t, sqlDB)
 	sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
 	var tableID int64
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
 
@@ -5271,6 +5271,15 @@ func TestImportControlJobRBAC(t *testing.T) {
 	}
 }
 
+// setSmallIngestBufferSizes lowers the initial buffering adder ingest
+// size to allow import jobs to run without exceeding the test memory
+// monitor.
+func setSmallIngestBufferSizes(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	t.Helper()
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
+}
+
 // TestImportWorkerFailure tests that IMPORT retries after the failure of a
 // worker node.
 func TestImportWorkerFailure(t *testing.T) {
@@ -5289,11 +5298,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
-
-	// Lower the initial buffering adder ingest size to allow import jobs to run
-	// without exceeding the test memory monitor.
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
+	setSmallIngestBufferSizes(t, sqlDB)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
