@@ -1916,6 +1916,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						tableOid,                                     // indrelid
 						tree.NewDInt(tree.DInt(indnatts)),            // indnatts
 						tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
+						tree.DBoolFalse,                              // indnullsnotdistinct
 						tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
 						tree.DBoolFalse,                              // indisexclusion
 						tree.MakeDBool(tree.DBool(index.IsUnique())), // indimmediate
