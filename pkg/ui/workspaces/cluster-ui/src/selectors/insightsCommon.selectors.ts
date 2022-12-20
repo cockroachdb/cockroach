@@ -8,33 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { FlattenedStmtInsights } from "src/api/txnInsightsApi";
 import {
   mergeTxnInsightDetails,
-  flattenTxnInsightsToStmts,
-  FlattenedStmtInsightEvent,
+  StmtInsightEvent,
   TxnInsightEvent,
-  TxnContentionInsightEvent,
   MergedTxnInsightEvent,
-  mergeTxnContentionAndStmtInsights,
   TxnContentionInsightDetails,
   TxnInsightDetails,
 } from "src/insights";
 
-// The functions in this file are agnostic to the different shape of each
-// state in db-console and cluster-ui. This file contains selector functions
-// and combiners that can be reused across both packages.
-
-export const selectFlattenedStmtInsightsCombiner = (
-  executionInsights: TxnInsightEvent[],
-): FlattenedStmtInsights => {
-  return flattenTxnInsightsToStmts(executionInsights);
-};
-
 export const selectStatementInsightDetailsCombiner = (
-  statementInsights: FlattenedStmtInsights,
+  statementInsights: StmtInsightEvent[],
   executionID: string,
-): FlattenedStmtInsightEvent | null => {
+): StmtInsightEvent | null => {
   if (!statementInsights || statementInsights?.length < 1 || !executionID) {
     return null;
   }
@@ -46,15 +32,9 @@ export const selectStatementInsightDetailsCombiner = (
 
 export const selectTxnInsightsCombiner = (
   txnInsightsFromStmts: TxnInsightEvent[],
-  txnContentionInsights: TxnContentionInsightEvent[],
 ): MergedTxnInsightEvent[] => {
-  if (!txnInsightsFromStmts && !txnContentionInsights) return [];
-
   // Merge the two insights lists.
-  return mergeTxnContentionAndStmtInsights(
-    txnInsightsFromStmts,
-    txnContentionInsights,
-  );
+  return txnInsightsFromStmts;
 };
 
 export const selectTxnInsightDetailsCombiner = (

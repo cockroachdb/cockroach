@@ -16,7 +16,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
 import {
-  refreshExecutionInsights,
+  refreshStmtInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
@@ -30,14 +30,14 @@ const mapStateToProps = (
 ): StatementInsightDetailsStateProps => {
   return {
     insightEventDetails: selectStatementInsightDetails(state, props),
-    insightError: state.cachedData?.executionInsights?.lastError,
+    insightError: state.cachedData?.stmtInsights?.lastError,
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
   };
 };
 
 const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
-  refreshStatementInsights: refreshExecutionInsights,
+  refreshStatementInsights: refreshStmtInsights,
   setTimeScale: setGlobalTimeScaleAction,
   refreshUserSQLRoles: refreshUserSQLRoles,
 };

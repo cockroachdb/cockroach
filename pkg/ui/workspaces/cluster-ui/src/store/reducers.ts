@@ -27,8 +27,8 @@ import {
   TransactionInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
 import {
-  ExecutionInsightsState,
-  reducer as executionInsights,
+  StmtInsightsState,
+  reducer as stmtInsights,
 } from "./insights/statementInsights";
 import {
   reducer as transactionInsights,
@@ -75,9 +75,9 @@ export type AdminUiState = {
   job: JobState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
-  transactionInsights: TransactionInsightsState;
+  txnInsights: TransactionInsightsState;
   transactionInsightDetails: TransactionInsightDetailsCachedState;
-  executionInsights: ExecutionInsightsState;
+  stmtInsights: StmtInsightsState;
   schemaInsights: SchemaInsightsState;
 };
 
@@ -91,9 +91,9 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
-  transactionInsights,
+  txnInsights: transactionInsights,
   transactionInsightDetails,
-  executionInsights,
+  stmtInsights,
   terminateQuery,
   uiConfig,
   sqlStats,

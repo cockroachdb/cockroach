@@ -45,7 +45,7 @@ import {
   defaultTimeScaleOptions,
   TimeScaleDropdown,
 } from "../../../timeScaleDropdown";
-import { ExecutionInsightsRequest } from "src/api";
+import { StmtInsightsReq } from "src/api";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -68,7 +68,7 @@ export type TransactionInsightsViewStateProps = {
 export type TransactionInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: (req: ExecutionInsightsRequest) => void;
+  refreshTransactionInsights: (req: StmtInsightsReq) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
 

@@ -26,6 +26,27 @@ export enum InsightExecEnum {
   STATEMENT = "statement",
 }
 
+// Common fields for both txn and stmt insights.
+export type InsightEventBase = {
+  transactionExecutionID: string;
+  transactionFingerprintID: string;
+  implicitTxn: boolean;
+  sessionID: string;
+  username: string;
+  lastRetryReason?: string;
+  priority: string;
+  retries: number;
+  application: string;
+  rowsRead: number;
+  rowsWritten: number;
+  startTime: Moment;
+  endTime: Moment;
+  elapsedTimeMillis: number;
+  query: string;
+  contentionTime?: moment.Duration;
+  insights: Insight[];
+};
+
 // What we store in redux for txn contention insight events in
 // the overview page.  It is missing information such as the
 // blocking txn information.
@@ -122,41 +143,15 @@ export type BlockedStatementContentionDetails = {
   indexName: string;
 };
 
-// Does not contain transaction information.
-// This is what is stored at the transaction insight level, shown
-// on the txn insights overview page.
-export type StmtInsightEvent = {
+// Shown on the stmt insights overview page.
+export type StmtInsightEvent = InsightEventBase & {
   statementExecutionID: string;
   statementFingerprintID: string;
-  startTime: Moment;
   isFullScan: boolean;
-  elapsedTimeMillis: number;
-  totalContentionTime?: moment.Duration;
   contentionEvents?: BlockedStatementContentionDetails[];
-  endTime: Moment;
-  rowsRead: number;
-  rowsWritten: number;
-  causes: string[];
-  problem: string;
-  query: string;
-  insights: Insight[];
   indexRecommendations: string[];
   planGist: string;
-};
-
-// StmtInsightEvent with their transaction level information.
-// What we show in the stmt insights overview and details pages.
-export type FlattenedStmtInsightEvent = StmtInsightEvent & {
-  transactionExecutionID: string;
-  transactionFingerprintID: string;
-  implicitTxn: boolean;
-  sessionID: string;
   databaseName: string;
-  username: string;
-  lastRetryReason?: string;
-  priority: string;
-  retries: number;
-  application: string;
 };
 
 export type Insight = {

@@ -29,10 +29,10 @@ import { SortSetting } from "src/sortedtable";
 import {
   actions as statementInsights,
   selectColumns,
-  selectExecutionInsights,
-  selectExecutionInsightsError,
-  selectExecutionInsightsLoading,
   selectInsightTypes,
+  selectStmtInsights,
+  selectStmtInsightsError,
+  selectStmtInsightsLoading,
 } from "src/store/insights/statementInsights";
 import {
   actions as transactionInsights,
@@ -44,7 +44,7 @@ import {
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
-import { ExecutionInsightsRequest } from "../../api";
+import { StmtInsightsReq } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 
 const transactionMapStateToProps = (
@@ -64,14 +64,14 @@ const statementMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  statements: selectExecutionInsights(state),
-  statementsError: selectExecutionInsightsError(state),
+  statements: selectStmtInsights(state),
+  statementsError: selectStmtInsightsError(state),
   insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
   timeScale: selectTimeScale(state),
-  isLoading: selectExecutionInsightsLoading(state),
+  isLoading: selectStmtInsightsLoading(state),
 });
 
 const TransactionDispatchProps = (
@@ -98,7 +98,7 @@ const TransactionDispatchProps = (
       }),
     );
   },
-  refreshTransactionInsights: (req: ExecutionInsightsRequest) => {
+  refreshTransactionInsights: (req: StmtInsightsReq) => {
     dispatch(transactionInsights.refresh(req));
   },
 });
@@ -138,7 +138,7 @@ const StatementDispatchProps = (
       }),
     );
   },
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => {
+  refreshStatementInsights: (req: StmtInsightsReq) => {
     dispatch(statementInsights.refresh(req));
   },
 });
