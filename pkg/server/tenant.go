@@ -875,6 +875,13 @@ func makeTenantSQLServerArgs(
 
 	sessionRegistry := sql.NewSessionRegistry()
 
+	goMemLimitSetting.SetOnChange(&baseCfg.Settings.SV, func(context.Context) {
+		handleGoMemLimitChange(&baseCfg.Settings.SV)
+	})
+	// TODO(yuzefovich): come up with a reasonable non-zero default value for
+	// goMemLimitSetting based on cfg.MemoryPoolSize (and pebble cache size for
+	// system tenants) before 23.1 release is cut.
+
 	monitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          sqlCfg.MemoryPoolSize,
 		histogramWindowInterval: baseCfg.HistogramWindowInterval(),

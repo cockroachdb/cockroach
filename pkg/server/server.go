@@ -13,9 +13,11 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
+	runtimeDebug "runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -59,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
@@ -174,6 +177,24 @@ type Server struct {
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
+}
+
+// goMemLimitSetting controls the value of the soft memory limit of Go runtime
+// on each node in the cluster. This soft memory limit can also be changed via
+// the GOMEMLIMIT environment variable on a per-node basis.
+var goMemLimitSetting = settings.RegisterByteSizeSetting(
+	settings.TenantReadOnly,
+	"server.go_mem_limit",
+	"if positive, changes the value of the soft memory limit, zero disables this limit",
+	0,
+)
+
+func handleGoMemLimitChange(sv *settings.Values) {
+	if limit := goMemLimitSetting.Get(sv); limit > 0 {
+		runtimeDebug.SetMemoryLimit(limit)
+	} else {
+		runtimeDebug.SetMemoryLimit(math.MaxInt64)
+	}
 }
 
 // NewServer creates a Server from a server.Config.
@@ -522,6 +543,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 	registry.AddMetricStruct(protectedtsProvider.Metrics())
+
+	goMemLimitSetting.SetOnChange(&cfg.Settings.SV, func(context.Context) {
+		handleGoMemLimitChange(&cfg.Settings.SV)
+	})
+	// TODO(yuzefovich): come up with a reasonable non-zero default value for
+	// goMemLimitSetting based on cfg.MemoryPoolSize and pebble cache size
+	// before 23.1 release is cut.
 
 	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
 	// the KV memory monitor for the StoreConfig.
