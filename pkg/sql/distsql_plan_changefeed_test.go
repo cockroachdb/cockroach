@@ -353,6 +353,12 @@ CREATE TABLE foo (
 			expectSpans: roachpb.Spans{primarySpan},
 			present:     extraColumnsTuple,
 		},
+		{
+			// System columns
+			stmt:        `SELECT crdb_internal_mvcc_timestamp AS mvcc FROM foo`,
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     colinfo.ResultColumns{rc("mvcc", colinfo.MVCCTimestampColumnType)},
+		},
 	} {
 		t.Run(tc.stmt, func(t *testing.T) {
 			stmt, err := parser.ParseOne(tc.stmt)
