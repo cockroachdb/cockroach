@@ -9,7 +9,6 @@ go_library(
     name = "descpb",
     srcs = [
         "column.go",
-        "constraint.go",
         "descriptor.go",
         "index.go",
         "index_fetch.go",
@@ -65,6 +64,7 @@ proto_library(
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/schemachanger/scpb:scpb_proto",
+        "//pkg/sql/sem/catenumpb:catenumpb_proto",
         "//pkg/sql/types:types_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -83,6 +83,7 @@ go_proto_library(
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catenumpb",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",

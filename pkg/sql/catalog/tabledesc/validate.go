@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -876,8 +877,8 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 	}
 
 	for _, fk := range desc.OutboundForeignKeys() {
-		if fk.OnUpdate() == catpb.ForeignKeyAction_NO_ACTION ||
-			fk.OnUpdate() == catpb.ForeignKeyAction_RESTRICT {
+		if fk.OnUpdate() == catenumpb.ForeignKeyAction_NO_ACTION ||
+			fk.OnUpdate() == catenumpb.ForeignKeyAction_RESTRICT {
 			continue
 		}
 		for i, n := 0, fk.NumOriginColumns(); i < n; i++ {

@@ -14,8 +14,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -278,17 +278,17 @@ func (c foreignKeyConstraint) CollectReferencedColumnIDs() catalog.TableColSet {
 }
 
 // OnDelete implements the catalog.ForeignKeyConstraint interface.
-func (c foreignKeyConstraint) OnDelete() catpb.ForeignKeyAction {
+func (c foreignKeyConstraint) OnDelete() catenumpb.ForeignKeyAction {
 	return c.desc.OnDelete
 }
 
 // OnUpdate implements the catalog.ForeignKeyConstraint interface.
-func (c foreignKeyConstraint) OnUpdate() catpb.ForeignKeyAction {
+func (c foreignKeyConstraint) OnUpdate() catenumpb.ForeignKeyAction {
 	return c.desc.OnUpdate
 }
 
 // Match implements the catalog.ForeignKeyConstraint interface.
-func (c foreignKeyConstraint) Match() descpb.ForeignKeyReference_Match {
+func (c foreignKeyConstraint) Match() catenumpb.Match {
 	return c.desc.Match
 }
 

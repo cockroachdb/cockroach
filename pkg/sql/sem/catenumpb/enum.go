@@ -8,29 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catpb
+package catenumpb
 
-import (
-	"strconv"
-
-	"github.com/cockroachdb/redact"
-)
-
-// String implements the fmt.Stringer interface.
-func (x ForeignKeyAction) String() string {
-	switch x {
-	case ForeignKeyAction_RESTRICT:
-		return "RESTRICT"
-	case ForeignKeyAction_SET_DEFAULT:
-		return "SET DEFAULT"
-	case ForeignKeyAction_SET_NULL:
-		return "SET NULL"
-	case ForeignKeyAction_CASCADE:
-		return "CASCADE"
-	default:
-		return strconv.Itoa(int(x))
-	}
-}
+import "github.com/cockroachdb/redact"
 
 var _ redact.SafeValue = ForeignKeyAction(0)
 

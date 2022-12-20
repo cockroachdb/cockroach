@@ -392,3 +392,22 @@ const (
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
 )
+
+// ConstraintType is used to identify the type of a constraint.
+type ConstraintType string
+
+const (
+	// ConstraintTypePK identifies a PRIMARY KEY constraint.
+	ConstraintTypePK ConstraintType = "PRIMARY KEY"
+	// ConstraintTypeFK identifies a FOREIGN KEY constraint.
+	ConstraintTypeFK ConstraintType = "FOREIGN KEY"
+	// ConstraintTypeUnique identifies a UNIQUE constraint.
+	ConstraintTypeUnique ConstraintType = "UNIQUE"
+	// ConstraintTypeCheck identifies a CHECK constraint.
+	ConstraintTypeCheck ConstraintType = "CHECK"
+	// ConstraintTypeUniqueWithoutIndex identifies a UNIQUE_WITHOUT_INDEX constraint.
+	ConstraintTypeUniqueWithoutIndex ConstraintType = "UNIQUE WITHOUT INDEX"
+)
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConstraintType) SafeValue() {}
