@@ -62,6 +62,7 @@ type tenantStreamingClustersArgs struct {
 	destInitFunc        destInitExecFunc
 	destNumNodes        int
 	destClusterSettings map[string]string
+	retentionTTLSeconds int
 	testingKnobs        *sql.StreamingTestingKnobs
 }
 
@@ -195,9 +196,19 @@ func (c *tenantStreamingClusters) cutover(
 // Returns producer job ID and ingestion job ID.
 func (c *tenantStreamingClusters) startStreamReplication() (int, int) {
 	var ingestionJobID, streamProducerJobID int
-	streamReplStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON '%s'", c.args.destTenantName, c.args.srcTenantName, c.srcURL.String())
-	c.destSysSQL.QueryRow(c.t, streamReplStmt).Scan(&ingestionJobID, &streamProducerJobID)
+	c.destSysSQL.QueryRow(c.t, c.buildCreateTenantQuery()).Scan(&ingestionJobID, &streamProducerJobID)
 	return streamProducerJobID, ingestionJobID
+}
+
+func (c *tenantStreamingClusters) buildCreateTenantQuery() string {
+	streamReplStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON '%s'",
+		c.args.destTenantName,
+		c.args.srcTenantName,
+		c.srcURL.String())
+	if c.args.retentionTTLSeconds > 0 {
+		streamReplStmt = fmt.Sprintf("%s WITH RETENTION = '%ds'", streamReplStmt, c.args.retentionTTLSeconds)
+	}
+	return streamReplStmt
 }
 
 func waitForTenantPodsActive(
@@ -1102,13 +1113,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 	args := defaultTenantStreamingClustersArgs
 	// Override the replication job details ReplicationTTLSeconds to a small value
 	// so that every progress update results in a protected timestamp update.
-	//
-	// TODO(adityamaru): Once this is wired up to be user configurable via an
-	// option to `CREATE TENANT ... FROM REPLICATION` we should replace this
-	// testing knob with a create tenant option.
-	args.testingKnobs = &sql.StreamingTestingKnobs{
-		OverrideReplicationTTLSeconds: 1,
-	}
+	args.retentionTTLSeconds = 1
 
 	testProtectedTimestampManagement := func(t *testing.T, pauseBeforeTerminal bool, completeReplication bool) {
 		// waitForProducerProtection asserts that there is a PTS record protecting
