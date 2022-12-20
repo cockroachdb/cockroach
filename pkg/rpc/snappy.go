@@ -51,7 +51,18 @@ const (
 // different streams on the same connection.
 var snappyWriterPool = sync.Pool{
 	New: func() interface{} {
-		return &snappyWriter{snappy: snappy.NewBufferedWriter(nil)}
+		// We use the deprecated snappy.NewWriter constructor instead of the newer
+		// snappy.NewBufferedWriter constructor to avoid internal input buffering.
+		// The objects Write method is only called once, so the internal buffering
+		// is unnecessary. Meanwhile, removing it avoids a memcpy of the input byte
+		// slice and a pooled 64KB buffer (snappy.Writer.ibuf).
+		//
+		// If the deprecated API is ever removed, it would not be a major loss to
+		// switch back to the buffering writer. While it's still around, though, we
+		// might as well use it.
+		//
+		//lint:ignore SA1019 snappy.NewWriter is deprecated
+		return &snappyWriter{snappy: snappy.NewWriter(nil)}
 	},
 }
 var snappyReaderPool = sync.Pool{
