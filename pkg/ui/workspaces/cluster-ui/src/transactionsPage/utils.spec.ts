@@ -11,6 +11,7 @@
 import { assert } from "chai";
 import {
   filterTransactions,
+  generateRegion,
   getStatementsByFingerprintId,
   statementFingerprintIdsToText,
 } from "./utils";
@@ -19,6 +20,8 @@ import { data, nodeRegions } from "./transactions.fixture";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
+type Statement =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type Transaction =
   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 
@@ -285,6 +288,50 @@ describe("statementFingerprintIdsToText", () => {
 SELECT _, _
 SELECT _
 SELECT _`,
+    );
+  });
+});
+
+describe("generateRegion", () => {
+  function transactionWithStatementFingerprintIDs(
+    ...ids: number[]
+  ): Transaction {
+    return {
+      stats_data: {
+        statement_fingerprint_ids: ids.map(id => Long.fromInt(id)),
+      },
+    };
+  }
+
+  function statementWithFingerprintAndNodeIDs(
+    id: number,
+    ...nodeIDs: number[]
+  ): Statement {
+    return {
+      id: Long.fromInt(id),
+      stats: { nodes: nodeIDs.map(id => Long.fromInt(id)) },
+    };
+  }
+
+  it("gathers up the list of regions for the transaction, sorted", () => {
+    assert.deepEqual(
+      generateRegion(
+        transactionWithStatementFingerprintIDs(42),
+        [statementWithFingerprintAndNodeIDs(42, 1, 2)],
+        { "1": "gcp-us-west1", "2": "gcp-us-east1" },
+      ),
+      ["gcp-us-east1", "gcp-us-west1"],
+    );
+  });
+
+  it("skips over nodes with unknown regions", () => {
+    assert.deepEqual(
+      generateRegion(
+        transactionWithStatementFingerprintIDs(42),
+        [statementWithFingerprintAndNodeIDs(42, 1, 2)],
+        { "1": "gcp-us-west1" },
+      ),
+      ["gcp-us-west1"],
     );
   });
 });
