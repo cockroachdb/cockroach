@@ -3803,7 +3803,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					if key, err = iter.UnsafeEngineKey(); err != nil {
 						return err
 					}
-					if err := fw.writer.PutEngineKey(key, iter.UnsafeValue()); err != nil {
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					if err := fw.writer.PutEngineKey(key, v); err != nil {
 						return err
 					}
 				}

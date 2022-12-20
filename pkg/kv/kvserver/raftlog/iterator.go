@@ -23,7 +23,7 @@ type storageIter interface {
 	Valid() (bool, error)
 	Next()
 	Close()
-	UnsafeValue() []byte
+	UnsafeValue() ([]byte, error)
 }
 
 // Reader is the subset of storage.Reader relevant for accessing the raft log.
@@ -94,8 +94,11 @@ func (it *Iterator) load() (bool, error) {
 	if ok, err := it.iter.Valid(); err != nil || !ok {
 		return false, err
 	}
-	var err error
-	if it.entry, err = raftEntryFromRawValue(it.iter.UnsafeValue()); err != nil {
+	v, err := it.iter.UnsafeValue()
+	if err != nil {
+		return false, err
+	}
+	if it.entry, err = raftEntryFromRawValue(v); err != nil {
 		return false, err
 	}
 	return true, nil

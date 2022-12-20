@@ -703,7 +703,10 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 					continue
 				}
 
-				unsafeValue := it.UnsafeValue()
+				unsafeValue, err := it.UnsafeValue()
+				if err != nil {
+					return err
+				}
 				if unsafeValue == nil {
 					name := origName
 					if name == "" {

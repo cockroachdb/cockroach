@@ -42,7 +42,7 @@ func (i *verifyingMVCCIterator) saveAndVerify() {
 	i.key = i.pebbleIterator.UnsafeKey()
 	i.hasPoint, i.hasRange = i.pebbleIterator.HasPointAndRange()
 	if i.hasPoint {
-		i.value = i.pebbleIterator.UnsafeValue()
+		i.value, _ = i.pebbleIterator.UnsafeValue()
 		if i.key.IsValue() {
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(i.value)
 			if !ok && err == nil {
@@ -102,8 +102,8 @@ func (i *verifyingMVCCIterator) UnsafeKey() MVCCKey {
 }
 
 // UnsafeValue implements MVCCIterator.
-func (i *verifyingMVCCIterator) UnsafeValue() []byte {
-	return i.value
+func (i *verifyingMVCCIterator) UnsafeValue() ([]byte, error) {
+	return i.value, nil
 }
 
 // MVCCValueLenAndIsTombstone implements MVCCIterator.

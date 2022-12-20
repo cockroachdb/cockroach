@@ -1176,7 +1176,12 @@ func requireEqualReaders(
 		require.True(t, itExp.UnsafeKey().Equal(itActual.UnsafeKey()),
 			"expected key not equal to actual (expected %s, found %s)", itExp.UnsafeKey(),
 			itActual.UnsafeKey())
-		require.True(t, bytes.Equal(itExp.UnsafeValue(), itActual.UnsafeValue()),
+		checkValErr := func(v []byte, err error) []byte {
+			require.NoError(t, err)
+			return v
+		}
+		require.True(t, bytes.Equal(checkValErr(itExp.UnsafeValue()),
+			checkValErr(itActual.UnsafeValue())),
 			"expected value not equal to actual for key %s", itExp.UnsafeKey())
 		itExp.Next()
 		itActual.Next()
@@ -1517,9 +1522,11 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 			prefix = "!"
 		} else {
 			v := "."
-			if len(it.UnsafeValue()) > 0 {
+			value, err := it.UnsafeValue()
+			require.NoError(t, err)
+			if len(value) > 0 {
 				val := roachpb.Value{
-					RawBytes: it.UnsafeValue(),
+					RawBytes: value,
 				}
 				b, err := val.GetBytes()
 				require.NoError(t, err, "failed to read byte value for cell")
