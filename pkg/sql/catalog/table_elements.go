@@ -17,11 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TableElementMaybeMutation is an interface used as a subtype for the various
@@ -564,13 +567,13 @@ type ForeignKeyConstraint interface {
 	CollectReferencedColumnIDs() TableColSet
 
 	// OnDelete returns the action to take ON DELETE.
-	OnDelete() catpb.ForeignKeyAction
+	OnDelete() catenumpb.ForeignKeyAction
 
 	// OnUpdate returns the action to take ON UPDATE.
-	OnUpdate() catpb.ForeignKeyAction
+	OnUpdate() catenumpb.ForeignKeyAction
 
 	// Match returns the type of algorithm used to match composite keys.
-	Match() descpb.ForeignKeyReference_Match
+	Match() catenumpb.Match
 }
 
 // UniqueWithoutIndexConstraint is an interface around a unique constraint
@@ -995,4 +998,23 @@ func ColumnNeedsBackfill(col Column) bool {
 		return false
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
+}
+
+// GetConstraintType finds the type of constraint.
+func GetConstraintType(c Constraint) catconstants.ConstraintType {
+	if c.AsCheck() != nil {
+		return catconstants.ConstraintTypeCheck
+	} else if c.AsForeignKey() != nil {
+		return catconstants.ConstraintTypeFK
+	} else if c.AsUniqueWithoutIndex() != nil {
+		return catconstants.ConstraintTypeUniqueWithoutIndex
+	} else if c.AsUniqueWithIndex() != nil {
+		if c.AsUniqueWithIndex().GetEncodingType() == descpb.PrimaryIndexEncoding {
+			return catconstants.ConstraintTypePK
+		} else {
+			return catconstants.ConstraintTypeUnique
+		}
+	} else {
+		panic(errors.AssertionFailedf("unknown constraint type %T", c))
+	}
 }

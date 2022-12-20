@@ -129,7 +129,7 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{2},
 					ReferencedTableID:   112,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            catpb.ForeignKeyAction_CASCADE,
+					OnDelete:            catenumpb.ForeignKeyAction_CASCADE,
 					Match:               descpb.ForeignKeyReference_PARTIAL,
 					ConstraintID:        3,
 				})
@@ -140,8 +140,8 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{1},
 					ReferencedTableID:   3,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            catpb.ForeignKeyAction_SET_DEFAULT,
-					Match:               descpb.ForeignKeyReference_SIMPLE,
+					OnDelete:            catenumpb.ForeignKeyAction_SET_DEFAULT,
+					Match:               catenumpb.Match_SIMPLE,
 					ConstraintID:        4,
 				})
 
@@ -157,8 +157,8 @@ func TestSafeMessage(t *testing.T) {
 								OriginColumnIDs:     []descpb.ColumnID{2},
 								ReferencedTableID:   2,
 								ReferencedColumnIDs: []descpb.ColumnID{3},
-								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: catpb.ForeignKeyAction_SET_NULL,
-								Match:        descpb.ForeignKeyReference_FULL,
+								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: catenumpb.ForeignKeyAction_SET_NULL,
+								Match:        catenumpb.Match_FULL,
 								ConstraintID: 5,
 							},
 						},
