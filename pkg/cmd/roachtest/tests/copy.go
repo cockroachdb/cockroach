@@ -71,7 +71,7 @@ func registerCopy(r registry.Registry) {
 
 			rangeCount := func() int {
 				var count int
-				const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
+				const q = "SELECT count(*) FROM [SHOW RANGES FROM INDEX bank.bank@primary]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
 					t.Fatalf("failed to get range count: %v", err)
 				}
