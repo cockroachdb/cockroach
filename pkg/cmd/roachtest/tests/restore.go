@@ -443,13 +443,12 @@ type tpce10TB struct{}
 func (tpce10TB) name() string {
 	return "TPCE10TB"
 }
-
 func (tpce10TB) runRestore(ctx context.Context, c cluster.Cluster) {
-	// Restore from the first full backup AOST in the last incremental backup in the chain.
+	// Restore from the first full backup AOST in the last incremental backup in the chain
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE DATABASE tpce FROM '/2022/11/06-124208.52' IN
-				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.2.0-rc.3/inc-count=11?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-11-06 23:40:22'"`)
+				RESTORE DATABASE tpce FROM '/2022/12/06-190322.57' IN
+				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.2.0-rc.3/inc-count=9?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-12-06 22:40:22'"`)
 }
 
 func (tpce10TB) runRestoreDetached(
@@ -457,9 +456,9 @@ func (tpce10TB) runRestoreDetached(
 ) (jobspb.JobID, error) {
 	// Restore from the first full backup AOST in the last incremental backup in the chain.
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE DATABASE tpce FROM '/2022/11/06-124208.52' IN
-				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.2.0-rc.3/inc-count=11?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-11-06 23:40:22' WITH detached"`)
+				RESTORE DATABASE tpce FROM '/2022/12/06-190322.57' IN
+				'gs://cockroach-fixtures/backups/tpc-e/customers=500000/v22.2.0-rc.3/inc-count=9?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-12-06 22:40:22' WITH detached"`)
 	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
