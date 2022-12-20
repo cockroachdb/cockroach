@@ -12163,6 +12163,12 @@ index_flags_param:
     /* SKIP DOC */
      $$.val = &tree.IndexFlags{ZigzagIndexIDs: []tree.IndexID{tree.IndexID($4.int64())}}
   }
+| FAMILY '=' '[' iconst64 ']'
+  {
+    /* SKIP DOC */
+    id := tree.FamilyID(uint32($4.int64()))
+     $$.val = &tree.IndexFlags{FamilyID: &id}
+  }
 
 index_flags_param_list:
   index_flags_param
