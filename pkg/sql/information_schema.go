@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -868,10 +869,10 @@ var (
 	matchOptionPartial = tree.NewDString("PARTIAL")
 	matchOptionNone    = tree.NewDString("NONE")
 
-	matchOptionMap = map[descpb.ForeignKeyReference_Match]tree.Datum{
-		descpb.ForeignKeyReference_SIMPLE:  matchOptionNone,
-		descpb.ForeignKeyReference_FULL:    matchOptionFull,
-		descpb.ForeignKeyReference_PARTIAL: matchOptionPartial,
+	matchOptionMap = map[catenumpb.Match]tree.Datum{
+		catenumpb.Match_SIMPLE:  matchOptionNone,
+		catenumpb.Match_FULL:    matchOptionFull,
+		catenumpb.Match_PARTIAL: matchOptionPartial,
 	}
 
 	refConstraintRuleNoAction   = tree.NewDString("NO ACTION")
@@ -881,17 +882,17 @@ var (
 	refConstraintRuleCascade    = tree.NewDString("CASCADE")
 )
 
-func dStringForFKAction(action catpb.ForeignKeyAction) tree.Datum {
+func dStringForFKAction(action catenumpb.ForeignKeyAction) tree.Datum {
 	switch action {
-	case catpb.ForeignKeyAction_NO_ACTION:
+	case catenumpb.ForeignKeyAction_NO_ACTION:
 		return refConstraintRuleNoAction
-	case catpb.ForeignKeyAction_RESTRICT:
+	case catenumpb.ForeignKeyAction_RESTRICT:
 		return refConstraintRuleRestrict
-	case catpb.ForeignKeyAction_SET_NULL:
+	case catenumpb.ForeignKeyAction_SET_NULL:
 		return refConstraintRuleSetNull
-	case catpb.ForeignKeyAction_SET_DEFAULT:
+	case catenumpb.ForeignKeyAction_SET_DEFAULT:
 		return refConstraintRuleSetDefault
-	case catpb.ForeignKeyAction_CASCADE:
+	case catenumpb.ForeignKeyAction_CASCADE:
 		return refConstraintRuleCascade
 	}
 	panic(errors.Errorf("unexpected ForeignKeyReference_Action: %v", action))
@@ -1281,13 +1282,13 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 				tbNameStr := tree.NewDString(table.GetName())
 
 				for _, c := range table.AllConstraints() {
-					kind := descpb.ConstraintTypeUnique
+					kind := catconstants.ConstraintTypeUnique
 					if c.AsCheck() != nil {
-						kind = descpb.ConstraintTypeCheck
+						kind = catconstants.ConstraintTypeCheck
 					} else if c.AsForeignKey() != nil {
-						kind = descpb.ConstraintTypeFK
+						kind = catconstants.ConstraintTypeFK
 					} else if u := c.AsUniqueWithIndex(); u != nil && u.Primary() {
-						kind = descpb.ConstraintTypePK
+						kind = catconstants.ConstraintTypePK
 					}
 					if err := addRow(
 						dbNameStr,                     // constraint_catalog

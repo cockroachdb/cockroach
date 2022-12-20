@@ -1,0 +1,37 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// This file should contain only EMUN definitions for concepts that
+// are visible in the SQL layer (i.e. concepts that can be configured
+// in a SQL query).
+// It uses proto3 so other packages can import those enum definitions
+// when needed.
+syntax = "proto3";
+package cockroach.sql.sem.catenumpb;
+option go_package = "catenumpb";
+
+import "gogoproto/gogo.proto";
+
+// ForeignKeyAction describes the action which should be taken when a foreign
+// key constraint reference is acted upon.
+enum ForeignKeyAction {
+  NO_ACTION = 0;
+  RESTRICT = 1;
+  SET_NULL = 2;
+  SET_DEFAULT = 3;
+  CASCADE = 4;
+}
+
+// Match is the algorithm used to compare composite keys.
+enum Match {
+  SIMPLE = 0;
+  FULL = 1;
+  PARTIAL = 2; // Note: not actually supported, but we reserve the value for future use.
+}
