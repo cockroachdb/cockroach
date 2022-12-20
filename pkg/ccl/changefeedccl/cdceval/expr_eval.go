@@ -229,15 +229,25 @@ func (e *Evaluator) setupProjection(presentation colinfo.ResultColumns) {
 // event descriptor.
 func inputSpecForEventDescriptor(
 	ed *cdcevent.EventDescriptor,
-) (inputTypes []*types.T, inputCols catalog.TableColMap, _ error) {
+) ([]*types.T, catalog.TableColMap, error) {
+	numCols := len(ed.ResultColumns()) + len(colinfo.AllSystemColumnDescs)
+	inputTypes := make([]*types.T, numCols)
+	var inputCols catalog.TableColMap
 	for i, c := range ed.ResultColumns() {
 		col, err := ed.TableDescriptor().FindColumnWithName(tree.Name(c.Name))
 		if err != nil {
 			return inputTypes, inputCols, err
 		}
 		inputCols.Set(col.GetID(), i)
-		inputTypes = append(inputTypes, c.Typ)
+		inputTypes[i] = c.Typ
 	}
+
+	// Add system columns.
+	for _, sc := range colinfo.AllSystemColumnDescs {
+		inputCols.Set(sc.ID, inputCols.Len())
+		inputTypes = append(inputTypes, sc.Type)
+	}
+
 	return inputTypes, inputCols, nil
 }
 
