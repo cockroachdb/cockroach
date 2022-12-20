@@ -306,6 +306,9 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID = catid.IndexID
 
+// FamilyID is a custom type for column family ID.
+type FamilyID = catid.FamilyID
+
 // IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
 // param is one of:
 //   - FORCE_INDEX=<index_name|index_id>
@@ -345,6 +348,10 @@ type IndexFlags struct {
 	ForceZigzag    bool
 	ZigzagIndexes  []UnrestrictedName
 	ZigzagIndexIDs []IndexID
+
+	// Restrict select to the specified column family.
+	// Used by changefeed.
+	FamilyID *FamilyID
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -455,7 +462,7 @@ func (ih *IndexFlags) Check() error {
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
 	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
-		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() {
+		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() && ih.FamilyID == nil {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -528,6 +535,9 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 					needSep = true
 				}
 			}
+		}
+		if ih.FamilyID != nil {
+			ctx.Printf("FAMILY=[%d]", *ih.FamilyID)
 		}
 		ctx.WriteString("}")
 	}
