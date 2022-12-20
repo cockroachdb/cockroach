@@ -25,6 +25,7 @@ genrule(
         "//pkg/sql/catalog/fetchpb:fetchpb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
         "//pkg/sql/execinfrapb:execinfrapb_proto",
+        "//pkg/sql/sem/semenumpb:semenumpb_proto",
         "//pkg/sql/inverted:inverted_proto",
         "//pkg/sql/lex:lex_proto",
         "//pkg/sql/pgwire/pgerror:pgerror_proto",

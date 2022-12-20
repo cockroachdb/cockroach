@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -130,8 +131,8 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{2},
 					ReferencedTableID:   112,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            catpb.ForeignKeyAction_CASCADE,
-					Match:               descpb.ForeignKeyReference_PARTIAL,
+					OnDelete:            semenumpb.ForeignKeyAction_CASCADE,
+					Match:               semenumpb.Match_PARTIAL,
 					ConstraintID:        3,
 				})
 				mutable.OutboundFKs = append(mutable.OutboundFKs, descpb.ForeignKeyConstraint{
@@ -141,8 +142,8 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{1},
 					ReferencedTableID:   3,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            catpb.ForeignKeyAction_SET_DEFAULT,
-					Match:               descpb.ForeignKeyReference_SIMPLE,
+					OnDelete:            semenumpb.ForeignKeyAction_SET_DEFAULT,
+					Match:               semenumpb.Match_SIMPLE,
 					ConstraintID:        4,
 				})
 
@@ -158,8 +159,8 @@ func TestSafeMessage(t *testing.T) {
 								OriginColumnIDs:     []descpb.ColumnID{2},
 								ReferencedTableID:   2,
 								ReferencedColumnIDs: []descpb.ColumnID{3},
-								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: catpb.ForeignKeyAction_SET_NULL,
-								Match:        descpb.ForeignKeyReference_FULL,
+								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: semenumpb.ForeignKeyAction_SET_NULL,
+								Match:        semenumpb.Match_FULL,
 								ConstraintID: 5,
 							},
 						},
