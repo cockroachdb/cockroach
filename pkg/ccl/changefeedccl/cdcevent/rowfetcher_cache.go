@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -232,6 +233,16 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
 	); err != nil {
 		return nil, nil, err
+	}
+
+	//Add system columns.
+	for _, sc := range colinfo.AllSystemColumnDescs {
+		spec.FetchedColumns = append(spec.FetchedColumns, descpb.IndexFetchSpec_Column{
+			ColumnID:      sc.ID,
+			Name:          sc.Name,
+			Type:          sc.Type,
+			IsNonNullable: !sc.Nullable,
+		})
 	}
 
 	if err := rf.Init(

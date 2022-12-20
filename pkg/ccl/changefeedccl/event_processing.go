@@ -319,7 +319,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	// Get prev value, if necessary.
 	prevRow, err := func() (cdcevent.Row, error) {
-		if !c.details.Opts.GetFilters().WithDiff {
+		if keyOnly || !c.details.Opts.GetFilters().WithDiff {
 			return cdcevent.Row{}, nil
 		}
 		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), prevSchemaTimestamp, keyOnly)

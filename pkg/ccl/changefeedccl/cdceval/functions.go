@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -153,8 +154,9 @@ func cdcTimestampBuiltin(
 // cdcPrevType returns a types.T for the tuple corresponding to the
 // event descriptor.
 func cdcPrevType(desc *cdcevent.EventDescriptor) *types.T {
-	tupleTypes := make([]*types.T, 0, len(desc.ResultColumns()))
-	tupleLabels := make([]string, 0, len(desc.ResultColumns()))
+	numCols := len(desc.ResultColumns()) + len(colinfo.AllSystemColumnDescs)
+	tupleTypes := make([]*types.T, 0, numCols)
+	tupleLabels := make([]string, 0, numCols)
 
 	for _, c := range desc.ResultColumns() {
 		// TODO(yevgeniy): Handle virtual columns in cdc_prev.
@@ -162,6 +164,12 @@ func cdcPrevType(desc *cdcevent.EventDescriptor) *types.T {
 		// all named references replaced with tuple field access.
 		tupleLabels = append(tupleLabels, c.Name)
 		tupleTypes = append(tupleTypes, c.Typ)
+	}
+
+	// Add system columns.
+	for _, sc := range colinfo.AllSystemColumnDescs {
+		tupleLabels = append(tupleLabels, sc.Name)
+		tupleTypes = append(tupleTypes, sc.Type)
 	}
 	return types.MakeLabeledTuple(tupleTypes, tupleLabels)
 }

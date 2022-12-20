@@ -55,16 +55,16 @@ extra STRING,
 FAMILY main (a, status, alt),
 FAMILY extra (extra)
 )`,
-		`CREATE TABLE bar (a INT PRIMARY KEY, b string)`,
+		`CREATE TABLE rowid (a INT)`, // This table has hidden rowid primary key column.
 	)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	codec := execCfg.Codec
 	fooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
+	rowidDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "rowid")
 	statusT := fooDesc.AllColumns()[1].GetType()
 	altStatusT := fooDesc.AllColumns()[2].GetType()
 	primarySpan := fooDesc.PrimaryIndexSpan(codec)
-
 	pkEnd := primarySpan.EndKey
 	fooID := fooDesc.GetID()
 
@@ -185,11 +185,18 @@ FAMILY extra (extra)
 			presentation: append(mainColumns, rc("cdc_prev", cdcPrevType(eventDesc))),
 		},
 		{
-			name:         "full table with cdc_prev expanded",
-			desc:         fooDesc,
-			stmt:         "SELECT *, cdc_prev.* FROM foo",
-			planSpans:    roachpb.Spans{primarySpan},
-			presentation: append(mainColumns, mainColumns...),
+			name:      "full table with cdc_prev expanded",
+			desc:      fooDesc,
+			stmt:      "SELECT *, cdc_prev.* FROM foo",
+			planSpans: roachpb.Spans{primarySpan},
+			presentation: append(mainColumns, append(
+				// It would be nice to hide "system" columns from cdc_prev -- just like they are
+				// hidden from the table, unless explicitly accessed.
+				// Alas, this is a bit difficult, since cdc_prev is not a table, but a function.
+				mainColumns,
+				rc(colinfo.MVCCTimestampColumnName, colinfo.MVCCTimestampColumnType),
+				rc(colinfo.TableOIDColumnName, colinfo.TableOIDColumnDesc.Type),
+			)...),
 		},
 		{
 			name:         "full table with cdc_prev json",
@@ -233,6 +240,20 @@ FAMILY extra (extra)
 			targetFamily: "extra",
 			planSpans:    roachpb.Spans{primarySpan},
 			presentation: extraColumnsTuple,
+		},
+		{
+			name:         "hidden columns hidden",
+			desc:         rowidDesc,
+			stmt:         "SELECT * FROM rowid",
+			planSpans:    roachpb.Spans{rowidDesc.PrimaryIndexSpan(codec)},
+			presentation: colinfo.ResultColumns{rc("a", types.Int)},
+		},
+		{
+			name:         "hidden columns hidden with cdc_prev",
+			desc:         rowidDesc,
+			stmt:         "SELECT *, cdc_prev FROM rowid",
+			planSpans:    roachpb.Spans{rowidDesc.PrimaryIndexSpan(codec)},
+			presentation: colinfo.ResultColumns{rc("a", types.Int)},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
