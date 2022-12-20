@@ -1083,7 +1083,9 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, v != nil, valid)
 		if valid {
-			require.Equal(t, v, iter.Value())
+			value, err := iter.Value()
+			require.NoError(t, err)
+			require.Equal(t, v, value)
 		}
 		return v
 	}

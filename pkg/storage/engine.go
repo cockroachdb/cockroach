@@ -278,7 +278,7 @@ type MVCCIterator interface {
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
 	// Value is like UnsafeValue, but returns memory owned by the caller.
-	Value() []byte
+	Value() ([]byte, error)
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
@@ -351,7 +351,7 @@ type EngineIterator interface {
 	UnsafeValue() ([]byte, error)
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
-	Value() []byte
+	Value() ([]byte, error)
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
 	GetRawIter() *pebble.Iterator
@@ -1248,7 +1248,7 @@ func ScanIntents(
 			return nil, err
 		}
 		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
-		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+		intentBytes += int64(len(lockedKey)) + int64(len(v))
 	}
 	if err != nil {
 		return nil, err
@@ -1488,7 +1488,11 @@ func iterateOnReader(
 
 		var kv MVCCKeyValue
 		if hasPoint, _ := it.HasPointAndRange(); hasPoint {
-			kv = MVCCKeyValue{Key: it.Key(), Value: it.Value()}
+			v, err := it.Value()
+			if err != nil {
+				return err
+			}
+			kv = MVCCKeyValue{Key: it.Key(), Value: v}
 		}
 		if !it.RangeBounds().Key.Equal(rangeKeys.Bounds.Key) {
 			rangeKeys = it.RangeKeys().Clone()
@@ -1675,7 +1679,11 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 	if err != nil {
 		return err
 	}
-	if v := iter.Value(); !bytes.Equal(v, u) {
+	v, err := iter.Value()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(v, u) {
 		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
 	}
 

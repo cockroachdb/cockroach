@@ -159,10 +159,12 @@ func getRawHistoryKVs(
 				k := it.Key()
 				suffix, _, err := codec.DecodeTablePrefix(k.Key)
 				require.NoError(t, err)
+				v, err := it.Value()
+				require.NoError(t, err)
 				row := roachpb.KeyValue{
 					Key: suffix,
 					Value: roachpb.Value{
-						RawBytes: it.Value(),
+						RawBytes: v,
 					},
 				}
 				row.Value.ClearChecksum()
