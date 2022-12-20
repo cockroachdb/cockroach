@@ -571,6 +571,16 @@ CREATE TABLE foo (
 
 				require.Equal(t, expect.keyValues, slurpKeys(t, projection))
 				require.Equal(t, expect.allValues, slurpValues(t, projection))
+
+				// Repeat the same eval, pretending that versions changed.
+				// Event descriptor versions are cached, so updated and prev row share
+				// same descriptor; we have to jump through some hoops to update
+				// just one.
+				descriptorCopy := *updatedRow.EventDescriptor
+				descriptorCopy.Version++
+				updatedRow.EventDescriptor = &descriptorCopy
+				_, err = e.Eval(ctx, updatedRow, prevRow)
+				require.NoError(t, err)
 			}
 		})
 	}

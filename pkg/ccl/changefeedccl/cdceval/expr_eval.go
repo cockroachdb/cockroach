@@ -190,7 +190,7 @@ func (e *Evaluator) preparePlan(ctx context.Context, plan *sql.CDCExpressionPlan
 				e.rowEvalCtx.prevRowTuple = nil
 			}
 
-			p, err := sql.PlanCDCExpression(ctx, execCtx, e.norm.SelectStatement())
+			p, err := sql.PlanCDCExpression(ctx, execCtx, e.norm.SelectStatementForFamily())
 			if err != nil {
 				return err
 			}

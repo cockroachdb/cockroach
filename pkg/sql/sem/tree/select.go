@@ -306,6 +306,9 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID = catid.IndexID
 
+// FamilyID is a custom type for column family ID.
+type FamilyID = catid.FamilyID
+
 // IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
 // param is one of:
 //   - FORCE_INDEX=<index_name|index_id>
@@ -316,6 +319,7 @@ type IndexID = catid.IndexID
 //   - IGNORE_FOREIGN_KEYS
 //   - FORCE_ZIGZAG
 //   - FORCE_ZIGZAG=<index_name|index_id>*
+//   - FAMILY=[family_id]
 //
 // It is used optionally after a table name in SELECT statements.
 type IndexFlags struct {
@@ -345,6 +349,10 @@ type IndexFlags struct {
 	ForceZigzag    bool
 	ZigzagIndexes  []UnrestrictedName
 	ZigzagIndexIDs []IndexID
+
+	// Restrict select to the specified column family.
+	// Used by changefeed.
+	FamilyID *FamilyID
 }
 
 // ForceIndex returns true if a forced index was specified, either using a name
@@ -448,14 +456,31 @@ func (ih *IndexFlags) Check() error {
 		}
 	}
 
+	// FamilyID is currently set internally by changefeed, and is never parsed/serialized.
+	// TODO(#94900): Remove this restriction.
+	if ih.FamilyID != nil && !enableFamilyIDIndexHintForTests {
+		return pgerror.New(pgcode.InvalidParameterValue, "FAMILY is an internal hint used by CDC")
+	}
+
 	return nil
+}
+
+var enableFamilyIDIndexHintForTests = false
+
+// TestingEnableFamilyIndexHint enables the use of Family index hint
+// for tests.
+func TestingEnableFamilyIndexHint() func() {
+	enableFamilyIDIndexHintForTests = true
+	return func() {
+		enableFamilyIDIndexHintForTests = false
+	}
 }
 
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
 	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
-		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() {
+		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() && ih.FamilyID == nil {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -528,6 +553,9 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 					needSep = true
 				}
 			}
+		}
+		if ih.FamilyID != nil {
+			ctx.Printf("FAMILY=[%d]", *ih.FamilyID)
 		}
 		ctx.WriteString("}")
 	}
