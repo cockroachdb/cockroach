@@ -1,5 +1,6 @@
 name: Publish Cluster UI Pre-release
 on:
+  workflow_dispatch:
   push:
     branches:
       - master
@@ -52,10 +53,14 @@ jobs:
         fi
 
     - name: Build Cluster UI
+      if: steps.version-check.outputs.published == 'no'
       run: |
         yarn install --frozen-lockfile
-        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp _bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* pkg/ui/workspaces/db-console/src/js/
+        npm run build
 
     - name: Publish prerelease version
       if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag next --dry-run
+      run: |
+        npm publish --access public --tag next --ignore-scripts --dry-run
