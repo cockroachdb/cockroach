@@ -86,7 +86,20 @@ FAMILY extra (extra)
 	mainColumns := colinfo.ResultColumns{
 		rc("a", types.Int), rc("status", statusT), rc("alt", altStatusT),
 	}
+	// mainColumns as tuple.
+	mainColumnsTuple := colinfo.ResultColumns{
+		rc("foo", types.MakeLabeledTuple(
+			[]*types.T{types.Int, statusT, altStatusT},
+			[]string{"a", "status", "alt"}),
+		)}
+
 	extraColumns := colinfo.ResultColumns{rc("a", types.Int), rc("extra", types.String)}
+	// extraColumns as tuple.
+	extraColumnsTuple := colinfo.ResultColumns{
+		rc("foo", types.MakeLabeledTuple(
+			[]*types.T{types.Int, types.String},
+			[]string{"a", "extra"}),
+		)}
 
 	checkPresentation := func(t *testing.T, expected, found colinfo.ResultColumns) {
 		t.Helper()
@@ -120,6 +133,13 @@ FAMILY extra (extra)
 			presentation: mainColumns,
 		},
 		{
+			name:         "full table - main tuple",
+			desc:         fooDesc,
+			stmt:         "SELECT foo FROM foo",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: mainColumnsTuple,
+		},
+		{
 			name:         "full table - double star",
 			desc:         fooDesc,
 			stmt:         "SELECT *, * FROM foo",
@@ -127,12 +147,20 @@ FAMILY extra (extra)
 			presentation: append(mainColumns, mainColumns...),
 		},
 		{
-			name:         "full table  extra family",
+			name:         "full table extra family",
 			desc:         fooDesc,
 			targetFamily: "extra",
 			stmt:         "SELECT * FROM foo",
 			planSpans:    roachpb.Spans{primarySpan},
 			presentation: extraColumns,
+		},
+		{
+			name:         "full table extra family tuple",
+			desc:         fooDesc,
+			targetFamily: "extra",
+			stmt:         "SELECT foo FROM foo",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: extraColumnsTuple,
 		},
 		{
 			name:         "expression scoped to column family",
@@ -185,11 +213,26 @@ FAMILY extra (extra)
 			presentation: mainColumns,
 		},
 		{
-			name:         "can cast to standard type",
+			name:         "cast to standard type",
 			desc:         fooDesc,
 			stmt:         "SELECT 'cast'::string AS a, 'type_annotation':::string AS b FROM foo AS bar",
 			planSpans:    roachpb.Spans{primarySpan},
 			presentation: colinfo.ResultColumns{rc("a", types.String), rc("b", types.String)},
+		},
+		{
+			name:         "cast to table-typed tuple main",
+			desc:         fooDesc,
+			stmt:         "SELECT foo FROM foo",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: mainColumnsTuple,
+		},
+		{
+			name:         "cast to table-typed tuple extra",
+			desc:         fooDesc,
+			stmt:         "SELECT foo FROM foo",
+			targetFamily: "extra",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: extraColumnsTuple,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -269,7 +312,7 @@ func normalizeAndPlan(
 		func(ctx context.Context, execCtx sql.JobExecContext) error {
 			defer configSemaForCDC(execCtx.SemaCtx(), d)()
 
-			plan, err = sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatement())
+			plan, err = sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatementForFamily(d.FamilyID))
 			return err
 		},
 	); err != nil {

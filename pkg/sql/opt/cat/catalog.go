@@ -62,6 +62,12 @@ type Flags struct {
 	// cases where we don't need them (like SHOW variants), to avoid polluting the
 	// stats cache.
 	NoTableStats bool
+
+	// IndexFlag contain index flags specified when accessing table (if any).
+	IndexFlags *tree.IndexFlags
+
+	// RequiredPrivilege contains required privilege.
+	RequiredPrivilege privilege.Kind
 }
 
 // Catalog is an interface to a database catalog, exposing only the information

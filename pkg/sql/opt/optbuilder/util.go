@@ -607,7 +607,7 @@ func (b *Builder) resolveTableForMutation(
 func (b *Builder) resolveTable(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.Table, tree.TableName) {
-	ds, _, resName := b.resolveDataSource(tn, priv)
+	ds, _, resName := b.resolveDataSource(tn, cat.Flags{RequiredPrivilege: priv})
 	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(sqlerrors.NewWrongObjectTypeError(tn, "table"))
@@ -619,7 +619,7 @@ func (b *Builder) resolveTable(
 // TableRef spec. If the name does not resolve to a table, or if the current
 // user does not have the given privilege, then resolveTableRef raises an error.
 func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.Table {
-	ds, _ := b.resolveDataSourceRef(ref, priv)
+	ds, _ := b.resolveDataSourceRef(ref, cat.Flags{RequiredPrivilege: priv})
 	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(sqlerrors.NewWrongObjectTypeError(ref, "table"))
@@ -635,9 +635,8 @@ func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.T
 // If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
 // the fully qualified name.
 func (b *Builder) resolveDataSource(
-	tn *tree.TableName, priv privilege.Kind,
+	tn *tree.TableName, flags cat.Flags,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
-	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef {
 		// Avoid taking descriptor leases when we're creating a view or a
 		// function.
@@ -648,7 +647,7 @@ func (b *Builder) resolveDataSource(
 		panic(err)
 	}
 	depName := opt.DepByName(tn)
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(depName, ds, flags.RequiredPrivilege)
 
 	if b.qualifyDataSourceNamesInAST {
 		*tn = resName
@@ -663,9 +662,8 @@ func (b *Builder) resolveDataSource(
 // matches, or if the current user does not have the given privilege, then
 // resolveDataSourceFromRef raises an error.
 func (b *Builder) resolveDataSourceRef(
-	ref *tree.TableRef, priv privilege.Kind,
+	ref *tree.TableRef, flags cat.Flags,
 ) (cat.DataSource, opt.MDDepName) {
-	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef {
 		// Avoid taking table leases when we're creating a view or a function.
 		flags.AvoidDescriptorCaches = true
@@ -675,7 +673,7 @@ func (b *Builder) resolveDataSourceRef(
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
 	depName := opt.DepByID(cat.StableID(ref.TableID))
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(depName, ds, flags.RequiredPrivilege)
 	return ds, depName
 }
 
