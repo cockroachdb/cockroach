@@ -82,13 +82,14 @@ func init() {
 		genDemoCmd := &cobra.Command{
 			Use:   meta.Name,
 			Short: meta.Description,
+			Long:  meta.Description + meta.Details,
 			Args:  cobra.ArbitraryArgs,
 			RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, _ []string) error {
 				return runDemo(cmd, gen)
 			}),
 		}
-		if !meta.PublicFacing {
-			genDemoCmd.Hidden = true
+		if meta.TestInfraOnly {
+			demoCmd.Long = "THIS COMMAND WAS DEVELOPED FOR INTERNAL TESTING ONLY.\n\n" + demoCmd.Long
 		}
 		demoCmd.AddCommand(genDemoCmd)
 		genDemoCmd.Flags().AddFlagSet(genFlags)

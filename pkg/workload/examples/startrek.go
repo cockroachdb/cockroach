@@ -30,11 +30,10 @@ func init() {
 }
 
 var startrekMeta = workload.Meta{
-	Name:         `startrek`,
-	Description:  `Star Trek models episodes and quotes from the tv show`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
-	New:          func() workload.Generator { return startrek{} },
+	Name:        `startrek`,
+	Description: `Star Trek models episodes and quotes from the TV show.`,
+	Version:     `1.0.0`,
+	New:         func() workload.Generator { return startrek{} },
 }
 
 // Meta implements the Generator interface.

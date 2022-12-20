@@ -63,10 +63,9 @@ func init() {
 }
 
 var insightsMeta = workload.Meta{
-	Name:         `insights`,
-	Description:  `This workload executes queries that will be detected by insights`,
-	Version:      `1.0.0`,
-	PublicFacing: false,
+	Name:        `insights`,
+	Description: `This workload executes queries that will be detected by the database insights in the web UI.`,
+	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &insights{}
 		g.flags.FlagSet = pflag.NewFlagSet(`insights`, pflag.ContinueOnError)
