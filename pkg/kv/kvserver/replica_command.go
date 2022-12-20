@@ -3223,6 +3223,8 @@ func (r *relocationArgs) finalRelocationTargets() []roachpb.ReplicationTarget {
 type RelocateOneOptions interface {
 	// Allocator returns the allocator for the store this replica is on.
 	Allocator() allocatorimpl.Allocator
+	// StorePool returns the store's configured store pool.
+	StorePool() storepool.AllocatorStorePool
 	// SpanConfig returns the span configuration for the range with start key.
 	SpanConfig(ctx context.Context, startKey roachpb.RKey) (roachpb.SpanConfig, error)
 	// LeaseHolder returns the descriptor of the replica which holds the lease
@@ -3237,6 +3239,11 @@ type replicaRelocateOneOptions struct {
 // Allocator returns the allocator for the store this replica is on.
 func (roo *replicaRelocateOneOptions) Allocator() allocatorimpl.Allocator {
 	return roo.store.allocator
+}
+
+// StorePool returns the store's configured store pool.
+func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
+	return roo.store.cfg.StorePool
 }
 
 // SpanConfig returns the span configuration for the range with start key.
@@ -3289,7 +3296,7 @@ func RelocateOne(
 	}
 
 	allocator := options.Allocator()
-	storePool := allocator.StorePool
+	storePool := options.StorePool()
 
 	conf, err := options.SpanConfig(ctx, desc.StartKey)
 	if err != nil {
@@ -3339,7 +3346,7 @@ func RelocateOne(
 
 		additionTarget, _ = allocator.AllocateTargetFromList(
 			ctx,
-			allocator.StorePool,
+			storePool,
 			candidateStoreList,
 			conf,
 			existingVoters,
@@ -3408,12 +3415,12 @@ func RelocateOne(
 		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
-		candidatesStoreList, _, _ := allocator.StorePool.GetStoreListForTargets(
+		candidatesStoreList, _, _ := storePool.GetStoreListForTargets(
 			args.targetsToRemove(), storepool.StoreFilterNone,
 		)
 		targetStore, _, err := allocator.RemoveTarget(
 			ctx,
-			allocator.StorePool,
+			storePool,
 			conf,
 			candidatesStoreList,
 			existingVoters,
@@ -3683,7 +3690,7 @@ func (r *Replica) adminScatter(
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc := r.Desc()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
-			ctx, r.store.allocator.StorePool, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
+			ctx, r.store.cfg.StorePool, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID

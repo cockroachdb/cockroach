@@ -611,7 +611,7 @@ func (rq *replicateQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
 	desc, conf := repl.DescAndSpanConfig()
-	action, priority := rq.allocator.ComputeAction(ctx, rq.allocator.StorePool, conf, desc)
+	action, priority := rq.allocator.ComputeAction(ctx, rq.store.cfg.StorePool, conf, desc)
 
 	if action == allocatorimpl.AllocatorNoop {
 		log.KvDistribution.VEventf(ctx, 2, "no action to take")
@@ -627,7 +627,7 @@ func (rq *replicateQueue) shouldQueue(
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
 		_, _, _, ok := rq.allocator.RebalanceVoter(
 			ctx,
-			rq.allocator.StorePool,
+			rq.store.cfg.StorePool,
 			conf,
 			repl.RaftStatus(),
 			voterReplicas,
@@ -642,7 +642,7 @@ func (rq *replicateQueue) shouldQueue(
 		}
 		_, _, _, ok = rq.allocator.RebalanceNonVoter(
 			ctx,
-			rq.allocator.StorePool,
+			rq.store.cfg.StorePool,
 			conf,
 			repl.RaftStatus(),
 			voterReplicas,
@@ -662,7 +662,7 @@ func (rq *replicateQueue) shouldQueue(
 	if rq.canTransferLeaseFrom(ctx, repl) &&
 		rq.allocator.ShouldTransferLease(
 			ctx,
-			rq.allocator.StorePool,
+			rq.store.cfg.StorePool,
 			conf,
 			voterReplicas,
 			repl,
@@ -983,7 +983,7 @@ func (rq *replicateQueue) processOneChange(
 
 	// Update the local storepool state to reflect the successful application
 	// of the change.
-	change.Op.applyImpact(rq.allocator.StorePool)
+	change.Op.applyImpact(rq.store.cfg.StorePool)
 
 	// Requeue the replica if it meets the criteria in ShouldRequeue.
 	return rq.ShouldRequeue(ctx, change), nil
@@ -1039,7 +1039,7 @@ func (rq *replicateQueue) PlanOneChange(
 	// unavailability; see:
 	_ = execChangeReplicasTxn
 
-	action, allocatorPrio := rq.allocator.ComputeAction(ctx, rq.allocator.StorePool, conf, desc)
+	action, allocatorPrio := rq.allocator.ComputeAction(ctx, rq.store.cfg.StorePool, conf, desc)
 	log.KvDistribution.VEventf(ctx, 1, "next replica action: %s", action)
 
 	var err error
@@ -1252,7 +1252,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
 	// the slice, the allocator would not be guaranteed to pick a replica that
 	// fills the gap removeRepl leaves once it's gone.
-	newVoter, details, err := rq.allocator.AllocateVoter(ctx, rq.allocator.StorePool, conf, remainingLiveVoters, remainingLiveNonVoters, replicaStatus)
+	newVoter, details, err := rq.allocator.AllocateVoter(ctx, rq.store.cfg.StorePool, conf, remainingLiveVoters, remainingLiveNonVoters, replicaStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -1284,7 +1284,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 			oldPlusNewReplicas,
 			roachpb.ReplicaDescriptor{NodeID: newVoter.NodeID, StoreID: newVoter.StoreID},
 		)
-		_, _, err := rq.allocator.AllocateVoter(ctx, rq.allocator.StorePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
+		_, _, err := rq.allocator.AllocateVoter(ctx, rq.store.cfg.StorePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
 		if err != nil {
 			// It does not seem possible to go to the next odd replica state. Note
 			// that AllocateVoter returns an allocatorError (a PurgatoryError)
@@ -1365,7 +1365,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 	existingNonVoters := desc.Replicas().NonVoterDescriptors()
 	effects := effectBuilder{}
 
-	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, rq.allocator.StorePool, conf, liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
+	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, rq.store.cfg.StorePool, conf, liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -1488,7 +1488,7 @@ func (rq *replicateQueue) findRemoveVoter(
 
 	return rq.allocator.RemoveVoter(
 		ctx,
-		rq.allocator.StorePool,
+		rq.store.cfg.StorePool,
 		zone,
 		candidates,
 		existingVoters,
@@ -1531,7 +1531,7 @@ func (rq *replicateQueue) maybeTransferLeaseAwayTarget(
 	// a replica needs to be removed for constraint violations.
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
-		rq.allocator.StorePool,
+		rq.store.cfg.StorePool,
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
@@ -1611,7 +1611,7 @@ func (rq *replicateQueue) removeNonVoter(
 	_, conf := repl.DescAndSpanConfig()
 	removeNonVoter, details, err := rq.allocator.RemoveNonVoter(
 		ctx,
-		rq.allocator.StorePool,
+		rq.store.cfg.StorePool,
 		conf,
 		existingNonVoters,
 		existingVoters,
@@ -1771,7 +1771,7 @@ func (rq *replicateQueue) considerRebalance(
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)
 	addTarget, removeTarget, details, ok := rq.allocator.RebalanceVoter(
 		ctx,
-		rq.allocator.StorePool,
+		rq.store.cfg.StorePool,
 		conf,
 		repl.RaftStatus(),
 		existingVoters,
@@ -1786,7 +1786,7 @@ func (rq *replicateQueue) considerRebalance(
 		log.KvDistribution.Infof(ctx, "no suitable rebalance target for voters")
 		addTarget, removeTarget, details, ok = rq.allocator.RebalanceNonVoter(
 			ctx,
-			rq.allocator.StorePool,
+			rq.store.cfg.StorePool,
 			conf,
 			repl.RaftStatus(),
 			existingVoters,
@@ -1970,7 +1970,7 @@ func (rq *replicateQueue) shedLease(
 	// so only consider the `VoterDescriptors` replicas.
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
-		rq.allocator.StorePool,
+		rq.store.cfg.StorePool,
 		conf,
 		desc.Replicas().VoterDescriptors(),
 		repl,
@@ -2047,7 +2047,7 @@ func (rq *replicateQueue) TransferLease(
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 
-	rq.allocator.StorePool.UpdateLocalStoresAfterLeaseTransfer(source, target, rangeQPS)
+	rq.store.cfg.StorePool.UpdateLocalStoresAfterLeaseTransfer(source, target, rangeQPS)
 	rq.lastLeaseTransfer.Store(timeutil.Now())
 	return nil
 }

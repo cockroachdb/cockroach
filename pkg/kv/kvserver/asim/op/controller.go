@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -47,6 +48,7 @@ type Controller interface {
 type controller struct {
 	changer   state.Changer
 	allocator allocatorimpl.Allocator
+	storePool storepool.AllocatorStorePool
 	settings  *config.SimulationSettings
 
 	pending   *priorityQueue
@@ -56,11 +58,15 @@ type controller struct {
 
 // NewController returns a new Controller implementation.
 func NewController(
-	changer state.Changer, allocator allocatorimpl.Allocator, settings *config.SimulationSettings,
+	changer state.Changer,
+	allocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
+	settings *config.SimulationSettings,
 ) Controller {
 	return &controller{
 		changer:   changer,
 		allocator: allocator,
+		storePool: storePool,
 		settings:  settings,
 		pending:   &priorityQueue{items: []*queuedOp{}},
 		tickets:   make(map[DispatchedTicket]ControlledOperation),
@@ -142,7 +148,7 @@ func (c *controller) processRelocateRange(
 	ctx context.Context, tick time.Time, s state.State, ro *RelocateRangeOp,
 ) error {
 	rng := s.RangeFor(ro.key)
-	options := SimRelocateOneOptions{allocator: c.allocator, state: s}
+	options := SimRelocateOneOptions{allocator: c.allocator, storePool: c.storePool, state: s}
 	ops, leaseTarget, err := kvserver.RelocateOne(
 		ctx,
 		rng.Descriptor(),
