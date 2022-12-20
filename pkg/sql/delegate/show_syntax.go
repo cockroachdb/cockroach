@@ -27,17 +27,17 @@ import (
 func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, error) {
 	// Construct an equivalent SELECT query that produces the results:
 	//
-	// SELECT @1 AS field, @2 AS message
+	// SELECT f AS field, m AS message
 	//   FROM (VALUES
 	//           ('file',     'foo.go'),
 	//           ('line',     '123'),
 	//           ('function', 'blix()'),
 	//           ('detail',   'some details'),
-	//           ('hint',     'some hints'))
+	//           ('hint',     'some hints')) v(f, m)
 	//
 	var query bytes.Buffer
 	fmt.Fprintf(
-		&query, "SELECT @1 AS %s, @2 AS %s FROM (VALUES ",
+		&query, "SELECT f AS %s, m AS %s FROM (VALUES ",
 		colinfo.ShowSyntaxColumns[0].Name, colinfo.ShowSyntaxColumns[1].Name,
 	)
 
@@ -64,7 +64,7 @@ func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, erro
 		},
 		nil, /* reportErr */
 	)
-	query.WriteByte(')')
+	query.WriteString(") v(f, m)")
 
 	return parse(query.String())
 }

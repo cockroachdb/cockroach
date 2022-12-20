@@ -8,7 +8,7 @@ query error statement source "DELETE FROM a" does not return any columns
 SELECT 1 FROM [DELETE FROM a]
 
 query II
-SELECT @1, a+b FROM [INSERT INTO a VALUES (1,2) RETURNING b,a]
+SELECT b, a+b FROM [INSERT INTO a VALUES (1,2) RETURNING b,a]
 ----
 2 3
 

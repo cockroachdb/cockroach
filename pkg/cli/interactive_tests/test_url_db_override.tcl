@@ -50,12 +50,12 @@ end_test
 
 
 start_test "Check that the database flag overrides the db if URL is already set."
-spawn $argv sql --url "postgresql://root@localhost:26257/system?sslmode=disable"  -e "select length(@1) as l, @1 as db from \[show database\]" --format=csv
+spawn $argv sql --url "postgresql://root@localhost:26257/system?sslmode=disable"  -e "select length(database) as l, database as db from \[show database\]" --format=csv
 eexpect "l,db"
 eexpect "6,system"
 eexpect eof
 
-spawn $argv sql --url "postgresql://root@localhost:26257/system?sslmode=disable" --database test -e "select length(@1) as l, @1 as db from \[show database\]" --format=csv
+spawn $argv sql --url "postgresql://root@localhost:26257/system?sslmode=disable" --database test -e "select length(database) as l, database as db from \[show database\]" --format=csv
 eexpect "l,db"
 eexpect "4,test"
 eexpect eof
@@ -63,12 +63,12 @@ end_test
 
 start_test "Check that the database flag does override the database if none was present in the URL."
 # Use empty path.
-spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --database system -e "select length(@1) as l, @1 as db from \[show database\]" --format=csv
+spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --database system -e "select length(database) as l, database as db from \[show database\]" --format=csv
 eexpect "l,db"
 eexpect "6,system"
 eexpect eof
 # Use path = /
-spawn $argv sql --url "postgresql://root@localhost:26257/?sslmode=disable" --database system -e "select length(@1) as l, @1 as db from \[show database\]" --format=csv
+spawn $argv sql --url "postgresql://root@localhost:26257/?sslmode=disable" --database system -e "select length(database) as l, database as db from \[show database\]" --format=csv
 eexpect "l,db"
 eexpect "6,system"
 eexpect eof
@@ -84,12 +84,12 @@ end_test
 set ::env(COCKROACH_INSECURE) "false"
 
 start_test "Check that the user flag  override the user if URL is already set."
-spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=disable" -e "select length(@1) as l, @1 as u from \[show session_user\]" --format=csv
+spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=disable" -e "select length(session_user) as l, session_user as u from \[show session_user\]" --format=csv
 eexpect "l,u"
 eexpect "4,test"
 eexpect eof
 
-spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --user test -e "select length(@1) as l, @1 as u from \[show session_user\]" --format=csv
+spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --user test -e "select length(session_user) as l, session_user as u from \[show session_user\]" --format=csv
 eexpect "l,u"
 eexpect "4,test"
 eexpect eof

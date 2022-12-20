@@ -333,7 +333,7 @@ a
 
 # From a column ordinal.
 query T
-SELECT @1[1] FROM (SELECT ARRAY['a','b','c'] AS a)
+SELECT a[1] FROM (SELECT ARRAY['a','b','c'] AS a)
 ----
 a
 

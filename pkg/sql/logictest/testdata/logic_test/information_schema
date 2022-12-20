@@ -4741,6 +4741,7 @@ WHERE
     );
 ----
 variable                                              value
+allow_ordinal_column_references                       off
 allow_prepare_as_opt_plan                             off
 alter_primary_region_super_region_override            off
 application_name                                      ·

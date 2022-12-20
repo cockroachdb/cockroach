@@ -387,7 +387,7 @@ statement ok
 CREATE UNIQUE INDEX idx_t_hash_b ON t_hash (b) USING HASH WITH BUCKET_COUNT = 5;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_hash]
+SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
 ----
 CREATE TABLE public.t_hash (
   pk INT8 NOT NULL,
