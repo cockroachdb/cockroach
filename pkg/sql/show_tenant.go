@@ -36,6 +36,7 @@ const (
 	initReplication   tenantStatus = "INITIALIZING REPLICATION"
 	replicating       tenantStatus = "REPLICATING"
 	replicationPaused tenantStatus = "REPLICATION PAUSED"
+	cuttingOver       tenantStatus = "REPLICATION CUTTING OVER"
 	// Users should not see this status normally.
 	replicationUnknownFormat tenantStatus = "REPLICATION UNKNOWN (%s)"
 )
@@ -171,7 +172,12 @@ func (n *showTenantNode) startExec(params runParams) error {
 				// replication did not complete the initial scan yet.
 				n.tenantStatus = initReplication
 			} else {
-				n.tenantStatus = replicating
+				progress := n.replicationInfo.IngestionProgress
+				if progress != nil && !progress.CutoverTime.IsEmpty() {
+					n.tenantStatus = cuttingOver
+				} else {
+					n.tenantStatus = replicating
+				}
 			}
 		case jobs.StatusPaused:
 			n.tenantStatus = replicationPaused
@@ -214,6 +220,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	replicationJobId := tree.NewDInt(tree.DInt(n.tenantInfo.TenantReplicationJobID))
 	replicatedTimestamp := tree.DNull
 	retainedTimestamp := tree.DNull
+	cutoverTimestamp := tree.DNull
 
 	if n.replicationInfo != nil {
 		sourceTenantName = tree.NewDString(string(n.replicationInfo.IngestionDetails.SourceTenantName))
@@ -234,6 +241,10 @@ func (n *showTenantNode) Values() tree.Datums {
 		// (it's not exactly ceil but close enough).
 		retainedCeil := n.protectedTimestamp.GoTime().Truncate(time.Microsecond).Add(time.Microsecond)
 		retainedTimestamp, _ = tree.MakeDTimestampTZ(retainedCeil, time.Nanosecond)
+		progress := n.replicationInfo.IngestionProgress
+		if progress != nil && !progress.CutoverTime.IsEmpty() {
+			cutoverTimestamp = eval.TimestampToDecimalDatum(progress.CutoverTime)
+		}
 	}
 
 	return tree.Datums{
@@ -245,6 +256,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		replicationJobId,
 		replicatedTimestamp,
 		retainedTimestamp,
+		cutoverTimestamp,
 	}
 }
 
