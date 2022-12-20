@@ -63,6 +63,19 @@ export const filterTransactionInsights = (
   } else {
     filteredTransactions = filteredTransactions.filter(txn => !isInternal(txn));
   }
+  if (filters.workloadInsightType && filters.workloadInsightType.length > 0) {
+    const workloadInsightTypes = filters.workloadInsightType
+      .toString()
+      .split(",");
+
+    filteredTransactions = filteredTransactions.filter(transaction =>
+      workloadInsightTypes.some(workloadType =>
+        transaction.insights.some(
+          txnInsight => workloadType === txnInsight.label,
+        ),
+      ),
+    );
+  }
   if (search) {
     search = search.toLowerCase();
 
@@ -203,6 +216,19 @@ export const filterStatementInsights = (
   } else {
     filteredStatements = filteredStatements.filter(
       stmt => !isInternal(stmt.application),
+    );
+  }
+  if (filters.workloadInsightType && filters.workloadInsightType.length > 0) {
+    const workloadInsightTypes = filters.workloadInsightType
+      .toString()
+      .split(",");
+
+    filteredStatements = filteredStatements.filter(statement =>
+      workloadInsightTypes.some(workloadType =>
+        statement.insights.some(
+          stmtInsight => workloadType === stmtInsight.label,
+        ),
+      ),
     );
   }
   if (search) {

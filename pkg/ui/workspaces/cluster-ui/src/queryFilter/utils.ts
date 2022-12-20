@@ -47,6 +47,7 @@ export function getRecentStatementFiltersFromURL(
 
   const appFilters = {
     app: filters.app,
+    executionStatus: filters.executionStatus,
   };
 
   // If every entry is null, there were no active stmt filters. Return null.
@@ -63,6 +64,7 @@ export function getRecentTransactionFiltersFromURL(
 
   const appFilters = {
     app: filters.app,
+    executionStatus: filters.executionStatus,
   };
 
   // If every entry is null, there were no active stmt filters. Return null.
@@ -79,6 +81,7 @@ export function getWorkloadInsightEventFiltersFromURL(
 
   const appFilters = {
     app: filters.app,
+    workloadInsightType: filters.workloadInsightType,
   };
 
   // If every entry is null, there were no active filters. Return null.

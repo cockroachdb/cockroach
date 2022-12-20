@@ -8,8 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RouteComponentProps } from "react-router";
-import { RecentExecutions, SessionsResponse } from "src/recentExecutions/types";
+import {
+  ExecutionStatus,
+  RecentExecutions,
+  SessionsResponse,
+} from "src/recentExecutions/types";
 import { ClusterLocksResponse } from "src/api";
 import {
   getRecentExecutionsFromSessions,
@@ -32,12 +35,18 @@ export const selectRecentExecutionsCombiner = (
   return {
     statements: execs.statements.map(s => ({
       ...s,
-      status: waitTimeByTxnID[s.transactionID] != null ? "Waiting" : s.status,
+      status:
+        waitTimeByTxnID[s.transactionID] != null
+          ? ExecutionStatus.Waiting
+          : s.status,
       timeSpentWaiting: waitTimeByTxnID[s.transactionID],
     })),
     transactions: execs.transactions.map(t => ({
       ...t,
-      status: waitTimeByTxnID[t.transactionID] != null ? "Waiting" : t.status,
+      status:
+        waitTimeByTxnID[t.transactionID] != null
+          ? ExecutionStatus.Waiting
+          : t.status,
       timeSpentWaiting: waitTimeByTxnID[t.transactionID],
     })),
   };

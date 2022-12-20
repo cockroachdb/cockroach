@@ -20,6 +20,7 @@ import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
 import {
   calculateActiveFilters,
+  defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
@@ -56,6 +57,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export type TransactionInsightsViewStateProps = {
   transactions: MergedTxnInsightEvent[];
   transactionsError: Error | null;
+  insightTypes: string[];
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
   isLoading?: boolean;
@@ -83,6 +85,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     sortSetting,
     transactions,
     transactionsError,
+    insightTypes,
     filters,
     timeScale,
     isLoading,
@@ -194,7 +197,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
 
   const clearFilters = () =>
     onSubmitFilters({
-      app: "",
+      app: defaultFilters.app,
+      workloadInsightType: defaultFilters.workloadInsightType,
     });
 
   const transactionInsights = transactions;
@@ -228,6 +232,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
             onSubmitFilters={onSubmitFilters}
             appNames={apps}
             filters={filters}
+            workloadInsightTypes={insightTypes.sort()}
+            showWorkloadInsightTypes={true}
           />
         </PageConfigItem>
         <PageConfigItem className={commonStyles("separator")}>
@@ -265,7 +271,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredTransactions?.length === 0
+                      (search?.length > 0 || countActiveFilters > 0) &&
+                      filteredTransactions?.length === 0
                     }
                   />
                 }
