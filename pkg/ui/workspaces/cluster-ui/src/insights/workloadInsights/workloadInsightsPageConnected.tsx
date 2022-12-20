@@ -32,6 +32,7 @@ import {
   selectExecutionInsights,
   selectExecutionInsightsError,
   selectExecutionInsightsLoading,
+  selectInsightTypes,
 } from "src/store/insights/statementInsights";
 import {
   actions as transactionInsights,
@@ -52,6 +53,7 @@ const transactionMapStateToProps = (
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
   transactionsError: selectTransactionInsightsError(state),
+  insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   timeScale: selectTimeScale(state),
@@ -64,6 +66,7 @@ const statementMapStateToProps = (
 ): StatementInsightsViewStateProps => ({
   statements: selectExecutionInsights(state),
   statementsError: selectExecutionInsightsError(state),
+  insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),

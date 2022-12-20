@@ -113,7 +113,8 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
           {`The status of the ${execType}'s execution. If
           "Preparing", the ${execType} is being parsed and planned.
           If "Executing", the ${execType} is currently being
-          executed.`}
+          executed. If "Waiting", the ${execType} is currently
+          experiencing contention.`}
         </p>
       }
     >
