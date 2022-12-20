@@ -22,13 +22,12 @@ import {
   limitText,
   NO_SAMPLES_FOUND,
 } from "src/util";
-import { InsightExecEnum, FlattenedStmtInsightEvent } from "src/insights";
+import { InsightExecEnum, StmtInsightEvent } from "src/insights";
 import {
   InsightCell,
   insightsTableTitles,
   StatementDetailsLink,
 } from "../util";
-import { FlattenedStmtInsights } from "src/api";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
@@ -38,55 +37,55 @@ import { TimeScale } from "../../../timeScaleDropdown";
 const cx = classNames.bind(styles);
 
 interface StatementInsightsTable {
-  data: FlattenedStmtInsights;
+  data: StmtInsightEvent[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;
   renderNoResult?: React.ReactNode;
-  visibleColumns: ColumnDescriptor<FlattenedStmtInsightEvent>[];
+  visibleColumns: ColumnDescriptor<StmtInsightEvent>[];
 }
 
 export function makeStatementInsightsColumns(
   setTimeScale: (ts: TimeScale) => void,
-): ColumnDescriptor<FlattenedStmtInsightEvent>[] {
+): ColumnDescriptor<StmtInsightEvent>[] {
   const execType = InsightExecEnum.STATEMENT;
   return [
     {
       name: "latestExecutionID",
       title: insightsTableTitles.latestExecutionID(execType),
-      cell: (item: FlattenedStmtInsightEvent) => (
+      cell: (item: StmtInsightEvent) => (
         <Link to={`/insights/statement/${item.statementExecutionID}`}>
           {String(item.statementExecutionID)}
         </Link>
       ),
-      sort: (item: FlattenedStmtInsightEvent) => item.statementExecutionID,
+      sort: (item: StmtInsightEvent) => item.statementExecutionID,
       alwaysShow: true,
     },
     {
       name: "statementFingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: FlattenedStmtInsightEvent) =>
+      cell: (item: StmtInsightEvent) =>
         StatementDetailsLink(item, setTimeScale),
-      sort: (item: FlattenedStmtInsightEvent) => item.statementFingerprintID,
+      sort: (item: StmtInsightEvent) => item.statementFingerprintID,
       showByDefault: true,
     },
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: (item: FlattenedStmtInsightEvent) => (
+      cell: (item: StmtInsightEvent) => (
         <Tooltip placement="bottom" content={item.query}>
           <span className={cx("queries-row")}>{limitText(item.query, 50)}</span>
         </Tooltip>
       ),
-      sort: (item: FlattenedStmtInsightEvent) => item.query,
+      sort: (item: StmtInsightEvent) => item.query,
       showByDefault: true,
     },
     {
       name: "insights",
       title: insightsTableTitles.insights(execType),
-      cell: (item: FlattenedStmtInsightEvent) =>
+      cell: (item: StmtInsightEvent) =>
         item.insights ? item.insights.map(insight => InsightCell(insight)) : "",
-      sort: (item: FlattenedStmtInsightEvent) =>
+      sort: (item: StmtInsightEvent) =>
         item.insights
           ? item.insights.map(insight => insight.label).toString()
           : "",
@@ -95,80 +94,78 @@ export function makeStatementInsightsColumns(
     {
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
-      cell: (item: FlattenedStmtInsightEvent) =>
+      cell: (item: StmtInsightEvent) =>
         item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
-      sort: (item: FlattenedStmtInsightEvent) => item.startTime.unix(),
+      sort: (item: StmtInsightEvent) => item.startTime.unix(),
       showByDefault: true,
     },
     {
       name: "elapsedTime",
       title: insightsTableTitles.elapsedTime(execType),
-      cell: (item: FlattenedStmtInsightEvent) =>
-        Duration(item.elapsedTimeMillis * 1e6),
-      sort: (item: FlattenedStmtInsightEvent) => item.elapsedTimeMillis,
+      cell: (item: StmtInsightEvent) => Duration(item.elapsedTimeMillis * 1e6),
+      sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
       showByDefault: true,
     },
     {
       name: "userName",
       title: insightsTableTitles.username(execType),
-      cell: (item: FlattenedStmtInsightEvent) => item.username,
-      sort: (item: FlattenedStmtInsightEvent) => item.username,
+      cell: (item: StmtInsightEvent) => item.username,
+      sort: (item: StmtInsightEvent) => item.username,
       showByDefault: true,
     },
     {
       name: "applicationName",
       title: insightsTableTitles.applicationName(execType),
-      cell: (item: FlattenedStmtInsightEvent) => item.application,
-      sort: (item: FlattenedStmtInsightEvent) => item.application,
+      cell: (item: StmtInsightEvent) => item.application,
+      sort: (item: StmtInsightEvent) => item.application,
       showByDefault: true,
     },
     {
       name: "rowsProcessed",
       title: insightsTableTitles.rowsProcessed(execType),
       className: cx("statements-table__col-rows-read"),
-      cell: (item: FlattenedStmtInsightEvent) =>
+      cell: (item: StmtInsightEvent) =>
         `${Count(item.rowsRead)} Reads / ${Count(item.rowsRead)} Writes`,
-      sort: (item: FlattenedStmtInsightEvent) =>
-        item.rowsRead + item.rowsWritten,
+      sort: (item: StmtInsightEvent) => item.rowsRead + item.rowsWritten,
       showByDefault: true,
     },
     {
       name: "retries",
       title: insightsTableTitles.numRetries(execType),
-      cell: (item: FlattenedStmtInsightEvent) => item.retries,
-      sort: (item: FlattenedStmtInsightEvent) => item.retries,
+      cell: (item: StmtInsightEvent) => item.retries,
+      sort: (item: StmtInsightEvent) => item.retries,
       showByDefault: false,
     },
     {
       name: "contention",
       title: insightsTableTitles.contention(execType),
-      cell: (item: FlattenedStmtInsightEvent) =>
-        !item.totalContentionTime
+      cell: (item: StmtInsightEvent) =>
+        !item.contentionTime
           ? NO_SAMPLES_FOUND
-          : Duration(item.totalContentionTime.asMilliseconds() * 1e6),
-      sort: (item: FlattenedStmtInsightEvent) =>
-        item.totalContentionTime?.asMilliseconds() ?? -1,
+          : Duration(item.contentionTime.asMilliseconds() * 1e6),
+      sort: (item: StmtInsightEvent) =>
+        item.contentionTime?.asMilliseconds() ?? -1,
       showByDefault: false,
     },
     {
       name: "isFullScan",
       title: insightsTableTitles.isFullScan(execType),
-      cell: (item: FlattenedStmtInsightEvent) => String(item.isFullScan),
-      sort: (item: FlattenedStmtInsightEvent) => String(item.isFullScan),
+      cell: (item: StmtInsightEvent) => String(item.isFullScan),
+      sort: (item: StmtInsightEvent) => String(item.isFullScan),
       showByDefault: false,
     },
     {
       name: "transactionFingerprintID",
       title: insightsTableTitles.fingerprintID(InsightExecEnum.TRANSACTION),
-      cell: (item: FlattenedStmtInsightEvent) => item.transactionFingerprintID,
-      sort: (item: FlattenedStmtInsightEvent) => item.transactionFingerprintID,
+      cell: (item: StmtInsightEvent) => item.transactionFingerprintID,
+      sort: (item: StmtInsightEvent) => item.transactionFingerprintID,
       showByDefault: false,
     },
     {
       name: "transactionID",
       title: insightsTableTitles.latestExecutionID(InsightExecEnum.TRANSACTION),
-      cell: (item: FlattenedStmtInsightEvent) => item.transactionExecutionID,
-      sort: (item: FlattenedStmtInsightEvent) => item.transactionExecutionID,
+      cell: (item: StmtInsightEvent) => item.transactionExecutionID,
+      sort: (item: StmtInsightEvent) => item.transactionExecutionID,
       showByDefault: false,
     },
   ];

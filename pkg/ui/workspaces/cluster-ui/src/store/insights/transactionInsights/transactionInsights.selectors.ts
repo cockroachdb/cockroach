@@ -14,16 +14,15 @@ import { selectTxnInsightsCombiner } from "src/selectors/insightsCommon.selector
 import { localStorageSelector } from "src/store/utils/selectors";
 
 const selectTransactionInsightsData = (state: AppState) =>
-  state.adminUI.transactionInsights?.data;
+  state.adminUI.txnInsights?.data;
 
 export const selectTransactionInsights = createSelector(
-  (state: AppState) => state.adminUI.executionInsights?.data,
   selectTransactionInsightsData,
   selectTxnInsightsCombiner,
 );
 
 export const selectTransactionInsightsError = (state: AppState) =>
-  state.adminUI.transactionInsights?.lastError;
+  state.adminUI.txnInsights?.lastError;
 
 export const selectSortSetting = createSelector(
   localStorageSelector,
@@ -36,5 +35,4 @@ export const selectFilters = createSelector(
 );
 
 export const selectTransactionInsightsLoading = (state: AppState) =>
-  !state.adminUI.transactionInsights?.valid ||
-  state.adminUI.transactionInsights?.inFlight;
+  !state.adminUI.txnInsights?.valid || state.adminUI.txnInsights?.inFlight;

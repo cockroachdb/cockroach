@@ -23,7 +23,7 @@ import {
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
-import { TxnContentionInsightDetailsRequest } from "src/api";
+import { TxnContentionReq } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 
 const mapStateToProps = (
@@ -42,9 +42,7 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): TransactionInsightDetailsDispatchProps => ({
-  refreshTransactionInsightDetails: (
-    req: TxnContentionInsightDetailsRequest,
-  ) => {
+  refreshTransactionInsightDetails: (req: TxnContentionReq) => {
     dispatch(actions.refresh(req));
   },
   setTimeScale: (ts: TimeScale) => {

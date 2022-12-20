@@ -15,7 +15,7 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
-import { refreshExecutionInsights } from "src/redux/apiReducers";
+import { refreshStmtInsights } from "src/redux/apiReducers";
 import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
@@ -26,13 +26,13 @@ const mapStateToProps = (
 ): StatementInsightDetailsStateProps => {
   return {
     insightEventDetails: selectStatementInsightDetails(state, props),
-    insightError: state.cachedData?.executionInsights?.lastError,
+    insightError: state.cachedData?.stmtInsights?.lastError,
     timeScale: selectTimeScale(state),
   };
 };
 
 const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
-  refreshStatementInsights: refreshExecutionInsights,
+  refreshStatementInsights: refreshStmtInsights,
   setTimeScale: setGlobalTimeScaleAction,
 };
 

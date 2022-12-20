@@ -17,7 +17,6 @@ import {
   insightType,
   SchemaInsightEventFilters,
   SortSetting,
-  selectFlattenedStmtInsightsCombiner,
   selectID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightsCombiner,
@@ -41,16 +40,10 @@ export const sortSettingLocalSetting = new LocalSetting<
 });
 
 export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => {
-    if (state.cachedData.executionInsights?.valid) {
-      return state.cachedData.executionInsights?.data;
-    } else return null;
-  },
-  (state: AdminUIState) => {
-    if (state.cachedData.transactionInsights?.valid) {
-      return state.cachedData.transactionInsights?.data;
-    } else return null;
-  },
+  (state: AdminUIState) =>
+    state.cachedData.transactionInsights?.valid
+      ? state.cachedData.transactionInsights?.data
+      : null,
   selectTxnInsightsCombiner,
 );
 
@@ -72,7 +65,7 @@ const selectTxnContentionInsightDetails = createSelector(
 );
 
 const selectTxnInsightFromExecInsight = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
+  (state: AdminUIState) => state.cachedData.stmtInsights?.data,
   selectID,
   (execInsights, execID) => {
     return execInsights?.find(txn => txn.transactionExecutionID === execID);
@@ -96,18 +89,17 @@ export const selectTransactionInsightDetailsError = createSelector(
   },
 );
 
-export const selectExecutionInsightsLoading = (state: AdminUIState) =>
-  !state.cachedData.executionInsights?.valid &&
-  state.cachedData.executionInsights?.inFlight;
+export const selectStmtInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.stmtInsights?.valid &&
+  state.cachedData.stmtInsights?.inFlight;
 
-export const selectExecutionInsights = createSelector((state: AdminUIState) => {
-  if (state.cachedData?.executionInsights?.valid) {
-    return state.cachedData?.executionInsights?.data;
-  } else return null;
-}, selectFlattenedStmtInsightsCombiner);
+export const selectStmtInsights = (state: AdminUIState) =>
+  state.cachedData?.stmtInsights?.valid
+    ? state.cachedData?.stmtInsights?.data
+    : null;
 
 export const selectStatementInsightDetails = createSelector(
-  selectExecutionInsights,
+  selectStmtInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
 );

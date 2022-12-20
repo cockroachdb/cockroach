@@ -190,8 +190,6 @@ export function formatStmtInsights(
       contentionEvents: row.contention_events,
       // This is the total stmt contention.
       contentionTime: row.contention ? moment.duration(row.contention) : null,
-      causes: row.causes,
-      problem: row.problem,
       indexRecommendations: row.index_recommendations,
       insights: getInsightsFromProblemsAndCauses(
         row.problem,

@@ -17,7 +17,7 @@ import "antd/lib/row/style";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { getMatchParamByName } from "src/util/query";
-import { TxnContentionInsightDetailsRequest } from "src/api";
+import { TxnContentionReq } from "src/api";
 import { TxnInsightDetails } from "../types";
 
 import { commonStyles } from "src/common";
@@ -36,9 +36,7 @@ export interface TransactionInsightDetailsStateProps {
 }
 
 export interface TransactionInsightDetailsDispatchProps {
-  refreshTransactionInsightDetails: (
-    req: TxnContentionInsightDetailsRequest,
-  ) => void;
+  refreshTransactionInsightDetails: (req: TxnContentionReq) => void;
   setTimeScale: (ts: TimeScale) => void;
 }
 

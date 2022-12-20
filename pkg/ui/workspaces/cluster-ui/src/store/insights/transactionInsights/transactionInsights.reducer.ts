@@ -10,12 +10,12 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
-import { TxnContentionInsightEvent } from "src/insights";
-import { ExecutionInsightsRequest } from "../../../api";
+import { TxnInsightEvent } from "src/insights";
 import { UpdateTimeScalePayload } from "../../sqlStats";
+import { StmtInsightsReq } from "src/api/stmtInsightsApi";
 
 export type TransactionInsightsState = {
-  data: TxnContentionInsightEvent[];
+  data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
@@ -32,7 +32,7 @@ const transactionInsightsSlice = createSlice({
   name: `${DOMAIN_NAME}/transactionInsightsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<TxnContentionInsightEvent[]>) => {
+    received: (state, action: PayloadAction<TxnInsightEvent[]>) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
@@ -46,8 +46,8 @@ const transactionInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
-    request: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
+    refresh: (_, _action: PayloadAction<StmtInsightsReq>) => {},
+    request: (_, _action: PayloadAction<StmtInsightsReq>) => {},
     updateTimeScale: (
       state,
       _action: PayloadAction<UpdateTimeScalePayload>,

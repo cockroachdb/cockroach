@@ -19,19 +19,19 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
-import { FlattenedStmtInsightEvent } from "../types";
+import { StmtInsightEvent } from "../types";
 import { InsightsError } from "../insightsErrorComponent";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
-import { ExecutionInsightsRequest } from "../../api";
 import { executionInsightsRequestFromTimeScale } from "../utils";
 import { TimeScale } from "../../timeScaleDropdown";
+import { StmtInsightsReq } from "src/api";
+import LoadingError from "../../sqlActivity/errorComponent";
 
 // Styles
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
-import LoadingError from "../../sqlActivity/errorComponent";
 
 const cx = classNames.bind(insightsDetailsStyles);
 
@@ -40,14 +40,14 @@ enum TabKeysEnum {
   EXPLAIN = "explain",
 }
 export interface StatementInsightDetailsStateProps {
-  insightEventDetails: FlattenedStmtInsightEvent;
+  insightEventDetails: StmtInsightEvent;
   insightError: Error | null;
   isTenant?: boolean;
   timeScale?: TimeScale;
 }
 
 export interface StatementInsightDetailsDispatchProps {
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => void;
+  refreshStatementInsights: (req: StmtInsightsReq) => void;
   setTimeScale: (ts: TimeScale) => void;
 }
 
