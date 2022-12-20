@@ -293,6 +293,7 @@ var TenantColumnsWithReplication = ResultColumns{
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
 	{Name: "retained_time", Typ: types.TimestampTZ},
+	{Name: "cutover_time", Typ: types.Decimal},
 }
 
 // RangesNoLeases is the schema for crdb_internal.ranges_no_leases.
