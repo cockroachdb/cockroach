@@ -28,7 +28,6 @@ import {
   insightsTableTitles,
   StatementDetailsLink,
 } from "../util";
-import { FlattenedStmtInsights } from "src/api";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
@@ -38,7 +37,7 @@ import { TimeScale } from "../../../timeScaleDropdown";
 const cx = classNames.bind(styles);
 
 interface StatementInsightsTable {
-  data: FlattenedStmtInsights;
+  data: FlattenedStmtInsightEvent[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;

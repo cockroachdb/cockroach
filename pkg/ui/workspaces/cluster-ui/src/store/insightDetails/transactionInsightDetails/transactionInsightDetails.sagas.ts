@@ -13,15 +13,15 @@ import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
 import { actions } from "./transactionInsightDetails.reducer";
 import {
   getTransactionInsightEventDetailsState,
-  TxnContentionInsightDetailsRequest,
-} from "src/api/insightsApi";
+  TxnContentionReq,
+} from "src/api/txnInsightsApi";
 import { TxnContentionInsightDetails } from "src/insights";
 import { PayloadAction } from "@reduxjs/toolkit";
 import { ErrorWithKey } from "src/api";
 import { actions as stmtInsightActions } from "../../insights/statementInsights";
 
 export function* refreshTransactionInsightDetailsSaga(
-  action: PayloadAction<TxnContentionInsightDetailsRequest>,
+  action: PayloadAction<TxnContentionReq>,
 ) {
   yield put(actions.request(action.payload));
   yield put(
@@ -33,7 +33,7 @@ export function* refreshTransactionInsightDetailsSaga(
 }
 
 export function* requestTransactionInsightDetailsSaga(
-  action: PayloadAction<TxnContentionInsightDetailsRequest>,
+  action: PayloadAction<TxnContentionReq>,
 ): any {
   try {
     const result = yield call(

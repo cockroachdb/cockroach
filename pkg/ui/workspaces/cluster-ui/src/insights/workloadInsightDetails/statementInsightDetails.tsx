@@ -23,15 +23,15 @@ import { FlattenedStmtInsightEvent } from "../types";
 import { InsightsError } from "../insightsErrorComponent";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
-import { ExecutionInsightsRequest } from "../../api";
 import { executionInsightsRequestFromTimeScale } from "../utils";
 import { TimeScale } from "../../timeScaleDropdown";
+import { StmtInsightsReq } from "src/api";
+import LoadingError from "../../sqlActivity/errorComponent";
 
 // Styles
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
-import LoadingError from "../../sqlActivity/errorComponent";
 
 const cx = classNames.bind(insightsDetailsStyles);
 
@@ -47,7 +47,7 @@ export interface StatementInsightDetailsStateProps {
 }
 
 export interface StatementInsightDetailsDispatchProps {
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => void;
+  refreshStatementInsights: (req: StmtInsightsReq) => void;
   setTimeScale: (ts: TimeScale) => void;
 }
 

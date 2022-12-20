@@ -31,12 +31,9 @@ import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
 import {
-  ExecutionInsightsRequest,
-  FlattenedStmtInsights,
-} from "src/api/insightsApi";
-import {
   executionInsightsRequestFromTimeScale,
   filterStatementInsights,
+  FlattenedStmtInsightEvent,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
@@ -51,6 +48,7 @@ import {
   TimeScale,
   TimeScaleDropdown,
 } from "../../../timeScaleDropdown";
+import { StmtInsightsReq } from "src/api/stmtInsightsApi";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -60,7 +58,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type StatementInsightsViewStateProps = {
-  statements: FlattenedStmtInsights;
+  statements: FlattenedStmtInsightEvent[];
   statementsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
@@ -73,7 +71,7 @@ export type StatementInsightsViewStateProps = {
 export type StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => void;
+  refreshStatementInsights: (req: StmtInsightsReq) => void;
   onColumnsChange: (selectedColumns: string[]) => void;
   setTimeScale: (ts: TimeScale) => void;
 };

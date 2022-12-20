@@ -10,10 +10,6 @@
 
 import { limitStringArray, unset } from "src/util";
 import {
-  ExecutionInsightsRequest,
-  FlattenedStmtInsights,
-} from "src/api/insightsApi";
-import {
   ExecutionDetails,
   FlattenedStmtInsightEvent,
   getInsightFromCause,
@@ -32,6 +28,7 @@ import {
   WorkloadInsightEventFilters,
 } from "./types";
 import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import { StmtInsightsReq } from "src/api";
 
 export const filterTransactionInsights = (
   transactions: MergedTxnInsightEvent[] | null,
@@ -171,11 +168,11 @@ export function insightType(type: InsightType): string {
 }
 
 export const filterStatementInsights = (
-  statements: FlattenedStmtInsights | null,
+  statements: FlattenedStmtInsightEvent[] | null,
   filters: WorkloadInsightEventFilters,
   internalAppNamePrefix: string,
   search?: string,
-): FlattenedStmtInsights => {
+): FlattenedStmtInsightEvent[] => {
   if (statements == null) return [];
 
   let filteredStatements = statements;
@@ -218,7 +215,7 @@ export const filterStatementInsights = (
 };
 
 export function getAppsFromStatementInsights(
-  statements: FlattenedStmtInsights | null,
+  statements: FlattenedStmtInsightEvent[] | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (statements == null || statements?.length === 0) return [];
@@ -524,7 +521,7 @@ export function dedupInsights(insights: Insight[]): Insight[] {
 
 export function executionInsightsRequestFromTimeScale(
   ts: TimeScale,
-): ExecutionInsightsRequest {
+): StmtInsightsReq {
   if (ts === null) return {};
   const [startTime, endTime] = toDateRange(ts);
   return {

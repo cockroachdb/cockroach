@@ -18,16 +18,16 @@ import {
 } from "src/selectors/insightsCommon.selectors";
 import { selectID } from "src/selectors/common";
 
-export const selectExecutionInsights = createSelector(
-  (state: AppState) => state.adminUI.executionInsights?.data,
+export const selectStmtInsights = createSelector(
+  (state: AppState) => state.adminUI.stmtInsights?.data,
   selectFlattenedStmtInsightsCombiner,
 );
 
-export const selectExecutionInsightsError = (state: AppState) =>
-  state.adminUI.executionInsights?.lastError;
+export const selectStmtInsightsError = (state: AppState) =>
+  state.adminUI.stmtInsights?.lastError;
 
-export const selectStatementInsightDetails = createSelector(
-  selectExecutionInsights,
+export const selectStmtInsightDetails = createSelector(
+  selectStmtInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
 );
@@ -40,6 +40,5 @@ export const selectColumns = createSelector(
       : null,
 );
 
-export const selectExecutionInsightsLoading = (state: AppState) =>
-  !state.adminUI.executionInsights?.valid ||
-  state.adminUI.executionInsights?.inFlight;
+export const selectStmtInsightsLoading = (state: AppState) =>
+  !state.adminUI.stmtInsights?.valid || state.adminUI.stmtInsights?.inFlight;

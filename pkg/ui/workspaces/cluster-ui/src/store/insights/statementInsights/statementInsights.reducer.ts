@@ -11,17 +11,17 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { TxnInsightEvent } from "src/insights";
-import { ExecutionInsightsRequest } from "../../../api";
+import { StmtInsightsReq } from "src/api";
 import { UpdateTimeScalePayload } from "../../sqlStats";
 
-export type ExecutionInsightsState = {
+export type StmtInsightsState = {
   data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
 };
 
-const initialState: ExecutionInsightsState = {
+const initialState: StmtInsightsState = {
   data: null,
   lastError: null,
   valid: false,
@@ -46,8 +46,8 @@ const statementInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
-    request: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
+    refresh: (_, _action: PayloadAction<StmtInsightsReq>) => {},
+    request: (_, _action: PayloadAction<StmtInsightsReq>) => {},
     updateTimeScale: (
       state,
       _action: PayloadAction<UpdateTimeScalePayload>,

@@ -151,12 +151,12 @@ export type FlattenedStmtInsightEvent = StatementInsightEvent & {
   transactionFingerprintID: string;
   implicitTxn: boolean;
   sessionID: string;
-  databaseName: string;
   username: string;
   lastRetryReason?: string;
   priority: string;
   retries: number;
   application: string;
+  databaseName: string;
 };
 
 export type Insight = {

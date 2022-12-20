@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
   mergeTxnInsightDetails,
   flattenTxnInsightsToStmts,
@@ -27,12 +26,12 @@ import {
 
 export const selectFlattenedStmtInsightsCombiner = (
   executionInsights: TxnInsightEvent[],
-): FlattenedStmtInsights => {
+): FlattenedStmtInsightEvent[] => {
   return flattenTxnInsightsToStmts(executionInsights);
 };
 
 export const selectStatementInsightDetailsCombiner = (
-  statementInsights: FlattenedStmtInsights,
+  statementInsights: FlattenedStmtInsightEvent[],
   executionID: string,
 ): FlattenedStmtInsightEvent | null => {
   if (!statementInsights || statementInsights?.length < 1 || !executionID) {
