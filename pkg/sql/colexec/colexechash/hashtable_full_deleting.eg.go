@@ -6038,55 +6038,28 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 			}
 		}
 	case HashTableDeletingProbeMode:
-		if ht.Same != nil {
-			toCheckSlice := ht.ProbeScratch.ToCheck
-			_ = toCheckSlice[nToCheck-1]
-			for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
-				//gcassert:bce
-				toCheck := toCheckSlice[toCheckPos]
-				if !ht.ProbeScratch.differs[toCheck] {
-					keyID := ht.ProbeScratch.ToCheckID[toCheck]
-					if !ht.Visited[keyID] {
-						ht.ProbeScratch.HeadID[toCheck] = keyID
-						ht.Visited[keyID] = true
-					} else {
-						if keyID != 0 {
-							//gcassert:bce
-							toCheckSlice[nDiffers] = toCheck
-							nDiffers++
-						}
-					}
+		toCheckSlice := ht.ProbeScratch.ToCheck
+		_ = toCheckSlice[nToCheck-1]
+		for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+			//gcassert:bce
+			toCheck := toCheckSlice[toCheckPos]
+			if !ht.ProbeScratch.differs[toCheck] {
+				keyID := ht.ProbeScratch.ToCheckID[toCheck]
+				if !ht.Visited[keyID] {
+					ht.ProbeScratch.HeadID[toCheck] = keyID
+					ht.Visited[keyID] = true
 				} else {
-					ht.ProbeScratch.differs[toCheck] = false
-					//gcassert:bce
-					toCheckSlice[nDiffers] = toCheck
-					nDiffers++
-				}
-			}
-		} else {
-			toCheckSlice := ht.ProbeScratch.ToCheck
-			_ = toCheckSlice[nToCheck-1]
-			for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
-				//gcassert:bce
-				toCheck := toCheckSlice[toCheckPos]
-				if !ht.ProbeScratch.differs[toCheck] {
-					keyID := ht.ProbeScratch.ToCheckID[toCheck]
-					if !ht.Visited[keyID] {
-						ht.ProbeScratch.HeadID[toCheck] = keyID
-						ht.Visited[keyID] = true
-					} else {
-						if keyID != 0 {
-							//gcassert:bce
-							toCheckSlice[nDiffers] = toCheck
-							nDiffers++
-						}
+					if keyID != 0 {
+						//gcassert:bce
+						toCheckSlice[nDiffers] = toCheck
+						nDiffers++
 					}
-				} else {
-					ht.ProbeScratch.differs[toCheck] = false
-					//gcassert:bce
-					toCheckSlice[nDiffers] = toCheck
-					nDiffers++
 				}
+			} else {
+				ht.ProbeScratch.differs[toCheck] = false
+				//gcassert:bce
+				toCheckSlice[nDiffers] = toCheck
+				nDiffers++
 			}
 		}
 	default:
