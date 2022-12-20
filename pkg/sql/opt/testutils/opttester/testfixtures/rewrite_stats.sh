@@ -19,7 +19,7 @@ DATABASE=$2
 FILENAME=$3
 
 tables=($($COCKROACH_BINARY sql --insecure --format=tsv \
- -e "USE $DATABASE; SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;"))
+ -e "USE $DATABASE; SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;" | tail -n +2))
 tables=("${tables[@]:1}")
 
 echo "Writing statistics to $FILENAME"
@@ -38,7 +38,7 @@ do
     # 4. Remove the double quote at the end of the JSON.
     # 5. Append '; to the last line.
     $COCKROACH_BINARY sql --insecure --format=tsv \
-     -e "USE $DATABASE; SELECT jsonb_pretty(statistics) FROM [SHOW STATISTICS USING JSON FOR TABLE \"$table\"];" \
+     -e "USE $DATABASE; SELECT jsonb_pretty(statistics) FROM [SHOW STATISTICS USING JSON FOR TABLE \"$table\"];" | tail -n +2 \
      | sed '1d' | sed 's/""/"/g' | sed 's/^"\[/\[/g' | sed 's/\]"$/\]/g' | sed '$ s/$/'\'';/' >> $FILENAME
     echo "----" >> $FILENAME
     echo "" >> $FILENAME

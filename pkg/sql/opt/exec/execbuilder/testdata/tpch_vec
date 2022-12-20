@@ -20906,17 +20906,16 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
 ----
 │
 └ Node 1
-  └ *colexec.topKSorter
+  └ *colexec.limitOp
     └ *colexec.hashAggregator
-      └ *colexecjoin.hashJoiner
-        ├ *colexecjoin.mergeJoinInnerOp
-        │ ├ *colfetcher.ColBatchScan
-        │ └ *colexecjoin.mergeJoinLeftSemiOp
-        │   ├ *colfetcher.ColBatchScan
-        │   └ *colexecsel.selGTFloat64Float64ConstOp
-        │     └ *colexec.orderedAggregator
-        │       └ *colfetcher.ColBatchScan
-        └ *colfetcher.ColBatchScan
+      └ *rowexec.joinReader
+        └ *rowexec.joinReader
+          └ *colexec.sortOp
+            └ *colexecjoin.mergeJoinLeftSemiOp
+              ├ *colfetcher.ColBatchScan
+              └ *colexecsel.selGTFloat64Float64ConstOp
+                └ *colexec.orderedAggregator
+                  └ *colfetcher.ColBatchScan
 
 # Query 19
 query T

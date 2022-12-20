@@ -184,3 +184,39 @@
 (TopK $input:* $private:*)
 =>
 (GeneratePartialOrderTopK $input $private)
+
+# GenerateStreamingGroupByLimitOrderingHint generates streaming group-by and
+# distinct-on aggregations with an ordering matching the ordering specified in
+# the Limit Op. The goal is to eliminate the need for a TopK operation.
+[GenerateStreamingGroupByLimitOrderingHint, Explore]
+(Limit
+    $aggregation:(GroupBy | DistinctOn
+        $input:*
+        $aggs:*
+        $private:* & (IsCanonicalGroupBy $private)
+    )
+    (Const $limit:* & (IsPositiveInt $limit))
+    $ordering:* &
+        (Let
+            (
+                $groupingCols
+                $newOrdering
+                $ok
+            ):(GroupingColsClosureOverlappingOrdering
+                $input
+                $private
+                $ordering
+            )
+            $ok
+        )
+)
+=>
+(GenerateStreamingGroupByLimitOrderingHint
+    (Root)
+    $aggregation
+    $input
+    $aggs
+    $private
+    $groupingCols
+    $newOrdering
+)
