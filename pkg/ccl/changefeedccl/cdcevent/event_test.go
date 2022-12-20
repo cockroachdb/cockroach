@@ -376,7 +376,7 @@ CREATE TABLE foo (
 					expect, tc.expectOnlyCFamily = tc.expectOnlyCFamily[0], tc.expectOnlyCFamily[1:]
 				}
 				updatedRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp(), tc.keyOnly)
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), tc.keyOnly)
 
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, ErrUnwatchedFamily)
@@ -393,7 +393,7 @@ CREATE TABLE foo (
 				}
 
 				prevRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, v.Timestamp(), tc.keyOnly)
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, PrevRow, v.Timestamp(), tc.keyOnly)
 				require.NoError(t, err)
 
 				// prevRow always has key columns initialized.
@@ -593,7 +593,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 					expect, tc.expectECFamily = tc.expectECFamily[0], tc.expectECFamily[1:]
 				}
 				updatedRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp(), false)
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), false)
 
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, ErrUnwatchedFamily)
