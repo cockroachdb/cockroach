@@ -828,6 +828,9 @@ func (u *sqlSymUnion) functionObj() tree.FuncObj {
 func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
     return u.val.(tree.FuncObjs)
 }
+func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
+  return u.val.(*tree.TenantReplicationOptions)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -929,7 +932,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
-%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETURN RETURNS RETRY REVISION_HISTORY
+%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETENTION RETURNING RETURN RETURNS RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
@@ -1265,6 +1268,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
+%type <*tree.TenantReplicationOptions> opt_with_tenant_replication_options tenant_replication_options tenant_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
@@ -3175,7 +3179,7 @@ backup_options:
   }
 | REVISION_HISTORY '=' a_expr
   {
-		$$.val = &tree.BackupOptions{CaptureRevisionHistory: $3.expr()}
+    $$.val = &tree.BackupOptions{CaptureRevisionHistory: $3.expr()}
   }
 | DETACHED
   {
@@ -3183,7 +3187,7 @@ backup_options:
   }
 | DETACHED '=' TRUE
   {
-		$$.val = &tree.BackupOptions{Detached: tree.MakeDBool(true)}
+    $$.val = &tree.BackupOptions{Detached: tree.MakeDBool(true)}
   }
 | DETACHED '=' FALSE
   {
@@ -4146,15 +4150,51 @@ create_tenant_stmt:
   {
     $$.val = &tree.CreateTenant{Name: tree.Name($3)}
   }
-| CREATE TENANT name FROM REPLICATION OF name ON string_or_placeholder
+| CREATE TENANT name FROM REPLICATION OF name ON string_or_placeholder opt_with_tenant_replication_options
   {
     $$.val = &tree.CreateTenantFromReplication{
       Name: tree.Name($3),
       ReplicationSourceTenantName: tree.Name($7),
       ReplicationSourceAddress: $9.expr(),
+      Options: *$10.tenantReplicationOptions(),
     }
   }
 | CREATE TENANT error // SHOW HELP: CREATE TENANT
+
+// Optional tenant replication options.
+opt_with_tenant_replication_options:
+  WITH tenant_replication_options_list
+  {
+    $$.val = $2.tenantReplicationOptions()
+  }
+| WITH OPTIONS '(' tenant_replication_options_list ')'
+  {
+    $$.val = $4.tenantReplicationOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.TenantReplicationOptions{}
+  }
+
+tenant_replication_options_list:
+  // Require at least one option
+  tenant_replication_options
+  {
+    $$.val = $1.tenantReplicationOptions()
+  }
+| tenant_replication_options_list ',' tenant_replication_options
+  {
+    if err := $1.tenantReplicationOptions().CombineWith($3.tenantReplicationOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid tenant replication options.
+tenant_replication_options:
+  RETENTION '=' string_or_placeholder
+  {
+    $$.val = &tree.TenantReplicationOptions{Retention: $3.expr()}
+  }
 
 // %Help: CREATE SCHEDULE
 // %Category: Group
@@ -15803,6 +15843,7 @@ unreserved_keyword:
 | RESTRICT
 | RESTRICTED
 | RESUME
+| RETENTION
 | RETRY
 | RETURN
 | RETURNS

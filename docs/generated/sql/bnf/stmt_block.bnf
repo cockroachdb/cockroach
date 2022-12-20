@@ -588,7 +588,7 @@ create_external_connection_stmt ::=
 
 create_tenant_stmt ::=
 	'CREATE' 'TENANT' name
-	| 'CREATE' 'TENANT' name 'FROM' 'REPLICATION' 'OF' name 'ON' string_or_placeholder
+	| 'CREATE' 'TENANT' name 'FROM' 'REPLICATION' 'OF' name 'ON' string_or_placeholder opt_with_tenant_replication_options
 
 create_schedule_stmt ::=
 	create_schedule_for_changefeed_stmt
@@ -1299,6 +1299,7 @@ unreserved_keyword ::=
 	| 'RESTRICT'
 	| 'RESTRICTED'
 	| 'RESUME'
+	| 'RETENTION'
 	| 'RETRY'
 	| 'RETURN'
 	| 'RETURNS'
@@ -1735,6 +1736,11 @@ changefeed_target_expr ::=
 label_spec ::=
 	string_or_placeholder
 	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
+opt_with_tenant_replication_options ::=
+	'WITH' tenant_replication_options_list
+	| 'WITH' 'OPTIONS' '(' tenant_replication_options_list ')'
+	| 
 
 create_schedule_for_changefeed_stmt ::=
 	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
@@ -2457,6 +2463,9 @@ target_elem ::=
 	| a_expr
 	| '*'
 
+tenant_replication_options_list ::=
+	( tenant_replication_options ) ( ( ',' tenant_replication_options ) )*
+
 schedule_label_spec ::=
 	label_spec
 	| 
@@ -3029,6 +3038,9 @@ target_name ::=
 bare_col_label ::=
 	'identifier'
 	| bare_label_keywords
+
+tenant_replication_options ::=
+	'RETENTION' '=' string_or_placeholder
 
 common_table_expr ::=
 	table_alias_name opt_col_def_list_no_types 'AS' '(' preparable_stmt ')'
