@@ -10,6 +10,8 @@ package ingest
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,11 +145,15 @@ func TestEventIngestionIntegration(t *testing.T) {
 		},
 	)
 	defer s.Stopper().Stop(ctx)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(),
-		"TestPersistEvents", url.User(username.RootUser),
-	)
-	defer cleanupFunc()
+	pgURL, cleanupFunc, err := sqlutils.PGUrlE(
+		s.ServingSQLAddr(), "TestPersistEvents", url.User(username.RootUser))
+	pgURL.Path = "defaultdb"
+	pgURL.RawQuery = "sslmode=disable"
+	obsDB, err := sql.Open("postgres", pgURL.String())
+	defer func() {
+		_ = obsDB.Close()
+		cleanupFunc()
+	}()
 
 	config, err := pgxpool.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -165,18 +172,135 @@ func TestEventIngestionIntegration(t *testing.T) {
 	// Wait for the ingester to connect.
 	<-connected
 
-	// Perform a schema change and check that we get an event.
-	_, err = sqlDB.Exec("create table t()")
-	require.NoError(t, err)
+	t.Run("cluster_events", func(t *testing.T) {
+		// Perform a schema change and check that we get an event.
+		_, err = sqlDB.Exec("create table t()")
+		require.NoError(t, err)
 
-	// Wait for an event to be ingested.
-	testutils.SucceedsSoon(t, func() error {
-		r := pool.QueryRow(ctx, "select count(1) from cluster_events where event_type='create_table'")
-		var count int
-		require.NoError(t, r.Scan(&count))
-		if count < 1 {
-			return errors.Newf("no events yet")
-		}
-		return nil
+		// Wait for an event to be ingested.
+		testutils.SucceedsSoon(t, func() error {
+			r := pool.QueryRow(ctx, "select count(1) from cluster_events where event_type='create_table'")
+			var count int
+			require.NoError(t, r.Scan(&count))
+			if count < 1 {
+				return errors.Newf("no events yet")
+			}
+			return nil
+		})
 	})
+
+	t.Run("execution_insights", func(t *testing.T) {
+		// Generate an execution insight and check that we get an event.
+		_, err = sqlDB.Exec("set application_name = $1", t.Name())
+		_, err = sqlDB.Exec("set cluster setting sql.insights.latency_threshold = '100ms'")
+		_, err = sqlDB.Exec("create table test (a int)")
+		_, err = sqlDB.Exec("insert into test (a) values (1)")
+		// The 10th running of this statement produces an index recommendation.
+		for i := 0; i < 10; i++ {
+			_, err = sqlDB.Exec("select pg_sleep(0.2), * from test order by a")
+		}
+		require.NoError(t, err)
+
+		// Wait for the events to be ingested.
+		testutils.SucceedsSoon(t, func() error {
+			r := pool.QueryRow(ctx, "select count(*) from execution_insights where app_name=$1", t.Name())
+			var count int
+			if err = r.Scan(&count); err != nil {
+				return err
+			}
+			if count < 10 {
+				return errors.Newf("not enough events yet")
+			}
+
+			var expected, actual insightRow
+
+			insightsQuery := "select * from %s where app_name=$1 order by start_time desc limit 1"
+			s := sqlDB.QueryRow(fmt.Sprintf(insightsQuery, "crdb_internal.cluster_execution_insights"), t.Name())
+			require.NoError(t, s.Scan(expected.fields()...))
+			// TODO(todd): Say why.
+			expected.contention = sql.NullString{}
+			expected.contentionEvents = sql.NullString{}
+
+			// TODO(todd): Yuck. It would be nice if Scan could skip fields or something.
+			var timestamp time.Time
+			var id string
+
+			r = obsDB.QueryRow(fmt.Sprintf(insightsQuery, "execution_insights"), t.Name())
+			var fields []interface{}
+			fields = append(fields, &timestamp)
+			fields = append(fields, &id)
+			fields = append(fields, actual.fields()...)
+			err = r.Scan(fields...)
+			// TODO(abarganier): We need to make sure all columns are populated. Also, lastRetryReason
+			// seems to be behaving unexpectedly with its sql.NullString value. One is valid, one isn't.
+			// Why is this?
+			require.NoError(t, err)
+			require.Equal(t, expected, actual)
+
+			fmt.Printf("expected: %v\n\n\n\n", expected)
+			fmt.Printf("actual: %v\n", actual)
+			return nil
+		})
+	})
+}
+
+// TODO(todd): Use the insight proto instead?
+type insightRow struct {
+	sessionID                string
+	transactionID            string
+	transactionFingerprintID []byte
+	statementID              string
+	statementFingerprintID   []byte
+	problem                  string
+	causes                   pq.StringArray
+	query                    string
+	status                   string
+	startTime                time.Time
+	endTime                  time.Time
+	fullScan                 bool
+	userName                 string
+	appName                  string
+	databaseName             string
+	planGist                 string
+	rowsRead                 int64
+	rowsWritten              int64
+	priority                 string
+	retries                  int64
+	lastRetryReason          sql.NullString
+	execNodeIDs              pq.Int64Array
+	contention               sql.NullString
+	contentionEvents         sql.NullString
+	indexRecommendations     pq.StringArray
+	implicitTransaction      bool
+}
+
+func (r *insightRow) fields() []interface{} {
+	return []interface{}{
+		&r.sessionID,
+		&r.transactionID,
+		&r.transactionFingerprintID,
+		&r.statementID,
+		&r.statementFingerprintID,
+		&r.problem,
+		&r.causes,
+		&r.query,
+		&r.status,
+		&r.startTime,
+		&r.endTime,
+		&r.fullScan,
+		&r.userName,
+		&r.appName,
+		&r.databaseName,
+		&r.planGist,
+		&r.rowsRead,
+		&r.rowsWritten,
+		&r.priority,
+		&r.retries,
+		&r.lastRetryReason,
+		&r.execNodeIDs,
+		&r.contention,
+		&r.contentionEvents,
+		&r.indexRecommendations,
+		&r.implicitTransaction,
+	}
 }

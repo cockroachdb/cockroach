@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -335,7 +336,7 @@ func startConnExecutor(
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
 	}
 
-	s := NewServer(cfg, pool)
+	s := NewServer(cfg, pool, &obs.EventsServer{}) // FIXME(todd): Huh?
 	buf := NewStmtBuf()
 	syncResults := make(chan []resWithPos, 1)
 	resultChannel := newAsyncIEResultChannel()

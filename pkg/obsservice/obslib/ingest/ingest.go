@@ -10,6 +10,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -17,11 +18,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	otlogs "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/lib/pq"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -48,6 +54,7 @@ func (e *EventIngester) StartIngestEvents(
 func (e *EventIngester) ingestEvents(ctx context.Context, addr string, db *pgxpool.Pool) {
 	// TODO(andrei): recover from connection errors.
 	// TODO(andrei): use certs for secure clusters.
+	log.Shoutf(ctx, logpb.Severity_INFO, "DIALING")
 	conn, err := grpc.DialContext(ctx, addr,
 		grpc.WithBlock(), // block until the connection is established
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -58,8 +65,10 @@ func (e *EventIngester) ingestEvents(ctx context.Context, addr string, db *pgxpo
 		_ = conn.Close() // nolint:grpcconnclose
 	}()
 	log.Infof(ctx, "Ingesting events from %s.", addr)
+	log.Shoutf(ctx, logpb.Severity_INFO, "Ingesting events from %s.", addr)
 
 	c := obspb.NewObsClient(conn)
+	log.Shoutf(ctx, logpb.Severity_INFO, "Subscribing")
 	stream, err := c.SubscribeToEvents(ctx,
 		&obspb.SubscribeToEventsRequest{
 			Identity: "Obs Service",
@@ -67,6 +76,7 @@ func (e *EventIngester) ingestEvents(ctx context.Context, addr string, db *pgxpo
 	if err != nil {
 		panic(fmt.Sprintf("SubscribeToEvents call to %s failed: %s", addr, err))
 	}
+	log.Shoutf(ctx, logpb.Severity_INFO, "Subscribed")
 
 	for {
 		events, err := stream.Recv()
@@ -78,8 +88,8 @@ func (e *EventIngester) ingestEvents(ctx context.Context, addr string, db *pgxpo
 			// connection.
 			return
 		}
-		if log.V(3) {
-			log.Infof(ctx, "received events: %s", events.String())
+		if true { //log.V(3) {
+			log.Shoutf(ctx, logpb.Severity_INFO, "received events: %s", events.String())
 		}
 		err = persistEvents(ctx, events.ResourceLogs, db)
 		if err != nil {
@@ -119,6 +129,11 @@ func persistEvents(ctx context.Context, events []*otlogs.ResourceLogs, db *pgxpo
 			case string(obspb.EventlogEvent):
 				if err := persistEventlogEvents(ctx, scope, clusterID, nodeID, db); err != nil {
 					log.Warningf(ctx, "error persisting events: %s", err)
+					return err
+				}
+			case string(obspb.ExecutionInsightEvent):
+				if err := persistExecutionInsightEvents(ctx, scope, clusterID, nodeID, db); err != nil {
+					log.Shoutf(ctx, logpb.Severity_ERROR, "error persisting events: %s", err)
 					return err
 				}
 			}
@@ -185,4 +200,106 @@ func persistEventlogEvents(
 		}
 	}
 	return nil
+}
+
+func persistExecutionInsightEvents(
+	ctx context.Context, events otlogs.ScopeLogs, id uuid.UUID, id2 roachpb.NodeID, db *pgxpool.Pool,
+) error {
+	for _, event := range events.LogRecords {
+		insight := insights.Insight{}
+
+		err := protoutil.Unmarshal(event.Body.GetBytesValue(), &insight)
+
+		_, err = db.Exec(context.Background(),
+			`INSERT INTO execution_insights (
+                            timestamp,
+                            session_id,
+                            txn_id,
+                            txn_fingerprint_id,
+                            stmt_id,
+                            stmt_fingerprint_id,
+                            problem,
+                            causes,
+                            query,
+                            status,
+                            start_time,
+                            end_time,
+                            full_scan,
+                            user_name,
+                            app_name,
+                            database_name,
+                            plan_gist,
+                            rows_read,
+                            rows_written,
+                            priority,
+                            retries,
+                            last_retry_reason,
+                            exec_node_ids,
+                            contention,
+                            contention_events,
+                            index_recommendations,
+                            implicit_txn
+                          )
+VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27 );`,
+			timeutil.Unix(0, int64(event.TimeUnixNano)),
+			insight.Session.ID.String(),
+			insight.Transaction.ID.String(),
+			encodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)),
+			hex.EncodeToString(insight.Statement.ID.GetBytes()),
+			encodeUint64ToBytes(uint64(insight.Statement.FingerprintID)),
+			insight.Problem.String(),
+			pq.Array(encodeCauses(insight.Causes)),
+			insight.Statement.Query,
+			insight.Statement.Status.String(),
+			timeutil.Unix(0, insight.Statement.StartTime.UnixNano()),
+			timeutil.Unix(0, insight.Statement.EndTime.UnixNano()),
+			insight.Statement.FullScan,
+			insight.Statement.User,
+			insight.Statement.ApplicationName,
+			insight.Statement.Database,
+			insight.Statement.PlanGist,
+			insight.Statement.RowsRead,
+			insight.Statement.RowsWritten,
+			insight.Transaction.UserPriority,
+			insight.Statement.Retries,
+			encodeAutoRetryReason(insight.Statement.AutoRetryReason),
+			pq.Array(insight.Statement.Nodes),
+			nil, // TODO(todd): insight.Statement.Contention,
+			nil, // TODO(todd): insight.Statement.ContentionEvents,
+			pq.Array(encodeIndexRecommendations(insight.Statement.IndexRecommendations)),
+			insight.Transaction.ImplicitTxn,
+		)
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func encodeAutoRetryReason(autoRetryReason string) *string {
+	if autoRetryReason == "" {
+		return nil
+	}
+	return &autoRetryReason
+}
+
+func encodeCauses(causes []insights.Cause) []string {
+	out := make([]string, len(causes))
+	for i := 0; i < len(causes); i++ {
+		out[i] = causes[i].String()
+	}
+	return out
+}
+
+func encodeIndexRecommendations(recommendations []string) []string {
+	if recommendations == nil {
+		return []string{}
+	}
+	return recommendations
+}
+
+func encodeUint64ToBytes(id uint64) []byte {
+	result := make([]byte, 0, 8)
+	return encoding.EncodeUint64Ascending(result, id)
 }

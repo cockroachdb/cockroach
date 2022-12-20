@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -452,7 +453,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
-		insights.New(st, insights.NewMetrics()).Writer,
+		insights.New(st, insights.NewMetrics(), &obs.EventsServer{}).Writer, // FIXME(todd)
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
@@ -570,7 +571,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			sqlstats.MaxMemSQLStatsTxnFingerprints,
 			nil,
 			nil,
-			insights.New(st, insights.NewMetrics()).Writer,
+			insights.New(st, insights.NewMetrics(), &obs.EventsServer{}).Writer, // FIXME(todd)
 			monitor,
 			nil,
 			nil,

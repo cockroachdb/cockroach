@@ -4,7 +4,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "migrations",
     srcs = ["migrations.go"],
-    embedsrcs = ["sqlmigrations/0001_init.sql"],
+    embedsrcs = [
+        "sqlmigrations/0001_init.sql",
+        "sqlmigrations/0002_execution_insights.sql",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations",
     visibility = ["//visibility:public"],
     deps = [

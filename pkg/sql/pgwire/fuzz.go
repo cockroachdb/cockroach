@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +38,7 @@ func FuzzServeConn(data []byte) int {
 		&sql.ExecutorConfig{
 			Settings: &cluster.Settings{},
 		},
+		&obs.EventsServer{}, // FIXME(todd): Huh?
 	)
 
 	// Fake a connection using a pipe.

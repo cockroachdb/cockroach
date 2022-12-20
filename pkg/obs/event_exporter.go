@@ -154,6 +154,12 @@ func NewEventServer(
 				Version: "1.0",
 			},
 		},
+		obspb.ExecutionInsightEvent: {
+			instrumentationScope: otel_pb.InstrumentationScope{
+				Name:    string(obspb.ExecutionInsightEvent),
+				Version: "1.0",
+			},
+		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
 	return s
