@@ -1,5 +1,6 @@
 name: Publish Cluster UI Release
 on:
+  workflow_dispatch:
   push:
     branches:
       - 'release-*'
@@ -10,7 +11,7 @@ on:
 
 jobs:
   publish_cluster_ui:
-    if: github.repository == 'cockroachdb/cockroach'
+    # if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -59,8 +60,10 @@ jobs:
     - name: Build Cluster UI
       run: |
         yarn install --frozen-lockfile
-        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
+        yarn build
 
     - name: Publish patch version
-      if: steps.version-check.outputs.published == 'no'
+      # if: steps.version-check.outputs.published == 'no'
       run: npm publish --access public --tag ${{ steps.branch_name.outputs.branch }} --dry-run

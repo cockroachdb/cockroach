@@ -1,16 +1,16 @@
 name: Publish Cluster UI Pre-release
-on:
-  push:
-    branches:
-      - master
-    paths:
-      - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
-      - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
-      - 'pkg/ui/workspaces/cluster-ui/package.json'
+on: [workflow_dispatch]
+#  push:
+#    branches:
+#      - master
+#    paths:
+#      - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
+#      - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
+#      - 'pkg/ui/workspaces/cluster-ui/package.json'
+
 
 jobs:
   publish_cluster_ui:
-    if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,10 +52,14 @@ jobs:
         fi
 
     - name: Build Cluster UI
+      #if: steps.version-check.outputs.published == 'no'
       run: |
         yarn install --frozen-lockfile
-        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
+        yarn build
 
     - name: Publish prerelease version
-      if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag next --dry-run
+      #if: steps.version-check.outputs.published == 'no'
+      run: |
+        npm publish --access public --tag next --dry-run
