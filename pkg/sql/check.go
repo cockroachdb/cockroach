@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -270,7 +271,7 @@ func validateForeignKey(
 	// For MATCH FULL FKs, first check whether any disallowed keys containing both
 	// null and non-null values exist.
 	// (The matching options only matter for FKs with more than one column.)
-	if nCols > 1 && fk.Match == descpb.ForeignKeyReference_FULL {
+	if nCols > 1 && fk.Match == semenumpb.Match_FULL {
 		query, colNames, err := matchFullUnacceptableKeyQuery(
 			srcTable, fk, true, /* limitResults */
 		)
