@@ -892,7 +892,6 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 	})
 }
 
-// TODO(lidor): consider rewriting this test as a data driven test when #92609 is merged.
 func TestTenantStreamingShowTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -930,9 +929,10 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 		jobId         int
 		maxReplTime   time.Time
 		protectedTime time.Time
+		cutoverTime   []byte // should be nil
 	)
 	row := c.DestSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
-	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime)
+	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &cutoverTime)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "REPLICATING", status)
@@ -943,4 +943,17 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.Less(t, protectedTime, timeutil.Now())
 	require.GreaterOrEqual(t, maxReplTime, highWatermark.GoTime())
 	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
+	require.Nil(t, cutoverTime)
+
+	// Verify the SHOW command prints the right cutover timestamp.
+	futureTime := c.DestSysServer.Clock().Now().Add(24*time.Hour.Nanoseconds(), 0)
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.Args.DestTenantName, futureTime.GoTime()).Scan(&cutoverStr)
+	var showCutover string
+	c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT cutover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
+		c.Args.DestTenantName)).Scan(&showCutover)
+	require.Equal(c.T, cutoverStr, showCutover)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(c.T, showCutover)
+	require.Equal(c.T, futureTime, cutoverOutput)
 }
