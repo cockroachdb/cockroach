@@ -21,3 +21,6 @@ enzyme.setup.js
 # project configs
 *.config.js
 tsconfig.json
+
+# bazel module mappings
+*.module_mappings.json
