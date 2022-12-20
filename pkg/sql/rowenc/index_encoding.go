@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -162,7 +162,7 @@ func MakeSpanFromEncDatums(
 // retrieve neededCols for the specified table and index. The returned descpb.FamilyIDs
 // are in sorted order.
 func NeededColumnFamilyIDs(
-	neededColOrdinals util.FastIntSet, table catalog.TableDescriptor, index catalog.Index,
+	neededColOrdinals intsets.Fast, table catalog.TableDescriptor, index catalog.Index,
 ) []descpb.FamilyID {
 	if table.NumFamilies() == 1 {
 		return []descpb.FamilyID{table.GetFamilies()[0].ID}
@@ -171,9 +171,9 @@ func NeededColumnFamilyIDs(
 	// Build some necessary data structures for column metadata.
 	columns := table.DeletableColumns()
 	colIdxMap := catalog.ColumnIDToOrdinalMap(columns)
-	var indexedCols util.FastIntSet
-	var compositeCols util.FastIntSet
-	var extraCols util.FastIntSet
+	var indexedCols intsets.Fast
+	var compositeCols intsets.Fast
+	var extraCols intsets.Fast
 	for i := 0; i < index.NumKeyColumns(); i++ {
 		columnID := index.GetKeyColumnID(i)
 		columnOrdinal := colIdxMap.GetDefault(columnID)

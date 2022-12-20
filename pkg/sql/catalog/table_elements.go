@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
@@ -930,7 +930,7 @@ func UserDefinedTypeColsInFamilyHaveSameVersion(
 		return false, err
 	}
 
-	familyCols := util.FastIntSet{}
+	familyCols := intsets.Fast{}
 	for _, colID := range family.ColumnIDs {
 		familyCols.Add(int(colID))
 	}

@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -109,7 +110,7 @@ var (
 )
 
 // RuleSet efficiently stores an unordered set of RuleNames.
-type RuleSet = util.FastIntSet
+type RuleSet = intsets.Fast
 
 // OptTester is a helper for testing the various optimizer components. It
 // contains the boiler-plate code for the following useful tasks:
@@ -209,7 +210,7 @@ type Flags struct {
 
 	// IgnoreTables specifies the subset of stats tables which should not be
 	// outputted by the stats-quality command.
-	IgnoreTables util.FastIntSet
+	IgnoreTables intsets.Fast
 
 	// File specifies the name of the file to import. This field is only used by
 	// the import command.
@@ -863,10 +864,10 @@ func fillInLazyProps(e opt.Expr) {
 		rel = rel.FirstExpr()
 
 		// Derive columns that are candidates for pruning.
-		norm.DerivePruneCols(rel, util.FastIntSet{} /* disabledRules */)
+		norm.DerivePruneCols(rel, intsets.Fast{} /* disabledRules */)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(rel, util.FastIntSet{} /* disabledRules */)
+		norm.DeriveRejectNullCols(rel, intsets.Fast{} /* disabledRules */)
 
 		// Make sure the interesting orderings are calculated.
 		ordering.DeriveInterestingOrderings(rel)
@@ -1026,7 +1027,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.Table = arg.Vals[0]
 
 	case "ignore-tables":
-		var tables util.FastIntSet
+		var tables intsets.Fast
 		addTables := func(val string) error {
 			table, err := strconv.Atoi(val)
 			if err != nil {

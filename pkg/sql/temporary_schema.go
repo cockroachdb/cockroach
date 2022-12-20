@@ -33,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -321,7 +321,7 @@ func cleanupTempSchemaObjects(
 					if err != nil {
 						return err
 					}
-					dependentColIDs := util.MakeFastIntSet()
+					dependentColIDs := intsets.MakeFast()
 					for _, colID := range d.ColumnIDs {
 						dependentColIDs.Add(int(colID))
 					}

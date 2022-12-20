@@ -13,7 +13,7 @@ package opt
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 func BenchmarkColSet(b *testing.B) {
@@ -22,7 +22,7 @@ func BenchmarkColSet(b *testing.B) {
 	const n = 50
 	b.Run("fastintset", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			var c util.FastIntSet
+			var c intsets.Fast
 			for j := 1; j <= n; j++ {
 				c.Add(j)
 			}

@@ -13,7 +13,7 @@ package backfill
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +45,7 @@ type indexBackfillerCols struct {
 
 	// valNeededForCol contains the indexes (into cols) of all columns that we
 	// need to fetch values for.
-	valNeededForCol util.FastIntSet
+	valNeededForCol intsets.Fast
 }
 
 // makeIndexBackfillColumns computes the set of writable columns and
@@ -141,7 +141,7 @@ func makeIndexBackfillColumns(
 // because of references in expressions.
 func makeInitialValNeededForCol(
 	ib indexBackfillerCols, addedIndexes []catalog.Index,
-) (valNeededForCol util.FastIntSet) {
+) (valNeededForCol intsets.Fast) {
 	// Any columns we're going to eval, we don't need values for ahead of time.
 	toEval := func() catalog.TableColSet {
 		columnIDs := func(columns []catalog.Column) (s catalog.TableColSet) {

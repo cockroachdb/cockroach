@@ -146,6 +146,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -438,7 +438,7 @@ type progressReportFlags struct {
 }
 
 func sameIndexIDSet(ds []descpb.IndexID, ds2 []descpb.IndexID) bool {
-	toSet := func(ids []descpb.IndexID) (s util.FastIntSet) {
+	toSet := func(ids []descpb.IndexID) (s intsets.Fast) {
 		for _, id := range ids {
 			s.Add(int(id))
 		}
@@ -465,7 +465,7 @@ type mergeKey struct {
 }
 
 func toMergeKey(m scexec.Merge) mergeKey {
-	var ids util.FastIntSet
+	var ids intsets.Fast
 	for _, id := range m.SourceIndexIDs {
 		ids.Add(int(id))
 	}

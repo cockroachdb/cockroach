@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -1107,7 +1107,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 			// Check if we have zigzag hints.
 			if scanPrivate.Flags.ForceZigzag {
-				indexes := util.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				indexes := intsets.MakeFast(leftIndex.Ordinal(), rightIndex.Ordinal())
 				forceIndexes := scanPrivate.Flags.ZigzagIndexes
 				if !forceIndexes.SubsetOf(indexes) {
 					return

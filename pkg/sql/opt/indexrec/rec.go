@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // Type represents the type of index recommendation for Rec.
@@ -94,8 +94,8 @@ func (rc recCollector) addIndexRec(md *opt.Metadata, expr opt.Expr) {
 }
 
 // getStoredCols returns stored columns of the given existingIndex.
-func getStoredCols(existingIndex cat.Index) util.FastIntSet {
-	var existingStoredOrds util.FastIntSet
+func getStoredCols(existingIndex cat.Index) intsets.Fast {
+	var existingStoredOrds intsets.Fast
 	for i, n := existingIndex.KeyColumnCount(), existingIndex.ColumnCount(); i < n; i++ {
 		existingStoredOrds.Add(existingIndex.Column(i).Ordinal())
 	}
@@ -104,8 +104,8 @@ func getStoredCols(existingIndex cat.Index) util.FastIntSet {
 
 // getAllCols returns columns of the given existingIndex including in the
 // explicit columns and STORING clause.
-func getAllCols(existingIndex cat.Index) util.FastIntSet {
-	var existingAllOrds util.FastIntSet
+func getAllCols(existingIndex cat.Index) intsets.Fast {
+	var existingAllOrds intsets.Fast
 	for i, n := 0, existingIndex.ColumnCount(); i < n; i++ {
 		existingAllOrds.Add(existingIndex.Column(i).Ordinal())
 	}
@@ -136,12 +136,12 @@ func getAllCols(existingIndex cat.Index) util.FastIntSet {
 // candidate for existing index, and its already stored columns. If not found,
 // this means that there does not exist an index that satisfy the requirement to
 // be a candidate. So no existing indexes can be replaced, and creating a new
-// index is necessary. It returns TypeCreateIndex, nil, and util.FastIntSet{}.
-// If there is a candidate that stores every column from actuallyScannedCols,
+// index is necessary. It returns TypeCreateIndex, nil, and intsets.Fast. If
+// there is a candidate that stores every column from actuallyScannedCols,
 // typeUseless, nil, {} is returned. Theoretically, this should never happen.
 func findBestExistingIndexToReplace(
-	table cat.Table, hypIndex *hypotheticalIndex, actuallyScannedCols util.FastIntSet,
-) (Type, cat.Index, util.FastIntSet) {
+	table cat.Table, hypIndex *hypotheticalIndex, actuallyScannedCols intsets.Fast,
+) (Type, cat.Index, intsets.Fast) {
 
 	// To find the existing index with most columns in actuallyScannedCol, we keep
 	// track of the best candidate for existing index and its stored columns.
@@ -157,7 +157,7 @@ func findBestExistingIndexToReplace(
 	// actuallyScannedCol).
 	minColsDiff := actuallyScannedCols.Len()
 	var existingIndexCandidate cat.Index
-	var existingIndexCandidateStoredCol util.FastIntSet
+	var existingIndexCandidateStoredCol intsets.Fast
 
 	for i, n := 0, table.IndexCount(); i < n; i++ {
 		// Iterate through every existing index in the table.
@@ -178,7 +178,7 @@ func findBestExistingIndexToReplace(
 				// SELECT a FROM t WHERE b > 0, hypIndex(a), actuallyScannedCol b.
 				// invisible_idx(a, b) could still be used. Creating a new index with
 				// idx(a) STORING b is unnecessary.
-				return TypeAlterIndex, existingIndex, util.FastIntSet{}
+				return TypeAlterIndex, existingIndex, intsets.Fast{}
 			}
 			// Skip any invisible indexes.
 			continue
@@ -206,7 +206,7 @@ func findBestExistingIndexToReplace(
 				// scanned cols is neither included in explicit columns nor stored.
 				// Otherwise, the optimizer should use the existing index, and no index
 				// recommendation should be constructed.
-				return typeUseless, nil, util.FastIntSet{}
+				return typeUseless, nil, intsets.Fast{}
 			} else if existingIndexCandidate == nil || storedColsDiffSet.Len() < minColsDiff {
 				// Otherwise, storedColsDiffSet is non-empty. The existing index is
 				// missing some columns in actuallyScannedCol. If no candidate has been
@@ -222,7 +222,7 @@ func findBestExistingIndexToReplace(
 	if existingIndexCandidate == nil {
 		// There doesn't exist an index with same explicit columns as hypIndex.
 		// Recommend index creation.
-		return TypeCreateIndex, nil, util.FastIntSet{}
+		return TypeCreateIndex, nil, intsets.Fast{}
 	}
 
 	return TypeReplaceIndex, existingIndexCandidate, existingIndexCandidateStoredCol
@@ -319,8 +319,8 @@ func (rc recCollector) outputIndexRec() []Rec {
 
 // getColOrdSet returns the set of column ordinals within the given table that
 // are contained in cols.
-func getColOrdSet(md *opt.Metadata, cols opt.ColSet, tabID opt.TableID) util.FastIntSet {
-	var colsOrdSet util.FastIntSet
+func getColOrdSet(md *opt.Metadata, cols opt.ColSet, tabID opt.TableID) intsets.Fast {
+	var colsOrdSet intsets.Fast
 	cols.ForEach(func(col opt.ColumnID) {
 		table := md.ColumnMeta(col).Table
 		// Do not add columns from other tables.
@@ -400,13 +400,13 @@ type indexRecommendation struct {
 
 	// newStoredColOrds stores the stored column ordinals that are scanned by the
 	// optimizer in the expression tree passed to FindRecs.
-	newStoredColOrds util.FastIntSet
+	newStoredColOrds intsets.Fast
 }
 
 // init initializes an index recommendation. If there is an existingIndex with
 // the same explicit columns, it is stored here.
 func (ir *indexRecommendation) init(
-	indexOrd int, hypTable *HypotheticalTable, scannedColOrds util.FastIntSet,
+	indexOrd int, hypTable *HypotheticalTable, scannedColOrds intsets.Fast,
 ) {
 	index := hypTable.Index(indexOrd).(*hypotheticalIndex)
 	ir.index = index
@@ -421,7 +421,7 @@ func (ir *indexRecommendation) init(
 
 // addStoredColOrds updates an index recommendation's newStoredColOrds field to
 // also contain the scannedColOrds columns.
-func (ir *indexRecommendation) addStoredColOrds(scannedColOrds util.FastIntSet) {
+func (ir *indexRecommendation) addStoredColOrds(scannedColOrds intsets.Fast) {
 	for i := range ir.index.storedCols {
 		colOrd := ir.index.storedCols[i].Column.Ordinal()
 		if scannedColOrds.Contains(colOrd) {

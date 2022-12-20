@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -658,7 +658,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 	// Validate mutations and exit early if any of these are deeply corrupted.
 	{
-		var mutationIDs util.FastIntSet
+		var mutationIDs intsets.Fast
 		mutationsHaveErrs := false
 		for _, m := range desc.Mutations {
 			mutationIDs.Add(int(m.MutationID))
@@ -1161,7 +1161,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		// Verify that the constraint's column IDs are valid and unique.
-		var seen util.FastIntSet
+		var seen intsets.Fast
 		for i, n := 0, c.NumKeyColumns(); i < n; i++ {
 			colID := c.GetKeyColumnID(i)
 			_, ok := columnsByID[colID]

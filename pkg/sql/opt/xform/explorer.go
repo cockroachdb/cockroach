@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // explorer generates alternate expressions that are logically equivalent to
@@ -239,7 +239,7 @@ type exploreState struct {
 	// fullyExploredMembers is a set of ordinal positions of members within the
 	// memo group. Once a member expression has been fully explored, its ordinal
 	// is added to this set.
-	fullyExploredMembers util.FastIntSet
+	fullyExploredMembers intsets.Fast
 }
 
 // isMemberFullyExplored is true if the member at the given ordinal position

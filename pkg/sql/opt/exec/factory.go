@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 )
 
@@ -125,18 +125,18 @@ const (
 type TableColumnOrdinal int32
 
 // TableColumnOrdinalSet contains a set of TableColumnOrdinal values.
-type TableColumnOrdinalSet = util.FastIntSet
+type TableColumnOrdinalSet = intsets.Fast
 
 // NodeColumnOrdinal is the 0-based ordinal index of a column produced by a
 // Node. It is used when referring to a column in an input to an operator.
 type NodeColumnOrdinal int32
 
 // NodeColumnOrdinalSet contains a set of NodeColumnOrdinal values.
-type NodeColumnOrdinalSet = util.FastIntSet
+type NodeColumnOrdinalSet = intsets.Fast
 
 // CheckOrdinalSet contains the ordinal positions of a set of check constraints
 // taken from the opt.Table.Check collection.
-type CheckOrdinalSet = util.FastIntSet
+type CheckOrdinalSet = intsets.Fast
 
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {

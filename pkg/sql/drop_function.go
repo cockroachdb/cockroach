@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -51,7 +51,7 @@ func (p *planner) DropFunction(
 		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Functions)),
 		dropBehavior: n.DropBehavior,
 	}
-	fnResolved := util.MakeFastIntSet()
+	fnResolved := intsets.MakeFast()
 	for _, fn := range n.Functions {
 		ol, err := p.matchUDF(ctx, &fn, !n.IfExists)
 		if err != nil {

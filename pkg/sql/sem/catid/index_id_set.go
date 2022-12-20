@@ -10,11 +10,11 @@
 
 package catid
 
-import "github.com/cockroachdb/cockroach/pkg/util"
+import "github.com/cockroachdb/cockroach/pkg/util/intsets"
 
 // IndexSet efficiently stores an unordered set of index ids.
 type IndexSet struct {
-	set util.FastIntSet
+	set intsets.Fast
 }
 
 // MakeIndexIDSet returns a set initialized with the given values.

@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -99,7 +99,7 @@ type tableInfo struct {
 
 	// The set of indexes into spec.FetchedColumns that are required for columns
 	// in the value part.
-	neededValueColsByIdx util.FastIntSet
+	neededValueColsByIdx intsets.Fast
 
 	// The number of needed columns from the value part of the row. Once we've
 	// seen this number of value columns for a particular row, we can stop

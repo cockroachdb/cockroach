@@ -217,6 +217,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",

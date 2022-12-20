@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -152,7 +152,7 @@ func newRowHelper(
 func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
-	ignoreIndexes util.FastIntSet,
+	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (
 	primaryIndexKey []byte,
@@ -203,7 +203,7 @@ func (rh *rowHelper) encodePrimaryIndex(
 func (rh *rowHelper) encodeSecondaryIndexes(
 	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
-	ignoreIndexes util.FastIntSet,
+	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry, err error) {
 

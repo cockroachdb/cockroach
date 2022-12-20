@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package util
+package intsets
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 // String returns a list representation of elements. Sequential runs of positive
 // numbers are shown as ranges. For example, for the set {0, 1, 2, 5, 6, 10},
 // the output is "(0-2,5,6,10)".
-func (s FastIntSet) String() string {
+func (s Fast) String() string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
 	appendRange := func(start, end int) {

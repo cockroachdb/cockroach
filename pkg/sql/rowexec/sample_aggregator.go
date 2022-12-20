@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -134,7 +135,7 @@ func newSampleAggregator(
 		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
 
-	var sampleCols util.FastIntSet
+	var sampleCols intsets.Fast
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:     spec.Sketches[i],
@@ -156,7 +157,7 @@ func newSampleAggregator(
 		// The datums are converted to their inverted index bytes and sent as a
 		// single DBytes column. We do not use DEncodedKey here because it would
 		// introduce backward compatibility complications.
-		var srCols util.FastIntSet
+		var srCols intsets.Fast
 		srCols.Add(0)
 		sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]

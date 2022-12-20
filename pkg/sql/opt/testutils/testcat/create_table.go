@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 type indexType int
@@ -812,7 +812,7 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	if typ == primaryIndex {
-		var pkOrdinals util.FastIntSet
+		var pkOrdinals intsets.Fast
 		for _, c := range idx.Columns {
 			pkOrdinals.Add(c.Ordinal())
 		}

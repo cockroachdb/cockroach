@@ -12,12 +12,12 @@ package catalog
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // TableColSet efficiently stores an unordered set of column ids.
 type TableColSet struct {
-	set util.FastIntSet
+	set intsets.Fast
 }
 
 // MakeTableColSet returns a set initialized with the given values.

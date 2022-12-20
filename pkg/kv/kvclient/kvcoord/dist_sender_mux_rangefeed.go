@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,7 +55,7 @@ type rangefeedMuxer struct {
 
 type muxClientState struct {
 	client  roachpb.Internal_MuxRangeFeedClient
-	streams util.FastIntSet
+	streams intsets.Fast
 	cancel  context.CancelFunc
 }
 

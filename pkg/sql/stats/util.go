@@ -12,13 +12,13 @@ package stats
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // MakeSortedColStatKey constructs a unique key representing cols that can be
 // used as the key in a map, and also sorts cols as a side-effect.
 func MakeSortedColStatKey(cols []descpb.ColumnID) string {
-	var colSet util.FastIntSet
+	var colSet intsets.Fast
 	for _, c := range cols {
 		colSet.Add(int(c))
 	}

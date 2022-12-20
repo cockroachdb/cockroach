@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,7 +46,7 @@ func NoopSplitter() Splitter {
 // the NoopSplitter (which never splits).
 // Note: this splitter should **not** be used for deletes.
 func MakeSplitter(
-	table catalog.TableDescriptor, index catalog.Index, neededColOrdinals util.FastIntSet,
+	table catalog.TableDescriptor, index catalog.Index, neededColOrdinals intsets.Fast,
 ) Splitter {
 	return MakeSplitterForDelete(table, index, neededColOrdinals, false /* forDelete */)
 }
@@ -56,7 +56,7 @@ func MakeSplitter(
 func MakeSplitterForDelete(
 	table catalog.TableDescriptor,
 	index catalog.Index,
-	neededColOrdinals util.FastIntSet,
+	neededColOrdinals intsets.Fast,
 	forDelete bool,
 ) Splitter {
 	// We can only split a span into separate family specific point lookups if:

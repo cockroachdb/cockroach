@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -817,7 +817,7 @@ func formatValues(colNames []string, values tree.Datums) string {
 // It is allowed to check only a subset of the active checks (the optimizer
 // could in principle determine that some checks can't fail because they
 // statically evaluate to true for the entire input).
-type checkSet = util.FastIntSet
+type checkSet = intsets.Fast
 
 // When executing mutations, we calculate a boolean column for each check
 // indicating if the check passed. This function verifies that each result is

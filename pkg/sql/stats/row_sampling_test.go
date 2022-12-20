@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -39,7 +39,7 @@ func runSampleTest(
 ) {
 	ctx := context.Background()
 	var sr SampleReservoir
-	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, util.MakeFastIntSet(0))
+	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, intsets.MakeFast(0))
 	for _, r := range ranks {
 		d := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
 		prevCapacity := sr.Cap()

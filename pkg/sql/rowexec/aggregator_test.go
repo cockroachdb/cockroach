@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -632,7 +632,7 @@ func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) rowenc.EncDat
 	numRows := intPow(groupSize, len(groupedCols)+1)
 	rows := make(rowenc.EncDatumRows, numRows)
 
-	groupColSet := util.MakeFastIntSet(groupedCols...)
+	groupColSet := intsets.MakeFast(groupedCols...)
 	getGroupedColVal := func(rowIdx, colIdx int) int {
 		rank := -1
 		for i, c := range groupedCols {

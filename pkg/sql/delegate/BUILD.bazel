@@ -60,8 +60,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/syntheticprivilege",
-        "//pkg/util",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
