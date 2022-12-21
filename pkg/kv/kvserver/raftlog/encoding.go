@@ -16,7 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 )
 
-// EntryEncoding enumerates the encodings used in CockroachDB for raftpb.Entry.
+// EntryEncoding enumerates the encodings used in CockroachDB for raftpb.Entry's
+// Data slice.
 //
 // A raftpb.Entry's EntryEncoding is determined by the Entry's raftpb.EntryType
 // and, in some cases, the first byte of the Entry's Data payload.
@@ -78,7 +79,8 @@ const (
 	EntryEncodingSideloadedPrefixByte = byte(1)
 )
 
-// EncodeRaftCommand encodes a raft command (including the versioning prefix).
+// EncodeRaftCommand encodes a raft command of type EntryEncodingStandard or
+// EntryEncodingSideloaded.
 func EncodeRaftCommand(prefixByte byte, commandID kvserverbase.CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], prefixByte, commandID)
@@ -86,7 +88,8 @@ func EncodeRaftCommand(prefixByte byte, commandID kvserverbase.CmdIDKey, command
 	return b
 }
 
-// EncodeRaftCommandPrefix encodes the versioning prefix for a Raft command.
+// EncodeRaftCommandPrefix encodes the prefix for a Raft command of type
+// EntryEncodingStandard or EntryEncodingSideloaded.
 func EncodeRaftCommandPrefix(b []byte, prefixByte byte, commandID kvserverbase.CmdIDKey) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
