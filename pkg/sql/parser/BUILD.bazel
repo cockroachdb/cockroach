@@ -102,6 +102,7 @@ export GOROOT=
 $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
     $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
     $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+    sql
 """,
     exec_tools = [
         ":sql-gen",

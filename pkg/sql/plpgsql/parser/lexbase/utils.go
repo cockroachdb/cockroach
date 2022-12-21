@@ -8,11 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package parser
-
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-
-type declareHeader struct {
-	label    string
-	initVars []plpgsqltree.PLpgSQLVariable
-}
+package lexbase

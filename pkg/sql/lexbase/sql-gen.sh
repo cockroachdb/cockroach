@@ -6,16 +6,11 @@
 
 set -euo pipefail
 
-
-set -euo pipefail
-
-if [ "$2" != "" ]; then
+if [ "$6" != plpgsql ]; then
   SYMUNION="sqlSymUnion"
-  LANG=sql
   GENYACC=sql-gen.y
 else
   SYMUNION="plpgsqlSymUnion"
-  LANG=plpgsql
   GENYACC=plpgsql-gen.y
 fi;
 
@@ -25,7 +20,7 @@ fi;
         awk '{print $0")>_\\1 <union> /* <\\2> */_"}' > types_regex.tmp
 
     sed -E -f types_regex.tmp < $1 | \
-        if [ "$2" != "" ]; then \
+        if [ "$6" != plpgsql ]; then \
             awk -f $2 | \
           sed -Ee 's,//.*$$,,g;s,/[*]([^*]|[*][^/])*[*]/, ,g;s/ +$$//g' > $GENYACC
         else
@@ -34,7 +29,7 @@ fi;
 
     rm types_regex.tmp
 
-    ret=$($4 -p $LANG -o $3 $GENYACC); \
+    ret=$($4 -p $6 -o $3 $GENYACC); \
       if expr "$ret" : ".*conflicts" >/dev/null; then \
         echo "$ret"; exit 1; \
       fi;
