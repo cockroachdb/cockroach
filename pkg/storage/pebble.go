@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/rangekey"
+	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -715,6 +716,16 @@ type Pebble struct {
 	wrappedIntentWriter intentDemuxWriter
 
 	storeIDPebbleLog *base.StoreIDContainer
+	replayer         *replay.WorkloadCollector
+}
+
+// WorkloadCollector implements an workloadCollectorGetter and returns the
+// workload collector stored on Pebble. This method is invoked following a
+// successful cast of an Engine to a `workloadCollectorGetter` type. This method
+// allows for pebble exclusive functionality to be used without modifying the
+// Engine interface.
+func (p *Pebble) WorkloadCollector() *replay.WorkloadCollector {
+	return p.replayer
 }
 
 // EncryptionEnv describes the encryption-at-rest environment, providing
@@ -732,6 +743,9 @@ type EncryptionEnv struct {
 }
 
 var _ Engine = &Pebble{}
+
+// WorkloadCollectorEnabled specifies if the workload collector will be enabled
+var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKLOAD_COLLECTOR", false)
 
 // NewEncryptedEnvFunc creates an encrypted environment and returns the vfs.FS to use for reading
 // and writing data. This should be initialized by calling engineccl.Init() before calling
@@ -913,6 +927,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
+		replayer:         replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
 	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
@@ -927,21 +942,26 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
 	}
 
-	l := pebble.TeeEventListener(
+	el := pebble.TeeEventListener(
 		pebble.MakeLoggingEventListener(pebbleLogger{
 			ctx:   logCtx,
 			depth: 2, // skip over the EventListener stack frame
 		}),
 		p.makeMetricEtcEventListener(ctx),
 	)
-	p.eventListener = &l
-	cfg.Opts.EventListener = &l
+
+	p.eventListener = &el
+	cfg.Opts.EventListener = &el
 	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// Read the current store cluster version.
 	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
 	if err != nil {
 		return nil, err
+	}
+
+	if WorkloadCollectorEnabled {
+		p.replayer.Attach(cfg.Opts)
 	}
 
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)

@@ -1,0 +1,19 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "replay",
+    srcs = ["replay.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/debug/replay",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//replay",
+        "@com_github_cockroachdb_pebble//vfs",
+    ],
+)
+
+get_x_data(name = "get_x_data")

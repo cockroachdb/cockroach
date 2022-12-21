@@ -178,7 +178,7 @@ func namesFromVM(v vm.VM) (userName string, clusterName string, _ error) {
 
 // ListCloud returns information about all instances (across all available
 // providers).
-func ListCloud(l *logger.Logger) (*Cloud, error) {
+func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	cloud := &Cloud{
 		Clusters: make(Clusters),
 	}
@@ -192,7 +192,7 @@ func ListCloud(l *logger.Logger) (*Cloud, error) {
 		provider := vm.Providers[providerName]
 		g.Go(func() error {
 			var err error
-			providerVMs[index], err = provider.List(l)
+			providerVMs[index], err = provider.List(l, options)
 			return err
 		})
 	}
