@@ -532,7 +532,10 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	}
 	var reqsKeysScratch []roachpb.Key
 	var newNumRangesPerScanRequestMemoryUsage int64
-	for {
+	for ; ; ri.Seek(ctx, rs.Key, scanDir) {
+		if !ri.Valid() {
+			return ri.Error()
+		}
 		// Find all requests that touch the current range.
 		var singleRangeReqs []roachpb.RequestUnion
 		var positions []int
@@ -626,11 +629,12 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		requestsToServe = append(requestsToServe, r)
 		s.enqueuedSingleRangeRequests += len(singleRangeReqs)
 
-		if !ri.NeedAnother(rs) {
-			// This was the last range.
+		if allRequestsAreWithinSingleRange || !ri.NeedAnother(rs) {
+			// This was the last range. Breaking here rather than Seek'ing the
+			// iterator to RKeyMax (and, thus, invalidating it) allows us to
+			// avoid adding a confusing message into the trace.
 			break
 		}
-		ri.Seek(ctx, rs.Key, scanDir)
 	}
 
 	if streamerLocked {
