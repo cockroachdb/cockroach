@@ -835,6 +835,13 @@ func TestLogic_gc_job_mixed(
 	runLogicTest(t, "gc_job_mixed")
 }
 
+func TestLogic_gen_test_objects(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "gen_test_objects")
+}
+
 func TestLogic_generator_probe_ranges(
 	t *testing.T,
 ) {
@@ -1463,6 +1470,13 @@ func TestLogic_propagate_input_ordering(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "propagate_input_ordering")
+}
+
+func TestLogic_rand_ident(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "rand_ident")
 }
 
 func TestLogic_reassign_owned_by(

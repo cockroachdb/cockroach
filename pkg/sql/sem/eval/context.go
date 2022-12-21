@@ -263,7 +263,9 @@ type DescIDGenerator interface {
 	GenerateUniqueDescID(ctx context.Context) (catid.DescID, error)
 
 	// IncrementDescID increments the descriptor ID counter by at least inc.
-	IncrementDescID(ctx context.Context, inc int64) error
+	// It returns the first ID in the incremented range:
+	// <val> .. <val> + inc  are all available to the caller.
+	IncrementDescID(ctx context.Context, inc int64) (catid.DescID, error)
 }
 
 // RangeStatsFetcher is used to fetch RangeStats.
