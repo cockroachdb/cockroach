@@ -59,6 +59,13 @@ jobs:
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
         yarn build
 
+    - name: Create version tag and push
+      if: steps.version-check.outputs.published == 'no'
+      run: |
+        TAGNAME="@cockroachlabs/cluster-ui@$(cat ./package.json | jq -r '.version')"
+        git tag $TAGNAME
+        git push origin $TAGNAME
+
     - name: Publish prerelease version
       if: steps.version-check.outputs.published == 'no'
       run: yarn publish --access public --tag next
