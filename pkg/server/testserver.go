@@ -799,6 +799,11 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
 }
 
+// MigrationServer is part of the TestTenantInterface.
+func (t *TestTenant) MigrationServer() interface{} {
+	return t.migrationServer
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,

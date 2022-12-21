@@ -65,6 +65,7 @@ go_library(
         "stop_trigger.go",
         "tcp_keepalive_manager.go",
         "tenant.go",
+        "tenant_migration.go",
         "testing_knobs.go",
         "testserver.go",
         "testserver_http.go",

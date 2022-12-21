@@ -17,6 +17,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server/serverpb",
+        "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/quotapool",

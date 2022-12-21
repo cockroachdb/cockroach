@@ -348,8 +348,11 @@ func TestTenantUpgradeFailure(t *testing.T) {
 				}
 			}
 		}()
-		// Upgrade the tenant cluster.
-		initialTenantRunner.Exec(t,
+		// Upgrade the tenant cluster. The "SucceedsSoon" is necessary here
+		// because the tenant upgrade could fail due to the fact that we have
+		// a cached view of the above crashed SQL server lying around, which
+		// we then try and contact as part of the upgrade process.
+		initialTenantRunner.ExecSucceedsSoon(t,
 			"SET CLUSTER SETTING version = $1",
 			v2.String())
 		close(tenantStopperChannel)

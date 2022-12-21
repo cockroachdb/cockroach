@@ -97,8 +97,8 @@ func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error
 	return nil
 }
 
-// NumNodes is part of the upgrade.Cluster interface.
-func (c *Cluster) NumNodes(ctx context.Context) (int, error) {
+// NumNodesOrTenantPods is part of the upgrade.Cluster interface.
+func (c *Cluster) NumNodesOrTenantPods(ctx context.Context) (int, error) {
 	ns, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 	if err != nil {
 		return 0, err
@@ -106,8 +106,8 @@ func (c *Cluster) NumNodes(ctx context.Context) (int, error) {
 	return len(ns), nil
 }
 
-// ForEveryNode is part of the upgrade.Cluster interface.
-func (c *Cluster) ForEveryNode(
+// ForEveryNodeOrTenantPod is part of the upgrade.Cluster interface.
+func (c *Cluster) ForEveryNodeOrTenantPod(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
 

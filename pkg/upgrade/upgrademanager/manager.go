@@ -15,6 +15,7 @@ package upgrademanager
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -125,7 +126,7 @@ func safeToUpgradeTenant(
 	if overrides == nil {
 		return false, errors.AssertionFailedf("overrides informer is nil in secondary tenant")
 	}
-	storageClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
+	storageClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterActiveVersion()
 	if storageClusterVersion.Less(tenantClusterVersion.Version) {
 		// We assert here if we find a tenant with a higher cluster version than
 		// the storage cluster. It's dangerous to run in this mode because the
@@ -358,6 +359,96 @@ func (m *Manager) Migrate(
 		return err
 	}
 
+	// The loop below runs the actual migrations and pushes out the version gate
+	// to every node (or tenant pod) in the cluster. Each node (or pod) will
+	// persist the version, bump the local version gates, and
+	// then return. The upgrade associated with the specific version is
+	// executed before any node (or pod) in the cluster has the corresponding
+	// version activated. Migrations that depend on a certain version
+	// already being activated will need to register using a cluster
+	// version greater than it.
+	//
+	// For each intermediate version, we'll need to first bump the fence
+	// version before bumping the "real" one. Doing so allows us to provide
+	// the invariant that whenever a cluster version is active, all nodes or
+	// pods in the cluster (including ones added concurrently during version
+	// upgrades) are running binaries that know about the version. This is
+	// discussed in greater detail below in the [Fence versions] section.
+	//
+	// Note: tenants don't persist their version information anywhere aside from
+	// in the settings table. Nodes however, persist the version information in
+	// each store. As a result, the section below (up to "Fence versions")
+	// applies to storage cluster upgrades only.
+	//
+	// [Storage cluster upgrades]
+	//
+	// Below-raft upgrades mutate replica state, making use of the
+	// Migrate(version=V) primitive which they issue against the entire
+	// keyspace. These upgrades typically want to rely on the invariant
+	// that there are no extant replicas in the system that haven't seen the
+	// specific Migrate command.
+	//
+	// This is partly achieved through the implementation of the Migrate
+	// command itself, which waits until it's applied on all followers[2]
+	// before returning. This also addresses the concern of extant snapshots
+	// with pre-migrated state possibly instantiating older version
+	// replicas. The intended learner replicas are listed as part of the
+	// range descriptor, and is also waited on for during command
+	// application. As for stale snapshots, if they specify a replicaID
+	// that's no longer part of the raft group, they're discarded by the
+	// recipient. Snapshots are also discarded unless they move the LAI
+	// forward.
+	//
+	// That still leaves rooms for replicas in the replica GC queue to evade
+	// detection. To address this, below-raft upgrades typically take a
+	// two-phrase approach (the TruncatedAndRangeAppliedStateMigration being
+	// one example of this), where after having migrated the entire keyspace
+	// to version V, and after having prevented subsequent snapshots
+	// originating from replicas with versions < V, the upgrade sets out
+	// to purge outdated replicas in the system[3]. Specifically it
+	// processes all replicas in the GC queue with a version < V (which are
+	// not accessible during the application of the Migrate command).
+	//
+	// [1]: See ReplicaState.Version.
+	// [2]: See Replica.executeWriteBatch, specifically how proposals with the
+	//      Migrate request are handled downstream of raft.
+	// [3]: See PurgeOutdatedReplicas from the SystemUpgrade service.
+	//
+	// [Fence versions]
+	//
+	// The upgrade infrastructure makes use of internal fence
+	// versions when stepping through consecutive versions. It's
+	// instructive to walk through how we expect a version upgrade
+	// from v21.1 to v21.2 to take place, and how we behave in the
+	// presence of new v21.1 or v21.2 nodes or pods being added to the cluster.
+	//
+	//   - All nodes or pods are running v21.1
+	//   - All nodes or pods are rolled into v21.2 binaries, but with active
+	//     cluster version still as v21.1
+	//   - The first version bump will be into v21.2-1(fence), see the
+	//     upgrade manager above for where that happens
+	//
+	// Then concurrently:
+	//
+	//   - A new node or pod is added to the cluster, but running binary v21.1
+	//   - We try bumping the cluster gates to v21.2-1(fence)
+	//
+	// If the v21.1 node or pod manages to sneak in before the version bump,
+	// it's fine as the version bump is a no-op one (all fence versions
+	// are). Any subsequent bumps (including the "actual" one bumping to
+	// v21.2) will fail during the validation step where we'll first
+	// check to see that all nodes or pods are running v21.2 binaries.
+	//
+	// If the v21.1 node is only added after v21.2-1(fence) is active,
+	// it won't be able to actually join the cluster (it'll be prevented
+	// by the join RPC). NOTE: this logic isn't yet in place for tenant pods
+	// (see GH issue #66606).
+	//
+	// All of which is to say that once we've seen the node/pod list
+	// stabilize (as UntilClusterStable enforces), any new nodes/pods that
+	// can join the cluster will run a release that support the fence
+	// version, and by design also supports the actual version (which is
+	// the direct successor of the fence).
 	for _, clusterVersion := range clusterVersions {
 		log.Infof(ctx, "stepping through %s", clusterVersion)
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
@@ -369,89 +460,9 @@ func (m *Manager) Migrate(
 			}
 		}
 
-		// Next we'll push out the version gate to every node in the cluster.
-		// Each node will persist the version, bump the local version gates, and
-		// then return. The upgrade associated with the specific version is
-		// executed before any node in the cluster has the corresponding
-		// version activated. Migrations that depend on a certain version
-		// already being activated will need to registered using a cluster
-		// version greater than it.
-		//
-		// For each intermediate version, we'll need to first bump the fence
-		// version before bumping the "real" one. Doing so allows us to provide
-		// the invariant that whenever a cluster version is active, all Nodes in
-		// the cluster (including ones added concurrently during version
-		// upgrades) are running binaries that know about the version.
-
-		// Below-raft upgrades mutate replica state, making use of the
-		// Migrate(version=V) primitive which they issue against the entire
-		// keyspace. These upgrades typically want to rely on the invariant
-		// that there are no extant replicas in the system that haven't seen the
-		// specific Migrate command.
-		//
-		// This is partly achieved through the implementation of the Migrate
-		// command itself, which waits until it's applied on all followers[2]
-		// before returning. This also addresses the concern of extant snapshots
-		// with pre-migrated state possibly instantiating older version
-		// replicas. The intended learner replicas are listed as part of the
-		// range descriptor, and is also waited on for during command
-		// application. As for stale snapshots, if they specify a replicaID
-		// that's no longer part of the raft group, they're discarded by the
-		// recipient. Snapshots are also discarded unless they move the LAI
-		// forward.
-		//
-		// That still leaves rooms for replicas in the replica GC queue to evade
-		// detection. To address this, below-raft upgrades typically take a
-		// two-phrase approach (the TruncatedAndRangeAppliedStateMigration being
-		// one example of this), where after having migrated the entire keyspace
-		// to version V, and after having prevented subsequent snapshots
-		// originating from replicas with versions < V, the upgrade sets out
-		// to purge outdated replicas in the system[3]. Specifically it
-		// processes all replicas in the GC queue with a version < V (which are
-		// not accessible during the application of the Migrate command).
-		//
-		// [1]: See ReplicaState.Version.
-		// [2]: See Replica.executeWriteBatch, specifically how proposals with the
-		//      Migrate request are handled downstream of raft.
-		// [3]: See PurgeOutdatedReplicas from the SystemUpgrade service.
-
-		{
-			// The upgrades infrastructure makes use of internal fence
-			// versions when stepping through consecutive versions. It's
-			// instructive to walk through how we expect a version upgrade
-			// from v21.1 to v21.2 to take place, and how we behave in the
-			// presence of new v21.1 or v21.2 Nodes being added to the cluster.
-			//
-			//   - All Nodes are running v21.1
-			//   - All Nodes are rolled into v21.2 binaries, but with active
-			//     cluster version still as v21.1
-			//   - The first version bump will be into v21.2-1(fence), see the
-			//     upgrade manager above for where that happens
-			//
-			// Then concurrently:
-			//
-			//   - A new node is added to the cluster, but running binary v21.1
-			//   - We try bumping the cluster gates to v21.2-1(fence)
-			//
-			// If the v21.1 Nodes manages to sneak in before the version bump,
-			// it's fine as the version bump is a no-op one (all fence versions
-			// are). Any subsequent bumps (including the "actual" one bumping to
-			// v21.2) will fail during the validation step where we'll first
-			// check to see that all Nodes are running v21.2 binaries.
-			//
-			// If the v21.1 node is only added after v21.2-1(fence) is active,
-			// it won't be able to actually join the cluster (it'll be prevented
-			// by the join RPC).
-			//
-			// All of which is to say that once we've seen the node list
-			// stabilize (as UntilClusterStable enforces), any new nodes that
-			// can join the cluster will run a release that support the fence
-			// version, and by design also supports the actual version (which is
-			// the direct successor of the fence).
-			fenceVersion := upgrade.FenceVersionFor(ctx, cv)
-			if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
-				return err
-			}
+		fenceVersion := upgrade.FenceVersionFor(ctx, cv)
+		if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
+			return err
 		}
 
 		// Now sanity check that we'll actually be able to perform the real
@@ -465,8 +476,9 @@ func (m *Manager) Migrate(
 		if err != nil {
 			return err
 		}
-		// Bump up the cluster version for tenants, which
-		// will bump over individual version bumps.
+
+		// Updates the version info inside the tenant or host cluster's
+		// (system tenant) settings table.
 		err = updateSystemVersionSetting(ctx, cv)
 		if err != nil {
 			return err
@@ -502,6 +514,15 @@ func validateTargetClusterVersion(
 		tx context.Context, client serverpb.MigrationClient,
 	) error {
 		_, err := client.ValidateTargetClusterVersion(ctx, req)
+		// The tenant upgrade interlock is new in 23.1, as a result, before
+		// 23.1 there was no Migration RPC for tenants. If we see the error that
+		// no Migration RPC has been started, we assume that the tenant pods
+		// in question are running on a version that predates 23.1, and return
+		// that friendlier error instead. This code can be removed when we no
+		// longer expect to see tenant pods running below version 23.1.
+		if err != nil && strings.Contains(err.Error(), "unknown service cockroach.server.serverpb.Migration") {
+			err = errors.New("validate cluster version failed: some tenant pods running on binary less than 23.1")
+		}
 		return err
 	})
 }
@@ -513,7 +534,7 @@ func forEveryNodeUntilClusterStable(
 	f func(ctx context.Context, client serverpb.MigrationClient) error,
 ) error {
 	return c.UntilClusterStable(ctx, func() error {
-		return c.ForEveryNode(ctx, op, f)
+		return c.ForEveryNodeOrTenantPod(ctx, op, f)
 	})
 }
 
