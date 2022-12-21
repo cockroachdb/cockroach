@@ -179,6 +179,12 @@ type CommonLookupFlags struct {
 	// ParentID enforces that the resolved descriptor exist with this parent
 	// ID if non-zero.
 	ParentID catid.DescID
+	// SkipHydration enforce descriptor lookups to skip hydration. This can be set
+	// to true only when looking up descriptors when hydrating another group of
+	// descriptors. The purpose is to avoid potential infinite recursion loop when
+	// trying to hydrate a descriptor which would lead to hydration of another
+	// descriptor depends on it.
+	SkipHydration bool
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
