@@ -274,6 +274,11 @@ func NewTenantServer(
 		return nil, err
 	}
 
+	// Instantiate the migration API server.
+	tms := newTenantMigrationServer(sqlServer)
+	serverpb.RegisterMigrationServer(args.grpc.Server, tms)
+	sqlServer.migrationServer = tms // only for testing via TestTenant
+
 	// Tell the authz server how to connect to SQL.
 	adminAuthzCheck.makePlanner = func(opName string) (interface{}, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment

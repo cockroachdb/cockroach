@@ -42,6 +42,7 @@ type Reader struct {
 	clock    *hlc.Clock
 	stopper  *stop.Stopper
 	rowcodec rowCodec
+	db       *kv.DB
 	// Once initialScanDone is closed, the error (if any) while establishing the
 	// rangefeed can be found in initialScanErr.
 	initialScanDone chan struct{}
@@ -62,6 +63,7 @@ func NewTestingReader(
 	table catalog.TableDescriptor,
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
+	db *kv.DB,
 ) *Reader {
 	r := &Reader{
 		storage:         storage,
@@ -72,6 +74,7 @@ func NewTestingReader(
 		rowcodec:        makeRowCodec(codec, table),
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
+		db:              db,
 	}
 	r.mu.instances = make(map[base.SQLInstanceID]instancerow)
 	return r
@@ -85,8 +88,9 @@ func NewReader(
 	codec keys.SQLCodec,
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
+	db *kv.DB,
 ) *Reader {
-	return NewTestingReader(storage, slReader, f, codec, systemschema.SQLInstancesTable(), clock, stopper)
+	return NewTestingReader(storage, slReader, f, codec, systemschema.SQLInstancesTable(), clock, stopper, db)
 }
 
 // Start initializes the rangefeed for the Reader. The rangefeed will run until
@@ -139,6 +143,13 @@ func makeInstanceInfos(rows []instancerow) []sqlinstance.InstanceInfo {
 		ret[i] = makeInstanceInfo(rows[i])
 	}
 	return ret
+}
+
+// GetAllInstancesNoCache reads all instances directly from the sql_instances
+// table, bypassing any caching.
+func (r *Reader) GetAllInstancesNoCache(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
+	txn := kv.NewTxn(ctx, r.db, 0 /* gatewayNodeID */)
+	return r.GetAllInstancesUsingTxn(ctx, txn)
 }
 
 // GetAllInstancesUsingTxn reads all instances using the given transaction and returns

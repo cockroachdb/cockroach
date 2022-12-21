@@ -919,6 +919,11 @@ func (ts *TestServer) StartSharedProcessTenant(
 	return testTenant, sqlDB, err
 }
 
+// MigrationServer is part of the TestTenantInterface.
+func (t *TestTenant) MigrationServer() interface{} {
+	return t.migrationServer
+}
+
 // StartTenant is part of TestServerInterface.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
