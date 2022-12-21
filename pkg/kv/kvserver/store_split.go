@@ -110,13 +110,9 @@ func splitPreApply(
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
-			// Cleared the HardState and RaftReplicaID, so rewrite them to the
-			// current values.
-			// TODO(sumeer): we know HardState.Commit cannot advance since the RHS
-			// cannot apply a snapshot yet. But there could be a concurrent change
-			// to HardState.{Term,Vote} that we would accidentally undo here,
-			// because we are not actually holding the appropriate mutex. See
-			// https://github.com/cockroachdb/cockroach/issues/75918.
+			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
+			// values. NB: rightRepl.raftMu is still locked since HardState was read,
+			// so it can't have been rewritten in the meantime (fixed in #75918).
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
 				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 			}

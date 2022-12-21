@@ -403,6 +403,13 @@ func TestExecBuild_partial_index(
 	runExecBuildLogicTest(t, "partial_index")
 }
 
+func TestExecBuild_partial_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "partial_stats")
+}
+
 func TestExecBuild_prepare(
 	t *testing.T,
 ) {
