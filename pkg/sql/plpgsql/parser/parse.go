@@ -11,9 +11,9 @@
 package parser
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
