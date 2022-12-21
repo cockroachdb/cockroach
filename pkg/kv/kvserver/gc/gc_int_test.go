@@ -144,13 +144,22 @@ func TestEndToEndGC(t *testing.T) {
 					return startKey, endKey
 				}
 
-				deleteRangeDataWithRangeTombstone := func(t *testing.T, rangeIDs ids, kvDb *kv.DB, db *gosql.DB) {
+				deleteRangeDataWithRangeTombstone := func(t *testing.T, kvDb *kv.DB, db *gosql.DB) {
 					t.Helper()
-					for _, id := range rangeIDs {
-						start, end := getRangeInfo(t, id, db)
-						require.NoError(t, kvDb.DelRangeUsingTombstone(ctx, start, end),
-							"failed to delete range with tombstone")
+					var prevRangeIDs ids
+					for i := 0; i < 3; i++ {
+						rangeIDs := getTableRangeIDs(t, sqlDb)
+						if rangeIDs.equal(prevRangeIDs) {
+							return
+						}
+						for _, id := range rangeIDs {
+							start, end := getRangeInfo(t, id, db)
+							require.NoError(t, kvDb.DelRangeUsingTombstone(ctx, start, end),
+								"failed to delete range with tombstone")
+						}
+						prevRangeIDs = rangeIDs
 					}
+					t.Fatal("failed to get consistent list of ranges for table after 3 attempts")
 				}
 
 				getRangeStats := func(t *testing.T, rangeID int64) enginepb.MVCCStats {
@@ -198,6 +207,7 @@ func TestEndToEndGC(t *testing.T) {
 				for i := 0; i < 1000; i++ {
 					execOrFatal(t, sqlDb, "upsert into kv values ($1, $2)", rng.Int63(), "hello")
 				}
+				t.Logf("found table range after initializing table data: %s", getTableRangeIDs(t, sqlDb))
 
 				require.NotEmptyf(t, readSomeKeys(t, sqlDb), "found no keys in table")
 
@@ -219,13 +229,16 @@ func TestEndToEndGC(t *testing.T) {
 					}
 				}
 				require.NotEmpty(t, tableRangeIDs, "failed to query ranges belonging to table")
-				require.NotEmptyf(t, nonEmptyRangeIDs, "all table ranges are empty according to MVCCStats")
+				require.NotEmpty(t, nonEmptyRangeIDs, "all table ranges are empty according to MVCCStats")
+
+				t.Logf("found non-empty table ranges before deletion: %v", nonEmptyRangeIDs)
 
 				if d.rangeTombstones {
-					deleteRangeDataWithRangeTombstone(t, tableRangeIDs, kvDb, sqlDb)
+					deleteRangeDataWithRangeTombstone(t, kvDb, sqlDb)
 				} else {
 					execOrFatal(t, sqlDb, "delete from kv where k is not null")
 				}
+				t.Logf("found table ranges after range deletion: %s", getTableRangeIDs(t, sqlDb))
 
 				require.Empty(t, readSomeKeys(t, sqlDb), "table still contains data after range deletion")
 
@@ -261,6 +274,7 @@ func TestEndToEndGC(t *testing.T) {
 
 					nonEmptyRangeIDs := findNonEmptyRanges(t, tableRangeIDs)
 					if len(nonEmptyRangeIDs) > 0 {
+						t.Logf("non empty ranges after GC queue: %s", nonEmptyRangeIDs)
 						return errors.New("not all ranges were cleared")
 					}
 					return nil
@@ -277,4 +291,16 @@ func (r ids) String() string {
 		s[i] = fmt.Sprintf("%d", r)
 	}
 	return fmt.Sprintf("[%s]", strings.Join(s, ","))
+}
+
+func (r ids) equal(o ids) bool {
+	if len(r) != len(o) {
+		return false
+	}
+	for i := range r {
+		if r[i] != o[i] {
+			return false
+		}
+	}
+	return true
 }
