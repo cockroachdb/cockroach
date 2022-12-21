@@ -57,17 +57,11 @@ func EncodingVersion(ent raftpb.Entry) (kvserverbase.RaftCommandEncodingVersion,
 	return v, nil
 }
 
-// DecomposeRaftVersionStandard extracts the CmdIDKey and the marshaled
+// DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the marshaled
 // kvserverpb.RaftCommand from a slice which is known to have come from a
-// raftpb.Entry of type kvserverbase.RaftVersionStandard.
-func DecomposeRaftVersionStandard(data []byte) (kvserverbase.CmdIDKey, []byte) {
-	return kvserverbase.CmdIDKey(data[1 : 1+kvserverbase.RaftCommandIDLen]), data[1+kvserverbase.RaftCommandIDLen:]
-}
-
-// DecomposeRaftVersionSideloaded extracts the CmdIDKey and the marshaled
-// kvserverpb.RaftCommand from a slice which is known to have come from a
-// raftpb.Entry of type kvserverbase.RaftVersionSideloaded.
-func DecomposeRaftVersionSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
+// raftpb.Entry of type kvserverbase.RaftVersionStandard or
+// kvserverbase.RaftVersionSideloaded (which share an encoding).
+func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	return kvserverbase.CmdIDKey(data[1 : 1+kvserverbase.RaftCommandIDLen]), data[1+kvserverbase.RaftCommandIDLen:]
 }
 
@@ -152,10 +146,8 @@ func (e *Entry) load() error {
 		AsV2() raftpb.ConfChangeV2
 	}
 	switch typ {
-	case kvserverbase.RaftVersionStandard:
-		e.ID, raftCmdBytes = DecomposeRaftVersionStandard(e.Entry.Data)
-	case kvserverbase.RaftVersionSideloaded:
-		e.ID, raftCmdBytes = DecomposeRaftVersionSideloaded(e.Entry.Data)
+	case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+		e.ID, raftCmdBytes = DecomposeRaftVersionStandardOrSideloaded(e.Entry.Data)
 	case kvserverbase.RaftVersionEmptyEntry:
 		// Nothing to load, the empty raftpb.Entry is represented by a trivial
 		// Entry.

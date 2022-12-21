@@ -223,7 +223,7 @@ func raftEntryFormatter(data []byte) string {
 	// that call this take care of unwrapping the ConfChange), and since
 	// len(data)>0 it has to be RaftVersionStandard or RaftVersionSideloaded and
 	// they are encoded identically.
-	cmdID, data := raftlog.DecomposeRaftVersionStandard(data)
+	cmdID, data := raftlog.DecomposeRaftVersionStandardOrSideloaded(data)
 	return fmt.Sprintf("[%x] [%d]", cmdID, len(data))
 }
 
@@ -274,11 +274,8 @@ func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase
 			continue
 		}
 		switch typ {
-		case kvserverbase.RaftVersionStandard:
-			id, _ := raftlog.DecomposeRaftVersionStandard(e.Data)
-			ids = append(ids, id)
-		case kvserverbase.RaftVersionSideloaded:
-			id, _ := raftlog.DecomposeRaftVersionSideloaded(e.Data)
+		case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+			id, _ := raftlog.DecomposeRaftVersionStandardOrSideloaded(e.Data)
 			ids = append(ids, id)
 		case kvserverbase.RaftVersionConfChange, kvserverbase.RaftVersionConfChangeV2:
 			// Configuration changes don't have the CmdIDKey easily accessible but are

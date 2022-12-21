@@ -22,8 +22,8 @@ import "fmt"
 type RaftCommandEncodingVersion byte
 
 const (
-	// RaftVersionStandard is the initial Raft command version, used for all
-	// regular Raft traffic.
+	// RaftVersionStandard is the default encoding for a CockroachDB raft log
+	// entry.
 	//
 	// This is a raftpb.Entry of type EntryNormal whose Data slice is either
 	// empty or whose first byte matches RaftVersionStandard. The subsequent
@@ -32,14 +32,15 @@ const (
 	RaftVersionStandard RaftCommandEncodingVersion = 0
 	// RaftVersionSideloaded indicates a proposal representing the result of a
 	// roachpb.AddSSTableRequest for which the payload (the SST) is stored outside
-	// the LSM to improve storage performance.
+	// the storage engine to improve storage performance.
 	//
-	// This is a raftpb.Entry of type EntryNormal whose data slice is either
-	// empty or whose first byte matches RaftVersionSideloaded. The remaining
-	// bytes represent a kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult
+	// This is a raftpb.Entry of type EntryNormal whose data slice is either empty
+	// or whose first byte matches RaftVersionSideloaded. The remaining bytes
+	// represent a kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult
 	// holds a nontrival kvserverpb.ReplicatedEvalResult_AddSSTable, the Data
-	// field of which is an SST to be ingested (and which is present in memory
-	// but made durable via direct storage on the filesystem, bypassing the LSM).
+	// field of which is an SST to be ingested (and which is present in memory but
+	// made durable via direct storage on the filesystem, bypassing the storage
+	// engine).
 	RaftVersionSideloaded RaftCommandEncodingVersion = 1
 	// RaftVersionEmptyEntry is an empty entry. These are used by raft after
 	// leader election. Since they hold no data, there is nothing in them to
@@ -55,9 +56,17 @@ const (
 	// the replacements raftpb.EntryConfChange{,V2} and raftpb.ConfChange{,V2}
 	// applied.
 	RaftVersionConfChangeV2 RaftCommandEncodingVersion = 255
-	// RaftCommandIDLen is the length for each command ID.
+)
+
+// TODO(tbg): when we have a good library for encoding entries, these should
+// no longer be exported.
+const (
+	// RaftCommandIDLen is the length of a command ID.
 	RaftCommandIDLen = 8
-	// RaftCommandPrefixLen is the prescribed length of each encoded command's prefix.
+	// RaftCommandPrefixLen is the length of the prefix of raft entries that
+	// use the RaftVersionStandard or RaftVersionSideloaded encodings. The
+	// bytes after the prefix represent the kvserverpb.RaftCommand.
+	//
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
 )
 
