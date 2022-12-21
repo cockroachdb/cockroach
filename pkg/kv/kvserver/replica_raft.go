@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -68,7 +69,7 @@ var (
 )
 
 func makeIDKey() kvserverbase.CmdIDKey {
-	idKeyBuf := make([]byte, 0, kvserverbase.RaftCommandIDLen)
+	idKeyBuf := make([]byte, 0, raftlog.RaftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
 	return kvserverbase.CmdIDKey(idKeyBuf)
 }
@@ -343,7 +344,7 @@ func (r *Replica) propose(
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
-	encodingPrefixByte := kvserverbase.RaftVersionStandardPrefixByte
+	encodingPrefixByte := raftlog.RaftVersionStandardPrefixByte
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -415,7 +416,7 @@ func (r *Replica) propose(
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		encodingPrefixByte = kvserverbase.RaftVersionSideloadedPrefixByte
+		encodingPrefixByte = raftlog.RaftVersionSideloadedPrefixByte
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -428,7 +429,7 @@ func (r *Replica) propose(
 	// Create encoding buffer.
 	preLen := 0
 	if prefix {
-		preLen = kvserverbase.RaftCommandPrefixLen
+		preLen = raftlog.RaftCommandPrefixLen
 	}
 	cmdLen := p.command.Size()
 	// Allocate the data slice with enough capacity to eventually hold the two
@@ -437,7 +438,7 @@ func (r *Replica) propose(
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		kvserverbase.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
+		raftlog.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
 	}
 	// Encode body of command.
 	data = data[:preLen+cmdLen]

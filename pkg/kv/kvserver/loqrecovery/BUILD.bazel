@@ -50,6 +50,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
