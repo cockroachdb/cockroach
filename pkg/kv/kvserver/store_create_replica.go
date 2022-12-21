@@ -14,10 +14,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -177,14 +175,9 @@ func (s *Store) tryCreateUninitializedReplica(
 	// Store's Range map even though we must check it again after to avoid race
 	// conditions. This double-checked locking is an optimization to avoid this
 	// work when we know the Replica should not be created ahead of time.
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-	var tombstone roachpb.RangeTombstone
-	if ok, err := storage.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-	); err != nil {
+	tombstone := kvstorage.NewRangeTombstoneChecker(rangeID, s.Engine())
+	if _, err := tombstone.Check(ctx, replicaID); err != nil {
 		return nil, err
-	} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
-		return nil, &roachpb.RaftGroupDeletedError{}
 	}
 
 	// Create a new replica and lock it for raft processing.
@@ -242,12 +235,8 @@ func (s *Store) tryCreateUninitializedReplica(
 		// tombstone check and the Range map linearization point. By checking
 		// again now, we make sure to synchronize with any goroutine that wrote
 		// a tombstone and then removed an old replica from the Range map.
-		if ok, err := storage.MVCCGetProto(
-			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		); err != nil {
+		if _, err := tombstone.Check(ctx, replicaID); err != nil {
 			return err
-		} else if ok && replicaID < tombstone.NextReplicaID {
-			return &roachpb.RaftGroupDeletedError{}
 		}
 
 		// An uninitialized replica should have an empty HardState.Commit at
