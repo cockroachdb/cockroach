@@ -3,12 +3,12 @@ set -euo pipefail
 
 (
   set -x
-  yarn --cwd workspaces/eslint-plugin-crdb install
-  yarn --cwd workspaces/db-console/src/js install
-  yarn --cwd workspaces/cluster-ui install
-  yarn --cwd workspaces/db-console install
+  yarn --cwd workspaces/eslint-plugin-crdb --pure-lockfile install
+  yarn --cwd workspaces/db-console/src/js --pure-lockfile install
+  yarn --cwd workspaces/cluster-ui --pure-lockfile install
+  yarn --cwd workspaces/db-console --pure-lockfile install
   # Don't install the native Cypress binary immediately. ./dev ui e2e will do that just in time.
-  CYPRESS_INSTALL_BINARY=0 yarn --cwd workspaces/e2e-tests install
+  CYPRESS_INSTALL_BINARY=0 yarn --cwd workspaces/e2e-tests --pure-lockfile install
 )
 
 cat << "EOF"
