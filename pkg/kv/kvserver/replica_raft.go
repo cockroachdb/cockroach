@@ -343,7 +343,7 @@ func (r *Replica) propose(
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
-	version := kvserverbase.RaftVersionStandard
+	encodingPrefixByte := kvserverbase.RaftVersionStandardPrefixByte
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -415,7 +415,7 @@ func (r *Replica) propose(
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		version = kvserverbase.RaftVersionSideloaded
+		encodingPrefixByte = kvserverbase.RaftVersionSideloadedPrefixByte
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -437,7 +437,7 @@ func (r *Replica) propose(
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		kvserverbase.EncodeRaftCommandPrefix(data, version, p.idKey)
+		kvserverbase.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
 	}
 	// Encode body of command.
 	data = data[:preLen+cmdLen]
