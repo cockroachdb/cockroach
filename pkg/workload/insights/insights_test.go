@@ -45,10 +45,10 @@ func TestInsightsWorkload(t *testing.T) {
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS insights_workload_table_a`)
 
 			insights := FromConfig(test.rows, test.rows, defaultPayloadBytes, test.ranges)
 			insightsTableA := insights.Tables()[0]
+			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, insightsTableA.Name))
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, insightsTableA.Name, insightsTableA.Schema))
 
 			if err := workloadsql.Split(ctx, db, insightsTableA, 1 /* concurrency */); err != nil {
