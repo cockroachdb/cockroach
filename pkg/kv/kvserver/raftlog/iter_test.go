@@ -44,9 +44,9 @@ func ents(inds ...uint64) []raftpb.Entry {
 		typ := raftpb.EntryType(ind % 3)
 		switch typ {
 		case raftpb.EntryNormal:
-			prefixByte := RaftVersionStandardPrefixByte
+			prefixByte := EntryEncodingStandardPrefixByte
 			if ind%2 == 0 {
-				prefixByte = RaftVersionSideloadedPrefixByte
+				prefixByte = EntryEncodingSideloadedPrefixByte
 			}
 			data = EncodeRaftCommand(prefixByte, cmdID, b)
 		case raftpb.EntryConfChangeV2:
