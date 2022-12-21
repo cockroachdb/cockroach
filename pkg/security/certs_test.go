@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -109,7 +110,7 @@ func TestGenerateCACert(t *testing.T) {
 	}
 }
 
-func TestGenerateTenantCerts(t *testing.T) {
+func TestGenerateTenantKVClientCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
@@ -118,7 +119,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 	certsDir := t.TempDir()
 
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
-	require.NoError(t, security.CreateTenantCAPair(
+	require.NoError(t, security.CreateTenantKVClientCAPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
@@ -127,7 +128,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 		false, // overwrite
 	))
 
-	cp, err := security.CreateTenantPair(
+	cp, err := security.CreateTenantKVClientCertPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
@@ -136,7 +137,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 		[]string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
-	require.NoError(t, security.WriteTenantPair(certsDir, cp, false))
+	require.NoError(t, security.WriteTenantKVClientCerts(certsDir, cp, false))
 
 	require.NoError(t, security.CreateTenantSigningPair(certsDir, time.Hour, false /* overwrite */, 999))
 
@@ -157,11 +158,11 @@ func TestGenerateTenantCerts(t *testing.T) {
 	}
 	require.Equal(t, []*security.CertInfo{
 		{
-			FileUsage: security.TenantCAPem,
+			FileUsage: security.TenantKVClientCAPem,
 			Filename:  "ca-client-tenant.crt",
 		},
 		{
-			FileUsage: security.TenantPem,
+			FileUsage: security.TenantKVClientPem,
 			Filename:  "client-tenant.999.crt",
 			Name:      "999",
 		},
@@ -211,8 +212,7 @@ func TestGenerateClientCerts(t *testing.T) {
 	// We expect two certificates: the CA certificate and the tenant scoped client certificate.
 	require.Equal(t, 2, len(infos))
 	expectedClientCrtName := fmt.Sprintf("client.%s.crt", user)
-	expectedSANs, err := security.MakeTenantURISANs(user, tenantIDs)
-	require.NoError(t, err)
+	expectedSANs := security.MakeTenantSQLClientURISANs(user, tenantIDs)
 	for _, info := range infos {
 		if info.Filename == "ca.crt" {
 			continue
@@ -296,20 +296,20 @@ func generateBaseCerts(certsDir string) error {
 
 	{
 		tenantID := uint64(10)
-		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
-		if err := security.CreateTenantCAPair(
+		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantKVClientCAKey)
+		if err := security.CreateTenantKVClientCAPair(
 			certsDir, caKey,
 			testKeySize, time.Hour*96, true, true,
 		); err != nil {
 			return err
 		}
 
-		tcp, err := security.CreateTenantPair(certsDir, caKey,
+		tcp, err := security.CreateTenantKVClientCertPair(certsDir, caKey,
 			testKeySize, time.Hour*48, tenantID, []string{"127.0.0.1"})
 		if err != nil {
 			return err
 		}
-		if err := security.WriteTenantPair(certsDir, tcp, true); err != nil {
+		if err := security.WriteTenantKVClientCerts(certsDir, tcp, true); err != nil {
 			return err
 		}
 		if err := security.CreateTenantSigningPair(certsDir, 96*time.Hour, true /* overwrite */, tenantID); err != nil {
@@ -323,7 +323,9 @@ func generateBaseCerts(certsDir string) error {
 // Generate certificates with separate CAs:
 // ca.crt: CA certificate
 // ca-client.crt: CA certificate to verify client certs
-// node.crt: node server cert: signed by ca.crt
+// ca-sql.crt: CA certificate for the SQL server cert
+// node.crt: RPC server cert: signed by ca.crt
+// sql-server.crt: SQL server cert: signed by ca-sql.crt
 // client.node.crt: node client cert: signed by ca-client.crt
 // client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
@@ -332,6 +334,20 @@ func generateSplitCACerts(certsDir string) error {
 	}
 
 	// Overwrite those certs that we want to split.
+
+	if err := security.CreateSQLServerCAPair(
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedSQLServerCAKey),
+		testKeySize, time.Hour*96, true, true,
+	); err != nil {
+		return errors.Wrap(err, "could not generate SQL server CA pair")
+	}
+
+	if err := security.CreateSQLServerPair(
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedSQLServerCAKey),
+		testKeySize, time.Hour*48, false, nil /* tenantIDs */, []string{"127.0.0.1"},
+	); err != nil {
+		return errors.Wrap(err, "could not generate SQL Server pair")
+	}
 
 	if err := security.CreateClientCAPair(
 		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
@@ -375,6 +391,8 @@ func generateSplitCACerts(certsDir string) error {
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -457,6 +475,8 @@ func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) str
 // We construct SSL server and clients and use the generated certs.
 func TestUseSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -532,17 +552,17 @@ func TestUseSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Success, but "node" is not a sql user.
-		{"node", certnames.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedSQLServerCACert, "client.node", "pq: password authentication failed for user node"},
 		// Success!
-		{"root", certnames.EmbeddedCACert, "client.root", ""},
+		{"root", certnames.EmbeddedSQLServerCACert, "client.root", ""},
 		// Bad server CA: can't verify server certificate.
 		{"root", certnames.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
-		{"node", certnames.EmbeddedCACert, "node", "tls: bad certificate"},
+		{"node", certnames.EmbeddedSQLServerCACert, "node", "tls: bad certificate"},
 		// We can't verify the node certificate using the UI cert.
 		{"node", certnames.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
 		// And the SQL server doesn't know what the ui.crt is.
-		{"node", certnames.EmbeddedCACert, "ui", "tls: bad certificate"},
+		{"node", certnames.EmbeddedSQLServerCACert, "ui", "tls: bad certificate"},
 	}
 
 	for i, tc := range testCases {
@@ -566,6 +586,8 @@ func TestUseSplitCACerts(t *testing.T) {
 // We construct SSL server and clients and use the generated certs.
 func TestUseWrongSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -649,9 +671,9 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Certificate signed by wrong client CA.
-		{"root", certnames.EmbeddedCACert, "client.root", "tls: bad certificate"},
+		{"root", certnames.EmbeddedSQLServerCACert, "client.root", "tls: bad certificate"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
-		{"node", certnames.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedSQLServerCACert, "node", "pq: password authentication failed for user node"},
 	}
 
 	for i, tc := range testCases {
@@ -683,7 +705,7 @@ func TestAppendCertificateToBlob(t *testing.T) {
 	for _, certFilename := range []string{
 		//		security.EmbeddedClientCACert,
 		//		security.EmbeddedUICACert,
-		certnames.EmbeddedTenantCACert,
+		certnames.EmbeddedTenantKVClientCACert,
 	} {
 		newCertBlob, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certFilename))
 		if err != nil {

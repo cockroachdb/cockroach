@@ -292,13 +292,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if !cfg.Insecure {
 		// TODO(peter): Call methods on CertificateManager directly. Need to call
 		// base.wrapError or similar on the resulting error.
-		if _, err := rpcContext.GetServerTLSConfig(); err != nil {
+		if _, err := rpcContext.GetRPCServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := rpcContext.GetSQLServerTLSConfig(); err != nil {
 			return nil, err
 		}
 		if _, err := rpcContext.GetUIServerTLSConfig(); err != nil {
 			return nil, err
 		}
-		if _, err := rpcContext.GetClientTLSConfig(); err != nil {
+		if _, err := rpcContext.GetRPCClientTLSConfig(); err != nil {
 			return nil, err
 		}
 		cm, err := rpcContext.GetCertificateManager()

@@ -40,6 +40,12 @@ var (
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
+	metaSQLServerCAExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.sql-server-ca",
+		Help:        "Expiration for the SQL server CA certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 	metaUICAExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.ui-ca",
 		Help:        "Expiration for the UI CA certificate. 0 means no certificate or error.",
@@ -49,6 +55,12 @@ var (
 	metaNodeExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node",
 		Help:        "Expiration for the node certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
+	metaSQLServerExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.sql-server",
+		Help:        "Expiration for the SQL server certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
@@ -116,24 +128,34 @@ type CertificateManager struct {
 	initialized bool
 
 	// Set of certs. These are swapped in during Load(), and never mutated afterwards.
-	caCert         *CertInfo // default CA certificate
-	clientCACert   *CertInfo // optional: certificate to verify client certificates
-	uiCACert       *CertInfo // optional: certificate to verify UI certificates
-	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
-	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
-	uiCert         *CertInfo // optional: server certificate for the admin UI.
-	clientCerts    map[username.SQLUsername]*CertInfo
+	caCert          *CertInfo // default CA certificate
+	clientCACert    *CertInfo // optional: certificate to verify client certificates
+	uiCACert        *CertInfo // optional: certificate to verify UI certificates
+	nodeCert        *CertInfo // certificate for RPC service (always server cert, sometimes client cert)
+	sqlServerCACert *CertInfo // optional: certificate to sign SQL service cert
+	sqlServerCert   *CertInfo // optional: certificate for SQL service
+	nodeClientCert  *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
+	uiCert          *CertInfo // optional: server certificate for the admin UI.
 
-	// Certs only used with multi-tenancy.
-	tenantCACert, tenantCert, tenantSigningCert *CertInfo
+	tenantKVClientCert   *CertInfo // optional: client certificate for a tenant server to authn to the KV layer
+	tenantKVClientCACert *CertInfo // optional: certificate to verify tenant KV client certs
+	tenantSigningCert    *CertInfo // optional: certificate used to sign serialized SQL sessions for a tenant
+
+	clientCerts map[username.SQLUsername]*CertInfo
 
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
-	// Server-side config.
-	serverConfig *tls.Config
+	// Server-side config for inbound RPC connections.
+	rpcServerConfig *tls.Config
+	// Server-side config for inbound SQL connections.
+	sqlServerConfig *tls.Config
 	// Server-side config for the Admin UI.
 	uiServerConfig *tls.Config
 	// Client-side config for the cockroach node.
 	// All other client tls.Config objects are built as requested and not cached.
+	// Currently applies to both RPC and SQL client connections.
+	//
+	// TODO(knz): Split them so we can use separate client certs for RPC
+	// and SQL client conns.
 	clientConfig *tls.Config
 	// Client config for the tenant (if running in a SQL tenant server).
 	tenantConfig *tls.Config
@@ -143,14 +165,16 @@ type CertificateManager struct {
 // These are initialized when the certificate manager is created and updated
 // on reload.
 type CertificateMetrics struct {
-	CAExpiration         *metric.Gauge
-	ClientCAExpiration   *metric.Gauge
-	UICAExpiration       *metric.Gauge
-	NodeExpiration       *metric.Gauge
-	NodeClientExpiration *metric.Gauge
-	UIExpiration         *metric.Gauge
-	TenantCAExpiration   *metric.Gauge
-	TenantExpiration     *metric.Gauge
+	CAExpiration          *metric.Gauge
+	ClientCAExpiration    *metric.Gauge
+	SQLServerCAExpiration *metric.Gauge
+	UICAExpiration        *metric.Gauge
+	NodeExpiration        *metric.Gauge
+	SQLServerExpiration   *metric.Gauge
+	NodeClientExpiration  *metric.Gauge
+	UIExpiration          *metric.Gauge
+	TenantCAExpiration    *metric.Gauge
+	TenantExpiration      *metric.Gauge
 }
 
 func makeCertificateManager(
@@ -166,14 +190,16 @@ func makeCertificateManager(
 		tenantIdentifier: o.tenantIdentifier,
 		tlsSettings:      tlsSettings,
 		certMetrics: CertificateMetrics{
-			CAExpiration:         metric.NewGauge(metaCAExpiration),
-			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
-			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
-			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
-			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
-			UIExpiration:         metric.NewGauge(metaUIExpiration),
-			TenantCAExpiration:   metric.NewGauge(metaTenantCAExpiration),
-			TenantExpiration:     metric.NewGauge(metaTenantExpiration),
+			CAExpiration:          metric.NewGauge(metaCAExpiration),
+			ClientCAExpiration:    metric.NewGauge(metaClientCAExpiration),
+			SQLServerCAExpiration: metric.NewGauge(metaSQLServerCAExpiration),
+			UICAExpiration:        metric.NewGauge(metaUICAExpiration),
+			NodeExpiration:        metric.NewGauge(metaNodeExpiration),
+			SQLServerExpiration:   metric.NewGauge(metaSQLServerExpiration),
+			NodeClientExpiration:  metric.NewGauge(metaNodeClientExpiration),
+			UIExpiration:          metric.NewGauge(metaUIExpiration),
+			TenantCAExpiration:    metric.NewGauge(metaTenantCAExpiration),
+			TenantExpiration:      metric.NewGauge(metaTenantExpiration),
 		},
 	}
 }
@@ -269,6 +295,14 @@ func (cm *CertificateManager) ClientCACert() *CertInfo {
 	return cm.clientCACert
 }
 
+// SQLServerCACert returns the CA cert used to sign the SQL server cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) SQLServerCACert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.sqlServerCACert
+}
+
 // UICACert returns the CA cert used to verify the Admin UI certificate. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) UICACert() *CertInfo {
@@ -299,6 +333,14 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.nodeCert
+}
+
+// SQLServerCert returns the SQL server cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) SQLServerCert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.sqlServerCert
 }
 
 // ClientCerts returns the Client certs.
@@ -340,8 +382,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 		return makeErrorf(err, "problem loading certs directory %s", cm.CertsDir())
 	}
 
-	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
-	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
+	var caCert, clientCACert, sqlServerCACert, uiCACert, nodeCert, sqlServerCert, uiCert, nodeClientCert *CertInfo
+	var tenantKVClientCACert, tenantKVClientCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[username.SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
@@ -349,11 +391,15 @@ func (cm *CertificateManager) LoadCertificates() error {
 			caCert = ci
 		case ClientCAPem:
 			clientCACert = ci
+		case SQLServerCAPem:
+			sqlServerCACert = ci
 		case UICAPem:
 			uiCACert = ci
 		case NodePem:
 			nodeCert = ci
-		case TenantPem:
+		case SQLServerPem:
+			sqlServerCert = ci
+		case TenantKVClientPem:
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
 			// dir between multiple tenants.
@@ -362,7 +408,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 				return errors.Errorf("invalid tenant id %s", ci.Name)
 			}
 			if tenantID == cm.tenantIdentifier {
-				tenantCert = ci
+				tenantKVClientCert = ci
 			}
 		case TenantSigningPem:
 			// When there are multiple tenant signing certs, pick the one we need only.
@@ -375,8 +421,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 			if tenantID == cm.tenantIdentifier {
 				tenantSigningCert = ci
 			}
-		case TenantCAPem:
-			tenantCACert = ci
+		case TenantKVClientCAPem:
+			tenantKVClientCACert = ci
 		case UIPem:
 			uiCert = ci
 		case ClientPem:
@@ -400,11 +446,17 @@ func (cm *CertificateManager) LoadCertificates() error {
 		if err := checkCertIsValid(nodeCert); checkCertIsValid(cm.nodeCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid node cert")
 		}
+		if err := checkCertIsValid(sqlServerCert); checkCertIsValid(cm.sqlServerCert) == nil && err != nil {
+			return makeError(err, "reload would lose valid SQL server cert")
+		}
 		if err := checkCertIsValid(nodeClientCert); checkCertIsValid(cm.nodeClientCert) == nil && err != nil {
 			return makeErrorf(err, "reload would lose valid client cert for '%s'", username.NodeUser)
 		}
 		if err := checkCertIsValid(clientCACert); checkCertIsValid(cm.clientCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid CA certificate for client verification")
+		}
+		if err := checkCertIsValid(sqlServerCACert); checkCertIsValid(cm.sqlServerCACert) == nil && err != nil {
+			return makeError(err, "reload would lose valid CA certificate for SQL server cert")
 		}
 		if err := checkCertIsValid(uiCACert); checkCertIsValid(cm.uiCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid CA certificate for UI")
@@ -413,16 +465,16 @@ func (cm *CertificateManager) LoadCertificates() error {
 			return makeError(err, "reload would lose valid UI certificate")
 		}
 
-		if err := checkCertIsValid(tenantCACert); checkCertIsValid(cm.tenantCACert) == nil && err != nil {
+		if err := checkCertIsValid(tenantKVClientCACert); checkCertIsValid(cm.tenantKVClientCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid tenant client CA certificate")
 		}
-		if err := checkCertIsValid(tenantCert); checkCertIsValid(cm.tenantCert) == nil && err != nil {
+		if err := checkCertIsValid(tenantKVClientCert); checkCertIsValid(cm.tenantKVClientCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid tenant client certificate")
 		}
 	}
 
-	if tenantCert == nil && cm.tenantIdentifier != 0 {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %d in %s", cm.tenantIdentifier, cm.CertsDir())
+	if tenantKVClientCert == nil && cm.tenantIdentifier != 0 {
+		return makeErrorf(errors.New("tenant KV client cert not found"), "for %d in %s", cm.tenantIdentifier, cm.CertsDir())
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {
@@ -437,21 +489,24 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.caCert = caCert
 	cm.clientCACert = clientCACert
 	cm.uiCACert = uiCACert
+	cm.sqlServerCACert = sqlServerCACert
 
 	cm.nodeCert = nodeCert
+	cm.sqlServerCert = sqlServerCert
 	cm.nodeClientCert = nodeClientCert
 	cm.uiCert = uiCert
 	cm.clientCerts = clientCerts
 
 	cm.initialized = true
 
-	cm.serverConfig = nil
+	cm.rpcServerConfig = nil
+	cm.sqlServerConfig = nil
 	cm.uiServerConfig = nil
 	cm.clientConfig = nil
 
 	cm.tenantConfig = nil
-	cm.tenantCACert = tenantCACert
-	cm.tenantCert = tenantCert
+	cm.tenantKVClientCACert = tenantKVClientCACert
+	cm.tenantKVClientCert = tenantKVClientCert
 	cm.tenantSigningCert = tenantSigningCert
 
 	cm.updateMetricsLocked()
@@ -482,12 +537,18 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	maybeSetMetric(cm.certMetrics.ClientCAExpiration, cm.clientCACert)
 
 	// UI CA certificate expiration.
+	maybeSetMetric(cm.certMetrics.SQLServerCAExpiration, cm.sqlServerCACert)
+
+	// UI CA certificate expiration.
 	maybeSetMetric(cm.certMetrics.UICAExpiration, cm.uiCACert)
 
 	// Node certificate expiration.
 	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
 	// used to sign the node cert expires sooner, then that is the expiration time to report.
 	maybeSetMetric(cm.certMetrics.NodeExpiration, cm.nodeCert)
+
+	// SQL Server certificate expiration.
+	maybeSetMetric(cm.certMetrics.SQLServerExpiration, cm.sqlServerCert)
 
 	// Node client certificate expiration.
 	maybeSetMetric(cm.certMetrics.NodeClientExpiration, cm.nodeClientCert)
@@ -496,15 +557,32 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	maybeSetMetric(cm.certMetrics.UIExpiration, cm.uiCert)
 }
 
-// GetServerTLSConfig returns a server TLS config with a callback to fetch the
-// latest TLS config. We still attempt to get the config to make sure
-// the initial call has a valid config loaded.
-func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
-	if _, err := cm.getEmbeddedServerTLSConfig(nil); err != nil {
+// GetSQLServerTLSConfig returns a SQL server TLS config.
+// TODO(knz): change this to use a separate cert wherever releavant.
+func (cm *CertificateManager) GetSQLServerTLSConfig() (*tls.Config, error) {
+	if _, err := cm.getEmbeddedSQLServerTLSConfig(nil); err != nil {
 		return nil, err
 	}
 	return &tls.Config{
-		GetConfigForClient: cm.getEmbeddedServerTLSConfig,
+		GetConfigForClient: cm.getEmbeddedSQLServerTLSConfig,
+		// We populate GetCertificate for symmetry with GetRPCServerTLSConfig,
+		// which seemingly needs it.
+		// TODO(knz): investigate whether this is truly needed.
+		GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return nil, nil
+		},
+	}, nil
+}
+
+// GetRPCServerTLSConfig returns a RPC server TLS config with a callback to fetch the
+// latest TLS config. We still attempt to get the config to make sure
+// the initial call has a valid config loaded.
+func (cm *CertificateManager) GetRPCServerTLSConfig() (*tls.Config, error) {
+	if _, err := cm.getEmbeddedRPCServerTLSConfig(nil); err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		GetConfigForClient: cm.getEmbeddedRPCServerTLSConfig,
 		// NB: this is needed to use (*http.Server).ServeTLS, which tries to load
 		// a certificate eagerly from the supplied strings (which are empty in
 		// our case) unless:
@@ -519,17 +597,89 @@ func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
 	}, nil
 }
 
-// getEmbeddedServerTLSConfig returns the most up-to-date server tls.Config.
+// getEmbeddedSQLServerTLSConfig returns the most up-to-date server tls.Config
+// for the SQL service.
 // This is the callback set in tls.Config.GetConfigForClient. We currently
 // ignore the ClientHelloInfo object.
-func (cm *CertificateManager) getEmbeddedServerTLSConfig(
+func (cm *CertificateManager) getEmbeddedSQLServerTLSConfig(
 	_ *tls.ClientHelloInfo,
 ) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if cm.serverConfig != nil {
-		return cm.serverConfig, nil
+	if cm.sqlServerConfig != nil {
+		return cm.sqlServerConfig, nil
+	}
+
+	ca, err := cm.getSQLServerCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	var serverCert *CertInfo
+	if cm.sqlServerCert != nil {
+		serverCert, err = cm.getSQLServerCertLocked()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No dedicated SQL server cert.
+		if !cm.IsForTenant() {
+			// Storage cluster.
+			serverCert, err = cm.getNodeCertLocked()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// We reuse the client cert used to authn to the KV layer also
+			// as server cert for clients.
+			serverCert, err = cm.getTenantKVClientCertLocked()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// In any case, also add all the related CAs in the bundle.
+
+	clientCA, err := cm.getClientCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	tenantCA, err := cm.getTenantKVClientCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newServerTLSConfig(
+		cm.tlsSettings,
+		serverCert.FileContents,
+		serverCert.KeyFileContents,
+		ca.FileContents,
+		clientCA.FileContents,
+		tenantCA.FileContents,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	cm.sqlServerConfig = cfg
+	return cfg, nil
+}
+
+// getEmbeddedRPCServerTLSConfig returns the most up-to-date server tls.Config
+// for the RPC service.
+// This is the callback set in tls.Config.GetConfigForClient. We currently
+// ignore the ClientHelloInfo object.
+func (cm *CertificateManager) getEmbeddedRPCServerTLSConfig(
+	_ *tls.ClientHelloInfo,
+) (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.rpcServerConfig != nil {
+		return cm.rpcServerConfig, nil
 	}
 
 	ca, err := cm.getCACertLocked()
@@ -546,18 +696,20 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		}
 	} else {
 		// Tenant server.
-		nodeCert, err = cm.getTenantCertLocked()
+		nodeCert, err = cm.getTenantKVClientCertLocked()
 		if err != nil {
 			return nil, err
 		}
 	}
+
+	// In any case, also add all the related CAs in the bundle.
 
 	clientCA, err := cm.getClientCACertLocked()
 	if err != nil {
 		return nil, err
 	}
 
-	tenantCA, err := cm.getTenantCACertLocked()
+	tenantCA, err := cm.getTenantKVClientCACertLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +726,7 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		return nil, err
 	}
 
-	cm.serverConfig = cfg
+	cm.rpcServerConfig = cfg
 	return cfg, nil
 }
 
@@ -644,6 +796,21 @@ func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 	return cm.clientCACert, nil
 }
 
+// getClientCACertLocked returns the CA cert used to sign SQL server certs.
+// Use the server SQL server CA if it exists, otherwise fall back on the general CA.
+// cm.mu must be held.
+func (cm *CertificateManager) getSQLServerCACertLocked() (*CertInfo, error) {
+	if cm.sqlServerCACert == nil {
+		// No SQL server CA: use general CA.
+		return cm.getCACertLocked()
+	}
+
+	if err := checkCertIsValid(cm.sqlServerCACert); err != nil {
+		return nil, makeError(err, "problem with SQL server CA certificate")
+	}
+	return cm.sqlServerCACert, nil
+}
+
 // getUICACertLocked returns the CA cert for the Admin UI.
 // Use the UI CA if it exists, otherwise fall back on the general CA.
 // cm.mu must be held.
@@ -668,6 +835,15 @@ func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 	return cm.nodeCert, nil
 }
 
+// getSQLServerCertLocked returns the SQL server certificate.
+// cm.mu must be held.
+func (cm *CertificateManager) getSQLServerCertLocked() (*CertInfo, error) {
+	if err := checkCertIsValid(cm.sqlServerCert); err != nil {
+		return nil, makeError(err, "problem with SQL server certificate")
+	}
+	return cm.sqlServerCert, nil
+}
+
 // getUICertLocked returns the UI certificate if present, otherwise returns
 // the node certificate.
 // cm.mu must be held.
@@ -679,7 +855,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 			return cm.getNodeCertLocked()
 		}
 		// Tenant server.
-		return cm.getTenantCertLocked()
+		return cm.getTenantKVClientCertLocked()
 	}
 	if err := checkCertIsValid(cm.uiCert); err != nil {
 		return nil, makeError(err, "problem with UI certificate")
@@ -722,33 +898,33 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	return cm.nodeClientCert, nil
 }
 
-// getTenantCACertLocked returns the CA cert used to verify tenant client
+// getTenantKVClientCACertLocked returns the CA cert used to verify tenant client
 // certificates. Use the tenant client CA if it exists, otherwise fall back to
 // client CA. cm.mu must be held.
-func (cm *CertificateManager) getTenantCACertLocked() (*CertInfo, error) {
-	if cm.tenantCACert == nil {
+func (cm *CertificateManager) getTenantKVClientCACertLocked() (*CertInfo, error) {
+	if cm.tenantKVClientCACert == nil {
 		return cm.getClientCACertLocked()
 	}
-	c := cm.tenantCACert
+	c := cm.tenantKVClientCACert
 	if err := checkCertIsValid(c); err != nil {
 		return nil, makeError(err, "problem with tenant client CA certificate")
 	}
 	return c, nil
 }
 
-// getTenantCertLocked returns the tenant node cert.
+// getTenantKVClientCertLocked returns the tenant node cert.
 // cm.mu must be held.
-func (cm *CertificateManager) getTenantCertLocked() (*CertInfo, error) {
-	c := cm.tenantCert
+func (cm *CertificateManager) getTenantKVClientCertLocked() (*CertInfo, error) {
+	c := cm.tenantKVClientCert
 	if err := checkCertIsValid(c); err != nil {
-		return nil, makeError(err, "problem with tenant client certificate")
+		return nil, makeError(err, "problem with tenant KV client certificate")
 	}
 	return c, nil
 }
 
-// GetTenantTLSConfig returns the most up-to-date tenant client
+// GetTenantTLSConfig returns the most up-to-date tenant RPC client
 // tls.Config.
-func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
+func (cm *CertificateManager) GetTenantRPCClientTLSConfig() (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -764,24 +940,24 @@ func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
 
 	caBlob := ca.FileContents
 
-	if cm.tenantCACert != nil {
+	if cm.tenantKVClientCACert != nil {
 		// If it's available, we also include the tenant CA.
-		tenantCA, err := cm.getTenantCACertLocked()
+		tenantCA, err := cm.getTenantKVClientCACertLocked()
 		if err == nil {
 			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
 		}
 	}
 
 	// Client cert presented to KV nodes.
-	tenantCert, err := cm.getTenantCertLocked()
+	tenantKVClientCert, err := cm.getTenantKVClientCertLocked()
 	if err != nil {
 		return nil, err
 	}
 
 	cfg, err := newClientTLSConfig(
 		cm.tlsSettings,
-		tenantCert.FileContents,
-		tenantCert.KeyFileContents,
+		tenantKVClientCert.FileContents,
+		tenantKVClientCert.KeyFileContents,
 		caBlob)
 	if err != nil {
 		return nil, err
@@ -803,10 +979,22 @@ func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
 	return c, nil
 }
 
-// GetClientTLSConfig returns the most up-to-date client tls.Config.
+// GetSQLClientTLSConfig returns the most up-to-date client tls.Config for SQL clients.
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
-func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tls.Config, error) {
+// TODO(knz): change this to use a separate cert wherever relevant.
+func (cm *CertificateManager) GetSQLClientTLSConfig(
+	user username.SQLUsername,
+) (*tls.Config, error) {
+	return cm.GetRPCClientTLSConfig(user)
+}
+
+// GetRPCClientTLSConfig returns the most up-to-date client tls.Config for RPC clients.
+// Returns the dual-purpose node certs if user == NodeUser and there is no
+// separate client cert for 'node'.
+func (cm *CertificateManager) GetRPCClientTLSConfig(
+	user username.SQLUsername,
+) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -821,7 +1009,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tl
 		}
 	} else {
 		// Tenant server.
-		ca, err = cm.getTenantCACertLocked()
+		ca, err = cm.getTenantKVClientCACertLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -884,9 +1072,9 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 
 	caBlob := uiCA.FileContents
 
-	if cm.tenantCACert != nil {
+	if cm.tenantKVClientCACert != nil {
 		// If it's available, we also include the tenant CA.
-		tenantCA, err := cm.getTenantCACertLocked()
+		tenantCA, err := cm.getTenantKVClientCACertLocked()
 		if err == nil {
 			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
 		}
@@ -916,11 +1104,17 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	if cm.clientCACert != nil {
 		ret = append(ret, cm.clientCACert)
 	}
+	if cm.sqlServerCACert != nil {
+		ret = append(ret, cm.sqlServerCACert)
+	}
 	if cm.uiCACert != nil {
 		ret = append(ret, cm.uiCACert)
 	}
 	if cm.nodeCert != nil {
 		ret = append(ret, cm.nodeCert)
+	}
+	if cm.sqlServerCert != nil {
+		ret = append(ret, cm.sqlServerCert)
 	}
 	if cm.uiCert != nil {
 		ret = append(ret, cm.uiCert)

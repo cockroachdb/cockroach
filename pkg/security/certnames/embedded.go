@@ -13,23 +13,30 @@ package certnames
 // EmbeddedCertsDir is the certs directory inside embedded assets.
 // Embedded*{Cert,Key} are the filenames for embedded certs.
 const (
-	EmbeddedCertsDir     = "test_certs"
-	EmbeddedCACert       = "ca.crt"
-	EmbeddedCAKey        = "ca.key"
-	EmbeddedClientCACert = "ca-client.crt"
-	EmbeddedClientCAKey  = "ca-client.key"
-	EmbeddedUICACert     = "ca-ui.crt"
-	EmbeddedUICAKey      = "ca-ui.key"
-	EmbeddedNodeCert     = "node.crt"
-	EmbeddedNodeKey      = "node.key"
-	EmbeddedRootCert     = "client.root.crt"
-	EmbeddedRootKey      = "client.root.key"
-	EmbeddedTestUserCert = "client.testuser.crt"
-	EmbeddedTestUserKey  = "client.testuser.key"
+	EmbeddedCertsDir        = "test_certs"
+	EmbeddedCACert          = "ca.crt"
+	EmbeddedCAKey           = "ca.key"
+	EmbeddedClientCACert    = "ca-client.crt"
+	EmbeddedClientCAKey     = "ca-client.key"
+	EmbeddedSQLServerCACert = "ca-sql.crt"
+	EmbeddedSQLServerCAKey  = "ca-sql.key"
+	EmbeddedUICACert        = "ca-ui.crt"
+	EmbeddedUICAKey         = "ca-ui.key"
+	EmbeddedNodeCert        = "node.crt"
+	EmbeddedNodeKey         = "node.key"
+	EmbeddedSQLServerCert   = "sql-server.crt"
+	EmbeddedSQLServerKey    = "sql-server.key"
+	EmbeddedRootCert        = "client.root.crt"
+	EmbeddedRootKey         = "client.root.key"
+	EmbeddedTestUserCert    = "client.testuser.crt"
+	EmbeddedTestUserKey     = "client.testuser.key"
 )
 
-// Embedded certificates specific to multi-tenancy testing.
+// Embedded certificates specific to multi-tenancy testing. This CA
+// cert is used to sign `client-tenant.NN.crt` certs, used to
+// authenticate tenant servers to the KV layer and other tenant
+// servers.
 const (
-	EmbeddedTenantCACert = "ca-client-tenant.crt" // CA for client connections
-	EmbeddedTenantCAKey  = "ca-client-tenant.key" // CA for client connections
+	EmbeddedTenantKVClientCACert = "ca-client-tenant.crt"
+	EmbeddedTenantKVClientCAKey  = "ca-client-tenant.key"
 )

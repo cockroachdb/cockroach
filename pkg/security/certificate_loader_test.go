@@ -109,7 +109,7 @@ func TestLoadEmbeddedCerts(t *testing.T) {
 
 	// Check that all non-CA pairs include a key.
 	for _, c := range certs {
-		if c.FileUsage == security.CAPem || c.FileUsage == security.TenantCAPem {
+		if c.FileUsage == security.CAPem || c.FileUsage == security.TenantKVClientCAPem {
 			if len(c.KeyFilename) != 0 {
 				t.Errorf("CA key was loaded for CertInfo %+v", c)
 			}

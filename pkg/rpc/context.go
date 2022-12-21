@@ -207,7 +207,7 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
 	}
 	if !rpcCtx.Config.Insecure {
-		tlsConfig, err := rpcCtx.GetServerTLSConfig()
+		tlsConfig, err := rpcCtx.GetRPCServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -1500,9 +1500,9 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 		var tlsConfig *tls.Config
 		var err error
 		if rpcCtx.tenID == roachpb.SystemTenantID {
-			tlsConfig, err = rpcCtx.GetClientTLSConfig()
+			tlsConfig, err = rpcCtx.GetRPCClientTLSConfig()
 		} else {
-			tlsConfig, err = rpcCtx.GetTenantTLSConfig()
+			tlsConfig, err = rpcCtx.GetTenantRPCClientTLSConfig()
 		}
 		if err != nil {
 			return nil, err

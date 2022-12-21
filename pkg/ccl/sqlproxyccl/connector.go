@@ -460,13 +460,23 @@ func tlsConfigForTenant(
 		}
 		serverCert := state.VerifiedChains[0][0]
 
-		// TODO(jeffswenson): once URI SANs are added to the tenant sql
-		// servers, this should validate the URI SAN.
-		if !security.IsTenantCertificate(serverCert) {
-			return errors.Newf("%s's certificate is not a tenant cert", outgoingHost)
+		valid, err := security.IsValidServerCertForTenant(serverCert, tenantID)
+		if err != nil {
+			return err
 		}
-		if serverCert.Subject.CommonName != tenantID.String() {
-			return errors.Newf("expected a cert for tenant %d found '%s'", tenantID, serverCert.Subject.CommonName)
+		if !valid {
+			// TODO(knz): When all certs have been rotated to include URIs,
+			// the code below can be deleted and replaced by the following:
+			//
+			//   return errors.Newf("expected a cert for tenant %d", tenantID)
+
+			// Backward-compatibility:
+			if !security.IsTenantKVClientCertificate(serverCert) {
+				return errors.Newf("%s's certificate is not a tenant cert", outgoingHost)
+			}
+			if serverCert.Subject.CommonName != tenantID.String() {
+				return errors.Newf("expected a cert for tenant %d found '%s'", tenantID, serverCert.Subject.CommonName)
+			}
 		}
 		return nil
 	}

@@ -114,14 +114,12 @@ func GetCertificateUserScope(
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
 	peerCert := tlsState.PeerCertificates[0]
 	for _, uri := range peerCert.URIs {
-		uriString := uri.String()
-		if URISANHasCRDBPrefix(uriString) {
-			tenantID, user, err := ParseTenantURISAN(uriString)
-			if err != nil {
-				return nil, err
-			}
+		hasURI, tenantID, username, err := ParseTenantSQLClientURI(uri)
+		if err != nil {
+			return nil, err
+		} else if hasURI {
 			scope := CertificateUserScope{
-				Username: user,
+				Username: username,
 				TenantID: tenantID,
 			}
 			userScopes = append(userScopes, scope)
@@ -182,7 +180,7 @@ func UserAuthCertHook(
 		// The client certificate should not be a tenant client type. For now just
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
-		if IsTenantCertificate(tlsState.PeerCertificates[0]) {
+		if IsTenantKVClientCertificate(tlsState.PeerCertificates[0]) {
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
@@ -193,9 +191,9 @@ func UserAuthCertHook(
 	}, nil
 }
 
-// IsTenantCertificate returns true if the passed certificate indicates an
-// inbound Tenant connection.
-func IsTenantCertificate(cert *x509.Certificate) bool {
+// IsTenantKVClientCertificate returns true if the passed certificate is valid
+// to connect as tenant client to the KV layer.
+func IsTenantKVClientCertificate(cert *x509.Certificate) bool {
 	return Contains(cert.Subject.OrganizationalUnit, TenantsOU)
 }
 

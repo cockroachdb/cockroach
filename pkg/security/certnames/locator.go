@@ -53,10 +53,10 @@ func (cl Locator) CAKeyPath() string {
 	return filepath.Join(cl.certsDir, CAKeyFilename())
 }
 
-// TenantCACertPath returns the expected file path for the Tenant client CA
+// TenantKVClientCACertPath returns the expected file path for the Tenant client CA
 // certificate.
-func (cl Locator) TenantCACertPath() string {
-	return filepath.Join(cl.certsDir, TenantClientCACertFilename())
+func (cl Locator) TenantKVClientCACertPath() string {
+	return filepath.Join(cl.certsDir, TenantKVClientCACertFilename())
 }
 
 // ClientCACertPath returns the expected file path for the CA certificate
@@ -69,6 +69,18 @@ func (cl Locator) ClientCACertPath() string {
 // used to sign client certificates.
 func (cl Locator) ClientCAKeyPath() string {
 	return filepath.Join(cl.certsDir, ClientCAKeyFilename())
+}
+
+// SQLServerCACertPath returns the expected file path for the CA certificate
+// used to verify client certificates.
+func (cl Locator) SQLServerCACertPath() string {
+	return filepath.Join(cl.certsDir, SQLServerCACertFilename())
+}
+
+// SQLServerCAKeyPath returns the expected file path for the CA key
+// used to sign client certificates.
+func (cl Locator) SQLServerCAKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServerCAKeyFilename())
 }
 
 // ClientNodeCertPath returns the expected file path for the certificate used
@@ -105,6 +117,16 @@ func (cl Locator) NodeKeyPath() string {
 	return filepath.Join(cl.certsDir, NodeKeyFilename())
 }
 
+// SQLServerCertPath returns the expected file path for the SQL server certificate.
+func (cl Locator) SQLServerCertPath() string {
+	return filepath.Join(cl.certsDir, SQLServerCertFilename())
+}
+
+// SQLServerKeyPath returns the expected file path for the SQL server key.
+func (cl Locator) SQLServerKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServerKeyFilename())
+}
+
 // UICertPath returns the expected file path for the UI certificate.
 func (cl Locator) UICertPath() string {
 	return filepath.Join(cl.certsDir, UIServerCertFilename())
@@ -115,14 +137,15 @@ func (cl Locator) UIKeyPath() string {
 	return filepath.Join(cl.certsDir, UIServerKeyFilename())
 }
 
-// TenantCertPath returns the expected file path for the user's certificate.
-func (cl Locator) TenantCertPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantCertFilename(tenantIdentifier))
+// TenantKVClientCertPath returns the expected file path for the tenant client certificate
+// (used to authenticate a tenant server to the KV layer).
+func (cl Locator) TenantKVClientCertPath(tenantIdentifier string) string {
+	return filepath.Join(cl.certsDir, TenantKVClientCertFilename(tenantIdentifier))
 }
 
-// TenantKeyPath returns the expected file path for the tenant's key.
-func (cl Locator) TenantKeyPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantKeyFilename(tenantIdentifier))
+// TenantKVCientKeyPath returns the expected file path for the tenant's key.
+func (cl Locator) TenantKVClientKeyPath(tenantIdentifier string) string {
+	return filepath.Join(cl.certsDir, TenantKVClientKeyFilename(tenantIdentifier))
 }
 
 // TenantSigningCertPath returns the expected file path for the node certificate.

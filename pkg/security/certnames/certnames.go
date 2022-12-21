@@ -38,20 +38,32 @@ func CACertFilename() string { return "ca" + certExtension }
 // CAKeyFilename returns the expected file name for the CA certificate.
 func CAKeyFilename() string { return "ca" + keyExtension }
 
-// TenantClientCACertFilename returns the expected file name for the Tenant CA
-// certificate.
-func TenantClientCACertFilename() string {
+// TenantKVClientCACertFilename returns the expected file name for the CA
+// certificate used to sign the cert used by tenant servers to autn themselves
+// to the KV layer.
+func TenantKVClientCACertFilename() string {
 	return "ca-client-tenant" + certExtension
 }
 
 // ClientCACertFilename returns the expected file name for the client CA certificate.
+// This is the CA used to sign the certs used by clients.
 func ClientCACertFilename() string { return "ca-client" + certExtension }
 
 // ClientCAKeyFilename returns the expected file name for the client CA key.
 func ClientCAKeyFilename() string { return "ca-client" + keyExtension }
 
 // UICACertFilename returns the expected file name for the HTTP CA certificate.
+// This is the CA used to sign the server HTTP cert.
 func UICACertFilename() string { return "ca-ui" + certExtension }
+
+// SQLServerCAKeyFilename returns the expected file name for the SQL
+// server CA key.
+func SQLServerCAKeyFilename() string { return "ca-sql" + keyExtension }
+
+// SQLServerCACertFilename returns the expected file name for the SQL
+// server CA certificate. This is the CA used to signed the SQL
+// server cert (sql-server.crt).
+func SQLServerCACertFilename() string { return "ca-sql" + certExtension }
 
 // UICAKeyFilename returns the expected file name for the HTTP CA key.
 func UICAKeyFilename() string { return "ca-ui" + keyExtension }
@@ -72,23 +84,35 @@ func UIServerCertFilename() string { return "ui" + certExtension }
 // UIServerKeyFilename returns the expected file name for the HTTP CA key.
 func UIServerKeyFilename() string { return "ui" + keyExtension }
 
-// NodeCertFilename returns the expected file name for the node server certificate.
+// NodeCertFilename returns the expected file name for the RPC server certificate.
 func NodeCertFilename() string {
 	return "node" + certExtension
 }
 
-// NodeKeyFilename returns the expected file name for the node server key.
+// NodeKeyFilename returns the expected file name for the RPC server key.
 func NodeKeyFilename() string {
 	return "node" + keyExtension
 }
 
-// TenantCertFilename returns the expected file name for the user's tenant client certificate.
-func TenantCertFilename(tenantIdentifier string) string {
+// SQLServerCertFilename returns the expected file name for the SQL server certificate.
+func SQLServerCertFilename() string {
+	return "sql-server" + certExtension
+}
+
+// SQLServerKeyFilename returns the expected file name for the SQL server key.
+func SQLServerKeyFilename() string {
+	return "sql-server" + keyExtension
+}
+
+// TenantKVClientCertFilename returns the expected file name for the
+// tenant client certificate (used to authenticate a tenant server to
+// the KV layer and to other tenant servers for the same tenant).
+func TenantKVClientCertFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + certExtension
 }
 
-// TenantKeyFilename returns the expected file name for the user's tenant client key.
-func TenantKeyFilename(tenantIdentifier string) string {
+// TenantKVClientKeyFilename returns the expected file name for the tenant client key.
+func TenantKVClientKeyFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + keyExtension
 }
 

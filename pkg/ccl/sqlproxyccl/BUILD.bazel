@@ -87,6 +87,7 @@ go_test(
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

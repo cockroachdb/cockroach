@@ -80,7 +80,7 @@ func (rpcCtx *Context) AddTestingDialOpts(opts ...grpc.DialOption) {
 }
 
 func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *grpc.Server {
-	tlsConfig, err := ctx.GetServerTLSConfig()
+	tlsConfig, err := ctx.GetRPCServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1099,7 +1099,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
 	// newTestServer with a custom listener.
-	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	tlsConfig, err := serverCtx.GetRPCServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1651,7 +1651,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	serverCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
-	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	tlsConfig, err := serverCtx.GetRPCServerTLSConfig()
 	if err != nil {
 		return err
 	}

@@ -84,7 +84,7 @@ func NewNetwork(
 			},
 		})
 	var err error
-	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
+	n.tlsConfig, err = n.RPCContext.GetRPCServerTLSConfig()
 	if err != nil {
 		log.Fatalf(context.TODO(), "%v", err)
 	}

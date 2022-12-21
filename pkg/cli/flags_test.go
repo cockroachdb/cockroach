@@ -1207,7 +1207,7 @@ Available Commands:
   connect           Create certificates for securely connecting with clusters
 
   init              initialize a cluster
-  cert              create ca, node, and client certs
+  cert              create ca, node, SQL and client certs
   sql               open a sql shell
   statement-diag    commands for managing statement diagnostics bundles
   auth-session      log in and out of HTTP sessions

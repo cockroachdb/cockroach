@@ -29,13 +29,13 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
+func makeTenantKVClientCerts(t *testing.T, tenant uint64) (certsDir string) {
 	certsDir = t.TempDir()
 
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
 	tenantCAKey := filepath.Join(certsDir, "tenant-ca-name-irrelevant.key")
-	require.NoError(t, security.CreateTenantCAPair(
+	require.NoError(t, security.CreateTenantKVClientCAPair(
 		certsDir,
 		tenantCAKey,
 		2048,
@@ -45,13 +45,13 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 	))
 
 	// That dedicated service can make client certs for a tenant as follows:
-	tenantCerts, err := security.CreateTenantPair(
+	tenantCerts, err := security.CreateTenantKVClientCertPair(
 		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant, []string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	// We write the certs to disk, though in production this would not necessarily
 	// happen (it may be enough to just have them in-mem, we will see).
-	require.NoError(t, security.WriteTenantPair(certsDir, tenantCerts, false /* overwrite */))
+	require.NoError(t, security.WriteTenantKVClientCerts(certsDir, tenantCerts, false /* overwrite */))
 
 	// The server also needs to show certs trusted by the client. These are the
 	// node certs.
@@ -67,7 +67,7 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 	return certsDir
 }
 
-// TestTenantCertificates creates a tenant CA and from it client certificates
+// TestTenantKVClientCertificates creates a tenant CA and from it client certificates
 // for a tenant. It then sets up a smoke test that verifies that the tenant
 // can use its client certificates to connect to a https server that trusts
 // the tenant CA.
@@ -75,17 +75,17 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 // This foreshadows upcoming work on multi-tenancy, see:
 // https://github.com/cockroachdb/cockroach/issues/49105
 // https://github.com/cockroachdb/cockroach/issues/47898
-func TestTenantCertificates(t *testing.T) {
+func TestTenantKVClientCertificates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Run("embedded-certs", func(t *testing.T) {
-		testTenantCertificatesInner(t, true /* embedded */)
+		testTenantKVClientCertificatesInner(t, true /* embedded */)
 	})
 	t.Run("new-certs", func(t *testing.T) {
-		testTenantCertificatesInner(t, false /* embedded */)
+		testTenantKVClientCertificatesInner(t, false /* embedded */)
 	})
 }
 
-func testTenantCertificatesInner(t *testing.T, embedded bool) {
+func testTenantKVClientCertificatesInner(t *testing.T, embedded bool) {
 	defer leaktest.AfterTest(t)()
 
 	var certsDir string
@@ -95,7 +95,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		securityassets.ResetLoader()
 		defer ResetTest()
 		tenant = uint64(rand.Int63())
-		certsDir = makeTenantCerts(t, tenant)
+		certsDir = makeTenantKVClientCerts(t, tenant)
 	} else {
 		certsDir = certnames.EmbeddedCertsDir
 		tenant = security.EmbeddedTenantIDs()[0]
@@ -107,7 +107,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	cm, err := security.NewCertificateManager(certsDir, security.CommandTLSSettings{})
 	require.NoError(t, err)
-	serverTLSConfig, err := cm.GetServerTLSConfig()
+	serverTLSConfig, err := cm.GetRPCServerTLSConfig()
 	require.NoError(t, err)
 
 	// Make a new CertificateManager for the tenant. We could've used this one
@@ -117,7 +117,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	// The client in turn trusts the server CA and presents its tenant certs to the
 	// server (which will validate them using the tenant CA).
-	clientTLSConfig, err := cm.GetTenantTLSConfig()
+	clientTLSConfig, err := cm.GetTenantRPCClientTLSConfig()
 	require.NoError(t, err)
 	require.NotNil(t, clientTLSConfig)
 

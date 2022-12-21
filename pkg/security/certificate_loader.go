@@ -49,22 +49,29 @@ const (
 	_ PemUsage = iota
 	// CAPem describes the main CA certificate.
 	CAPem
-	// TenantCAPem describes the CA certificate used to broker authN/Z for SQL
-	// tenants wishing to access the KV layer.
-	TenantCAPem
+	// TenantKVClientCAPem describes the CA certificate used to sign
+	// the Tenant KV client cert.
+	TenantKVClientCAPem
 	// ClientCAPem describes the CA certificate used to verify client certificates.
 	ClientCAPem
+	// SQLServerCAPem describes the CA certificate used to sign the SQL server
+	// certificate.
+	SQLServerCAPem
 	// UICAPem describes the CA certificate used to verify the Admin UI server certificate.
 	UICAPem
-	// NodePem describes the server certificate for the node, possibly a combined server/client
-	// certificate for user Node if a separate 'client.node.crt' is not present.
+	// NodePem describes the server certificate for the RPC service,
+	// possibly a combined server/client certificate for user Node if a
+	// separate 'client.node.crt' is not present.
 	NodePem
+	// SQLServerPem describes the server certificate for the SQL service.
+	SQLServerPem
 	// UIPem describes the server certificate for the admin UI.
 	UIPem
 	// ClientPem describes a client certificate.
 	ClientPem
-	// TenantPem describes a SQL tenant client certificate.
-	TenantPem
+	// TenantKVClientPem describes a tenant client certificate, used to
+	// broker authN/Z for SQL tenants wishing to access the KV layer.
+	TenantKVClientPem
 	// TenantSigningPem describes a SQL tenant signing certificate.
 	TenantSigningPem
 
@@ -79,7 +86,12 @@ const (
 )
 
 func isCA(usage PemUsage) bool {
-	return usage == CAPem || usage == ClientCAPem || usage == TenantCAPem || usage == UICAPem
+	switch usage {
+	case CAPem, ClientCAPem, SQLServerCAPem, TenantKVClientCAPem, UICAPem:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p PemUsage) String() string {
@@ -88,17 +100,21 @@ func (p PemUsage) String() string {
 		return "CA"
 	case ClientCAPem:
 		return "Client CA"
-	case TenantCAPem:
+	case SQLServerCAPem:
+		return "SQL Server CA"
+	case TenantKVClientCAPem:
 		return "Tenant Client CA"
 	case UICAPem:
 		return "UI CA"
 	case NodePem:
 		return "Node"
+	case SQLServerPem:
+		return "SQL Server"
 	case UIPem:
 		return "UI"
 	case ClientPem:
 		return "Client"
-	case TenantPem:
+	case TenantKVClientPem:
 		return "Tenant Client"
 	default:
 		return "unknown"
@@ -165,10 +181,15 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		if numParts != 2 {
 			return nil, errors.Errorf("client CA certificate filename should match %s", certnames.ClientCACertFilename())
 		}
-	case `ca-client-tenant`:
-		fileUsage = TenantCAPem
+	case `ca-sql`:
+		fileUsage = SQLServerCAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("tenant CA certificate filename should match %s", certnames.TenantClientCACertFilename())
+			return nil, errors.Errorf("SQL server CA certificate filename should match %s", certnames.SQLServerCACertFilename())
+		}
+	case `ca-client-tenant`:
+		fileUsage = TenantKVClientCAPem
+		if numParts != 2 {
+			return nil, errors.Errorf("tenant CA certificate filename should match %s", certnames.TenantKVClientCACertFilename())
 		}
 	case `ca-ui`:
 		fileUsage = UICAPem
@@ -179,6 +200,11 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		fileUsage = NodePem
 		if numParts != 2 {
 			return nil, errors.Errorf("node certificate filename should match %s", certnames.NodeCertFilename())
+		}
+	case `sql-server`:
+		fileUsage = SQLServerPem
+		if numParts != 2 {
+			return nil, errors.Errorf("SQL server certificate filename should match %s", certnames.SQLServerCertFilename())
 		}
 	case `ui`:
 		fileUsage = UIPem
@@ -194,12 +220,12 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 				certnames.ClientCertFilename(username.MakeSQLUsernameFromPreNormalizedString("<user>")))
 		}
 	case `client-tenant`:
-		fileUsage = TenantPem
+		fileUsage = TenantKVClientPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("tenant certificate filename should match %s",
-				certnames.TenantCertFilename("<tenantid>"))
+			return nil, errors.Errorf("tenant KV client certificate filename should match %s",
+				certnames.TenantKVClientCertFilename("<tenantid>"))
 		}
 	case `tenant-signing`:
 		fileUsage = TenantSigningPem
