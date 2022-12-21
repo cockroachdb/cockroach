@@ -247,7 +247,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`opentelemetry-proto/.*.proto$`),
 			// These files are copied from bazel upstream with its own license.
 			stream.GrepNot(`build/bazel/bes/.*.proto$`),
-			// Generated files for plpgsql
+			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
 		), func(filename string) {
 			file, err := os.Open(filepath.Join(pkgDir, filename))
