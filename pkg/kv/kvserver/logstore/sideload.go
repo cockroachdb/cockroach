@@ -86,7 +86,7 @@ func MaybeSideloadEntries(
 		if err != nil {
 			return nil, 0, 0, 0, err
 		}
-		if typ != raftlog.RaftVersionSideloaded {
+		if typ != raftlog.EntryEncodingSideloaded {
 			otherEntriesSize += int64(len(input[i].Data))
 			continue
 		}
@@ -124,7 +124,7 @@ func MaybeSideloadEntries(
 		// TODO(tbg): this should be supported by a method as well.
 		{
 			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
-			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.RaftVersionSideloadedPrefixByte, e.ID)
+			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.EntryEncodingSideloadedPrefixByte, e.ID)
 			_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
@@ -165,7 +165,7 @@ func MaybeInlineSideloadedRaftCommand(
 	if err != nil {
 		return nil, err
 	}
-	if typ != raftlog.RaftVersionSideloaded {
+	if typ != raftlog.EntryEncodingSideloaded {
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
@@ -213,7 +213,7 @@ func MaybeInlineSideloadedRaftCommand(
 	// the EntryEncoding.
 	{
 		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
-		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.RaftVersionSideloadedPrefixByte, e.ID)
+		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.EntryEncodingSideloadedPrefixByte, e.ID)
 		_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
@@ -232,7 +232,7 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	if typ != raftlog.RaftVersionSideloaded {
+	if typ != raftlog.EntryEncodingSideloaded {
 		return
 	}
 

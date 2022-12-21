@@ -25,7 +25,7 @@ func TestLoadInvalidEntry(t *testing.T) {
 		Data: EncodeRaftCommand(
 			// It would be nice to have an "even more invalid" command here but it
 			// turns out that DecodeRaftCommand "handles" errors via panic().
-			RaftVersionStandardPrefixByte, "foobarzz", []byte("definitely not a protobuf"),
+			EntryEncodingStandardPrefixByte, "foobarzz", []byte("definitely not a protobuf"),
 		),
 	}
 	ent, err := NewEntry(invalidEnt)

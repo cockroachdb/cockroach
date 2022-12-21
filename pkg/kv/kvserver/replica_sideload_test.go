@@ -199,7 +199,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	var idx int
 	for idx = 0; idx < len(ents); idx++ {
 		// Get the SST back from the raft log.
-		if typ, _ := raftlog.EncodingVersion(ents[idx]); typ != raftlog.RaftVersionSideloaded {
+		if typ, _ := raftlog.EncodingVersion(ents[idx]); typ != raftlog.EntryEncodingSideloaded {
 			continue
 		}
 		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
