@@ -93,7 +93,7 @@ func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 	}
 	cmdB, err := protoutil.Marshal(cmd)
 	require.NoError(b, err)
-	data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, "cmd12345", cmdB)
+	data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandardPrefixByte, "cmd12345", cmdB)
 
 	ent := raftpb.Entry{
 		Term:  1,

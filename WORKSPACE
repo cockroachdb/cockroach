@@ -104,9 +104,10 @@ http_archive(
 
 http_archive(
     name = "bazel_skylib",
-    sha256 = "1c531376ac7e5a180e0237938a2536de0c54d93f5c278634818e0efc952dd56c",
+    sha256 = "4ede85dfaa97c5662c3fb2042a7ac322d5f029fdc7a6b9daa9423b746e8e8fc0",
+    strip_prefix = "bazelbuild-bazel-skylib-6a17363",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-skylib-1.0.3.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-skylib-1.3.0-0-g6a17363.tar.gz",
     ],
 )
 

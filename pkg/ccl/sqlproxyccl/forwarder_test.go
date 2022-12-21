@@ -452,14 +452,15 @@ func TestWrapClientToServerError(t *testing.T) {
 		{errors.Mark(errors.New("foo"), context.Canceled), nil},
 		{errors.Wrap(context.DeadlineExceeded, "foo"), nil},
 		// Forwarding errors.
-		{errors.New("foo"), newErrorf(
+		{errors.New("foo"), withCode(errors.New(
+			"unexpected error copying from client to target server: foo"),
 			codeClientDisconnected,
-			"unexpected error copying from client to target server: foo",
 		)},
-		{errors.Mark(errors.New("some write error"), errClientWrite), newErrorf(
-			codeClientWriteFailed,
-			"unable to write to client: some write error",
-		)},
+		{errors.Mark(errors.New("some write error"), errClientWrite),
+			withCode(errors.New(
+				"unable to write to client: some write error"),
+				codeClientWriteFailed,
+			)},
 	} {
 		err := wrapClientToServerError(tc.input)
 		if tc.output == nil {
@@ -484,14 +485,15 @@ func TestWrapServerToClientError(t *testing.T) {
 		{errors.Mark(errors.New("foo"), context.Canceled), nil},
 		{errors.Wrap(context.DeadlineExceeded, "foo"), nil},
 		// Forwarding errors.
-		{errors.New("foo"), newErrorf(
+		{errors.New("foo"), withCode(errors.New(
+			"unexpected error copying from target server to client: foo"),
 			codeBackendDisconnected,
-			"unexpected error copying from target server to client: foo",
 		)},
-		{errors.Mark(errors.New("some read error"), errServerRead), newErrorf(
-			codeBackendReadFailed,
-			"unable to read from sql server: some read error",
-		)},
+		{errors.Mark(errors.New("some read error"), errServerRead),
+			withCode(errors.New(
+				"unable to read from sql server: some read error"),
+				codeBackendReadFailed,
+			)},
 	} {
 		err := wrapServerToClientError(tc.input)
 		if tc.output == nil {

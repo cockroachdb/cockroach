@@ -76,7 +76,7 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		Term:  1,
 		Index: 1,
 		Type:  raftpb.EntryNormal,
-		Data:  kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, "deadbeef", data),
+		Data:  kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandardPrefixByte, "deadbeef", data),
 	})
 	stats := &AppendStats{}
 
