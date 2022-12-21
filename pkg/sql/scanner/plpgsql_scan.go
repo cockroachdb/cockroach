@@ -11,10 +11,11 @@
 package scanner
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase"
 	"unicode/utf8"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase"
 )
 
 // PLPGSQLScanner is a scanner with a PLPGSQL specific scan function

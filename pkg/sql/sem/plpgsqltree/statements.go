@@ -443,8 +443,7 @@ type PLpgSQLStmtGetDiagItemList []*PLpgSQLStmtGetDiagItem
 // stmt_open
 type PLpgSQLStmtOpen struct {
 	PLpgSQLStatementImpl
-	CurVar int // TODO this could just a PLpgSQLVariable
-
+	CurVar        int // TODO this could just a PLpgSQLVariable
 	CursorOptions uint32
 	// TODO(jane): This is temporary and we should remove it and use CurVar.
 	CursorName       string
