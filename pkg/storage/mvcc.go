@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -3788,7 +3787,7 @@ func (opts *MVCCScanOptions) errOnIntents() bool {
 // but never more than one.
 type MVCCScanResult struct {
 	KVData     [][]byte
-	ColBatches []coldata.Batch
+	ColBatches [][]byte
 	KVs        []roachpb.KeyValue
 	NumKeys    int64
 	// NumBytes is the number of bytes this scan result accrued in terms of the

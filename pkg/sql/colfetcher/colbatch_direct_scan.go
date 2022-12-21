@@ -90,25 +90,20 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 		if !res.MoreKVs {
 			return coldata.ZeroBatch
 		}
-		if res.KVs != nil {
-			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
+		if res.KVs != nil || res.BatchResponse != nil {
+			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs or BatchResponse in a direct scan"))
 		}
-		// TODO: make sure that someone is accounting for the memory footprint of
-		// this batch.
 		if res.ColBatch != nil {
-			return res.ColBatch
-		}
-		if res.BatchResponse != nil {
 			break
 		}
-		// If both ColBatch and BatchResponse are nil, then it was an empty
-		// response for a ScanRequest, and we need to proceed further.
+		// If ColBatch is nil, then it was an empty response for a ScanRequest,
+		// and we need to proceed further.
 	}
 	// Update the allocator since we're holding onto the serialized bytes for
 	// now.
-	s.allocator.AdjustMemoryUsageAfterAllocation(int64(len(res.BatchResponse)))
+	s.allocator.AdjustMemoryUsageAfterAllocation(int64(len(res.ColBatch)))
 	s.data = s.data[:0]
-	batchLength, err := s.deser.Deserialize(&s.data, res.BatchResponse)
+	batchLength, err := s.deser.Deserialize(&s.data, res.ColBatch)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -122,7 +117,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	// At this point, we have lost all references to the serialized bytes
 	// (because ArrowToBatch nils out elements in s.data once processed), so we
 	// update the allocator accordingly.
-	s.allocator.AdjustMemoryUsage(-int64(len(res.BatchResponse)))
+	s.allocator.AdjustMemoryUsage(-int64(len(res.ColBatch)))
 	return s.batch
 }
 
