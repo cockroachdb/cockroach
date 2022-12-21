@@ -51,9 +51,7 @@ func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
 }
 
 func mkEnt(
-	v kvserverbase.RaftCommandEncodingVersion,
-	index, term uint64,
-	as *kvserverpb.ReplicatedEvalResult_AddSSTable,
+	v byte, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
 	cmdIDKey := strings.Repeat("x", kvserverbase.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
@@ -360,7 +358,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded
+	v1, v2 := kvserverbase.RaftVersionStandardPrefixByte, kvserverbase.RaftVersionSideloadedPrefixByte
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -482,11 +480,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(kvserverbase.RaftVersionStandard, 10, 99, nil)
-	entV1SST := mkEnt(kvserverbase.RaftVersionStandard, 11, 99, &addSST)
-	entV2Reg := mkEnt(kvserverbase.RaftVersionSideloaded, 12, 99, nil)
-	entV2SST := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(kvserverbase.RaftVersionStandardPrefixByte, 10, 99, nil)
+	entV1SST := mkEnt(kvserverbase.RaftVersionStandardPrefixByte, 11, 99, &addSST)
+	entV2Reg := mkEnt(kvserverbase.RaftVersionSideloadedPrefixByte, 12, 99, nil)
+	entV2SST := mkEnt(kvserverbase.RaftVersionSideloadedPrefixByte, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(kvserverbase.RaftVersionSideloadedPrefixByte, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string

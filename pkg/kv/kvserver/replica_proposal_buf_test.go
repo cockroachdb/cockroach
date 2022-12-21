@@ -303,7 +303,7 @@ func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	cmdLen := p.command.Size()
 	needed := kvserverbase.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
 	data := make([]byte, kvserverbase.RaftCommandPrefixLen, needed)
-	kvserverbase.EncodeRaftCommandPrefix(data, kvserverbase.RaftVersionStandard, p.idKey)
+	kvserverbase.EncodeRaftCommandPrefix(data, kvserverbase.RaftVersionStandardPrefixByte, p.idKey)
 	data = data[:kvserverbase.RaftCommandPrefixLen+p.command.Size()]
 	if _, err := protoutil.MarshalTo(p.command, data[kvserverbase.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
