@@ -193,7 +193,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 			if err != nil {
 				return nil, err
 			}
-			tableNames, _, err := expandTableGlob(ctx, p, tableGlob)
+			tableNames, _, err := p.ExpandTableGlob(ctx, tableGlob)
 			if err != nil {
 				return nil, err
 			}

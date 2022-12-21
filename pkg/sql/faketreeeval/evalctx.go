@@ -183,6 +183,13 @@ func (ep *DummyEvalPlanner) ResolveOIDFromOID(
 	return nil, false, errors.WithStack(errEvalPlanner)
 }
 
+// GenerateTestObjects is part of the Planner interface.
+func (ep *DummyEvalPlanner) GenerateTestObjects(
+	ctx context.Context, params string,
+) (string, error) {
+	return "", errors.WithStack(errEvalPlanner)
+}
+
 // UnsafeUpsertDescriptor is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	ctx context.Context, descID int64, encodedDescriptor []byte, force bool,

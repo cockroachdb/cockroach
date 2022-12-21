@@ -124,15 +124,8 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
-	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
-	if err != nil {
+	if err := p.CanCreateDatabase(ctx); err != nil {
 		return nil, err
-	}
-	if !hasCreateDB {
-		return nil, pgerror.New(
-			pgcode.InsufficientPrivilege,
-			"permission denied to create database",
-		)
 	}
 
 	if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName && n.SecondaryRegion != tree.SecondaryRegionNotSpecifiedName {
@@ -150,6 +143,22 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	}
 
 	return &createDatabaseNode{n: n}, nil
+}
+
+// CanCreateDatabase verifies that the current user has the CREATEDB
+// role option.
+func (p *planner) CanCreateDatabase(ctx context.Context) error {
+	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+	if err != nil {
+		return err
+	}
+	if !hasCreateDB {
+		return pgerror.New(
+			pgcode.InsufficientPrivilege,
+			"permission denied to create database",
+		)
+	}
+	return nil
 }
 
 func (n *createDatabaseNode) startExec(params runParams) error {

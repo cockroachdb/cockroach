@@ -41,9 +41,12 @@ func (g *generator) GenerateUniqueDescID(ctx context.Context) (id catid.DescID, 
 }
 
 // IncrementDescID is part of the eval.DescIDGenerator interface.
-func (g *generator) IncrementDescID(ctx context.Context, inc int64) error {
-	_, err := g.run(ctx, inc)
-	return err
+func (g *generator) IncrementDescID(ctx context.Context, inc int64) (id catid.DescID, _ error) {
+	nextID, err := g.run(ctx, inc)
+	if err != nil {
+		return catid.InvalidDescID, err
+	}
+	return nextID - catid.DescID(inc), nil
 }
 
 // PeekNextUniqueDescID is part of the eval.DescIDGenerator interface.
