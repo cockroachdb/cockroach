@@ -31,7 +31,7 @@ type Reader struct {
 	storage  *Storage
 	slReader sqlliveness.Reader
 	stopper  *stop.Stopper
-
+	db       *kv.DB
 	// Once initialScanDone is closed, the error (if any) while establishing the
 	// rangefeed can be found in initialScanErr.
 	initialScanDone chan struct{}
@@ -45,21 +45,24 @@ type Reader struct {
 // NewTestingReader constructs a new Reader with control for the database
 // in which the `sql_instances` table should exist.
 func NewTestingReader(
-	storage *Storage, slReader sqlliveness.Reader, stopper *stop.Stopper,
+	storage *Storage, slReader sqlliveness.Reader, stopper *stop.Stopper, db *kv.DB,
 ) *Reader {
 	r := &Reader{
 		storage:         storage,
 		slReader:        slReader,
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
+		db:              db,
 	}
 	r.setCache(&emptyInstanceCache{})
 	return r
 }
 
 // NewReader constructs a new reader for SQL instance data.
-func NewReader(storage *Storage, slReader sqlliveness.Reader, stopper *stop.Stopper) *Reader {
-	return NewTestingReader(storage, slReader, stopper)
+func NewReader(
+	storage *Storage, slReader sqlliveness.Reader, stopper *stop.Stopper, db *kv.DB,
+) *Reader {
+	return NewTestingReader(storage, slReader, stopper, db)
 }
 
 // Start initializes the instanceCache for the Reader. The range feed backing
@@ -137,6 +140,19 @@ func makeInstanceInfos(rows []instancerow) []sqlinstance.InstanceInfo {
 		ret[i] = makeInstanceInfo(rows[i])
 	}
 	return ret
+}
+
+// GetAllInstancesNoCache reads all instances directly from the sql_instances
+// table, bypassing any caching.
+func (r *Reader) GetAllInstancesNoCache(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
+	var instances []sqlinstance.InstanceInfo
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		instances, err = r.GetAllInstancesUsingTxn(ctx, txn)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return instances, nil
 }
 
 // GetAllInstancesUsingTxn reads all instances using the given transaction and returns

@@ -41,6 +41,7 @@ go_test(
         "server_sql_test.go",
         "server_startup_guardrails_test.go",
         "tenant_decommissioned_host_test.go",
+        "tenant_migration_test.go",
         "tenant_vars_test.go",
     ],
     args = ["-test.timeout=3595s"],
