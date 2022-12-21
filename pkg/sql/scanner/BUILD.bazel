@@ -11,7 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/lexbase",
-        "//pkg/sql/plpgsql/parser/plpgsqllexbase",
+        "//pkg/sql/plpgsql/parser/lexbase",
     ],
 )
 
