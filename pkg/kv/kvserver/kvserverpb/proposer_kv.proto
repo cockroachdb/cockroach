@@ -310,13 +310,6 @@ message RaftCommand {
   // been added after it, and on removal, the assignment counters must be
   // updated accordingly. Managing retry of proposals becomes trickier as
   // well as that uproots whatever ordering was originally envisioned.
-  //
-  // This field is set through MaxLeaseFooter hackery. Unlike with the
-  // ClosedTimestamp, which needs to be nullable in this proto (see comment),
-  // there are no nullability concerns with this field. This is because
-  // max_lease_index is a primitive type, so it does not get encoded when zero.
-  // This alone ensures that the field is not encoded twice in the combined
-  // RaftCommand+MaxLeaseFooter proto.
   uint64 max_lease_index = 4;
 
   // The closed timestamp carried by this command. Once a follower is told to
@@ -329,12 +322,23 @@ message RaftCommand {
   // update. If the value is not zero, the value is greater or equal to that of
   // the previous commands (and all before it).
   //
-  // This field is set through ClosedTimestampFooter hackery. The field is
-  // nullable so that it does not get encoded when empty. This prevents the
-  // field from being encoded twice in the combined
-  // RaftCommand+ClosedTimestampFooter proto (encoding it twice is not illegal
-  // as far as proto goes - the last value wins when decoding - but it is a
-  // problem for sideloading, which reduces the size of the proto).
+  // NB:
+  //
+  // The nullability of this field is historical in nature; we used to marshal
+  // this command before the closed timestamp was known and later extended the
+  // marshaled representation with a footer containing the closed timestamp. Due
+  // to a gogoproto quirk[^1] a zero hlc.Timestamp{} still gets put on the wire,
+  // which we wanted to avoid sincei t caused subtle bugs[^2]. None of this
+  // applies any more but changing a field from nullable to non-nullable can
+  // have a migration concern, which would need to be investigated.
+  //
+  // A negative effect of this nullability is an additional allocation on the
+  // leaseholder to populate this field, which is why we currently leave it
+  // unpopulated there[^3], except during marshaling.
+  //
+  // [^1]: https://github.com/cockroachdb/cockroach/issues/85312
+  // [^2]: https://github.com/cockroachdb/cockroach/pull/60992
+  // [^3]: See (*propBuf).FlushLockedWithRaftGroup().
   util.hlc.Timestamp closed_timestamp = 17;
 
   reserved 3;
@@ -359,19 +363,4 @@ message RaftCommand {
   map<string, string> trace_data = 16;
 
   reserved 1, 2, 10001 to 10014;
-}
-
-// RaftCommandFooter contains a subset of the fields in RaftCommand. It is used
-// to optimize a pattern where most of the fields in RaftCommand are marshaled
-// outside of a heavily contended critical section, except for the fields in the
-// footer, which are assigned and marshaled inside of the critical section and
-// appended to the marshaled byte buffer. This minimizes the memory allocation
-// and marshaling work performed under lock.
-message RaftCommandFooter {
-  uint64 max_lease_index = 4;
-  // NOTE: unlike in RaftCommand, there's no reason to make this field nullable
-  // and so we make it non-nullable in order to save allocations. This means
-  // that the field on a decoded RaftCommand will also never be nil, but we
-  // don't rely on that.
-  util.hlc.Timestamp closed_timestamp = 17 [(gogoproto.nullable) = false];
 }
