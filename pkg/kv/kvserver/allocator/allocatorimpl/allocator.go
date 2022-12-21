@@ -133,6 +133,67 @@ const (
 	AllocatorFinalizeAtomicReplicationChange
 )
 
+func (a AllocatorAction) Add() bool {
+	return a == AllocatorAddVoter || a == AllocatorAddNonVoter
+}
+
+func (a AllocatorAction) Replace() bool {
+	return a == AllocatorReplaceDeadVoter ||
+		a == AllocatorReplaceDeadNonVoter ||
+		a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter
+}
+
+func (a AllocatorAction) Remove() bool {
+	return a == AllocatorRemoveVoter ||
+		a == AllocatorRemoveNonVoter ||
+		a == AllocatorRemoveDeadVoter ||
+		a == AllocatorRemoveDeadNonVoter ||
+		a == AllocatorRemoveDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter
+}
+
+func (a AllocatorAction) TargetReplicaType() TargetReplicaType {
+	var t TargetReplicaType
+	if a == AllocatorRemoveVoter ||
+		a == AllocatorAddVoter ||
+		a == AllocatorReplaceDeadVoter ||
+		a == AllocatorRemoveDeadVoter ||
+		a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningVoter {
+		t = VoterTarget
+	} else if a == AllocatorRemoveNonVoter ||
+		a == AllocatorAddNonVoter ||
+		a == AllocatorReplaceDeadNonVoter ||
+		a == AllocatorRemoveDeadNonVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter {
+		t = NonVoterTarget
+	}
+	return t
+}
+
+func (a AllocatorAction) ReplicaStatus() ReplicaStatus {
+	var s ReplicaStatus
+	if a == AllocatorRemoveVoter ||
+		a == AllocatorRemoveNonVoter ||
+		a == AllocatorAddVoter ||
+		a == AllocatorAddNonVoter {
+		s = Alive
+	} else if a == AllocatorReplaceDeadVoter ||
+		a == AllocatorReplaceDeadNonVoter ||
+		a == AllocatorRemoveDeadVoter ||
+		a == AllocatorRemoveDeadNonVoter {
+		s = Dead
+	} else if a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter ||
+		a == AllocatorRemoveDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter {
+		s = Decommissioning
+	}
+	return s
+}
+
 var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorNoop:                            "noop",
 	AllocatorRemoveVoter:                     "remove voter",
@@ -265,6 +326,19 @@ func (t TargetReplicaType) String() string {
 		return "non-voter"
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType %d", t))
+	}
+}
+
+func (s ReplicaStatus) String() string {
+	switch s {
+	case Alive:
+		return "live"
+	case Dead:
+		return "dead"
+	case Decommissioning:
+		return "decommissioning"
+	default:
+		panic(fmt.Sprintf("unknown replicaStatus %d", s))
 	}
 }
 
@@ -925,7 +999,7 @@ func (s *GoodCandidateSelector) selectOne(cl candidateList) *candidate {
 	return cl.selectGood(s.randGen)
 }
 
-func (a *Allocator) allocateTarget(
+func (a *Allocator) AllocateTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
@@ -996,7 +1070,7 @@ func (a *Allocator) AllocateVoter(
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.allocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
+	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
 }
 
 // AllocateNonVoter returns a suitable store for a new allocation of a
@@ -1009,7 +1083,7 @@ func (a *Allocator) AllocateNonVoter(
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.allocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
+	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
 }
 
 // AllocateTargetFromList returns a suitable store for a new allocation of a

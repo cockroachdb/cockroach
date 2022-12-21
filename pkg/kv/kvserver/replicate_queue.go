@@ -1032,14 +1032,9 @@ func (rq *replicateQueue) PlanOneChange(
 	// range descriptor.
 	desc, conf := repl.DescAndSpanConfig()
 
-	voterReplicas := desc.Replicas().VoterDescriptors()
-	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
-	liveVoterReplicas, deadVoterReplicas := rq.storePool.LiveAndDeadReplicas(
-		voterReplicas, true, /* includeSuspectAndDrainingStores */
-	)
-	liveNonVoterReplicas, deadNonVoterReplicas := rq.storePool.LiveAndDeadReplicas(
-		nonVoterReplicas, true, /* includeSuspectAndDrainingStores */
-	)
+	voterReplicas, nonVoterReplicas,
+		liveVoterReplicas, deadVoterReplicas,
+		liveNonVoterReplicas, deadNonVoterReplicas := replicasByType(rq.storePool, desc)
 
 	// NB: the replication layer ensures that the below operations don't cause
 	// unavailability; see:
@@ -1056,82 +1051,47 @@ func (rq *replicateQueue) PlanOneChange(
 		// lost quorum. Either way, it's not a good idea to make changes right now.
 		// Let the scanner requeue it again later.
 
-	// Add replicas.
-	case allocatorimpl.AllocatorAddVoter:
-		op, err = rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio,
+	// Add replicas, replace dead replicas, or replace decommissioning replicas.
+	case allocatorimpl.AllocatorAddVoter, allocatorimpl.AllocatorAddNonVoter,
+		allocatorimpl.AllocatorReplaceDeadVoter, allocatorimpl.AllocatorReplaceDeadNonVoter,
+		allocatorimpl.AllocatorReplaceDecommissioningVoter, allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
+		var removeIdx int
+		var nothingToDo bool
+		var existing, remainingLiveVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor
+
+		existing, remainingLiveVoters, remainingLiveNonVoters,
+			removeIdx, nothingToDo, err = determineReplacementAndFilter(
+			rq.storePool,
+			voterReplicas, nonVoterReplicas,
+			liveVoterReplicas, liveNonVoterReplicas,
+			deadVoterReplicas, deadNonVoterReplicas,
+			action.ReplicaStatus(), action.TargetReplicaType(),
 		)
-	case allocatorimpl.AllocatorAddNonVoter:
-		op, err = rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio,
-		)
+		if nothingToDo || err != nil {
+			// Nothing to do.
+			break
+		}
+
+		switch action.TargetReplicaType() {
+		case allocatorimpl.VoterTarget:
+			op, err = rq.addOrReplaceVoters(
+				ctx, repl, existing, remainingLiveVoters, remainingLiveNonVoters,
+				removeIdx, action.ReplicaStatus(), allocatorPrio,
+			)
+		case allocatorimpl.NonVoterTarget:
+			op, err = rq.addOrReplaceNonVoters(
+				ctx, repl, existing, remainingLiveVoters, remainingLiveNonVoters,
+				removeIdx, action.ReplicaStatus(), allocatorPrio,
+			)
+		default:
+			panic(fmt.Sprintf("unsupported targetReplicaType: %v", action.TargetReplicaType()))
+		}
 
 	// Remove replicas.
 	case allocatorimpl.AllocatorRemoveVoter:
 		op, err = rq.removeVoter(ctx, repl, voterReplicas, nonVoterReplicas)
 	case allocatorimpl.AllocatorRemoveNonVoter:
 		op, err = rq.removeNonVoter(ctx, repl, voterReplicas, nonVoterReplicas)
-
-	// Replace dead replicas.
-	case allocatorimpl.AllocatorReplaceDeadVoter:
-		if len(deadVoterReplicas) == 0 {
-			// Nothing to do.
-			break
-		}
-		removeIdx := getRemoveIdx(voterReplicas, deadVoterReplicas[0])
-		if removeIdx < 0 {
-			err = errors.AssertionFailedf(
-				"dead voter %v unexpectedly not found in %v",
-				deadVoterReplicas[0], voterReplicas)
-			break
-		}
-		op, err = rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio)
-	case allocatorimpl.AllocatorReplaceDeadNonVoter:
-		if len(deadNonVoterReplicas) == 0 {
-			// Nothing to do.
-			break
-		}
-		removeIdx := getRemoveIdx(nonVoterReplicas, deadNonVoterReplicas[0])
-		if removeIdx < 0 {
-			err = errors.AssertionFailedf(
-				"dead non-voter %v unexpectedly not found in %v",
-				deadNonVoterReplicas[0], nonVoterReplicas)
-			break
-		}
-		op, err = rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio)
-	// Replace decommissioning replicas.
-	case allocatorimpl.AllocatorReplaceDecommissioningVoter:
-		decommissioningVoterReplicas := rq.storePool.DecommissioningReplicas(voterReplicas)
-		if len(decommissioningVoterReplicas) == 0 {
-			// Nothing to do.
-			break
-		}
-		removeIdx := getRemoveIdx(voterReplicas, decommissioningVoterReplicas[0])
-		if removeIdx < 0 {
-			err = errors.AssertionFailedf(
-				"decommissioning voter %v unexpectedly not found in %v",
-				decommissioningVoterReplicas[0], voterReplicas)
-			break
-		}
-		op, err = rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio)
-	case allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
-		decommissioningNonVoterReplicas := rq.storePool.DecommissioningReplicas(nonVoterReplicas)
-		if len(decommissioningNonVoterReplicas) == 0 {
-			// Nothing to do.
-			break
-		}
-		removeIdx := getRemoveIdx(nonVoterReplicas, decommissioningNonVoterReplicas[0])
-		if removeIdx < 0 {
-			err = errors.AssertionFailedf(
-				"decommissioning non-voter %v unexpectedly not found in %v",
-				decommissioningNonVoterReplicas[0], nonVoterReplicas)
-			break
-		}
-		op, err = rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio)
 
 	// Remove decommissioning replicas.
 	//
@@ -1190,9 +1150,109 @@ func (rq *replicateQueue) PlanOneChange(
 	return change, err
 }
 
+// replicasByType splits up the replica in the given range descriptor by voters
+// vs non-voters and live replicas vs dead replicas.
+func replicasByType(storePool storepool.AllocatorStorePool, desc *roachpb.RangeDescriptor) (
+	voterReplicas, nonVoterReplicas,
+	liveVoterReplicas, deadVoterReplicas,
+	liveNonVoterReplicas, deadNonVoterReplicas []roachpb.ReplicaDescriptor,
+) {
+	voterReplicas = desc.Replicas().VoterDescriptors()
+	nonVoterReplicas = desc.Replicas().NonVoterDescriptors()
+	liveVoterReplicas, deadVoterReplicas = storePool.LiveAndDeadReplicas(
+		voterReplicas, true, /* includeSuspectAndDrainingStores */
+	)
+	liveNonVoterReplicas, deadNonVoterReplicas = storePool.LiveAndDeadReplicas(
+		nonVoterReplicas, true, /* includeSuspectAndDrainingStores */
+	)
+	return
+}
+
+// determineReplacementAndFilter identifies a dead or decommissioning replica to
+// replace from the list of voters or non-voters, depending on the replica
+// status and target type, and returns the filtered live voters and non-voters
+// along with the list of existing replicas and the index of the removal candidate.
+// In case of an add action, no replicas are removed and -1 is returned, and if no
+// candidates for replacement can be found during a replace action, the returned
+// nothingToDo flag will be set to true.
+// TODO(sarkesian): If possible, move this logic into the allocator.
+func determineReplacementAndFilter(
+	storePool storepool.AllocatorStorePool,
+	voters, nonVoters []roachpb.ReplicaDescriptor,
+	liveVoterReplicas, deadVoterReplicas []roachpb.ReplicaDescriptor,
+	liveNonVoterReplicas, deadNonVoterReplicas []roachpb.ReplicaDescriptor,
+	replicaStatus allocatorimpl.ReplicaStatus,
+	replicaType allocatorimpl.TargetReplicaType,
+) (
+	existing, remainingLiveVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor,
+	removeIdx int, nothingToDo bool, err error,
+) {
+	removeIdx = -1
+	remainingLiveVoters = liveVoterReplicas
+	remainingLiveNonVoters = liveNonVoterReplicas
+	var deadReplicas, removalCandidates []roachpb.ReplicaDescriptor
+
+	switch replicaType {
+	case allocatorimpl.VoterTarget:
+		existing = voters
+		deadReplicas = deadVoterReplicas
+	case allocatorimpl.NonVoterTarget:
+		existing = nonVoters
+		deadReplicas = deadNonVoterReplicas
+	default:
+		panic(fmt.Sprintf("unknown targetReplicaType: %s", replicaType))
+	}
+	switch replicaStatus {
+	case allocatorimpl.Alive:
+		// NB: Live replicas are not candidates for replacement.
+		return
+	case allocatorimpl.Dead:
+		removalCandidates = deadReplicas
+	case allocatorimpl.Decommissioning:
+		removalCandidates = storePool.DecommissioningReplicas(existing)
+	default:
+		panic(fmt.Sprintf("unknown replicaStatus: %s", replicaStatus))
+	}
+	if len(removalCandidates) == 0 {
+		nothingToDo = true
+		return
+	}
+
+	removeIdx = getRemoveIdx(existing, removalCandidates[0])
+	if removeIdx < 0 {
+		err = errors.AssertionFailedf(
+			"%s %s %v unexpectedly not found in %v",
+			replicaStatus, replicaType, removalCandidates[0], existing,
+		)
+		return
+	}
+
+	// TODO(sarkesian): Add comment on why this filtering only happens for voters.
+	if replicaType == allocatorimpl.VoterTarget {
+		if len(existing) == 1 {
+			// If only one replica remains, that replica is the leaseholder and
+			// we won't be able to swap it out. Ignore the removal and simply add
+			// a replica.
+			removeIdx = -1
+		}
+
+		if removeIdx >= 0 {
+			replToRemove := existing[removeIdx]
+			for i, r := range liveVoterReplicas {
+				if r.ReplicaID == replToRemove.ReplicaID {
+					remainingLiveVoters = append(liveVoterReplicas[:i:i], liveVoterReplicas[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+	return
+}
+
 func getRemoveIdx(
 	repls []roachpb.ReplicaDescriptor, deadOrDecommissioningRepl roachpb.ReplicaDescriptor,
 ) (removeIdx int) {
+	removeIdx = -1
 	for i, rDesc := range repls {
 		if rDesc.StoreID == deadOrDecommissioningRepl.StoreID {
 			removeIdx = i
@@ -1200,6 +1260,28 @@ func getRemoveIdx(
 		}
 	}
 	return removeIdx
+}
+
+// filterReplicasForAllocatorAction converts a range descriptor to the filtered
+// voter and non-voter replicas needed to allocate a target for the given action.
+// NB: This method is a convenience that follows the logic used in rq.PlanOneChange().
+func filterReplicasForAllocatorAction(
+	storePool storepool.AllocatorStorePool,
+	desc *roachpb.RangeDescriptor,
+	action allocatorimpl.AllocatorAction,
+) (filteredVoters, filteredNonVoters []roachpb.ReplicaDescriptor, nothingToDo bool, err error) {
+	voterReplicas, nonVoterReplicas,
+		liveVoterReplicas, deadVoterReplicas,
+		liveNonVoterReplicas, deadNonVoterReplicas := replicasByType(storePool, desc)
+
+	_, filteredVoters, filteredNonVoters, _, nothingToDo, err = determineReplacementAndFilter(
+		storePool,
+		voterReplicas, nonVoterReplicas,
+		liveVoterReplicas, liveNonVoterReplicas,
+		deadVoterReplicas, deadNonVoterReplicas,
+		action.ReplicaStatus(), action.TargetReplicaType(),
+	)
+	return filteredVoters, filteredNonVoters, nothingToDo, err
 }
 
 func maybeAnnotateDecommissionErr(err error, action allocatorimpl.AllocatorAction) error {
@@ -1227,32 +1309,14 @@ func isDecommissionAction(action allocatorimpl.AllocatorAction) bool {
 func (rq *replicateQueue) addOrReplaceVoters(
 	ctx context.Context,
 	repl *Replica,
-	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
+	existingVoters []roachpb.ReplicaDescriptor,
+	remainingLiveVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
 	allocatorPriority float64,
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
 	desc, conf := repl.DescAndSpanConfig()
-	existingVoters := desc.Replicas().VoterDescriptors()
-	if len(existingVoters) == 1 {
-		// If only one replica remains, that replica is the leaseholder and
-		// we won't be able to swap it out. Ignore the removal and simply add
-		// a replica.
-		removeIdx = -1
-	}
-
-	remainingLiveVoters := liveVoterReplicas
-	remainingLiveNonVoters := liveNonVoterReplicas
-	if removeIdx >= 0 {
-		replToRemove := existingVoters[removeIdx]
-		for i, r := range liveVoterReplicas {
-			if r.ReplicaID == replToRemove.ReplicaID {
-				remainingLiveVoters = append(liveVoterReplicas[:i:i], liveVoterReplicas[i+1:]...)
-				break
-			}
-		}
-	}
 
 	// The allocator should not try to re-add this replica since there is a reason
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
@@ -1282,6 +1346,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	//
 	// We skip this check if we're swapping a replica, since that does not
 	// change the quorum size.
+	// TODO(sarkesian): extract this bit into a reusable function
 	if willHave := len(existingVoters) + 1; removeIdx < 0 && willHave < neededVoters && willHave%2 == 0 {
 		// This means we are going to up-replicate to an even replica state.
 		// Check if it is possible to go to an odd replica state beyond it.
@@ -1362,14 +1427,14 @@ func (rq *replicateQueue) addOrReplaceVoters(
 func (rq *replicateQueue) addOrReplaceNonVoters(
 	ctx context.Context,
 	repl *Replica,
+	existingNonVoters []roachpb.ReplicaDescriptor,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
 	allocatorPrio float64,
 ) (op AllocationOp, _ error) {
-	desc, conf := repl.DescAndSpanConfig()
-	existingNonVoters := desc.Replicas().NonVoterDescriptors()
 	effects := effectBuilder{}
+	conf := repl.SpanConfig()
 
 	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, rq.storePool, conf, liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
 	if err != nil {
@@ -1422,10 +1487,10 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 func (rq *replicateQueue) findRemoveVoter(
 	ctx context.Context,
 	repl interface {
-		DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
-		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
-		RaftStatus() *raft.Status
-	},
+	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
+	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
+	RaftStatus() *raft.Status
+},
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicationTarget, string, error) {
 	_, zone := repl.DescAndSpanConfig()
