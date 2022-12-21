@@ -16,7 +16,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -159,7 +158,7 @@ type txnKVFetcher struct {
 
 	responses           []roachpb.ResponseUnion
 	remainingBatchResps [][]byte
-	remainingColBatches []coldata.Batch
+	remainingColBatches [][]byte
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
@@ -531,12 +530,12 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 // element before reslicing the outer slice.
 // TODO: comment.
 func popBatch(
-	batchResps [][]byte, colBatches []coldata.Batch,
+	batchResps [][]byte, colBatches [][]byte,
 ) (
 	batchResp []byte,
-	colBatch coldata.Batch,
+	colBatch []byte,
 	remainingBatchResps [][]byte,
-	remainingColBatches []coldata.Batch,
+	remainingColBatches [][]byte,
 ) {
 	if len(batchResps) > 0 {
 		batchResp, remainingBatchResps = batchResps[0], batchResps[1:]
@@ -557,8 +556,7 @@ func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		if !resp.MoreKVs || recursed {
 			return
 		}
-		// TODO: col batches.
-		nBytes := len(resp.BatchResponse)
+		nBytes := len(resp.BatchResponse) + len(resp.ColBatch)
 		for i := range resp.KVs {
 			nBytes += len(resp.KVs[i].Key)
 			nBytes += len(resp.KVs[i].Value.RawBytes)
@@ -577,8 +575,7 @@ func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 	if len(f.remainingBatchResps) > 0 || len(f.remainingColBatches) > 0 {
 		// Are there remaining data batches? If so, just pop one off from the
 		// list and return it.
-		var batchResp []byte
-		var colBatch coldata.Batch
+		var batchResp, colBatch []byte
 		batchResp, colBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(f.remainingBatchResps, f.remainingColBatches)
 		return KVBatchFetcherResponse{
 			MoreKVs:       true,
@@ -621,13 +618,8 @@ func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			if len(t.BatchResponses) > 0 || len(t.ColBatches.ColBatches) > 0 {
-				// TODO: reuse this.
-				colBatches := make([]coldata.Batch, len(t.ColBatches.ColBatches))
-				for i := range t.ColBatches.ColBatches {
-					colBatches[i] = t.ColBatches.ColBatches[i].(coldata.Batch)
-				}
-				ret.BatchResponse, ret.ColBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(t.BatchResponses, colBatches)
+			if len(t.BatchResponses) > 0 || len(t.ColBatches) > 0 {
+				ret.BatchResponse, ret.ColBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(t.BatchResponses, t.ColBatches)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
@@ -643,13 +635,8 @@ func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
 		case *roachpb.ReverseScanResponse:
-			if len(t.BatchResponses) > 0 || len(t.ColBatches.ColBatches) > 0 {
-				// TODO: reuse this.
-				colBatches := make([]coldata.Batch, len(t.ColBatches.ColBatches))
-				for i := range t.ColBatches.ColBatches {
-					colBatches[i] = t.ColBatches.ColBatches[i].(coldata.Batch)
-				}
-				ret.BatchResponse, ret.ColBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(t.BatchResponses, colBatches)
+			if len(t.BatchResponses) > 0 || len(t.ColBatches) > 0 {
+				ret.BatchResponse, ret.ColBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(t.BatchResponses, t.ColBatches)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
