@@ -727,7 +727,24 @@
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "cockroach/pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
+            "pkg/sql/conn_executor.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/instrumentation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/planner.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/schema_changer.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/distsql/server.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/execinfra/processorsbase.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/importer/import_table_creation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/row/expr_walker_test.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/security/securityassets/security_assets.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/roachprod/install/cluster_synced.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/security/securitytest/securitytest.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/server/dumpstore/dumpstore.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/server/dumpstore/dumpstore_test.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/server/heapprofiler/profilestore_test.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/build/bazel/bazel\\.go$": "Runfile function deprecated"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
