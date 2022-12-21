@@ -625,7 +625,7 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
+	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, desc, subsumedRepls); err != nil {
 		return err
 	}
 	stats.subsumedReplicas = timeutil.Now()
@@ -788,7 +788,6 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	scratch *SSTSnapshotStorageScratch,
 	desc *roachpb.RangeDescriptor,
 	subsumedRepls []*Replica,
-	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
@@ -820,7 +819,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			ctx,
 			r.store.Engine(),
 			&subsumedReplSST,
-			subsumedNextReplicaID,
+			mergedTombstoneReplicaID,
 			true, /* clearRangeIDLocalOnly */
 			true, /* mustClearRange */
 		); err != nil {
