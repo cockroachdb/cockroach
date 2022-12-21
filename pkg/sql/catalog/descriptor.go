@@ -763,6 +763,8 @@ type TableDescriptor interface {
 	// GetInProgressImportStartTime returns the start wall time of the in progress import,
 	// if it exists.
 	GetInProgressImportStartTime() int64
+	// Hydrated returns true iff all visible column types are hydrated.
+	Hydrated() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

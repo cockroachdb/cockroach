@@ -143,6 +143,16 @@ func (desc *wrapper) IsTemporary() bool {
 	return desc.GetTemporary()
 }
 
+// Hydrated implements the TableDescriptor interface.
+func (desc *wrapper) Hydrated() bool {
+	for _, col := range desc.VisibleColumns() {
+		if col.GetType().UserDefined() && !col.GetType().IsHydrated() {
+			return false
+		}
+	}
+	return true
+}
+
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	return desc.NewBuilder().BuildImmutable()

@@ -339,8 +339,10 @@ func getDescriptorsByID(
 	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
 		return err
 	}
-	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
-		return err
+	if !flags.SkipHydration {
+		if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+			return err
+		}
 	}
 	for _, desc := range descs {
 		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
