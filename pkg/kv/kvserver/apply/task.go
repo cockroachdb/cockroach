@@ -71,6 +71,10 @@ var ErrRemoved = errors.New("replica removed")
 type EphemeralBatch interface {
 	// Stage inserts a Command into the Batch. In doing so, the Command is
 	// checked for rejection and a CheckedCommand is returned.
+	//
+	// TODO(tbg): consider renaming this to Add, so that in implementations
+	// of this we less unambiguously refer to "staging" commands into the
+	// pebble batch.
 	Stage(context.Context, Command) (CheckedCommand, error)
 	// Close closes the batch and releases any resources that it holds.
 	Close()

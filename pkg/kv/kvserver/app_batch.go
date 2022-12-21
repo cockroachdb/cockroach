@@ -24,6 +24,10 @@ import (
 )
 
 type appBatchStats struct {
+	// TODO(sep-raft-log):
+	// numEntries
+	// numEntriesBytes
+	// numEntriesEmpty
 	numMutations             int
 	numEntriesProcessed      int
 	numEntriesProcessedBytes int64
