@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -343,8 +342,6 @@ func (r *Replica) propose(
 	p.command.MaxLeaseIndex = 0
 
 	// Determine the encoding style for the Raft command.
-	prefix := true
-	encodingPrefixByte := raftlog.EntryEncodingStandardPrefixByte
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -353,7 +350,6 @@ func (r *Replica) propose(
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
 		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
-		prefix = false
 
 		// The following deals with removing a leaseholder. A voter can be removed
 		// in two ways. 1) Simple (old style) where there is a reconfiguration
@@ -415,59 +411,13 @@ func (r *Replica) propose(
 			return roachpb.NewError(e)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		encodingPrefixByte = raftlog.EntryEncodingSideloadedPrefixByte
-		r.store.metrics.AddSSTableProposals.Inc(1)
-
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
 			return roachpb.NewErrorf("cannot sideload empty SSTable")
 		}
+		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
+		r.store.metrics.AddSSTableProposals.Inc(1)
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
-	}
-
-	// Create encoding buffer.
-	preLen := 0
-	if prefix {
-		preLen = raftlog.RaftCommandPrefixLen
-	}
-	cmdLen := p.command.Size()
-	// Allocate the data slice with enough capacity to eventually hold the two
-	// "footers" that are filled later.
-	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, preLen, needed)
-	// Encode prefix with command ID, if necessary.
-	if prefix {
-		raftlog.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
-	}
-	// Encode body of command.
-	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
-		return roachpb.NewError(err)
-	}
-	p.encodedCommand = data
-
-	// Too verbose even for verbose logging, so manually enable if you want to
-	// debug proposal sizes.
-	if false {
-		log.Infof(p.ctx, `%s: proposal: %d
-  RaftCommand.ReplicatedEvalResult:          %d
-  RaftCommand.ReplicatedEvalResult.Delta:    %d
-  RaftCommand.WriteBatch:                    %d
-`, p.Request.Summary(), cmdLen,
-			p.command.ReplicatedEvalResult.Size(),
-			p.command.ReplicatedEvalResult.Delta.Size(),
-			p.command.WriteBatch.Size(),
-		)
-	}
-
-	// Log an event if this is a large proposal. These are more likely to cause
-	// blips or worse, and it's good to be able to pick them from traces.
-	//
-	// TODO(tschottdorf): can we mark them so lightstep can group them?
-	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
-	if cmdLen > largeProposalEventThresholdBytes {
-		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(cmdLen)))
 	}
 
 	// Insert into the proposal buffer, which passes the command to Raft to be

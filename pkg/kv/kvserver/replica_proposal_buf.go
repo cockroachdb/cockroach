@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -89,9 +91,6 @@ type propBuf struct {
 	// This field can be read under the proposer's read lock, and written to under
 	// the write lock.
 	assignedClosedTimestamp hlc.Timestamp
-
-	// Buffer used to avoid allocations.
-	scratchFooter kvserverpb.RaftCommandFooter
 
 	testing struct {
 		// leaseIndexFilter can be used by tests to override the max lease index
@@ -364,6 +363,12 @@ func (b *propBuf) flushLocked(ctx context.Context) error {
 	})
 }
 
+var ctPool = sync.Pool{
+	New: func() interface{} {
+		return &hlc.Timestamp{}
+	},
+}
+
 // FlushLockedWithRaftGroup flushes the commands from the proposal buffer and
 // resets the buffer back to an empty state. Each command is handed off to the
 // Raft proposals map, at which point they are owned by the Raft processor.
@@ -456,6 +461,38 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			continue
 		}
 
+		// Determine which encoding we're going to use for the Entry.Data slice.
+		var entryEncoding raftlog.EntryEncoding
+		switch {
+		case p.command.ReplicatedEvalResult.AddSSTable != nil:
+			entryEncoding = raftlog.EntryEncodingSideloaded
+		case p.command.ReplicatedEvalResult.ChangeReplicas != nil:
+			// Flush any previously batched (non-conf change) proposals to
+			// preserve the correct ordering or proposals. This isn't
+			// strictly necessary for anything - after all, latching prevents
+			// reordering where it matters, but it's not worth changing now.
+			// Later proposals will start a new batch.
+			if err := proposeBatch(raftGroup, b.p.getReplicaID(), ents); err != nil {
+				firstErr = err
+				continue
+			}
+			ents = ents[len(ents):]
+
+			checkCC, err := p.command.ReplicatedEvalResult.ChangeReplicas.ConfChange(nil /* encodedCtx */)
+			if err != nil {
+				firstErr = err
+				continue
+			}
+			if _, v1 := checkCC.AsV1(); v1 {
+				entryEncoding = raftlog.EntryEncodingRaftConfChange
+			} else {
+				entryEncoding = raftlog.EntryEncodingRaftConfChangeV2
+			}
+		default:
+			entryEncoding = raftlog.EntryEncodingStandard
+		}
+
+		var ct hlc.Timestamp
 		// Figure out what closed timestamp this command will carry.
 		//
 		// If this is a reproposal, we don't reassign the LAI. We also don't
@@ -463,41 +500,106 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// make a copy of the encoded command as to not modify the copy that's
 		// already stored in the local replica's raft entry cache.
 		if !reproposal {
-			lai, closedTimestamp, err := b.allocateLAIAndClosedTimestampLocked(ctx, p, closedTSTarget)
+			var lai uint64
+			var err error
+			lai, ct, err = b.allocateLAIAndClosedTimestampLocked(ctx, p, closedTSTarget)
 			if err != nil {
 				firstErr = err
 				continue
 			}
-			err = b.marshallLAIAndClosedTimestampToProposalLocked(ctx, p, lai, closedTimestamp)
-			if err != nil {
-				firstErr = err
-				continue
-			}
+			// Also assign MaxLeaseIndex to the in-memory copy. The in-memory copy is
+			// checked for sanity at application time, on the proposing replica. Note
+			// that if we catch any error below, this proposal will be rejected, so
+			// we can do this upfront.
+			p.command.MaxLeaseIndex = lai
+			// NB: we don't assign to the p.command.ClosedTimestamp here because that
+			// would cause an allocation. It'd be nice to assign to it, for
+			// consistency, but nobody needs it. What we do instead is get memory from
+			// a sync.Pool just while we're marshaling the command, and reset the
+			// field again right after. We could make the field nullable, see comment
+			// on p.command.ClosedTimestamp for context.
+			_ = ct
 		}
 
-		// Potentially drop the proposal before passing it to etcd/raft, but
-		// only after performing necessary bookkeeping.
+		testingSubmitProposalFilter := func(*ProposalData) (drop bool, err error) { return false, nil }
 		if filter := b.testing.submitProposalFilter; filter != nil {
-			if drop, err := filter(p); drop || err != nil {
-				firstErr = err
-				continue
-			}
+			testingSubmitProposalFilter = filter
 		}
 
-		// Coordinate proposing the command to etcd/raft.
-		if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-			// Flush any previously batched (non-conf change) proposals to
-			// preserve the correct ordering or proposals. Later proposals
-			// will start a new batch.
-			if err := proposeBatch(raftGroup, b.p.getReplicaID(), ents); err != nil {
+		// TODO(tbg): the encoding code within both of the branches of this
+		// conditional should be encapsulated in methods in the `logstore` package.
+		if entryEncoding == raftlog.EntryEncodingStandard || entryEncoding == raftlog.EntryEncodingSideloaded {
+			// Allocate the data slice with just the right capacity. This is a hot
+			// path so we are careful to minimize allocations.
+			if ct.IsSet() {
+				// See assignment to `ct` above to understand ctPool. It's important that we
+				// do this before calling p.command.Size() below or that will be off.
+				ctp := ctPool.Get().(*hlc.Timestamp)
+				*ctp = ct
+				p.command.ClosedTimestamp = ctp
+			}
+			data := make([]byte, raftlog.RaftCommandPrefixLen+p.command.Size())
+			// Encode prefix with command ID.
+			prefixByte := raftlog.EntryEncodingStandardPrefixByte
+			if entryEncoding == raftlog.EntryEncodingSideloaded {
+				prefixByte = raftlog.EntryEncodingSideloadedPrefixByte
+			}
+			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], prefixByte, p.idKey)
+			// Encode body of command into the remaining space, which it will fill precisely.
+
+			if _, err := protoutil.MarshalTo(
+				p.command, data[raftlog.RaftCommandPrefixLen:],
+			); err != nil {
 				firstErr = err
 				continue
 			}
-			ents = ents[len(ents):]
+			if ctp := p.command.ClosedTimestamp; ctp != nil {
+				p.command.ClosedTimestamp = nil
+				ctPool.Put(ctp)
+			}
 
+			if drop, err := testingSubmitProposalFilter(p); drop || err != nil {
+				firstErr = errors.CombineErrors(firstErr, err)
+				continue
+			}
+
+			// Add to the batch of entries that will soon be proposed. It is
+			// possible that this batching can cause the batched MsgProp to grow
+			// past the size limit where etcd/raft will drop the entire thing
+			// (see raft.Config.MaxUncommittedEntriesSize), but that's not a
+			// concern. This setting is configured to twice the maximum quota in
+			// the proposal quota pool, so for batching to cause a message to be
+			// dropped the uncommitted portion of the Raft log would already
+			// need to be at least as large as the proposal quota size, assuming
+			// that all in-flight proposals are reproposed in a single batch.
+
+			// Log an event if this is a large proposal. These are more likely to cause
+			// blips or worse, and it's good to be able to pick them from traces.
+			const largeProposalEventThresholdBytes = 2 << 19 // 512kb
+			if n := len(data); n > largeProposalEventThresholdBytes {
+				log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(n)))
+			}
+
+			ents = append(ents, raftpb.Entry{
+				Data: data,
+			})
+		} else {
+			// Handle raftlog.EntryEncodingRaftConfChange{,V2}.
+			//
+			// First we need to encode the kvserverpb.RaftCommand. No need to optimize
+			// allocations in this case since it's not a hot path.
+			var err error
+			if ct.IsSet() {
+				p.command.ClosedTimestamp = &ct
+			}
+			raftCmdBytes, err := protoutil.Marshal(p.command)
+			if err != nil {
+				firstErr = err
+				continue
+			}
 			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
-				Payload:   p.encodedCommand,
+				Payload:   raftCmdBytes,
 			}
 			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
@@ -505,12 +607,24 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 
-			cc, err := crt.ConfChange(encodedCtx)
+			cc, err := p.command.ReplicatedEvalResult.ChangeReplicas.ConfChange(encodedCtx)
 			if err != nil {
 				firstErr = err
 				continue
 			}
 
+			// TODO(tbg): it seems desirable to streamline the handling of conf changes more
+			// by creating an entry here so that it can be sent through the same hooks in both
+			// branches of the surrounding if clause. It's not trivial but surely something
+			// can be done.
+
+			if drop, err := testingSubmitProposalFilter(p); drop || err != nil {
+				firstErr = errors.CombineErrors(firstErr, err)
+				continue
+			}
+
+			// The resulting raftpb.Entry's Data slice will be the marshaled `cc`, but we
+			// need to hand `cc` to raft directly per its contract.
 			if err := raftGroup.ProposeConfChange(
 				cc,
 			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
@@ -521,24 +635,14 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				firstErr = err
 				continue
 			}
-		} else {
-			// Add to the batch of entries that will soon be proposed. It is
-			// possible that this batching can cause the batched MsgProp to grow
-			// past the size limit where etcd/raft will drop the entire thing
-			// (see raft.Config.MaxUncommittedEntriesSize), but that's not a
-			// concern. This setting is configured to twice the maximum quota in
-			// the proposal quota pool, so for batching to cause a message to be
-			// dropped the uncommitted portion of the Raft log would already
-			// need to be at least as large as the proposal quota size, assuming
-			// that all in-flight proposals are reproposed in a single batch.
-			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
-			})
 		}
 	}
 	if firstErr != nil {
 		return 0, firstErr
 	}
+	// TODO(during review): we've populated a bunch of in-mem state on the proposal, but
+	// if it fails (say ErrProposalDropped) are we sure we're not erroneously "re-using" some
+	// of that state? Page back in how that works and document it better.
 	return used, proposeBatch(raftGroup, b.p.getReplicaID(), ents)
 }
 
@@ -854,37 +958,6 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	}
 
 	return lai, closedTSTarget, nil
-}
-
-// marshallLAIAndClosedTimestampToProposalLocked modifies p.encodedCommand,
-// adding the LAI and closed timestamp.
-func (b *propBuf) marshallLAIAndClosedTimestampToProposalLocked(
-	ctx context.Context, p *ProposalData, lai uint64, closedTimestamp hlc.Timestamp,
-) error {
-	buf := &b.scratchFooter
-	buf.MaxLeaseIndex = lai
-	// Also assign MaxLeaseIndex to the in-memory copy. The in-memory copy is
-	// checked for sanity at application time, on the proposing replica.
-	p.command.MaxLeaseIndex = lai
-
-	// Fill in the closed ts in the proposal.
-	buf.ClosedTimestamp = closedTimestamp
-	// NOTE(andrei): We don't assigned to the in-memory command
-	// (p.command.ClosedTimestamp) because that would cause an allocation (see
-	// comments on the proto field about why it needs to be nullable). It'd be
-	// nice to assign to it, for consistency, but nobody needs it.
-
-	if log.ExpensiveLogEnabled(ctx, 4) {
-		log.VEventf(ctx, 4, "attaching closed timestamp %s to proposal %x",
-			closedTimestamp, p.idKey)
-	}
-
-	// Here we rely on p.encodedCommand to have been allocated with enough
-	// capacity for this footer.
-	preLen := len(p.encodedCommand)
-	p.encodedCommand = p.encodedCommand[:preLen+buf.Size()]
-	_, err := protoutil.MarshalTo(buf, p.encodedCommand[preLen:])
-	return err
 }
 
 func (b *propBuf) forwardAssignedLAILocked(v uint64) {

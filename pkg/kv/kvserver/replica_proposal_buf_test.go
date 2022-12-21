@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -295,20 +294,7 @@ func (pc proposalCreator) newProposal(ba *roachpb.BatchRequest) *ProposalData {
 		Request:     ba,
 		leaseStatus: pc.lease,
 	}
-	p.encodedCommand = pc.encodeProposal(p)
 	return p
-}
-
-func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
-	cmdLen := p.command.Size()
-	needed := raftlog.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
-	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardPrefixByte, p.idKey)
-	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
-		panic(err)
-	}
-	return data
 }
 
 // TestProposalBuffer tests the basic behavior of the Raft proposal buffer.

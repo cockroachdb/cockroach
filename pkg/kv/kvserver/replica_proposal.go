@@ -74,10 +74,6 @@ type ProposalData struct {
 	// reproposals its MaxLeaseIndex field is mutated.
 	command *kvserverpb.RaftCommand
 
-	// encodedCommand is the encoded Raft command, with an optional prefix
-	// containing the command ID.
-	encodedCommand []byte
-
 	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
 	// proposal has been passed to raft modifying this field requires holding the
 	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is

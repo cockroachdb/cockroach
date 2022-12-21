@@ -1561,7 +1561,12 @@ func (crt ChangeReplicasTrigger) NextReplicaID() ReplicaID {
 }
 
 // ConfChange returns the configuration change described by the trigger.
-func (crt ChangeReplicasTrigger) ConfChange(encodedCtx []byte) (raftpb.ConfChangeI, error) {
+func (crt ChangeReplicasTrigger) ConfChange(
+	encodedCtx []byte,
+) (interface {
+	raftpb.ConfChangeI
+	protoutil.Message
+}, error) {
 	return confChangeImpl(crt, encodedCtx)
 }
 
@@ -1582,7 +1587,10 @@ func confChangeImpl(
 		alwaysV2() bool
 	},
 	encodedCtx []byte,
-) (raftpb.ConfChangeI, error) {
+) (interface {
+	raftpb.ConfChangeI
+	protoutil.Message
+}, error) {
 	added, removed, replicas := crt.Added(), crt.Removed(), crt.Replicas()
 
 	var sl []raftpb.ConfChangeSingle
@@ -1714,7 +1722,10 @@ func confChangeImpl(
 		return nil, errors.Errorf("descriptor enters joint state, but trigger is requesting to leave one")
 	}
 
-	var cc raftpb.ConfChangeI
+	var cc interface {
+		raftpb.ConfChangeI
+		protoutil.Message
+	}
 
 	if enteringJoint || crt.alwaysV2() {
 		// V2 membership changes, which allow atomic replication changes. We
@@ -1728,19 +1739,19 @@ func confChangeImpl(
 			// says we're not supposed to go through one.
 			transition = raftpb.ConfChangeTransitionAuto
 		}
-		cc = raftpb.ConfChangeV2{
+		cc = &raftpb.ConfChangeV2{
 			Transition: transition,
 			Changes:    sl,
 			Context:    encodedCtx,
 		}
 	} else if wantLeaveJoint {
 		// Transitioning out of a joint config.
-		cc = raftpb.ConfChangeV2{
+		cc = &raftpb.ConfChangeV2{
 			Context: encodedCtx,
 		}
 	} else {
 		// Legacy path with exactly one change.
-		cc = raftpb.ConfChange{
+		cc = &raftpb.ConfChange{
 			Type:    sl[0].Type,
 			NodeID:  sl[0].NodeID,
 			Context: encodedCtx,
