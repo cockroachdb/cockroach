@@ -1,0 +1,520 @@
+# LogicTest: local
+
+subtest example
+
+# The following test demonstrates that the function can create
+# databases, schemas and tables.
+
+query I
+SELECT count(*) FROM crdb_internal.databases
+WHERE name NOT IN ('system','defaultdb','postgres','test')
+----
+0
+
+query I
+SELECT count(*) FROM crdb_internal.tables
+WHERE database_name NOT IN ('system','defaultdb','postgres','test')
+----
+0
+
+query T
+SELECT crdb_internal.generate_test_objects('a.b.c',array[2,3,5])->'generated_counts'
+----
+{"databases": 2, "schemas": 8, "tables": 30}
+
+query I
+SELECT count(*) FROM crdb_internal.databases
+WHERE name NOT IN ('system','defaultdb','postgres','test')
+----
+2
+
+query I
+SELECT count(*) FROM crdb_internal.tables
+WHERE database_name NOT IN ('system','defaultdb','postgres','test')
+----
+30
+
+subtest show_names
+
+# The following test demonstrates how the new objects are named by default.
+# We use a fixed seed to make the output deterministic.
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"zz.b.c","counts":[2,2,2],"seed":123}'::jsonb)->'generated_counts'
+----
+{"databases": 2, "schemas": 6, "tables": 8}
+
+query TTT
+SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
+FROM "".crdb_internal.tables WHERE database_name LIKE '%z%z%'
+ORDER BY database_name, schema_name, name
+----
+"""z😋z1"  "b-1"  c2
+"""z😋z1"  "b-1"  c😉1
+"""z😋z1"  b2     "&c2"
+"""z😋z1"  b2     c1
+zz2       b1     c1
+zz2       b1     c2
+zz2       b2     """  c1"
+zz2       b2     c2
+
+# Show number placement inside the output identifier, without added noise.
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"\"z#y\".b.c","counts":[2,2,2],"seed":123,"name_gen":{"noise":false}}'::jsonb)->'generated_counts'
+----
+{"databases": 2, "schemas": 6, "tables": 8}
+
+query TTT rowsort
+SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
+FROM "".crdb_internal.tables WHERE database_name LIKE '%z%y%'
+----
+z1y  b1  c1
+z1y  b1  c2
+z1y  b2  c1
+z1y  b2  c2
+z2y  b1  c1
+z2y  b1  c2
+z2y  b2  c1
+z2y  b2  c2
+
+subtest randomize_columns
+
+query T
+SELECT crdb_internal.generate_test_objects('{"seed":123,"randomize_columns":true,"counts":[3]}'::jsonb)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 3}
+
+query TT
+SELECT quote_ident(descriptor_name), quote_ident(column_name) FROM crdb_internal.table_columns
+WHERE descriptor_name ILIKE '%t%e%s%t%'
+ORDER BY descriptor_name, column_name
+----
+"tEst1"   "addre ss"
+"tEst1"   "nam""e"
+"tEst1"   rowid
+"te-st2"  "ad'd  ress"
+"te-st2"  rowid
+"te-st2"  😗name
+test3     " name"
+test3     address
+test3     rowid
+
+subtest templates/more_tables_generated_than_templates
+
+statement ok
+CREATE DATABASE base; CREATE TABLE base.t(x NUMERIC); CREATE TABLE base.u(y STRING);
+CREATE DATABASE newdb; SET database = newdb
+
+# More tables requested than there are templates: the count
+# rotates around the templates.
+query T
+SELECT crdb_internal.generate_test_objects('{"seed":123,"counts":[10],"table_templates":["base.*"]}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 10}
+
+# The column names are also randomized by default.
+query TTT
+SELECT quote_ident(table_name), quote_ident(column_name), data_type FROM "".information_schema.columns
+WHERE table_catalog = 'newdb' AND table_schema = 'public'
+ORDER BY table_name, column_name
+----
+"*t     1"     rowid    bigint
+"*t     1"     x        numeric
+".u2"   rowid  bigint
+".u2"   "y "   text
+"t""4"  rowid  bigint
+"t""4"  x͎     numeric
+t2      "/x"   numeric
+t2      rowid  bigint
+t3      rowid  bigint
+t3      x      numeric
+t5      rowid  bigint
+t5      "{x"   numeric
+"u 5"   "%y "  text
+"u 5"   rowid  bigint
+u1      "'y"   text
+u1      rowid  bigint
+u3      rowid  bigint
+u3      y̷     text
+u4      rowid  bigint
+u4      y      text
+
+subtest templates/fewer_tables_generated_than_templates
+
+statement ok
+CREATE DATABASE newdb2; SET database = newdb2
+
+# More templates than tables requested: we get a random
+# selection of the templates; there is no numbering.
+query T
+SELECT crdb_internal.generate_test_objects('{"seed":123,"counts":[10],"table_templates":["system.*"]}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 10}
+
+query T
+SELECT table_name FROM [SHOW TABLES]
+ORDER BY table_name
+----
+external_conNections
+join_tokens
+locatIons
+migrations
+protected_ts_meta
+replic'ati&on_sta ts
+role_memberS
+spa n_configurations
+statement_diagnostics_requests
+statement_statistics
+
+# Again, the column names are randomized.
+query TTT
+SELECT quote_ident(table_name), quote_ident(column_name), data_type FROM "".information_schema.columns
+WHERE table_catalog = 'newdb2' AND table_schema = 'public'
+ORDER BY table_name, column_name
+LIMIT 20
+----
+"external_conNections"  " crEated"             timestamp without time zone
+"external_conNections"  "c(onnection_details"  bytea
+"external_conNections"  "connectioN_name"      text
+"external_conNections"  connection_type        text
+"external_conNections"  "o""wner"              text
+"external_conNections"  rowid                  bigint
+"external_conNections"  updated                timestamp without time zone
+join_tokens             expiration             timestamp with time zone
+join_tokens             id                     uuid
+join_tokens             rowid                  bigint
+join_tokens             "secr|""               et"                          bytea
+"locatIons"             "latitudE"             numeric
+"locatIons"             "localityKey"          text
+"locatIons"             "localityValue"        text
+"locatIons"             longitude              numeric
+"locatIons"             rowid                  bigint
+migrations              "completed_at' "       timestamp with time zone
+migrations              interna͆l              bigint
+migrations              major                  bigint
+migrations              "minor"""              bigint
+
+subtest templates/different_templates_in_each_db
+
+# When there are more templates than the requested number of tables
+# per database, a different subset of templates is selected in each
+# new database.
+
+query T
+SELECT crdb_internal.generate_test_objects('{"seed":123,"names":"dbt._","counts":[3,0,3],"table_templates":["system.*"]}'::JSONB)->'generated_counts'
+----
+{"databases": 3, "schemas": 3, "tables": 9}
+
+query TTT
+SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
+FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
+ORDER BY database_name, schema_name, name
+----
+"dBt1"   public  " privile ges "
+"dBt1"   public  statement_diagnostics_requests
+"dBt1"   public  "tenant%_settings"
+"dbt-2"  public  database_role_settings
+"dbt-2"  public  eventlog
+"dbt-2"  public  "j|ob_info"
+dbt3     public  "comme                          nts"
+dbt3     public  eventlog
+dbt3     public  "job_in fO"
+
+
+statement ok
+SET database = test
+
+subtest show_config
+
+# The following tests shows how the default config is applied.
+
+# Default parameters.
+# We erase the seed to make the output deterministic.
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true}'::JSONB)#-array['seed']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "generated_counts": {"databases": 0, "schemas": 0, "tables": 10}, "name_gen": {"capitals": 0.1, "diacritic_depth": 1, "diacritics": 0.1, "emote": 0.1, "noise": true, "number": true, "punctuate": 0.1, "quote": 0.1, "space": 0.1, "whitespace": 0.1}, "names": "_", "randomize_columns": true}
+
+# Manual seed.
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123}'::JSONB)#-array['generated_counts']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "name_gen": {"capitals": 0.1, "diacritic_depth": 1, "diacritics": 0.1, "emote": 0.1, "noise": true, "number": true, "punctuate": 0.1, "quote": 0.1, "space": 0.1, "whitespace": 0.1}, "names": "_", "randomize_columns": true, "seed": 123}
+
+# Noise disabled.
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123,"name_gen":{"noise":false}}'::JSONB)#-array['generated_counts']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "name_gen": {"noise": false, "number": true}, "names": "_", "randomize_columns": true, "seed": 123}
+
+# Numbers disabled.
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123,"name_gen":{"number":false}}'::JSONB)#-array['generated_counts']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "name_gen": {"capitals": 0.1, "diacritic_depth": 1, "diacritics": 0.1, "emote": 0.1, "noise": true, "number": false, "punctuate": 0.1, "quote": 0.1, "space": 0.1, "whitespace": 0.1}, "names": "_", "randomize_columns": true, "seed": 123}
+
+# Numbers and noise disabled.
+query error name generation needs variability to generate objects
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123,"name_gen":{"number":false,"noise":false}}'::JSONB)#-array['generated_counts']
+
+# Numbers and noise disabled, but some extra variability.
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123,"name_gen":{"number":false,"noise":false,"quote":1}}'::JSONB)#-array['generated_counts']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "name_gen": {"noise": false, "number": false, "quote": 1}, "names": "_", "randomize_columns": true, "seed": 123}
+
+# Zalgo mode enabled.
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123,"name_gen":{"noise":false,"zalgo":true}}'::JSONB)#-array['generated_counts']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "name_gen": {"diacritic_depth": 20, "diacritics": 1000, "noise": false, "number": true, "zalgo": true}, "names": "_", "randomize_columns": true, "seed": 123}
+
+query T
+SELECT crdb_internal.generate_test_objects('{"dry_run":true,"seed":123,"name_gen":{"noise":true,"zalgo":true}}'::JSONB)#-array['generated_counts']
+----
+{"batch_size": 1000, "counts": [10], "dry_run": true, "name_gen": {"capitals": 0.1, "diacritic_depth": 20, "diacritics": 1000, "emote": 0.1, "noise": true, "number": true, "punctuate": 0.1, "quote": 0.1, "space": 0.1, "whitespace": 0.1, "zalgo": true}, "names": "_", "randomize_columns": true, "seed": 123}
+
+subtest zero_dbs
+
+# If the requested number of databases is zero, then no objects are ever created.
+query T
+SELECT crdb_internal.generate_test_objects('foo.bar.baz', ARRAY[0,10,20])->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 0}
+
+
+subtest nonzero_dbs_zero_schemas
+
+# If the requested number of schemas is zero, but the number of
+# databases is non-zero, then dbs are created but no schemas.
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"dba.bar.baz", "counts":[2,0,10], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 2, "schemas": 2, "tables": 0}
+
+query I
+SELECT count(*) FROM [SHOW TABLES FROM dba1]
+----
+0
+
+query I
+SELECT count(*) FROM [SHOW TABLES FROM dba2]
+----
+0
+
+subtest nonzero_dbs_nonzero_schemas_zero_tables
+
+# If the requested number of tables is zero, but the number of
+# databases/schemas is non-zero, then schemas/dbs are created but no
+# tables.
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"dbb.bar.baz", "counts":[1,1,0], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 1, "schemas": 2, "tables": 0}
+
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS FROM dbb1]
+----
+bar1
+public
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+query I
+SELECT count(*) FROM [SHOW TABLES FROM dbb1.bar1]
+----
+0
+
+
+subtest implicit_db
+
+# Without a db qualification, the creation targets the current db.
+
+statement ok
+CREATE SCHEMA myschema
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"myschema.foo", "counts":[2], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 2}
+
+query TT rowsort
+SELECT schema_name, table_name FROM [SHOW TABLES FROM test.myschema]
+----
+myschema  foo1
+myschema  foo2
+
+subtest implicit_db/zero_schemas
+
+query T
+SELECT crdb_internal.generate_test_objects('myschema.foo', ARRAY[0, 2])->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 0}
+
+subtest implicit_db/zero_tables
+
+query T
+SELECT crdb_internal.generate_test_objects('myschema.foo', ARRAY[0])->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 0}
+
+subtest implicit_db/nonzero_schemas_zero_tables
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"scgen.foo", "counts":[2,0], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 2, "tables": 0}
+
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'scgen%'
+----
+scgen1
+scgen2
+
+query I
+SELECT count(*) FROM [SHOW TABLES FROM scgen1]
+----
+0
+
+query I
+SELECT count(*) FROM [SHOW TABLES FROM scgen2]
+----
+0
+
+subtest implicit_schema
+
+# Without a schema qualification, the creation targets the first valid
+# schema in the search path.
+
+statement ok
+CREATE SCHEMA otherschema;
+SET search_path=invalidschema,otherschema,public
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"foo", "counts":[2], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 2}
+
+query TT rowsort
+SELECT schema_name, table_name FROM [SHOW TABLES FROM test.otherschema]
+----
+otherschema  foo2
+otherschema  foo1
+
+statement ok
+RESET search_path
+
+subtest gen_dbs_and_public_tables_but_no_schema
+
+# This test checks that if db creation is requested (with 3 sizes),
+# and there are just 2 name components, the prefix is used as db name
+# and the tables get created in schema 'public'.
+
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"dbfoo.baz", "counts":[1,0,2], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 1, "schemas": 1, "tables": 2}
+
+query TT rowsort
+SELECT schema_name, table_name FROM [SHOW TABLES FROM dbfoo1]
+----
+public  baz1
+public  baz2
+
+subtest missing_pattern
+
+query error missing database name pattern
+SELECT crdb_internal.generate_test_objects('foo', ARRAY[10,10,10])
+
+query error missing schema name pattern
+SELECT crdb_internal.generate_test_objects('foo', ARRAY[10,10])
+
+subtest target_check_on_zero_count
+
+query error database "nonexistent" does not exist
+SELECT crdb_internal.generate_test_objects('nonexistent.foo.bar', 0)
+
+query error unknown schema "nonexistent"
+SELECT crdb_internal.generate_test_objects('nonexistent.bar', 0)
+
+query error unknown schema "nonexistent"
+SELECT crdb_internal.generate_test_objects('test.nonexistent.bar', 0)
+
+subtest inv_name
+
+query error unacceptable schema name "pg_foo"
+SELECT crdb_internal.generate_test_objects('pg_foo.bar', ARRAY[10,10])
+
+query error unacceptable schema name "pg_foo"
+SELECT crdb_internal.generate_test_objects('test.pg_foo.bar', ARRAY[10,10])
+
+subtest inv_privs
+
+query error does not have CREATE privilege on database system
+SELECT crdb_internal.generate_test_objects('system.public.foo', 10)
+
+query error cannot CREATE on schema pg_catalog
+SELECT crdb_internal.generate_test_objects('pg_catalog.foo', 10)
+
+statement ok
+SET search_path=pg_catalog,public
+
+query error cannot CREATE on schema pg_catalog
+SELECT crdb_internal.generate_test_objects('foo', 10)
+
+statement ok
+RESET search_path
+
+user testuser
+
+query error permission denied to create database
+SELECT crdb_internal.generate_test_objects('foo._._', ARRAY[1,0,0])
+
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+SELECT crdb_internal.generate_test_objects('custom._._', ARRAY[1,0,0])
+
+subtest inv_privs/many_descriptors
+
+query error only admin users can generate more than 10000 descriptors at a time
+SELECT crdb_internal.generate_test_objects('a.b.c', ARRAY[10000, 1,1])
+
+query error only admin users can generate more than 10000 descriptors at a time
+SELECT crdb_internal.generate_test_objects('a.b.c', ARRAY[1,10000,1])
+
+query error only admin users can generate more than 10000 descriptors at a time
+SELECT crdb_internal.generate_test_objects('a.b.c', ARRAY[1,1,10000])
+
+user root
+
+subtest temp_schema
+
+# Force create the temp schema.
+statement ok
+SET experimental_enable_temp_tables = 'on';
+CREATE TEMP TABLE test(x INT)
+
+# Create some tables in it.
+query T
+SELECT crdb_internal.generate_test_objects('{"names":"pg_temp.foo", "counts":[3], "name_gen":{"noise":false}}'::JSONB)->'generated_counts'
+----
+{"databases": 0, "schemas": 0, "tables": 3}
+
+# List them.
+query T rowsort
+SELECT table_name FROM [SHOW TABLES FROM pg_temp]
+----
+foo1
+foo2
+foo3
+test

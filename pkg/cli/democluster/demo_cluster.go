@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -1295,9 +1296,69 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 				return errors.Wrapf(err, "starting background workload")
 			}
 		}
+
+		if c.demoCtx.ExpandSchema > 0 {
+			if err := c.expandSchema(ctx, gen); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
+}
+
+func (c *transientCluster) expandSchema(ctx context.Context, gen workload.Generator) error {
+	return c.stopper.RunAsyncTask(ctx, "expand-schema", func(ctx context.Context) {
+		ctx, cancel := c.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		ctx = logtags.AddTag(ctx, "expand-schemas", nil)
+
+		db, err := gosql.Open("postgres", c.connURL)
+		if err != nil {
+			c.warnLog(ctx, "unable to connect: %v", err)
+			return
+		}
+		defer db.Close()
+
+		// Don't spam too many warnings if the schema expansion cannot
+		// make progress.
+		every := log.Every(10 * time.Second)
+
+		for num := 0; num < c.demoCtx.ExpandSchema; {
+			// Pace the expansion in proportion to the target
+			// number (more desired descriptors = grow faster).
+			var dbPerRound, tbPerDbPerRound int
+			switch {
+			case c.demoCtx.ExpandSchema <= 100:
+				dbPerRound = 1
+				tbPerDbPerRound = 10
+			case c.demoCtx.ExpandSchema <= 50000:
+				dbPerRound = 10
+				tbPerDbPerRound = 100
+			default:
+				dbPerRound = 20
+				tbPerDbPerRound = 450
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			if _, err := db.ExecContext(ctx, `SELECT crdb_internal.generate_test_objects(
+json_build_object(
+  'names', quote_ident($1) || '._',
+  'counts', array[$2,0,$3],
+  'table_templates', array[quote_ident($1) || '.*']
+))`, gen.Meta().Name, dbPerRound, tbPerDbPerRound); err != nil {
+				if every.ShouldLog() {
+					c.warnLog(ctx, "while expanding the schema: %v", err)
+				}
+				// Try again - it may succeed later.
+				continue
+			}
+			num += dbPerRound*2 + (dbPerRound * tbPerDbPerRound)
+		}
+	})
 }
 
 func (c *transientCluster) runWorkload(

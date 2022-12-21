@@ -213,6 +213,12 @@ type Planner interface {
 		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 	) (tree.Datum, error)
 
+	// GenerateTestObjects is used to generate a large number of
+	// objets quickly.
+	// Note: we pass parameters as a string to avoid a package
+	// dependency to randgen from users of this interface;
+	GenerateTestObjects(ctx context.Context, parameters string) (string, error)
+
 	// UnsafeUpsertDescriptor is used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeUpsertDescriptor(

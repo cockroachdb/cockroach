@@ -781,6 +781,7 @@ func init() {
 
 		cliflagcfg.IntFlag(f, &demoCtx.NumNodes, cliflags.DemoNodes)
 		cliflagcfg.BoolFlag(f, &demoCtx.RunWorkload, cliflags.RunDemoWorkload)
+		cliflagcfg.IntFlag(f, &demoCtx.ExpandSchema, cliflags.ExpandDemoSchema)
 		cliflagcfg.IntFlag(f, &demoCtx.WorkloadMaxQPS, cliflags.DemoWorkloadMaxQPS)
 		cliflagcfg.VarFlag(f, &demoCtx.Localities, cliflags.DemoNodeLocality)
 		cliflagcfg.BoolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)

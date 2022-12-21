@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen/randgencfg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -6327,6 +6328,108 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	// Generate some objects.
+	"crdb_internal.generate_test_objects": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "names", Typ: types.String},
+				{Name: "number", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Avoid using randgen.TestSchemaGeneratorConfig directly so
+				// that we only define these two fields and leave the others
+				// to defaults.
+				cfg := struct {
+					Names  string
+					Counts []int64
+				}{
+					Names:  string(*args[0].(*tree.DString)),
+					Counts: []int64{int64(*args[1].(*tree.DInt))},
+				}
+				j, err := gojson.Marshal(cfg)
+				if err != nil {
+					return nil, err
+				}
+				js, err := evalCtx.Planner.GenerateTestObjects(ctx, string(j))
+				if err != nil {
+					return nil, err
+				}
+				return tree.ParseDJSON(js)
+			},
+			Info: `Generates a number of objects whose name follow the provided pattern.
+
+generate_test_objects(pat, num) is an alias for
+generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
+`,
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "names", Typ: types.String},
+				{Name: "counts", Typ: types.IntArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[1].(*tree.DArray).HasNulls {
+					return nil, errors.New("cannot use NULL in number parameter")
+				}
+				dints := args[1].(*tree.DArray).Array
+				// Avoid using randgen.TestSchemaGeneratorConfig directly so
+				// that we only define these two fields and leave the others
+				// to defaults.
+				cfg := struct {
+					Names  string
+					Counts []int64
+				}{
+					Names:  string(*args[0].(*tree.DString)),
+					Counts: make([]int64, len(dints)),
+				}
+				for i, d := range dints {
+					cfg.Counts[i] = int64(*d.(*tree.DInt))
+				}
+				j, err := gojson.Marshal(cfg)
+				if err != nil {
+					return nil, err
+				}
+				js, err := evalCtx.Planner.GenerateTestObjects(ctx, string(j))
+				if err != nil {
+					return nil, err
+				}
+				return tree.ParseDJSON(js)
+			},
+			Info: `Generates a number of objects whose name follow the provided pattern.
+
+generate_test_objects(pat, counts) is an alias for
+generate_test_objects('{"names":pat, "counts":counts}'::jsonb)
+`,
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "parameters", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				j, err := evalCtx.Planner.GenerateTestObjects(ctx,
+					args[0].(*tree.DJSON).JSON.String(),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.ParseDJSON(j)
+			},
+			Info: `Generates a number of objects whose name follow the provided pattern.
+
+Parameters:` + randgencfg.ConfigDoc,
 			Volatility: volatility.Volatile,
 		},
 	),

@@ -2705,6 +2705,32 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.decode_plan_gist"></a><code>crdb_internal.decode_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns random SQL identifiers.</p>
+<p>gen_rand_ident(pattern, count) is an alias for gen_rand_ident(pattern, count, ‘’).
+See the documentation of the other gen_rand_ident overload for details.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>, parameters: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns count random SQL identifiers that resemble the name_pattern.</p>
+<p>The last argument is a JSONB object containing the following optional fields:</p>
+<ul>
+<li>“seed”: the seed to use for the pseudo-random generator (default: random).</li>
+<li>“number”: whether to add a number to the generated names (default true).
+When enabled, occurrences of the character ‘#’ in the name pattern are
+replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
+<li>“noise”: whether to add noise to the generated names (default true).
+It adds a non-zero probability for each of the probability options below left to zero.
+(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
+<li>“punctuate”: probability of adding punctuation to the generated names.</li>
+<li>“quote”: probabiltiy of adding single or double quotes to the generated names.</li>
+<li>“emote”: probability of adding emojis to the generated names.</li>
+<li>“space”: probability of adding simple spaces to the generated names.</li>
+<li>“whitespace”: probability of adding complex whitespace to the generated names.</li>
+<li>“capitals”: probability of using capital letters in the generated names.
+Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
+<li>“diacritics”: probability of adding diacritics in the generated names.</li>
+<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
+<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
+</ul>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.show_create_all_schemas"></a><code>crdb_internal.show_create_all_schemas(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE schema statements.
 The output can be used to recreate a database.’</p>
 </span></td><td>Volatile</td></tr>
@@ -3073,6 +3099,47 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="crdb_internal.force_panic"></a><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.force_retry"></a><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, counts: <a href="int.html">int</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
+<p>generate_test_objects(pat, counts) is an alias for
+generate_test_objects(’{“names”:pat, “counts”:counts}’::jsonb)</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, number: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
+<p>generate_test_objects(pat, num) is an alias for
+generate_test_objects(’{“names”:pat, “counts”:[num]}’::jsonb)</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(parameters: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
+<p>Parameters:</p>
+<ul>
+<li>“names”: pattern to use to name the generated objects (default:
+“test”).</li>
+<li>“counts”: counts of generated objects (default: [10]).</li>
+<li>“dry_run”: prepare the schema but do not actually write it
+(default: false).</li>
+<li>“seed”: random seed to use (default: auto).</li>
+<li>“randomize_columns”: whether to randomize the column names on tables
+(default: true).</li>
+<li>“name_gen”: configuration for the name generation, see below.</li>
+</ul>
+<p>Name generation options:</p>
+<ul>
+<li>“number”: whether to add a number to the generated names (default true).
+When enabled, occurrences of the character ‘#’ in the name pattern are
+replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
+<li>“noise”: whether to add noise to the generated names (default true).
+It adds a non-zero probability for each of the probability options below left to zero.
+(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
+<li>“punctuate”: probability of adding punctuation to the generated names.</li>
+<li>“quote”: probabiltiy of adding single or double quotes to the generated names.</li>
+<li>“emote”: probability of adding emojis to the generated names.</li>
+<li>“space”: probability of adding simple spaces to the generated names.</li>
+<li>“whitespace”: probability of adding complex whitespace to the generated names.</li>
+<li>“capitals”: probability of using capital letters in the generated names.
+Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
+<li>“diacritics”: probability of adding diacritics in the generated names.</li>
+<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
+<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
+</ul>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.get_database_id"></a><code>crdb_internal.get_database_id(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>

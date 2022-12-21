@@ -38,6 +38,7 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/serverutils/regionlatency",
         "//pkg/util/humanizeutil",
+        "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",

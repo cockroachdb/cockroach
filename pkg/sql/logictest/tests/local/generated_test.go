@@ -1465,6 +1465,13 @@ func TestLogic_propagate_input_ordering(
 	runLogicTest(t, "propagate_input_ordering")
 }
 
+func TestLogic_rand_ident(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "rand_ident")
+}
+
 func TestLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -2058,6 +2065,13 @@ func TestLogic_tenant_builtins(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_builtins")
+}
+
+func TestLogic_test_objects(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "test_objects")
 }
 
 func TestLogic_time(

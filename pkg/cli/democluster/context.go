@@ -43,6 +43,11 @@ type Context struct {
 	// after the demo cluster has been initialized.
 	RunWorkload bool
 
+	// ExpandSchema indicates whether to expand the schema of the
+	// workload. The expansion stops when this number of extra
+	// descriptors has been reached.
+	ExpandSchema int
+
 	// WorkloadGenerator is the desired workload generator.
 	WorkloadGenerator workload.Generator
 

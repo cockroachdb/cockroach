@@ -2039,6 +2039,11 @@ var builtinOidsArray = []string{
 	2061: `crdb_internal.job_payload_type(data: bytes) -> string`,
 	2062: `crdb_internal.tenant_span(tenant_name: string) -> bytes[]`,
 	2063: `crdb_internal.system_jobs -> tuple{int AS id, string AS status, timestamp AS created, bytes AS payload, bytes AS progress, string AS created_by_type, int AS created_by_id, bytes AS claim_session_id, int AS claim_instance_id, int AS num_runs, timestamp AS last_run}`,
+	2064: `crdb_internal.generate_test_objects(names: string, number: int) -> jsonb`,
+	2065: `crdb_internal.generate_test_objects(names: string, counts: int[]) -> jsonb`,
+	2066: `crdb_internal.generate_test_objects(parameters: jsonb) -> jsonb`,
+	2067: `crdb_internal.gen_rand_ident(name_pattern: string, count: int) -> string`,
+	2068: `crdb_internal.gen_rand_ident(name_pattern: string, count: int, parameters: jsonb) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
