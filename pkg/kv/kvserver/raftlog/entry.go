@@ -28,9 +28,8 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-// EncodingVersion determines the RaftCommandEncodingVersion for a given
-// Entry.
-func EncodingVersion(ent raftpb.Entry) (RaftCommandEncodingVersion, error) {
+// EncodingVersion determines the EntryEncoding for a given Entry.
+func EncodingVersion(ent raftpb.Entry) (EntryEncoding, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
 		return RaftVersionEmptyEntry, nil

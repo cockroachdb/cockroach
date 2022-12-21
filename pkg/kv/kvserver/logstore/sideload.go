@@ -210,7 +210,7 @@ func MaybeInlineSideloadedRaftCommand(
 	}
 	e.Cmd.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
 	// TODO(tbg): there should be a helper that properly encodes a command, given
-	// the RaftCommandEncodingVersion.
+	// the EntryEncoding.
 	{
 		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
 		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.RaftVersionSideloadedPrefixByte, e.ID)
