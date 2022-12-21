@@ -367,6 +367,13 @@ const (
 	// based on (statistics->>'indexes') with inverted index on table system.statement_statistics.
 	V23_1_AlterSystemStatementStatisticsAddIndexesUsage
 
+	// V23_1PebbleFormatSSTableValueBlocks upgrades the Pebble format major
+	// version to FormatSSTableValueBlocks, which supports writing sstables in a
+	// new format containing value blocks (sstable.TableFormatPebblev3). As part
+	// of this upgrade, a preceding Pebble format major version
+	// (FormatPrePebblev1MarkedCompacted) upgrade also occurs.
+	V23_1PebbleFormatSSTableValueBlocks
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -636,6 +643,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_AlterSystemStatementStatisticsAddIndexesUsage,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
+	},
+	{
+		Key:     V23_1PebbleFormatSSTableValueBlocks,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 24},
 	},
 
 	// *************************************************
