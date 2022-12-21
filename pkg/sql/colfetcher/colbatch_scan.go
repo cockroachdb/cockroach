@@ -318,7 +318,6 @@ func NewColBatchScan(
 		estimatedRowCount,
 		flowCtx.TraceKV,
 		true,  /* singleUse */
-		false, /* allocateFreshBatches */
 		false, /* allowNullsInNonNullableOnLastRowInBatch */
 	}
 	if err = fetcher.Init(allocator, kvFetcher, tableArgs); err != nil {
