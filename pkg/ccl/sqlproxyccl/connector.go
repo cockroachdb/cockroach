@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	pgproto3 "github.com/jackc/pgproto3/v2"
+	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -111,14 +111,14 @@ func (c *connector) OpenTenantConnWithToken(
 	}
 	defer func() {
 		if retErr != nil {
-			serverConn.Close()
+			retErr = errors.CombineErrors(retErr, serverConn.Close())
 		}
 	}()
 
 	// When we use token-based authentication, we will still get the initial
 	// connection data messages (e.g. ParameterStatus and BackendKeyData).
 	// Since this method is only used during connection migration (i.e. proxy
-	// is connecting to the SQL pod), we'll discard all of the messages, and
+	// is connecting to the SQL pod), we'll discard all the messages, and
 	// only return once we've seen a ReadyForQuery message.
 	newBackendKeyData, err := readTokenAuthResult(serverConn)
 	if err != nil {
@@ -156,7 +156,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	}
 	defer func() {
 		if retErr != nil {
-			serverConn.Close()
+			retErr = errors.CombineErrors(retErr, serverConn.Close())
 		}
 	}()
 
@@ -273,7 +273,7 @@ func (c *connector) dialTenantCluster(
 	// err will never be nil here regardless of whether we retry infinitely or
 	// a bounded number of times. In our case, since we retry infinitely, the
 	// only possibility is when ctx's Done channel is closed (which implies that
-	// ctx.Err() != nil.
+	// ctx.Err() != nil).
 	//
 	// If the error is already marked, just return that.
 	if errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
@@ -317,13 +317,14 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 
 	case status.Code(err) == codes.FailedPrecondition:
 		if st, ok := status.FromError(err); ok {
-			return "", newErrorf(codeUnavailable, "%v", st.Message())
+			return "", withCode(errors.Newf("%v", st.Message()), codeUnavailable)
 		}
-		return "", newErrorf(codeUnavailable, "unavailable")
+		return "", withCode(errors.New("unavailable"), codeUnavailable)
 
 	case status.Code(err) == codes.NotFound:
-		return "", newErrorf(codeParamsRoutingFailed,
-			"cluster %s-%d not found", c.ClusterName, c.TenantID.ToUint64())
+		return "", withCode(
+			errors.Newf("cluster %s-%d not found", c.ClusterName, c.TenantID.ToUint64()),
+			codeParamsRoutingFailed)
 
 	default:
 		return "", markAsRetriableConnectorError(err)
@@ -361,8 +362,7 @@ func (c *connector) dialSQLServer(
 
 	conn, err := BackendDial(c.StartupMsg, serverAssignment.Addr(), tlsConf)
 	if err != nil {
-		var codeErr *codeError
-		if errors.As(err, &codeErr) && codeErr.code == codeBackendDown {
+		if getErrorCode(err) == codeBackendDown {
 			return nil, markAsRetriableConnectorError(err)
 		}
 		return nil, err
