@@ -1,0 +1,247 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package serverccl
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
+)
+
+func TestValidateTargetTenantClusterVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	// In cases where we use prev as the binary version for the test, set the
+	// minimum supported version to prev's binary version - 1 Major version.
+	prevMsv := clusterversion.ClusterVersion{
+		Version: roachpb.Version{
+			Major: prev.Version.Major - 1,
+			Minor: prev.Version.Minor,
+		},
+	}
+
+	var tests = []struct {
+		binaryVersion             roachpb.Version
+		binaryMinSupportedVersion roachpb.Version
+		targetClusterVersion      clusterversion.ClusterVersion
+		expErrMatch               string // empty if expecting a nil error
+	}{
+		{
+			binaryVersion:             cur.Version,
+			binaryMinSupportedVersion: prev.Version,
+			targetClusterVersion:      prev,
+			expErrMatch:               "",
+		},
+		{
+			binaryVersion:             cur.Version,
+			binaryMinSupportedVersion: prev.Version,
+			targetClusterVersion:      cur,
+			expErrMatch:               "",
+		},
+		{
+			binaryVersion:             prev.Version,
+			binaryMinSupportedVersion: prevMsv.Version,
+			targetClusterVersion:      cur,
+			expErrMatch:               fmt.Sprintf("sql server 1 is running a binary version %s which is less than the attempted upgrade version %s", prev.String(), cur.String()),
+		},
+		{
+			binaryVersion:             cur.Version,
+			binaryMinSupportedVersion: prev.Version,
+			targetClusterVersion:      prevMsv,
+			expErrMatch:               fmt.Sprintf("requested tenant cluster upgrade version %s is less than the binary's minimum supported version %s for SQL server instance 1", prevMsv.String(), prev.String()),
+		},
+	}
+
+	// tenant's minimum supported version <= target version <= node's binary version
+	for i, test := range tests {
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			test.binaryVersion,
+			test.binaryMinSupportedVersion,
+			false, /* initializeVersion */
+		)
+
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			// Disable the default test tenant, since we create one explicitly
+			// below.
+			DisableDefaultTestTenant: true,
+			Settings:                 st,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride: test.binaryVersion,
+					// We're bumping cluster versions manually ourselves. We
+					// want to avoid racing with the auto-upgrade process.
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+		})
+
+		ctx := context.Background()
+		upgradePod, err := s.StartTenant(ctx,
+			base.TestTenantArgs{
+				Settings: st,
+				TenantID: serverutils.TestTenantID(),
+				TestingKnobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						BinaryVersionOverride: test.binaryVersion,
+					},
+				},
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tmServer := upgradePod.MigrationServer().(*server.TenantMigrationServer)
+		req := &serverpb.ValidateTargetClusterVersionRequest{
+			ClusterVersion: &test.targetClusterVersion,
+		}
+
+		_, err = tmServer.ValidateTargetClusterVersion(context.Background(), req)
+		if !testutils.IsError(err, test.expErrMatch) {
+			t.Fatalf("test %d: got error %s, wanted error matching '%s'", i, err, test.expErrMatch)
+		}
+
+		upgradePod.Stopper().Stop(context.Background())
+		s.Stopper().Stop(context.Background())
+	}
+}
+
+// TestBumpTenantClusterVersion verifies that the tenant BumpClusterVersion call
+// correctly updates the active cluster version for the tenant pod. Unlike the
+// server version of this test, we don't need to check that the updated value
+// is persisted properly to disk, since there is only one on-disk copy of the
+// tenant version (stored in the settings table).
+func TestBumpTenantClusterVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	// In cases where we use prev as the binary version for the test, set the
+	// minimum supported version to prev's binary version - 1 Major version.
+	prevMsv := clusterversion.ClusterVersion{
+		Version: roachpb.Version{
+			Major: prev.Version.Major - 1,
+			Minor: prev.Version.Minor,
+		},
+	}
+
+	var tests = []struct {
+		binaryVersion           clusterversion.ClusterVersion
+		minSupportedVersion     clusterversion.ClusterVersion
+		initialClusterVersion   clusterversion.ClusterVersion
+		attemptedClusterVersion clusterversion.ClusterVersion
+		expectedClusterVersion  clusterversion.ClusterVersion
+	}{
+		{
+			binaryVersion:           cur,
+			minSupportedVersion:     prev,
+			initialClusterVersion:   prev,
+			attemptedClusterVersion: prev,
+			expectedClusterVersion:  prev,
+		},
+		{
+			binaryVersion:           cur,
+			minSupportedVersion:     prev,
+			initialClusterVersion:   prev,
+			attemptedClusterVersion: cur,
+			expectedClusterVersion:  cur,
+		},
+		{
+			binaryVersion:           cur,
+			minSupportedVersion:     prev,
+			initialClusterVersion:   cur,
+			attemptedClusterVersion: prev,
+			expectedClusterVersion:  cur,
+		},
+		{
+			binaryVersion:           prev,
+			minSupportedVersion:     prevMsv,
+			initialClusterVersion:   prev,
+			attemptedClusterVersion: cur,
+			expectedClusterVersion:  prev,
+		},
+	}
+
+	ctx := context.Background()
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("config=%d", i), func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettingsWithVersions(
+				test.binaryVersion.Version,
+				test.minSupportedVersion.Version,
+				false, /* initializeVersion */
+			)
+
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+				// Disable the default tenant because we're creating one
+				// explicitly below.
+				DisableDefaultTestTenant: true,
+				Settings:                 st,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						// This test wants to bootstrap at the previously active
+						// cluster version, so we can actually bump the cluster
+						// version to the binary version.
+						BinaryVersionOverride: test.initialClusterVersion.Version,
+						// We're bumping cluster versions manually ourselves. We
+						// want to avoid racing with the auto-upgrade process.
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+					},
+				},
+			})
+			defer s.Stopper().Stop(context.Background())
+
+			tenant, err := s.StartTenant(ctx,
+				base.TestTenantArgs{
+					Settings: st,
+					TenantID: serverutils.TestTenantID(),
+					TestingKnobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							BinaryVersionOverride: test.initialClusterVersion.Version,
+						},
+					},
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tenant.Stopper().Stop(context.Background())
+
+			// Check to see our initial active cluster versions are what we
+			// expect.
+			got := tenant.ClusterSettings().Version.ActiveVersion(ctx)
+			require.Equal(t, got, test.initialClusterVersion)
+
+			// Do the bump.
+			tmServer := tenant.MigrationServer().(*server.TenantMigrationServer)
+			req := &serverpb.BumpClusterVersionRequest{
+				ClusterVersion: &test.attemptedClusterVersion,
+			}
+			if _, err = tmServer.BumpClusterVersion(ctx, req); err != nil {
+				// Accept failed upgrade errors. Fatal at the rest.
+				require.ErrorContains(t, err, "less than the attempted upgrade version")
+			}
+
+			// Check to see if our post-bump active cluster versions are what we
+			// expect.
+			got = tenant.ClusterSettings().Version.ActiveVersion(ctx)
+			require.Equal(t, got, test.expectedClusterVersion)
+		})
+	}
+}

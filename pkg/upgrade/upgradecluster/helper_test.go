@@ -52,7 +52,7 @@ func TestHelperEveryNode(t *testing.T) {
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, func() error {
-			return h.ForEveryNode(ctx, "dummy-op", func(
+			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
 				context.Context, serverpb.MigrationClient,
 			) error {
 				mu.Lock()
@@ -85,7 +85,7 @@ func TestHelperEveryNode(t *testing.T) {
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, func() error {
-			return h.ForEveryNode(ctx, "dummy-op", func(
+			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
 				context.Context, serverpb.MigrationClient,
 			) error {
 				mu.Lock()
@@ -120,7 +120,7 @@ func TestHelperEveryNode(t *testing.T) {
 		expRe := fmt.Sprintf("n%d required, but unavailable", downedNode)
 		opCount := 0
 		if err := h.UntilClusterStable(ctx, func() error {
-			return h.ForEveryNode(ctx, "dummy-op", func(
+			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
 				context.Context, serverpb.MigrationClient,
 			) error {
 				mu.Lock()
@@ -138,7 +138,7 @@ func TestHelperEveryNode(t *testing.T) {
 
 		tc.RestartNode(downedNode)
 		if err := h.UntilClusterStable(ctx, func() error {
-			return h.ForEveryNode(ctx, "dummy-op", func(
+			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
 				context.Context, serverpb.MigrationClient,
 			) error {
 				return nil
