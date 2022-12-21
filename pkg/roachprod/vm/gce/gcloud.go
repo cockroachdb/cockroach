@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -288,7 +289,9 @@ type snapshotCreateJson struct {
 	StorageLocations   []string  `json:"storageLocations"`
 }
 
-func (p *Provider) SnapshotVolume(volume vm.Volume, name, description string) (string, error) {
+func (p *Provider) SnapshotVolume(
+	volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
 	args := []string{
 		"compute",
 		"snapshots",
@@ -305,6 +308,24 @@ func (p *Provider) SnapshotVolume(volume vm.Volume, name, description string) (s
 		return "", err
 	}
 
+	sb := strings.Builder{}
+	for k, v := range labels {
+		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
+	}
+	s := sb.String()
+
+	args = []string{
+		"compute",
+		"snapshots",
+		"add-labels", name,
+		"--labels", s[:len(s)-1],
+	}
+
+	cmd := exec.Command("gcloud", args...)
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
 	return createJsonResponse.Name, nil
 }
 
@@ -381,7 +402,7 @@ func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err err
 	}
 	sb := strings.Builder{}
 	for k, v := range vco.Labels {
-		fmt.Fprintf(&sb, "%s=%s,", k, v)
+		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
 	}
 	s := sb.String()
 
@@ -984,6 +1005,18 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	}
 
 	return vms, nil
+}
+
+func serializeLabel(s string) string {
+	var output = make([]rune, len(s))
+	for idx, c := range s {
+		if c != '_' && c != '-' && !unicode.IsDigit(c) && !unicode.IsLetter(c) {
+			output[idx] = '_'
+		} else {
+			output[idx] = unicode.ToLower(c)
+		}
+	}
+	return string(output)
 }
 
 // Name TODO(peter): document

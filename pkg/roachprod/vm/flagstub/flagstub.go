@@ -32,7 +32,7 @@ type provider struct {
 	unimplemented string
 }
 
-func (p *provider) SnapshotVolume(vm.Volume, string, string) (string, error) {
+func (p *provider) SnapshotVolume(vm.Volume, string, string, map[string]string) (string, error) {
 	return "", errors.Newf("%s", p.unimplemented)
 }
 

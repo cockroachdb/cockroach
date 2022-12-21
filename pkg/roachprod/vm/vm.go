@@ -304,7 +304,7 @@ type Provider interface {
 
 	CreateVolume(vco VolumeCreateOpts) (Volume, error)
 	AttachVolumeToVM(volume Volume, vm *VM) (string, error)
-	SnapshotVolume(volume Volume, name, description string) (string, error)
+	SnapshotVolume(volume Volume, name, description string, labels map[string]string) (string, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can
