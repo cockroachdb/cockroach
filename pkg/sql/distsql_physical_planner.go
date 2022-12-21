@@ -2522,17 +2522,14 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 
 	// If any of the ordering columns originate from the lookup table, this is a
 	// case where we are ordering on a prefix of input columns followed by the
-	// lookup columns. We need to maintain the index ordering on each lookup.
+	// lookup columns.
 	var maintainLookupOrdering bool
 	numInputCols := len(plan.GetResultTypes())
 	for i := range n.reqOrdering {
 		if n.reqOrdering[i].ColIdx >= numInputCols {
+			// We need to maintain the index ordering on each lookup.
 			maintainLookupOrdering = true
-			if n.reqOrdering[i].Direction == encoding.Descending {
-				// Validate that an ordering on lookup columns does not contain
-				// descending columns.
-				panic(errors.AssertionFailedf("ordering on a lookup index with descending columns"))
-			}
+			break
 		}
 	}
 
