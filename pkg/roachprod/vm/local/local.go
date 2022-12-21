@@ -119,7 +119,9 @@ type Provider struct {
 	storage VMStorage
 }
 
-func (p *Provider) SnapshotVolume(volume vm.Volume, name, description string) (string, error) {
+func (p *Provider) SnapshotVolume(
+	volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
 	return "", nil
 }
 

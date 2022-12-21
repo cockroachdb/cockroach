@@ -1265,14 +1265,22 @@ type snapshotOutput struct {
 	SnapshotID string    `json:"SnapshotId"`
 }
 
-func (p *Provider) SnapshotVolume(volume vm.Volume, name, description string) (string, error) {
+func (p *Provider) SnapshotVolume(
+	volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
 	region := volume.Zone[:len(volume.Zone)-1]
+	labels["Name"] = name
+	var tags []string
+	for k, v := range labels {
+		tags = append(tags, fmt.Sprintf("{Key=%s,Value=%s}", k, v))
+	}
+
 	args := []string{
 		"ec2", "create-snapshot",
 		"--description", description,
 		"--region", region,
 		"--volume-id", volume.ProviderResourceID,
-		"--tag-specifications", "ResourceType=snapshot,Tags=[{Key=Name,Value=" + name + "}]",
+		"--tag-specifications", "ResourceType=snapshot,Tags=[" + strings.Join(tags, ",") + "]",
 	}
 
 	var so snapshotOutput
