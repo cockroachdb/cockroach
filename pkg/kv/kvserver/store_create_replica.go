@@ -194,7 +194,6 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-	repl.mu.tombstoneMinReplicaID = tombstone.NextReplicaID
 
 	// NB: A Replica should never be in the store's replicas map with a nil
 	// descriptor. Assign it directly here. In the case that the Replica should
