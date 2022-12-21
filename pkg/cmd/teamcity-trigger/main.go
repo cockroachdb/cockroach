@@ -105,9 +105,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 			// Disable -maxruns for kvnemesis. Run for the full 1h.
 			maxRuns = 0
 			if bazel.BuiltWithBazel() {
-				opts["env.EXTRA_BAZEL_FLAGS"] = "--test_env COCKROACH_KVNEMESIS_STEPS=10000"
+				opts["env.EXTRA_BAZEL_FLAGS"] = "--test_env COCKROACH_KVNEMESIS_STEPS=1000"
 			} else {
-				opts["env.COCKROACH_KVNEMESIS_STEPS"] = "10000"
+				opts["env.COCKROACH_KVNEMESIS_STEPS"] = "1000"
 			}
 		case baseImportPath + "sql/logictest", baseImportPath + "kv/kvserver":
 			// Stress heavy with reduced parallelism (to avoid overloading the

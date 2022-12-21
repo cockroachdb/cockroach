@@ -64,20 +64,20 @@ func Example_runTC() {
 
 	// Output:
 	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
+	//   env.COCKROACH_KVNEMESIS_STEPS: 1000
 	//   env.GOFLAGS:     -parallel=4
 	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 4
 	//   env.TESTTIMEOUT: 40m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
+	//   env.COCKROACH_KVNEMESIS_STEPS: 1000
 	//   env.GOFLAGS:     -parallel=4
 	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 4
 	//   env.TAGS:        deadlock
 	//   env.TESTTIMEOUT: 40m0s
 	//
 	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
+	//   env.COCKROACH_KVNEMESIS_STEPS: 1000
 	//   env.GOFLAGS:     -race -parallel=4
 	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 1
 	//   env.TESTTIMEOUT: 40m0s
