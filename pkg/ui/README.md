@@ -145,7 +145,7 @@ caveats:
 ### Adding, Removing, or Updating a dependency
 Since there's no shared dependency hoisting and dependencies are managed
 independently for each tree under pkg/ui/workspaces (see above), adding,
-removing, and updating dependencies must happt happen from the root of the sub-
+removing, and updating dependencies must happen from the root of the sub-
 project, not the general pkg/ui/ root.
 
 Besides that wrinkle, the standard workflows apply:

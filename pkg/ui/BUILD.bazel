@@ -49,6 +49,7 @@ EOF
 test_suite(
     name = "lint",
     tests = [
+        "//pkg/cmd/mirror/npm:are_lockfiles_updated",
         "//pkg/ui/workspaces/cluster-ui:lint",
         "//pkg/ui/workspaces/db-console:lint",
         "//pkg/ui/workspaces/e2e-tests:lint",
