@@ -824,8 +824,16 @@ func CheckSSTConflicts(
 			}
 		} else if extValueDeletedByRange {
 			// Don't double-count the current key.
-			version, _ := extRangeKeys.Versions.FirstAtOrAbove(extKey.Timestamp)
-			statsDiff.AgeTo(version.Timestamp.WallTime)
+			var deletedAt hlc.Timestamp
+			if _, isTombstone, err := extIter.MVCCValueLenAndIsTombstone(); err != nil {
+				return enginepb.MVCCStats{}, err
+			} else if isTombstone {
+				deletedAt = extKey.Timestamp
+			} else {
+				version, _ := extRangeKeys.Versions.FirstAtOrAbove(extKey.Timestamp)
+				deletedAt = version.Timestamp
+			}
+			statsDiff.AgeTo(deletedAt.WallTime)
 			statsDiff.KeyCount--
 			statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		}
