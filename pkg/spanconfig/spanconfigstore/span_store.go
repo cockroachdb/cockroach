@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/btree/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -49,13 +50,16 @@ var hostCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 // b-tree to store non-overlapping span configurations. It isn't safe for
 // concurrent use.
 type spanConfigStore struct {
-	btree       *btree
+	btree       btree
 	treeIDAlloc uint64    // used to maintain unique IDs for entries in btree
 	interner    *interner // interns configs for fast comparison
 
 	settings *cluster.Settings
 	knobs    *spanconfig.TestingKnobs
 }
+
+type btreeCfg = interval.WithBytesSpanAndID[*entry, roachpb.Key, uint64]
+type btree = interval.Set[btreeCfg, *entry, roachpb.Key]
 
 // newSpanConfigStore constructs and returns a new spanConfigStore.
 func newSpanConfigStore(
@@ -67,7 +71,6 @@ func newSpanConfigStore(
 	s := &spanConfigStore{
 		settings: settings,
 		knobs:    knobs,
-		btree:    &btree{},
 		interner: newInterner(),
 	}
 	return s
@@ -75,11 +78,10 @@ func newSpanConfigStore(
 
 // copy returns a copy of the spanConfigStore.
 func (s *spanConfigStore) clone() *spanConfigStore {
-	clonedTree := s.btree.Clone()
 	return &spanConfigStore{
 		settings: s.settings,
 		knobs:    s.knobs,
-		btree:    &clonedTree,
+		btree:    s.btree.Clone(),
 		interner: s.interner.copy(),
 	}
 }
@@ -269,7 +271,7 @@ func (s *spanConfigStore) apply(
 	for i := range entriesToAdd {
 		entry := &entriesToAdd[i]
 		if !dryrun {
-			s.btree.Set(entry)
+			s.btree.Upsert(entry)
 		}
 		added[i] = *entry
 	}
@@ -545,8 +547,6 @@ func (s *spanConfigPairInterned) conf() roachpb.SpanConfig {
 	return *s.canonical
 }
 
-//go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
-
 type entry struct {
 	spanConfigPairInterned
 	id uint64
@@ -573,18 +573,12 @@ func (s *spanConfigStore) makeEntry(
 
 func makeQueryEntry(s roachpb.Span) *entry {
 	var e entry
-	e.SetKey(s.Key)
-	e.SetEndKey(s.EndKey)
+	e.span = s
 	return &e
 }
 
-// Methods required by util/interval/generic type contract.
+// Methods required by util/btree/interval type contract.
 
-func (s *entry) ID() uint64         { return s.id }
-func (s *entry) Key() []byte        { return s.span.Key }
-func (s *entry) EndKey() []byte     { return s.span.EndKey }
-func (s *entry) String() string     { return s.span.String() }
-func (s *entry) New() *entry        { return new(entry) }
-func (s *entry) SetID(id uint64)    { s.id = id }
-func (s *entry) SetKey(k []byte)    { s.span.Key = k }
-func (s *entry) SetEndKey(k []byte) { s.span.EndKey = k }
+func (s *entry) Key() roachpb.Key    { return s.span.Key }
+func (s *entry) EndKey() roachpb.Key { return s.span.EndKey }
+func (s *entry) ID() uint64          { return s.id }

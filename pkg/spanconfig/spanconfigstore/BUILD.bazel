@@ -1,5 +1,4 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,7 +8,6 @@ go_library(
         "span_store.go",
         "store.go",
         "system_store.go",
-        ":entry_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore",
     visibility = ["//visibility:public"],
@@ -19,11 +17,11 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/util/btree/interval",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",  # keep
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -34,7 +32,6 @@ go_test(
         "span_store_test.go",
         "store_test.go",
         "system_store_test.go",
-        ":entry_interval_btree_test.go",  # keep
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
@@ -52,12 +49,6 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
-)
-
-gen_interval_btree(
-    name = "spanconfig_interval_btree",
-    package = "spanconfigstore",
-    type = "*entry",
 )
 
 get_x_data(name = "get_x_data")

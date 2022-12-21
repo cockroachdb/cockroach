@@ -27,7 +27,6 @@ pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -m
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
 pkg/server/api_v2.go://-go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
-pkg/spanconfig/spanconfigstore/span_store.go://go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
 pkg/sql/conn_fsm.go://go:generate ../util/fsm/gen/reports.sh TxnStateTransitions stateNoTxn
 pkg/sql/opt/optgen/lang/gen.go://go:generate langgen -out expr.og.go exprs lang.opt
 pkg/sql/opt/optgen/lang/gen.go://go:generate langgen -out operator.og.go ops lang.opt
