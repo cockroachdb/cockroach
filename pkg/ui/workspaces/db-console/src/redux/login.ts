@@ -109,6 +109,7 @@ class NoLoginState {
 export const selectLoginState = createSelector(
   (state: AdminUIState) => state.login,
   (login: LoginAPIState) => {
+    const dataFromServer = getDataFromServer();
     if (!dataFromServer.ExperimentalUseLogin) {
       return new NoLoginState();
     }
