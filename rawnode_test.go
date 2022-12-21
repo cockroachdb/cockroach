@@ -342,6 +342,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				if len(rd.Entries) > 0 {
 					t.Fatal("expected no more entries")
 				}
+				rawNode.Advance(rd)
 				if tc.exp2 == nil {
 					return
 				}
@@ -370,6 +371,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			if exp := tc.exp2; !reflect.DeepEqual(exp, cs) {
 				t.Fatalf("exp:\n%+v\nact:\n%+v", exp, cs)
 			}
+			rawNode.Advance(rd)
 		})
 	}
 }
@@ -479,6 +481,10 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 
 	// Make it leader again. It should leave joint automatically after moving apply index.
 	rawNode.Campaign()
+	rd = rawNode.Ready()
+	t.Log(DescribeReady(rd, nil))
+	s.Append(rd.Entries)
+	rawNode.Advance(rd)
 	rd = rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
@@ -743,11 +749,14 @@ func TestRawNodeStart(t *testing.T) {
 		t.Fatalf("unexpected ready: %+v", rawNode.Ready())
 	}
 	rawNode.Campaign()
+	rd := rawNode.Ready()
+	storage.Append(rd.Entries)
+	rawNode.Advance(rd)
 	rawNode.Propose([]byte("foo"))
 	if !rawNode.HasReady() {
 		t.Fatal("expected a Ready")
 	}
-	rd := rawNode.Ready()
+	rd = rawNode.Ready()
 	if !reflect.DeepEqual(entries, rd.Entries) {
 		t.Fatalf("expected to see entries\n%s, not\n%s", DescribeEntries(entries, nil), DescribeEntries(rd.Entries, nil))
 	}
@@ -861,6 +870,9 @@ func TestRawNodeStatus(t *testing.T) {
 	if err := rn.Campaign(); err != nil {
 		t.Fatal(err)
 	}
+	rd := rn.Ready()
+	s.Append(rd.Entries)
+	rn.Advance(rd)
 	status := rn.Status()
 	if status.Lead != 1 {
 		t.Fatal("not lead")
@@ -967,12 +979,12 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	const maxEntries = 16
 	data := []byte("testdata")
 	testEntry := pb.Entry{Data: data}
-	maxEntrySize := uint64(maxEntries * PayloadSize(testEntry))
+	maxEntrySize := maxEntries * payloadSize(testEntry)
 	t.Log("maxEntrySize", maxEntrySize)
 
 	s := newTestMemoryStorage(withPeers(1))
 	cfg := newTestConfig(1, 10, 1, s)
-	cfg.MaxUncommittedEntriesSize = maxEntrySize
+	cfg.MaxUncommittedEntriesSize = uint64(maxEntrySize)
 	rawNode, err := NewRawNode(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -998,7 +1010,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 
 	// Check the size of leader's uncommitted log tail. It should not exceed the
 	// MaxUncommittedEntriesSize limit.
-	checkUncommitted := func(exp uint64) {
+	checkUncommitted := func(exp entryPayloadSize) {
 		t.Helper()
 		if a := rawNode.raft.uncommittedSize; exp != a {
 			t.Fatalf("expected %d uncommitted entry bytes, found %d", exp, a)
