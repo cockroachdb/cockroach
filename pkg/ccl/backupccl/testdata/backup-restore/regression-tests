@@ -34,3 +34,51 @@ SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'db1'
 1
 
 subtest end
+
+subtest privileges-zone-config
+
+exec-sql
+CREATE DATABASE test;
+SET database = test;
+CREATE USER testuser;
+CREATE TABLE test_table();
+CREATE TABLE test_table2();
+GRANT ZONECONFIG ON DATABASE test TO testuser;
+GRANT ZONECONFIG ON test_table TO testuser;
+GRANT ALL ON test_table2 TO testuser;
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/priv-zone-cfg'
+----
+
+new-cluster name=s3 share-io-dir=s2
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/priv-zone-cfg';
+----
+
+query-sql
+show grants on database test;
+----
+test admin ALL true
+test public CONNECT false
+test root ALL true
+test testuser ZONECONFIG false
+
+query-sql
+show grants on test.test_table
+----
+test public test_table admin ALL true
+test public test_table root ALL true
+test public test_table testuser ZONECONFIG false
+
+query-sql
+show grants on test.test_table2
+----
+test public test_table2 admin ALL true
+test public test_table2 root ALL true
+test public test_table2 testuser ALL false
+
+subtest end
