@@ -67,7 +67,6 @@ func TestRestoreOldVersions(t *testing.T) {
 	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
 		clusterDirs                 = testdataBase + "/cluster"
-		privilegeDirs               = testdataBase + "/privileges"
 		multiRegionDirs             = testdataBase + "/multi-region"
 		publicSchemaDirs            = testdataBase + "/public-schema-remap"
 		systemUsersDirs             = testdataBase + "/system-users-restore"
@@ -92,12 +91,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(clusterDirs, dir.Name()))
 			require.NoError(t, err)
 
-			// TODO(adityamaru): Figure out how to generate a 20.1.7 fixture using the
-			// updated `create_cluster.sql` file.
-			if strings.Contains(dir.Name(), "v20.1.7") {
-				t.Run(dir.Name(), deprecatedRestoreOldVersionClusterTest(exportDir))
-				continue
-			}
 			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
 		}
 	})
@@ -111,17 +104,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(multiRegionDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), runOldVersionMultiRegionTest(exportDir))
-		}
-	})
-
-	t.Run("zoneconfig_privilege_restore", func(t *testing.T) {
-		dirs, err := os.ReadDir(privilegeDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(privilegeDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreV201ZoneconfigPrivilegeTest(exportDir))
 		}
 	})
 
@@ -287,46 +269,6 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 	}
 }
 
-// restoreV201ZoneconfigPrivilegeTest checks that privilege descriptors with
-// ZONECONFIG from tables and databases are correctly restored.
-// The ZONECONFIG bit was overwritten to be USAGE in 20.2 onwards.
-// We only need to test restoring with full cluster backup / restore as
-// it is the only form of restore that restores privileges.
-func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
-		testDBGrants := [][]string{
-			{"test", "admin", "ALL", "true"},
-			{"test", "root", "ALL", "true"},
-			{"test", "testuser", "ZONECONFIG", "false"},
-		}
-		sqlDB.CheckQueryResults(t, `show grants on database test`, testDBGrants)
-
-		testTableGrants := [][]string{
-			{"test", "public", "test_table", "admin", "ALL", "true"},
-			{"test", "public", "test_table", "root", "ALL", "true"},
-			{"test", "public", "test_table", "testuser", "ZONECONFIG", "false"},
-		}
-		sqlDB.CheckQueryResults(t, `show grants on test.test_table`, testTableGrants)
-
-		testTable2Grants := [][]string{
-			{"test", "public", "test_table2", "admin", "ALL", "true"},
-			{"test", "public", "test_table2", "root", "ALL", "true"},
-			{"test", "public", "test_table2", "testuser", "ALL", "false"},
-		}
-		sqlDB.CheckQueryResults(t, `show grants on test.test_table2`, testTable2Grants)
-	}
-}
-
 func TestRestoreFKRevTest(t *testing.T) {
 	params := base.TestServerArgs{}
 	const numAccounts = 1000
@@ -393,57 +335,6 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 	}
 }
 
-func deprecatedRestoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		externalDir, dirCleanup := testutils.TempDir(t)
-		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// Disabling the test tenant due to test failures. More
-				// investigation is required. Tracked with #76378.
-				DisableDefaultTestTenant: true,
-				ExternalIODir:            externalDir,
-			},
-		})
-		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-		defer func() {
-			tc.Stopper().Stop(ctx)
-			dirCleanup()
-		}()
-		err := os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
-		require.NoError(t, err)
-
-		// Ensure that the restore succeeds.
-		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
-
-		sqlDB.CheckQueryResults(t, "SHOW USERS", [][]string{
-			{"admin", "", "{}"},
-			{"craig", "", "{}"},
-			{"root", "", "{admin}"},
-		})
-		sqlDB.CheckQueryResults(t, "SELECT comment FROM system.comments ORDER BY object_id", [][]string{
-			{"database comment string"},
-			{"table comment string"},
-		})
-		// In the backup, Public schemas for non-system databases have ID 29.
-		// These should all be updated to explicit public schemas.
-		sqlDB.CheckQueryResults(t, `SELECT
-	if((id = 29), 'system', 'non-system') AS is_system_schema, count(*) as c
-FROM
-	system.namespace
-WHERE
-	"parentSchemaID" = 0 AND name = 'public'
-GROUP BY
-	is_system_schema
-ORDER BY
-	c ASC`, [][]string{
-			{"system", "1"},
-			{"non-system", "3"},
-		})
-		sqlDB.CheckQueryResults(t, "SELECT * FROM data.bank", [][]string{{"1"}})
-	}
-}
-
 func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		externalDir, dirCleanup := testutils.TempDir(t)
@@ -465,7 +356,7 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		require.NoError(t, err)
 
 		// Ensure that the restore succeeds.
-		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
+		sqlDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 		sqlDB.CheckQueryResults(t, "SHOW DATABASES", [][]string{
 			{"data", "root", "NULL", "NULL", "{}", "NULL"},
