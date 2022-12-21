@@ -67,7 +67,6 @@ func TestRestoreOldVersions(t *testing.T) {
 	testdataBase := datapathutils.TestDataPath(t, "restore_old_versions")
 	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
-		exportDirs                  = testdataBase + "/exports"
 		fkRevDirs                   = testdataBase + "/fk-rev-history"
 		clusterDirs                 = testdataBase + "/cluster"
 		exceptionalDirs             = testdataBase + "/exceptional"
@@ -85,17 +84,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(exportDirsWithoutInterleave, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
-		}
-	})
-
-	t.Run("table-restore-with-interleave", func(t *testing.T) {
-		dirs, err := os.ReadDir(exportDirsWithoutInterleave)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreOldVersionTestWithInterleave(exportDir))
 		}
 	})
 
@@ -300,23 +288,6 @@ ORDER BY object_type, object_name`, [][]string{
 			t.Run(dir.Name(), fullClusterRestoreUsersWithoutIDs(exportDir))
 		}
 	})
-}
-
-func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		params := base.TestServerArgs{}
-		const numAccounts = 1000
-		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
-		require.NoError(t, err)
-		sqlDB.Exec(t, `CREATE DATABASE test`)
-		// Restore should now fail.
-		sqlDB.ExpectErr(t,
-			"pq: restoring interleaved tables is no longer allowed. table t3 was found to be interleaved",
-			`RESTORE test.* FROM $1`, localFoo)
-	}
 }
 
 func runOldVersionMultiRegionTest(exportDir string) func(t *testing.T) {
