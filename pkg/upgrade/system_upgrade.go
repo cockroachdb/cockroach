@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -27,19 +26,19 @@ import (
 // Cluster abstracts a physical KV cluster and can be utilized by a long-running
 // upgrade.
 type Cluster interface {
-	// NumNodes returns the number of nodes in the cluster. This is merely a
-	// convenience method and is not meant to be used to infer cluster stability;
-	// for that, use UntilClusterStable.
-	NumNodes(ctx context.Context) (int, error)
+	// NumNodesOrTenantPods returns the number of nodes or tenant pods in the
+	// cluster. This is merely a convenience method and is not meant to be used
+	// to infer cluster stability; for that, use UntilClusterStable.
+	NumNodesOrTenantPods(ctx context.Context) (int, error)
 
-	// ForEveryNode is a short hand to execute the given closure (named by the
-	// informational parameter op) against every node in the cluster at a given
-	// point in time. Given it's possible for nodes to join or leave the cluster
-	// during (we don't make any guarantees for the ordering of cluster membership
-	// events), we only expect this to be used in conjunction with
-	// UntilClusterStable (see the comment there for how these two primitives can be
-	// put together).
-	ForEveryNode(
+	// ForEveryNodeOrTenantPod executes the given closure (named by the
+	// informational parameter op) against every node or tenant pod in the
+	// cluster at a given point in time. Given it's possible for nodes/pods to
+	// join or leave the cluster during (we don't make any guarantees on the
+	// ordering of cluster membership events), we only expect this to be used in
+	// conjunction with UntilClusterStable (see the comment there for how these
+	// two primitives can be put together).
+	ForEveryNodeOrTenantPod(
 		ctx context.Context,
 		op string,
 		fn func(context.Context, serverpb.MigrationClient) error,
@@ -71,7 +70,7 @@ type Cluster interface {
 	//
 	// To consider an example of how this primitive is used, let's consider our
 	// use of it to bump the cluster version. We use in conjunction with
-	// ForEveryNode, where after we return, we can rely on the guarantee that all
+	// ForEveryNodeOrTenantPod, where after we return, we can rely on the guarantee that all
 	// nodes in the cluster will have their cluster versions bumped. This then
 	// implies that future node additions will observe the latest version (through
 	// the join RPC). That in turn lets us author upgrades that can assume that
@@ -107,9 +106,8 @@ type Cluster interface {
 // KV layer on behalf of the system tenant.
 type SystemDeps struct {
 	Cluster          Cluster
-	DB               *kv.DB
 	InternalExecutor sqlutil.InternalExecutor
-	DistSender       *kvcoord.DistSender
+	DB               *kv.DB
 	Stopper          *stop.Stopper
 }
 

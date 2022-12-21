@@ -306,18 +306,20 @@ const versionSettingKey = "version"
 
 // set the current value of a setting.
 func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val settings.EncodedValue) {
-	// The system tenant (i.e. the KV layer) does not use the SettingsWatcher
-	// to propagate cluster version changes (it uses the BumpClusterVersion
-	// RPC). However, secondary tenants get word of the new cluster version
-	// below. This is to handle the case where there are multiple SQL pods
-	// working on behalf of the same secondary tenant. If one pod performs the
-	// upgrade, we want to make the other SQL pods aware of the fact that the
-	// upgrade occurred.
+	// Both the system tenant and secondary tenants no longer use this code
+	// path to propagate cluster version changes (they rely on
+	// BumpClusterVersion instead). The secondary tenants however, still rely
+	// on the initial pass through this code (in settingsWatcher.Start()) to
+	// bootstrap the initial cluster version on tenant startup. In all other
+	// instances, this code should no-op (either because we're in the system
+	// tenant, or because the new version <= old version).
 	if key == versionSettingKey && !s.codec.ForSystemTenant() {
 		var newVersion clusterversion.ClusterVersion
 		oldVersion := s.settings.Version.ActiveVersion(ctx)
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
 			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
+		} else if newVersion.LessEq(oldVersion.Version) {
+			// Nothing to do
 		} else if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
 			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 		} else if newVersion != oldVersion {
@@ -420,14 +422,14 @@ func (s *SettingsWatcher) IsOverridden(settingName string) bool {
 	return exists
 }
 
-// GetStorageClusterVersion returns the storage cluster version cached in the
-// SettingsWatcher. The storage cluster version info in the settings watcher is
-// populated by a cluster settings override sent from the system tenant to all
-// tenants, anytime the storage cluster version changes (or when a new cluster
-// is initialized in version 23.1 or later). In cases where the storage cluster
-// version is not initialized, we assume that it's running version 22.2,
+// GetStorageClusterActiveVersion returns the storage cluster version cached in
+// the SettingsWatcher. The storage cluster version info in the settings watcher
+// is populated by a cluster settings override sent from the system tenant to
+// all tenants, anytime the storage cluster version changes (or when a new
+// cluster is initialized in version 23.1 or later). In cases where the storage
+// cluster version is not initialized, we assume that it's running version 22.2,
 // the last version which did not properly initialize this value.
-func (s *SettingsWatcher) GetStorageClusterVersion() clusterversion.ClusterVersion {
+func (s *SettingsWatcher) GetStorageClusterActiveVersion() clusterversion.ClusterVersion {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.mu.storageClusterVersion.Equal(clusterversion.ClusterVersion{Version: roachpb.Version{Major: 0, Minor: 0}}) {
@@ -439,4 +441,8 @@ func (s *SettingsWatcher) GetStorageClusterVersion() clusterversion.ClusterVersi
 		return clusterversion.ClusterVersion{Version: storageClusterVersion}
 	}
 	return s.mu.storageClusterVersion
+}
+
+func (s *SettingsWatcher) GetTenantClusterVersion() clusterversion.Handle {
+	return s.settings.Version
 }

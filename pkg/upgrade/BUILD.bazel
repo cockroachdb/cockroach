@@ -17,7 +17,6 @@ go_library(
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",

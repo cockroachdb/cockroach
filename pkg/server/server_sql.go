@@ -192,6 +192,9 @@ type SQLServer struct {
 	// upgradeManager deals with cluster version upgrades on bootstrap and on
 	// `set cluster setting version = <v>`.
 	upgradeManager *upgrademanager.Manager
+
+	// Tenant migration server for use in tenant tests.
+	migrationServer *TenantMigrationServer
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -1118,9 +1121,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	var upgradeMgr *upgrademanager.Manager
 	{
-		// We only need to attach a version upgrade hook if we're the system
-		// tenant. Regular tenants are disallowed from changing cluster
-		// versions.
 		var c upgrade.Cluster
 		var systemDeps upgrade.SystemDeps
 		if codec.ForSystemTenant() {
@@ -1130,20 +1130,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
 			})
-			systemDeps = upgrade.SystemDeps{
-				Cluster:          c,
-				DB:               cfg.db,
-				InternalExecutor: cfg.circularInternalExecutor,
-				DistSender:       cfg.distSender,
-				Stopper:          cfg.stopper,
-			}
 		} else {
-			c = upgradecluster.NewTenantCluster(cfg.db)
-			systemDeps = upgrade.SystemDeps{
-				Cluster:          c,
-				DB:               cfg.db,
-				InternalExecutor: cfg.circularInternalExecutor,
-			}
+			c = upgradecluster.NewTenantCluster(
+				upgradecluster.TenantClusterConfig{
+					Dialer:         cfg.podNodeDialer,
+					InstanceReader: cfg.sqlInstanceReader,
+				})
+		}
+		systemDeps = upgrade.SystemDeps{
+			Cluster:          c,
+			DB:               cfg.db,
+			InternalExecutor: cfg.circularInternalExecutor,
+			Stopper:          cfg.stopper,
 		}
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)

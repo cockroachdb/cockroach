@@ -12,11 +12,17 @@ package upgradecluster
 
 import (
 	"context"
+	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -120,37 +126,116 @@ import (
 //  5. All tenants have to be at 21.1 cluster version before KV gets upgraded
 //     again in the next release.
 type TenantCluster struct {
-	db *kv.DB
+	// Dialer allows for the construction of connections to other SQL pods.
+	Dialer         NodeDialer
+	InstanceReader *instancestorage.Reader
+}
+
+// TenantClusterConfig configures a TenantCluster.
+type TenantClusterConfig struct {
+	// Dialer allows for the construction of connections to other SQL pods.
+	Dialer NodeDialer
+
+	// InstanceReader is used to retrieve all SQL pods for a given tenant.
+	InstanceReader *instancestorage.Reader
 }
 
 // NewTenantCluster returns a new TenantCluster.
-func NewTenantCluster(db *kv.DB) *TenantCluster {
-	return &TenantCluster{db: db}
+func NewTenantCluster(cfg TenantClusterConfig) *TenantCluster {
+	return &TenantCluster{
+		Dialer:         cfg.Dialer,
+		InstanceReader: cfg.InstanceReader,
+	}
 }
 
-// NumNodes is part of the upgrade.Cluster interface.
-func (t *TenantCluster) NumNodes(ctx context.Context) (int, error) {
-	return 0, errors.AssertionFailedf("non-system tenants cannot iterate nodes")
+// NumNodesOrTenantPods is part of the upgrade.Cluster interface.
+func (t *TenantCluster) NumNodesOrTenantPods(ctx context.Context) (int, error) {
+	// Get the list of all SQL pods running
+	instances, err := t.InstanceReader.GetAllInstances(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(instances), nil
 }
 
-// ForEveryNode is part of the upgrade.Cluster interface.
-func (t *TenantCluster) ForEveryNode(
+// ForEveryNodeOrTenantPod is part of the upgrade.Cluster interface.
+func (t *TenantCluster) ForEveryNodeOrTenantPod(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
-	return errors.AssertionFailedf("non-system tenants cannot iterate nodes")
+	// Get the list of all SQL pods running
+	instances, err := t.InstanceReader.GetAllInstances(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Limiting of outgoing RPCs at the tenant level mirrors what we do for
+	// nodes at the storage cluster level.
+	qp := quotapool.NewIntPool("every-sql-pod", 25)
+	log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), instances)
+	grp := ctxgroup.WithContext(ctx)
+
+	for _, instance := range instances {
+		id := instance.InstanceID // copy out of the loop variable
+		alloc, err := qp.Acquire(ctx, 1)
+		if err != nil {
+			return err
+		}
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer alloc.Release()
+
+			conn, err := t.Dialer.Dial(ctx, roachpb.NodeID(id), rpc.DefaultClass)
+			if err != nil {
+				return err
+			}
+			client := serverpb.NewMigrationClient(conn)
+			return fn(ctx, client)
+		})
+	}
+	return grp.Wait()
 }
 
 // UntilClusterStable is part of the upgrade.Cluster interface.
 //
-// Tenant clusters in the current version assume their cluster is stable
-// because they presently assume there is at most one running SQL pod. When
-// that changes, this logic will need to change.
-func (t TenantCluster) UntilClusterStable(ctx context.Context, fn func() error) error {
+// We don't have the same notion of cluster stability with tenant pods as we
+// do with cluster nodes. As a result, this function behaves slightly
+// differently with secondary tenants than it does with the system tenant.
+// Instead of relying on liveness and waiting until all nodes are active before
+// we claim that the cluster has become "stable", we test to see how many
+// pods of the tenant are active, and loop until we find two successive
+// iterations where the number of active tenant pods is the same.
+func (t *TenantCluster) UntilClusterStable(ctx context.Context, fn func() error) error {
+	instances, err := t.InstanceReader.GetAllInstances(ctx)
+	if err != nil {
+		return err
+	}
+
+	for {
+		if err := fn(); err != nil {
+			return err
+		}
+		curInstances, err := t.InstanceReader.GetAllInstances(ctx)
+		if err != nil {
+			return err
+		}
+		if ok := reflect.DeepEqual(instances, curInstances); !ok {
+			if len(instances) != len(curInstances) {
+				log.Infof(ctx,
+					"number of sql pods has changed (pre: %d, post: %d), retrying",
+					len(instances), len(curInstances))
+			} else {
+				log.Infof(ctx, "different set of sql pods running (pre: %v, post: %v), retrying", instances, curInstances)
+			}
+			instances = curInstances
+			continue
+		}
+		break
+	}
 	return nil
 }
 
 // IterateRangeDescriptors is part of the upgrade.Cluster interface.
-func (t TenantCluster) IterateRangeDescriptors(
+func (t *TenantCluster) IterateRangeDescriptors(
 	ctx context.Context, size int, init func(), f func(descriptors ...roachpb.RangeDescriptor) error,
 ) error {
 	return errors.AssertionFailedf("non-system tenants cannot iterate ranges")

@@ -164,6 +164,10 @@ type TestTenantInterface interface {
 	//Tracer returns a reference to the tenant's Tracer.
 	Tracer() *tracing.Tracer
 
+	// MigrationServer returns the tenant's migration server, which is used in
+	// upgrade testing.
+	MigrationServer() interface{}
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.
