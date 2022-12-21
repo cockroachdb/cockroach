@@ -32,12 +32,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -50,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -3394,6 +3398,206 @@ func TestSnapshotRateLimit(t *testing.T) {
 			}
 			if c.expectedLimit != limit {
 				t.Fatalf("expected %v, but found %v", c.expectedLimit, limit)
+			}
+		})
+	}
+}
+
+// TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
+// for a range with a single replica using the default system configuration and
+// no other available allocation targets.
+func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc := testContext{}
+	tc.Start(ctx, t, stopper)
+
+	s := tc.store
+
+	// Expect allocator error if range has nowhere to upreplicate.
+	action, _, _, err := s.AllocatorCheckRange(ctx, tc.repl.Desc(), nil /* overrideStorePool */)
+	require.Error(t, err)
+	var allocatorError allocator.AllocationError
+	require.ErrorAs(t, err, &allocatorError)
+	require.Equal(t, allocatorimpl.AllocatorAddVoter, action)
+
+	// Expect error looking up spanConfig if we can't use the system config span,
+	// as the spanconfig.KVSubscriber infrastructure is not initialized.
+	s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
+	action, _, _, err = s.AllocatorCheckRange(ctx, tc.repl.Desc(), nil /* overrideStorePool */)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errSysCfgUnavailable)
+	require.Equal(t, allocatorimpl.AllocatorNoop, action)
+}
+
+// TestAllocatorCheckRange runs a number of tests to check the allocator's
+// range repair action and target based on a number of different configured
+// stores.
+func TestAllocatorCheckRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	for _, tc := range []struct {
+		name               string
+		stores             []*roachpb.StoreDescriptor
+		existingReplicas   []roachpb.ReplicaDescriptor
+		livenessOverrides  map[roachpb.NodeID]livenesspb.NodeLivenessStatus
+		expectedAction     allocatorimpl.AllocatorAction
+		expectValidTarget  bool
+		expectedLogMessage string
+		expectErr          bool
+		expectAllocatorErr bool
+		expectedErr        error
+		expectedErrStr     string
+	}{
+		{
+			name:   "overreplicated",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+			},
+			livenessOverrides: nil,
+			expectedAction:    allocatorimpl.AllocatorRemoveVoter,
+			expectErr:         false,
+		},
+		{
+			name:   "overreplicated but store dead",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DEAD,
+			},
+			expectedAction: allocatorimpl.AllocatorRemoveDeadVoter,
+			expectErr:      false,
+		},
+		{
+			name:   "decommissioning but underreplicated",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				2: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorAddVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning with replacement",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning without valid replacement",
+			stores: threeStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "likely not enough nodes in cluster",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup store pool based on store descriptors and configure test store.
+			nodesSeen := make(map[roachpb.NodeID]struct{})
+			for _, storeDesc := range tc.stores {
+				nodesSeen[storeDesc.Node.NodeID] = struct{}{}
+			}
+			numNodes := len(nodesSeen)
+
+			// Create a test store simulating n1s1, where we have other nodes/stores as
+			// determined by the test configuration. As we do not start the test store,
+			// queues will not be running.
+			stopper, g, sp, _, manual := allocatorimpl.CreateTestAllocator(ctx, numNodes, false /* deterministic */)
+			defer stopper.Stop(context.Background())
+			gossiputil.NewStoreGossiper(g).GossipStores(tc.stores, t)
+
+			clock := hlc.NewClock(manual, time.Nanosecond)
+			cfg := TestStoreConfig(clock)
+			cfg.Gossip = g
+			cfg.StorePool = sp
+
+			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+			desc := &roachpb.RangeDescriptor{
+				RangeID:          789,
+				StartKey:         roachpb.RKey("a"),
+				EndKey:           roachpb.RKey("b"),
+				InternalReplicas: tc.existingReplicas,
+			}
+
+			var storePoolOverride storepool.AllocatorStorePool
+			if len(tc.livenessOverrides) > 0 {
+				livenessOverride := storepool.OverrideNodeLivenessFunc(tc.livenessOverrides, sp.NodeLivenessFn)
+				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride)
+			}
+
+			// Execute actual allocator range repair check.
+			action, target, recording, err := s.AllocatorCheckRange(ctx, desc, storePoolOverride)
+
+			// Validate expectations from test case.
+			if tc.expectErr || tc.expectAllocatorErr {
+				require.Error(t, err)
+
+				if tc.expectedErr != nil {
+					require.ErrorIs(t, err, tc.expectedErr)
+				}
+				if tc.expectAllocatorErr {
+					var allocatorError allocator.AllocationError
+					require.ErrorAs(t, err, &allocatorError)
+				}
+				if tc.expectedErrStr != "" {
+					require.ErrorContains(t, err, tc.expectedErrStr)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+
+			require.Equalf(t, tc.expectedAction, action,
+				"expected action \"%s\", got action \"%s\"", tc.expectedAction, action,
+			)
+
+			if tc.expectValidTarget {
+				require.NotEqualf(t, roachpb.ReplicationTarget{}, target, "expected valid target")
+			}
+
+			if tc.expectedLogMessage != "" {
+				_, ok := recording.FindLogMessage(tc.expectedLogMessage)
+				require.Truef(t, ok, "expected to find trace \"%s\"", tc.expectedLogMessage)
 			}
 		})
 	}
