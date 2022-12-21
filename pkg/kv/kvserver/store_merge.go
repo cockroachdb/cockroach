@@ -133,7 +133,7 @@ func (s *Store) MergeRange(
 	// we'll drop atomically with extending the right-hand side down below.
 	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
 		// The replica was destroyed by the tombstones added to the batch in
-		// runPreApplyTriggersAfterStagingWriteBatch.
+		// runPostAddTriggers.
 		DestroyData:       false,
 		InsertPlaceholder: true,
 	})
