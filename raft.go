@@ -167,12 +167,12 @@ type Config struct {
 	// messages over the network) and those targeted at the same thread can't be
 	// reordered. Messages to different targets can be processed in any order.
 	//
-	// MsgStorageAppend carries Raft log entries to append, election votes to
-	// persist, and snapshots to apply. All writes performed in service of a
-	// MsgStorageAppend must be durable before response messages are delivered.
-	// However, if the MsgStorageAppend carries no response messages, durability
-	// is not required. The message assumes the role of the Entries, HardState,
-	// and Snapshot fields in Ready.
+	// MsgStorageAppend carries Raft log entries to append, election votes /
+	// term changes / updated commit indexes to persist, and snapshots to apply.
+	// All writes performed in service of a MsgStorageAppend must be durable
+	// before response messages are delivered. However, if the MsgStorageAppend
+	// carries no response messages, durability is not required. The message
+	// assumes the role of the Entries, HardState, and Snapshot fields in Ready.
 	//
 	// MsgStorageApply carries committed entries to apply. Writes performed in
 	// service of a MsgStorageApply need not be durable before response messages
