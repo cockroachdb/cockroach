@@ -44,7 +44,7 @@ import (
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
 	appBatchStats
-	numBatchesProcessed  int
+	numBatchesProcessed  int // TODO(sep-raft-log): numBatches
 	stateAssertions      int
 	numConfChangeEntries int
 }

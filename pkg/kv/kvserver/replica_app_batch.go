@@ -124,6 +124,10 @@ func (b *replicaAppBatch) Stage(
 		return nil, err
 	}
 
+	// TODO(tbg): if we rename Stage to Add we could less ambiguously
+	// use the verb "stage" instead of "add" for all of the methods
+	// below.
+
 	if err := b.runPreAddTriggersReplicaOnly(ctx, cmd); err != nil {
 		return nil, err
 	}
@@ -197,8 +201,6 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 // staged in the replicaAppBatch's write batch.
 //
 // May mutate `cmd`.
-//
-// All errors from this method are fatal for this Replica.
 func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
