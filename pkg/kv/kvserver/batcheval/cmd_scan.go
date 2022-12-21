@@ -71,16 +71,7 @@ func Scan(
 		if err != nil {
 			return result.Result{}, err
 		}
-		if scanRes.ColBatches != nil {
-			// TODO: consider changing scanRes.ColBatches to be a slice of
-			// interface{}.
-			reply.ColBatches.ColBatches = make([]interface{}, len(scanRes.ColBatches))
-			for i := range scanRes.ColBatches {
-				reply.ColBatches.ColBatches[i] = scanRes.ColBatches[i]
-			}
-		} else {
-			reply.BatchResponses = scanRes.KVData
-		}
+		reply.ColBatches = scanRes.ColBatches
 	case roachpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
