@@ -468,6 +468,7 @@ ALL_TESTS = [
     "//pkg/workload/histogram:histogram_test",
     "//pkg/workload/movr:movr_test",
     "//pkg/workload/tpcc:tpcc_test",
+    "//pkg/workload/tpch:tpch_test",
     "//pkg/workload/workloadimpl:workloadimpl_test",
     "//pkg/workload/workloadsql:workloadsql_test",
     "//pkg/workload/ycsb:ycsb_test",
