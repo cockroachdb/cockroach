@@ -1747,9 +1747,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 
 func TestLockStateSafeFormat(t *testing.T) {
 	l := &lockState{
-		id:     1,
-		key:    []byte("KEY"),
-		endKey: []byte("END"),
+		key: []byte("KEY"),
 	}
 	l.holder.locked = true
 	l.holder.holder[lock.Replicated] = lockHolderInfo{
