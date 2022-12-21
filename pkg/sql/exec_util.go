@@ -1391,6 +1391,7 @@ type ExecutorConfig struct {
 type UpdateVersionSystemSettingHook func(
 	ctx context.Context,
 	version clusterversion.ClusterVersion,
+	validate func(ctx context.Context) error,
 ) error
 
 // VersionUpgradeHook is used to run upgrades starting in v21.1.

@@ -15,6 +15,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
+const (
+	NoPause = iota
+	AfterFirstCheckForInstances
+	AfterFenceRPC
+	AfterSecondCheckForInstances
+	AfterFenceWriteToSettingsTable
+	AfterMigration
+	AfterVersionBumpRPC
+	AfterVersionWriteToSettingsTable
+)
+
 // TestingKnobs are knobs to inject behavior into the upgrade manager which
 // are useful for testing.
 type TestingKnobs struct {
@@ -26,6 +37,18 @@ type TestingKnobs struct {
 
 	// RegistryOverride is used to inject upgrades for specific cluster versions.
 	RegistryOverride func(v roachpb.Version) (Upgrade, bool)
+
+	// InterlockPausePoint specifies the point in the upgrade interlock where
+	// the upgrade should pause.
+	InterlockPausePoint int
+
+	// InterlockResumeChannel specifies the channel to wait on when the paused
+	// during the upgrade interlock.
+	InterlockResumeChannel *chan struct{}
+
+	// InterlockReachedPausePointChannel specifies the channel to post to once
+	// the interlock pause point has been reached.
+	InterlockReachedPausePointChannel *chan struct{}
 
 	// DontUseJobs, if set, makes upgrades run without employing jobs. This helps
 	// tests that care about not having random rows in the system.jobs table, and

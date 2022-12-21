@@ -43,7 +43,7 @@ import (
 )
 
 const (
-	tenantCreationMinSupportedVersionKey = clusterversion.V22_2
+	TenantCreationMinSupportedVersionKey = clusterversion.V22_2
 )
 
 // CreateTenant implements the tree.TenantOperator interface.
@@ -160,7 +160,7 @@ func (p *planner) createTenantInternal(
 		// Use the previous major version to create the tenant and bootstrap it
 		// just like the previous major version binary would, using hardcoded
 		// initial values.
-		if err = processNonActiveVersionInitialValues(tenantCreationMinSupportedVersionKey); err != nil {
+		if err = processNonActiveVersionInitialValues(TenantCreationMinSupportedVersionKey); err != nil {
 			return tid, err
 		}
 	} else {
