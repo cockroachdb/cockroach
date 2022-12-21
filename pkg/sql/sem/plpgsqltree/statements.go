@@ -444,14 +444,47 @@ type PLpgSQLStmtGetDiagItemList []*PLpgSQLStmtGetDiagItem
 type PLpgSQLStmtOpen struct {
 	PLpgSQLStatementImpl
 	CurVar        int // TODO this could just a PLpgSQLVariable
-	CursorOptions int
-	ArgQuery      PLpgSQLExpr
-	Query         PLpgSQLExpr
-	DynamicQuery  PLpgSQLExpr
-	Params        []PLpgSQLExpr
+	CursorOptions uint32
+	// TODO(jane): This is temporary and we should remove it and use CurVar.
+	CursorName       string
+	WithExplicitExpr bool
+	// TODO(jane): Should be PLpgSQLExpr
+	ArgQuery string
+	// TODO(jane): Should be PLpgSQLExpr
+	Query string
+	// TODO(jane): Should be PLpgSQLExpr
+	DynamicQuery string
+	// TODO(jane): Should be []PLpgSQLExpr
+	Params []string
 }
 
 func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(
+		fmt.Sprintf(
+			"OPEN %s ",
+			s.CursorName,
+		))
+
+	opts := OptListFromBitField(s.CursorOptions)
+	for _, opt := range opts {
+		if opt.String() != "" {
+			ctx.WriteString(fmt.Sprintf("%s ", opt.String()))
+		}
+	}
+	if !s.WithExplicitExpr {
+		ctx.WriteString("FOR ")
+		if s.DynamicQuery != "" {
+			ctx.WriteString(fmt.Sprintf("EXECUTE %s ", s.DynamicQuery))
+			if len(s.Params) != 0 {
+				ctx.WriteString(fmt.Sprintf("USING %s", s.Params))
+			}
+		} else {
+			ctx.WriteString(s.Query)
+		}
+	} else {
+		ctx.WriteString(fmt.Sprintf("%s", s.ArgQuery))
+	}
+	ctx.WriteString("\n")
 }
 
 // stmt_fetch

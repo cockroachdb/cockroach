@@ -2,6 +2,8 @@
 package parser
 
 import (
+  "fmt"
+
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/errors"
@@ -95,6 +97,11 @@ func (u *plpgsqlSymUnion) int32() int32 {
     return u.val.(int32)
 }
 
+func (u *plpgsqlSymUnion) uint32() uint32 {
+    return u.val.(uint32)
+}
+
+
 func (u *plpgsqlSymUnion) bool() bool {
     return u.val.(bool)
 }
@@ -115,6 +122,9 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStm
     return u.val.([]*plpgsqltree.PLpgSQLStmtIfElseIfArm)
 }
 
+func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
+    return u.val.(*plpgsqltree.PLpgSQLStmtOpen)
+}
 
 %}
 /*
@@ -209,6 +219,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStm
 %token <str>	MOVE
 %token <str>	NEXT
 %token <str>	NO
+%token <str>	NO_SCROLL
 %token <str>	NOT
 %token <str>	NOTICE
 %token <str>	NULL
@@ -274,6 +285,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStm
 //%type <list>	decl_cursor_arglist // TODO a list of what?
 //%type <nsitem>	decl_aliasitem // TODO what is nsitem? looks like namespace item, not sure if we need it.
 
+%type <*plpgsqltree.PLpgSQLStmtOpen> open_stmt_processor
 %type <str>	expr_until_semi
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
@@ -313,16 +325,15 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStm
 %type <plpgsqltree.PLpgSQLStmtGetDiagItemList>	getdiag_list // TODO don't know what this is
 %type <*plpgsqltree.PLpgSQLStmtGetDiagItem> getdiag_list_item // TODO don't know what this is
 //%type <plpgsqltree.PLpgSQLDatum>	getdiag_target // TODO don't know what this is
-%type <int32> getdiag_item // TODO don't know what this is
+%type <int32> getdiag_item
 
-%type <*tree.NumVal>	opt_scrollable
+%type <uint32>	opt_scrollable
+
 %type <*plpgsqltree.PLpgSQLStmtFetch>	opt_fetch_direction
 
 %type <*tree.NumVal>	opt_transaction_chain
 
 %type <str>	unreserved_keyword
-
-
 %%
 
 // TODO(chengxiong): add `comp_options` (these options are plpgsql compiler
@@ -423,12 +434,15 @@ decl_statement	: decl_varname decl_const decl_datatype decl_collate decl_notnull
 
 opt_scrollable :
 					{
+					fmt.Println("plpgsqllex.(*lexer).pos in opt_scrollable empty", plpgsqllex.(*lexer).lastPos)
 					}
-				| NO SCROLL
+				| NO_SCROLL SCROLL
 					{
+					fmt.Println("plpgsqllex.(*lexer).pos in opt_scrollable no_scroll", plpgsqllex.(*lexer).lastPos)
 					}
 				| SCROLL
 					{
+					fmt.Println("plpgsqllex.(*lexer).pos in opt_scrollable scroll", plpgsqllex.(*lexer).lastPos)
 					}
 				;
 
@@ -974,8 +988,12 @@ stmt_dynexecute : EXECUTE
   $$.val = plpgsqllex.(*lexer).MakeDynamicExecuteStmt()}
 ;
 
-stmt_open		: OPEN cursor_variable
+// TODO: change expr_until_semi to process_cursor_before_semi
+stmt_open		: OPEN IDENT open_stmt_processor ';'
 					{
+					  openCursorStmt := $3.pLpgSQLStmtOpen()
+					  openCursorStmt.CursorName = $2
+						$$.val = openCursorStmt
 					}
 				;
 
@@ -1062,6 +1080,12 @@ proc_condition	: any_identifier
 						{
 						}
 				;
+
+
+open_stmt_processor:
+{
+	$$.val = plpgsqllex.(*lexer).ProcessForOpenCursor(true)
+}
 
 expr_until_semi :
 {
@@ -1172,6 +1196,7 @@ unreserved_keyword:
 | MOVE
 | NEXT
 | NO
+| NO_SCROLL
 | NOTICE
 | OPEN
 | OPTION
