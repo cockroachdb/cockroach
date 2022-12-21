@@ -667,12 +667,14 @@ func (p *pebbleIterator) EngineKey() (EngineKey, error) {
 }
 
 // Value implements the MVCCIterator and EngineIterator interfaces.
-func (p *pebbleIterator) Value() []byte {
-	// TODO(sumeer): Do not ignore error.
-	value, _ := p.UnsafeValue()
+func (p *pebbleIterator) Value() ([]byte, error) {
+	value, err := p.UnsafeValue()
+	if err != nil {
+		return nil, err
+	}
 	valueCopy := make([]byte, len(value))
 	copy(valueCopy, value)
-	return valueCopy
+	return valueCopy, nil
 }
 
 // ValueProto implements the MVCCIterator interface.

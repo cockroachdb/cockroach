@@ -2301,9 +2301,13 @@ func (r *Replica) printRaftTail(
 		if err != nil {
 			return sb.String(), err
 		}
+		v, err := it.Value()
+		if err != nil {
+			return sb.String(), err
+		}
 		kv := storage.MVCCKeyValue{
 			Key:   mvccKey,
-			Value: it.Value(),
+			Value: v,
 		}
 		sb.WriteString(truncateEntryString(SprintMVCCKeyValue(kv, true /* printKey */), 2000))
 		sb.WriteRune('\n')

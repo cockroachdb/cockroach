@@ -495,7 +495,8 @@ func getExpectationsGenerator(
 				p, r := it.HasPointAndRange()
 				if p {
 					k := it.Key()
-					v := it.Value()
+					v, err := it.Value()
+					require.NoError(t, err)
 					if len(baseKey) == 0 {
 						baseKey = k.Key
 						// We are only interested in range tombstones covering current point,

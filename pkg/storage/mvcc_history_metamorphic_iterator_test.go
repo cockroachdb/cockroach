@@ -380,7 +380,7 @@ func (m *metamorphicMVCCIterator) UnsafeRawMVCCKey() []byte {
 	return m.it.(storage.MVCCIterator).UnsafeRawMVCCKey()
 }
 
-func (m *metamorphicMVCCIterator) Value() []byte {
+func (m *metamorphicMVCCIterator) Value() ([]byte, error) {
 	return m.it.(storage.MVCCIterator).Value()
 }
 

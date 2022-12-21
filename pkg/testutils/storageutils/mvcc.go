@@ -33,5 +33,5 @@ func MVCCGetRawWithError(t *testing.T, r storage.Reader, key storage.MVCCKey) ([
 	if ok, err := iter.Valid(); err != nil || !ok {
 		return nil, err
 	}
-	return iter.Value(), nil
+	return iter.Value()
 }
