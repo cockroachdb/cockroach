@@ -492,6 +492,9 @@ func (g *newRuleGen) genMatchNameAndChildren(
 			g.w.nest("else {\n")
 			g.w.writeIndent("_member = _member.NextExpr()\n")
 			g.w.unnest("}\n")
+			if context.untypedAlias != "" {
+				g.w.write("%s = _member\n", context.untypedAlias)
+			}
 
 			if match == g.innerExploreMatch {
 				// This is the innermost match expression, so skip over already
