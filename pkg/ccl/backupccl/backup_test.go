@@ -10748,3 +10748,104 @@ $$;
 	require.NoError(t, err)
 
 }
+
+func TestBackupRestoreForeignKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestServerArgs{}
+	const numAccounts = 1000
+	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+	defer cleanup()
+
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+	sqlDB.Exec(t, `SET database = test`)
+	sqlDB.Exec(t, `
+CREATE TABLE circular (k INT8 PRIMARY KEY, selfid INT8 UNIQUE);
+ALTER TABLE circular ADD CONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES circular (selfid);
+CREATE TABLE parent (k INT8 PRIMARY KEY, j INT8 UNIQUE);
+CREATE TABLE child (k INT8 PRIMARY KEY, parent_i INT8 REFERENCES parent, parent_j INT8 REFERENCES parent (j));
+CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
+`)
+
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
+
+	sqlDB.Exec(t, `CREATE TABLE rev_times (id INT PRIMARY KEY, logical_time DECIMAL);`)
+	sqlDB.Exec(t, `INSERT INTO rev_times VALUES (1, cluster_logical_timestamp());`)
+
+	sqlDB.Exec(t, `
+	CREATE USER newuser;
+	GRANT ALL ON circular TO newuser;
+	GRANT ALL ON parent TO newuser;
+`)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `INSERT INTO rev_times VALUES (2, cluster_logical_timestamp())`)
+
+	sqlDB.Exec(t, `GRANT ALL ON child TO newuser;`)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `INSERT INTO rev_times VALUES (3, cluster_logical_timestamp())`)
+
+	sqlDB.Exec(t, `GRANT ALL ON child_pk TO newuser`)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, localFoo)
+
+	// Test that `SHOW BACKUP` displays the foreign keys correctly.
+	type testCase struct {
+		table                     string
+		expectedForeignKeyPattern string
+	}
+	for _, tc := range []testCase{
+		{
+			"circular",
+			"CONSTRAINT self_fk FOREIGN KEY \\(selfid\\) REFERENCES public\\.circular\\(selfid\\) NOT VALID",
+		},
+		{
+			"child",
+			"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
+		},
+		{
+			"child_pk",
+			"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
+		},
+	} {
+		results := sqlDB.QueryStr(t, `
+				SELECT
+					create_statement
+				FROM
+					[SHOW BACKUP SCHEMAS FROM LATEST IN $1]
+				WHERE
+					object_type = 'table' AND object_name = $2
+				`, localFoo, tc.table)
+		require.NotEmpty(t, results)
+		require.Regexp(t, regexp.MustCompile(tc.expectedForeignKeyPattern), results[0][0])
+	}
+	sqlDB.Exec(t, `DROP DATABASE test`)
+
+	// Test restoring different objects from the backup.
+	sqlDB.Exec(t, `CREATE DATABASE ts`)
+	sqlDB.Exec(t, `RESTORE test.rev_times FROM LATEST IN $1 WITH into_db = 'ts'`, localFoo)
+	for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		// Just rendering the constraints loads and validates schema.
+		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+		sqlDB.Exec(t, `DROP DATABASE test`)
+
+		// Restore a couple tables, including parent but not child_pk.
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.circular FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.parent, test.child FROM LATEST IN $1 AS OF SYSTEM TIME %s  WITH skip_missing_foreign_keys`, ts[0]), localFoo)
+		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+		sqlDB.Exec(t, `DROP DATABASE test`)
+
+		// Now do each table on its own with skip_missing_foreign_keys.
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		for _, name := range []string{"child_pk", "child", "circular", "parent"} {
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), localFoo)
+		}
+		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+		sqlDB.Exec(t, `DROP DATABASE test`)
+	}
+}

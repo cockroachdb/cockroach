@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -712,67 +711,6 @@ func TestShowBackupPrivileges(t *testing.T) {
 
 	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
 	require.NoError(t, err)
-}
-
-func TestShowUpgradedForeignKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var (
-		testdataBase = datapathutils.TestDataPath(t, "restore_old_versions")
-		fkRevDirs    = testdataBase + "/fk-rev-history"
-	)
-
-	dirs, err := os.ReadDir(fkRevDirs)
-	require.NoError(t, err)
-	for _, dir := range dirs {
-		require.True(t, dir.IsDir())
-		exportDir, err := filepath.Abs(filepath.Join(fkRevDirs, dir.Name()))
-		require.NoError(t, err)
-		t.Run(dir.Name(), showUpgradedForeignKeysTest(exportDir))
-	}
-}
-
-func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		params := base.TestServerArgs{}
-		const numAccounts = 1000
-		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
-		require.NoError(t, err)
-
-		type testCase struct {
-			table                     string
-			expectedForeignKeyPattern string
-		}
-		for _, tc := range []testCase{
-			{
-				"circular",
-				"CONSTRAINT self_fk FOREIGN KEY \\(selfid\\) REFERENCES public\\.circular\\(selfid\\) NOT VALID",
-			},
-			{
-				"child",
-				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
-			},
-			{
-				"child_pk",
-				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
-			},
-		} {
-			results := sqlDB.QueryStr(t, `
-				SELECT
-					create_statement
-				FROM
-					[SHOW BACKUP SCHEMAS $1]
-				WHERE
-					object_type = 'table' AND object_name = $2
-				`, localFoo, tc.table)
-			require.NotEmpty(t, results)
-			require.Regexp(t, regexp.MustCompile(tc.expectedForeignKeyPattern), results[0][0])
-		}
-	}
 }
 
 func TestShowBackupWithDebugIDs(t *testing.T) {
