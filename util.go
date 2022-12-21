@@ -171,6 +171,9 @@ func DescribeMessage(m pb.Message, f EntryFormatter) string {
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
 	}
+	if m.Vote != 0 {
+		fmt.Fprintf(&buf, " Vote:%d", m.Vote)
+	}
 	if len(m.Entries) > 0 {
 		fmt.Fprint(&buf, " Entries:[")
 		for i, e := range m.Entries {
@@ -180,9 +183,6 @@ func DescribeMessage(m pb.Message, f EntryFormatter) string {
 			buf.WriteString(DescribeEntry(e, f))
 		}
 		fmt.Fprint(&buf, "]")
-	}
-	if m.HardState != nil {
-		fmt.Fprintf(&buf, " HardState: %s", DescribeHardState(*m.HardState))
 	}
 	if s := m.Snapshot; s != nil && !IsEmptySnap(*s) {
 		fmt.Fprintf(&buf, " Snapshot: %s", DescribeSnapshot(*s))

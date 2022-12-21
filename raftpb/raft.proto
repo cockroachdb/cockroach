@@ -13,14 +13,12 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 enum EntryType {
-
 	EntryNormal       = 0;
 	EntryConfChange   = 1; // corresponds to pb.ConfChange
 	EntryConfChangeV2 = 2; // corresponds to pb.ConfChangeV2
 }
 
 message Entry {
-
 	optional uint64     Term  = 2 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations
 	optional uint64     Index = 3 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations
 	optional EntryType  Type  = 1 [(gogoproto.nullable) = false];
@@ -81,14 +79,19 @@ message Message {
 	// entries from its leader as it already has an entry with term 5 at index 100.
 	// (type=MsgStorageAppendResp,index=100,logTerm=5) means the local node wrote
 	// entries up to index=100 in stable storage, and the term of the entry at index
-	// 100 was 5.
+	// 100 was 5. This doesn't always mean that the corresponding MsgStorageAppend
+	// message was the one that carried these entries, just that those entries were
+	// stable at the time of processing the corresponding MsgStorageAppend.
 	optional uint64      logTerm     = 5  [(gogoproto.nullable) = false];
 	optional uint64      index       = 6  [(gogoproto.nullable) = false];
 	repeated Entry       entries     = 7  [(gogoproto.nullable) = false];
 	optional uint64      commit      = 8  [(gogoproto.nullable) = false];
-	// hardState can be non-nil for MsgStorageAppend messages and is nil for all
-	// other message types.
-	optional HardState   hardState   = 13 [(gogoproto.nullable) = true];
+	// (type=MsgStorageAppend,vote=5,term=10) means the local node is voting for
+	// peer 5 in term 10. For MsgStorageAppends, the term, vote, and commit fields
+	// will either all be set (to facilitate the construction of a HardState) if
+	// any of the fields have changed or will all be unset if none of the fields
+	// have changed.
+	optional uint64      vote        = 13 [(gogoproto.nullable) = false];
 	// snapshot is non-nil and non-empty for MsgSnap messages and nil for all other
 	// message types. However, peer nodes running older binary versions may send a
 	// non-nil, empty value for the snapshot field of non-MsgSnap messages. Code
@@ -204,7 +207,6 @@ message ConfChangeSingle {
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 message ConfChangeV2 {
-
 	optional ConfChangeTransition transition = 1 [(gogoproto.nullable) = false];
 	repeated ConfChangeSingle     changes =    2 [(gogoproto.nullable) = false];
 	optional bytes                context =    3;

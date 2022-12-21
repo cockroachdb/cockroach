@@ -222,19 +222,19 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		Type:    pb.MsgStorageAppend,
 		To:      LocalAppendThread,
 		From:    r.id,
-		Term:    r.Term,
 		Entries: rd.Entries,
 	}
 	if !IsEmptyHardState(rd.HardState) {
-		// TODO(nvanbenschoten): we could avoid this heap allocation by
-		// replacing the pb.Message.HardState field with a Vote uint64 field. We
-		// would then need to teach apps to construct a HardState from these
-		// three fields, or supply a function/method that does so.
-		//  m.Term = rd.Term
-		//  m.Vote = rd.Vote
-		//  m.Commit = rd.Commit
-		hs := rd.HardState
-		m.HardState = &hs
+		// If the Ready includes a HardState update, assign each of its fields
+		// to the corresponding fields in the Message. This allows clients to
+		// reconstruct the HardState and save it to stable storage.
+		//
+		// If the Ready does not include a HardState update, make sure to not
+		// assign a value to any of the fields so that a HardState reconstructed
+		// from them will be empty (return true from raft.IsEmptyHardState).
+		m.Term = rd.Term
+		m.Vote = rd.Vote
+		m.Commit = rd.Commit
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
@@ -340,8 +340,8 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		// MsgStorageAppend that contained the last entry in the unstable slice carried
 		// an earlier term and was dropped.
 		//
-		// A MsgStorageAppend with a new HardState is emitted on each term change. This
-		// is the same condition that causes MsgStorageAppendResp messages with earlier
+		// A MsgStorageAppend with a new term is emitted on each term change. This is
+		// the same condition that causes MsgStorageAppendResp messages with earlier
 		// terms to be ignored. As a result, we are guaranteed that, assuming a bounded
 		// number of term changes, there will eventually be a MsgStorageAppendResp
 		// message that is not ignored. This means that entries in the unstable log
