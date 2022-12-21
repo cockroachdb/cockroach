@@ -66,7 +66,6 @@ func TestRestoreOldVersions(t *testing.T) {
 	testdataBase := testutils.TestDataPath(t, "restore_old_versions")
 	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
-		fkRevDirs                   = testdataBase + "/fk-rev-history"
 		clusterDirs                 = testdataBase + "/cluster"
 		privilegeDirs               = testdataBase + "/privileges"
 		multiRegionDirs             = testdataBase + "/multi-region"
@@ -82,17 +81,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(exportDirsWithoutInterleave, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
-		}
-	})
-
-	t.Run("fk-rev-restore", func(t *testing.T) {
-		dirs, err := os.ReadDir(fkRevDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(fkRevDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreOldVersionFKRevTest(exportDir))
 		}
 	})
 
@@ -339,40 +327,69 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 	}
 }
 
-func restoreOldVersionFKRevTest(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		params := base.TestServerArgs{}
-		const numAccounts = 1000
-		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
-		require.NoError(t, err)
-		sqlDB.Exec(t, `CREATE DATABASE ts`)
-		sqlDB.Exec(t, `RESTORE test.rev_times FROM $1 WITH into_db = 'ts'`, localFoo)
-		for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
+func TestRestoreFKRevTest(t *testing.T) {
+	params := base.TestServerArgs{}
+	const numAccounts = 1000
+	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+	defer cleanup()
 
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
-			// Just rendering the constraints loads and validates schema.
-			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
-			sqlDB.Exec(t, `DROP DATABASE test`)
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+	sqlDB.Exec(t, `SET database = test`)
+	sqlDB.Exec(t, `
+CREATE TABLE circular (k INT8 PRIMARY KEY, selfid INT8 UNIQUE);
+ALTER TABLE circular ADD CONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES circular (selfid);
+CREATE TABLE parent (k INT8 PRIMARY KEY, j INT8 UNIQUE);
+CREATE TABLE child (k INT8 PRIMARY KEY, parent_i INT8 REFERENCES parent, parent_j INT8 REFERENCES parent (j));
+CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
+`)
 
-			// Restore a couple tables, including parent but not child_pk.
-			sqlDB.Exec(t, `CREATE DATABASE test`)
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.circular FROM $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.parent, test.child FROM $1 AS OF SYSTEM TIME %s  WITH skip_missing_foreign_keys`, ts[0]), localFoo)
-			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
-			sqlDB.Exec(t, `DROP DATABASE test`)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 
-			// Now do each table on its own with skip_missing_foreign_keys.
-			sqlDB.Exec(t, `CREATE DATABASE test`)
-			for _, name := range []string{"child_pk", "child", "circular", "parent"} {
-				sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.%s FROM $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), localFoo)
-			}
-			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
-			sqlDB.Exec(t, `DROP DATABASE test`)
+	sqlDB.Exec(t, `CREATE TABLE rev_times (id INT PRIMARY KEY, logical_time DECIMAL);`)
+	sqlDB.Exec(t, `INSERT INTO rev_times VALUES (1, cluster_logical_timestamp());`)
 
+	sqlDB.Exec(t, `
+	CREATE USER newuser;
+	GRANT ALL ON circular TO newuser;
+	GRANT ALL ON parent TO newuser;
+`)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `INSERT INTO rev_times VALUES (2, cluster_logical_timestamp())`)
+
+	sqlDB.Exec(t, `GRANT ALL ON child TO newuser;`)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `INSERT INTO rev_times VALUES (3, cluster_logical_timestamp())`)
+
+	sqlDB.Exec(t, `GRANT ALL ON child_pk TO newuser`)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `DROP DATABASE test`)
+
+	sqlDB.Exec(t, `CREATE DATABASE ts`)
+	sqlDB.Exec(t, `RESTORE test.rev_times FROM LATEST IN $1 WITH into_db = 'ts'`, localFoo)
+	for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		// Just rendering the constraints loads and validates schema.
+		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+		sqlDB.Exec(t, `DROP DATABASE test`)
+
+		// Restore a couple tables, including parent but not child_pk.
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.circular FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.parent, test.child FROM LATEST IN $1 AS OF SYSTEM TIME %s  WITH skip_missing_foreign_keys`, ts[0]), localFoo)
+		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+		sqlDB.Exec(t, `DROP DATABASE test`)
+
+		// Now do each table on its own with skip_missing_foreign_keys.
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		for _, name := range []string{"child_pk", "child", "circular", "parent"} {
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), localFoo)
 		}
+		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+		sqlDB.Exec(t, `DROP DATABASE test`)
 	}
 }
 
