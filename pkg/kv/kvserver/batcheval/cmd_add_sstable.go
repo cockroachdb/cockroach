@@ -181,6 +181,8 @@ func EvalAddSSTable(
 			st := cArgs.EvalCtx.ClusterSettings()
 			// TODO(dt): use a quotapool.
 			conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
+			log.VEventf(ctx, 2, "rewriting timestamps for SSTable [%s,%s) from %s to %s",
+				start.Key, end.Key, sstToReqTS, h.Timestamp)
 			sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(
 				ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
 			if err != nil {
@@ -223,6 +225,8 @@ func EvalAddSSTable(
 		desc := cArgs.EvalCtx.Desc()
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+
+		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
 			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxIntents, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
@@ -234,6 +238,7 @@ func EvalAddSSTable(
 		// If not checking for MVCC conflicts, at least check for separated intents.
 		// The caller is expected to make sure there are no writers across the span,
 		// and thus no or few intents, so this is cheap in the common case.
+		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start.Key, end.Key)
 		intents, err := storage.ScanIntents(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning intents")
