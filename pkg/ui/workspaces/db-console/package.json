@@ -199,7 +199,7 @@
     "**/redux": "^4.1.0",
     "**/ua-parser-js": "0.7.24",
     "**/url-parse": "^1.4.3",
-    "aria-query": "file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz",
+    "aria-query": "5.0.1",
     "core-js": "^2.6.12",
     "elliptic": "~6.5.3",
     "esbuild": "0.14.43",

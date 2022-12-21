@@ -26,7 +26,7 @@ func TestLoadInvalidEntry(t *testing.T) {
 		Data: kvserverbase.EncodeRaftCommand(
 			// It would be nice to have an "even more invalid" command here but it
 			// turns out that DecodeRaftCommand "handles" errors via panic().
-			kvserverbase.RaftVersionStandard, "foobarzz", []byte("definitely not a protobuf"),
+			kvserverbase.RaftVersionStandardPrefixByte, "foobarzz", []byte("definitely not a protobuf"),
 		),
 	}
 	ent, err := NewEntry(invalidEnt)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 )
 
@@ -30,7 +31,9 @@ var authenticate = func(
 	feSend := func(msg pgproto3.BackendMessage) error {
 		err := fe.Send(msg)
 		if err != nil {
-			return newErrorf(codeClientWriteFailed, "unable to send message %v to client: %v", msg, err)
+			return withCode(
+				errors.Wrapf(err, "unable to send message %v to client", msg),
+				codeClientWriteFailed)
 		}
 		return nil
 	}
@@ -43,7 +46,9 @@ var authenticate = func(
 		// TODO(spaskob): in verbose mode, log these messages.
 		backendMsg, err := be.Receive()
 		if err != nil {
-			return nil, newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
+			return nil, withCode(
+				errors.Wrap(err, "unable to receive message from backend"),
+				codeBackendReadFailed)
 		}
 
 		// The cases in this switch are roughly sorted in the order the server will send them.
@@ -77,13 +82,15 @@ var authenticate = func(
 			}
 			fntMsg, err := fe.Receive()
 			if err != nil {
-				return nil, newErrorf(codeClientReadFailed, "unable to receive message from client: %v", err)
+				return nil, withCode(
+					errors.Wrap(err, "unable to receive message from client"),
+					codeClientReadFailed)
 			}
 			err = be.Send(fntMsg)
 			if err != nil {
-				return nil, newErrorf(
-					codeBackendWriteFailed, "unable to send message %v to backend: %v", fntMsg, err,
-				)
+				return nil, withCode(
+					errors.Wrapf(err, "unable to send message %v to backend", fntMsg),
+					codeBackendWriteFailed)
 			}
 
 		// Server has authenticated the connection; keep reading messages until
@@ -114,7 +121,9 @@ var authenticate = func(
 			if err = feSend(backendMsg); err != nil {
 				return nil, err
 			}
-			return nil, newErrorf(codeAuthFailed, "authentication failed: %s", tp.Message)
+			return nil, withCode(
+				errors.Newf("authentication failed: %s", tp.Message),
+				codeAuthFailed)
 
 		// Information provided by the server to the client before the connection is ready
 		// to accept queries. These are typically returned after AuthenticationOk and before
@@ -141,10 +150,14 @@ var authenticate = func(
 			return crdbBackendKeyData, nil
 
 		default:
-			return nil, newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
+			return nil, withCode(
+				errors.Newf("received unexpected backend message type: %v", tp),
+				codeBackendDisconnected)
 		}
 	}
-	return nil, newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
+	return nil, withCode(
+		errors.Newf("authentication took more than %d iterations", i),
+		codeBackendDisconnected)
 }
 
 // readTokenAuthResult reads the result for the token-based authentication, and
@@ -180,7 +193,9 @@ var readTokenAuthResult = func(conn net.Conn) (*pgproto3.BackendKeyData, error) 
 	for ; i < 20; i++ {
 		backendMsg, err := serverConn.ReadMsg()
 		if err != nil {
-			return nil, newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
+			return nil, withCode(
+				errors.Wrap(err, "unable to receive message from backend"),
+				codeBackendReadFailed)
 		}
 
 		switch tp := backendMsg.(type) {
@@ -190,15 +205,21 @@ var readTokenAuthResult = func(conn net.Conn) (*pgproto3.BackendKeyData, error) 
 			backendKeyData = tp
 
 		case *pgproto3.ErrorResponse:
-			return nil, newErrorf(codeAuthFailed, "authentication failed: %s", tp.Message)
+			return nil, withCode(
+				errors.Newf("authentication failed: %s", tp.Message),
+				codeAuthFailed)
 
 		case *pgproto3.ReadyForQuery:
 			return backendKeyData, nil
 
 		default:
-			return nil, newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
+			return nil, withCode(
+				errors.Newf("received unexpected backend message type: %v", tp),
+				codeBackendDisconnected)
 		}
 	}
 
-	return nil, newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
+	return nil, withCode(
+		errors.Newf("authentication took more than %d iterations", i),
+		codeBackendDisconnected)
 }

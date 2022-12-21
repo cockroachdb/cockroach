@@ -87,7 +87,7 @@ func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
 	r.store.unquiescedReplicas.Unlock()
 	r.maybeCampaignOnWakeLocked(ctx)
 	// Propose an empty command which will wake the leader.
-	data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, makeIDKey(), nil)
+	data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandardPrefixByte, makeIDKey(), nil)
 	_ = r.mu.internalRaftGroup.Propose(data)
 	return true
 }
