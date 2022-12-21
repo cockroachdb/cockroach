@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "doc.go",
         "init.go",
+        "range_tombstone.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage",
     visibility = ["//visibility:public"],
