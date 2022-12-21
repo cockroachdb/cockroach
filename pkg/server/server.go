@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1758,6 +1759,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Connect the engines to the disk stats map constructor.
 	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
+	}
+
+	if storage.WorkloadCollectorEnabled {
+		if err := s.debug.RegisterWorkloadCollector(s.node.stores); err != nil {
+			return errors.Wrapf(err, "failed to register workload collector with debug server")
+		}
 	}
 
 	// Register the engines debug endpoints.
