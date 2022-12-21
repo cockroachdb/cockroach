@@ -67,6 +67,10 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
 		format = sstable.TableFormatPebblev2 // Range keys.
 	}
+	if cs.Version.IsActive(ctx, clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks) &&
+		valueBlocksEnabled.Get(&cs.SV) {
+		format = sstable.TableFormatPebblev3
+	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	opts.MergerName = "nullptr"
 	return opts
@@ -78,20 +82,22 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatPebblev1)
+	format := sstable.TableFormatPebblev1 // Block properties.
 	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
-		opts.TableFormat = sstable.TableFormatPebblev2 // Range keys.
+		format = sstable.TableFormatPebblev2 // Range keys.
 	}
+	// TODO(sumeer): add code to use TableFormatPebblev3 after confirming that
+	// we won't run afoul of any stale tooling that reads backup ssts.
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+
 	// Don't need BlockPropertyCollectors for backups.
 	opts.BlockPropertyCollectors = nil
-
 	// Disable bloom filters since we only ever iterate backups.
 	opts.FilterPolicy = nil
 	// Bump up block size, since we almost never seek or do point lookups, so more
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
-
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw:                sstable.NewWriter(noopSyncCloser{f}, opts),
