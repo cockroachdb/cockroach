@@ -264,7 +264,7 @@ func (oc *optCatalog) ResolveIndex(
 			name,
 			tree.IndexLookupFlags{
 				Required:              true,
-				IncludeNonActiveIndex: false,
+				IncludeNonActiveIndex: flags.IncludeNonActiveIndexes,
 				IncludeOfflineTable:   flags.IncludeOfflineTables,
 			},
 		)
