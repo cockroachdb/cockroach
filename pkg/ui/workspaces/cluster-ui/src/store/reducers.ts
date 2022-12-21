@@ -10,7 +10,6 @@
 
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
-import { TxnInsightEvent } from "src/insights";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
@@ -31,6 +30,10 @@ import {
   reducer as transactionInsights,
   TransactionInsightsState,
 } from "./insights/transactionInsights";
+import {
+  reducer as recentStatements,
+  RecentStatementsState,
+} from "./recentExecutions/recentStatements";
 import { JobState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
 import { LivenessState, reducer as liveness } from "./liveness";
@@ -75,6 +78,7 @@ export type AdminUiState = {
   transactionInsightDetails: TransactionInsightDetailsCachedState;
   executionInsights: ExecutionInsightsState;
   schemaInsights: SchemaInsightsState;
+  recentStatements: RecentStatementsState;
 };
 
 export type AppState = {
@@ -99,6 +103,7 @@ export const reducers = combineReducers<AdminUiState>({
   job,
   clusterLocks,
   schemaInsights,
+  recentStatements,
 });
 
 export const rootActions = {

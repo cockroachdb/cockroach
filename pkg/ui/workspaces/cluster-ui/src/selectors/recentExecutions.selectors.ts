@@ -11,7 +11,11 @@
 import { createSelector } from "reselect";
 import { RecentExecutions } from "src/recentExecutions/types";
 import { AppState } from "src/store";
-import { selectRecentExecutionsCombiner } from "src/selectors/recentExecutionsCommon.selectors";
+import {
+  selectRecentExecutionsCombiner,
+  selectHistoricalExecutionsCombiner,
+  selectActiveExecutionsCombiner,
+} from "src/selectors/recentExecutionsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";
 import {
   getRecentTransaction,
@@ -28,9 +32,24 @@ const selectSessions = (state: AppState) => state.adminUI.sessions?.data;
 const selectClusterLocks = (state: AppState) =>
   state.adminUI.clusterLocks?.data;
 
-export const selectRecentExecutions = createSelector(
+const selectHistoricalStatements = (state: AppState) =>
+  state.adminUI.recentStatements?.data;
+
+export const selectHistoricalExecutions = createSelector(
+  selectHistoricalStatements,
+  selectClusterLocks,
+  selectHistoricalExecutionsCombiner,
+);
+
+export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
+  selectActiveExecutionsCombiner,
+);
+
+export const selectRecentExecutions = createSelector(
+  selectHistoricalExecutions,
+  selectActiveExecutions,
   selectRecentExecutionsCombiner,
 );
 
@@ -39,7 +58,7 @@ export const selectRecentStatements = createSelector(
   (executions: RecentExecutions) => executions.statements,
 );
 
-export const selecteRecentStatement = createSelector(
+export const selectRecentStatement = createSelector(
   selectRecentStatements,
   selectExecutionID,
   getRecentStatement,
@@ -64,7 +83,7 @@ export const selectContentionDetailsForTransaction = createSelector(
 );
 
 const selectRecentTxnFromStmt = createSelector(
-  selecteRecentStatement,
+  selectRecentStatement,
   selectRecentTransactions,
   (stmt, transactions) => {
     return transactions.find(txn => txn.transactionID === stmt.transactionID);

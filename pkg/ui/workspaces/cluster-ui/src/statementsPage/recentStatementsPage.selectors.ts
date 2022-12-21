@@ -23,6 +23,7 @@ import {
 } from "src/selectors/recentExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
+import { actions as recentStatementsActions } from "src/store/recentExecutions/recentStatements";
 import { selectIsTenant } from "src/store/uiConfig";
 import { localStorageSelector } from "../store/utils/selectors";
 
@@ -62,6 +63,7 @@ export const mapDispatchToRecentStatementsPageProps = (
   dispatch: Dispatch,
 ): RecentStatementsViewDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
+  refreshRecentStatements: () => dispatch(recentStatementsActions.refresh()),
   onColumnsSelect: columns => {
     dispatch(
       localStorageActions.update({

@@ -12,9 +12,14 @@ import {
   RecentStatementFilters,
   defaultFilters,
   SortSetting,
+  RecentStatementsViewDispatchProps,
+  RecentStatementsViewStateProps,
 } from "@cockroachlabs/cluster-ui";
 import { selectRecentStatements, selectAppName } from "src/selectors";
-import { refreshLiveWorkload } from "src/redux/apiReducers";
+import {
+  refreshLiveWorkload,
+  refreshRecentStatementsAction,
+} from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 
@@ -44,7 +49,9 @@ const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
   { ascending: false, columnTitle: "startTime" },
 );
 
-export const mapStateToRecentStatementViewProps = (state: AdminUIState) => ({
+export const mapStateToRecentStatementViewProps = (
+  state: AdminUIState,
+): RecentStatementsViewStateProps => ({
   filters: filtersLocalSetting.selector(state),
   selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
   sortSetting: sortSettingLocalSetting.selector(state),
@@ -53,10 +60,11 @@ export const mapStateToRecentStatementViewProps = (state: AdminUIState) => ({
   internalAppNamePrefix: selectAppName(state),
 });
 
-export const recentStatementsViewActions = {
+export const recentStatementsViewActions: RecentStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) =>
     selectedColumnsLocalSetting.set(columns.join(",")),
   refreshLiveWorkload,
+  refreshRecentStatements: refreshRecentStatementsAction,
   onFiltersChange: (filters: RecentStatementFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),

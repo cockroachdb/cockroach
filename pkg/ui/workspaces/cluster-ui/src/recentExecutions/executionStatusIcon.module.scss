@@ -14,3 +14,23 @@
 .executing {
   fill: $colors--success;
 }
+
+.preparing {
+  fill: $colors--success;
+}
+
+.timed-out {
+  fill: $colors--warning;
+}
+
+.canceled {
+  fill: $colors--warning;
+}
+
+.failed {
+  fill: $colors--warning;
+}
+
+.completed {
+  fill: $colors--success;
+}

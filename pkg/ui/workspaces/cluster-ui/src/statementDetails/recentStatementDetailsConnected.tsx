@@ -12,6 +12,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
+import { actions as recentStatementsActions } from "src/store/recentExecutions/recentStatements";
 import { AppState } from "../store";
 import {
   RecentStatementDetails,
@@ -19,7 +20,7 @@ import {
 } from "./recentStatementDetails";
 import { RecentStatementDetailsStateProps } from ".";
 import {
-  selecteRecentStatement,
+  selectRecentStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors/recentExecutions.selectors";
 import { selectIsTenant } from "src/store/uiConfig";
@@ -32,7 +33,7 @@ const mapStateToProps = (
 ): RecentStatementDetailsStateProps => {
   return {
     contentionDetails: selectContentionDetailsForStatement(state, props),
-    statement: selecteRecentStatement(state, props),
+    statement: selectRecentStatement(state, props),
     match: props.match,
     isTenant: selectIsTenant(state),
   };
@@ -42,6 +43,7 @@ const mapDispatchToProps = (
   dispatch: Dispatch,
 ): RecentStatementDetailsDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
+  refreshRecentStatements: () => dispatch(recentStatementsActions.refresh()),
 });
 
 export const RecentStatementDetailsPageConnected = withRouter(
