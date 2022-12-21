@@ -344,7 +344,7 @@ func (r *Replica) propose(
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
-	encodingPrefixByte := raftlog.RaftVersionStandardPrefixByte
+	encodingPrefixByte := raftlog.EntryEncodingStandardPrefixByte
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -416,7 +416,7 @@ func (r *Replica) propose(
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		encodingPrefixByte = raftlog.RaftVersionSideloadedPrefixByte
+		encodingPrefixByte = raftlog.EntryEncodingSideloadedPrefixByte
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
