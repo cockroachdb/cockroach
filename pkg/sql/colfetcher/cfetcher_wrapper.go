@@ -156,7 +156,6 @@ func newCFetcherWrapper(
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
-		false, /* allocateFreshBatches */
 		allowNullsInNonNullableOnLastRowInBatch,
 	}
 
