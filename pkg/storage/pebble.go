@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -79,6 +80,17 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	maxSyncDurationFatalOnExceededDefault,
 )
+
+// valueBlocksEnabled controls whether older versions of MVCC keys in the same
+// sstable will have their values written to value blocks. This only affects
+// sstables that will be written in the future, as part of flushes or
+// compactions, and does not eagerly change the encoding of existing sstables.
+// Reads can correctly read both kinds of sstables.
+var valueBlocksEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.value_blocks.enabled",
+	"set to true to enable writing of value blocks in sstables",
+	false).WithPublic()
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
@@ -568,6 +580,11 @@ func DefaultPebbleOptions() *pebble.Options {
 		}
 		return nil
 	}
+	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
+	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
+		Lower: keys.LocalRangeLockTablePrefix,
+		Upper: keys.LocalRangeLockTablePrefix.PrefixEnd(),
+	}
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
@@ -582,6 +599,25 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 
 	return opts
+}
+
+func shortAttributeExtractorForValues(
+	key []byte, keyPrefixLen int, value []byte,
+) (pebble.ShortAttribute, error) {
+	suffixLen := len(key) - keyPrefixLen
+	const lockTableSuffixLen = engineKeyVersionLockTableLen + sentinelLen
+	if suffixLen == engineKeyNoVersion || suffixLen == lockTableSuffixLen {
+		// Not a versioned MVCC value.
+		return 0, nil
+	}
+	isTombstone, err := EncodedMVCCValueIsTombstone(value)
+	if err != nil {
+		return 0, err
+	}
+	if isTombstone {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 // wrapFilesystemMiddleware wraps the Option's vfs.FS with disk-health checking
@@ -845,6 +881,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if settings := cfg.Settings; settings != nil {
 		cfg.Opts.WALMinSyncInterval = func() time.Duration {
 			return minWALSyncInterval.Get(&settings.SV)
+		}
+		cfg.Opts.Experimental.EnableValueBlocks = func() bool {
+			version := settings.Version.ActiveVersionOrEmpty(context.Background())
+			return !version.Less(clusterversion.ByKey(
+				clusterversion.V23_1PebbleFormatSSTableValueBlocks)) && valueBlocksEnabled.Get(&settings.SV)
 		}
 	}
 
@@ -1828,6 +1869,10 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	formatVers := pebble.FormatMostCompatible
 	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.V23_1PebbleFormatSSTableValueBlocks)):
+		if formatVers < pebble.FormatSSTableValueBlocks {
+			formatVers = pebble.FormatSSTableValueBlocks
+		}
 	case !version.Less(clusterversion.ByKey(clusterversion.V22_2PebbleFormatPrePebblev1Marked)):
 		if formatVers < pebble.FormatPrePebblev1Marked {
 			formatVers = pebble.FormatPrePebblev1Marked
