@@ -2179,9 +2179,15 @@ func RangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 	if localitySummary.Duration >= replicastats.MinStatsDuration {
 		info.QueriesPerSecond = localitySummary.QPS
 	}
-
 	if writesPerSecond, dur := repl.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 		info.WritesPerSecond = writesPerSecond
 	}
+	if reqCPUNanos, dur := repl.loadStats.reqCPUNanos.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		info.ReqCPUNanosPerSecond = reqCPUNanos
+	}
+	if raftCPUNanos, dur := repl.loadStats.raftCPUNanos.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		info.RaftCPUNanosPerSecond = raftCPUNanos
+	}
+
 	return info
 }

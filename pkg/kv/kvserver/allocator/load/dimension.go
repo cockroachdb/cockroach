@@ -18,6 +18,7 @@ type Dimension int
 const (
 	// Queries refers to the number of queries.
 	Queries Dimension = iota
+	CPUTime
 
 	nDimensionsTyped
 	nDimensions = int(nDimensionsTyped)
@@ -28,6 +29,8 @@ func (d Dimension) String() string {
 	switch d {
 	case Queries:
 		return "queries-per-second"
+	case CPUTime:
+		return "cpu-nanos-per-second"
 	default:
 		panic(fmt.Sprintf("cannot name: unknown dimension with ordinal %d", d))
 	}
@@ -36,7 +39,7 @@ func (d Dimension) String() string {
 // Format returns a formatted string for a value.
 func (d Dimension) Format(value float64) string {
 	switch d {
-	case Queries:
+	case Queries, CPUTime:
 		return fmt.Sprintf("%.1f", value)
 	default:
 		panic(fmt.Sprintf("cannot format value: unknown dimension with ordinal %d", d))
