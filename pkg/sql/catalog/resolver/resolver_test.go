@@ -637,7 +637,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		for _, tc := range testCases {
 			t.Run(tc.testName, func(t *testing.T) {
 				_, prefix, tblDesc, idxDesc, err := resolver.ResolveIndex(
-					ctx, schemaResolver, tc.name, tree.IndexLookupFlags{Required: true, RequireActiveIndex: false})
+					ctx, schemaResolver, tc.name, tree.IndexLookupFlags{Required: true, IncludeNonActiveIndex: true})
 				var res string
 				if err != nil {
 					res = fmt.Sprintf("error: %s", err.Error())
@@ -647,7 +647,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 				require.Equal(t, tc.expected, res)
 
 				_, _, _, _, err = resolver.ResolveIndex(
-					ctx, schemaResolver, tc.name, tree.IndexLookupFlags{Required: false, RequireActiveIndex: false})
+					ctx, schemaResolver, tc.name, tree.IndexLookupFlags{Required: false, IncludeNonActiveIndex: true})
 				if tc.errIfNotRequired {
 					require.Error(t, err)
 				} else {
@@ -722,9 +722,9 @@ CREATE INDEX baz_idx ON baz (s);
 			schemaResolver,
 			newTableIndexName("", "", "", "baz_idx"),
 			tree.IndexLookupFlags{
-				Required:            false,
-				RequireActiveIndex:  true,
-				IncludeOfflineTable: false,
+				Required:              false,
+				IncludeNonActiveIndex: false,
+				IncludeOfflineTable:   false,
 			},
 		)
 		require.NoError(t, err)
@@ -737,9 +737,9 @@ CREATE INDEX baz_idx ON baz (s);
 			schemaResolver,
 			newTableIndexName("", "", "", "baz_idx"),
 			tree.IndexLookupFlags{
-				Required:            true,
-				RequireActiveIndex:  false,
-				IncludeOfflineTable: true,
+				Required:              true,
+				IncludeNonActiveIndex: true,
+				IncludeOfflineTable:   true,
 			},
 		)
 		require.NoError(t, err)
@@ -753,9 +753,9 @@ CREATE INDEX baz_idx ON baz (s);
 			schemaResolver,
 			newTableIndexName("", "", "", "foo_idx"),
 			tree.IndexLookupFlags{
-				Required:            true,
-				RequireActiveIndex:  true,
-				IncludeOfflineTable: false,
+				Required:              true,
+				IncludeNonActiveIndex: false,
+				IncludeOfflineTable:   false,
 			},
 		)
 		require.NoError(t, err)
