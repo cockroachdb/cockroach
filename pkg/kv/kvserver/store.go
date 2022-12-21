@@ -2902,6 +2902,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	var l0SublevelsMax int64
 	var totalQueriesPerSecond float64
 	var totalWritesPerSecond float64
+	var totalCPUTimePerSecond float64
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
@@ -2926,6 +2927,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
 		totalQueriesPerSecond += usage.QueriesPerSecond
 		totalWritesPerSecond += usage.WritesPerSecond
+		totalCPUTimePerSecond += usage.RaftCPUNanosPerSecond + usage.ReqCPUNanosPerSecond
 		writesPerReplica = append(writesPerReplica, usage.WritesPerSecond)
 		cr := candidateReplica{
 			Replica: r,
@@ -2941,6 +2943,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
 	capacity.L0Sublevels = l0SublevelsMax
+	capacity.CpuPerSecond = totalCPUTimePerSecond
 	{
 		s.ioThreshold.Lock()
 		capacity.IOThreshold = *s.ioThreshold.t
@@ -3147,7 +3150,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageReadsPerSecond += loadStats.ReadKeysPerSecond
 		averageReadBytesPerSecond += loadStats.ReadBytesPerSecond
 		averageWriteBytesPerSecond += loadStats.WriteBytesPerSecond
-		averageCPUNanosPerSecond += loadStats.CPUNanosPerSecond
+		averageCPUNanosPerSecond += loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos

@@ -321,6 +321,7 @@ message StoreCapacity {
   // by ranges in the store. The stat is tracked over the time period defined
   // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
+  optional double cpu_per_second = 14 [(gogoproto.nullable) = false];
   // l0_sublevels tracks the current number of l0 sublevels in the store.
   // TODO(kvoli): Use of this field will need to be version-gated, to avoid
   // instances where overlapping node-binary versions within a cluster result

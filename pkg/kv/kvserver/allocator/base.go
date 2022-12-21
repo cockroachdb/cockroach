@@ -37,6 +37,9 @@ const (
 	// lightly loaded clusters.
 	MinQPSThresholdDifference = 100
 
+	// MinCPUThresholdDifference is the amount of cpu time by which a store must
+	MinCPUThresholdDifference = float64(50 * time.Millisecond)
+
 	// defaultLoadBasedRebalancingInterval is how frequently to check the store-level
 	// balance of the cluster.
 	defaultLoadBasedRebalancingInterval = time.Minute
@@ -100,6 +103,27 @@ var QPSRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
+// CPURebalanceThreshold is the minimum ratio of a store's cpu time to the mean
+// cput time at which that store is considered overfull or underfull of cpu
+// usage.
+var CPURebalanceThreshold = func() *settings.FloatSetting {
+	s := settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.allocator.cpu_rebalance_threshold",
+		"minimum fraction away from the mean a store's cpu time can be before it is considered overfull or underfull",
+		0.10,
+		settings.NonNegativeFloat,
+		func(f float64) error {
+			if f < 0.01 {
+				return errors.Errorf("cannot set kv.allocator.qps_rebalance_threshold to less than 0.01")
+			}
+			return nil
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
 // LoadBasedRebalanceInterval controls how frequently each store checks for
 // load-base lease/replica rebalancing opportunties.
 var LoadBasedRebalanceInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
@@ -135,6 +159,29 @@ var MinQPSDifferenceForTransfers = func() *settings.FloatSetting {
 		"the minimum qps difference that must exist between any two stores"+
 			" for the allocator to allow a lease or replica transfer between them",
 		2*MinQPSThresholdDifference,
+		settings.NonNegativeFloat,
+	)
+	s.SetVisibility(settings.Reserved)
+	return s
+}()
+
+// MinCPUDifferencceForTransfers is the minimum CPU difference that the store
+// rebalancer would care to reconcile (via lease or replica rebalancing)
+// between any two stores.
+//
+// NB: This value is used to compare the QPS of two stores _without accounting_
+// for the QPS of the replica or lease that is being considered for the
+// transfer. This is set to be twice the minimum threshold that a store needs to
+// be above or below the mean to be considered overfull or underfull
+// respectively. This is to make lease and replica transfers less sensitive to
+// the jitters in any given workload.
+var MinCPUDifferenceForTransfers = func() *settings.FloatSetting {
+	s := settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.allocator.min_cpu_difference_for_transfers",
+		"the minimum cpu time difference that must exist between any two stores"+
+			" for the allocator to allow a lease or replica transfer between them",
+		2*MinCPUThresholdDifference,
 		settings.NonNegativeFloat,
 	)
 	s.SetVisibility(settings.Reserved)

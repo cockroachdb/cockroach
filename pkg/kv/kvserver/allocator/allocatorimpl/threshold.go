@@ -27,6 +27,8 @@ func getLoadThreshold(dim load.Dimension, sv *settings.Values) float64 {
 	switch dim {
 	case load.Queries:
 		return allocator.QPSRebalanceThreshold.Get(sv)
+	case load.CPUTime:
+		return allocator.CPURebalanceThreshold.Get(sv)
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -51,6 +53,8 @@ func getLoadMinThreshold(dim load.Dimension) float64 {
 	switch dim {
 	case load.Queries:
 		return allocator.MinQPSThresholdDifference
+	case load.CPUTime:
+		return allocator.MinCPUThresholdDifference
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -76,6 +80,8 @@ func getLoadRebalanceMinRequiredDiff(dim load.Dimension, sv *settings.Values) fl
 	switch dim {
 	case load.Queries:
 		return allocator.MinQPSDifferenceForTransfers.Get(sv)
+	case load.CPUTime:
+		return allocator.MinCPUDifferenceForTransfers.Get(sv)
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}

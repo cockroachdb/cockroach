@@ -582,8 +582,14 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 		detail.Desc.Capacity.RangeCount++
 		detail.Desc.Capacity.LogicalBytes += rangeUsageInfo.LogicalBytes
 		detail.Desc.Capacity.WritesPerSecond += rangeUsageInfo.WritesPerSecond
+		detail.Desc.Capacity.CpuPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
 	case roachpb.REMOVE_VOTER, roachpb.REMOVE_NON_VOTER:
 		detail.Desc.Capacity.RangeCount--
+		if detail.Desc.Capacity.CpuPerSecond <= rangeUsageInfo.RaftCPUNanosPerSecond {
+			detail.Desc.Capacity.CpuPerSecond = 0
+		} else {
+			detail.Desc.Capacity.CpuPerSecond -= rangeUsageInfo.RaftCPUNanosPerSecond
+		}
 		if detail.Desc.Capacity.LogicalBytes <= rangeUsageInfo.LogicalBytes {
 			detail.Desc.Capacity.LogicalBytes = 0
 		} else {
@@ -626,6 +632,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 		for _, target := range targets {
 			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail != nil {
 				toDetail.Desc.Capacity.RangeCount++
+				toDetail.Desc.Capacity.CpuPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
 			}
 		}
 	}
@@ -633,6 +640,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 		for _, old := range previous {
 			if toDetail := sp.GetStoreDetailLocked(old.StoreID); toDetail != nil {
 				toDetail.Desc.Capacity.RangeCount--
+				toDetail.Desc.Capacity.CpuPerSecond -= rangeUsageInfo.RaftCPUNanosPerSecond
 			}
 		}
 	}
@@ -659,6 +667,11 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 		} else {
 			fromDetail.Desc.Capacity.QueriesPerSecond -= rangeUsageInfo.QueriesPerSecond
 		}
+		if fromDetail.Desc.Capacity.CpuPerSecond < rangeUsageInfo.ReqCPUNanosPerSecond {
+			fromDetail.Desc.Capacity.CpuPerSecond = 0
+		} else {
+			fromDetail.Desc.Capacity.CpuPerSecond -= rangeUsageInfo.ReqCPUNanosPerSecond
+		}
 		sp.DetailsMu.StoreDetails[from] = &fromDetail
 	}
 
@@ -666,6 +679,7 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	if toDetail.Desc != nil {
 		toDetail.Desc.Capacity.LeaseCount++
 		toDetail.Desc.Capacity.QueriesPerSecond += rangeUsageInfo.QueriesPerSecond
+		toDetail.Desc.Capacity.CpuPerSecond += rangeUsageInfo.ReqCPUNanosPerSecond
 		sp.DetailsMu.StoreDetails[to] = &toDetail
 	}
 }
@@ -946,6 +960,8 @@ type StoreList struct {
 	// candidateWritesPerSecond tracks L0 sub-level stats for Stores that are
 	// eligible to be rebalance targets.
 	CandidateL0Sublevels Stat
+
+	CandidateCPUTime Stat
 }
 
 // MakeStoreList constructs a new store list based on the passed in descriptors.
@@ -961,6 +977,7 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		sl.CandidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
 		sl.CandidateL0Sublevels.update(float64(desc.Capacity.L0Sublevels))
+		sl.CandidateCPUTime.update(desc.Capacity.CpuPerSecond)
 	}
 	return sl
 }
@@ -1010,6 +1027,7 @@ func (sl StoreList) ExcludeInvalid(constraints []roachpb.ConstraintsConjunction)
 func (sl StoreList) LoadMeans() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = sl.CandidateQueriesPerSecond.Mean
+	dims[load.CPUTime] = sl.CandidateCPUTime.Mean
 	return dims
 }
 
