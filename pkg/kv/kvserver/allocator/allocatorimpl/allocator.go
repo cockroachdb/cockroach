@@ -430,7 +430,8 @@ func (ae *allocatorError) Error() string {
 	return b.String()
 }
 
-func (*allocatorError) PurgatoryErrorMarker() {}
+func (*allocatorError) AllocationErrorMarker() {}
+func (*allocatorError) PurgatoryErrorMarker()  {}
 
 // allocatorRand pairs a rand.Rand with a mutex.
 // NOTE: Allocator is typically only accessed from a single thread (the
@@ -813,6 +814,32 @@ func getRemoveIdx(
 		}
 	}
 	return removeIdx
+}
+
+// FilterReplicasForAction converts a range descriptor to the filtered
+// voter and non-voter replicas needed to allocate a target for the given action.
+// NB: This is a convenience method for callers of allocator.AllocateTarget(..).
+func FilterReplicasForAction(
+	storePool storepool.AllocatorStorePool, desc *roachpb.RangeDescriptor, action AllocatorAction,
+) (
+	filteredVoters, filteredNonVoters []roachpb.ReplicaDescriptor,
+	isReplacement, nothingToDo bool,
+	err error,
+) {
+	voterReplicas, nonVoterReplicas,
+		liveVoterReplicas, deadVoterReplicas,
+		liveNonVoterReplicas, deadNonVoterReplicas := LiveAndDeadVoterAndNonVoterReplicas(storePool, desc)
+
+	removeIdx := -1
+	_, filteredVoters, filteredNonVoters, removeIdx, nothingToDo, err = DetermineReplicaToReplaceAndFilter(
+		storePool,
+		action,
+		voterReplicas, nonVoterReplicas,
+		liveVoterReplicas, deadVoterReplicas,
+		liveNonVoterReplicas, deadNonVoterReplicas,
+	)
+
+	return filteredVoters, filteredNonVoters, removeIdx >= 0, nothingToDo, err
 }
 
 // ComputeAction determines the exact operation needed to repair the
