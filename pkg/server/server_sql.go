@@ -196,6 +196,9 @@ type SQLServer struct {
 	// upgradeManager deals with cluster version upgrades on bootstrap and on
 	// `set cluster setting version = <v>`.
 	upgradeManager *upgrademanager.Manager
+
+	// Tenant migration server for use in tenant tests.
+	migrationServer *TenantMigrationServer
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -544,7 +547,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlInstanceStorage,
 		cfg.sqlLivenessProvider,
 		cfg.rangeFeedFactory,
-		codec, cfg.clock, cfg.stopper)
+		codec, cfg.clock, cfg.stopper, cfg.db)
 
 	// We can't use the nodeDailer as the podNodeDailer unless we
 	// are serving the system tenant despite the fact that we've
@@ -1151,9 +1154,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	var upgradeMgr *upgrademanager.Manager
 	{
-		// We only need to attach a version upgrade hook if we're the system
-		// tenant. Regular tenants are disallowed from changing cluster
-		// versions.
 		var c upgrade.Cluster
 		var systemDeps upgrade.SystemDeps
 		keyVisKnobs, _ := cfg.TestingKnobs.KeyVisualizer.(*keyvisualizer.TestingKnobs)
@@ -1164,21 +1164,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
 			})
-			systemDeps = upgrade.SystemDeps{
-				Cluster:     c,
-				DB:          cfg.internalDB,
-				Settings:    cfg.Settings,
-				JobRegistry: jobRegistry,
-				DistSender:  cfg.distSender,
-				Stopper:     cfg.stopper,
-				KeyVisKnobs: keyVisKnobs,
-			}
 		} else {
-			c = upgradecluster.NewTenantCluster(cfg.db)
-			systemDeps = upgrade.SystemDeps{
-				Cluster: c,
-				DB:      cfg.internalDB,
-			}
+			c = upgradecluster.NewTenantCluster(
+				upgradecluster.TenantClusterConfig{
+					Dialer:         cfg.podNodeDialer,
+					InstanceReader: cfg.sqlInstanceReader,
+					DB:             cfg.db,
+				})
+		}
+		systemDeps = upgrade.SystemDeps{
+			Cluster:     c,
+			DB:          cfg.internalDB,
+			Settings:    cfg.Settings,
+			JobRegistry: jobRegistry,
+			Stopper:     cfg.stopper,
+			KeyVisKnobs: keyVisKnobs,
 		}
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
