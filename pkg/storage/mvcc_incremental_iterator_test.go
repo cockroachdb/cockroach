@@ -1357,7 +1357,9 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			ek, err := it.EngineKey()
 			require.NoError(t, err)
 			require.NoError(t, err)
-			if err := sst.PutEngineKey(ek, it.Value()); err != nil {
+			v, err := it.Value()
+			require.NoError(t, err)
+			if err := sst.PutEngineKey(ek, v); err != nil {
 				t.Fatal(err)
 			}
 			valid, err = it.NextEngineKey()
@@ -1483,7 +1485,11 @@ func collectMatchingWithMVCCIterator(
 		}
 		ts := iter.Key().Timestamp
 		if (ts.Less(end) || end == ts) && start.Less(ts) {
-			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+			v, err := iter.Value()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: v})
 		}
 		iter.Next()
 	}

@@ -321,6 +321,9 @@ func getAvailableTenantID(
 func (p *planner) CreateTenant(
 	ctx context.Context, name roachpb.TenantName,
 ) (roachpb.TenantID, error) {
+	if p.EvalContext().TxnReadOnly {
+		return roachpb.TenantID{}, readOnlyError("create_tenant()")
+	}
 	const op = "create tenant"
 	if err := p.RequireAdminRole(ctx, op); err != nil {
 		return roachpb.TenantID{}, err
@@ -343,6 +346,9 @@ func (p *planner) CreateTenant(
 func (p *planner) CreateTenantWithID(
 	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
 ) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("create_tenant()")
+	}
 	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
 		return err
 	}
@@ -552,6 +558,10 @@ func (p *planner) DestroyTenantByID(
 }
 
 func (p *planner) validateDestroyTenant(ctx context.Context) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("destroy_tenant()")
+	}
+
 	const op = "destroy"
 	if err := p.RequireAdminRole(ctx, "destroy tenant"); err != nil {
 		return err
@@ -810,6 +820,10 @@ func TestingUpdateTenantRecord(
 func (p *planner) RenameTenant(
 	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
 ) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("rename_tenant()")
+	}
+
 	if err := tenantName.IsValid(); err != nil {
 		return pgerror.WithCandidateCode(err, pgcode.Syntax)
 	}

@@ -193,7 +193,11 @@ func runGCOld(
 			expBaseKey = iterKey.Key
 			if !iterKey.IsValue() {
 				keys = []storage.MVCCKey{iter.Key()}
-				vals = [][]byte{iter.Value()}
+				v, err := iter.Value()
+				if err != nil {
+					return Info{}, err
+				}
+				vals = [][]byte{v}
 				continue
 			}
 			// An implicit metadata.
@@ -203,8 +207,12 @@ func runGCOld(
 			// determine that there is no intent.
 			vals = [][]byte{nil}
 		}
+		v, err := iter.Value()
+		if err != nil {
+			return Info{}, err
+		}
 		keys = append(keys, iter.Key())
-		vals = append(vals, iter.Value())
+		vals = append(vals, v)
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
