@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -12,64 +12,16 @@ package plpgsqltree
 
 import "github.com/cockroachdb/errors"
 
-type DatumType int
-
-const (
-	PlpgsqlDtypeVar DatumType = iota
-	plpgsqlDtypeRow
-	plpgsqlDtypeRec
-	plpgsqlDtypeRecfield
-	plpgsqlDtypePromise
-)
-
-type PLpgSQLStatementType int
-
-const (
-	PlpgsqlStmtBlock PLpgSQLStatementType = iota
-	PlpgsqlStmtAssign
-	PlpgsqlStmtIf
-	PlpgsqlStmtCase
-	PlpgsqlStmtLoop
-	PlpgsqlStmtWhile
-	PlpgsqlStmtFori
-	PlpgsqlStmtFors
-	PlpgsqlStmtForc
-	PlpgsqlStmtForeachA
-	PlpgsqlStmtExit
-	PlpgsqlStmtReturn
-	PlpgsqlStmtReturnNext
-	PlpgsqlStmtReturnQuery
-	PlpgsqlStmtRaise
-	PlpgsqlStmtAssert
-	PlpgsqlStmtExecSql
-	PlpgsqlStmtDynExecute
-	PlpgsqlStmtDynFors
-	PlpgsqlStmtGetDiag
-	PlpgsqlStmtOpen
-	PlpgsqlStmtFetch
-	PlpgsqlStmtClose
-	PlpgsqlStmtPerform
-	PlpgsqlStmtCall
-	PlpgsqlStmtCommit
-	PlpgsqlStmtRollback
-)
-
+// PLpgSQLRaiseOptionType represents the severity of the error in
+// a raise statement
 type PLpgSQLRaiseOptionType int
 
-const (
-	PlpgsqlRaiseoptionErrcode PLpgSQLRaiseOptionType = iota
-	PlpgsqlRaiseoptionMessage
-	PlpgsqlRaiseoptionDetail
-	PlpgsqlRaiseoptionHint
-	PlpgsqlRaiseoptionColumn
-	PlpgsqlRaiseoptionConstraint
-	PlpgsqlRaiseoptionDatatype
-	PlpgsqlRaiseoptionTable
-	PlpgsqlRaiseoptionSchema
-)
-
+// PLpgSQLGetDiagKind represents the type of error diagnostic
+// item in stmt_getdiag
 type PLpgSQLGetDiagKind int
 
+// A list of options for diagnostic items that can be present in
+// stmt_getdiag
 const (
 	PlpgsqlGetdiagRowCount PLpgSQLGetDiagKind = iota
 	PlpgsqlGetdiagContext
@@ -85,6 +37,7 @@ const (
 	PlpgsqlGetdiagSchemaName
 )
 
+// Returns a string of the diagnostic item to be printed
 func (k PLpgSQLGetDiagKind) String() string {
 	switch k {
 	case PlpgsqlGetdiagRowCount:
@@ -116,26 +69,85 @@ func (k PLpgSQLGetDiagKind) String() string {
 
 }
 
+// PLpgSQLFetchDirection represents the direction clause passed into a
+// fetch statement.
 type PLpgSQLFetchDirection int
 
+// PLpgSQLCursorOpt represents a cursor option, which describes
+// how a cursor will behave.
+type PLpgSQLCursorOpt uint32
+
+// A  full list of cursor options. Each option describes the expected behavior
+// of the cursor being created.
 const (
-	PLpgSQLFetchForward PLpgSQLFetchDirection = iota
-	// TODO add more, but maybe we have existing enum for this already.
+	PLpgSQLCursorOptNone PLpgSQLCursorOpt = iota
+	PLpgSQLCursorOptBinary
+	PLpgSQLCursorOptScroll
+	PLpgSQLCursorOptNoScroll
+	PLpgSQLCursorOptInsensitive
+	PLpgSQLCursorOptAsensitive
+	PLpgSQLCursorOptHold
+	PLpgSQLCursorOptFastPlan
+	PLpgSQLCursorOptGenericPlan
+	PLpgSQLCursorOptCustomPlan
+	PLpgSQLCursorOptParallelOK
 )
 
-type PLpgSQLPromiseType int
+// Returns a string of the cursor option to be printed
+func (o PLpgSQLCursorOpt) String() string {
+	switch o {
+	case PLpgSQLCursorOptNoScroll:
+		return "NO SCROLL"
+	case PLpgSQLCursorOptScroll:
+		return "SCROLL"
+	case PLpgSQLCursorOptFastPlan:
+		return ""
+	// TODO(jane): implement string representation for other opts.
+	default:
+		return "NOT_IMPLEMENTED_OPT"
+	}
+}
 
-const (
-	PlpgsqlPromiseNone = iota /* not a promise, or promise satisfied */
-	PlpgsqlPromiseTgName
-	PlpgsqlPromiseTgWhen
-	PlpgsqlPromiseTgLevel
-	PlpgsqlPromiseTgOp
-	PlpgsqlPromiseTgRelid
-	PlpgsqlPromiseTgTableName
-	PlpgsqlPromiseTgTableSchema
-	PlpgsqlPromiseTgNargs
-	PlpgsqlPromiseTgArgv
-	PlpgsqlPromiseTgEvent
-	PlpgsqlPromiseTgTag
-)
+// Mask returns the bitmask for a given cursor option.
+func (o PLpgSQLCursorOpt) Mask() uint32 {
+	return 1 << o
+}
+
+// IsSetIn returns true if this cursor option is set in the supplied bitfield.
+func (o PLpgSQLCursorOpt) IsSetIn(bits uint32) bool {
+	return bits&o.Mask() != 0
+}
+
+type plpgSQLCursorOptList []PLpgSQLCursorOpt
+
+// ToBitField returns the bitfield representation of a list of cursor options.
+func (ol plpgSQLCursorOptList) ToBitField() uint32 {
+	var ret uint32
+	for _, o := range ol {
+		ret |= o.Mask()
+	}
+	return ret
+}
+
+// OptListFromBitField returns a list of cursor option to be printed
+func OptListFromBitField(m uint32) plpgSQLCursorOptList {
+	ret := plpgSQLCursorOptList{}
+	opts := []PLpgSQLCursorOpt{
+		PLpgSQLCursorOptBinary,
+		PLpgSQLCursorOptScroll,
+		PLpgSQLCursorOptNoScroll,
+		PLpgSQLCursorOptInsensitive,
+		PLpgSQLCursorOptAsensitive,
+		PLpgSQLCursorOptHold,
+		PLpgSQLCursorOptFastPlan,
+		PLpgSQLCursorOptGenericPlan,
+		PLpgSQLCursorOptCustomPlan,
+		PLpgSQLCursorOptParallelOK,
+	}
+	for _, opt := range opts {
+		if opt.IsSetIn(m) {
+			ret = append(ret, opt)
+		}
+	}
+	return ret
+}
