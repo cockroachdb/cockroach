@@ -358,7 +358,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := raftlog.RaftVersionStandardPrefixByte, raftlog.RaftVersionSideloadedPrefixByte
+	v1, v2 := raftlog.EntryEncodingStandardPrefixByte, raftlog.EntryEncodingSideloadedPrefixByte
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -480,11 +480,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(raftlog.RaftVersionStandardPrefixByte, 10, 99, nil)
-	entV1SST := mkEnt(raftlog.RaftVersionStandardPrefixByte, 11, 99, &addSST)
-	entV2Reg := mkEnt(raftlog.RaftVersionSideloadedPrefixByte, 12, 99, nil)
-	entV2SST := mkEnt(raftlog.RaftVersionSideloadedPrefixByte, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(raftlog.RaftVersionSideloadedPrefixByte, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(raftlog.EntryEncodingStandardPrefixByte, 10, 99, nil)
+	entV1SST := mkEnt(raftlog.EntryEncodingStandardPrefixByte, 11, 99, &addSST)
+	entV2Reg := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 12, 99, nil)
+	entV2SST := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string

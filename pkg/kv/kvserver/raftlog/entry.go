@@ -33,24 +33,24 @@ import (
 func EncodingVersion(ent raftpb.Entry) (EntryEncoding, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
-		return RaftVersionEmptyEntry, nil
+		return EntryEncodingEmpty, nil
 	}
 
 	switch ent.Type {
 	case raftpb.EntryNormal:
 	case raftpb.EntryConfChange:
-		return RaftVersionConfChange, nil
+		return EntryEncodingRaftConfChange, nil
 	case raftpb.EntryConfChangeV2:
-		return RaftVersionConfChangeV2, nil
+		return EntryEncodingRaftConfChangeV2, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
 	switch ent.Data[0] {
-	case RaftVersionStandardPrefixByte:
-		return RaftVersionStandard, nil
-	case RaftVersionSideloadedPrefixByte:
-		return RaftVersionSideloaded, nil
+	case EntryEncodingStandardPrefixByte:
+		return EntryEncodingStandard, nil
+	case EntryEncodingSideloadedPrefixByte:
+		return EntryEncodingSideloaded, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
 	}
@@ -58,8 +58,8 @@ func EncodingVersion(ent raftpb.Entry) (EntryEncoding, error) {
 
 // DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the
 // marshaled kvserverpb.RaftCommand from a slice which is known to have come
-// from a raftpb.Entry of type kvserverbase.RaftVersionStandard or
-// kvserverbase.RaftVersionSideloaded (which, mod the prefix byte, share an
+// from a raftpb.Entry of type kvserverbase.EntryEncodingStandard or
+// kvserverbase.EntryEncodingSideloaded (which, mod the prefix byte, share an
 // encoding).
 func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
@@ -146,16 +146,16 @@ func (e *Entry) load() error {
 		AsV2() raftpb.ConfChangeV2
 	}
 	switch typ {
-	case RaftVersionStandard, RaftVersionSideloaded:
+	case EntryEncodingStandard, EntryEncodingSideloaded:
 		e.ID, raftCmdBytes = DecomposeRaftVersionStandardOrSideloaded(e.Entry.Data)
-	case RaftVersionEmptyEntry:
+	case EntryEncodingEmpty:
 		// Nothing to load, the empty raftpb.Entry is represented by a trivial
 		// Entry.
 		return nil
-	case RaftVersionConfChange:
+	case EntryEncodingRaftConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
 		ccTarget = e.ConfChangeV1
-	case RaftVersionConfChangeV2:
+	case EntryEncodingRaftConfChangeV2:
 		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
 		ccTarget = e.ConfChangeV2
 	default:
