@@ -455,7 +455,7 @@ func newRaft(c *Config) *raft {
 
 func (r *raft) hasLeader() bool { return r.lead != None }
 
-func (r *raft) softState() *SoftState { return &SoftState{Lead: r.lead, RaftState: r.state} }
+func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
