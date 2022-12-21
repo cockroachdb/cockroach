@@ -419,6 +419,14 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 3, "sst")},
 			expectErr:  "inline values are unsupported",
 		},
+		// Regression test for https://github.com/cockroachdb/cockroach/issues/94053.
+		"DisallowConflicts MVCC stats with point tombstone below range tombstone": {
+			noConflict:     true,
+			data:           kvs{rangeKV("a", "c", 3, ""), pointKV("b", 2, ""), pointKV("b", 1, "b1")},
+			sst:            kvs{pointKV("b", 5, "sst")},
+			expect:         kvs{rangeKV("a", "c", 3, ""), pointKV("b", 5, "sst"), pointKV("b", 2, ""), pointKV("b", 1, "b1")},
+			expectStatsEst: !storage.DisableCheckSSTRangeKeyMasking, // assert correct without masking
+		},
 
 		// DisallowShadowing
 		"DisallowShadowing errors above existing": {
