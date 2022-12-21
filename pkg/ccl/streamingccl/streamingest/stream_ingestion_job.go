@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -59,61 +58,6 @@ func completeStreamIngestion(
 			ju.UpdateProgress(md.Progress)
 			return nil
 		})
-}
-
-func getStreamIngestionStatsNoHeartbeat(
-	ctx context.Context,
-	streamIngestionDetails jobspb.StreamIngestionDetails,
-	jobProgress jobspb.Progress,
-) (*streampb.StreamIngestionStats, error) {
-	stats := &streampb.StreamIngestionStats{
-		IngestionDetails:  &streamIngestionDetails,
-		IngestionProgress: jobProgress.GetStreamIngest(),
-	}
-	if highwater := jobProgress.GetHighWater(); highwater != nil && !highwater.IsEmpty() {
-		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
-			MinIngestedTimestamp: *highwater,
-		}
-		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
-		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
-		// TODO(casper): track spans that the slowest partition is associated
-		for _, resolvedSpan := range jobProgress.GetStreamIngest().Checkpoint.ResolvedSpans {
-			if resolvedSpan.Timestamp.Less(lagInfo.EarliestCheckpointedTimestamp) {
-				lagInfo.EarliestCheckpointedTimestamp = resolvedSpan.Timestamp
-			}
-
-			if lagInfo.LatestCheckpointedTimestamp.Less(resolvedSpan.Timestamp) {
-				lagInfo.LatestCheckpointedTimestamp = resolvedSpan.Timestamp
-			}
-		}
-		lagInfo.SlowestFastestIngestionLag = lagInfo.LatestCheckpointedTimestamp.GoTime().
-			Sub(lagInfo.EarliestCheckpointedTimestamp.GoTime())
-		lagInfo.ReplicationLag = timeutil.Since(highwater.GoTime())
-		stats.ReplicationLagInfo = lagInfo
-	}
-	return stats, nil
-}
-
-func getStreamIngestionStats(
-	ctx context.Context,
-	streamIngestionDetails jobspb.StreamIngestionDetails,
-	jobProgress jobspb.Progress,
-) (*streampb.StreamIngestionStats, error) {
-	stats, err := getStreamIngestionStatsNoHeartbeat(ctx, streamIngestionDetails, jobProgress)
-	if err != nil {
-		return nil, err
-	}
-	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
-	if err != nil {
-		return nil, err
-	}
-	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(stats.IngestionDetails.StreamID), hlc.MaxTimestamp)
-	if err != nil {
-		stats.ProducerError = err.Error()
-	} else {
-		stats.ProducerStatus = &streamStatus
-	}
-	return stats, client.Close(ctx)
 }
 
 type streamIngestionResumer struct {
