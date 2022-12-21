@@ -512,8 +512,17 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 2
 		return version
 	}
+	// In cases where the tenant migration fails at the migration step, the
+	// active version will remain at the fence version, which was set before
+	// the migration was attempted.
+	fence := func(version roachpb.Version) roachpb.Version {
+		version.Internal += 1
+		return version
+	}
 	v0 := clusterversion.ByKey(clusterversion.V22_1)
+	v0_fence := fence(v0)
 	v1 := next(v0)
+	v1_fence := fence(v1)
 	v2 := next(v1)
 	versions := []roachpb.Version{v0, v1, v2}
 	var migrationRun, preconditionRun int64
@@ -605,7 +614,7 @@ func TestPrecondition(t *testing.T) {
 		require.Regexp(t, "boom", err)
 		require.Equal(t, int64(2), atomic.LoadInt64(&preconditionRun))
 		require.Equal(t, int64(1), atomic.LoadInt64(&migrationRun))
-		checkActiveVersion(t, v0)
+		checkActiveVersion(t, v0_fence)
 	}
 	migrationErr.Store(false)
 	{
@@ -615,15 +624,15 @@ func TestPrecondition(t *testing.T) {
 		require.Equal(t, int64(2), atomic.LoadInt64(&migrationRun))
 		checkActiveVersion(t, v1)
 	}
-	preconditionErr.Store(true)
 	migrationErr.Store(true)
 	{
 		_, err := sqlDB.Exec("SET CLUSTER SETTING version = $1", v2.String())
 		require.Regexp(t, "boom", err)
-		// Note that the precondition is no longer run.
+		// Note that there is no precondition for this second upgrade. This
+		// case will fail at the migration step.
 		require.Equal(t, int64(3), atomic.LoadInt64(&preconditionRun))
 		require.Equal(t, int64(3), atomic.LoadInt64(&migrationRun))
-		checkActiveVersion(t, v1)
+		checkActiveVersion(t, v1_fence)
 	}
 	migrationErr.Store(false)
 	{

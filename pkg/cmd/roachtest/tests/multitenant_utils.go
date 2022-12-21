@@ -73,12 +73,13 @@ func createTenantCertNodes(nodes option.NodeListOption) createTenantOpt {
 	return func(c *createTenantOptions) { c.certNodes = nodes }
 }
 
-func createTenantNode(
+func createTenantNodeInternal(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	kvnodes option.NodeListOption,
 	tenantID, node, httpPort, sqlPort int,
+	certs bool,
 	opts ...createTenantOpt,
 ) *tenantNode {
 	var createOptions createTenantOptions
@@ -103,8 +104,32 @@ func createTenantNode(
 		err := tn.recreateClientCertsWithTenantScope(ctx, c, createOptions.otherTenantIDs)
 		require.NoError(t, err)
 	}
-	tn.createTenantCert(ctx, t, c, createOptions.certNodes)
+	if certs {
+		tn.createTenantCert(ctx, t, c, createOptions.certNodes)
+	}
 	return tn
+}
+
+func createTenantNode(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	kvnodes option.NodeListOption,
+	tenantID, node, httpPort, sqlPort int,
+	opts ...createTenantOpt,
+) *tenantNode {
+	return createTenantNodeInternal(ctx, t, c, kvnodes, tenantID, node, httpPort, sqlPort, true /* certs */, opts...)
+}
+
+func createTenantNodeNoCerts(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	kvnodes option.NodeListOption,
+	tenantID, node, httpPort, sqlPort int,
+	opts ...createTenantOpt,
+) *tenantNode {
+	return createTenantNodeInternal(ctx, t, c, kvnodes, tenantID, node, httpPort, sqlPort, false /* certs */, opts...)
 }
 
 // cockroachBinSupportsTenantScope is a hack to figure out if the version of
