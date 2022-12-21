@@ -97,6 +97,8 @@ statement ok
 INSERT INTO data SELECT a, b, c::FLOAT, 1
 FROM generate_series(1,10) AS a, generate_series(1,10) AS b, generate_series(1,10) AS c;
 
+# Skip on 22.2 due to flakiness (issue #92989).
+skipif cockroachdb
 query T
 EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON a FROM data
 ----
@@ -112,6 +114,8 @@ network usage: <hidden>
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkVttq4zoUfT9fIfZTC05tyU6a-qk9oQdC6YUk9OUQBtXeeEwcySPJtJ2Sz5ofmC8bbI3JpJPYbkih0JdS7YvX2nstO3oB_S2DEEaTy4vZJZnOLmbj6Ww8mhJNye0N4eS_ye01ibnh4ICQMd7wJWoI_wcKDjBwwAcHAnCgD3MHciUj1FqqsuSlahjHTxB6DqQiL0wZnjsQSYUQvoBJTYYQwow_ZDhBHqNyPXAgRsPTrIIpoc_LP1_yBT6DAyOZFUuhQ1Iymua8_LfnUsJFTCiR5isqcODqnph0iSHxfv7Q9hxJYVCYVIq_Uko-aqKQxyGhnmdjD88G6-DQ88i_NpxM7kYk4lmm69rr-9GIaIM5iWQhDDnCJ-OmwhyHxHPXBYiLXQUVvCxMXhj70PnKAXv-vTBteIIQ0pXTfalTvswzVG5_c6E2PE2_Y4VVjTA13ITknO4EZjuB13iFkCpGhfEG3ny1k9pFkihMuJHKpV53kuSIeR55KKIFGn28k7K_QZl2NyDdw4Au7bnsUBZk2yxITwbkKt1iQvYeJmSdTdiy2NqEg4ObkHVXlO2jKOu5_qdUtGWxtaKnB1fU766ov4-ifs8NPqWiLYutFR0eXNGgu6LBPooGPbd_KEX9bYqyE3-7ov57KOp3VrRlsbWiZ-_6078FeII6l0LjqyvA9id75dUA4wTtPULLQkV4p2RUwdjjbdVXBWLUxmapPYyFTZUE_2ymjc1so5m-bmbNyC3QfmN30NwcvIV3tcVqoSDQPEq1sGbWKKpvQ3mLqRPW0Taz_kbV2SVqzZN1gTXhJrV-I7VB81yDjzvXaSO1YfNcw48711mzi72WF6j59XvTZP7OydhJ0DJZv5xsvvrnVwAAAP__buCuCA==
 
+# Skip on 22.2 due to flakiness (issue #92989).
+skipif cockroachdb
 query T retry
 EXPLAIN (DISTSQL, TYPES) SELECT * FROM data
 ----
