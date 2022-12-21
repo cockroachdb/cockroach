@@ -11,9 +11,9 @@
 package parser
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -83,7 +83,7 @@ func (p *Parser) Parse(sql string) (Statement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
-func (p *Parser) scanOneStmt() (sql string, tokens []plpgsqlSymType, done bool) {
+func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) {
 	var lval plpgsqlSymType
 	tokens = p.tokBuf[:0]
 
@@ -116,7 +116,7 @@ func (p *Parser) parseWithDepth(
 ) (Statement, error) {
 	p.scanner.Init(plpgsql)
 	defer p.scanner.Cleanup()
-	sql, tokens, done := p.scanOneStmt()
+	sql, tokens, done := p.scanFnBlock()
 	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
 	if err != nil {
 		return Statement{}, err
