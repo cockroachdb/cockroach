@@ -163,7 +163,8 @@ sure the username and password are correct.
 `
 
 var throttledError = errors.WithHint(
-	newErrorf(codeProxyRefusedConnection, "connection attempt throttled"),
+	withCode(errors.New(
+		"connection attempt throttled"), codeProxyRefusedConnection),
 	throttledErrorHint)
 
 // newProxyHandler will create a new proxy handler with configuration based on
@@ -334,7 +335,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	// should be careful with the details that we want to expose.
 	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, fe)
 	if err != nil {
-		clientErr := &codeError{codeParamsRoutingFailed, err}
+		clientErr := withCode(err, codeParamsRoutingFailed)
 		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
 		return clientErr
@@ -347,7 +348,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	// correctly parsing the IP address here.
 	ipAddr, _, err := addr.SplitHostPort(fe.Conn.RemoteAddr().String(), "")
 	if err != nil {
-		clientErr := newErrorf(codeParamsRoutingFailed, "unexpected connection address")
+		clientErr := withCode(errors.New(
+			"unexpected connection address"), codeParamsRoutingFailed)
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
 		return clientErr
@@ -358,7 +360,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	removeListener, err := handler.denyListWatcher.ListenForDenied(
 		denylist.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
 		func(err error) {
-			err = newErrorf(codeExpiredClientConnection, "connection added to deny list: %v", err)
+			err = withCode(errors.Wrap(err,
+				"connection added to deny list"), codeExpiredClientConnection)
 			select {
 			case errConnection <- err: /* error reported */
 			default: /* the channel already contains an error */
@@ -367,7 +370,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	)
 	if err != nil {
 		log.Errorf(ctx, "connection matched denylist: %v", err)
-		err = newErrorf(codeProxyRefusedConnection, "connection refused")
+		err = withCode(errors.New(
+			"connection refused"), codeProxyRefusedConnection)
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
 		return err
 	}
@@ -835,18 +839,18 @@ func parseOptionsParam(optionsParam string) (clusterIdentifier, newOptionsParam 
 const clusterIdentifierHint = `Ensure that your cluster identifier is uniquely specified using any of the
 following methods:
 
-1) Database parameter:
-   Use "<cluster identifier>.<database name>" as the database parameter.
-   (e.g. database="active-roach-42.defaultdb")
+1) Host name:
+   Use a driver that supports server name identification (SNI) with TLS 
+   connection and the hostname assigned to your cluster 
+   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
 
 2) Options parameter:
    Use "--cluster=<cluster identifier>" as the options parameter.
    (e.g. options="--cluster=active-roach-42")
 
-3) Host name:
-   Use a driver that supports server name identification (SNI) with TLS 
-   connection and the hostname assigned to your cluster 
-   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
+3) Database parameter:
+   Use "<cluster identifier>.<database name>" as the database parameter.
+   (e.g. database="active-roach-42.defaultdb")
 
 For more details, please visit our docs site at:
 	https://www.cockroachlabs.com/docs/cockroachcloud/connect-to-a-serverless-cluster

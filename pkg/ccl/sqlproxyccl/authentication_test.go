@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,9 +187,7 @@ func TestAuthenticateError(t *testing.T) {
 
 	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
 	require.Error(t, err)
-	codeErr := (*codeError)(nil)
-	require.True(t, errors.As(err, &codeErr))
-	require.Equal(t, codeAuthFailed, codeErr.code)
+	require.Equal(t, codeAuthFailed, getErrorCode(err))
 }
 
 func TestAuthenticateUnexpectedMessage(t *testing.T) {
@@ -212,9 +209,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	srv.Close()
 
 	require.Error(t, err)
-	codeErr := (*codeError)(nil)
-	require.True(t, errors.As(err, &codeErr))
-	require.Equal(t, codeBackendDisconnected, codeErr.code)
+	require.Equal(t, codeBackendDisconnected, getErrorCode(err))
 }
 
 func TestReadTokenAuthResult(t *testing.T) {
@@ -230,9 +225,7 @@ func TestReadTokenAuthResult(t *testing.T) {
 
 		_, err := readTokenAuthResult(cli)
 		require.Error(t, err)
-		codeErr := (*codeError)(nil)
-		require.True(t, errors.As(err, &codeErr))
-		require.Equal(t, codeBackendDisconnected, codeErr.code)
+		require.Equal(t, codeBackendDisconnected, getErrorCode(err))
 	})
 
 	t.Run("error_response", func(t *testing.T) {
@@ -245,9 +238,7 @@ func TestReadTokenAuthResult(t *testing.T) {
 
 		_, err := readTokenAuthResult(cli)
 		require.Error(t, err)
-		codeErr := (*codeError)(nil)
-		require.True(t, errors.As(err, &codeErr))
-		require.Equal(t, codeAuthFailed, codeErr.code)
+		require.Equal(t, codeAuthFailed, getErrorCode(err))
 	})
 
 	t.Run("successful", func(t *testing.T) {

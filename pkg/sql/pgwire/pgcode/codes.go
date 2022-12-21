@@ -56,6 +56,7 @@ var (
 	SQLserverRejectedEstablishmentOfSQLconnection = MakeCode("08004")
 	TransactionResolutionUnknown                  = MakeCode("08007")
 	ProtocolViolation                             = MakeCode("08P01")
+	ProxyConnectionError                          = MakeCode("08C00")
 	// Section: Class 09 - Triggered Action Exception
 	TriggeredActionException = MakeCode("09000")
 	// Section: Class 0A - Feature Not Supported
