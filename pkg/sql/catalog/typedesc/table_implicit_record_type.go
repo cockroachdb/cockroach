@@ -58,7 +58,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	typs := make([]*types.T, len(cols))
 	names := make([]string, len(cols))
 	for i, col := range cols {
-		if col.GetType().UserDefined() && !col.GetType().IsHydrated() {
+		if !ColumnIsHydrated(col) {
 			return nil, errors.AssertionFailedf("encountered unhydrated col %s while creating implicit record type from"+
 				" table %s", col.ColName(), descriptor.GetName())
 		}
@@ -109,6 +109,21 @@ func CreateImplicitRecordTypeFromTableDesc(
 			Version:    tablePrivs.Version,
 		},
 	}, nil
+}
+
+// TableIsHydrated checks if all visible columns of a table are hydrated.
+func TableIsHydrated(tbl catalog.TableDescriptor) bool {
+	for _, col := range tbl.VisibleColumns() {
+		if !ColumnIsHydrated(col) {
+			return false
+		}
+	}
+	return true
+}
+
+// ColumnIsHydrated checks if a column is type hydrated.
+func ColumnIsHydrated(col catalog.Column) bool {
+	return !col.GetType().UserDefined() || col.GetType().IsHydrated()
 }
 
 // GetName implements the Namespace interface.
