@@ -631,6 +631,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			break
 		}
 		ri.Seek(ctx, rs.Key, scanDir)
+		if !ri.Valid() {
+			return ri.Error()
+		}
 	}
 
 	if streamerLocked {
