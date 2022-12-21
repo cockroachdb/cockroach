@@ -16,13 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 )
 
-// RaftCommandEncodingVersion versions CockroachDB's raft entries.
-// A raftpb.Entry's RaftCommandEncodingVersion is a function of the
-// Entry's raftpb.EntryType and, in some cases, the first byte of the
-// Entry's Data payload.
+// EntryEncoding enumerates the encodings used in CockroachDB for raftpb.Entry.
 //
-// TODO(tbg): rename to RaftCommandEncoding.
-type RaftCommandEncodingVersion byte
+// A raftpb.Entry's EntryEncoding is determined by the Entry's raftpb.EntryType
+// and, in some cases, the first byte of the Entry's Data payload.
+type EntryEncoding byte
 
 const (
 	// RaftVersionStandard is the default encoding for a CockroachDB raft log
@@ -32,7 +30,7 @@ const (
 	// or whose first byte matches RaftVersionStandardPrefixByte. The subsequent
 	// eight bytes represent a CmdIDKey. The remaining bytes represent a
 	// kvserverpb.RaftCommand.
-	RaftVersionStandard RaftCommandEncodingVersion = 0
+	RaftVersionStandard EntryEncoding = 0
 	// RaftVersionSideloaded indicates a proposal representing the result of a
 	// roachpb.AddSSTableRequest for which the payload (the SST) is stored outside
 	// the storage engine to improve storage performance.
@@ -45,21 +43,21 @@ const (
 	// which is an SST to be ingested (and which is present in memory but made
 	// durable via direct storage on the filesystem, bypassing the storage
 	// engine).
-	RaftVersionSideloaded RaftCommandEncodingVersion = 1
+	RaftVersionSideloaded EntryEncoding = 1
 	// RaftVersionEmptyEntry is an empty entry. These are used by raft after
 	// leader election. Since they hold no data, there is nothing in them to
 	// decode.
-	RaftVersionEmptyEntry RaftCommandEncodingVersion = 253
+	RaftVersionEmptyEntry EntryEncoding = 253
 	// RaftVersionConfChange is a raftpb.Entry whose raftpb.EntryType is
 	// raftpb.EntryConfChange. The Entry's Data field holds a raftpb.ConfChange
 	// whose Context field is a kvserverpb.ConfChangeContext whose Payload is a
 	// kvserverpb.RaftCommand. In particular, the CmdIDKey requires a round of
 	// protobuf unmarshaling.
-	RaftVersionConfChange RaftCommandEncodingVersion = 254
+	RaftVersionConfChange EntryEncoding = 254
 	// RaftVersionConfChangeV2 is analogous to RaftVersionConfChange, with
 	// the replacements raftpb.EntryConfChange{,V2} and raftpb.ConfChange{,V2}
 	// applied.
-	RaftVersionConfChangeV2 RaftCommandEncodingVersion = 255
+	RaftVersionConfChangeV2 EntryEncoding = 255
 )
 
 // TODO(tbg): when we have a good library for encoding entries, these should
