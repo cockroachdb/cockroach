@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -336,12 +336,9 @@ func (s *PLpgSQLStmtAssert) Format(ctx *tree.FmtCtx) {
 // stmt_execsql
 type PLpgSQLStmtExecSql struct {
 	PLpgSQLStatementImpl
-	SqlStmt            string
-	IsModifyingStmt    bool            // is the stmt insert/update/delete/merge?
-	IsModifyingStmtSet bool            // is the stmt valid yet?
-	Into               bool            // INTO provided?
-	Strict             bool            // INTO STRICT flag
-	Target             PLpgSQLVariable // INTO target (record variable or row variable)
+	SqlStmt string
+	Into    bool // INTO provided?
+	Strict  bool // INTO STRICT flag
 }
 
 func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
@@ -443,8 +440,7 @@ type PLpgSQLStmtGetDiagItemList []*PLpgSQLStmtGetDiagItem
 // stmt_open
 type PLpgSQLStmtOpen struct {
 	PLpgSQLStatementImpl
-	CurVar int // TODO this could just a PLpgSQLVariable
-
+	CurVar        int // TODO this could just a PLpgSQLVariable
 	CursorOptions uint32
 	// TODO(jane): This is temporary and we should remove it and use CurVar.
 	CursorName       string

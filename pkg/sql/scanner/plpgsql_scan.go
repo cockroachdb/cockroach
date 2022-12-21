@@ -11,10 +11,10 @@
 package scanner
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/plpgsqllexbase"
 	"unicode/utf8"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
 )
 
 // PLPGSQLScanner is a scanner with a PLPGSQL specific scan function
@@ -25,28 +25,16 @@ type PLPGSQLScanner struct {
 // Scan scans the next token and populates its information into lval.
 // This scan function contains rules for plpgsql.
 func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
-	lval.SetID(0)
-	lval.SetPos(int32(s.pos))
-	lval.SetStr("EOF")
+	ch, skipWhiteSpace := s.scanSetup(lval)
 
-	if _, ok := s.skipWhitespace(lval, true); !ok {
+	if skipWhiteSpace {
 		return
 	}
-
-	ch := s.next()
-	if ch == eof {
-		lval.SetPos(int32(s.pos))
-		return
-	}
-
-	lval.SetID(int32(ch))
-	lval.SetPos(int32(s.pos - 1))
-	lval.SetStr(s.in[lval.Pos():s.pos])
 
 	switch ch {
 	case '$':
 		if s.scanDollarQuotedString(lval) {
-			lval.SetID(plpgsqllexbase.SCONST)
+			lval.SetID(lexbase.SCONST)
 			return
 		}
 		return
@@ -54,14 +42,14 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 	case identQuote:
 		// "[^"]"
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(plpgsqllexbase.IDENT)
+			lval.SetID(lexbase.IDENT)
 		}
 		return
 
 	case singleQuote:
 		// '[^']'
 		if s.scanString(lval, ch, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(plpgsqllexbase.SCONST)
+			lval.SetID(lexbase.SCONST)
 		}
 		return
 
@@ -71,7 +59,7 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 			// b'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
-				lval.SetID(plpgsqllexbase.BCONST)
+				lval.SetID(lexbase.BCONST)
 			}
 			return
 		}
@@ -82,7 +70,7 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 		switch t := s.peek(); {
 		case t == '.': // ..
 			s.pos++
-			lval.SetID(plpgsqllexbase.DOT_DOT)
+			lval.SetID(lexbase.DOT_DOT)
 			return
 		case lexbase.IsDigit(t):
 			s.scanNumber(lval, ch)
@@ -94,7 +82,7 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case '=': // !=
 			s.pos++
-			lval.SetID(plpgsqllexbase.NOT_EQUALS)
+			lval.SetID(lexbase.NOT_EQUALS)
 			return
 		}
 		return
@@ -103,11 +91,11 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case '<': // <<
 			s.pos++
-			lval.SetID(plpgsqllexbase.LESS_LESS)
+			lval.SetID(lexbase.LESS_LESS)
 			return
 		case '=': // <=
 			s.pos++
-			lval.SetID(plpgsqllexbase.LESS_EQUALS)
+			lval.SetID(lexbase.LESS_EQUALS)
 			return
 		}
 		return
@@ -116,11 +104,11 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case '>': // >>
 			s.pos++
-			lval.SetID(plpgsqllexbase.GREATER_GREATER)
+			lval.SetID(lexbase.GREATER_GREATER)
 			return
 		case '=': // >=
 			s.pos++
-			lval.SetID(plpgsqllexbase.GREATER_EQUALS)
+			lval.SetID(lexbase.GREATER_EQUALS)
 			return
 		}
 		return
@@ -129,11 +117,11 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 		switch s.peek() {
 		case ':':
 			s.pos++
-			lval.SetID(plpgsqllexbase.TYPECAST)
+			lval.SetID(lexbase.TYPECAST)
 			return
 		case '=':
 			s.pos++
-			lval.SetID(plpgsqllexbase.COLON_EQUALS)
+			lval.SetID(lexbase.COLON_EQUALS)
 			return
 		}
 		return
@@ -202,5 +190,5 @@ func (s *PLPGSQLScanner) scanIdent(lval ScanSymType) {
 		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
 	}
 
-	lval.SetID(plpgsqllexbase.GetKeywordID(lval.Str()))
+	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }

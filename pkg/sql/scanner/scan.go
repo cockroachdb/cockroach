@@ -133,8 +133,7 @@ func (s *Scanner) finishString(buf []byte) string {
 	return str
 }
 
-// Scan scans the next token and populates its information into lval.
-func (s *SQLScanner) Scan(lval ScanSymType) {
+func (s *Scanner) scanSetup(lval ScanSymType) (int, bool) {
 	lval.SetID(0)
 	lval.SetPos(int32(s.pos))
 	lval.SetStr("EOF")
@@ -142,19 +141,29 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 	s.lastAttemptedID = 0
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
-		return
+		return 0, true
 	}
 
 	ch := s.next()
 	if ch == eof {
 		lval.SetPos(int32(s.pos))
-		return
+		return ch, false
 	}
 
 	lval.SetID(int32(ch))
 	lval.SetPos(int32(s.pos - 1))
 	lval.SetStr(s.in[lval.Pos():s.pos])
 	s.lastAttemptedID = int32(ch)
+	return ch, false
+}
+
+// Scan scans the next token and populates its information into lval.
+func (s *SQLScanner) Scan(lval ScanSymType) {
+	ch, skipWhiteSpace := s.scanSetup(lval)
+
+	if skipWhiteSpace {
+		return
+	}
 
 	switch ch {
 	case '$':
@@ -582,7 +591,6 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 	// of whether the string is only ASCII or only ASCII lowercase for later.
 	for {
 		ch := s.peek()
-		//fmt.Println(ch, ch >= utf8.RuneSelf, ch >= 'A' && ch <= 'Z')
 
 		if ch >= utf8.RuneSelf {
 			isASCII = false
@@ -596,7 +604,6 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 
 		s.pos++
 	}
-	//fmt.Println("parsed: ", s.in[start:s.pos], isASCII, isLower)
 
 	if isLower && isASCII {
 		// Already lowercased - nothing to do.
