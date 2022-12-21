@@ -1,0 +1,36 @@
+new-cluster name=s1
+----
+
+subtest double-db
+
+exec-sql
+CREATE DATABASE db1;
+DROP DATABASE db1;
+CREATE DATABASE db1;
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/doubleDB' WITH revision_history;
+----
+
+new-cluster name=s2 share-io-dir=s1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/doubleDB'
+----
+
+exec-sql
+DROP DATABASE db1;
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/doubleDB';
+----
+
+query-sql
+SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'db1'
+----
+1
+
+subtest end
