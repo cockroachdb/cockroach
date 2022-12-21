@@ -181,6 +181,10 @@ type TestTenantInterface interface {
 	// SHOW RANGES from a secondary tenant should call this to avoid races.
 	WaitForTenantEndKeySplit(ctx context.Context) error
 
+	// MigrationServer returns the tenant's migration server, which is used in
+	// upgrade testing.
+	MigrationServer() interface{}
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.

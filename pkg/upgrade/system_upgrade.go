@@ -13,11 +13,9 @@ package upgrade
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,23 +27,28 @@ import (
 // Cluster abstracts a physical KV cluster and can be utilized by a long-running
 // upgrade.
 type Cluster interface {
-	// NumNodes returns the number of nodes in the cluster. This is merely a
-	// convenience method and is not meant to be used to infer cluster stability;
-	// for that, use UntilClusterStable.
-	NumNodes(ctx context.Context) (int, error)
+	// NumNodesOrTenantPods returns the number of nodes or tenant pods in the
+	// cluster. This is merely a convenience method and is not meant to be used
+	// to infer cluster stability; for that, use UntilClusterStable.
+	NumNodesOrTenantPods(ctx context.Context) (int, error)
 
-	// ForEveryNode is a short hand to execute the given closure (named by the
-	// informational parameter op) against every node in the cluster at a given
-	// point in time. Given it's possible for nodes to join or leave the cluster
-	// during (we don't make any guarantees for the ordering of cluster membership
-	// events), we only expect this to be used in conjunction with
-	// UntilClusterStable (see the comment there for how these two primitives can be
-	// put together).
-	ForEveryNode(
+	// ForEveryNodeOrTenantPod executes the given closure (named by the
+	// informational parameter op) against every node or tenant pod in the
+	// cluster at a given point in time. Given it's possible for nodes/pods to
+	// join or leave the cluster during (we don't make any guarantees on the
+	// ordering of cluster membership events), we only expect this to be used in
+	// conjunction with UntilClusterStable (see the comment there for how these
+	// two primitives can be put together).
+	ForEveryNodeOrTenantPod(
 		ctx context.Context,
 		op string,
 		fn func(context.Context, serverpb.MigrationClient) error,
 	) error
+
+	// ValidateAfterUpdateSystemVersion performs any required validation after
+	// the system version is updated. This is used to perform additional
+	// validation during the tenant upgrade interlock.
+	ValidateAfterUpdateSystemVersion(ctx context.Context) error
 
 	// UntilClusterStable invokes the given closure until the cluster membership
 	// is stable, i.e once the set of nodes in the cluster before and after the
@@ -73,7 +76,7 @@ type Cluster interface {
 	//
 	// To consider an example of how this primitive is used, let's consider our
 	// use of it to bump the cluster version. We use in conjunction with
-	// ForEveryNode, where after we return, we can rely on the guarantee that all
+	// ForEveryNodeOrTenantPod, where after we return, we can rely on the guarantee that all
 	// nodes in the cluster will have their cluster versions bumped. This then
 	// implies that future node additions will observe the latest version (through
 	// the join RPC). That in turn lets us author upgrades that can assume that
@@ -112,7 +115,6 @@ type SystemDeps struct {
 	DB          descs.DB
 	Settings    *cluster.Settings
 	JobRegistry *jobs.Registry
-	DistSender  *kvcoord.DistSender
 	Stopper     *stop.Stopper
 	KeyVisKnobs *keyvisualizer.TestingKnobs
 }

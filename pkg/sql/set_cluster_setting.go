@@ -501,7 +501,7 @@ func setVersionSetting(
 	// Updates the version inside the system.settings table.
 	// If we are already at or above the target version, then this
 	// function is idempotent.
-	updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion) error {
+	updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion, postSettingValidate func(ctx context.Context) error) error {
 		rawValue, err := protoutil.Marshal(&version)
 		if err != nil {
 			return err
@@ -557,6 +557,16 @@ func setVersionSetting(
 					return err
 				}
 			}
+
+			// Perform any necessary post-setting validation. This is used in
+			// the tenant upgrade interlock to ensure that the set of sql
+			// servers present at the time of the settings update, matches the
+			// set that was present when the fence bump occurred (see comment in
+			// upgrademanager.Migrate() for more details).
+			if err = postSettingValidate(ctx); err != nil {
+				return err
+			}
+
 			return err
 		})
 	}

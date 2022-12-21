@@ -81,6 +81,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/testutils",

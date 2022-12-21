@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "//pkg/upgrade",
         "//pkg/upgrade/migrationstable",
         "//pkg/upgrade/upgradebase",
