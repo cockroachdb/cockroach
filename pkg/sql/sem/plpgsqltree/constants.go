@@ -136,3 +136,76 @@ const (
 	PlpgsqlPromiseTgEvent
 	PlpgsqlPromiseTgTag
 )
+
+type PLpgSQLCursorOpt uint32
+
+const (
+	PLpgSQLCursorOptNone PLpgSQLCursorOpt = iota
+	PLpgSQLCursorOptBinary
+	PLpgSQLCursorOptScroll
+	PLpgSQLCursorOptNoScroll
+	PLpgSQLCursorOptInsensitive
+	PLpgSQLCursorOptAsensitive
+	PLpgSQLCursorOptHold
+	PLpgSQLCursorOptFastPlan
+	PLpgSQLCursorOptGenericPlan
+	PLpgSQLCursorOptCustomPlan
+	PLpgSQLCursorOptParallelOK
+)
+
+func (o PLpgSQLCursorOpt) String() string {
+	switch o {
+	case PLpgSQLCursorOptNoScroll:
+		return "NO SCROLL"
+	case PLpgSQLCursorOptScroll:
+		return "SCROLL"
+	case PLpgSQLCursorOptFastPlan:
+		return ""
+	// TODO(jane): implement string representation for other opts.
+	default:
+		return "NOT_IMPLEMENTED_OPT"
+	}
+}
+
+// Mask returns the bitmask for a given cursor option.
+func (o PLpgSQLCursorOpt) Mask() uint32 {
+	return 1 << o
+}
+
+// IsSetIn returns true if this cursor option is set in the supplied bitfield.
+func (o PLpgSQLCursorOpt) IsSetIn(bits uint32) bool {
+	return bits&o.Mask() != 0
+}
+
+type PLpgSQLCursorOptList []PLpgSQLCursorOpt
+
+// ToBitField returns the bitfield representation of a list of cursor options.
+func (ol PLpgSQLCursorOptList) ToBitField() uint32 {
+	var ret uint32
+	for _, o := range ol {
+		ret |= o.Mask()
+	}
+	return ret
+}
+
+func OptListFromBitField(m uint32) PLpgSQLCursorOptList {
+	ret := PLpgSQLCursorOptList{}
+	opts := []PLpgSQLCursorOpt{
+		PLpgSQLCursorOptBinary,
+		PLpgSQLCursorOptScroll,
+		PLpgSQLCursorOptNoScroll,
+		PLpgSQLCursorOptInsensitive,
+		PLpgSQLCursorOptAsensitive,
+		PLpgSQLCursorOptHold,
+		PLpgSQLCursorOptFastPlan,
+		PLpgSQLCursorOptGenericPlan,
+		PLpgSQLCursorOptCustomPlan,
+		PLpgSQLCursorOptParallelOK,
+	}
+	for _, opt := range opts {
+		if opt.IsSetIn(m) {
+			ret = append(ret, opt)
+		}
+	}
+	return ret
+}
