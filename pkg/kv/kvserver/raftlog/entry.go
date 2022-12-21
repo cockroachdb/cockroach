@@ -46,21 +46,21 @@ func EncodingVersion(ent raftpb.Entry) (kvserverbase.RaftCommandEncodingVersion,
 		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
-	v := kvserverbase.RaftCommandEncodingVersion(ent.Data[0])
-	switch v {
-	case kvserverbase.RaftVersionStandard:
-	case kvserverbase.RaftVersionSideloaded:
+	switch ent.Data[0] {
+	case kvserverbase.RaftVersionStandardPrefixByte:
+		return kvserverbase.RaftVersionStandard, nil
+	case kvserverbase.RaftVersionSideloadedPrefixByte:
+		return kvserverbase.RaftVersionSideloaded, nil
 	default:
-		return 0, errors.AssertionFailedf("unknown command encoding version %d", v)
+		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
 	}
-
-	return v, nil
 }
 
-// DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the marshaled
-// kvserverpb.RaftCommand from a slice which is known to have come from a
-// raftpb.Entry of type kvserverbase.RaftVersionStandard or
-// kvserverbase.RaftVersionSideloaded (which share an encoding).
+// DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the
+// marshaled kvserverpb.RaftCommand from a slice which is known to have come
+// from a raftpb.Entry of type kvserverbase.RaftVersionStandard or
+// kvserverbase.RaftVersionSideloaded (which, mod the prefix byte, share an
+// encoding).
 func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	return kvserverbase.CmdIDKey(data[1 : 1+kvserverbase.RaftCommandIDLen]), data[1+kvserverbase.RaftCommandIDLen:]
 }

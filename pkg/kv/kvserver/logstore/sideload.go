@@ -125,7 +125,7 @@ func MaybeSideloadEntries(
 		// TODO(tbg): this should be supported by a method as well.
 		{
 			data := make([]byte, kvserverbase.RaftCommandPrefixLen+e.Cmd.Size())
-			kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, e.ID)
+			kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloadedPrefixByte, e.ID)
 			_, err := protoutil.MarshalTo(&e.Cmd, data[kvserverbase.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
@@ -214,7 +214,7 @@ func MaybeInlineSideloadedRaftCommand(
 	// the RaftCommandEncodingVersion.
 	{
 		data := make([]byte, kvserverbase.RaftCommandPrefixLen+e.Cmd.Size())
-		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, e.ID)
+		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloadedPrefixByte, e.ID)
 		_, err := protoutil.MarshalTo(&e.Cmd, data[kvserverbase.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err

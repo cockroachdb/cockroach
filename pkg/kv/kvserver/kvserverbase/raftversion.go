@@ -17,16 +17,15 @@ import "fmt"
 // Entry's raftpb.EntryType and, in some cases, the first byte of the
 // Entry's Data payload.
 //
-// TODO(tbg): it versions them, but there are really different types
-// and none of them is deprecated, so consider renaming this.
+// TODO(tbg): rename to RaftCommandEncoding.
 type RaftCommandEncodingVersion byte
 
 const (
 	// RaftVersionStandard is the default encoding for a CockroachDB raft log
 	// entry.
 	//
-	// This is a raftpb.Entry of type EntryNormal whose Data slice is either
-	// empty or whose first byte matches RaftVersionStandard. The subsequent
+	// This is a raftpb.Entry of type EntryNormal whose Data slice is either empty
+	// or whose first byte matches RaftVersionStandardPrefixByte. The subsequent
 	// eight bytes represent a CmdIDKey. The remaining bytes represent a
 	// kvserverpb.RaftCommand.
 	RaftVersionStandard RaftCommandEncodingVersion = 0
@@ -35,11 +34,12 @@ const (
 	// the storage engine to improve storage performance.
 	//
 	// This is a raftpb.Entry of type EntryNormal whose data slice is either empty
-	// or whose first byte matches RaftVersionSideloaded. The remaining bytes
-	// represent a kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult
-	// holds a nontrival kvserverpb.ReplicatedEvalResult_AddSSTable, the Data
-	// field of which is an SST to be ingested (and which is present in memory but
-	// made durable via direct storage on the filesystem, bypassing the storage
+	// or whose first byte matches RaftVersionSideloadedPrefixByte. The subsequent
+	// eight bytes represent a CmdIDKey. The remaining bytes represent a
+	// kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult holds a
+	// nontrival kvserverpb.ReplicatedEvalResult_AddSSTable, the Data field of
+	// which is an SST to be ingested (and which is present in memory but made
+	// durable via direct storage on the filesystem, bypassing the storage
 	// engine).
 	RaftVersionSideloaded RaftCommandEncodingVersion = 1
 	// RaftVersionEmptyEntry is an empty entry. These are used by raft after
@@ -68,26 +68,30 @@ const (
 	// bytes after the prefix represent the kvserverpb.RaftCommand.
 	//
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
+	// RaftVersionStandardPrefixByte is the first byte of a raftpb.Entry's
+	// Data slice for an Entry of encoding RaftVersionStandard.
+	RaftVersionStandardPrefixByte = byte(0)
+	// RaftVersionSideloadedPrefixByte is the first byte of a raftpb.Entry's Data
+	// slice for an Entry of encoding RaftVersionSideloaded.
+	RaftVersionSideloadedPrefixByte = byte(1)
 )
 
 // EncodeRaftCommand encodes a raft command (including the versioning prefix).
-func EncodeRaftCommand(
-	version RaftCommandEncodingVersion, commandID CmdIDKey, command []byte,
-) []byte {
+func EncodeRaftCommand(prefixByte byte, commandID CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
-	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], version, commandID)
+	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], prefixByte, commandID)
 	copy(b[RaftCommandPrefixLen:], command)
 	return b
 }
 
 // EncodeRaftCommandPrefix encodes the versioning prefix for a Raft command.
-func EncodeRaftCommandPrefix(b []byte, version RaftCommandEncodingVersion, commandID CmdIDKey) {
+func EncodeRaftCommandPrefix(b []byte, prefixByte byte, commandID CmdIDKey) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
 	}
 	if len(b) != RaftCommandPrefixLen {
 		panic(fmt.Sprintf("invalid command prefix length; %d != %d", len(b), RaftCommandPrefixLen))
 	}
-	b[0] = byte(version)
+	b[0] = prefixByte
 	copy(b[1:], commandID)
 }
