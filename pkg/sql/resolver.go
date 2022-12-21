@@ -720,7 +720,8 @@ func expandIndexName(
 		p,
 		index,
 		tree.IndexLookupFlags{
-			Required: requireTable,
+			Required:              requireTable,
+			IncludeNonActiveIndex: true,
 		},
 	)
 	if err != nil {
@@ -768,8 +769,8 @@ func (p *planner) getTableAndIndexImpl(
 	_, resolvedPrefix, tbl, idx, err := resolver.ResolveIndex(
 		ctx, p, tableWithIndex,
 		tree.IndexLookupFlags{
-			Required:           true,
-			RequireActiveIndex: true,
+			Required:              true,
+			IncludeNonActiveIndex: false,
 		},
 	)
 	if err != nil {
