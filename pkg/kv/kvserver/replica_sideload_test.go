@@ -20,7 +20,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -198,7 +200,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	var idx int
 	for idx = 0; idx < len(ents); idx++ {
 		// Get the SST back from the raft log.
-		if !logstore.SniffSideloadedRaftCommand(ents[idx].Data) {
+		if typ, _ := raftlog.EncodingVersion(ents[idx]); typ != kvserverbase.RaftVersionSideloaded {
 			continue
 		}
 		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)

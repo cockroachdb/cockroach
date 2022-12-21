@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
@@ -218,8 +219,12 @@ func raftEntryFormatter(data []byte) string {
 	if len(data) == 0 {
 		return "[empty]"
 	}
-	commandID, _ := kvserverbase.DecodeRaftCommand(data)
-	return fmt.Sprintf("[%x] [%d]", commandID, len(data))
+	// NB: a raft.EntryFormatter is only invoked for EntryNormal (raft methods
+	// that call this take care of unwrapping the ConfChange), and since
+	// len(data)>0 it has to be RaftVersionStandard or RaftVersionSideloaded and
+	// they are encoded identically.
+	cmdID, data := raftlog.DecomposeRaftVersionStandardOrSideloaded(data)
+	return fmt.Sprintf("[%x] [%d]", cmdID, len(data))
 }
 
 var raftMessageRequestPool = sync.Pool{
@@ -264,9 +269,22 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 // in ents to ids and returns the result.
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
-		if e.Type == raftpb.EntryNormal && len(e.Data) > 0 {
-			id, _ := kvserverbase.DecodeRaftCommand(e.Data)
+		typ, err := raftlog.EncodingVersion(e)
+		if err != nil {
+			continue
+		}
+		switch typ {
+		case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+			id, _ := raftlog.DecomposeRaftVersionStandardOrSideloaded(e.Data)
 			ids = append(ids, id)
+		case kvserverbase.RaftVersionConfChange, kvserverbase.RaftVersionConfChangeV2:
+			// Configuration changes don't have the CmdIDKey easily accessible but are
+			// rare, so fully decode the entry.
+			ent, err := raftlog.NewEntry(e)
+			if err != nil {
+				continue
+			}
+			ids = append(ids, ent.ID)
 		}
 	}
 	return ids
