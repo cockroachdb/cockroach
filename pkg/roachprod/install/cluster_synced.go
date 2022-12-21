@@ -1316,9 +1316,15 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 		cmd += fmt.Sprintf(`
 rm -fr certs
 mkdir -p certs
+VERSION=$(%[1]s version --build-tag)
+VERSION=${VERSION::3}
+TENANT_SCOPE_OPT=""
+if [[ $VERSION = v22 ]]; then
+       TENANT_SCOPE_OPT="--tenant-scope 1,2,3,4,11,12,13,14"
+fi
 %[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
+%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
 # Pre-create a few tenant-client
 %[1]s cert create-tenant-client 2 %[2]s --certs-dir=certs --ca-key=certs/ca.key
@@ -1401,8 +1407,6 @@ func (c *SyncedCluster) createTenantCertBundle(
 	return c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 
-		var tenantScopeArg string
-
 		cmd := "set -e;"
 		if c.IsLocal() {
 			cmd += fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
@@ -1415,16 +1419,21 @@ rm -fr $CERT_DIR
 mkdir -p $CERT_DIR
 cp certs/ca.crt $CERT_DIR
 SHARED_ARGS="--certs-dir=$CERT_DIR --ca-key=$CA_KEY"
+VERSION=$(%[1]s version --build-tag)
+VERSION=${VERSION::3}
+TENANT_SCOPE_OPT=""
+if [[ $VERSION = v22 ]]; then
+        TENANT_SCOPE_OPT="--tenant-scope %[3]d"
+fi
 %[1]s cert create-node %[2]s $SHARED_ARGS
 %[1]s cert create-tenant-client %[3]d %[2]s $SHARED_ARGS
-%[1]s cert create-client root %[4]s $SHARED_ARGS
-%[1]s cert create-client testuser %[4]s $SHARED_ARGS
-tar cvf %[5]s $CERT_DIR
++%[1]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
++%[1]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
++tar cvf %[4]s $CERT_DIR
 `,
 			cockroachNodeBinary(c, node),
 			strings.Join(nodeNames, " "),
 			tenantID,
-			tenantScopeArg,
 			bundleName,
 		)
 
