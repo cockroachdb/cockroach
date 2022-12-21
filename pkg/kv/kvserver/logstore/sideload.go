@@ -13,7 +13,6 @@ package logstore
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -87,7 +86,7 @@ func MaybeSideloadEntries(
 		if err != nil {
 			return nil, 0, 0, 0, err
 		}
-		if typ != kvserverbase.RaftVersionSideloaded {
+		if typ != raftlog.RaftVersionSideloaded {
 			otherEntriesSize += int64(len(input[i].Data))
 			continue
 		}
@@ -124,9 +123,9 @@ func MaybeSideloadEntries(
 		//
 		// TODO(tbg): this should be supported by a method as well.
 		{
-			data := make([]byte, kvserverbase.RaftCommandPrefixLen+e.Cmd.Size())
-			kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloadedPrefixByte, e.ID)
-			_, err := protoutil.MarshalTo(&e.Cmd, data[kvserverbase.RaftCommandPrefixLen:])
+			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
+			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.RaftVersionSideloadedPrefixByte, e.ID)
+			_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
@@ -166,7 +165,7 @@ func MaybeInlineSideloadedRaftCommand(
 	if err != nil {
 		return nil, err
 	}
-	if typ != kvserverbase.RaftVersionSideloaded {
+	if typ != raftlog.RaftVersionSideloaded {
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
@@ -213,9 +212,9 @@ func MaybeInlineSideloadedRaftCommand(
 	// TODO(tbg): there should be a helper that properly encodes a command, given
 	// the RaftCommandEncodingVersion.
 	{
-		data := make([]byte, kvserverbase.RaftCommandPrefixLen+e.Cmd.Size())
-		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloadedPrefixByte, e.ID)
-		_, err := protoutil.MarshalTo(&e.Cmd, data[kvserverbase.RaftCommandPrefixLen:])
+		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
+		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.RaftVersionSideloadedPrefixByte, e.ID)
+		_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}
@@ -233,7 +232,7 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	if typ != kvserverbase.RaftVersionSideloaded {
+	if typ != raftlog.RaftVersionSideloaded {
 		return
 	}
 

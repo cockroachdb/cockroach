@@ -274,10 +274,10 @@ func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase
 			continue
 		}
 		switch typ {
-		case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+		case raftlog.RaftVersionStandard, raftlog.RaftVersionSideloaded:
 			id, _ := raftlog.DecomposeRaftVersionStandardOrSideloaded(e.Data)
 			ids = append(ids, id)
-		case kvserverbase.RaftVersionConfChange, kvserverbase.RaftVersionConfChangeV2:
+		case raftlog.RaftVersionConfChange, raftlog.RaftVersionConfChangeV2:
 			// Configuration changes don't have the CmdIDKey easily accessible but are
 			// rare, so fully decode the entry.
 			ent, err := raftlog.NewEntry(e)
