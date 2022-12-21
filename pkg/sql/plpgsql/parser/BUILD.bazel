@@ -14,9 +14,10 @@ genrule(
     ],
     outs = ["plpgsql.go"],
     cmd = """
-      $(location :plpgsql-gen) $(location plpgsql.y) ""\
+      $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
           $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
+          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+
     """,
     exec_tools = [
         ":plpgsql-gen",
@@ -27,7 +28,7 @@ genrule(
 )
 
 go_library(
-    name = "parser",
+    name = "plpgparser",
     srcs = [
         "lexer.go",
         "parse.go",
@@ -37,13 +38,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/scanner",
         "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -61,10 +62,9 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
-        ":parser",
-        "//pkg/testutils/datapathutils",
+        ":plpgparser",
+        "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_stretchr_testify//require",
     ],
 )
 
