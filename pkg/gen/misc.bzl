@@ -2,6 +2,7 @@
 
 MISC_SRCS = [
 <<<<<<< HEAD
+<<<<<<< HEAD
   "//pkg/kv/kvserver/concurrency:lockstate_interval_btree.go",
   "//pkg/kv/kvserver/concurrency:lockstate_interval_btree_test.go",
   "//pkg/kv/kvserver/spanlatch:latch_interval_btree.go",

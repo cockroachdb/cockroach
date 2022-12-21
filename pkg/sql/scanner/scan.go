@@ -121,25 +121,35 @@ func (s *Scanner) finishString(buf []byte) string {
 	return str
 }
 
-// Scan scans the next token and populates its information into lval.
-func (s *SQLScanner) Scan(lval ScanSymType) {
+func (s *Scanner) scanSetup(lval ScanSymType) (int, bool) {
 	lval.SetID(0)
 	lval.SetPos(int32(s.pos))
 	lval.SetStr("EOF")
 
 	if _, ok := s.skipWhitespace(lval, true); !ok {
-		return
+		return 0, true
 	}
 
 	ch := s.next()
 	if ch == eof {
 		lval.SetPos(int32(s.pos))
-		return
+		return ch, false
 	}
 
 	lval.SetID(int32(ch))
 	lval.SetPos(int32(s.pos - 1))
 	lval.SetStr(s.in[lval.Pos():s.pos])
+
+	return ch, false
+}
+
+// Scan scans the next token and populates its information into lval.
+func (s *SQLScanner) Scan(lval ScanSymType) {
+	ch, skipWhiteSpace := s.scanSetup(lval)
+
+	if skipWhiteSpace {
+		return
+	}
 
 	switch ch {
 	case '$':
@@ -538,7 +548,7 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) scanIdent(lval ScanSymType) {
+func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
 	s.pos--
 	start := s.pos
 	isASCII := true
@@ -552,8 +562,6 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 	// of whether the string is only ASCII or only ASCII lowercase for later.
 	for {
 		ch := s.peek()
-		//fmt.Println(ch, ch >= utf8.RuneSelf, ch >= 'A' && ch <= 'Z')
-
 		if ch >= utf8.RuneSelf {
 			isASCII = false
 		} else if ch >= 'A' && ch <= 'Z' {
@@ -566,7 +574,6 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 
 		s.pos++
 	}
-	//fmt.Println("parsed: ", s.in[start:s.pos], isASCII, isLower)
 
 	if isLower && isASCII {
 		// Already lowercased - nothing to do.
@@ -587,6 +594,10 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 		// The string has unicode in it. No choice but to run Normalize.
 		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
 	}
+}
+
+func (s *Scanner) scanIdent(lval ScanSymType) {
+	s.lowerCaseAndNormalizeIdent(lval)
 
 	isExperimental := false
 	kw := lval.Str()
