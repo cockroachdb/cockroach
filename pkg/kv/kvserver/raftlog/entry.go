@@ -30,27 +30,27 @@ import (
 
 // EncodingVersion determines the RaftCommandEncodingVersion for a given
 // Entry.
-func EncodingVersion(ent raftpb.Entry) (kvserverbase.RaftCommandEncodingVersion, error) {
+func EncodingVersion(ent raftpb.Entry) (RaftCommandEncodingVersion, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
-		return kvserverbase.RaftVersionEmptyEntry, nil
+		return RaftVersionEmptyEntry, nil
 	}
 
 	switch ent.Type {
 	case raftpb.EntryNormal:
 	case raftpb.EntryConfChange:
-		return kvserverbase.RaftVersionConfChange, nil
+		return RaftVersionConfChange, nil
 	case raftpb.EntryConfChangeV2:
-		return kvserverbase.RaftVersionConfChangeV2, nil
+		return RaftVersionConfChangeV2, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
 	switch ent.Data[0] {
-	case kvserverbase.RaftVersionStandardPrefixByte:
-		return kvserverbase.RaftVersionStandard, nil
-	case kvserverbase.RaftVersionSideloadedPrefixByte:
-		return kvserverbase.RaftVersionSideloaded, nil
+	case RaftVersionStandardPrefixByte:
+		return RaftVersionStandard, nil
+	case RaftVersionSideloadedPrefixByte:
+		return RaftVersionSideloaded, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
 	}
@@ -62,7 +62,7 @@ func EncodingVersion(ent raftpb.Entry) (kvserverbase.RaftCommandEncodingVersion,
 // kvserverbase.RaftVersionSideloaded (which, mod the prefix byte, share an
 // encoding).
 func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
-	return kvserverbase.CmdIDKey(data[1 : 1+kvserverbase.RaftCommandIDLen]), data[1+kvserverbase.RaftCommandIDLen:]
+	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
 
 // Entry contains data related to a raft log entry. This is the raftpb.Entry
@@ -146,16 +146,16 @@ func (e *Entry) load() error {
 		AsV2() raftpb.ConfChangeV2
 	}
 	switch typ {
-	case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+	case RaftVersionStandard, RaftVersionSideloaded:
 		e.ID, raftCmdBytes = DecomposeRaftVersionStandardOrSideloaded(e.Entry.Data)
-	case kvserverbase.RaftVersionEmptyEntry:
+	case RaftVersionEmptyEntry:
 		// Nothing to load, the empty raftpb.Entry is represented by a trivial
 		// Entry.
 		return nil
-	case kvserverbase.RaftVersionConfChange:
+	case RaftVersionConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
 		ccTarget = e.ConfChangeV1
-	case kvserverbase.RaftVersionConfChangeV2:
+	case RaftVersionConfChangeV2:
 		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
 		ccTarget = e.ConfChangeV2
 	default:

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -329,7 +328,7 @@ func LoadTerm(
 		if err != nil {
 			return 0, err
 		}
-		if typ != kvserverbase.RaftVersionSideloaded {
+		if typ != raftlog.RaftVersionSideloaded {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
 		return entry.Term, nil
@@ -406,7 +405,7 @@ func LoadEntries(
 		if err != nil {
 			return err
 		}
-		if typ == kvserverbase.RaftVersionSideloaded {
+		if typ == raftlog.RaftVersionSideloaded {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
 			)

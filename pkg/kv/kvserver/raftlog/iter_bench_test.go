@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -93,7 +92,7 @@ func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 	}
 	cmdB, err := protoutil.Marshal(cmd)
 	require.NoError(b, err)
-	data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandardPrefixByte, "cmd12345", cmdB)
+	data := EncodeRaftCommand(RaftVersionStandardPrefixByte, "cmd12345", cmdB)
 
 	ent := raftpb.Entry{
 		Term:  1,
