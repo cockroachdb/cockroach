@@ -15,18 +15,23 @@ import "src/protobufInit";
 import { alertDataSync } from "src/redux/alerts";
 import { App } from "src/app";
 import { history } from "src/redux/history";
-import { store } from "src/redux/state";
+import { createAdminUIStore } from "src/redux/state";
 import "src/redux/analytics";
 import {
   DataFromServer,
   fetchDataFromServer,
+  getDataFromServer,
   setDataFromServer,
 } from "src/util/dataFromServer";
+import { recomputeDocsURLs } from "src/util/docs";
 
 async function fetchAndRender() {
   setDataFromServer(
     (await fetchDataFromServer().catch(() => {})) as DataFromServer,
   );
+
+  const store = createAdminUIStore(history, getDataFromServer());
+  recomputeDocsURLs();
 
   ReactDOM.render(
     <App history={history} store={store} />,
