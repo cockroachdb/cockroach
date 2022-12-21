@@ -1,0 +1,25 @@
+parse
+DECLARE
+BEGIN
+OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+----
+DECLARE
+BEGIN
+OPEN curs1 NO SCROLL FOR select * from foo where key = mykey
+END
+
+
+parse
+DECLARE
+BEGIN
+OPEN curs2 SCROLL FOR EXECUTE SELECT $1, $2 FROM foo WHERE key = mykey USING hello, jojo;
+END
+----
+DECLARE
+BEGIN
+OPEN curs2 SCROLL FOR EXECUTE select $ , $ from foo where key = mykey USING [hello jojo]
+END
+
+
+

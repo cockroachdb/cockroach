@@ -107,6 +107,15 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 		case CASE:
 			lval.id = END_CASE
 		}
+	case NO:
+		nextToken := plpgsqlSymType{}
+		if l.lastPos+1 < len(l.tokens) {
+			nextToken = l.tokens[l.lastPos+1]
+		}
+		switch nextToken.id {
+		case SCROLL:
+			lval.id = NO_SCROLL
+		}
 	}
 
 	return int(lval.id)
@@ -212,6 +221,56 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 	return ret
 }
 
+func (l *lexer) ProcessForOpenCursor(nullCursorExplicitExpr bool) *plpgsqltree.PLpgSQLStmtOpen {
+	openStmt := &plpgsqltree.PLpgSQLStmtOpen{}
+	openStmt.CursorOptions = plpgsqltree.PLpgSQLCursorOptFastPlan.Mask()
+
+	if nullCursorExplicitExpr {
+		if l.Peek().id == NO {
+			l.lastPos++
+			if l.Peek().id == SCROLL {
+				openStmt.CursorOptions |= plpgsqltree.PLpgSQLCursorOptNoScroll.Mask()
+				l.lastPos++
+			}
+		} else if l.Peek().id == SCROLL {
+			openStmt.CursorOptions |= plpgsqltree.PLpgSQLCursorOptScroll.Mask()
+			l.lastPos++
+		}
+
+		if l.Peek().id != FOR {
+			l.setErr(pgerror.New(pgcode.Syntax, "syntax error, expected \"FOR\""))
+			return nil
+		}
+
+		l.lastPos++
+		if l.Peek().id == EXECUTE {
+			l.lastPos++
+			dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
+			openStmt.DynamicQuery = dynamicQuery
+			l.lastPos++
+			if endToken == USING {
+				// Continue reading for params for the sql expression till the ending
+				// token is not a comma.
+				openStmt.Params = make([]string, 0)
+				for {
+					param, endToken := l.ReadSqlExpressionStr2(',', ';')
+					openStmt.Params = append(openStmt.Params, param)
+					if endToken != ',' {
+						break
+					}
+					l.lastPos++
+				}
+			}
+		} else {
+			openStmt.Query = l.ReadSqlExpressionStr(';')
+		}
+	} else {
+		// read_cursor_args()
+		openStmt.ArgQuery = "hello"
+	}
+	return openStmt
+}
+
 // ReadSqlExpressionStr returns the string from the l.lastPos till it sees
 // the terminator for the first time. The returned string is made by tokens
 // between the starting index (included) to the terminator (not included).
@@ -261,10 +320,32 @@ func (l *lexer) ReadSqlConstruct(
 	}
 	if len(exprTokenStrs) == 0 {
 		//TODO(jane): show the terminator in the panic message.
-		panic("there should be at least one token for sql expression")
+		l.setErr(errors.New("there should be at least one token for sql expression"))
 	}
 
 	return strings.Join(exprTokenStrs, " "), terminatorMet
+}
+
+func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(
+	openStmt *plpgsqltree.PLpgSQLStmtOpen,
+) {
+	l.lastPos++
+	if int(l.Peek().id) == EXECUTE {
+		dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
+		openStmt.DynamicQuery = dynamicQuery
+		if endToken == USING {
+			var expr string
+			for {
+				expr, endToken = l.ReadSqlExpressionStr2(',', ';')
+				openStmt.Params = append(openStmt.Params, expr)
+				if endToken != ',' {
+					break
+				}
+			}
+		}
+	} else {
+		openStmt.Query = l.ReadSqlExpressionStr(';')
+	}
 }
 
 // Peek peeks

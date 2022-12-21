@@ -61,7 +61,8 @@ type PLpgSQLScalarVar struct {
 	 * scalar variables of type refcursor, but they have these additional
 	 * properties:
 	 */
-	CursorExplicitExpr   PLpgSQLExpr
+	// TODO(plpgsql-team): It should be PLpgSQLExpr.
+	CursorExplicitExpr   string
 	CursorExplicitArgRow int
 	CursorOptions        int
 
