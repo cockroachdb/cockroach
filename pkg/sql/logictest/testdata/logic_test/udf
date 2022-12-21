@@ -2622,3 +2622,51 @@ subtest variadic
 # Variadic UDFS are not currently supported.
 statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
 CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
+
+# Regression test for #93314
+subtest regression_93314
+
+statement ok
+CREATE TYPE e_93314 AS ENUM ('a', 'b');
+CREATE TABLE t_93314 (i INT, e e_93314);
+INSERT INTO t_93314 VALUES (1, 'a');
+
+statement ok
+CREATE OR REPLACE FUNCTION f_93314 () RETURNS t_93314 AS
+$$
+  SELECT i, e
+  FROM t_93314
+  ORDER BY i
+  LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_93314();
+----
+(1,a)
+
+statement ok
+CREATE TABLE t_93314_alias (i INT, e _e_93314);
+INSERT INTO t_93314_alias VALUES (1, ARRAY['a', 'b']::_e_93314);
+
+statement ok
+CREATE OR REPLACE FUNCTION f_93314_alias () RETURNS t_93314_alias AS
+$$
+  SELECT i, e
+  FROM t_93314_alias
+  ORDER BY i
+  LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_93314_alias();
+----
+(1,"{a,b}")
+
+query TTTTTBBBTITTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
+ORDER BY oid;
+----
+100250  f_93314        105  1546506610  14  false  false  false  v  0  100249  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100252  f_93314_alias  105  1546506610  14  false  false  false  v  0  100251  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;

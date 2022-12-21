@@ -25,7 +25,7 @@ import (
 
 // HydrationLookupFunc is the type of function required to look up type
 // descriptors and their parent schemas and databases when hydrating an object.
-type HydrationLookupFunc func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
+type HydrationLookupFunc func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error)
 
 // IsHydratable returns false iff the descriptor definitely does not require
 // hydration
@@ -64,12 +64,14 @@ func Hydrate(
 // looked up in the nstree.Catalog object before being looked up via the
 // HydrationLookupFunc.
 func MakeTypeLookupFuncForHydration(
-	c nstree.Catalog, lookupFn HydrationLookupFunc,
+	c nstree.MutableCatalog, lookupFn HydrationLookupFunc,
 ) typedesc.TypeLookupFunc {
-	return func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error) {
+	var typeLookupFunc func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error)
+
+	typeLookupFunc = func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error) {
 		typDesc := c.LookupDescriptorEntry(id)
 		if typDesc == nil {
-			typDesc, err = lookupFn(ctx, id)
+			typDesc, err = lookupFn(ctx, id, false /* skipHydration */)
 			if err != nil {
 				if errors.Is(err, catalog.ErrDescriptorNotFound) {
 					n := tree.Name(fmt.Sprintf("[%d]", id))
@@ -77,11 +79,18 @@ func MakeTypeLookupFuncForHydration(
 				}
 				return tree.TypeName{}, nil, err
 			}
+			c.UpsertDescriptorEntry(typDesc)
 		}
 		switch t := typDesc.(type) {
 		case catalog.TypeDescriptor:
 			typ = t
 		case catalog.TableDescriptor:
+			if !typedesc.TableIsHydrated(t) {
+				if err := Hydrate(ctx, t, typeLookupFunc); err != nil {
+					return tree.TypeName{}, nil, err
+				}
+				c.UpsertDescriptorEntry(t)
+			}
 			typ, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 		default:
 			typ, err = catalog.AsTypeDescriptor(typDesc)
@@ -91,7 +100,7 @@ func MakeTypeLookupFuncForHydration(
 		}
 		dbDesc := c.LookupDescriptorEntry(typ.GetParentID())
 		if dbDesc == nil {
-			dbDesc, err = lookupFn(ctx, typ.GetParentID())
+			dbDesc, err = lookupFn(ctx, typ.GetParentID(), true /* skipHydration */)
 			if err != nil {
 				if errors.Is(err, catalog.ErrDescriptorNotFound) {
 					n := fmt.Sprintf("[%d]", typ.GetParentID())
@@ -99,13 +108,14 @@ func MakeTypeLookupFuncForHydration(
 				}
 				return tree.TypeName{}, nil, err
 			}
+			c.UpsertDescriptorEntry(dbDesc)
 		}
 		if _, err = catalog.AsDatabaseDescriptor(dbDesc); err != nil {
 			return tree.TypeName{}, nil, err
 		}
 		scDesc := c.LookupDescriptorEntry(typ.GetParentSchemaID())
 		if scDesc == nil {
-			scDesc, err = lookupFn(ctx, typ.GetParentSchemaID())
+			scDesc, err = lookupFn(ctx, typ.GetParentSchemaID(), true /* skipHydration */)
 			if err != nil {
 				if errors.Is(err, catalog.ErrDescriptorNotFound) {
 					n := fmt.Sprintf("[%d]", typ.GetParentSchemaID())
@@ -113,6 +123,7 @@ func MakeTypeLookupFuncForHydration(
 				}
 				return tree.TypeName{}, nil, err
 			}
+			c.UpsertDescriptorEntry(scDesc)
 		}
 		if _, err = catalog.AsSchemaDescriptor(scDesc); err != nil {
 			return tree.TypeName{}, nil, err
@@ -120,4 +131,6 @@ func MakeTypeLookupFuncForHydration(
 		tn = tree.MakeQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), typ.GetName())
 		return tn, typ, nil
 	}
+
+	return typeLookupFunc
 }
