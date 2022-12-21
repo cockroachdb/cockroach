@@ -68,6 +68,12 @@ type Flags struct {
 	// which we also want to show valid ranges when a table is being imported
 	// (offline).
 	IncludeOfflineTables bool
+
+	// IncludeNonActiveIndexes considers non-active indexes (e.g. being
+	// added). This is useful in cases where we are running a statement
+	// like `SHOW RANGES` for which we also want to show valid ranges
+	// when a table is being imported (offline).
+	IncludeNonActiveIndexes bool
 }
 
 // Catalog is an interface to a database catalog, exposing only the information

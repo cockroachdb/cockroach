@@ -493,7 +493,10 @@ func ResolveIndex(
 ) {
 	if tableIndexName.Table.ObjectName != "" {
 		lflags := tree.ObjectLookupFlags{
-			CommonLookupFlags:    tree.CommonLookupFlags{Required: flag.Required},
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:       flag.Required,
+				IncludeOffline: flag.IncludeOfflineTable,
+			},
 			DesiredObjectKind:    tree.TableObject,
 			DesiredTableDescKind: tree.ResolveRequireTableOrViewDesc,
 		}
