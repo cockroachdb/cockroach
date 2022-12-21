@@ -49,13 +49,13 @@ export const StatementsPageRoot = ({
     },
     {
       value: StatementViewType.ACTIVE,
-      label: "Active Executions",
+      label: "Recent Executions",
       description: (
         <span>
-          Active executions represent individual statement executions in
-          progress. Use active statement execution details, such as the
-          application or elapsed time, to understand and tune workload
-          performance.
+          Recent executions represent individual statement executions that are
+          in progress or recently completed, failed, or canceled. Use recent
+          statement execution details, such as the application or elapsed time,
+          to understand and tune workload performance.
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),

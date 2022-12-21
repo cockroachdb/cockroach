@@ -46,6 +46,7 @@ export type RecentStatementDetailsStateProps = {
 
 export type RecentStatementDetailsDispatchProps = {
   refreshLiveWorkload: () => void;
+  refreshRecentStatements: () => void;
 };
 
 enum TabKeysEnum {
@@ -68,6 +69,7 @@ export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
   statement,
   match,
   refreshLiveWorkload,
+  refreshRecentStatements,
 }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
@@ -88,6 +90,13 @@ export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
       refreshLiveWorkload();
     }
   }, [refreshLiveWorkload, statement]);
+
+  useEffect(() => {
+    if (statement == null) {
+      // Refresh sessions if the statement was not found initially.
+      refreshRecentStatements();
+    }
+  }, [refreshRecentStatements, statement]);
 
   const onTabClick = (key: TabKeysEnum) => {
     if (

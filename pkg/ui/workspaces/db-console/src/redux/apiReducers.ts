@@ -15,6 +15,7 @@ import moment from "moment";
 import {
   api as clusterUiApi,
   util,
+  RecentStatement,
   TxnContentionInsightDetails,
   TxnContentionInsightEvent,
   TxnInsightEvent,
@@ -407,6 +408,26 @@ export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
       refreshSessions(new SessionsRequest({ exclude_closed_sessions: true })),
     );
     dispatch(refreshClusterLocks());
+    dispatch(refreshRecentStatements());
+  };
+};
+
+const recentStatementsReducerObj = new CachedDataReducer(
+  clusterUiApi.getRecentStatements,
+  "recentStatements",
+  null,
+  moment.duration(30, "s"),
+);
+export const refreshRecentStatements = recentStatementsReducerObj.refresh;
+
+export const refreshRecentStatementsAction = (): ThunkAction<
+  any,
+  any,
+  any,
+  Action
+> => {
+  return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
+    dispatch(refreshRecentStatements());
   };
 };
 
@@ -551,6 +572,7 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
+  recentStatements: CachedDataReducerState<RecentStatement[]>;
   transactionInsights: CachedDataReducerState<TxnContentionInsightEvent[]>;
   transactionInsightDetails: KeyedCachedDataReducerState<TxnContentionInsightDetails>;
   executionInsights: CachedDataReducerState<TxnInsightEvent[]>;
@@ -600,6 +622,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
+  [recentStatementsReducerObj.actionNamespace]:
+    recentStatementsReducerObj.reducer,
   [transactionInsightsReducerObj.actionNamespace]:
     transactionInsightsReducerObj.reducer,
   [transactionInsightDetailsReducerObj.actionNamespace]:

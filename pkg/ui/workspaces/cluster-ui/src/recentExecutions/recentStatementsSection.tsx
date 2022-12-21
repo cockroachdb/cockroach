@@ -24,7 +24,7 @@ import {
   ISortedTablePagination,
   SortedTable,
   SortSetting,
-} from "../sortedtable/sortedtable";
+} from "../sortedtable";
 import {
   getColumnOptions,
   makeRecentStatementsColumns,
@@ -32,6 +32,7 @@ import {
 import { StatementViewType } from "src/statementsPage/statementPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
 import { isSelectedColumn } from "src/columnsSelector/utils";
+import { Pagination } from "../pagination";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -46,6 +47,7 @@ type RecentStatementsSectionProps = {
   onChangeSortSetting: (sortSetting: SortSetting) => void;
   onClearFilters: () => void;
   onColumnsSelect: (columns: string[]) => void;
+  onChangePagination: (page: number) => void;
 };
 
 export const RecentStatementsSection: React.FC<
@@ -61,6 +63,7 @@ export const RecentStatementsSection: React.FC<
   onClearFilters,
   onChangeSortSetting,
   onColumnsSelect,
+  onChangePagination,
 }) => {
   const columns = useMemo(
     () => makeRecentStatementsColumns(isTenant),
@@ -78,35 +81,43 @@ export const RecentStatementsSection: React.FC<
   const activeFilters = calculateActiveFilters(filters);
 
   return (
-    <section className={sortableTableCx("cl-table-container")}>
-      <div>
-        <ColumnsSelector
-          options={tableColumns}
-          onSubmitColumns={onColumnsSelect}
-        />
-        <TableStatistics
-          pagination={pagination}
-          search={search}
-          totalCount={statements.length}
-          arrayItemName="statements"
-          activeFilters={activeFilters}
-          onClearFilters={onClearFilters}
-        />
-      </div>
-      <SortedTable
-        className="statements-table"
-        data={statements}
-        columns={shownColumns}
-        sortSetting={sortSetting}
-        onChangeSortSetting={onChangeSortSetting}
-        renderNoResult={
-          <EmptyStatementsPlaceholder
-            isEmptySearchResults={search?.length > 0 && statements.length > 0}
-            statementView={StatementViewType.ACTIVE}
+    <div>
+      <section className={sortableTableCx("cl-table-container")}>
+        <div>
+          <ColumnsSelector
+            options={tableColumns}
+            onSubmitColumns={onColumnsSelect}
           />
-        }
-        pagination={pagination}
+          <TableStatistics
+            pagination={pagination}
+            search={search}
+            totalCount={statements.length}
+            arrayItemName="statements"
+            activeFilters={activeFilters}
+            onClearFilters={onClearFilters}
+          />
+        </div>
+        <SortedTable
+          className="statements-table"
+          data={statements}
+          columns={shownColumns}
+          sortSetting={sortSetting}
+          onChangeSortSetting={onChangeSortSetting}
+          renderNoResult={
+            <EmptyStatementsPlaceholder
+              isEmptySearchResults={search?.length > 0 && statements.length > 0}
+              statementView={StatementViewType.ACTIVE}
+            />
+          }
+          pagination={pagination}
+        />
+      </section>
+      <Pagination
+        pageSize={pagination.pageSize}
+        current={pagination.current}
+        total={statements.length}
+        onChange={onChangePagination}
       />
-    </section>
+    </div>
   );
 };

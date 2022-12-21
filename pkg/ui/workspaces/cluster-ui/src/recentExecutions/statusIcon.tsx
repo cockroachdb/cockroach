@@ -21,6 +21,8 @@ export type StatusIconProps = {
 };
 
 export const StatusIcon: React.FC<StatusIconProps> = ({ status }) => {
-  const statusClassName = status !== "Waiting" ? "executing" : "waiting";
+  // The className will be an ExecutionStatus with spaces converted to hyphens, and
+  // all letters in lowercase. eg: Timed Out -> timed-out.
+  const statusClassName = status.toLowerCase().replace(/\s/g, "-");
   return <CircleFilled className={cx("status-icon", statusClassName)} />;
 };
