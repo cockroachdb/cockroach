@@ -1291,6 +1291,16 @@ can also be specified (e.g. .25).`,
 		Description: `Run a demo workload against the pre-loaded database.`,
 	}
 
+	ExpandDemoSchema = FlagInfo{
+		Name:        "expand-schema",
+		Description: `Expand the workload schema up to the specified size.`,
+	}
+
+	DemoNameGenOpts = FlagInfo{
+		Name:        "name-gen-options",
+		Description: `Use the specified options for the name generation during schema expansion (JSON syntax).`,
+	}
+
 	DemoWorkloadMaxQPS = FlagInfo{
 		Name:        "workload-max-qps",
 		Description: "The maximum QPS when a workload is running.",

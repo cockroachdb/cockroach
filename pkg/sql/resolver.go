@@ -552,7 +552,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		if err != nil {
 			return nil, err
 		}
-		_, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
+		_, objectIDs, err := p.ExpandTableGlob(ctx, tableGlob)
 		if err != nil {
 			return nil, err
 		}
@@ -807,10 +807,10 @@ func (p *planner) getTableAndIndexImpl(
 	return resolvedPrefix, mut, retIdx, nil
 }
 
-// expandTableGlob expands pattern into a list of objects represented
-// as a tree.TableNames.
-func expandTableGlob(
-	ctx context.Context, p *planner, pattern tree.TablePattern,
+// ExpandTableGlob expands pattern into a list of objects represented
+// as a tree.TableNames and corresponding descriptor IDs.
+func (p *planner) ExpandTableGlob(
+	ctx context.Context, pattern tree.TablePattern,
 ) (tree.TableNames, descpb.IDs, error) {
 	var catalog optCatalog
 	catalog.init(p)

@@ -545,7 +545,7 @@ func (p *planner) getTablePatternsComposition(
 		if err != nil {
 			return unknownComposition, err
 		}
-		_, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
+		_, objectIDs, err := p.ExpandTableGlob(ctx, tableGlob)
 		if err != nil {
 			return unknownComposition, err
 		}

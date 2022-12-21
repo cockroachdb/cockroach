@@ -13,6 +13,8 @@ package builtins
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -35,6 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randident"
+	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -544,6 +549,46 @@ The output can be used to recreate a database.'
 			makeDecodeExternalPlanGistGenerator,
 			`Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table without attempting to resolve tables or indexes.
 			`,
+			volatility.Volatile,
+		),
+	),
+	"crdb_internal.gen_rand_ident": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "name_pattern", Typ: types.String},
+				{Name: "count", Typ: types.Int},
+			},
+			types.String,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (eval.ValueGenerator, error) {
+				return makeIdentGenerator(ctx, evalCtx, args[0], args[1], nil)
+			},
+			`Returns random SQL identifiers.
+
+gen_rand_ident(pattern, count) is an alias for gen_rand_ident(pattern, count, '').
+See the documentation of the other gen_rand_ident overload for details.
+`,
+			volatility.Volatile,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "name_pattern", Typ: types.String},
+				{Name: "count", Typ: types.Int},
+				{Name: "parameters", Typ: types.Jsonb},
+			},
+			types.String,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (eval.ValueGenerator, error) {
+				return makeIdentGenerator(ctx, evalCtx, args[0], args[1], args[2])
+			},
+			`Returns count random SQL identifiers that resemble the name_pattern.
+
+The last argument is a JSONB object containing the following optional fields:
+- "seed": the seed to use for the pseudo-random generator (default: random).`+
+				randidentcfg.ConfigDoc,
 			volatility.Volatile,
 		),
 	),
@@ -2765,5 +2810,93 @@ func makeShowCreateAllTypesGenerator(
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
 		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+	}, nil
+}
+
+// identGenerator supports the execution of
+// crdb_internal.gen_rand_ident().
+type identGenerator struct {
+	gen randident.NameGenerator
+	acc mon.BoundAccount
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// identGenerator.
+	curr  tree.Datum
+	idx   int
+	count int
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *identGenerator) ResolvedType() *types.T {
+	return types.String
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *identGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+func (s *identGenerator) Next(ctx context.Context) (bool, error) {
+	s.idx++
+	if s.idx > s.count {
+		return false, nil
+	}
+
+	name := s.gen.GenerateOne(s.idx)
+	if err := s.acc.Grow(ctx, int64(len(name))); err != nil {
+		return false, err
+	}
+	s.curr = tree.NewDString(name)
+
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *identGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *identGenerator) Close(ctx context.Context) {
+	s.acc.Close(ctx)
+}
+
+// makeIdentGenerator creates a generator to support the
+// crdb_internal.gen_rand_ident() builtin.
+func makeIdentGenerator(
+	ctx context.Context, evalCtx *eval.Context, namePatDatum, countDatum, cfgDatum tree.Datum,
+) (eval.ValueGenerator, error) {
+	pattern := string(tree.MustBeDString(namePatDatum))
+	count := int(tree.MustBeDInt(countDatum))
+	cfg := randident.DefaultNameGeneratorConfig()
+	seed := randutil.NewPseudoSeed()
+	if cfgDatum != nil {
+		customCfg := struct {
+			// Seed is the random seed to use. We expose this so that tests
+			// can use this function and obtain deterministic output.
+			Seed int64
+
+			// The other name config parameters.
+			randidentcfg.Config `json:",inline"`
+		}{
+			Seed:   seed,
+			Config: cfg,
+		}
+		userInputCfg := cfgDatum.(*tree.DJSON).JSON.String()
+		d := gojson.NewDecoder(strings.NewReader(userInputCfg))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&customCfg); err != nil {
+			return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
+		}
+		seed = customCfg.Seed
+		cfg = customCfg.Config
+	}
+	cfg.Finalize()
+	rand := rand.New(rand.NewSource(seed))
+	return &identGenerator{
+		gen:   randident.NewNameGenerator(&cfg, rand, pattern),
+		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+		count: count,
 	}, nil
 }
