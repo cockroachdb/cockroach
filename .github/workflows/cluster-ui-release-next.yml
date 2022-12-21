@@ -61,4 +61,4 @@ jobs:
 
     - name: Publish prerelease version
       if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag next --dry-run
+      run: yarn publish --access public --tag next
