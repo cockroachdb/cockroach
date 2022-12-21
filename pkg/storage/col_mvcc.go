@@ -261,7 +261,7 @@ func mvccScanToCols(
 		// buffer.
 		b := make([]byte, len(batch))
 		copy(b, batch)
-		res.KVData = append(res.KVData, b)
+		res.ColBatches = append(res.ColBatches, b)
 	}
 
 	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.afterScan()

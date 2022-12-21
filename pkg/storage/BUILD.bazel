@@ -49,7 +49,6 @@ go_library(
         "//pkg/base",
         "//pkg/cli/exit",
         "//pkg/clusterversion",
-        "//pkg/col/coldata",
         "//pkg/keys",
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvserver/concurrency/lock",

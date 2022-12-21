@@ -585,7 +585,7 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 		}); err != nil {
 			return err
 		}
-		if v.ColBatches.ColBatches != nil {
+		if v.ColBatches != nil {
 			return errors.AssertionFailedf("unexpectedly non-nil ColBatches")
 		}
 	case *ReverseScanResponse:
@@ -601,7 +601,7 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 		}); err != nil {
 			return err
 		}
-		if v.ColBatches.ColBatches != nil {
+		if v.ColBatches != nil {
 			return errors.AssertionFailedf("unexpectedly non-nil ColBatches")
 		}
 	default:
@@ -851,17 +851,6 @@ func (ba BatchRequest) ValidateForEvaluation() error {
 		if ba.Txn.WriteTooOld && ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
 			return errors.AssertionFailedf("WriteTooOld set but no offset in timestamps. txn: %s", ba.Txn)
 		}
-	}
-	return nil
-}
-
-func (ColBatches) Size() int { return 0 }
-
-func (ColBatches) MarshalToSizedBuffer([]byte) (int, error) { return 0, nil }
-
-func (ColBatches) Unmarshal(b []byte) error {
-	if len(b) > 0 {
-		return errors.AssertionFailedf("unexpectedly unmarshaling a non-empty ColBatches")
 	}
 	return nil
 }
