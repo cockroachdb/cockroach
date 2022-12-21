@@ -8,9 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserverbase
+package raftlog
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+)
 
 // RaftCommandEncodingVersion versions CockroachDB's raft entries.
 // A raftpb.Entry's RaftCommandEncodingVersion is a function of the
@@ -77,7 +81,7 @@ const (
 )
 
 // EncodeRaftCommand encodes a raft command (including the versioning prefix).
-func EncodeRaftCommand(prefixByte byte, commandID CmdIDKey, command []byte) []byte {
+func EncodeRaftCommand(prefixByte byte, commandID kvserverbase.CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], prefixByte, commandID)
 	copy(b[RaftCommandPrefixLen:], command)
@@ -85,7 +89,7 @@ func EncodeRaftCommand(prefixByte byte, commandID CmdIDKey, command []byte) []by
 }
 
 // EncodeRaftCommandPrefix encodes the versioning prefix for a Raft command.
-func EncodeRaftCommandPrefix(b []byte, prefixByte byte, commandID CmdIDKey) {
+func EncodeRaftCommandPrefix(b []byte, prefixByte byte, commandID kvserverbase.CmdIDKey) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
 	}
