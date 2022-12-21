@@ -79,12 +79,14 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 		tApplicationBegin: ts(1),
 		tApplicationEnd:   ts(2),
 		apply: applyCommittedEntriesStats{
-			batchesProcessed:      9,
-			entriesProcessed:      2,
-			entriesProcessedBytes: 3,
-			stateAssertions:       4,
-			numEmptyEntries:       5,
-			numConfChangeEntries:  6,
+			numBatchesProcessed: 9,
+			appBatchStats: appBatchStats{
+				numEntriesProcessed:      2,
+				numEntriesProcessedBytes: 3,
+				numEmptyEntries:          5,
+			},
+			stateAssertions:      4,
+			numConfChangeEntries: 6,
 		},
 		append: logstore.AppendStats{
 			Begin:             ts(2),

@@ -621,9 +621,9 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	if b, n := s.append.SideloadedBytes, s.append.SideloadedEntries; n > 0 || b > 0 {
 		p.Printf("append-sst=%s (%d), ", humanizeutil.IBytes(b), n)
 	}
-	if b, n := s.apply.entriesProcessedBytes, s.apply.entriesProcessed; n > 0 || b > 0 {
+	if b, n := s.apply.numEntriesProcessedBytes, s.apply.numEntriesProcessed; n > 0 || b > 0 {
 		p.Printf("apply=%s (%d", humanizeutil.IBytes(b), n)
-		if c := s.apply.batchesProcessed; c > 1 {
+		if c := s.apply.numBatchesProcessed; c > 1 {
 			p.Printf(" in %d batches", c)
 		}
 		p.SafeString(")")

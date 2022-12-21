@@ -25,6 +25,8 @@ import (
 // All state transitions performed by the state machine are expected to be
 // deterministic, which ensures that if each instance is driven from the
 // same consistent shared log, they will all stay in sync.
+//
+// The implementation may not be and commonly is not thread safe.
 type StateMachine interface {
 	// NewEphemeralBatch creates an EphemeralBatch. This kind of batch is not able
 	// to make changes to the StateMachine, but can be used for the purpose of
@@ -39,6 +41,9 @@ type StateMachine interface {
 	// that a group of Commands will have on the replicated state machine.
 	// Commands are staged in the batch one-by-one and then the entire batch is
 	// applied to the StateMachine at once via its ApplyToStateMachine method.
+	//
+	// There must only be a single EphemeralBatch *or* Batch open at any given
+	// point in time.
 	NewBatch() Batch
 	// ApplySideEffects applies the in-memory side-effects of a Command to
 	// the replicated state machine. The method will be called in the order
@@ -66,6 +71,10 @@ var ErrRemoved = errors.New("replica removed")
 type EphemeralBatch interface {
 	// Stage inserts a Command into the Batch. In doing so, the Command is
 	// checked for rejection and a CheckedCommand is returned.
+	//
+	// TODO(tbg): consider renaming this to Add, so that in implementations
+	// of this we less unambiguously refer to "staging" commands into the
+	// pebble batch.
 	Stage(context.Context, Command) (CheckedCommand, error)
 	// Close closes the batch and releases any resources that it holds.
 	Close()
