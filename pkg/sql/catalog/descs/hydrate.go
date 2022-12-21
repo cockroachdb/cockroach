@@ -120,7 +120,7 @@ func makeMutableTypeLookupFunc(
 		}
 		mut.UpsertDescriptor(desc)
 	}
-	mutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	mutableLookupFunc := func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		// This special case exists to deal with the desire to use enums in the
 		// system database, and the fact that the hydration contract is such that
 		// when we resolve types mutably, we resolve the mutable type descriptors
@@ -130,11 +130,19 @@ func makeMutableTypeLookupFunc(
 		// let the caller have the immutable copy.
 		if id == catconstants.PublicSchemaID {
 			return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
+				Required:      true,
+				AvoidLeased:   true,
+				SkipHydration: skipHydration,
 			})
 		}
-		return tc.GetMutableDescriptorByID(ctx, txn, id)
+		return tc.getDescriptorByID(ctx, txn, tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			RequireMutable: true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+			SkipHydration:  skipHydration,
+		}, id)
 	}
 	return hydrateddesc.MakeTypeLookupFuncForHydration(mut.Catalog, mutableLookupFunc)
 }
@@ -152,12 +160,13 @@ func makeImmutableTypeLookupFunc(
 		}
 		imm.UpsertDescriptor(desc)
 	}
-	immutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	immutableLookupFunc := func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
 			Required:       true,
 			AvoidLeased:    flags.AvoidLeased,
 			IncludeOffline: flags.IncludeOffline,
 			AvoidSynthetic: true,
+			SkipHydration:  skipHydration,
 		})
 	}
 	return hydrateddesc.MakeTypeLookupFuncForHydration(imm.Catalog, immutableLookupFunc)
@@ -169,7 +178,7 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 	ctx, sp := tracing.ChildSpan(ctx, "descs.HydrateCatalog")
 	defer sp.Finish()
 
-	fakeLookupFunc := func(_ context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	fakeLookupFunc := func(_ context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
 	typeLookupFunc := hydrateddesc.MakeTypeLookupFuncForHydration(c.Catalog, fakeLookupFunc)
