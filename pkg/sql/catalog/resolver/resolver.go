@@ -493,7 +493,10 @@ func ResolveIndex(
 ) {
 	if tableIndexName.Table.ObjectName != "" {
 		lflags := tree.ObjectLookupFlags{
-			CommonLookupFlags:    tree.CommonLookupFlags{Required: flag.Required},
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:       flag.Required,
+				IncludeOffline: flag.IncludeOfflineTable,
+			},
 			DesiredObjectKind:    tree.TableObject,
 			DesiredTableDescKind: tree.ResolveRequireTableOrViewDesc,
 		}
@@ -523,7 +526,7 @@ func ResolveIndex(
 
 		idx, err := candidateTbl.FindNonDropIndexWithName(string(tableIndexName.Index))
 		// err == nil indicates that the index is found.
-		if err == nil && (!flag.RequireActiveIndex || idx.Public()) {
+		if err == nil && (flag.IncludeNonActiveIndex || idx.Public()) {
 			return true, resolvedPrefix, candidateTbl, idx, nil
 		}
 
@@ -548,7 +551,7 @@ func ResolveIndex(
 		}
 
 		tblFound, tbl, idx, err := findTableContainingIndex(
-			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, schemaResolver, flag.RequireActiveIndex, flag.IncludeOfflineTable,
+			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, schemaResolver, flag.IncludeNonActiveIndex, flag.IncludeOfflineTable,
 		)
 		if err != nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
@@ -591,7 +594,7 @@ func ResolveIndex(
 		schemaFound = true
 
 		candidateFound, tbl, idx, curErr := findTableContainingIndex(
-			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, schemaResolver, flag.RequireActiveIndex, flag.IncludeOfflineTable,
+			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, schemaResolver, flag.IncludeNonActiveIndex, flag.IncludeOfflineTable,
 		)
 		if curErr != nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil, curErr
@@ -702,7 +705,7 @@ func findTableContainingIndex(
 	indexName tree.Name,
 	resolvedPrefix catalog.ResolvedObjectPrefix,
 	schemaResolver SchemaResolver,
-	requireActiveIndex bool,
+	includeNonActiveIndex bool,
 	includeOfflineTable bool,
 ) (found bool, tblDesc catalog.TableDescriptor, idxDesc catalog.Index, err error) {
 	dsNames, _, err := schemaResolver.GetObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
@@ -732,7 +735,7 @@ func findTableContainingIndex(
 
 		candidateIdx, err := candidateTbl.FindNonDropIndexWithName(string(indexName))
 		if err == nil {
-			if requireActiveIndex && !candidateIdx.Public() {
+			if !includeNonActiveIndex && !candidateIdx.Public() {
 				continue
 			}
 			if found {
