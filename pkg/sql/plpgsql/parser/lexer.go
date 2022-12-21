@@ -13,11 +13,11 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -105,6 +105,15 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 		case CASE:
 			lval.id = END_CASE
 		}
+	case NO:
+		nextToken := plpgsqlSymType{}
+		if l.lastPos+1 < len(l.tokens) {
+			nextToken = l.tokens[l.lastPos+1]
+		}
+		switch nextToken.id {
+		case SCROLL:
+			lval.id = NO_SCROLL
+		}
 	}
 
 	return int(lval.id)
@@ -115,10 +124,10 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSql {
 	sqlToks := make([]string, 0)
 	if startTokenID == 0 || startTokenID == ';' {
-		errors.AssertionFailedf("plpgsql_execsql: invalid start token")
+		l.setErr(errors.AssertionFailedf("plpgsql_execsql: invalid start token"))
 	}
 	if int(l.lastToken().id) != startTokenID {
-		errors.AssertionFailedf("plpgsql_execsql: given start token does not match current pos of lexer")
+		l.setErr(errors.AssertionFailedf("plpgsql_execsql: given start token does not match current pos of lexer"))
 	}
 
 	var hasInto bool
@@ -135,7 +144,7 @@ func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSq
 			break
 		}
 		if tok.id == 0 {
-			errors.AssertionFailedf("unexpected end of function definition")
+			l.setErr(errors.AssertionFailedf("unexpected end of function definition"))
 		}
 		if hasInto && tok.id == STRICT {
 			hasStrict = true
@@ -152,7 +161,7 @@ func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSq
 				continue
 			}
 			if hasInto {
-				errors.AssertionFailedf("plpgsql_execsql: INTO specified more than once")
+				l.setErr(errors.AssertionFailedf("plpgsql_execsql: INTO specified more than once"))
 			}
 			hasInto = true
 		}
@@ -175,7 +184,7 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 	for {
 		if lval.id == INTO {
 			if ret.Into {
-				errors.AssertionFailedf("seen multiple INTO")
+				l.setErr(errors.AssertionFailedf("seen multiple INTO"))
 			}
 			ret.Into = true
 			nextTok := l.Peek()
@@ -189,7 +198,7 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 			l.Lex(&lval)
 		} else if lval.id == USING {
 			if ret.Params != nil {
-				errors.AssertionFailedf("seen multiple USINGs")
+				l.setErr(errors.AssertionFailedf("seen multiple USINGs"))
 			}
 			ret.Params = make([]plpgsqltree.PLpgSQLExpr, 0)
 			for {
@@ -203,11 +212,61 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 		} else if lval.id == ';' {
 			break
 		} else {
-			errors.AssertionFailedf("syntax error")
+			l.setErr(errors.AssertionFailedf("syntax error"))
 		}
 	}
 
 	return ret
+}
+
+func (l *lexer) ProcessForOpenCursor(nullCursorExplicitExpr bool) *plpgsqltree.PLpgSQLStmtOpen {
+	openStmt := &plpgsqltree.PLpgSQLStmtOpen{}
+	openStmt.CursorOptions = plpgsqltree.PLpgSQLCursorOptFastPlan.Mask()
+
+	if nullCursorExplicitExpr {
+		if l.Peek().id == NO {
+			l.lastPos++
+			if l.Peek().id == SCROLL {
+				openStmt.CursorOptions |= plpgsqltree.PLpgSQLCursorOptNoScroll.Mask()
+				l.lastPos++
+			}
+		} else if l.Peek().id == SCROLL {
+			openStmt.CursorOptions |= plpgsqltree.PLpgSQLCursorOptScroll.Mask()
+			l.lastPos++
+		}
+
+		if l.Peek().id != FOR {
+			l.setErr(pgerror.New(pgcode.Syntax, "syntax error, expected \"FOR\""))
+			return nil
+		}
+
+		l.lastPos++
+		if l.Peek().id == EXECUTE {
+			l.lastPos++
+			dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
+			openStmt.DynamicQuery = dynamicQuery
+			l.lastPos++
+			if endToken == USING {
+				// Continue reading for params for the sql expression till the ending
+				// token is not a comma.
+				openStmt.Params = make([]string, 0)
+				for {
+					param, endToken := l.ReadSqlExpressionStr2(',', ';')
+					openStmt.Params = append(openStmt.Params, param)
+					if endToken != ',' {
+						break
+					}
+					l.lastPos++
+				}
+			}
+		} else {
+			openStmt.Query = l.ReadSqlExpressionStr(';')
+		}
+	} else {
+		// read_cursor_args()
+		openStmt.ArgQuery = "hello"
+	}
+	return openStmt
 }
 
 // ReadSqlExpressionStr returns the string from the l.lastPos till it sees
@@ -258,12 +317,31 @@ func (l *lexer) ReadSqlConstruct(
 		panic(errors.AssertionFailedf("parentheses is badly nested"))
 	}
 	if len(exprTokenStrs) == 0 {
-		// TODO we need to get access to function return type, and it's ok to read
-		// nothing if return type is void.
-		panic(errors.AssertionFailedf("there should be at least one token for sql expression"))
+		//TODO(jane): show the terminator in the panic message.
+		l.setErr(errors.New("there should be at least one token for sql expression"))
 	}
 
 	return strings.Join(exprTokenStrs, " "), terminatorMet
+}
+
+func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.PLpgSQLStmtOpen) {
+	l.lastPos++
+	if int(l.Peek().id) == EXECUTE {
+		dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
+		openStmt.DynamicQuery = dynamicQuery
+		if endToken == USING {
+			var expr string
+			for {
+				expr, endToken = l.ReadSqlExpressionStr2(',', ';')
+				openStmt.Params = append(openStmt.Params, expr)
+				if endToken != ',' {
+					break
+				}
+			}
+		}
+	} else {
+		openStmt.Query = l.ReadSqlExpressionStr(';')
+	}
 }
 
 // Peek peeks
@@ -299,44 +377,6 @@ func (l *lexer) lastToken() plpgsqlSymType {
 // SetStmt is called from the parser when the statement is constructed.
 func (l *lexer) SetStmt(stmt plpgsqltree.PLpgSQLStatement) {
 	l.stmt = stmt.(*plpgsqltree.PLpgSQLStmtBlock)
-}
-
-// PurposelyUnimplemented wraps Error, setting lastUnimplementedError.
-func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
-	// We purposely do not use unimp here, as it appends hints to suggest that
-	// the error may be actively tracked as a bug.
-	l.lastError = errors.WithHint(
-		errors.WithTelemetry(
-			pgerror.Newf(pgcode.Syntax, "unimplemented: this syntax"),
-			fmt.Sprintf("sql.purposely_unimplemented.%s", feature),
-		),
-		reason,
-	)
-	l.populateErrorDetails()
-	l.lastError = &tree.UnsupportedError{
-		Err:         l.lastError,
-		FeatureName: feature,
-	}
-}
-
-// UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
-func (l *lexer) UnimplementedWithIssue(issue int) {
-	l.lastError = unimp.NewWithIssue(issue, "this syntax")
-	l.populateErrorDetails()
-	l.lastError = &tree.UnsupportedError{
-		Err:         l.lastError,
-		FeatureName: fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue),
-	}
-}
-
-// UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
-func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
-	l.populateErrorDetails()
-	l.lastError = &tree.UnsupportedError{
-		Err:         l.lastError,
-		FeatureName: detail,
-	}
 }
 
 // Unimplemented wraps Error, setting lastUnimplementedError.

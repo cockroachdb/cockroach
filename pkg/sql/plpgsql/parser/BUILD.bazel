@@ -64,7 +64,6 @@ go_test(
         ":parser",
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_stretchr_testify//require",
     ],
 )
 
