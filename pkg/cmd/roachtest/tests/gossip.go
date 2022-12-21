@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -47,52 +46,36 @@ func registerGossip(r registry.Registry) {
 		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
 		require.NoError(t, err)
 
-		// TODO(irfansharif): We could also look at gossip_liveness to determine
-		// cluster membership as seen by each gossip module, and ensure each
-		// node's gossip excludes the dead node and includes all other live
-		// ones.
-		gossipNetworkAccordingTo := func(node int) (network string) {
+		gossipNetworkAccordingTo := func(node int) (nodes []int) {
+			// Expiration timestamp format: <seconds>.<nanos>,<logical>. We'll
+			// capture just the <seconds> portion.
 			const query = `
-SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
-  FROM (SELECT * FROM crdb_internal.gossip_network ORDER BY source_id, target_id)
+SELECT node_id
+  FROM (SELECT node_id, to_timestamp(split_part(split_part(expiration, ',', 1), '.', 1)::FLOAT8) AS expiration
+		  FROM crdb_internal.gossip_liveness)
+ WHERE expiration > now();
 `
 
 			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
-			var s gosql.NullString
-			if err = db.QueryRow(query).Scan(&s); err != nil {
+
+			rows, err := db.Query(query)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if s.Valid {
-				return s.String
-			}
-			return ""
-		}
 
-		nodesInNetworkAccordingTo := func(node int) (nodes []int, network string) {
-			split := func(c rune) bool {
-				return !unicode.IsNumber(c)
-			}
-
-			uniqueNodes := make(map[int]struct{})
-			network = gossipNetworkAccordingTo(node)
-			for _, idStr := range strings.FieldsFunc(network, split) {
-				nodeID, err := strconv.Atoi(idStr)
-				if err != nil {
-					t.Fatal(err)
-				}
-				uniqueNodes[nodeID] = struct{}{}
-			}
-			for node := range uniqueNodes {
-				nodes = append(nodes, node)
+			for rows.Next() {
+				var nodeID int
+				require.NoError(t, rows.Scan(&nodeID))
+				require.NotZero(t, nodeID)
+				nodes = append(nodes, nodeID)
 			}
 			sort.Ints(nodes)
-			return nodes, network
+			return nodes
 		}
 
 		gossipOK := func(start time.Time, deadNode int) bool {
 			var expLiveNodes []int
-			var expGossipNetwork string
 
 			for i := 1; i <= c.Spec().NodeCount; i++ {
 				if elapsed := timeutil.Since(start); elapsed >= 20*time.Second {
@@ -104,36 +87,35 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 				}
 
 				t.L().Printf("%d: checking gossip\n", i)
-				liveNodes, gossipNetwork := nodesInNetworkAccordingTo(i)
+				liveNodes := gossipNetworkAccordingTo(i)
 				for _, id := range liveNodes {
 					if id == deadNode {
-						t.L().Printf("%d: gossip not ok (dead node %d present): %s (%.0fs)\n",
-							i, deadNode, gossipNetwork, timeutil.Since(start).Seconds())
+						t.L().Printf("%d: gossip not ok (dead node %d present) (%.0fs)\n",
+							i, deadNode, timeutil.Since(start).Seconds())
 						return false
 					}
 				}
 
 				if len(expLiveNodes) == 0 {
 					expLiveNodes = liveNodes
-					expGossipNetwork = gossipNetwork
 					continue
 				}
 
 				if len(liveNodes) != len(expLiveNodes) {
-					t.L().Printf("%d: gossip not ok (mismatched size of network: %s); expected %d, got %d (%.0fs)\n",
-						i, gossipNetwork, len(expLiveNodes), len(liveNodes), timeutil.Since(start).Seconds())
+					t.L().Printf("%d: gossip not ok (mismatched size of network); expected %d, got %d (%.0fs)\n",
+						i, len(expLiveNodes), len(liveNodes), timeutil.Since(start).Seconds())
 					return false
 				}
 
 				for i := range liveNodes {
 					if liveNodes[i] != expLiveNodes[i] {
 						t.L().Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
-							i, gossipNetwork, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
+							i, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
 						return false
 					}
 				}
 			}
-			t.L().Printf("gossip ok: %s (size: %d) (%0.0fs)\n", expGossipNetwork, len(expLiveNodes), timeutil.Since(start).Seconds())
+			t.L().Printf("gossip ok (size: %d) (%0.0fs)\n", len(expLiveNodes), timeutil.Since(start).Seconds())
 			return true
 		}
 
