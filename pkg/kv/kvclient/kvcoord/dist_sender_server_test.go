@@ -125,7 +125,6 @@ func setupMultipleRanges(ctx context.Context, db *kv.DB, splitAt ...string) erro
 			ctx,
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			return err
 		}
@@ -1186,7 +1185,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		ctx,
 		"m",              /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1344,7 +1342,6 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 					ctx,
 					splitKey,
 					hlc.MaxTimestamp, /* expirationTime */
-					roachpb.AdminSplitRequest_INGESTION,
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -1496,7 +1493,6 @@ func TestParallelSender(t *testing.T) {
 			context.Background(),
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1546,7 +1542,6 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 			context.Background(),
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1652,7 +1647,6 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 			context.Background(),
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1714,7 +1708,6 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 		context.Background(),
 		"c",              /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -3581,7 +3574,6 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 			ctx,
 			rangeKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		))
 
 		for k := 0; k < KeysPerRange; k++ {
