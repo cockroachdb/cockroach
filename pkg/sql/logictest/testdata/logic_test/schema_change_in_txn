@@ -954,9 +954,9 @@ check_table  d_0               CHECK        CHECK ((d > 0))            true
 query TTBTTTB
 SHOW COLUMNS FROM check_table
 ----
-k  INT8  false  NULL      ·  {check_table_pkey}  false
-c  INT8  true   NULL      ·  {check_table_pkey}  false
-d  INT8  true   1:::INT8  ·  {check_table_pkey}  false
+k  INT8  false  NULL  ·  {check_table_pkey}  false
+c  INT8  true   NULL  ·  {check_table_pkey}  false
+d  INT8  true   1     ·  {check_table_pkey}  false
 
 statement ok
 DROP TABLE check_table
