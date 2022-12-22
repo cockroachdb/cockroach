@@ -152,6 +152,11 @@ func (s *FileSerializer) Finish() error {
 	return err
 }
 
+// Close releases the resources of the serializer.
+func (s *FileSerializer) Close() {
+	s.a.Release()
+}
+
 // FileDeserializer decodes columnar data batches from files encoded according
 // to the arrow spec.
 type FileDeserializer struct {
@@ -175,9 +180,9 @@ func NewFileDeserializerFromBytes(typs []*types.T, buf []byte) (*FileDeserialize
 	return newFileDeserializer(typs, buf, func() error { return nil })
 }
 
-// NewFileDeserializerFromPath constructs a FileDeserializer by reading it from
-// a file.
-func NewFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserializer, error) {
+// NewTestFileDeserializerFromPath constructs a FileDeserializer by reading it
+// from a file. It is only used in tests.
+func NewTestFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserializer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `opening %s`, path)
@@ -221,6 +226,7 @@ func newFileDeserializer(
 
 // Close releases any resources held by this deserializer.
 func (d *FileDeserializer) Close() error {
+	d.a.Release()
 	return d.bufCloseFn()
 }
 

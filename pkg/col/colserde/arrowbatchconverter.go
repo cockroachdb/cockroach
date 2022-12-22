@@ -40,6 +40,7 @@ type ArrowBatchConverter struct {
 		boolBuilder *array.BooleanBuilder
 	}
 
+	// TODO(yuzefovich): perform memory accounting for these slices.
 	scratch struct {
 		// arrowData is used as scratch space returned as the corresponding
 		// conversion result.
@@ -47,6 +48,13 @@ type ArrowBatchConverter struct {
 		// buffers is scratch space for two or three buffers per element in
 		// arrowData.
 		buffers [][]*memory.Buffer
+		// values and offsets will only be populated if there is at least one
+		// type that needs three buffers. If populated, then vecIdx'th elements
+		// of the slices will store the values and offsets, respectively, of the
+		// last serialized representation of vecIdx'th vector which allows us to
+		// reuse the same memory across BatchToArrow calls.
+		values  [][]byte
+		offsets [][]int32
 	}
 }
 
@@ -55,14 +63,19 @@ type ArrowBatchConverter struct {
 // not conform to typs results in undefined behavior.
 func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 	c := &ArrowBatchConverter{typs: typs}
+	// TODO(yuzefovich): we can avoid all of the allocations below if the
+	// converter is only used in the arrow-to-batch direction.
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
 	c.scratch.arrowData = make([]array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
 	// Calculate the number of buffers needed for all types to be able to batch
 	// allocate them below.
 	var numBuffersTotal int
+	var needOffsets bool
 	for _, t := range typs {
-		numBuffersTotal += numBuffersForType(t)
+		n := numBuffersForType(t)
+		numBuffersTotal += n
+		needOffsets = needOffsets || n == 3
 	}
 	buffers := make([]memory.Buffer, numBuffersTotal)
 	var buffersIdx int
@@ -72,6 +85,10 @@ func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 			c.scratch.buffers[i][j] = &buffers[buffersIdx]
 			buffersIdx++
 		}
+	}
+	if needOffsets {
+		c.scratch.values = make([][]byte, len(typs))
+		c.scratch.offsets = make([][]int32, len(typs))
 	}
 	return c, nil
 }
@@ -154,22 +171,27 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 			valuesHeader.Len = dataHeader.Len * int(datumSize)
 			valuesHeader.Cap = dataHeader.Cap * int(datumSize)
 		} else {
-			var offsets []int32
+			values = c.scratch.values[vecIdx][:0]
+			offsets := c.scratch.offsets[vecIdx][:0]
+			if cap(offsets) < n+1 {
+				offsets = make([]int32, 0, n+1)
+			}
 			switch f {
 			case types.BytesFamily:
-				values, offsets = vec.Bytes().ToArrowSerializationFormat(n)
+				values, offsets = vec.Bytes().ToArrowSerializationFormat(n, values, offsets)
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case types.JsonFamily:
-				values, offsets = vec.JSON().Bytes.ToArrowSerializationFormat(n)
+				values, offsets = vec.JSON().Bytes.ToArrowSerializationFormat(n, values, offsets)
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case types.DecimalFamily:
-				offsets = make([]int32, 0, n+1)
 				decimals := vec.Decimal()[:n]
-				// We don't know exactly how big a decimal will serialize to. Let's
-				// estimate 16 bytes.
-				values = make([]byte, 0, n*16)
+				// We don't know exactly how big a decimal will serialize to.
+				// Let's estimate 16 bytes.
+				if cap(values) < n*16 {
+					values = make([]byte, 0, n*16)
+				}
 				for i := range decimals {
 					offsets = append(offsets, int32(len(values)))
 					if nulls != nil && nulls.NullAt(i) {
@@ -183,12 +205,11 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case types.IntervalFamily:
-				offsets = make([]int32, 0, n+1)
 				intervals := vec.Interval()[:n]
 				intervalSize := int(memsize.Int64) * 3
-				// TODO(jordan): we could right-size this values slice by counting up the
-				// number of nulls in the nulls bitmap first, and subtracting from n.
-				values = make([]byte, intervalSize*n)
+				if cap(values) < intervalSize*n {
+					values = make([]byte, intervalSize*n)
+				}
 				var curNonNullInterval int
 				for i := range intervals {
 					offsets = append(offsets, int32(curNonNullInterval*intervalSize))
@@ -210,11 +231,12 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case types.TimestampTZFamily:
-				offsets = make([]int32, 0, n+1)
 				timestamps := vec.Timestamp()[:n]
 				// See implementation of time.MarshalBinary.
 				const timestampSize = 14
-				values = make([]byte, 0, n*timestampSize)
+				if cap(values) < n*timestampSize {
+					values = make([]byte, 0, n*timestampSize)
+				}
 				for i := range timestamps {
 					offsets = append(offsets, int32(len(values)))
 					if nulls != nil && nulls.NullAt(i) {
@@ -230,13 +252,14 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case typeconv.DatumVecCanonicalTypeFamily:
-				offsets = make([]int32, 0, n+1)
 				datums := vec.Datum().Window(0 /* start */, n)
 				// Make a very very rough estimate of the number of bytes we'll have to
 				// allocate for the datums in this vector. This will likely be an
 				// undercount, but the estimate is better than nothing.
 				size, _ := tree.DatumTypeSize(typ)
-				values = make([]byte, 0, n*int(size))
+				if cap(values) < n*int(size) {
+					values = make([]byte, 0, n*int(size))
+				}
 				for i := 0; i < n; i++ {
 					offsets = append(offsets, int32(len(values)))
 					if nulls != nil && nulls.NullAt(i) {
@@ -254,6 +277,10 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 			default:
 				panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
 			}
+
+			// Store the serialized slices as scratch space for the next call.
+			c.scratch.values[vecIdx] = values
+			c.scratch.offsets[vecIdx] = offsets
 		}
 
 		var arrowBitmap []byte
@@ -537,4 +564,10 @@ func deserializeArrowIntoBytes(
 	b = b[:len(b):len(b)]
 	offsets = offsets[:len(offsets):len(offsets)]
 	coldata.BytesFromArrowSerializationFormat(bytes, b, offsets)
+}
+
+// Release should be called once the converter is no longer needed so that its
+// memory could be GCed.
+func (c *ArrowBatchConverter) Release() {
+	*c = ArrowBatchConverter{}
 }
