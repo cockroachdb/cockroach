@@ -168,8 +168,13 @@ type streamIngestionProcessor struct {
 	// cutover.
 	cutoverCh chan struct{}
 
-	// cg is used to receive the subscription of events from the source cluster.
-	cg ctxgroup.Group
+	// subscriberCtxGroup is used to receive the subscription of
+	// events from the source cluster.
+	subscriberCtxGroup ctxgroup.Group
+
+	// subscriberCtxGroupCancel cancels the context passed to
+	// subscriberCtxGroup.
+	subscriberCtxGroupCancel context.CancelFunc
 
 	// closePoller is used to shutdown the poller that checks the job for a
 	// cutover signal.
@@ -303,48 +308,67 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 	}()
 
+	// Initialize the event streams.
+	if err := sip.startSubscribers(ctx); err != nil {
+		sip.MoveToDraining(err)
+		return
+	}
+}
+
+func (sip *streamIngestionProcessor) startSubscribers(ctx context.Context) error {
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
-	// Initialize the event streams.
+	subscriberCtx, cancel := context.WithCancel(ctx)
+	sip.subscriberCtxGroupCancel = cancel
+	sip.subscriberCtxGroup = ctxgroup.WithContext(subscriberCtx)
+
 	subscriptions := make(map[string]streamclient.Subscription)
-	sip.cg = ctxgroup.WithContext(ctx)
-	sip.streamPartitionClients = make([]streamclient.Client, 0)
+	sip.streamPartitionClients = make([]streamclient.Client, 0, len(sip.spec.PartitionSpecs))
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
-		id := partitionSpec.PartitionID
+		addr := streamingccl.StreamAddress(partitionSpec.Address)
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
-		addr := partitionSpec.Address
-		var streamClient streamclient.Client
-		if sip.forceClientForTests != nil {
-			streamClient = sip.forceClientForTests
-			log.Infof(ctx, "using testing client")
-		} else {
-			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr))
-			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
-				return
-			}
-			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
+
+		streamClient, err := sip.createStreamClientForAddress(ctx, addr)
+		if err != nil {
+			return errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr)
 		}
 
 		previousHighWater := frontierForSpans(sip.frontier, partitionSpec.Spans...)
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousHighWater)
+				streamingKnobs.BeforeClientSubscribe(string(addr), string(token), previousHighWater)
 			}
 		}
-
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token,
 			sip.spec.InitialScanTimestamp, previousHighWater)
-
 		if err != nil {
-			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
-			return
+			return err
 		}
-		subscriptions[id] = sub
-		sip.cg.GoCtx(sub.Subscribe)
+		subscriptions[partitionSpec.PartitionID] = sub
+		sip.subscriberCtxGroup.GoCtx(sub.Subscribe)
 	}
 	sip.eventCh = sip.merge(ctx, subscriptions)
+	return nil
+}
+
+func (sip *streamIngestionProcessor) createStreamClientForAddress(
+	ctx context.Context, addr streamingccl.StreamAddress,
+) (streamclient.Client, error) {
+	if sip.forceClientForTests != nil {
+		log.Infof(ctx, "using testing client")
+		return sip.forceClientForTests, nil
+	}
+
+	streamClient, err := streamclient.NewStreamClient(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save stream client so that it can be closed later. We don't
+	// close the testing client.
+	sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
+	return streamClient, nil
 }
 
 // Next is part of the RowSource interface.
@@ -423,6 +447,12 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.cancelMergeAndWait != nil {
 		sip.cancelMergeAndWait()
 	}
+
+	// Wait for all streamclient.Subscription.Subscribe()
+	// goroutines to return.
+	sip.subscriberCtxGroupCancel()
+	_ = sip.subscriberCtxGroup.Wait()
+
 	sip.InternalClose()
 }
 
