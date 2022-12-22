@@ -410,3 +410,5 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 replace google.golang.org/api v0.80.0 => github.com/cockroachdb/google-api-go-client v0.80.1-0.20221117193156-6a9f7150cb93
+
+replace github.com/cockroachdb/pebble => github.com/nvanbenschoten/pebble v0.0.0-20221222033003-850d76c06155

@@ -961,6 +961,15 @@ type Batch interface {
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
 	Commit(sync bool) error
+	// CommitNoSyncWait atomically applies any batched updates to the underlying
+	// engine and initiates a synchronous disk write, but does not wait for that
+	// write to complete. The caller must call SyncWait to wait for the fsync to
+	// complete. The caller must not Close the Batch without first calling
+	// SyncWait.
+	CommitNoSyncWait() error
+	// SyncWait waits for the disk write initiated by a call to CommitNoSyncWait
+	// to complete.
+	SyncWait() error
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
 	// Count returns the number of memtable-modifying operations in the batch.

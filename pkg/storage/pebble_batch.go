@@ -549,6 +549,30 @@ func (p *pebbleBatch) Commit(sync bool) error {
 	return err
 }
 
+// CommitNoSyncWait implements the Batch interface.
+func (p *pebbleBatch) CommitNoSyncWait() error {
+	if p.batch == nil {
+		panic("called with nil batch")
+	}
+	err := p.db.ApplyNoSyncWait(p.batch, pebble.Sync)
+	if err != nil {
+		panic(err)
+	}
+	return err
+}
+
+// SyncWait implements the Batch interface.
+func (p *pebbleBatch) SyncWait() error {
+	if p.batch == nil {
+		panic("called with nil batch")
+	}
+	err := p.batch.SyncWait()
+	if err != nil {
+		panic(err)
+	}
+	return err
+}
+
 // Empty implements the Batch interface.
 func (p *pebbleBatch) Empty() bool {
 	return p.batch.Count() == 0

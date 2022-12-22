@@ -742,6 +742,14 @@ func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
 }
 
+func (s spanSetBatch) CommitNoSyncWait() error {
+	return s.b.CommitNoSyncWait()
+}
+
+func (s spanSetBatch) SyncWait() error {
+	return s.b.CommitNoSyncWait()
+}
+
 func (s spanSetBatch) Empty() bool {
 	return s.b.Empty()
 }
