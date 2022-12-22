@@ -94,7 +94,7 @@ backgroundColor<<connected>> RosyBrown
 
 ## Version alignment with CRDB releases
 
-`cluster-ui` is dependent on the API of CRDB through a dependency on protobuf clients.
+`cluster-ui` is dependent on the API of CRDB through a dependency on a protobuf client.
 Since the API can change in incompatible ways between major versions of the database,
 versions of cluster-ui are published following the version scheme of CockroachDB.
 
@@ -185,7 +185,17 @@ here: https://storybook.js.org/docs/react/api/csf in order to
 facilitate writing unit tests with the storybook components.
 
 ## Publishing Cluster UI package to npm
-WIP
+Publishing Cluster UI pre-release versions from the master branch to npm is done
+by a Github Action workflow called "Publish Cluster UI Pre-release". This workflow
+will publish to npm anytime a version of Cluster UI is merged to master that is
+unpublished (by comparing the version in the `package.json` to versions of
+`@cockroachlabs/cluster-ui` on npm). To change the version of Cluster UI, you can
+run the command `yarn bump` from `pkg/ui/workspaces/cluster-ui`.
+
+To publish a version from a release branch, a manual publish is still required.
+The steps below can be followed to manually publish to npm. Github Workflows are
+being worked on for release branches, and this README will be updated when they
+are available.
 
 ### 1. Change the version in package.json
 CockroachDB uses a form of [calver](https://calver.org/) versioning where the major part
@@ -262,10 +272,10 @@ Once you have authenticated, you are ready to publish to npm.
 
 Go into the `pkg/ui/cluster-ui` subfolder, as you'll be publishing the package
 as specified by that `package.json`.
-  
+
 Note: If you've already updated `version` in `package.json` to reflect the new version,
 you'll need to temporarily change this back to the older version (i.e. the version
-that's currently listed on npm). After running the command below, the script will then 
+that's currently listed on npm). After running the command below, the script will then
 automatically reverted back to the newer version.
 
 To publish the package, run the publish command,

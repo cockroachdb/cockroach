@@ -19,12 +19,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "8a11a59c977f90b09b05cc91901c36fd566683824993c76fa79bc0927e67726f",
-    strip_prefix = "cockroachdb-rules_go-c7e85b7",
+    sha256 = "f02f82e74033ea42cf81da4319b9f8e0d4c5fa49346537267bba84053dc68ceb",
+    strip_prefix = "cockroachdb-rules_go-993120e",
     urls = [
-        # cockroachdb/rules_go as of c7e85b7266f5eb686354c8e6f362ca3baaf47199
-        # (upstream release-0.34 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-167-gc7e85b7.tar.gz",
+        # cockroachdb/rules_go as of 993120ee175025d8556a4dd8bec330e6c4b9ac13
+        # (upstream release-0.37 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-240-g993120e.tar.gz",
     ],
 )
 
@@ -143,14 +143,14 @@ http_archive(
         "@io_bazel_rules_go//third_party:go_googleapis-gazelle.patch",
         "@com_github_cockroachdb_cockroach//build/patches:go_googleapis.patch",
     ],
-    sha256 = "73831cbb41f2750f3181d126bbabcd3e58b5188e131ecbc309793fa54d5439c9",
-    strip_prefix = "googleapis-53377c165584e84c410a0905d9effb3fe5df2806",
-    # master, as of 2022-07-19
+    sha256 = "ba694861340e792fd31cb77274eacaf6e4ca8bda97707898f41d8bebfd8a4984",
+    strip_prefix = "googleapis-83c3605afb5a39952bf0a0809875d41cf2a558ca",
+    # master, as of 2022-12-05
     # NB: You may have to update this when bumping rules_go. Bumping to the same
     # version in rules_go (go/private/repositories.bzl) is probably what you
     # want to do.
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/53377c165584e84c410a0905d9effb3fe5df2806.zip",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/googleapis-83c3605afb5a39952bf0a0809875d41cf2a558ca.zip",
     ],
 )
 
