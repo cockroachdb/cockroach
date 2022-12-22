@@ -2251,6 +2251,7 @@ system         public        statement_statistics             app_name          
 system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  11
 system         public        statement_statistics             fingerprint_id                                                                                            2
 system         public        statement_statistics             index_recommendations                                                                                     12
+system         public        statement_statistics             indexes_usage                                                                                             13
 system         public        statement_statistics             metadata                                                                                                  8
 system         public        statement_statistics             node_id                                                                                                   6
 system         public        statement_statistics             plan                                                                                                      10
