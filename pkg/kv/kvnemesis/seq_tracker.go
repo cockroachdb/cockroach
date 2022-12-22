@@ -55,7 +55,13 @@ func (tr *SeqTracker) String() string {
 	return buf.String()
 }
 
-// Add associates key@ts with the provided Seq.
+// Add associates key@ts with the provided Seq. It is called in two places:
+//
+//   - For regular point/range key writes, we hook into the server-side rangefeed
+//     processor via RangefeedValueHeaderFilter and read it there.
+//
+//   - For AddSSTables, we scan the emitted SST in the rangefeed watcher,
+//     which contains the embedded seqnos.
 func (tr *SeqTracker) Add(key, endKey roachpb.Key, ts hlc.Timestamp, seq kvnemesisutil.Seq) {
 	tr.Lock()
 	defer tr.Unlock()
