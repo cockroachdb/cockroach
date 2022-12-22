@@ -166,7 +166,7 @@ type FileDeserializer struct {
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
 
-	arrowScratch []*array.Data
+	arrowScratch []array.Data
 }
 
 // NewFileDeserializerFromBytes constructs a FileDeserializer for an in-memory
@@ -214,7 +214,7 @@ func newFileDeserializer(
 	if d.rb, err = NewRecordBatchSerializer(typs); err != nil {
 		return nil, err
 	}
-	d.arrowScratch = make([]*array.Data, 0, len(typs))
+	d.arrowScratch = make([]array.Data, 0, len(typs))
 
 	return d, nil
 }

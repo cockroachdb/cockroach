@@ -155,7 +155,7 @@ func (a *arrowTestOperator) Next() coldata.Batch {
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	var arrowDataOut []*array.Data
+	var arrowDataOut []array.Data
 	batchLength, err := a.r.Deserialize(&arrowDataOut, buf.Bytes())
 	if err != nil {
 		colexecerror.InternalError(err)

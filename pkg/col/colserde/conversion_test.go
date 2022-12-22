@@ -75,7 +75,7 @@ func BenchmarkConversion(b *testing.B) {
 			s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
 			require.NoError(b, err)
 			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
-			var arrowScratch []*array.Data
+			var arrowScratch []array.Data
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				arrowScratch = arrowScratch[:0]
