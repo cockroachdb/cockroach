@@ -583,9 +583,6 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		c.Args.DestTenantName, cutoverTime.AsOfSystemTime())
 
-	// Resume ingestion.
-	c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
-
 	// Ingestion job should succeed despite source failure due to the successful cutover
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
