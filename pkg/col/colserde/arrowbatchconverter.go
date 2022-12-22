@@ -27,6 +27,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ConversionMode describes how ArrowBatchConverter will be utilized.
+type ConversionMode int
+
+const (
+	// BiDirectional indicates that both arrow-to-batch and batch-to-arrow
+	// conversions can happen.
+	BiDirectional ConversionMode = iota
+	// ArrowToBatchOnly indicates that only arrow-to-batch conversion can
+	// happen.
+	ArrowToBatchOnly
+	// BatchToArrowOnly indicates that only batch-to-arrow conversion can
+	// happen.
+	BatchToArrowOnly
+)
+
 // ArrowBatchConverter converts batches to arrow column data
 // ([]array.Data) and back again.
 type ArrowBatchConverter struct {
@@ -74,10 +89,13 @@ func numBuffers(t *types.T) int {
 // NewArrowBatchConverter converts coldata.Batches to []array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
-func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
+func NewArrowBatchConverter(typs []*types.T, mode ConversionMode) (*ArrowBatchConverter, error) {
 	c := &ArrowBatchConverter{typs: typs}
-	// TODO(yuzefovich): we can avoid all of the allocations below if the
-	// converter is only used in the arrow-to-batch direction.
+	if mode == ArrowToBatchOnly {
+		// All the allocations below are only used in BatchToArrow, so we don't
+		// need to allocate them.
+		return c, nil
+	}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
 	c.scratch.arrowData = make([]array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
