@@ -51,6 +51,7 @@ PROTOBUF_SRCS = [
     "//pkg/sql/catalog/catenumpb:catenumpb_go_proto",
     "//pkg/sql/catalog/catpb:catpb_go_proto",
     "//pkg/sql/catalog/descpb:descpb_go_proto",
+    "//pkg/sql/catalog/fetchpb:fetchpb_go_proto",
     "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller:schematelemetrycontroller_go_proto",
     "//pkg/sql/contentionpb:contentionpb_go_proto",
     "//pkg/sql/execinfrapb:execinfrapb_go_proto",

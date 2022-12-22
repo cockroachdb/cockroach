@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",

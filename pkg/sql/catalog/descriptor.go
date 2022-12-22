@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -539,8 +540,8 @@ type TableDescriptor interface {
 	IndexKeysPerRow(idx Index) int
 
 	// IndexFetchSpecKeyAndSuffixColumns returns information about the key and
-	// suffix columns, suitable for populating a descpb.IndexFetchSpec.
-	IndexFetchSpecKeyAndSuffixColumns(idx Index) []descpb.IndexFetchSpec_KeyColumn
+	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
+	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
 
 	// FindColumnWithID returns the first column found whose ID matches the
 	// provided target ID, in the canonical order.
@@ -590,7 +591,7 @@ type TableDescriptor interface {
 
 	// FamilyDefaultColumns returns the default column IDs for families with a
 	// default column. See IndexFetchSpec.FamilyDefaultColumns.
-	FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn
+	FamilyDefaultColumns() []fetchpb.IndexFetchSpec_FamilyDefaultColumn
 
 	// HasColumnBackfillMutation returns whether the table has any queued column
 	// mutations that require a backfill.

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -62,7 +63,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			if err != nil {
 				return "", "", nil, nil, err
 			}
-			var spec descpb.IndexFetchSpec
+			var spec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, nil /* fetchColumnIDs */); err != nil {
 				return "", "", nil, nil, err
 			}
@@ -77,7 +78,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 
 // ConvertFetchError attempts to map a key-value error generated during a
 // key-value fetch to a user friendly SQL error.
-func ConvertFetchError(spec *descpb.IndexFetchSpec, err error) error {
+func ConvertFetchError(spec *fetchpb.IndexFetchSpec, err error) error {
 	var errs struct {
 		wi *roachpb.WriteIntentError
 		bs *roachpb.MinTimestampBoundUnsatisfiableError
@@ -136,7 +137,7 @@ func NewUniquenessConstraintViolationError(
 // decodeKeyValsUsingSpec decodes an index key and returns the key column names
 // and values.
 func decodeKeyValsUsingSpec(
-	spec *descpb.IndexFetchSpec, key roachpb.Key,
+	spec *fetchpb.IndexFetchSpec, key roachpb.Key,
 ) (colNames []string, values []string, err error) {
 	// We want the key columns without the suffix columns.
 	keyCols := spec.KeyColumns()
@@ -252,7 +253,7 @@ func DecodeRowInfo(
 		}
 		cols[i] = col
 	}
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, colIDs); err != nil {
 		return nil, nil, nil, err
 	}

@@ -11,7 +11,7 @@
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "descpb";
+option go_package = "fetchpb";
 
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
@@ -24,7 +24,7 @@ message IndexFetchSpec {
   message Column {
     optional uint32 column_id = 1 [(gogoproto.nullable) = false,
                                    (gogoproto.customname) = "ColumnID",
-                                   (gogoproto.casttype) = "ColumnID"];
+                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
 
     // Name of the column, as it is expected to appear in debug and error
     // messages.
@@ -60,13 +60,13 @@ message IndexFetchSpec {
   message FamilyDefaultColumn {
     optional uint32 family_id = 1 [(gogoproto.nullable) = false,
                                    (gogoproto.customname) = "FamilyID",
-                                   (gogoproto.casttype) = "FamilyID"];
+                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
 
     // DefaultColumnID is the implicit column ID when a single value is encoded
     // for the family. See ColumnFamilyDescriptor.DefaultColumnID.
     optional uint32 default_column_id = 2 [(gogoproto.nullable) = false,
                                            (gogoproto.customname) = "DefaultColumnID",
-                                           (gogoproto.casttype) = "ColumnID"];
+                                           (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   }
 
   // Version is used to allow providing backward compatibility if this spec
@@ -76,12 +76,12 @@ message IndexFetchSpec {
 
   optional uint32 table_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "TableID",
-                                (gogoproto.casttype) = "ID"];
+                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   optional string table_name = 3 [(gogoproto.nullable) = false];
 
   optional uint32 index_id = 4 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "IndexID",
-                                (gogoproto.casttype) = "IndexID"];
+                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
   optional string index_name = 5 [(gogoproto.nullable) = false];
 
@@ -116,7 +116,7 @@ message IndexFetchSpec {
 
   optional uint32 max_family_id = 12 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "MaxFamilyID",
-                                      (gogoproto.casttype) = "FamilyID"];
+                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
 
   // FamilyDefaultColumns contains the default column IDs for families with a
   // default column. This is used to decode values that use the single column

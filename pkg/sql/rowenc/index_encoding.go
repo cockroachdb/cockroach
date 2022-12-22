@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
@@ -82,7 +83,7 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
@@ -99,7 +100,7 @@ func EncodePartialIndexSpan(
 // suffix) columns are encoded; these can be a prefix of the index key columns.
 // Does not directly append to keyPrefix.
 func EncodePartialIndexKey(
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
@@ -147,7 +148,7 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // specified in the same order as the index key columns and may be a prefix.
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
@@ -343,7 +344,7 @@ func SplitRowKeyIntoFamilySpans(
 // encodings of the given EncDatum values.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Key, containsNull bool, _ error) {
@@ -472,9 +473,9 @@ func DecodeKeyVals(
 }
 
 // DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
-// descpb.IndexFetchSpec_KeyColumn for column metadata.
+// fetchpb.IndexFetchSpec_KeyColumn for column metadata.
 func DecodeKeyValsUsingSpec(
-	keyCols []descpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	for j := range vals {
 		c := keyCols[j]

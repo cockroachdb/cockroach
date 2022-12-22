@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -43,7 +43,7 @@ type initFetcherArgs struct {
 	columns   []int
 }
 
-func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) descpb.IndexFetchSpec {
+func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) fetchpb.IndexFetchSpec {
 	index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
 	colIDs := entry.tableDesc.PublicColumnIDs()
 	if entry.columns != nil {
@@ -53,7 +53,7 @@ func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) descpb.IndexFetchSp
 			colIDs = append(colIDs, allColIDs[ord])
 		}
 	}
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, entry.tableDesc, index, colIDs); err != nil {
 		t.Fatal(err)
 	}
