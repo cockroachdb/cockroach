@@ -436,6 +436,7 @@ func (d *diskQueue) Close(ctx context.Context) error {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
+		d.serializer.Close()
 		d.serializer = nil
 	}
 	if err := d.closeFileDeserializer(); err != nil {

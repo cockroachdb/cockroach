@@ -106,14 +106,6 @@ func (e *element) getNonInlined(b *Bytes) []byte {
 	return b.buffer[e.header.bufferOffset : e.header.bufferOffset+e.header.len : e.header.bufferOffset+e.header.cap]
 }
 
-//gcassert:inline
-func (e *element) len() int {
-	if e.inlined {
-		return int(e.inlinedLength)
-	}
-	return e.header.len
-}
-
 func (e *element) set(v []byte, b *Bytes) {
 	if len(v) <= BytesMaxInlineLength {
 		*e = element{inlinedLength: byte(len(v)), inlined: true}
@@ -553,6 +545,10 @@ func (b *Bytes) String() string {
 // offsets and populates b.
 func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
 	numElements := len(offsets) - 1
+	// TODO(yuzefovich): we can come up with better strategy here. For example,
+	// we could estimate the average size of values and possibly not inline all
+	// of them, or we could at least ensure that b.buffer is large enough to
+	// hold some guess on the non-inlined total footprint.
 	if cap(b.elements) < numElements {
 		b.elements = make([]element, numElements)
 		b.buffer = b.buffer[:0]
@@ -566,15 +562,14 @@ func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
 }
 
 // ToArrowSerializationFormat returns a bytes slice and offsets that are
-// Arrow-compatible. n is the number of elements to serialize.
-func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
-	// Calculate the size of the flat byte slice that will contain all elements.
-	var dataSize int
-	for _, e := range b.elements[:n] {
-		dataSize += e.len()
-	}
-	data := make([]byte, 0, dataSize)
-	offsets := make([]int32, 1, n+1)
+// Arrow-compatible. n is the number of elements to serialize. The results will
+// be appended to the passed-in slices.
+func (b *Bytes) ToArrowSerializationFormat(
+	n int, dataScratch []byte, offsetsScratch []int32,
+) ([]byte, []int32) {
+	data := dataScratch[:0]
+	offsets := offsetsScratch[:0]
+	offsets = append(offsets, 0)
 	for _, e := range b.elements[:n] {
 		data = append(data, e.get(b)...)
 		offsets = append(offsets, int32(len(data)))
