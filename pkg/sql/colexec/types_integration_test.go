@@ -81,7 +81,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 
 			columnarizer := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 0 /* processorID */, source)
 
-			c, err := colserde.NewArrowBatchConverter(typs)
+			c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
 			require.NoError(t, err)
 			r, err := colserde.NewRecordBatchSerializer(typs)
 			require.NoError(t, err)

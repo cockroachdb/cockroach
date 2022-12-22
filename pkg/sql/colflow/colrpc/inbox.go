@@ -134,7 +134,7 @@ var _ colexecop.Operator = &Inbox{}
 func NewInbox(
 	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.ArrowToBatchOnly)
 	if err != nil {
 		return nil, err
 	}
