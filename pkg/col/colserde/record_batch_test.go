@@ -346,7 +346,7 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	}
 	src.SetLength(coldata.BatchSize())
 
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
 	require.NoError(t, err)
 	r, err := colserde.NewRecordBatchSerializer(typs)
 	require.NoError(t, err)
