@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -372,7 +372,7 @@ func (s *eventStream) addSST(
 	// Extract the received SST to only contain data within the boundaries of
 	// matching registered span. Execute the specified operations on each MVCC
 	// key value and each MVCCRangeKey value in the trimmed SSTable.
-	if err := replicationutils.ScanSST(sst, registeredSpan,
+	if err := streamingccl.ScanSST(sst, registeredSpan,
 		func(mvccKV storage.MVCCKeyValue) error {
 			batch.KeyValues = append(batch.KeyValues, roachpb.KeyValue{
 				Key: mvccKV.Key.Key,

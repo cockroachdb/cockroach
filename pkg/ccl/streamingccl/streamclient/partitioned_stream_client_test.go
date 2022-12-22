@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,7 +46,7 @@ type subscriptionFeedSource struct {
 	sub Subscription
 }
 
-var _ replicationtestutils.FeedSource = (*subscriptionFeedSource)(nil)
+var _ streamingtest.FeedSource = (*subscriptionFeedSource)(nil)
 
 // Next implements the streamingtest.FeedSource interface.
 func (f *subscriptionFeedSource) Next() (streamingccl.Event, bool) {
@@ -65,7 +66,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	h, cleanup := replicationtestutils.NewReplicationHelper(t,
+	h, cleanup := streamingtest.NewReplicationHelper(t,
 		base.TestServerArgs{
 			// Need to disable the test tenant until tenant-level restore is
 			// supported. Tracked with #76378.
@@ -206,21 +207,21 @@ INSERT INTO d.t2 VALUES (2);
 		initialScanTimestamp, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	rf := replicationtestutils.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
+	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), tenant.Codec, "d", "t1")
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
 	cg.GoCtx(sub.Subscribe)
 	// Observe the existing single row in t1.
-	expected := replicationtestutils.EncodeKV(t, tenant.Codec, t1Descr, 42)
+	expected := streamingtest.EncodeKV(t, tenant.Codec, t1Descr, 42)
 	firstObserved := rf.ObserveKey(ctx, expected.Key)
 	require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 	rf.ObserveResolved(ctx, firstObserved.Value.Timestamp)
 
 	// Updates the existing row.
 	tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
-	expected = replicationtestutils.EncodeKV(t, tenant.Codec, t1Descr, 42, nil, "world")
+	expected = streamingtest.EncodeKV(t, tenant.Codec, t1Descr, 42, nil, "world")
 
 	// Observe its changes.
 	secondObserved := rf.ObserveKey(ctx, expected.Key)

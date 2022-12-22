@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package replicationtestutils
+package streamingtest
 
 import (
 	"bytes"

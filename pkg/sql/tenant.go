@@ -792,22 +792,6 @@ func (p *planner) UpdateTenantResourceLimits(
 	})
 }
 
-// GetTenantInfo implements the tree.TenantOperator interface.
-func (p *planner) GetTenantInfo(
-	ctx context.Context, tenantName roachpb.TenantName,
-) (*descpb.TenantInfo, error) {
-	const op = "get-tenant-info"
-	if err := p.RequireAdminRole(ctx, op); err != nil {
-		return nil, err
-	}
-
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
-		return nil, err
-	}
-
-	return GetTenantRecordByName(ctx, p.execCfg, p.Txn(), tenantName)
-}
-
 // TestingUpdateTenantRecord is a public wrapper around updateTenantRecord
 // intended for testing purposes.
 func TestingUpdateTenantRecord(

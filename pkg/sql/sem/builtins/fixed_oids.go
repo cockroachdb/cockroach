@@ -2037,7 +2037,6 @@ var builtinOidsArray = []string{
 	2059: `parse_ident(qualified_identifier: string, strict: bool) -> string[]`,
 	2060: `pg_get_function_arguments(func_oid: oid) -> string`,
 	2061: `crdb_internal.job_payload_type(data: bytes) -> string`,
-	2062: `crdb_internal.tenant_span(tenant_name: string) -> bytes[]`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
