@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -2137,7 +2136,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	if sc.execCfg.Codec.ForSystemTenant() {
 		expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 		for _, span := range addingSpans {
-			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime, oppurpose.SplitImport); err != nil {
+			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
 			}
 		}

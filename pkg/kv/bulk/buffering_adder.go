@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -404,7 +403,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 		predicateKey := b.curBuf.Key(predicateAt)
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
-		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, roachpb.AdminSplitRequest_INGESTION, predicateKey); err != nil {
+		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, predicateKey); err != nil {
 			// TODO(dt): a typed error would be nice here.
 			if strings.Contains(err.Error(), "predicate") {
 				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s",
@@ -425,7 +424,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	b.sink.currentStats.SplitWait += splitsWait
 
 	for _, splitKey := range toScatter {
-		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */, oppurpose.ScatterBulk)
+		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */)
 		if err != nil {
 			log.Warningf(ctx, "failed to scatter: %v", err)
 			continue

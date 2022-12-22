@@ -121,8 +121,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	// Test that we can actually perform a scatter.
 	if _, err := db.Exec("ALTER TABLE system.jobs SCATTER"); err != nil {
-		if strings.Contains(err.Error(), "not fully contained in tenant") ||
-			strings.Contains(err.Error(), "request [1 AdmScatter] not permitted") {
+		if strings.Contains(err.Error(), "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled") {
 			log.Infof(ctx, `skipping workload splits; can't scatter on tenants'`)
 			//nolint:returnerrcheck
 			return nil

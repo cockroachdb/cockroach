@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -1944,11 +1943,17 @@ func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, 
 func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
+
+	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		ef.planner.ExecCfg(),
+		execCfg,
 		"ALTER TABLE/INDEX SPLIT AT",
 	); err != nil {
+		return nil, err
+	}
+
+	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantSplitAtEnabled); err != nil {
 		return nil, err
 	}
 
@@ -1969,11 +1974,17 @@ func (ef *execFactory) ConstructAlterTableSplit(
 func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
+
+	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		ef.planner.ExecCfg(),
+		execCfg,
 		"ALTER TABLE/INDEX UNSPLIT AT",
 	); err != nil {
+		return nil, err
+	}
+
+	if err := execCfg.RequireSystemTenant(); err != nil {
 		return nil, err
 	}
 
@@ -1986,14 +1997,17 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
+	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		ef.planner.ExecCfg(),
+		execCfg,
 		"ALTER TABLE/INDEX UNSPLIT ALL",
 	); err != nil {
 		return nil, err
 	}
-
+	if err := execCfg.RequireSystemTenant(); err != nil {
+		return nil, err
+	}
 	return &unsplitAllNode{
 		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).idx,
@@ -2004,8 +2018,9 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
-	if !ef.planner.ExecCfg().IsSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+
+	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
+		return nil, err
 	}
 
 	return &relocateNode{
@@ -2023,10 +2038,9 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
-	if !ef.planner.ExecCfg().IsSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
+		return nil, err
 	}
-
 	return &relocateRange{
 		rows:            input.(planNode),
 		subjectReplicas: relocateSubject,
