@@ -92,6 +92,7 @@ go_test(
         "tls_test.go",
     ],
     args = ["-test.timeout=55s"],
+    data = glob(["testdata/**"]),
     embed = [":rpc"],
     deps = [
         "//pkg/base",
@@ -106,6 +107,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/grpcutil",

@@ -14,8 +14,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/golang/snappy"
 	"github.com/stretchr/testify/require"
@@ -24,22 +27,32 @@ import (
 func TestSnappyCompressorCompressDecompress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var c snappyCompressor
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
 	for _, tt := range []struct {
 		lenPrefix bool
 		in        []byte // uncompressed
-		expOut    []byte // compressed
 	}{
 		// Without length prefixing enabled.
-		{false, []byte{}, nil},
-		{false, []byte("A"), []byte{0xff, 0x6, 0x0, 0x0, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59, 0x1, 0x5, 0x0, 0x0, 0xb3, 0xad, 0x60, 0x3e, 0x41}},
-		{false, []byte("ABC"), []byte{0xff, 0x6, 0x0, 0x0, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59, 0x1, 0x7, 0x0, 0x0, 0x4b, 0xfb, 0x81, 0xf5, 0x41, 0x42, 0x43}},
+		{false, []byte{}},
+		{false, []byte("A")},
+		{false, []byte("ABC")},
 		// With length prefixing enabled.
-		{true, []byte{}, []byte{0xfd, 0x0}},
-		{true, []byte("A"), []byte{0xfd, 0x1, 0xff, 0x6, 0x0, 0x0, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59, 0x1, 0x5, 0x0, 0x0, 0xb3, 0xad, 0x60, 0x3e, 0x41}},
-		{true, []byte("ABC"), []byte{0xfd, 0x3, 0xff, 0x6, 0x0, 0x0, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59, 0x1, 0x7, 0x0, 0x0, 0x4b, 0xfb, 0x81, 0xf5, 0x41, 0x42, 0x43}},
+		{true, []byte{}},
+		{true, []byte("A")},
+		{true, []byte("ABC")},
 	} {
-		name := fmt.Sprintf("lenPrefix=%t/input=%v", tt.lenPrefix, tt.in)
-		t.Run(name, func(t *testing.T) {
+		name := string(tt.in)
+		if name == "" {
+			name = "empty"
+		}
+		if tt.lenPrefix {
+			name += "_lenprefix"
+		} else {
+			name += "_noprefix"
+		}
+		t.Run(name, w.Run(t, name, func(t *testing.T) string {
+			var s strings.Builder
+
 			c.setLengthPrefixingEnabled(tt.lenPrefix)
 
 			// Compress.
@@ -52,7 +65,8 @@ func TestSnappyCompressorCompressDecompress(t *testing.T) {
 			err = wc.Close()
 			require.NoError(t, err)
 			out := buf.Bytes()
-			require.Equal(t, tt.expOut, out)
+			fmt.Fprintf(&s, "input:\n%x (%s)\n", tt.in, tt.in)
+			fmt.Fprintf(&s, "compressed:\n%x\n", out)
 
 			// Decompress.
 			n := c.DecompressedSize(out)
@@ -66,8 +80,9 @@ func TestSnappyCompressorCompressDecompress(t *testing.T) {
 			require.NoError(t, err)
 			in, err := io.ReadAll(r)
 			require.NoError(t, err)
-			require.EqualValues(t, tt.in, in)
-		})
+			require.Equal(t, tt.in, in)
+			return s.String()
+		}))
 	}
 }
 
