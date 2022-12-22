@@ -2065,6 +2065,17 @@ DROP DATABASE constraint_db CASCADE
 
 ## information_schema.columns
 
+statement ok
+SET DATABASE = test;
+CREATE TABLE t2(a smallint DEFAULT 0);
+
+query TT colnames
+select data_type, column_default  from information_schema.columns where table_name = 't2' and column_name = 'a';
+----
+data_type  column_default
+smallint   0
+
+
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -2329,8 +2340,8 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'with_defaults'
 ----
 table_name     column_name  column_default
-with_defaults  a            9:::INT8
-with_defaults  b            'default':::STRING
+with_defaults  a            9
+with_defaults  b            default
 with_defaults  c            NULL
 with_defaults  d            NULL
 with_defaults  rowid        unique_rowid()
@@ -4898,8 +4909,10 @@ ORDER BY 3,4
 table_catalog  table_schema  table_name  column_name  ordinal_position
 test           public        t1          a            1
 test           public        t1          b            2
+test           public        t2          a            1
 other_db       public        t2          c            1
 other_db       public        t2          d            2
+test           public        t2          rowid        2
 
 statement ok
 SET DATABASE = "";
@@ -4915,8 +4928,10 @@ ORDER BY 3,4
 table_catalog  table_schema  table_name  column_name  ordinal_position
 test           public        t1          a            1
 test           public        t1          b            2
+test           public        t2          a            1
 other_db       public        t2          c            1
 other_db       public        t2          d            2
+test           public        t2          rowid        2
 
 statement ok
 SET DATABASE = test
