@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachangestatus"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -225,9 +226,9 @@ func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus
 	switch {
 	// `flag` not set implies we're not GCing anything.
 	case !flag && anyWaitingForMVCCGC:
-		return sql.RunningStatusWaitingForMVCCGC
+		return schemachangestatus.WaitingForMVCCGC
 	case !flag:
-		return sql.RunningStatusWaitingGC // legacy status
+		return schemachangestatus.WaitingGC // legacy status
 	default:
 		return jobs.RunningStatus(b.String())
 	}

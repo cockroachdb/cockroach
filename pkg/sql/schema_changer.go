@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachangestatus"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -74,36 +75,6 @@ var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
 	"the exponential back off when retrying jobs for schema changes",
 	20*time.Second,
 	settings.PositiveDuration,
-)
-
-const (
-	// RunningStatusWaitingForMVCCGC is used for the GC job when it has cleared
-	// the data but is waiting for MVCC GC to remove the data.
-	RunningStatusWaitingForMVCCGC jobs.RunningStatus = "waiting for MVCC GC"
-	// RunningStatusDeletingData is used for the GC job when it is about
-	// to clear the data.
-	RunningStatusDeletingData jobs.RunningStatus = "deleting data"
-	// RunningStatusWaitingGC is for jobs that are currently in progress and
-	// are waiting for the GC interval to expire
-	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
-	// RunningStatusDeleteOnly is for jobs that are currently waiting on
-	// the cluster to converge to seeing the schema element in the DELETE_ONLY
-	// state.
-	RunningStatusDeleteOnly jobs.RunningStatus = "waiting in DELETE-ONLY"
-	// RunningStatusWriteOnly is for jobs that are currently waiting on
-	// the cluster to converge to seeing the schema element in the
-	// WRITE_ONLY state.
-	RunningStatusWriteOnly jobs.RunningStatus = "waiting in WRITE_ONLY"
-	// RunningStatusMerging is for jobs that are currently waiting on
-	// the cluster to converge to seeing the schema element in the
-	// MERGING state.
-	RunningStatusMerging jobs.RunningStatus = "waiting in MERGING"
-	// RunningStatusBackfill is for jobs that are currently running a backfill
-	// for a schema element.
-	RunningStatusBackfill jobs.RunningStatus = "populating schema"
-	// RunningStatusValidation is for jobs that are currently validating
-	// a schema element.
-	RunningStatusValidation jobs.RunningStatus = "validating schema"
 )
 
 // SchemaChanger is used to change the schema on a table.
@@ -909,9 +880,9 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			}
 
 			if mutation.Adding() && mutation.DeleteOnly() {
-				runStatus = RunningStatusDeleteOnly
+				runStatus = schemachangestatus.DeleteOnly
 			} else if mutation.Dropped() && mutation.WriteAndDeleteOnly() {
-				runStatus = RunningStatusWriteOnly
+				runStatus = schemachangestatus.WriteOnly
 			}
 		}
 		if runStatus != "" && !desc.Dropped() {
@@ -1139,13 +1110,13 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					// WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
 					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_WRITE_ONLY
-					runStatus = RunningStatusWriteOnly
+					runStatus = schemachangestatus.WriteOnly
 				}
 				// else if WRITE_ONLY, then the state change has already moved forward.
 			} else if m.Dropped() {
 				if m.WriteAndDeleteOnly() || m.Merging() {
 					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
-					runStatus = RunningStatusDeleteOnly
+					runStatus = schemachangestatus.DeleteOnly
 				}
 				// else if DELETE_ONLY, then the state change has already moved forward.
 			}
@@ -1240,10 +1211,10 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 			if m.Adding() {
 				if m.Backfilling() {
 					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
-					runStatus = RunningStatusDeleteOnly
+					runStatus = schemachangestatus.DeleteOnly
 				} else if m.DeleteOnly() {
 					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_MERGING
-					runStatus = RunningStatusMerging
+					runStatus = schemachangestatus.Merging
 				}
 			}
 		}
@@ -2313,9 +2284,11 @@ func CreateGCJobRecord(
 			descriptorIDs = append(descriptorIDs, table.ID)
 		}
 	}
-	runningStatus := RunningStatusDeletingData
+	var runningStatus jobs.RunningStatus
 	if useLegacyGCJob {
-		runningStatus = RunningStatusWaitingGC
+		runningStatus = schemachangestatus.WaitingGC
+	} else {
+		runningStatus = schemachangestatus.DeletingData
 	}
 	return jobs.Record{
 		Description:   fmt.Sprintf("GC for %s", originalDescription),

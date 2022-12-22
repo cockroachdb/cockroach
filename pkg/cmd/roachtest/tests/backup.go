@@ -26,8 +26,8 @@ import (
 	"time"
 
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
-	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/amazonparams"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/gcp/gcpparams"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachangestatus"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1317,7 +1317,7 @@ func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cl
 	require.NoError(t, err)
 	require.NoError(t, conn.QueryRowContext(ctx,
 		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'`).Scan(&jobID))
-	waitForStatus(jobID, jobs.StatusRunning, sql.RunningStatusWaitingForMVCCGC, 2*time.Minute)
+	waitForStatus(jobID, jobs.StatusRunning, schemachangestatus.WaitingForMVCCGC, 2*time.Minute)
 
 	// Check that the data has been deleted. We don't write MVCC range tombstones
 	// unless the range contains live data, so only assert their existence if the
@@ -1382,9 +1382,9 @@ func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cl
 func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     amazon.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": amazon.AWSSecretParam,
-		regionEnvVariable:       amazon.KMSRegionParam,
+		"AWS_ACCESS_KEY_ID":     amazonparams.AWSAccessKey,
+		"AWS_SECRET_ACCESS_KEY": amazonparams.AWSSecret,
+		regionEnvVariable:       amazonparams.KMSRegion,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1410,10 +1410,10 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 func getAWSKMSAssumeRoleURI() (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		AssumeRoleAWSKeyIDEnvVar:     amazon.AWSAccessKeyParam,
-		AssumeRoleAWSSecretKeyEnvVar: amazon.AWSSecretParam,
-		AssumeRoleAWSRoleEnvVar:      amazon.AssumeRoleParam,
-		KMSRegionAEnvVar:             amazon.KMSRegionParam,
+		AssumeRoleAWSKeyIDEnvVar:     amazonparams.AWSAccessKey,
+		AssumeRoleAWSSecretKeyEnvVar: amazonparams.AWSSecret,
+		AssumeRoleAWSRoleEnvVar:      amazonparams.AssumeRole,
+		KMSRegionAEnvVar:             amazonparams.KMSRegion,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1439,7 +1439,7 @@ func getAWSKMSAssumeRoleURI() (string, error) {
 func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		KMSGCSCredentials: gcp.CredentialsParam,
+		KMSGCSCredentials: gcpparams.Credentials,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1465,8 +1465,8 @@ func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
 func getGCSKMSAssumeRoleURI() (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
-		AssumeRoleGCSServiceAccount: gcp.AssumeRoleParam,
+		AssumeRoleGCSCredentials:    gcpparams.Credentials,
+		AssumeRoleGCSServiceAccount: gcpparams.AssumeRole,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1474,7 +1474,7 @@ func getGCSKMSAssumeRoleURI() (string, error) {
 			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
 		}
 		// Nightly env uses JSON credentials, which have to be base64 encoded.
-		if param == gcp.CredentialsParam {
+		if param == gcpparams.Credentials {
 			v = base64.StdEncoding.EncodeToString([]byte(v))
 		}
 		q.Add(param, v)
@@ -1496,8 +1496,8 @@ func getGCSKMSAssumeRoleURI() (string, error) {
 func getGCSBackupPath(dest string) (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
-		AssumeRoleGCSServiceAccount: gcp.AssumeRoleParam,
+		AssumeRoleGCSCredentials:    gcpparams.Credentials,
+		AssumeRoleGCSServiceAccount: gcpparams.AssumeRole,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1506,7 +1506,7 @@ func getGCSBackupPath(dest string) (string, error) {
 		}
 
 		// Nightly env uses JSON credentials, which have to be base64 encoded.
-		if param == gcp.CredentialsParam {
+		if param == gcpparams.Credentials {
 			v = base64.StdEncoding.EncodeToString([]byte(v))
 		}
 		q.Add(param, v)
@@ -1522,10 +1522,10 @@ func getGCSBackupPath(dest string) (string, error) {
 func getAWSBackupPath(dest string) (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		AssumeRoleAWSKeyIDEnvVar:     amazon.AWSAccessKeyParam,
-		AssumeRoleAWSSecretKeyEnvVar: amazon.AWSSecretParam,
-		AssumeRoleAWSRoleEnvVar:      amazon.AssumeRoleParam,
-		KMSRegionAEnvVar:             amazon.KMSRegionParam,
+		AssumeRoleAWSKeyIDEnvVar:     amazonparams.AWSAccessKey,
+		AssumeRoleAWSSecretKeyEnvVar: amazonparams.AWSSecret,
+		AssumeRoleAWSRoleEnvVar:      amazonparams.AssumeRole,
+		KMSRegionAEnvVar:             amazonparams.KMSRegion,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)

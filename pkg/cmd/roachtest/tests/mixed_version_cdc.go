@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/validator"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -95,7 +95,7 @@ type cdcMixedVersionTester struct {
 	}
 	crdbUpgrading     syncutil.Mutex
 	kafka             kafkaManager
-	validator         *cdctest.CountValidator
+	validator         *validator.CountValidator
 	testFinished      bool
 	validatorFinished chan struct{}
 	cleanup           func()
@@ -231,16 +231,16 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 			}
 
 			getConn := func(node int) *gosql.DB { return u.conn(ctx, t, node) }
-			fprintV, err := cdctest.NewFingerprintValidator(db, tableName, `fprint`, consumer.partitions, 0)
+			fprintV, err := validator.NewFingerprintValidator(db, tableName, `fprint`, consumer.partitions, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
 			fprintV.DBFunc(cmvt.cdcDBConn(getConn))
-			validators := cdctest.Validators{
-				cdctest.NewOrderValidator(tableName),
+			validators := validator.Validators{
+				validator.NewOrderValidator(tableName),
 				fprintV,
 			}
-			cmvt.validator = cdctest.MakeCountValidator(validators)
+			cmvt.validator = validator.MakeCountValidator(validators)
 
 			for !cmvt.testFinished {
 				m := consumer.Next(ctx)
@@ -254,7 +254,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 					return nil
 				}
 
-				updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
+				updated, resolved, err := validator.ParseJSONValueTimestamps(m.Value)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -20,6 +20,8 @@ disallowed_imports_test(
     [
         "//pkg/sql/randgen",
         "//pkg/testutils/testcluster",
+        "//pkg/ccl/changefeedccl/cdctest",
+        "//pkg/ccl/changefeedccl/validator",
     ],
 )
 

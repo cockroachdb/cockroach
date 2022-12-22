@@ -142,6 +142,7 @@ go_library(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/cookie",
         "//pkg/server/debug",
         "//pkg/server/dumpstore",
         "//pkg/server/heapprofiler",

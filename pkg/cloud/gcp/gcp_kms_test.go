@@ -21,6 +21,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/gcp/gcpparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,8 +63,8 @@ func TestEncryptDecryptGCS(t *testing.T) {
 		_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
 		require.EqualError(t, err, fmt.Sprintf(
 			"%s or %s must be set if %q is %q",
-			CredentialsParam,
-			BearerTokenParam,
+			gcpparams.Credentials,
+			gcpparams.BearerToken,
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
 		))
@@ -92,7 +93,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
-		q.Set(CredentialsParam, url.QueryEscape(encoded))
+		q.Set(gcpparams.Credentials, url.QueryEscape(encoded))
 
 		// Set AUTH to specified.
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
@@ -118,7 +119,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		token, err := ts.Token()
 		require.NoError(t, err, "getting token")
-		q.Set(BearerTokenParam, token.AccessToken)
+		q.Set(gcpparams.BearerToken, token.AccessToken)
 
 		// Set AUTH to specified.
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
@@ -158,7 +159,7 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 
 		q := make(url.Values)
 		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
-		q.Set(AssumeRoleParam, assumedAccount)
+		q.Set(gcpparams.AssumeRole, assumedAccount)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
 	})
@@ -169,12 +170,12 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 			Settings:         gcpKMSTestSettings,
 		}
 		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
-			cloud.AuthParamSpecified, CredentialsParam, url.QueryEscape(encodedCredentials)), testEnv)
+			cloud.AuthParamSpecified, gcpparams.Credentials, url.QueryEscape(encodedCredentials)), testEnv)
 
 		q := make(url.Values)
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
-		q.Set(AssumeRoleParam, assumedAccount)
-		q.Set(CredentialsParam, encodedCredentials)
+		q.Set(gcpparams.AssumeRole, assumedAccount)
+		q.Set(gcpparams.Credentials, encodedCredentials)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
 	})
@@ -192,16 +193,16 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 
 		q := make(url.Values)
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
-		q.Set(CredentialsParam, encodedCredentials)
+		q.Set(gcpparams.Credentials, encodedCredentials)
 
 		// First verify that none of the individual roles in the chain can be used
 		// to access the KMS.
 		for _, role := range roleChain {
-			q.Set(AssumeRoleParam, role)
+			q.Set(gcpparams.AssumeRole, role)
 			cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s", keyID, q.Encode()), testEnv)
 		}
 
-		q.Set(AssumeRoleParam, roleChainStr)
+		q.Set(gcpparams.AssumeRole, roleChainStr)
 		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("gs:///%s?%s", keyID, q.Encode()), testEnv)
 	})
 }

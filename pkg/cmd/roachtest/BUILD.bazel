@@ -1,4 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
@@ -92,6 +93,13 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "roachtest",
+    [
+        "//pkg/sql",
     ],
 )
 

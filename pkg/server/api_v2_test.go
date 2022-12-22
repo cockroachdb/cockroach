@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/cookie"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -253,7 +254,7 @@ func TestAuthV2(t *testing.T) {
 				}
 				if tc.cookie != "" {
 					req.AddCookie(&http.Cookie{
-						Name:  SessionCookieName,
+						Name:  cookie.SessionCookieName,
 						Value: tc.cookie,
 					})
 				}
