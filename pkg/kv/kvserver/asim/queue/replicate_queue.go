@@ -25,6 +25,7 @@ import (
 type replicateQueue struct {
 	baseQueue
 	allocator allocatorimpl.Allocator
+	storePool storepool.AllocatorStorePool
 	delay     func(rangeSize int64, add bool) time.Duration
 }
 
@@ -34,6 +35,7 @@ func NewReplicateQueue(
 	stateChanger state.Changer,
 	delay func(rangeSize int64, add bool) time.Duration,
 	allocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
 	return &replicateQueue{
@@ -45,6 +47,7 @@ func NewReplicateQueue(
 		},
 		delay:     delay,
 		allocator: allocator,
+		storePool: storePool,
 	}
 }
 
@@ -59,7 +62,7 @@ func (rq *replicateQueue) MaybeAdd(
 		return false
 	}
 
-	action, priority := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
+	action, priority := rq.allocator.ComputeAction(ctx, rq.storePool, rng.SpanConfig(), rng.Descriptor())
 	if action == allocatorimpl.AllocatorNoop {
 		return false
 	}
@@ -98,7 +101,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			return
 		}
 
-		action, _ := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
+		action, _ := rq.allocator.ComputeAction(ctx, rq.storePool, rng.SpanConfig(), rng.Descriptor())
 
 		switch action {
 		case allocatorimpl.AllocatorConsiderRebalance:
@@ -125,6 +128,7 @@ func (rq *replicateQueue) considerRebalance(
 ) {
 	add, remove, _, ok := rq.allocator.RebalanceVoter(
 		ctx,
+		rq.storePool,
 		rng.SpanConfig(),
 		nil, /* raftStatus */
 		rng.Descriptor().Replicas().VoterDescriptors(),

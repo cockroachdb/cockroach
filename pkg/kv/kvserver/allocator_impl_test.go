@@ -66,7 +66,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	ctx := context.Background()
-	stopper, g, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 5, false /* deterministic */)
+	stopper, g, sp, a, _ := allocatorimpl.CreateTestAllocator(ctx, 5, false /* deterministic */)
 	defer stopper.Stop(ctx)
 	// We make 5 stores in this test -- 3 in the same datacenter, and 1 each in
 	// 2 other datacenters. All of our replicas are distributed within these 3
@@ -180,6 +180,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, _, details, ok := a.RebalanceVoter(
 			ctx,
+			sp,
 			roachpb.SpanConfig{},
 			status,
 			replicas,
@@ -205,6 +206,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		target, _, details, ok := a.RebalanceVoter(
 			ctx,
+			sp,
 			roachpb.SpanConfig{},
 			status,
 			replicas,
@@ -224,6 +226,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		target, origin, details, ok := a.RebalanceVoter(
 			ctx,
+			sp,
 			roachpb.SpanConfig{},
 			status,
 			replicas,
@@ -248,18 +251,18 @@ func TestAllocatorThrottled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stopper, g, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, false /* deterministic */)
+	stopper, g, sp, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, false /* deterministic */)
 	defer stopper.Stop(ctx)
 
 	// First test to make sure we would send the replica to purgatory.
-	_, _, err := a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
+	_, _, err := a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); !ok {
 		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
 	// Second, test the normal case in which we can allocate to the store.
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, _, err := a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
+	result, _, err := a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %+v", err)
 	}
@@ -269,15 +272,14 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// Finally, set that store to be throttled and ensure we don't send the
 	// replica to purgatory.
-	storePool := a.StorePool.(*storepool.StorePool)
-	storePool.DetailsMu.Lock()
-	storeDetail, ok := storePool.DetailsMu.StoreDetails[singleStore[0].StoreID]
+	sp.DetailsMu.Lock()
+	storeDetail, ok := sp.DetailsMu.StoreDetails[singleStore[0].StoreID]
 	if !ok {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
 	storeDetail.ThrottledUntil = timeutil.Now().Add(24 * time.Hour)
-	storePool.DetailsMu.Unlock()
-	_, _, err = a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
+	sp.DetailsMu.Unlock()
+	_, _, err = a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); ok {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}

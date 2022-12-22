@@ -478,7 +478,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
-	StorePool     storepool.AllocatorStorePool
+	deterministic bool
 	nodeLatencyFn func(addr string) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
 	// wrapped inside a mutex, to avoid misuse.
@@ -508,26 +508,28 @@ func makeAllocatorMetrics() AllocatorMetrics {
 	}
 }
 
-// MakeAllocator creates a new allocator using the specified StorePool.
+// MakeAllocator creates a new allocator.
+// The deterministic flag indicates that this allocator is intended to be used
+// with a deterministic store pool.
+//
+// In test cases where the store pool is nil, deterministic should be false.
+// TODO(sarkesian): Eliminate the need for this flag, which is a remnant of
+// close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
-	storePool storepool.AllocatorStorePool,
+	deterministic bool,
 	nodeLatencyFn func(addr string) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
 ) Allocator {
 	var randSource rand.Source
-	// There are number of test cases that make a test store but don't add
-	// gossip or a store pool. So we can't rely on the existence of the
-	// store pool in those cases.
-	if storePool != nil && storePool.IsDeterministic() {
+	if deterministic {
 		randSource = rand.NewSource(777)
 	} else {
-
 		randSource = rand.NewSource(rand.Int63())
 	}
 	allocator := Allocator{
 		st:            st,
-		StorePool:     storePool,
+		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
 		Metrics:       makeAllocatorMetrics(),
@@ -597,9 +599,12 @@ func GetNeededNonVoters(numVoters, zoneConfigNonVoterCount, clusterNodes int) in
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, conf roachpb.SpanConfig, desc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	desc *roachpb.RangeDescriptor,
 ) (action AllocatorAction, priority float64) {
-	if a.StorePool == nil {
+	if storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
 		action = AllocatorNoop
 		return action, action.Priority()
@@ -657,13 +662,13 @@ func (a *Allocator) ComputeAction(
 		return action, action.Priority()
 	}
 
-	return a.computeAction(ctx, conf, desc.Replicas().VoterDescriptors(),
+	return a.computeAction(ctx, storePool, conf, desc.Replicas().VoterDescriptors(),
 		desc.Replicas().NonVoterDescriptors())
-
 }
 
 func (a *Allocator) computeAction(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	voterReplicas []roachpb.ReplicaDescriptor,
 	nonVoterReplicas []roachpb.ReplicaDescriptor,
@@ -681,10 +686,10 @@ func (a *Allocator) computeAction(
 	// After that we handle rebalancing related actions, followed by removal
 	// actions.
 	haveVoters := len(voterReplicas)
-	decommissioningVoters := a.StorePool.DecommissioningReplicas(voterReplicas)
+	decommissioningVoters := storePool.DecommissioningReplicas(voterReplicas)
 	// Node count including dead nodes but excluding
 	// decommissioning/decommissioned nodes.
-	clusterNodes := a.StorePool.ClusterNodeCount()
+	clusterNodes := storePool.ClusterNodeCount()
 	neededVoters := GetNeededVoters(conf.GetNumVoters(), clusterNodes)
 	desiredQuorum := computeQuorum(neededVoters)
 	quorum := computeQuorum(haveVoters)
@@ -710,7 +715,7 @@ func (a *Allocator) computeAction(
 	// heartbeat in the recent past. This means we won't move those replicas
 	// elsewhere (for a regular rebalance or for decommissioning).
 	const includeSuspectAndDrainingStores = true
-	liveVoters, deadVoters := a.StorePool.LiveAndDeadReplicas(voterReplicas, includeSuspectAndDrainingStores)
+	liveVoters, deadVoters := storePool.LiveAndDeadReplicas(voterReplicas, includeSuspectAndDrainingStores)
 
 	if len(liveVoters) < quorum {
 		// Do not take any replacement/removal action if we do not have a quorum of
@@ -789,7 +794,7 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	liveNonVoters, deadNonVoters := a.StorePool.LiveAndDeadReplicas(
+	liveNonVoters, deadNonVoters := storePool.LiveAndDeadReplicas(
 		nonVoterReplicas, includeSuspectAndDrainingStores,
 	)
 	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
@@ -800,7 +805,7 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	decommissioningNonVoters := a.StorePool.DecommissioningReplicas(nonVoterReplicas)
+	decommissioningNonVoters := storePool.DecommissioningReplicas(nonVoterReplicas)
 	if haveNonVoters == neededNonVoters && len(decommissioningNonVoters) > 0 {
 		// The range has non-voter(s) on a decommissioning node that we should
 		// replace.
@@ -922,12 +927,13 @@ func (s *GoodCandidateSelector) selectOne(cl candidateList) *candidate {
 
 func (a *Allocator) allocateTarget(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string, error) {
-	candidateStoreList, aliveStoreCount, throttled := a.StorePool.GetStoreList(storepool.StoreFilterThrottled)
+	candidateStoreList, aliveStoreCount, throttled := storePool.GetStoreList(storepool.StoreFilterThrottled)
 
 	// If the replica is alive we are upreplicating, and in that case we want to
 	// allocate new replicas on the best possible store. Otherwise, the replica is
@@ -941,8 +947,9 @@ func (a *Allocator) allocateTarget(
 		selector = a.NewGoodCandidateSelector()
 	}
 
-	target, details := a.AllocateTargetFromList(
+	target, details := a.allocateTargetFromList(
 		ctx,
+		storePool,
 		candidateStoreList,
 		conf,
 		existingVoters,
@@ -984,11 +991,12 @@ func (a *Allocator) allocateTarget(
 // voting replicas are ruled out as targets.
 func (a *Allocator) AllocateVoter(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
+	return a.allocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
 }
 
 // AllocateNonVoter returns a suitable store for a new allocation of a
@@ -996,11 +1004,12 @@ func (a *Allocator) AllocateVoter(
 // _any_ existing replicas are ruled out as targets.
 func (a *Allocator) AllocateNonVoter(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
+	return a.allocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
 }
 
 // AllocateTargetFromList returns a suitable store for a new allocation of a
@@ -1008,6 +1017,22 @@ func (a *Allocator) AllocateNonVoter(
 // existing set of voters and non-voters..
 func (a *Allocator) AllocateTargetFromList(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	candidateStores storepool.StoreList,
+	conf roachpb.SpanConfig,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	options ScorerOptions,
+	selector CandidateSelector,
+	allowMultipleReplsPerNode bool,
+	targetType TargetReplicaType,
+) (roachpb.ReplicationTarget, string) {
+	return a.allocateTargetFromList(ctx, storePool, candidateStores, conf, existingVoters,
+		existingNonVoters, options, selector, allowMultipleReplsPerNode, targetType)
+}
+
+func (a *Allocator) allocateTargetFromList(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	candidateStores storepool.StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1018,13 +1043,13 @@ func (a *Allocator) AllocateTargetFromList(
 ) (roachpb.ReplicationTarget, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
-		a.StorePool,
+		storePool,
 		existingReplicas,
 		conf.NumReplicas,
 		conf.Constraints,
 	)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(
-		a.StorePool,
+		storePool,
 		existingVoters,
 		conf.GetNumVoters(),
 		conf.VoterConstraints,
@@ -1056,8 +1081,8 @@ func (a *Allocator) AllocateTargetFromList(
 		constraintsChecker,
 		existingReplicaSet,
 		existingNonVoters,
-		a.StorePool.GetLocalitiesByStore(existingReplicaSet),
-		a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
+		storePool.GetLocalitiesByStore(existingReplicaSet),
+		storePool.IsStoreReadyForRoutineReplicaTransfer,
 		allowMultipleReplsPerNode,
 		options,
 		targetType,
@@ -1081,6 +1106,7 @@ func (a *Allocator) AllocateTargetFromList(
 
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	targetStore roachpb.StoreID,
 	conf roachpb.SpanConfig,
 	candidates []roachpb.ReplicaDescriptor,
@@ -1103,8 +1129,8 @@ func (a Allocator) simulateRemoveTarget(
 	// Update statistics first
 	switch t := targetType; t {
 	case VoterTarget:
-		a.StorePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
-		defer a.StorePool.UpdateLocalStoreAfterRebalance(
+		storePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
+		defer storePool.UpdateLocalStoreAfterRebalance(
 			targetStore,
 			rangeUsageInfo,
 			roachpb.REMOVE_VOTER,
@@ -1113,12 +1139,12 @@ func (a Allocator) simulateRemoveTarget(
 			targetStore)
 
 		return a.RemoveTarget(
-			ctx, conf, storepool.MakeStoreList(candidateStores),
+			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
 			existingVoters, existingNonVoters, VoterTarget, options,
 		)
 	case NonVoterTarget:
-		a.StorePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
-		defer a.StorePool.UpdateLocalStoreAfterRebalance(
+		storePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
+		defer storePool.UpdateLocalStoreAfterRebalance(
 			targetStore,
 			rangeUsageInfo,
 			roachpb.REMOVE_NON_VOTER,
@@ -1126,7 +1152,7 @@ func (a Allocator) simulateRemoveTarget(
 		log.KvDistribution.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
 			targetStore)
 		return a.RemoveTarget(
-			ctx, conf, storepool.MakeStoreList(candidateStores),
+			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
 			existingVoters, existingNonVoters, NonVoterTarget, options,
 		)
 	default:
@@ -1134,24 +1160,11 @@ func (a Allocator) simulateRemoveTarget(
 	}
 }
 
-// StoreListForTargets converts the set of replica targets to a StoreList.
-func (a Allocator) StoreListForTargets(candidates []roachpb.ReplicationTarget) storepool.StoreList {
-	result := make([]roachpb.StoreDescriptor, 0, len(candidates))
-	sl, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterNone)
-	for _, cand := range candidates {
-		for _, store := range sl.Stores {
-			if cand.StoreID == store.StoreID {
-				result = append(result, store)
-			}
-		}
-	}
-	return storepool.MakeStoreList(result)
-}
-
 // RemoveTarget returns a suitable replica (of the given type) to remove from
 // the provided set of replicas.
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	candidateStoreList storepool.StoreList,
 	existingVoters []roachpb.ReplicaDescriptor,
@@ -1168,13 +1181,13 @@ func (a Allocator) RemoveTarget(
 
 	existingReplicas := append(existingVoters, existingNonVoters...)
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
-		a.StorePool,
+		storePool,
 		existingReplicas,
 		conf.NumReplicas,
 		conf.Constraints,
 	)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(
-		a.StorePool,
+		storePool,
 		existingVoters,
 		conf.GetNumVoters(),
 		conf.VoterConstraints,
@@ -1201,7 +1214,7 @@ func (a Allocator) RemoveTarget(
 		ctx,
 		candidateStoreList,
 		constraintsChecker,
-		a.StorePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
+		storePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
 		options,
 	)
 
@@ -1231,6 +1244,7 @@ func (a Allocator) RemoveTarget(
 // back to selecting a random target from any of the existing voting replicas.
 func (a Allocator) RemoveVoter(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	voterCandidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
@@ -1242,10 +1256,11 @@ func (a Allocator) RemoveVoter(
 	for i, exist := range voterCandidates {
 		candidateStoreIDs[i] = exist.StoreID
 	}
-	candidateStoreList, _, _ := a.StorePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
+	candidateStoreList, _, _ := storePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
 
 	return a.RemoveTarget(
 		ctx,
+		storePool,
 		conf,
 		candidateStoreList,
 		existingVoters,
@@ -1262,6 +1277,7 @@ func (a Allocator) RemoveVoter(
 // non-voting replicas.
 func (a Allocator) RemoveNonVoter(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	nonVoterCandidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
@@ -1273,10 +1289,11 @@ func (a Allocator) RemoveNonVoter(
 	for i, exist := range nonVoterCandidates {
 		candidateStoreIDs[i] = exist.StoreID
 	}
-	candidateStoreList, _, _ := a.StorePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
+	candidateStoreList, _, _ := storePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
 
 	return a.RemoveTarget(
 		ctx,
+		storePool,
 		conf,
 		candidateStoreList,
 		existingVoters,
@@ -1290,6 +1307,7 @@ func (a Allocator) RemoveNonVoter(
 // type) with required attributes.
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	raftStatus *raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1298,7 +1316,7 @@ func (a Allocator) RebalanceTarget(
 	targetType TargetReplicaType,
 	options ScorerOptions,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
-	sl, _, _ := a.StorePool.GetStoreList(filter)
+	sl, _, _ := storePool.GetStoreList(filter)
 
 	// If we're considering a rebalance due to an `AdminScatterRequest`, we'd like
 	// to ensure that we're returning a random rebalance target to a new store
@@ -1310,13 +1328,13 @@ func (a Allocator) RebalanceTarget(
 
 	zero := roachpb.ReplicationTarget{}
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
-		a.StorePool,
+		storePool,
 		existingReplicas,
 		conf.NumReplicas,
 		conf.Constraints,
 	)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(
-		a.StorePool,
+		storePool,
 		existingVoters,
 		conf.GetNumVoters(),
 		conf.VoterConstraints,
@@ -1360,8 +1378,8 @@ func (a Allocator) RebalanceTarget(
 		rebalanceConstraintsChecker,
 		replicaSetToRebalance,
 		replicasWithExcludedStores,
-		a.StorePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
-		a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
+		storePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
+		storePool.IsStoreReadyForRoutineReplicaTransfer,
 		options,
 		a.Metrics,
 	)
@@ -1411,6 +1429,7 @@ func (a Allocator) RebalanceTarget(
 		var err error
 		removeReplica, removeDetails, err = a.simulateRemoveTarget(
 			ctx,
+			storePool,
 			target.store.StoreID,
 			conf,
 			replicaCandidates,
@@ -1484,6 +1503,7 @@ func (a Allocator) RebalanceTarget(
 //     opportunity was found).
 func (a Allocator) RebalanceVoter(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	raftStatus *raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1493,6 +1513,7 @@ func (a Allocator) RebalanceVoter(
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	return a.RebalanceTarget(
 		ctx,
+		storePool,
 		conf,
 		raftStatus,
 		existingVoters,
@@ -1518,6 +1539,7 @@ func (a Allocator) RebalanceVoter(
 // replicas.
 func (a Allocator) RebalanceNonVoter(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	raftStatus *raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1527,6 +1549,7 @@ func (a Allocator) RebalanceNonVoter(
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	return a.RebalanceTarget(
 		ctx,
+		storePool,
 		conf,
 		raftStatus,
 		existingVoters,
@@ -1543,7 +1566,7 @@ func (a Allocator) RebalanceNonVoter(
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
 		StoreHealthOptions:      a.StoreHealthOptions(ctx),
-		deterministic:           a.StorePool.IsDeterministic(),
+		deterministic:           a.deterministic,
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
 	}
 }
@@ -1553,7 +1576,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
 			StoreHealthOptions:      a.StoreHealthOptions(ctx),
-			deterministic:           a.StorePool.IsDeterministic(),
+			deterministic:           a.deterministic,
 			rangeRebalanceThreshold: 0,
 		},
 		// We set jitter to be equal to the padding around replica-count rebalancing
@@ -1578,6 +1601,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 // replicas need a snapshot or not), produces no results.
 func (a *Allocator) ValidLeaseTargets(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
@@ -1601,7 +1625,7 @@ func (a *Allocator) ValidLeaseTargets(
 		}
 		candidates = append(candidates, existing[i])
 	}
-	candidates, _ = a.StorePool.LiveAndDeadReplicas(
+	candidates, _ = storePool.LiveAndDeadReplicas(
 		candidates, false, /* includeSuspectAndDrainingStores */
 	)
 
@@ -1653,7 +1677,7 @@ func (a *Allocator) ValidLeaseTargets(
 
 	// Determine which store(s) is preferred based on user-specified preferences.
 	// If any stores match, only consider those stores as candidates.
-	preferred := a.PreferredLeaseholders(conf, candidates)
+	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
 	if len(preferred) > 0 {
 		candidates = preferred
 	}
@@ -1666,6 +1690,7 @@ func (a *Allocator) ValidLeaseTargets(
 // some existing replica.
 func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
@@ -1693,12 +1718,12 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	}
 
 	// Exclude suspect/draining/dead stores.
-	candidates, _ := a.StorePool.LiveAndDeadReplicas(
+	candidates, _ := storePool.LiveAndDeadReplicas(
 		allExistingReplicas, false, /* includeSuspectAndDrainingStores */
 	)
 	// If there are any replicas that do match lease preferences, then we check if
 	// the existing leaseholder is one of them.
-	preferred := a.PreferredLeaseholders(conf, candidates)
+	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
 	preferred = excludeReplicasInNeedOfSnapshots(
 		ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
 	if len(preferred) == 0 {
@@ -1742,6 +1767,7 @@ func (a *Allocator) StoreHealthOptions(_ context.Context) StoreHealthOptions {
 // to a learner.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
@@ -1756,26 +1782,26 @@ func (a *Allocator) TransferLeaseTarget(
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
 	excludeLeaseRepl := opts.ExcludeLeaseRepl
-	if a.leaseholderShouldMoveDueToPreferences(ctx, conf, leaseRepl, existing) {
+	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) {
 		// Explicitly exclude the current leaseholder from the result set if it is
 		// in violation of lease preferences that can be satisfied by some other
 		// replica.
 		excludeLeaseRepl = true
 	}
 
-	allStoresList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterNone)
+	allStoresList, _, _ := storePool.GetStoreList(storepool.StoreFilterNone)
 	storeDescMap := allStoresList.ToMap()
-	sl, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+	sl, _, _ := storePool.GetStoreList(storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
 	candidateLeasesMean := sl.CandidateLeases.Mean
 
-	source, ok := a.StorePool.GetStoreDescriptor(leaseRepl.StoreID())
+	source, ok := storePool.GetStoreDescriptor(leaseRepl.StoreID())
 	if !ok {
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, opts)
+	existing = a.ValidLeaseTargets(ctx, storePool, conf, existing, leaseRepl, opts)
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		log.KvDistribution.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
@@ -1793,7 +1819,7 @@ func (a *Allocator) TransferLeaseTarget(
 		// falls back to `leaseCountConvergence`. Rationalize this or refactor this
 		// logic to be more clear.
 		transferDec, repl := a.shouldTransferLeaseForAccessLocality(
-			ctx, source, existing, statSummary, nil, candidateLeasesMean,
+			ctx, storePool, source, existing, statSummary, nil, candidateLeasesMean,
 		)
 		if !excludeLeaseRepl {
 			switch transferDec {
@@ -1803,7 +1829,7 @@ func (a *Allocator) TransferLeaseTarget(
 				}
 				fallthrough
 			case decideWithoutStats:
-				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing) {
+				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
 					return roachpb.ReplicaDescriptor{}
 				}
 			case shouldTransfer:
@@ -1839,7 +1865,7 @@ func (a *Allocator) TransferLeaseTarget(
 			if leaseRepl.StoreID() == repl.StoreID {
 				continue
 			}
-			storeDesc, ok := a.StorePool.GetStoreDescriptor(repl.StoreID)
+			storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
 			if !ok {
 				continue
 			}
@@ -1996,6 +2022,7 @@ func getQPSDelta(storeQPSMap map[roachpb.StoreID]float64, domain []roachpb.Store
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
@@ -2006,11 +2033,12 @@ func (a *Allocator) ShouldTransferLease(
 	},
 	statSummary *replicastats.RatedSummary,
 ) bool {
-	if a.leaseholderShouldMoveDueToPreferences(ctx, conf, leaseRepl, existing) {
+	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) {
 		return true
 	}
 	existing = a.ValidLeaseTargets(
 		ctx,
+		storePool,
 		conf,
 		existing,
 		leaseRepl,
@@ -2021,18 +2049,19 @@ func (a *Allocator) ShouldTransferLease(
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		return false
 	}
-	source, ok := a.StorePool.GetStoreDescriptor(leaseRepl.StoreID())
+	source, ok := storePool.GetStoreDescriptor(leaseRepl.StoreID())
 	if !ok {
 		return false
 	}
 
-	sl, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+	sl, _, _ := storePool.GetStoreList(storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
 	log.KvDistribution.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
 
 	transferDec, _ := a.shouldTransferLeaseForAccessLocality(
 		ctx,
+		storePool,
 		source,
 		existing,
 		statSummary,
@@ -2046,7 +2075,7 @@ func (a *Allocator) ShouldTransferLease(
 	case shouldTransfer:
 		result = true
 	case decideWithoutStats:
-		result = a.shouldTransferLeaseForLeaseCountConvergence(ctx, sl, source, existing)
+		result = a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing)
 	default:
 		log.KvDistribution.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
@@ -2061,6 +2090,7 @@ func (a *Allocator) ShouldTransferLease(
 // follow-the-workload strategy would still prefer selecting the local store.
 func (a Allocator) FollowTheWorkloadPrefersLocal(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	sl storepool.StoreList,
 	source roachpb.StoreDescriptor,
 	candidate roachpb.StoreID,
@@ -2068,7 +2098,7 @@ func (a Allocator) FollowTheWorkloadPrefersLocal(
 	statSummary *replicastats.RatedSummary,
 ) bool {
 	adjustments := make(map[roachpb.StoreID]float64)
-	decision, _ := a.shouldTransferLeaseForAccessLocality(ctx, source, existing, statSummary, adjustments, sl.CandidateLeases.Mean)
+	decision, _ := a.shouldTransferLeaseForAccessLocality(ctx, storePool, source, existing, statSummary, adjustments, sl.CandidateLeases.Mean)
 	if decision == decideWithoutStats {
 		return false
 	}
@@ -2084,6 +2114,7 @@ func (a Allocator) FollowTheWorkloadPrefersLocal(
 
 func (a Allocator) shouldTransferLeaseForAccessLocality(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 	statSummary *replicastats.RatedSummary,
@@ -2097,7 +2128,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		!EnableLoadBasedLeaseRebalancing.Get(&a.st.SV) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
-	replicaLocalities := a.StorePool.GetLocalitiesByNode(existing)
+	replicaLocalities := storePool.GetLocalitiesByNode(existing)
 	for _, locality := range replicaLocalities {
 		if len(locality.Tiers) == 0 {
 			return decideWithoutStats, roachpb.ReplicaDescriptor{}
@@ -2152,11 +2183,11 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		if repl.NodeID == source.Node.NodeID {
 			continue
 		}
-		storeDesc, ok := a.StorePool.GetStoreDescriptor(repl.StoreID)
+		storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
 		if !ok {
 			continue
 		}
-		addr, err := a.StorePool.GossipNodeIDAddress(repl.NodeID)
+		addr, err := storePool.GossipNodeIDAddress(repl.NodeID)
 		if err != nil {
 			log.KvDistribution.Errorf(ctx, "missing address for n%d: %+v", repl.NodeID, err)
 			continue
@@ -2273,6 +2304,7 @@ func loadBasedLeaseRebalanceScore(
 
 func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	sl storepool.StoreList,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
@@ -2301,7 +2333,7 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 		}
 
 		for _, repl := range existing {
-			storeDesc, ok := a.StorePool.GetStoreDescriptor(repl.StoreID)
+			storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
 			if !ok {
 				continue
 			}
@@ -2316,7 +2348,9 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 // PreferredLeaseholders returns a slice of replica descriptors corresponding to
 // replicas that meet lease preferences (among the `existing` replicas).
 func (a Allocator) PreferredLeaseholders(
-	conf roachpb.SpanConfig, existing []roachpb.ReplicaDescriptor,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a
 	// preference, we don't need to look at the later preferences, because
@@ -2327,7 +2361,7 @@ func (a Allocator) PreferredLeaseholders(
 			// TODO(a-robinson): Do all these lookups at once, up front? We could
 			// easily be passing a slice of StoreDescriptors around all the Allocator
 			// functions instead of ReplicaDescriptors.
-			storeDesc, ok := a.StorePool.GetStoreDescriptor(repl.StoreID)
+			storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
 			if !ok {
 				continue
 			}

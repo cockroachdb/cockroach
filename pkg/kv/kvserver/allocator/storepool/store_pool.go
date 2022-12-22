@@ -385,6 +385,14 @@ type AllocatorStorePool interface {
 		filter StoreFilter,
 	) (StoreList, int, ThrottledStoreReasons)
 
+	// GetStoreListForTargets is the same as GetStoreList, but only returns stores
+	// from the subset of stores present in the passed in replication targets,
+	// converting to a StoreList.
+	GetStoreListForTargets(
+		candidates []roachpb.ReplicationTarget,
+		filter StoreFilter,
+	) (StoreList, int, ThrottledStoreReasons)
+
 	// GossipNodeIDAddress looks up the RPC address for the given node via gossip.
 	GossipNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error)
 
@@ -1069,6 +1077,23 @@ func (sp *StorePool) GetStoreListFromIDs(
 ) (StoreList, int, ThrottledStoreReasons) {
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
+	return sp.getStoreListFromIDsLocked(storeIDs, sp.NodeLivenessFn, filter)
+}
+
+// GetStoreListForTargets is the same as GetStoreList, but only returns stores
+// from the subset of stores present in the passed in replication targets,
+// converting to a StoreList.
+func (sp *StorePool) GetStoreListForTargets(
+	candidates []roachpb.ReplicationTarget, filter StoreFilter,
+) (StoreList, int, ThrottledStoreReasons) {
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
+
+	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
+	for _, tgt := range candidates {
+		storeIDs = append(storeIDs, tgt.StoreID)
+	}
+
 	return sp.getStoreListFromIDsLocked(storeIDs, sp.NodeLivenessFn, filter)
 }
 

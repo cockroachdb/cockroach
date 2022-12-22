@@ -1234,15 +1234,29 @@ func NewStore(
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
 	var allocatorStorePool storepool.AllocatorStorePool
+	var storePoolIsDeterministic bool
 	if cfg.StorePool != nil {
+		// There are number of test cases that make a test store but don't add
+		// gossip or a store pool. So we can't rely on the existence of the
+		// store pool in those cases.
 		allocatorStorePool = cfg.StorePool
+		storePoolIsDeterministic = allocatorStorePool.IsDeterministic()
 	}
 	if cfg.RPCContext != nil {
-		s.allocator = allocatorimpl.MakeAllocator(cfg.Settings, allocatorStorePool, cfg.RPCContext.RemoteClocks.Latency, cfg.TestingKnobs.AllocatorKnobs)
+		s.allocator = allocatorimpl.MakeAllocator(
+			cfg.Settings,
+			storePoolIsDeterministic,
+			cfg.RPCContext.RemoteClocks.Latency,
+			cfg.TestingKnobs.AllocatorKnobs,
+		)
 	} else {
-		s.allocator = allocatorimpl.MakeAllocator(cfg.Settings, allocatorStorePool, func(string) (time.Duration, bool) {
-			return 0, false
-		}, cfg.TestingKnobs.AllocatorKnobs)
+		s.allocator = allocatorimpl.MakeAllocator(
+			cfg.Settings,
+			storePoolIsDeterministic,
+			func(string) (time.Duration, bool) {
+				return 0, false
+			}, cfg.TestingKnobs.AllocatorKnobs,
+		)
 	}
 	if s.metrics != nil {
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)

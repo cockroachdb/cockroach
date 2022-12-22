@@ -324,6 +324,33 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 3, "sst")},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
+		"DisallowConflicts returns WriteTooOldError at existing range tombstone": {
+			noConflict: true,
+			data:       kvs{rangeKV("a", "c", 3, "")},
+			sst:        kvs{pointKV("b", 3, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		// Regression tests for https://github.com/cockroachdb/cockroach/issues/93968.
+		"DisallowConflicts WriteTooOldError straddling at existing range tombstone": {
+			noConflict: true,
+			data:       kvs{rangeKV("b", "z", 3, "")},
+			sst:        kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts WriteTooOldError straddling multiple existing range tombstones": {
+			noConflict: true,
+			data:       kvs{rangeKV("b", "c", 3, ""), rangeKV("d", "f", 3, "")},
+			sst:        kvs{pointKV("a", 3, "sst"), pointKV("e", 3, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts WriteTooOldError with SSTTimestampToRequestTimestamp straddling range keys below and at timestamp": {
+			toReqTS:    1,
+			reqTS:      3,
+			noConflict: true,
+			data:       kvs{rangeKV("a", "c", 2, ""), rangeKV("e", "g", 3, "")},
+			sst:        kvs{pointKV("b", 1, "sst"), pointKV("d", 1, "sst"), pointKV("f", 1, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
 		"DisallowConflicts returns WriteIntentError below intent": {
 			noConflict: true,
 			data:       kvs{pointKV("a", intentTS, "intent")},
