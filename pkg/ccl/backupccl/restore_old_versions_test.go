@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -67,7 +66,6 @@ func TestRestoreOldVersions(t *testing.T) {
 	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
 		clusterDirs                 = testdataBase + "/cluster"
-		multiRegionDirs             = testdataBase + "/multi-region"
 		publicSchemaDirs            = testdataBase + "/public-schema-remap"
 		systemUsersDirs             = testdataBase + "/system-users-restore"
 	)
@@ -92,18 +90,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			require.NoError(t, err)
 
 			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
-		}
-	})
-
-	t.Run("multi-region-restore", func(t *testing.T) {
-		skip.UnderRace(t, "very slow as it starts multiple servers")
-		dirs, err := os.ReadDir(multiRegionDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(multiRegionDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), runOldVersionMultiRegionTest(exportDir))
 		}
 	})
 
@@ -150,89 +136,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			t.Run(dir.Name(), fullClusterRestoreUsersWithoutIDs(exportDir))
 		}
 	})
-}
-
-func runOldVersionMultiRegionTest(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numNodes = 9
-		dir, dirCleanupFn := testutils.TempDir(t)
-		defer dirCleanupFn()
-		ctx := context.Background()
-
-		params := make(map[int]base.TestServerArgs, numNodes)
-		for i := 0; i < 9; i++ {
-			var region string
-			switch i / 3 {
-			case 0:
-				region = "europe-west2"
-			case 1:
-				region = "us-east1"
-			case 2:
-				region = "us-west1"
-			}
-			params[i] = base.TestServerArgs{
-				// Test fails due to inability to use multi-region
-				// abstractions by default in tenants. Tracked with #76378.
-				DisableDefaultTestTenant: true,
-				Locality: roachpb.Locality{
-					Tiers: []roachpb.Tier{
-						{Key: "region", Value: region},
-					},
-				},
-				ExternalIODir: dir,
-			}
-		}
-
-		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
-			ServerArgsPerNode: params,
-		})
-		defer tc.Stopper().Stop(ctx)
-		require.NoError(t, os.Symlink(exportDir, filepath.Join(dir, "external_backup_dir")))
-
-		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		var unused string
-		var importedRows int
-		sqlDB.QueryRow(t, `RESTORE DATABASE multi_region_db FROM $1`, `nodelocal://0/external_backup_dir`).Scan(
-			&unused, &unused, &unused, &importedRows, &unused, &unused,
-		)
-		const totalRows = 12
-		if importedRows != totalRows {
-			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
-		}
-		sqlDB.Exec(t, `USE multi_region_db`)
-		sqlDB.CheckQueryResults(t, `select table_name, locality FROM [show tables] ORDER BY table_name;`, [][]string{
-			{`tbl_global`, `GLOBAL`},
-			{`tbl_primary_region`, `REGIONAL BY TABLE IN PRIMARY REGION`},
-			{`tbl_regional_by_row`, `REGIONAL BY ROW`},
-			{`tbl_regional_by_table`, `REGIONAL BY TABLE IN "us-east1"`},
-		})
-		sqlDB.CheckQueryResults(t, `SELECT region FROM [SHOW REGIONS FROM DATABASE] ORDER BY region`, [][]string{
-			{`europe-west2`},
-			{`us-east1`},
-			{`us-west1`},
-		})
-		sqlDB.CheckQueryResults(t, `SELECT * FROM tbl_primary_region ORDER BY pk`, [][]string{
-			{`1`, `a`},
-			{`2`, `b`},
-			{`3`, `c`},
-		})
-		sqlDB.CheckQueryResults(t, `SELECT * FROM tbl_global ORDER BY pk`, [][]string{
-			{`4`, `d`},
-			{`5`, `e`},
-			{`6`, `f`},
-		})
-		sqlDB.CheckQueryResults(t, `SELECT * FROM tbl_regional_by_table ORDER BY pk`, [][]string{
-			{`7`, `g`},
-			{`8`, `h`},
-			{`9`, `i`},
-		})
-		sqlDB.CheckQueryResults(t, `SELECT crdb_region, * FROM tbl_regional_by_row ORDER BY pk`, [][]string{
-			{`europe-west2`, `10`, `j`},
-			{`us-east1`, `11`, `k`},
-			{`us-west1`, `12`, `l`},
-		})
-	}
 }
 
 func restoreOldVersionTest(exportDir string) func(t *testing.T) {
