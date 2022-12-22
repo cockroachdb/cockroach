@@ -457,6 +457,13 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		}
 		newProtectAbove := highWatermark.Add(
 			-int64(replicationDetails.ReplicationTTLSeconds)*time.Second.Nanoseconds(), 0)
+
+		// If we have a CutoverTime set, keep the protected
+		// timestamp at or below the cutover time.
+		if !streamProgress.CutoverTime.IsEmpty() && streamProgress.CutoverTime.Less(newProtectAbove) {
+			newProtectAbove = streamProgress.CutoverTime
+		}
+
 		if record.Timestamp.Less(newProtectAbove) {
 			return ptp.UpdateTimestamp(ctx, txn, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
