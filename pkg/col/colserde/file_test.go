@@ -107,7 +107,7 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-				d, err := colserde.NewFileDeserializerFromPath(typs, path)
+				d, err := colserde.NewTestFileDeserializerFromPath(typs, path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
 				require.Equal(t, typs, d.Typs())

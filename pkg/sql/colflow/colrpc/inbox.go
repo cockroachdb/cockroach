@@ -485,8 +485,10 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	// Eagerly lose the reference to the metadata since it might be of
 	// non-trivial footprint.
 	i.bufferedMeta = nil
-	// We also no longer need the scratch batch.
+	// We also no longer need the scratch batch nor the arrow-to-batch
+	// converter.
 	i.scratch.b = nil
+	i.converter.Release()
 	// The allocator tracks the memory usage for a few things (the scratch batch
 	// as well as the metadata), and when this function returns, we no longer
 	// reference any of those, so we can release all of the allocations.

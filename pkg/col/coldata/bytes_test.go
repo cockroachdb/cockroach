@@ -534,7 +534,9 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	}
 	wind := b.Window(startIdx, endIdx)
 
-	data, offsets := wind.ToArrowSerializationFormat(wind.Len())
+	var data []byte
+	var offsets []int32
+	data, offsets = wind.ToArrowSerializationFormat(wind.Len(), data, offsets)
 
 	require.Equal(t, wind.Len(), len(offsets)-1)
 	require.Equal(t, int32(0), offsets[0])
