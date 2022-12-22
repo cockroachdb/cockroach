@@ -394,19 +394,19 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db)
+	inDB, err := p.Descriptors().GetAllTablesInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return err
 	}
-
-	for _, tableDesc := range tableDescs {
-		if err = RevalidateUniqueConstraintsInTable(
-			ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
-		); err != nil {
+	return inDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		tableDesc, err := catalog.AsTableDescriptor(desc)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
+		return RevalidateUniqueConstraintsInTable(
+			ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+		)
+	})
 }
 
 // RevalidateUniqueConstraintsInTable verifies that all unique constraints
@@ -684,17 +684,17 @@ func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
 	if err != nil {
 		return err
 	}
-	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db)
+	inDB, err := p.Descriptors().GetAllTablesInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return err
 	}
-
-	for _, tableDesc := range tableDescs {
-		if err = p.validateTTLScheduledJobInTable(ctx, tableDesc); err != nil {
+	return inDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		tableDesc, err := catalog.AsTableDescriptor(desc)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
+		return p.validateTTLScheduledJobInTable(ctx, tableDesc)
+	})
 }
 
 var invalidTableTTLScheduledJobError = errors.Newf("invalid scheduled job for table")
