@@ -75,3 +75,52 @@ ALTER RANGE default CONFIGURE ZONE USING num_replicas=3
 # Removing RANGE DEFAULT is not allowed (for both host and secondary tenants)
 statement error pq: cannot remove default zone
 ALTER RANGE default CONFIGURE ZONE DISCARD
+
+
+# Regression test for github issue #93614, in which zone configurations
+# for dropped tables were not translated to span configurations.
+subtest regression_93614
+
+statement ok
+CREATE DATABASE db2;
+CREATE TABLE db2.t (i INT PRIMARY KEY);
+
+let $t_id
+SELECT 'db2.t'::REGCLASS::INT
+
+# Alter the zone configuration and drop the table in the same transaction
+# because the reconciler listens to both system.zones and system.descriptor
+# changes. After this transaction commits, there shall be no further updates
+# in either of these tables for id = $t_id.
+statement ok
+BEGIN;
+ALTER TABLE db2.t CONFIGURE ZONE USING range_max_bytes = 1<<24, range_min_bytes = 1<<20;
+DROP TABLE db2.t;
+COMMIT;
+
+# Wait for the span configs corresponding to table db2.t to be reconciled.
+query T retry
+SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
+FROM system.span_configurations
+WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
+----
+{"gcPolicy": {"ttlSeconds": 90000}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
+
+statement ok
+CREATE TABLE db2.t2 (i INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE db2.t2 CONFIGURE ZONE USING range_max_bytes = 1<<30, range_min_bytes = 1<<26;
+
+statement ok
+ALTER DATABASE db2 CONFIGURE ZONE USING gc.ttlseconds = 90001;
+
+# Both the dropped and the new table should eventually have span configurations
+# and they should both inherit from the database's GC TTL setting.
+query T retry
+SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
+FROM system.span_configurations
+WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
+----
+{"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
+{"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
