@@ -1154,6 +1154,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
 	desc, conf := repl.DescAndSpanConfig()
+	isReplace := removeIdx >= 0
 
 	// The allocator should not try to re-add this replica since there is a reason
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
@@ -1163,42 +1164,23 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	if err != nil {
 		return nil, err
 	}
-	if removeIdx >= 0 && newVoter.StoreID == existingVoters[removeIdx].StoreID {
+	if isReplace && newVoter.StoreID == existingVoters[removeIdx].StoreID {
 		return nil, errors.AssertionFailedf("allocator suggested to replace replica on s%d with itself", newVoter.StoreID)
 	}
 
-	clusterNodes := rq.storePool.ClusterNodeCount()
-	neededVoters := allocatorimpl.GetNeededVoters(conf.GetNumVoters(), clusterNodes)
-
-	// Only up-replicate if there are suitable allocation targets such that,
-	// either the replication goal is met, or it is possible to get to the next
+	// We only want to up-replicate if there are suitable allocation targets such
+	// that, either the replication goal is met, or it is possible to get to the next
 	// odd number of replicas. A consensus group of size 2n has worse failure
 	// tolerance properties than a group of size 2n - 1 because it has a larger
 	// quorum. For example, up-replicating from 1 to 2 replicas only makes sense
 	// if it is possible to be able to go to 3 replicas.
-	//
-	// NB: If willHave > neededVoters, then always allow up-replicating as that
-	// will be the case when up-replicating a range with a decommissioning
-	// replica.
-	//
-	// We skip this check if we're swapping a replica, since that does not
-	// change the quorum size.
-	// TODO(sarkesian): extract this bit into a reusable function
-	if willHave := len(existingVoters) + 1; removeIdx < 0 && willHave < neededVoters && willHave%2 == 0 {
-		// This means we are going to up-replicate to an even replica state.
-		// Check if it is possible to go to an odd replica state beyond it.
-		oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), existingVoters...)
-		oldPlusNewReplicas = append(
-			oldPlusNewReplicas,
-			roachpb.ReplicaDescriptor{NodeID: newVoter.NodeID, StoreID: newVoter.StoreID},
-		)
-		_, _, err := rq.allocator.AllocateVoter(ctx, rq.storePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
-		if err != nil {
-			// It does not seem possible to go to the next odd replica state. Note
-			// that AllocateVoter returns an allocatorError (a PurgatoryError)
-			// when purgatory is requested.
-			return nil, errors.Wrap(err, "avoid up-replicating to fragile quorum")
-		}
+	if err := rq.allocator.CheckAvoidsFragileQuorum(ctx, rq.storePool, conf,
+		existingVoters, remainingLiveNonVoters,
+		replicaStatus, allocatorimpl.VoterTarget, newVoter, isReplace); err != nil {
+		// It does not seem possible to go to the next odd replica state. Note
+		// that AllocateVoter returns an allocatorError (a PurgatoryError)
+		// when purgatory is requested.
+		return nil, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 	}
 
 	// Figure out whether we should be promoting an existing non-voting replica to
@@ -1222,7 +1204,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		})
 		ops = roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
 	}
-	if removeIdx < 0 {
+	if !isReplace {
 		log.KvDistribution.Infof(ctx, "adding voter %+v: %s",
 			newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	} else {
