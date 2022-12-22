@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -139,11 +138,15 @@ func (c *cFetcherWrapper) Close(ctx context.Context) {
 func newCFetcherWrapper(
 	ctx context.Context,
 	acc *mon.BoundAccount,
-	fetchSpec *fetchpb.IndexFetchSpec,
+	indexFetchSpec []byte,
 	nextKVer storage.NextKVer,
 	lastKeyProvider storage.LastKeyProvider,
 	mustSerialize bool,
 ) (_ storage.CFetcherWrapper, willSerialize bool, retErr error) {
+	fetchSpec, err := cache.deserialize(indexFetchSpec)
+	if retErr != nil {
+		return nil, willSerialize, err
+	}
 	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */, true /* allowUnhydratedEnums */)
 	if err != nil {
 		return nil, willSerialize, err

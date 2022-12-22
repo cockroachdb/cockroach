@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -69,7 +68,7 @@ type LastKeyProvider interface {
 var GetCFetcherWrapper func(
 	ctx context.Context,
 	acc *mon.BoundAccount,
-	indexFetchSpec *fetchpb.IndexFetchSpec,
+	indexFetchSpec []byte,
 	nextKVer NextKVer,
 	lastKeyProvider LastKeyProvider,
 	mustSerialize bool,
@@ -152,7 +151,7 @@ func (f *mvccScanFetchAdapter) NextKV(
 func MVCCScanToCols(
 	ctx context.Context,
 	reader Reader,
-	indexFetchSpec *fetchpb.IndexFetchSpec,
+	indexFetchSpec []byte,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
@@ -171,7 +170,7 @@ func MVCCScanToCols(
 func mvccScanToCols(
 	ctx context.Context,
 	iter MVCCIterator,
-	indexFetchSpec *fetchpb.IndexFetchSpec,
+	indexFetchSpec []byte,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,

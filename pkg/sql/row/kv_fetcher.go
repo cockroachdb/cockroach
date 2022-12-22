@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -104,7 +103,8 @@ func newKVBatchFetcher(
 func NewDirectKVBatchFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
-	spec *fetchpb.IndexFetchSpec,
+	spec []byte,
+	maxKeysPerRow int32,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
@@ -118,6 +118,7 @@ func NewDirectKVBatchFetcher(
 	)
 	kvBatchFetcher.scanFormat = roachpb.COL_BATCH_RESPONSE
 	kvBatchFetcher.indexFetchSpec = spec
+	kvBatchFetcher.maxKeysPerRow = maxKeysPerRow
 	return kvBatchFetcher
 }
 

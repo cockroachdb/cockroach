@@ -20,7 +20,6 @@ import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
 import "settings/encoding.proto";
-import "sql/catalog/fetchpb/index_fetch.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -2633,7 +2632,7 @@ message Header {
   util.tracing.tracingpb.TraceInfo trace_info = 25;
 
   // TODO: comment.
-  sql.sqlbase.IndexFetchSpec index_fetch_spec = 29;
+  bytes index_fetch_spec = 29;
 
   reserved 7, 10, 12, 14, 20;
 }

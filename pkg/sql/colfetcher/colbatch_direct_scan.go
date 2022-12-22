@@ -186,10 +186,16 @@ func NewColBatchDirectScan(
 	if err != nil {
 		return nil, nil, err
 	}
+	// TODO: implement cache for this.
+	serialized, err := spec.FetchSpec.Marshal()
+	if err != nil {
+		return nil, nil, err
+	}
 	fetcher := row.NewDirectKVBatchFetcher(
 		flowCtx.Txn,
 		bsHeader,
-		&spec.FetchSpec,
+		serialized,
+		int32(spec.FetchSpec.MaxKeysPerRow),
 		spec.Reverse,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,

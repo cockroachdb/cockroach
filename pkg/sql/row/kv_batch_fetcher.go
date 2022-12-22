@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -138,7 +137,8 @@ type txnKVFetcher struct {
 	batchBytesLimit rowinfra.BytesLimit
 
 	scanFormat     roachpb.ScanFormat
-	indexFetchSpec *fetchpb.IndexFetchSpec
+	indexFetchSpec []byte
+	maxKeysPerRow  int32
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
@@ -419,7 +419,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	if f.indexFetchSpec != nil {
 		ba.Header.IndexFetchSpec = f.indexFetchSpec
-		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
+		ba.Header.WholeRowsOfSize = f.maxKeysPerRow
 	} else if f.scanFormat == roachpb.COL_BATCH_RESPONSE {
 		return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
 	}
