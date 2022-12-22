@@ -89,7 +89,7 @@ func NewOutbox(
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BatchToArrowOnly)
 	if err != nil {
 		return nil, err
 	}

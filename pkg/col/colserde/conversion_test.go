@@ -23,7 +23,7 @@ import (
 
 func BenchmarkConversion(b *testing.B) {
 	createSerializer := func(typ *types.T) (*colserde.ArrowBatchConverter, *colserde.RecordBatchSerializer) {
-		c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
+		c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BatchToArrowOnly)
 		require.NoError(b, err)
 		s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
 		require.NoError(b, err)
@@ -70,7 +70,7 @@ func BenchmarkConversion(b *testing.B) {
 				}
 				serialized = buf.Bytes()
 			}
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.ArrowToBatchOnly)
 			require.NoError(b, err)
 			s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
 			require.NoError(b, err)

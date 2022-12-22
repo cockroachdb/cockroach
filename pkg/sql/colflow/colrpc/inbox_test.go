@@ -279,7 +279,7 @@ func TestInboxShutdown(t *testing.T) {
 					defer inboxMemAccount.Close(inboxCtx)
 					inbox, err := NewInbox(colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 					require.NoError(t, err)
-					c, err := colserde.NewArrowBatchConverter(typs)
+					c, err := colserde.NewArrowBatchConverter(typs, colserde.BatchToArrowOnly)
 					require.NoError(t, err)
 					r, err := colserde.NewRecordBatchSerializer(typs)
 					require.NoError(t, err)

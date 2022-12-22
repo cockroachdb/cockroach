@@ -47,7 +47,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	typs, b := randomBatch(testAllocator)
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
 	require.NoError(t, err)
 
 	// Make a copy of the original batch because the converter modifies and casts
@@ -100,7 +100,7 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 			typs, src = randomBatch(testAllocator)
 		}
 		dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
-		c, err := colserde.NewArrowBatchConverter(typs)
+		c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
 		require.NoError(t, err)
 		r, err := colserde.NewRecordBatchSerializer(typs)
 		require.NoError(t, err)
@@ -219,7 +219,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		b,
 		"BatchToArrow",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional)
 			require.NoError(b, err)
 			var data []array.Data
 			b.ResetTimer()
@@ -235,7 +235,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		},
 		"ArrowToBatch",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional)
 			require.NoError(b, err)
 			data, err := c.BatchToArrow(batch)
 			dataCopy := make([]array.Data, len(data))

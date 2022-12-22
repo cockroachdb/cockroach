@@ -56,7 +56,7 @@ type FileSerializer struct {
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer.
 func NewFileSerializer(w io.Writer, typs []*types.T) (*FileSerializer, error) {
-	a, err := NewArrowBatchConverter(typs)
+	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func newFileDeserializer(
 	}
 	d.typs = typs
 
-	if d.a, err = NewArrowBatchConverter(typs); err != nil {
+	if d.a, err = NewArrowBatchConverter(typs, ArrowToBatchOnly); err != nil {
 		return nil, err
 	}
 	if d.rb, err = NewRecordBatchSerializer(typs); err != nil {
