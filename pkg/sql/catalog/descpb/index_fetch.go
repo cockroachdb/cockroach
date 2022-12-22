@@ -53,11 +53,11 @@ func (s *IndexFetchSpec) FetchedColumnTypes() []*types.T {
 
 // DatumEncoding returns the datum encoding that corresponds to the key column
 // direction.
-func (c *IndexFetchSpec_KeyColumn) DatumEncoding() DatumEncoding {
+func (c *IndexFetchSpec_KeyColumn) DatumEncoding() catenumpb.DatumEncoding {
 	if c.Direction == catenumpb.IndexColumn_DESC {
-		return DatumEncoding_DESCENDING_KEY
+		return catenumpb.DatumEncoding_DESCENDING_KEY
 	}
-	return DatumEncoding_ASCENDING_KEY
+	return catenumpb.DatumEncoding_ASCENDING_KEY
 }
 
 // EncodingDirection returns the encoding direction for the key column.

@@ -15,8 +15,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -372,7 +372,7 @@ type DiskBackedRowContainer struct {
 	// Encoding helpers for de-duplication:
 	// encodings keeps around the DatumEncoding equivalents of the encoding
 	// directions in ordering to avoid conversions in hot paths.
-	encodings  []descpb.DatumEncoding
+	encodings  []catenumpb.DatumEncoding
 	datumAlloc tree.DatumAlloc
 	scratchKey []byte
 
@@ -413,7 +413,7 @@ func (f *DiskBackedRowContainer) Init(
 	f.src = &mrc
 	f.engine = engine
 	f.diskMonitor = diskMonitor
-	f.encodings = make([]descpb.DatumEncoding, len(ordering))
+	f.encodings = make([]catenumpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
 		f.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
 	}

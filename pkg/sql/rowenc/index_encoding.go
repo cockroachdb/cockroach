@@ -357,9 +357,9 @@ func MakeKeyFromEncDatums(
 	copy(key, keyPrefix)
 
 	for i, val := range values {
-		encoding := descpb.DatumEncoding_ASCENDING_KEY
+		encoding := catenumpb.DatumEncoding_ASCENDING_KEY
 		if keyCols[i].Direction == catenumpb.IndexColumn_DESC {
-			encoding = descpb.DatumEncoding_DESCENDING_KEY
+			encoding = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		if val.IsNull() {
 			containsNull = true
@@ -457,9 +457,9 @@ func DecodeKeyVals(
 			len(directions), len(vals))
 	}
 	for j := range vals {
-		enc := descpb.DatumEncoding_ASCENDING_KEY
+		enc := catenumpb.DatumEncoding_ASCENDING_KEY
 		if directions != nil && (directions[j] == catenumpb.IndexColumn_DESC) {
-			enc = descpb.DatumEncoding_DESCENDING_KEY
+			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(types[j], enc, key)
@@ -478,9 +478,9 @@ func DecodeKeyValsUsingSpec(
 ) (remainingKey []byte, foundNull bool, _ error) {
 	for j := range vals {
 		c := keyCols[j]
-		enc := descpb.DatumEncoding_ASCENDING_KEY
+		enc := catenumpb.DatumEncoding_ASCENDING_KEY
 		if c.Direction == catenumpb.IndexColumn_DESC {
-			enc = descpb.DatumEncoding_DESCENDING_KEY
+			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(c.Type, enc, key)

@@ -13,7 +13,7 @@ package flowinfra
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,8 +46,8 @@ import (
 // will cause data to accumulate internally.
 type StreamDecoder struct {
 	types []*types.T
-	// TODO(yuzefovich): move descpb.DatumEncoding into execinfrapb.
-	encoding     []descpb.DatumEncoding
+	// TODO(yuzefovich): move catenumpb.DatumEncoding into execinfrapb.
+	encoding     []catenumpb.DatumEncoding
 	data         []byte
 	numEmptyRows int
 	metadata     []execinfrapb.ProducerMetadata

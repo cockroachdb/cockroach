@@ -22,7 +22,7 @@ option go_package = "execinfrapb";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "errorspb/errors.proto";
-import "sql/catalog/descpb/encoded_datum.proto";
+import "sql/catalog/catenumpb/encoded_datum.proto";
 import "sql/types/types.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "gogoproto/gogo.proto";

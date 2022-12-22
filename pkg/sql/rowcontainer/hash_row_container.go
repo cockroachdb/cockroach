@@ -15,8 +15,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -131,7 +131,7 @@ func encodeColumnsOfRow(
 		// TODO(radu): we should figure out what encoding is readily available and
 		// use that (though it needs to be consistent across all rows). We could add
 		// functionality to compare VALUE encodings ignoring the column ID.
-		appendTo, err = row[colIdx].Encode(colTypes[i], da, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Encode(colTypes[i], da, catenumpb.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}
@@ -448,7 +448,7 @@ func (i *hashMemRowIterator) computeKey() error {
 	i.curKey = i.curKey[:0]
 	for _, col := range i.storedEqCols {
 		var err error
-		i.curKey, err = row[col].Encode(i.types[col], &i.columnEncoder.datumAlloc, descpb.DatumEncoding_ASCENDING_KEY, i.curKey)
+		i.curKey, err = row[col].Encode(i.types[col], &i.columnEncoder.datumAlloc, catenumpb.DatumEncoding_ASCENDING_KEY, i.curKey)
 		if err != nil {
 			return err
 		}

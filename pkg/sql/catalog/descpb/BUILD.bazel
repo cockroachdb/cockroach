@@ -51,7 +51,6 @@ go_test(
 proto_library(
     name = "descpb_proto",
     srcs = [
-        "encoded_datum.proto",
         "index_fetch.proto",
         "join_type.proto",
         "locking.proto",

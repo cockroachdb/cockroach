@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -252,7 +253,7 @@ func runSampleAggregator(
 
 			for _, b := range h.Buckets {
 				ed, _, err := rowenc.EncDatumFromBuffer(
-					types.Int, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					types.Int, catenumpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					t.Fatal(err)

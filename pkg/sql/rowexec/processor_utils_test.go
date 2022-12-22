@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -81,7 +81,7 @@ func toEncDatum(datumType *types.T, v interface{}) rowenc.EncDatum {
 	if err != nil {
 		panic(err)
 	}
-	encodedDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	encodedDatum := rowenc.EncDatumFromEncoded(catenumpb.DatumEncoding_ASCENDING_KEY, encoded)
 	encodedDatum.Datum = d
 	return encodedDatum
 }

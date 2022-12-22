@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -284,7 +284,7 @@ var (
 		Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
 			{
 				Column:   0,
-				Encoding: descpb.DatumEncoding_ASCENDING_KEY,
+				Encoding: catenumpb.DatumEncoding_ASCENDING_KEY,
 			},
 		},
 	}

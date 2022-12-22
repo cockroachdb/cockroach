@@ -433,7 +433,7 @@ func (s *Builder) generateInvertedSpanKey(
 	scratchRow = scratchRow[:keyLen]
 	if len(enc) > 0 {
 		// The encoded inverted value will be passed through unchanged.
-		encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+		encDatum := rowenc.EncDatumFromEncoded(catenumpb.DatumEncoding_ASCENDING_KEY, enc)
 		scratchRow = append(scratchRow, encDatum)
 		keyLen++
 	}

@@ -14,7 +14,7 @@ import (
 	context "context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -180,11 +180,11 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "invalid preceding or following size in window function")
 			}
 			typ := dStartOffset.ResolvedType()
-			spec.Start.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
+			spec.Start.OffsetType = DatumInfo{Encoding: catenumpb.DatumEncoding_VALUE, Type: typ}
 			var buf []byte
 			var a tree.DatumAlloc
 			datum := rowenc.DatumToEncDatum(typ, dStartOffset)
-			buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
+			buf, err = datum.Encode(typ, &a, catenumpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return err
 			}
@@ -224,11 +224,11 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 					return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "invalid preceding or following size in window function")
 				}
 				typ := dEndOffset.ResolvedType()
-				spec.End.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
+				spec.End.OffsetType = DatumInfo{Encoding: catenumpb.DatumEncoding_VALUE, Type: typ}
 				var buf []byte
 				var a tree.DatumAlloc
 				datum := rowenc.DatumToEncDatum(typ, dEndOffset)
-				buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
+				buf, err = datum.Encode(typ, &a, catenumpb.DatumEncoding_VALUE, buf)
 				if err != nil {
 					return err
 				}
