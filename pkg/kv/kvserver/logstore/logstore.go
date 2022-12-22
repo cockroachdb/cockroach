@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -325,11 +324,11 @@ func LoadTerm(
 		// sideloaded entries here to keep the term fetching cheap.
 		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
 		// makes any difference.
-		typ, err := raftlog.EncodingVersion(entry)
+		typ, err := raftlog.EncodingOf(entry)
 		if err != nil {
 			return 0, err
 		}
-		if typ != kvserverbase.RaftVersionSideloaded {
+		if typ != raftlog.EntryEncodingSideloaded {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
 		return entry.Term, nil
@@ -402,11 +401,11 @@ func LoadEntries(
 		}
 		expectedIndex++
 
-		typ, err := raftlog.EncodingVersion(ent)
+		typ, err := raftlog.EncodingOf(ent)
 		if err != nil {
 			return err
 		}
-		if typ == kvserverbase.RaftVersionSideloaded {
+		if typ == raftlog.EntryEncodingSideloaded {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
 			)

@@ -221,7 +221,7 @@ func raftEntryFormatter(data []byte) string {
 	}
 	// NB: a raft.EntryFormatter is only invoked for EntryNormal (raft methods
 	// that call this take care of unwrapping the ConfChange), and since
-	// len(data)>0 it has to be RaftVersionStandard or RaftVersionSideloaded and
+	// len(data)>0 it has to be EntryEncodingStandard or EntryEncodingSideloaded and
 	// they are encoded identically.
 	cmdID, data := raftlog.DecomposeRaftVersionStandardOrSideloaded(data)
 	return fmt.Sprintf("[%x] [%d]", cmdID, len(data))
@@ -269,15 +269,15 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 // in ents to ids and returns the result.
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
-		typ, err := raftlog.EncodingVersion(e)
+		typ, err := raftlog.EncodingOf(e)
 		if err != nil {
 			continue
 		}
 		switch typ {
-		case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+		case raftlog.EntryEncodingStandard, raftlog.EntryEncodingSideloaded:
 			id, _ := raftlog.DecomposeRaftVersionStandardOrSideloaded(e.Data)
 			ids = append(ids, id)
-		case kvserverbase.RaftVersionConfChange, kvserverbase.RaftVersionConfChangeV2:
+		case raftlog.EntryEncodingRaftConfChange, raftlog.EntryEncodingRaftConfChangeV2:
 			// Configuration changes don't have the CmdIDKey easily accessible but are
 			// rare, so fully decode the entry.
 			ent, err := raftlog.NewEntry(e)

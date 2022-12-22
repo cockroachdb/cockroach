@@ -28,29 +28,28 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-// EncodingVersion determines the RaftCommandEncodingVersion for a given
-// Entry.
-func EncodingVersion(ent raftpb.Entry) (kvserverbase.RaftCommandEncodingVersion, error) {
+// EncodingOf determines the EntryEncoding for a given Entry.
+func EncodingOf(ent raftpb.Entry) (EntryEncoding, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
-		return kvserverbase.RaftVersionEmptyEntry, nil
+		return EntryEncodingEmpty, nil
 	}
 
 	switch ent.Type {
 	case raftpb.EntryNormal:
 	case raftpb.EntryConfChange:
-		return kvserverbase.RaftVersionConfChange, nil
+		return EntryEncodingRaftConfChange, nil
 	case raftpb.EntryConfChangeV2:
-		return kvserverbase.RaftVersionConfChangeV2, nil
+		return EntryEncodingRaftConfChangeV2, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
 	switch ent.Data[0] {
-	case kvserverbase.RaftVersionStandardPrefixByte:
-		return kvserverbase.RaftVersionStandard, nil
-	case kvserverbase.RaftVersionSideloadedPrefixByte:
-		return kvserverbase.RaftVersionSideloaded, nil
+	case EntryEncodingStandardPrefixByte:
+		return EntryEncodingStandard, nil
+	case EntryEncodingSideloadedPrefixByte:
+		return EntryEncodingSideloaded, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
 	}
@@ -58,11 +57,11 @@ func EncodingVersion(ent raftpb.Entry) (kvserverbase.RaftCommandEncodingVersion,
 
 // DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the
 // marshaled kvserverpb.RaftCommand from a slice which is known to have come
-// from a raftpb.Entry of type kvserverbase.RaftVersionStandard or
-// kvserverbase.RaftVersionSideloaded (which, mod the prefix byte, share an
+// from a raftpb.Entry of type raftlog.EntryEncodingStandard or
+// raftlog.EntryEncodingSideloaded (which, mod the prefix byte, share an
 // encoding).
 func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
-	return kvserverbase.CmdIDKey(data[1 : 1+kvserverbase.RaftCommandIDLen]), data[1+kvserverbase.RaftCommandIDLen:]
+	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
 
 // Entry contains data related to a raft log entry. This is the raftpb.Entry
@@ -130,7 +129,7 @@ func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 }
 
 func (e *Entry) load() error {
-	typ, err := EncodingVersion(e.Entry)
+	typ, err := EncodingOf(e.Entry)
 	if err != nil {
 		return err
 	}
@@ -146,16 +145,16 @@ func (e *Entry) load() error {
 		AsV2() raftpb.ConfChangeV2
 	}
 	switch typ {
-	case kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded:
+	case EntryEncodingStandard, EntryEncodingSideloaded:
 		e.ID, raftCmdBytes = DecomposeRaftVersionStandardOrSideloaded(e.Entry.Data)
-	case kvserverbase.RaftVersionEmptyEntry:
+	case EntryEncodingEmpty:
 		// Nothing to load, the empty raftpb.Entry is represented by a trivial
 		// Entry.
 		return nil
-	case kvserverbase.RaftVersionConfChange:
+	case EntryEncodingRaftConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
 		ccTarget = e.ConfChangeV1
-	case kvserverbase.RaftVersionConfChangeV2:
+	case EntryEncodingRaftConfChangeV2:
 		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
 		ccTarget = e.ConfChangeV2
 	default:

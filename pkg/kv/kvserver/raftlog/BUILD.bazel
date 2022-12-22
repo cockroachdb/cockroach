@@ -5,6 +5,7 @@ go_library(
     name = "raftlog",
     srcs = [
         "command.go",
+        "encoding.go",
         "entry.go",
         "iterator.go",
     ],
