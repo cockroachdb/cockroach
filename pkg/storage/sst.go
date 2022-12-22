@@ -743,15 +743,30 @@ func CheckSSTConflicts(
 				// Seeks on the engine are expensive. Try Next()ing if we're very close
 				// to the sst key (which we might be).
 				nextsUntilSeek := numNextsBeforeSeek
+				rangeKeyChanged := false
 				for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 					extIter.NextKey()
 					extOK, _ = extIter.Valid()
+					rangeKeyChanged = rangeKeyChanged || extIter.RangeKeyChanged()
 					nextsUntilSeek--
 					if nextsUntilSeek <= 0 {
 						break
 					}
 				}
-				if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+				// TODO(erikgrinaker): NextKey() may not trigger `RangeKeyChanged()`
+				// on an exhausted iterator, so we check the case where we stepped
+				// from an initial range key onto an exhausted iterator. See:
+				// https://github.com/cockroachdb/cockroach/issues/94041
+				rangeKeyChanged = rangeKeyChanged || (!extOK && !extPrevRangeKeys.IsEmpty())
+				// If we havent't reached the SST key yet, seek to it. Otherwise, if we
+				// stepped past it but the range key changed we have to seek back to it,
+				// since we could otherwise have missed a range key that overlapped
+				// the SST key.
+				extCmp := 1
+				if extOK {
+					extCmp = extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key)
+				}
+				if extCmp < 0 || (extCmp > 0 && rangeKeyChanged) {
 					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 				}
 			}
@@ -776,7 +791,7 @@ func CheckSSTConflicts(
 		// Since we use range key masking, we can just Next() the ext iterator
 		// past its range key.
 		if sstTimestamp.IsSet() && extHasRange && !extHasPoint && !sstHasRange {
-			if vers, ok := extRangeKeys.FirstAtOrAbove(sstTimestamp); !ok || vers.Timestamp.Equal(sstTimestamp) {
+			if extRangeKeys.Newest().Less(sstTimestamp) {
 				// All range key versions are below the request timestamp. We can seek
 				// past the range key, as all SST points/ranges are going to be above
 				// this range key.
@@ -792,15 +807,30 @@ func CheckSSTConflicts(
 					// Seeks on the engine are expensive. Try Next()ing if we're very close
 					// to the sst key (which we might be).
 					nextsUntilSeek := numNextsBeforeSeek
+					rangeKeyChanged := false
 					for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 						extIter.NextKey()
 						extOK, _ = extIter.Valid()
+						rangeKeyChanged = rangeKeyChanged || extIter.RangeKeyChanged()
 						nextsUntilSeek--
 						if nextsUntilSeek <= 0 {
 							break
 						}
 					}
-					if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+					// TODO(erikgrinaker): NextKey() may not trigger `RangeKeyChanged()`
+					// on an exhausted iterator, so we check the case where we stepped
+					// from an initial range key onto an exhausted iterator. See:
+					// https://github.com/cockroachdb/cockroach/issues/94041
+					rangeKeyChanged = rangeKeyChanged || (!extOK && !extPrevRangeKeys.IsEmpty())
+					// If we havent't reached the SST key yet, seek to it. Otherwise, if we
+					// stepped past it but the range key changed we have to seek back to it,
+					// since we could otherwise have missed a range key that overlapped
+					// the SST key.
+					extCmp := 1
+					if extOK {
+						extCmp = extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key)
+					}
+					if extCmp < 0 || (extCmp > 0 && rangeKeyChanged) {
 						extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 					}
 				}
