@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/colconv",
         "//pkg/sql/colencoding",

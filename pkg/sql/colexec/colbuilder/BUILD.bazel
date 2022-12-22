@@ -68,6 +68,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/execinfra",

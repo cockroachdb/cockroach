@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -291,7 +292,7 @@ func newZigzagJoiner(
 	// Make sure the key column types are hydrated. The fetched column types
 	// will be hydrated in ProcessorBase.Init (via joinerBase.init below).
 	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
-	for _, fetchSpec := range []descpb.IndexFetchSpec{spec.Sides[0].FetchSpec, spec.Sides[1].FetchSpec} {
+	for _, fetchSpec := range []fetchpb.IndexFetchSpec{spec.Sides[0].FetchSpec, spec.Sides[1].FetchSpec} {
 		for i := range fetchSpec.KeyAndSuffixColumns {
 			if err := typedesc.EnsureTypeIsHydrated(
 				ctx, fetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
@@ -395,7 +396,7 @@ type zigzagJoinerInfo struct {
 	// rowsRead is the total number of rows that this fetcher read from disk.
 	rowsRead  int64
 	alloc     tree.DatumAlloc
-	fetchSpec descpb.IndexFetchSpec
+	fetchSpec fetchpb.IndexFetchSpec
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
