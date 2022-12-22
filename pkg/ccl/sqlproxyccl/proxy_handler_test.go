@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -992,7 +993,7 @@ func TestCancelQuery(t *testing.T) {
 	proxy, addr, httpAddr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 	connectionString := fmt.Sprintf(
 		"postgres://testuser:hunter2@%s/defaultdb?sslmode=require&sslrootcert=%s&options=--cluster=tenant-cluster-%s",
-		addr, testutils.TestDataPath(t, "testserver.crt"), tenantID,
+		addr, datapathutils.TestDataPath(t, "testserver.crt"), tenantID,
 	)
 
 	// Open a connection to the first pod.
@@ -2213,8 +2214,8 @@ openssl genrsa -out testdata/testserver.key 2048
 openssl req -new -x509 -sha256 -key testdata/testserver.key -out testdata/testserver.crt \
   -days 3650 -config testdata/testserver_config.cnf
 `
-	opts.ListenKey = testutils.TestDataPath(t, "testserver.key")
-	opts.ListenCert = testutils.TestDataPath(t, "testserver.crt")
+	opts.ListenKey = datapathutils.TestDataPath(t, "testserver.key")
+	opts.ListenCert = datapathutils.TestDataPath(t, "testserver.crt")
 
 	return newProxyServer(ctx, t, stopper, opts)
 }

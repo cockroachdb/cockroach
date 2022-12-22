@@ -42,7 +42,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/spanconfig/spanconfigtestutils",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",

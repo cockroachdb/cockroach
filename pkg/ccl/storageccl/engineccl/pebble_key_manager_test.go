@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -251,7 +251,7 @@ func TestDataKeyManager(t *testing.T) {
 		return timeutil.Unix(unixTime, 0)
 	}
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "data_key_manager"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "data_key_manager"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -414,7 +414,7 @@ func TestDataKeyManagerIO(t *testing.T) {
 
 	var dkm *DataKeyManager
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "data_key_manager_io"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "data_key_manager_io"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			fmt.Println(d.Pos)
 			buf.Reset()

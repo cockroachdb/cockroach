@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -68,5 +68,5 @@ func TestEngine(t *testing.T) {
 	assert.Equal(t, v(`e-4`, ts(4)), e.Get(roachpb.Key(`e`), ts(5)))
 
 	_, _ = k, v
-	echotest.Require(t, e.DebugPrint(""), testutils.TestDataPath(t, t.Name(), "output.txt"))
+	echotest.Require(t, e.DebugPrint(""), datapathutils.TestDataPath(t, t.Name(), "output.txt"))
 }

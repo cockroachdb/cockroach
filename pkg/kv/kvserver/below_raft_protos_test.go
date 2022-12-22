@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -103,7 +103,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 	// some point.
 	const itersPerProto = 50
 
-	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for _, fn := range testCases {
 		name := fmt.Sprintf("%T", fn(rand.New(rand.NewSource(0))))
 		name = regexp.MustCompile(`.*\.`).ReplaceAllString(name, "")

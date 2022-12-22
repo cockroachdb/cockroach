@@ -53,6 +53,7 @@ go_test(
         "//pkg/sql/contentionpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",

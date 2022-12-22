@@ -264,6 +264,7 @@ go_test(
         "//pkg/sql/stats",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

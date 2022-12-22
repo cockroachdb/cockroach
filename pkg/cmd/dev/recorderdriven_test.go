@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/os"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/irfansharif/recorder"
 	"github.com/stretchr/testify/require"
@@ -78,7 +78,7 @@ func TestRecorderDriven(t *testing.T) {
 	}
 
 	verbose := testing.Verbose()
-	testdata := testutils.TestDataPath(t, "recorderdriven")
+	testdata := datapathutils.TestDataPath(t, "recorderdriven")
 	datadriven.Walk(t, testdata, func(t *testing.T, path string) {
 		if strings.HasSuffix(path, ".rec") {
 			return

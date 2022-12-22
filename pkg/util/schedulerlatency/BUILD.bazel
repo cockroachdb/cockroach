@@ -34,6 +34,7 @@ go_test(
     deps = [
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "//pkg/util/metric",
         "//pkg/util/stop",

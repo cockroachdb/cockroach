@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +55,7 @@ func TestServer(t *testing.T) {
 
 	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
 		require.Equal(t, expectedNodeID, req.NodeId)
-		b, err := os.ReadFile(testutils.TestDataPath(t, "heap.profile"))
+		b, err := os.ReadFile(datapathutils.TestDataPath(t, "heap.profile"))
 		require.NoError(t, err)
 		return &serverpb.JSONResponse{Data: b}, nil
 	}
@@ -112,7 +112,7 @@ func TestServerConcurrentAccess(t *testing.T) {
 		if req.Type == serverpb.ProfileRequest_CPU {
 			fileName = "cpu.profile"
 		}
-		b, err := os.ReadFile(testutils.TestDataPath(t, fileName))
+		b, err := os.ReadFile(datapathutils.TestDataPath(t, fileName))
 		require.NoError(t, err)
 		return &serverpb.JSONResponse{Data: b}, nil
 	}

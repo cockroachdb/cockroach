@@ -29,7 +29,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",

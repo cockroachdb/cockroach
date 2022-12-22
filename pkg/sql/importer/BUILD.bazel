@@ -212,6 +212,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

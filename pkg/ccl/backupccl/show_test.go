@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -718,7 +719,7 @@ func TestShowUpgradedForeignKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		testdataBase = testutils.TestDataPath(t, "restore_old_versions")
+		testdataBase = datapathutils.TestDataPath(t, "restore_old_versions")
 		fkRevDirs    = testdataBase + "/fk-rev-history"
 	)
 

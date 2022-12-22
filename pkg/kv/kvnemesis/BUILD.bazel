@@ -82,7 +82,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

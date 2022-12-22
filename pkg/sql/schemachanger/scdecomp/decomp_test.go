@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,5 +38,5 @@ func TestDecomposeToElements(t *testing.T) {
 		return tc.ServerConn(0), func() { tc.Stopper().Stop(ctx) }
 	}
 
-	sctest.DecomposeToElements(t, testutils.TestDataPath(t), newCluster)
+	sctest.DecomposeToElements(t, datapathutils.TestDataPath(t), newCluster)
 }

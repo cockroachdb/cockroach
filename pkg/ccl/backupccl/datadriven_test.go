@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -403,7 +404,7 @@ func TestDataDriven(t *testing.T) {
 	defer httpServerCleanup()
 
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
 		var lastCreatedCluster string
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx, t)
@@ -861,7 +862,7 @@ func TestDataDriven(t *testing.T) {
 				d.ScanArgs(t, "src-path", &sourceRelativePath)
 				d.ScanArgs(t, "dest-path", &destRelativePath)
 				splitSrcPath := strings.Split(sourceRelativePath, ",")
-				sourcePath, err := filepath.Abs(testutils.TestDataPath(t, splitSrcPath...))
+				sourcePath, err := filepath.Abs(datapathutils.TestDataPath(t, splitSrcPath...))
 				require.NoError(t, err)
 				splitDestPath := strings.Split(destRelativePath, ",")
 				destPath := filepath.Join(ioDir, filepath.Join(splitDestPath...))

@@ -23,6 +23,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

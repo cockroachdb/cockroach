@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/davecgh/go-spew/spew"
@@ -43,7 +43,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 		s += fmt.Sprintf("RangeLeaseAcquireTimeout: %s\n", cfg.RangeLeaseAcquireTimeout())
 		s += fmt.Sprintf("NodeLivenessDurations: active=%s renewal=%s\n", nodeActive, nodeRenewal)
 		s += fmt.Sprintf("SentinelGossipTTL: %s\n", cfg.SentinelGossipTTL())
-		echotest.Require(t, s, testutils.TestDataPath(t, "raft_config"))
+		echotest.Require(t, s, datapathutils.TestDataPath(t, "raft_config"))
 	}
 
 	// Generate and assert the derived recovery intervals.
@@ -120,5 +120,5 @@ func TestDefaultRaftConfig(t *testing.T) {
 		},
 	})
 
-	echotest.Require(t, s, testutils.TestDataPath(t, "raft_config_recovery"))
+	echotest.Require(t, s, datapathutils.TestDataPath(t, "raft_config_recovery"))
 }

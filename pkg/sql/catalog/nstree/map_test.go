@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/datadriven"
 )
@@ -48,7 +48,7 @@ import (
 //	  Gets the entry with the given ID and prints its entry.
 //	  If no such entry exists, "not found" will be printed.
 func TestNameMapDataDriven(t *testing.T) {
-	datadriven.Walk(t, testutils.TestDataPath(t, "name_map"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "name_map"), func(t *testing.T, path string) {
 		var nm NameMap
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return testMapDataDriven(t, d, nil /* im */, &nm)
@@ -58,7 +58,7 @@ func TestNameMapDataDriven(t *testing.T) {
 
 // TestIDMapDataDriven is like TestNameMapDataDriven but for IDMap.
 func TestIDMapDataDriven(t *testing.T) {
-	datadriven.Walk(t, testutils.TestDataPath(t, "id_map"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "id_map"), func(t *testing.T, path string) {
 		var im IDMap
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return testMapDataDriven(t, d, &im, nil /* nm */)

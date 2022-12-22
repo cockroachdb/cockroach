@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -496,7 +497,7 @@ func cumulativeTest(
 ) {
 	skip.UnderStress(t)
 	skip.UnderRace(t)
-	path := testutils.RewritableDataPath(t, relPath)
+	path := datapathutils.RewritableDataPath(t, relPath)
 	var setup []parser.Statement
 	stageExecMap := makeStageExecStmtMap()
 	rewrite := false

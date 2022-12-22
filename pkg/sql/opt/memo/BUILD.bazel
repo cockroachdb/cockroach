@@ -101,6 +101,7 @@ go_test(
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/duration",
         "//pkg/util/intsets",
         "//pkg/util/leaktest",

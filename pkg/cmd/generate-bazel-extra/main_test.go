@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +38,7 @@ func TestParseQueryXML(t *testing.T) {
 			"//pkg/sql/sem/normalize:normalize_test",
 		},
 	}
-	xmlData, err := os.ReadFile(filepath.Join(testutils.TestDataPath(t, "TestParseQueryXML"), "tc1.xml"))
+	xmlData, err := os.ReadFile(filepath.Join(datapathutils.TestDataPath(t, "TestParseQueryXML"), "tc1.xml"))
 	require.NoError(t, err)
 	sizeToTargets, err := parseQueryXML(xmlData)
 	require.NoError(t, err)

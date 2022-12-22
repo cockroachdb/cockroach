@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +38,7 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	datadriven.RunTest(t, testutils.TestDataPath(t, "elastic_cpu_work_queue"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "elastic_cpu_work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

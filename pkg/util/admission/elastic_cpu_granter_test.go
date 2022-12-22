@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -99,7 +99,7 @@ func TestElasticCPUGranter(t *testing.T) {
 	}
 
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "elastic_cpu_granter"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "elastic_cpu_granter"),
 		func(t *testing.T, d *datadriven.TestData) (retStr string) {
 			var duration time.Duration
 			if d.Cmd == "advance" || d.Cmd == "took-without-permission" ||

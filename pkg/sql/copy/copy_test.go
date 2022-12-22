@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -129,7 +129,7 @@ func TestCopy(t *testing.T) {
 		}
 
 	}
-	datadriven.RunTest(t, testutils.TestDataPath(t, "copyfrom"), testCopy)
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "copyfrom"), testCopy)
 }
 
 // TestCopyFromTransaction tests that copy from rows are written with

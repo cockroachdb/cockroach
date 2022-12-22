@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -326,7 +326,7 @@ func TestFileRegistry(t *testing.T) {
 	fs := loggingFS{FS: vfs.NewMem(), w: &buf}
 	var registry *PebbleFileRegistry
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "file_registry"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "file_registry"), func(t *testing.T, d *datadriven.TestData) string {
 		buf.Reset()
 
 		switch d.Cmd {

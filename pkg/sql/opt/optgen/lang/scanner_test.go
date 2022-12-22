@@ -19,12 +19,12 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
 
 func TestScanner(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "scanner"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "scanner"), func(t *testing.T, d *datadriven.TestData) string {
 		// Only scan command supported.
 		if d.Cmd != "scan" {
 			t.FailNow()

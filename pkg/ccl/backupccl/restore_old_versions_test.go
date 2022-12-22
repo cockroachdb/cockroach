@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -63,7 +64,7 @@ import (
 func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testdataBase := testutils.TestDataPath(t, "restore_old_versions")
+	testdataBase := datapathutils.TestDataPath(t, "restore_old_versions")
 	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
 		exportDirs                  = testdataBase + "/exports"
@@ -790,7 +791,7 @@ func TestRestoreOldBackupMissingOfflineIndexes(t *testing.T) {
 	skip.UnderRace(t, "times out under race cause it starts up two test servers")
 	ctx := context.Background()
 
-	badBackups, err := filepath.Abs(testutils.TestDataPath(t, "restore_old_versions", "inc_missing_addsst", "v20.2.7"))
+	badBackups, err := filepath.Abs(datapathutils.TestDataPath(t, "restore_old_versions", "inc_missing_addsst", "v20.2.7"))
 	require.NoError(t, err)
 	// Disabling the default test tenant due to test cases failures. More
 	// investigation is required. Tracked with #76378.
@@ -865,7 +866,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	backupDir := testutils.TestDataPath(t, "restore_with_dropped_schema", "exports", "v20.2.7")
+	backupDir := datapathutils.TestDataPath(t, "restore_with_dropped_schema", "exports", "v20.2.7")
 	const (
 		dbName  = "foo"
 		fromDir = "nodelocal://0/"
