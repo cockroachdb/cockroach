@@ -28,7 +28,7 @@ import (
 )
 
 // ArrowBatchConverter converts batches to arrow column data
-// ([]*array.Data) and back again.
+// ([]array.Data) and back again.
 type ArrowBatchConverter struct {
 	typs []*types.T
 
@@ -43,35 +43,57 @@ type ArrowBatchConverter struct {
 	scratch struct {
 		// arrowData is used as scratch space returned as the corresponding
 		// conversion result.
-		arrowData []*array.Data
-		// buffers is scratch space for exactly two buffers per element in
+		arrowData []array.Data
+		// buffers is scratch space for two or three buffers per element in
 		// arrowData.
 		buffers [][]*memory.Buffer
 	}
 }
 
-// NewArrowBatchConverter converts coldata.Batches to []*array.Data and back
+//gcassert:inline
+func numBuffers(t *types.T) int {
+	// Most types need three buffers: one for the nulls, one for the values, and
+	// one for the offsets; however, some simple types don't need the offsets
+	// buffer, so two buffers are sufficient.
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily, types.IntFamily, types.FloatFamily:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// NewArrowBatchConverter converts coldata.Batches to []array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
 func NewArrowBatchConverter(typs []*types.T) (*ArrowBatchConverter, error) {
 	c := &ArrowBatchConverter{typs: typs}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
-	c.scratch.arrowData = make([]*array.Data, len(typs))
+	c.scratch.arrowData = make([]array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
-	for i := range c.scratch.buffers {
-		// Some types need only two buffers: one for the nulls, and one for the
-		// values, but others (i.e. Bytes) need an extra buffer for the
-		// offsets.
-		c.scratch.buffers[i] = make([]*memory.Buffer, 0, 3)
+	// Calculate the number of buffers needed for all types to be able to batch
+	// allocate them below.
+	var numBuffersTotal int
+	for _, t := range typs {
+		numBuffersTotal += numBuffers(t)
+	}
+	buffers := make([]memory.Buffer, numBuffersTotal)
+	var buffersIdx int
+	for i, t := range typs {
+		c.scratch.buffers[i] = make([]*memory.Buffer, numBuffers(t))
+		for j := range c.scratch.buffers[i] {
+			c.scratch.buffers[i][j] = &buffers[buffersIdx]
+			buffersIdx++
+		}
 	}
 	return c, nil
 }
 
 // BatchToArrow converts the first batch.Length elements of the batch into an
-// arrow []*array.Data. It is assumed that the batch is not larger than
-// coldata.BatchSize(). The returned []*array.Data may only be used until the
+// arrow []array.Data. It is assumed that the batch is not larger than
+// coldata.BatchSize(). The returned []array.Data may only be used until the
 // next call to BatchToArrow.
-func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, error) {
+func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, error) {
 	if batch.Width() != len(c.typs) {
 		return nil, errors.AssertionFailedf("mismatched batch width and schema length: %d != %d", batch.Width(), len(c.typs))
 	}
@@ -89,7 +111,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		// Bools require special handling.
 		if typ.Family() == types.BoolFamily {
 			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
-			c.scratch.arrowData[vecIdx] = c.builders.boolBuilder.NewBooleanArray().Data()
+			c.scratch.arrowData[vecIdx] = *c.builders.boolBuilder.NewBooleanArray().Data()
 			// Overwrite incorrect null bitmap (that has all values as "valid")
 			// with the actual null bitmap. Note that if we actually don't have
 			// any nulls, we use a bitmap with zero length for it in order to
@@ -98,7 +120,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			if nulls != nil {
 				arrowBitmap = nulls.NullBitmap()
 			}
-			c.scratch.arrowData[vecIdx].Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
+			c.scratch.arrowData[vecIdx].Buffers()[0].Reset(arrowBitmap)
 			continue
 		}
 
@@ -254,12 +276,13 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 
 		// Construct the underlying arrow buffers.
 		// WARNING: The ordering of construction is critical.
-		c.scratch.buffers[vecIdx] = c.scratch.buffers[vecIdx][:0]
-		c.scratch.buffers[vecIdx] = append(c.scratch.buffers[vecIdx], memory.NewBufferBytes(arrowBitmap))
+		c.scratch.buffers[vecIdx][0].Reset(arrowBitmap)
+		bufferIdx := 1
 		if offsetsBytes != nil {
-			c.scratch.buffers[vecIdx] = append(c.scratch.buffers[vecIdx], memory.NewBufferBytes(offsetsBytes))
+			c.scratch.buffers[vecIdx][1].Reset(offsetsBytes)
+			bufferIdx++
 		}
-		c.scratch.buffers[vecIdx] = append(c.scratch.buffers[vecIdx], memory.NewBufferBytes(values))
+		c.scratch.buffers[vecIdx][bufferIdx].Reset(values)
 
 		// Create the data from the buffers. It might be surprising that we don't
 		// set a type or a null count, but these fields are not used in the way that
@@ -267,7 +290,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		// information is inferred from the ArrowBatchConverter schema, null count
 		// is an optimization we can use when working with nulls, and childData is
 		// only used for nested types like Lists, Structs, or Unions.
-		c.scratch.arrowData[vecIdx] = array.NewData(
+		c.scratch.arrowData[vecIdx].Reset(
 			nil /* dtype */, n, c.scratch.buffers[vecIdx], nil /* childData */, 0 /* nulls */, 0, /* offset */
 		)
 	}
@@ -285,9 +308,8 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 	bytesHeader.Cap = int32Header.Cap * int(memsize.Int32)
 }
 
-// ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be
-// more than coldata.BatchSize() elements in data. It's safe to call ArrowToBatch
-// concurrently.
+// ArrowToBatch converts []array.Data to a coldata.Batch. There must not be
+// more than coldata.BatchSize() elements in data.
 //
 // The passed in batch is overwritten, but after this method returns it stays
 // valid as long as `data` stays valid. Callers can use this to control the
@@ -297,7 +319,7 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 // The passed in data is also mutated (we store nulls differently than arrow and
 // the adjustment is done in place).
 func (c *ArrowBatchConverter) ArrowToBatch(
-	data []*array.Data, batchLength int, b coldata.Batch,
+	data []array.Data, batchLength int, b coldata.Batch,
 ) error {
 	if len(data) != len(c.typs) {
 		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
@@ -305,20 +327,15 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 
 	for i, typ := range c.typs {
 		vec := b.ColVec(i)
-		d := data[i]
-
-		// Eagerly release our data references to make sure they can be collected
-		// as quickly as possible as we copy each (or simply reference each) by
-		// coldata.Vecs below.
-		data[i] = nil
+		d := &data[i]
 
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
 			boolArr := array.NewBooleanData(d)
 			vec.Nulls().SetNullBitmap(boolArr.NullBitmapBytes(), batchLength)
 			vecArr := vec.Bool()
-			for i := 0; i < boolArr.Len(); i++ {
-				vecArr[i] = boolArr.Value(i)
+			for j := 0; j < boolArr.Len(); j++ {
+				vecArr[j] = boolArr.Value(j)
 			}
 
 		case types.BytesFamily:
@@ -347,9 +364,9 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Decimal()
-			for i := 0; i < len(offsets)-1; i++ {
-				if nulls == nil || !nulls.NullAt(i) {
-					if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
+			for j := 0; j < len(offsets)-1; j++ {
+				if nulls == nil || !nulls.NullAt(j) {
+					if err := vecArr[j].UnmarshalText(bytes[offsets[j]:offsets[j+1]]); err != nil {
 						return err
 					}
 				}
@@ -375,9 +392,9 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Timestamp()
-			for i := 0; i < len(offsets)-1; i++ {
-				if nulls == nil || !nulls.NullAt(i) {
-					if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+			for j := 0; j < len(offsets)-1; j++ {
+				if nulls == nil || !nulls.NullAt(j) {
+					if err := vecArr[j].UnmarshalBinary(bytes[offsets[j]:offsets[j+1]]); err != nil {
 						return err
 					}
 				}
@@ -403,11 +420,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Interval()
-			for i := 0; i < len(offsets)-1; i++ {
-				if nulls == nil || !nulls.NullAt(i) {
-					intervalBytes := bytes[offsets[i]:offsets[i+1]]
+			for j := 0; j < len(offsets)-1; j++ {
+				if nulls == nil || !nulls.NullAt(j) {
+					intervalBytes := bytes[offsets[j]:offsets[j+1]]
 					var err error
-					vecArr[i], err = duration.Decode(
+					vecArr[j], err = duration.Decode(
 						int64(binary.LittleEndian.Uint64(intervalBytes[0:memsize.Int64])),
 						int64(binary.LittleEndian.Uint64(intervalBytes[memsize.Int64:memsize.Int64*2])),
 						int64(binary.LittleEndian.Uint64(intervalBytes[memsize.Int64*2:memsize.Int64*3])),
@@ -436,9 +453,9 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			offsets := bytesArr.ValueOffsets()
 			vecArr := vec.Datum()
-			for i := 0; i < len(offsets)-1; i++ {
-				if nulls == nil || !nulls.NullAt(i) {
-					if err := vecArr.UnmarshalTo(i, bytes[offsets[i]:offsets[i+1]]); err != nil {
+			for j := 0; j < len(offsets)-1; j++ {
+				if nulls == nil || !nulls.NullAt(j) {
+					if err := vecArr.UnmarshalTo(j, bytes[offsets[j]:offsets[j+1]]); err != nil {
 						return err
 					}
 				}
@@ -486,6 +503,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 			vec.SetCol(col)
 		}
+
+		// Eagerly release our data references to make sure they can be collected
+		// as quickly as possible as we copy each (or simply reference each) by
+		// coldata.Vecs below.
+		data[i] = array.Data{}
 	}
 	b.SetSelection(false)
 	b.SetLength(batchLength)

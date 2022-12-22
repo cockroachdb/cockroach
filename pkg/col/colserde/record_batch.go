@@ -96,7 +96,7 @@ func calculatePadding(numBytes int) int {
 // so users who wish to retain references to individual array.Data elements must
 // do so by making a copy elsewhere.
 func (s *RecordBatchSerializer) Serialize(
-	w io.Writer, data []*array.Data, headerLength int,
+	w io.Writer, data []array.Data, headerLength int,
 ) (metadataLen uint32, dataLen uint64, _ error) {
 	if len(data) != len(s.numBuffers) {
 		return 0, 0, errors.Errorf("mismatched schema length and number of columns: %d != %d", len(s.numBuffers), len(data))
@@ -216,7 +216,7 @@ func (s *RecordBatchSerializer) Serialize(
 			}
 		}
 		// Eagerly discard the buffer; we have no use for it any longer.
-		data[i] = nil
+		data[i] = array.Data{}
 	}
 
 	// Add body padding. The body also needs to be a multiple of 8 bytes.
@@ -230,7 +230,7 @@ func (s *RecordBatchSerializer) Serialize(
 // into data and returns the length of the batch. Deserializing a schema that
 // does not match the schema given in NewRecordBatchSerializer results in
 // undefined behavior.
-func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (int, error) {
+func (s *RecordBatchSerializer) Deserialize(data *[]array.Data, bytes []byte) (int, error) {
 	// Read the metadata by first reading its length.
 	metadataLen := int(binary.LittleEndian.Uint32(bytes[:metadataLengthNumBytes]))
 	metadata := arrowserde.GetRootAsMessage(
@@ -285,6 +285,7 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (
 
 		// Decode the message body by using the offset and length information in the
 		// message header.
+		// TODO(yuzefovich): reuse these buffers across Deserialize calls.
 		buffers := make([]*memory.Buffer, s.numBuffers[fieldIdx])
 		for i := 0; i < s.numBuffers[fieldIdx]; i++ {
 			header.Buffers(&buf, bufferIdx)
@@ -301,7 +302,7 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (
 
 		*data = append(
 			*data,
-			array.NewData(
+			*array.NewData(
 				nil, /* dType */
 				int(header.Length()),
 				buffers,
