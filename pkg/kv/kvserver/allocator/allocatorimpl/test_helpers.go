@@ -42,7 +42,7 @@ func CreateTestAllocatorWithKnobs(
 		storepool.TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, storePool, func(string) (time.Duration, bool) {
+	a := MakeAllocator(st, deterministic, func(string) (time.Duration, bool) {
 		return 0, true
 	}, knobs)
 	return stopper, g, storePool, a, manual

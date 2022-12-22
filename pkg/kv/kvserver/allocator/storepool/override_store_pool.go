@@ -89,6 +89,21 @@ func (o *OverrideStorePool) GetStoreListFromIDs(
 	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 
+// GetStoreListForTargets implements the AllocatorStorePool interface.
+func (o *OverrideStorePool) GetStoreListForTargets(
+	candidates []roachpb.ReplicationTarget, filter StoreFilter,
+) (StoreList, int, ThrottledStoreReasons) {
+	o.sp.DetailsMu.Lock()
+	defer o.sp.DetailsMu.Unlock()
+
+	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
+	for _, tgt := range candidates {
+		storeIDs = append(storeIDs, tgt.StoreID)
+	}
+
+	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+}
+
 // LiveAndDeadReplicas implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) LiveAndDeadReplicas(
 	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
