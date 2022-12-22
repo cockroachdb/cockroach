@@ -133,7 +133,7 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -144,7 +144,7 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 				KeyColumnNames:      []string{"completed", "id"},
 				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC, fetchpb.IndexColumn_ASC},
 				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},

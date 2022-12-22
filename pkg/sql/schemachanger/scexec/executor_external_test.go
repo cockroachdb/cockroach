@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -183,8 +182,8 @@ CREATE TABLE db.t (
 		KeyColumnIDs:      []descpb.ColumnID{1},
 		KeyColumnNames:    []string{"i"},
 		StoreColumnNames:  []string{},
-		KeyColumnDirections: []catpb.IndexColumn_Direction{
-			catpb.IndexColumn_ASC,
+		KeyColumnDirections: []fetchpb.IndexColumn_Direction{
+			fetchpb.IndexColumn_ASC,
 		},
 		ConstraintID:                3,
 		UseDeletePreservingEncoding: true,
@@ -222,7 +221,7 @@ CREATE TABLE db.t (
 						ColumnID:  1,
 						IndexID:   indexToAdd.ID,
 						Kind:      scpb.IndexColumn_KEY,
-						Direction: catpb.IndexColumn_ASC,
+						Direction: fetchpb.IndexColumn_ASC,
 						Ordinal:   0,
 					},
 				}

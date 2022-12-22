@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -222,11 +223,11 @@ func UpdateIndexPartitioning(
 	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
 	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
 	newColumnNames := make([]string, len(newImplicitCols), newCap)
-	newColumnDirections := make([]catpb.IndexColumn_Direction, len(newImplicitCols), newCap)
+	newColumnDirections := make([]fetchpb.IndexColumn_Direction, len(newImplicitCols), newCap)
 	for i, col := range newImplicitCols {
 		newColumnIDs[i] = col.GetID()
 		newColumnNames[i] = col.GetName()
-		newColumnDirections[i] = catpb.IndexColumn_ASC
+		newColumnDirections[i] = fetchpb.IndexColumn_ASC
 		if isNoOp &&
 			(idx.KeyColumnIDs[i] != newColumnIDs[i] ||
 				idx.KeyColumnNames[i] != newColumnNames[i] ||
@@ -475,7 +476,7 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 }
 
 // FamilyDefaultColumns implements the TableDescriptor interface.
-func (desc *wrapper) FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn {
+func (desc *wrapper) FamilyDefaultColumns() []fetchpb.IndexFetchSpec_FamilyDefaultColumn {
 	return desc.getExistingOrNewColumnCache().familyDefaultColumns
 }
 
@@ -506,7 +507,7 @@ func (desc *wrapper) IndexKeyColumns(idx catalog.Index) []catalog.Column {
 }
 
 // IndexKeyColumnDirections implements the TableDescriptor interface.
-func (desc *wrapper) IndexKeyColumnDirections(idx catalog.Index) []catpb.IndexColumn_Direction {
+func (desc *wrapper) IndexKeyColumnDirections(idx catalog.Index) []fetchpb.IndexColumn_Direction {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.keyDirs
 	}
@@ -530,7 +531,7 @@ func (desc *wrapper) IndexFullColumns(idx catalog.Index) []catalog.Column {
 }
 
 // IndexFullColumnDirections implements the TableDescriptor interface.
-func (desc *wrapper) IndexFullColumnDirections(idx catalog.Index) []catpb.IndexColumn_Direction {
+func (desc *wrapper) IndexFullColumnDirections(idx catalog.Index) []fetchpb.IndexColumn_Direction {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.fullDirs
 	}
@@ -602,7 +603,7 @@ func (desc *wrapper) UniqueWithoutIndexColumns(
 // IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.
 func (desc *wrapper) IndexFetchSpecKeyAndSuffixColumns(
 	idx catalog.Index,
-) []descpb.IndexFetchSpec_KeyColumn {
+) []fetchpb.IndexFetchSpec_KeyColumn {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.keyAndSuffix
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -1127,7 +1128,7 @@ func TestJoinReader(t *testing.T) {
 								neededOrds.Add(int(ord))
 								fetchColIDs = append(fetchColIDs, td.PublicColumns()[ord].GetID())
 							}
-							var fetchSpec descpb.IndexFetchSpec
+							var fetchSpec fetchpb.IndexFetchSpec
 							if err := rowenc.InitIndexFetchSpec(
 								&fetchSpec,
 								keys.SystemSQLCodec,
@@ -1297,7 +1298,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 	}
-	var fetchSpec descpb.IndexFetchSpec
+	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&fetchSpec,
 		keys.SystemSQLCodec,
@@ -1405,7 +1406,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	encRow := make(rowenc.EncDatumRow, 1)
 	encRow[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
-	var fetchSpec descpb.IndexFetchSpec
+	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&fetchSpec,
 		keys.SystemSQLCodec,
@@ -1579,7 +1580,7 @@ func TestIndexJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
-			var fetchSpec descpb.IndexFetchSpec
+			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
 				&fetchSpec,
 				keys.SystemSQLCodec,
@@ -1821,7 +1822,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 								}), numLookupRows)
 								output := rowDisposer{}
 
-								var fetchSpec descpb.IndexFetchSpec
+								var fetchSpec fetchpb.IndexFetchSpec
 								if err := rowenc.InitIndexFetchSpec(
 									&fetchSpec,
 									keys.SystemSQLCodec,
@@ -2031,7 +2032,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 				fetchColumnIDs = append(fetchColumnIDs, descpb.ColumnID(i))
 			}
 
-			var fetchSpec descpb.IndexFetchSpec
+			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
 				&fetchSpec,
 				keys.SystemSQLCodec,

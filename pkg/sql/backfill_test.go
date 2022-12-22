@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -92,7 +93,7 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID: 1, Name: "pri", KeyColumnIDs: []descpb.ColumnID{1},
 			KeyColumnNames:      []string{"c1"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC},
 			EncodingType:        descpb.PrimaryIndexEncoding,
 			Version:             descpb.LatestIndexDescriptorVersion,
 		},
@@ -102,9 +103,9 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 					Index: &descpb.IndexDescriptor{
 						ID: 2, Name: "new_hash_index", KeyColumnIDs: []descpb.ColumnID{2, 3},
 						KeyColumnNames: []string{"c2", "c3"},
-						KeyColumnDirections: []catpb.IndexColumn_Direction{
-							catpb.IndexColumn_ASC,
-							catpb.IndexColumn_ASC,
+						KeyColumnDirections: []fetchpb.IndexColumn_Direction{
+							fetchpb.IndexColumn_ASC,
+							fetchpb.IndexColumn_ASC,
 						},
 						EncodingType: descpb.PrimaryIndexEncoding,
 						Version:      descpb.LatestIndexDescriptorVersion,

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -588,7 +589,7 @@ func addSecondaryIndexTargetsForAddColumn(
 				len(desc.KeyColumnIDs)+int(partitioning.NumImplicitColumns),
 			)
 			keyColumnDirs := make(
-				[]catpb.IndexColumn_Direction, 0,
+				[]fetchpb.IndexColumn_Direction, 0,
 				len(desc.KeyColumnIDs)+int(partitioning.NumImplicitColumns),
 			)
 			for _, c := range newPrimaryIdxKeyColumns[0:partitioning.NumImplicitColumns] {

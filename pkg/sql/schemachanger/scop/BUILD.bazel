@@ -23,6 +23,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/schemachanger/scpb",
     ],
 )

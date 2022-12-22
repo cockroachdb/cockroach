@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -515,7 +516,7 @@ type TableDescriptor interface {
 	IndexKeyColumns(idx Index) []Column
 	// IndexKeyColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index.
-	IndexKeyColumnDirections(idx Index) []catpb.IndexColumn_Direction
+	IndexKeyColumnDirections(idx Index) []fetchpb.IndexColumn_Direction
 	// IndexKeySuffixColumns returns a slice of Column interfaces containing all
 	// key suffix columns in the specified Index.
 	IndexKeySuffixColumns(idx Index) []Column
@@ -526,7 +527,7 @@ type TableDescriptor interface {
 	// IndexFullColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index, plus all key suffix columns if that
 	// index is not a unique index.
-	IndexFullColumnDirections(idx Index) []catpb.IndexColumn_Direction
+	IndexFullColumnDirections(idx Index) []fetchpb.IndexColumn_Direction
 	// IndexStoredColumns returns a slice of Column interfaces containing all
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column
@@ -538,8 +539,8 @@ type TableDescriptor interface {
 	IndexKeysPerRow(idx Index) int
 
 	// IndexFetchSpecKeyAndSuffixColumns returns information about the key and
-	// suffix columns, suitable for populating a descpb.IndexFetchSpec.
-	IndexFetchSpecKeyAndSuffixColumns(idx Index) []descpb.IndexFetchSpec_KeyColumn
+	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
+	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
 
 	// FindColumnWithID returns the first column found whose ID matches the
 	// provided target ID, in the canonical order.
@@ -589,7 +590,7 @@ type TableDescriptor interface {
 
 	// FamilyDefaultColumns returns the default column IDs for families with a
 	// default column. See IndexFetchSpec.FamilyDefaultColumns.
-	FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn
+	FamilyDefaultColumns() []fetchpb.IndexFetchSpec_FamilyDefaultColumn
 
 	// HasColumnBackfillMutation returns whether the table has any queued column
 	// mutations that require a backfill.

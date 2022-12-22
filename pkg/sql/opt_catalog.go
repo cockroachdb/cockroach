@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1586,7 +1587,7 @@ func (oi *optIndex) NonInvertedPrefixColumnCount() int {
 func (oi *optIndex) Column(i int) cat.IndexColumn {
 	ord := oi.columnOrds[i]
 	// Only key columns have a direction.
-	descending := i < oi.idx.NumKeyColumns() && oi.idx.GetKeyColumnDirection(i) == catpb.IndexColumn_DESC
+	descending := i < oi.idx.NumKeyColumns() && oi.idx.GetKeyColumnDirection(i) == fetchpb.IndexColumn_DESC
 	return cat.IndexColumn{
 		Column:     oi.tab.Column(ord),
 		Descending: descending,

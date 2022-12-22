@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -95,7 +96,7 @@ type KVBatchFetcher interface {
 
 type tableInfo struct {
 	// -- Fields initialized once --
-	spec descpb.IndexFetchSpec
+	spec fetchpb.IndexFetchSpec
 
 	// The set of indexes into spec.FetchedColumns that are required for columns
 	// in the value part.
@@ -248,7 +249,7 @@ type FetcherInitArgs struct {
 	// Alloc is used for buffered allocation of decoded datums.
 	Alloc      *tree.DatumAlloc
 	MemMonitor *mon.BytesMonitor
-	Spec       *descpb.IndexFetchSpec
+	Spec       *fetchpb.IndexFetchSpec
 	// TraceKV indicates whether or not session tracing is enabled.
 	TraceKV                    bool
 	ForceProductionKVBatchSize bool
@@ -262,7 +263,7 @@ type FetcherInitArgs struct {
 
 // Init sets up a Fetcher for a given table and index.
 func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
-	if args.Spec.Version != descpb.IndexFetchSpecVersionInitial {
+	if args.Spec.Version != fetchpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", args.Spec.Version)
 	}
 
@@ -291,7 +292,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	}
 
 	for idx := range args.Spec.FetchedColumns {
-		colID := args.Spec.FetchedColumns[idx].ColumnID
+		colID := descpb.ColumnID(args.Spec.FetchedColumns[idx].ColumnID)
 		table.colIdxMap.Set(colID, idx)
 		if colinfo.IsColIDSystemColumn(colID) {
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
@@ -326,7 +327,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		table.indexColIdx = make([]int, nIndexCols)
 	}
 	for i := 0; i < nIndexCols; i++ {
-		id := args.Spec.KeyAndSuffixColumns[i].ColumnID
+		id := descpb.ColumnID(args.Spec.KeyAndSuffixColumns[i].ColumnID)
 		colIdx, ok := table.colIdxMap.Get(id)
 		if ok {
 			table.indexColIdx[i] = colIdx
@@ -730,7 +731,7 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ erro
 }
 
 func (rf *Fetcher) prettyKeyDatums(
-	cols []descpb.IndexFetchSpec_KeyColumn, vals []rowenc.EncDatum,
+	cols []fetchpb.IndexFetchSpec_KeyColumn, vals []rowenc.EncDatum,
 ) string {
 	var buf strings.Builder
 	for i, v := range vals {
@@ -818,7 +819,7 @@ func (rf *Fetcher) processKV(
 	}
 
 	// For covering secondary indexes, allow for decoding as a primary key.
-	if table.spec.EncodingType == descpb.PrimaryIndexEncoding &&
+	if descpb.IndexDescriptorEncodingType(table.spec.EncodingType) == descpb.PrimaryIndexEncoding &&
 		len(rf.keyRemainingBytes) > 0 {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
@@ -854,8 +855,8 @@ func (rf *Fetcher) processKV(
 				// Find the default column ID for the family.
 				var defaultColumnID descpb.ColumnID
 				for _, f := range table.spec.FamilyDefaultColumns {
-					if f.FamilyID == descpb.FamilyID(familyID) {
-						defaultColumnID = f.DefaultColumnID
+					if descpb.FamilyID(f.FamilyID) == descpb.FamilyID(familyID) {
+						defaultColumnID = descpb.ColumnID(f.DefaultColumnID)
 						break
 					}
 				}
@@ -899,7 +900,7 @@ func (rf *Fetcher) processKV(
 					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
 				for i := range extraCols {
-					if idx, ok := table.colIdxMap.Get(extraCols[i].ColumnID); ok {
+					if idx, ok := table.colIdxMap.Get(descpb.ColumnID(extraCols[i].ColumnID)); ok {
 						table.row[idx] = table.extraVals[i]
 					}
 				}
@@ -1106,7 +1107,7 @@ func (rf *Fetcher) NextRowInto(
 	}
 
 	for i := range rf.table.spec.FetchedColumns {
-		if ord, ok := colIdxMap.Get(rf.table.spec.FetchedColumns[i].ColumnID); ok {
+		if ord, ok := colIdxMap.Get(descpb.ColumnID(rf.table.spec.FetchedColumns[i].ColumnID)); ok {
 			destination[ord] = row[i]
 		}
 	}
@@ -1160,7 +1161,7 @@ func (rf *Fetcher) NextRowDecodedInto(
 
 	for i := range rf.table.spec.FetchedColumns {
 		col := &rf.table.spec.FetchedColumns[i]
-		ord, ok := colIdxMap.Get(col.ColumnID)
+		ord, ok := colIdxMap.Get(descpb.ColumnID(col.ColumnID))
 		if !ok {
 			// Column not in map, ignore.
 			continue

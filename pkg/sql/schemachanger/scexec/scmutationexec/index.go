@@ -15,9 +15,9 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -376,7 +376,7 @@ func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex
 		}
 		(*s)[n-1] = column.GetName()
 	}
-	insertIntoDirections := func(s *[]catpb.IndexColumn_Direction) {
+	insertIntoDirections := func(s *[]fetchpb.IndexColumn_Direction) {
 		for delta := n - len(*s); delta > 0; delta-- {
 			*s = append(*s, 0)
 		}

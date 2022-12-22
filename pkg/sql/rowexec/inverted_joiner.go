@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -64,7 +65,7 @@ const (
 type invertedJoiner struct {
 	execinfra.ProcessorBase
 
-	fetchSpec descpb.IndexFetchSpec
+	fetchSpec fetchpb.IndexFetchSpec
 
 	runningState invertedJoinerState
 	diskMonitor  *mon.BytesMonitor
@@ -193,7 +194,7 @@ func newInvertedJoiner(
 	}
 	ij.prefixFetchedColOrdinals = make([]int, len(ij.prefixEqualityCols))
 	for i := range ij.prefixFetchedColOrdinals {
-		id := spec.FetchSpec.KeyAndSuffixColumns[i].ColumnID
+		id := descpb.ColumnID(spec.FetchSpec.KeyAndSuffixColumns[i].ColumnID)
 		ij.prefixFetchedColOrdinals[i], err = findFetchedColOrdinal(&spec.FetchSpec, id)
 		if err != nil {
 			return nil, err
@@ -336,10 +337,10 @@ func newInvertedJoiner(
 // findFetchedColOrdinal finds the ordinal into fetchSpec.FetchedColumns for the
 // column with the given ID.
 func findFetchedColOrdinal(
-	fetchSpec *descpb.IndexFetchSpec, id descpb.ColumnID,
+	fetchSpec *fetchpb.IndexFetchSpec, id descpb.ColumnID,
 ) (ordinal int, _ error) {
 	for i := range fetchSpec.FetchedColumns {
-		if fetchSpec.FetchedColumns[i].ColumnID == id {
+		if descpb.ColumnID(fetchSpec.FetchedColumns[i].ColumnID) == id {
 			return i, nil
 		}
 	}
@@ -348,10 +349,10 @@ func findFetchedColOrdinal(
 
 // findInvertedFetchedColOrdinal finds the ordinal into fetchSpec.FetchedColumns for the
 // inverted key column.
-func findInvertedFetchedColOrdinal(fetchSpec *descpb.IndexFetchSpec) (ordinal int, _ error) {
+func findInvertedFetchedColOrdinal(fetchSpec *fetchpb.IndexFetchSpec) (ordinal int, _ error) {
 	for i := range fetchSpec.KeyAndSuffixColumns {
 		if c := &fetchSpec.KeyAndSuffixColumns[i]; c.IsInverted {
-			return findFetchedColOrdinal(fetchSpec, c.ColumnID)
+			return findFetchedColOrdinal(fetchSpec, descpb.ColumnID(c.ColumnID))
 		}
 	}
 	return -1, errors.AssertionFailedf("no inverted key column")
@@ -714,13 +715,20 @@ func (ij *invertedJoiner) renderUnmatchedRow(row rowenc.EncDatumRow) {
 	}
 }
 
+func datumEncoding(keyCol *fetchpb.IndexFetchSpec_KeyColumn) descpb.DatumEncoding {
+	if keyCol.Direction == fetchpb.IndexColumn_DESC {
+		return descpb.DatumEncoding_DESCENDING_KEY
+	}
+	return descpb.DatumEncoding_ASCENDING_KEY
+}
+
 // appendPrefixColumn encodes a datum corresponding to an index prefix column
 // and appends it to ij.prefixKey.
 func (ij *invertedJoiner) appendPrefixColumn(
-	keyCol *descpb.IndexFetchSpec_KeyColumn, encDatum rowenc.EncDatum,
+	keyCol *fetchpb.IndexFetchSpec_KeyColumn, encDatum rowenc.EncDatum,
 ) error {
 	var err error
-	ij.prefixKey, err = encDatum.Encode(keyCol.Type, &ij.alloc, keyCol.DatumEncoding(), ij.prefixKey)
+	ij.prefixKey, err = encDatum.Encode(keyCol.Type, &ij.alloc, datumEncoding(keyCol), ij.prefixKey)
 	return err
 }
 

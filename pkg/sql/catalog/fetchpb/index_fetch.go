@@ -8,13 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descpb
+package fetchpb
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
 // IndexFetchSpecVersionInitial is the initial IndexFetchSpec version.
 const IndexFetchSpecVersionInitial = 1
@@ -49,21 +45,4 @@ func (s *IndexFetchSpec) FetchedColumnTypes() []*types.T {
 		res[i] = s.FetchedColumns[i].Type
 	}
 	return res
-}
-
-// DatumEncoding returns the datum encoding that corresponds to the key column
-// direction.
-func (c *IndexFetchSpec_KeyColumn) DatumEncoding() DatumEncoding {
-	if c.Direction == catpb.IndexColumn_DESC {
-		return DatumEncoding_DESCENDING_KEY
-	}
-	return DatumEncoding_ASCENDING_KEY
-}
-
-// EncodingDirection returns the encoding direction for the key column.
-func (c *IndexFetchSpec_KeyColumn) EncodingDirection() encoding.Direction {
-	if c.Direction == catpb.IndexColumn_DESC {
-		return encoding.Descending
-	}
-	return encoding.Ascending
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -146,7 +147,7 @@ func (cb *ColumnBackfiller) init(
 	}
 
 	cb.colIdxMap = catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, evalCtx.Codec, desc, desc.GetPrimaryIndex(), cb.fetcherCols); err != nil {
 		return err
 	}
@@ -825,7 +826,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// during the scan. Index entries in the new index are being
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
 	); err != nil {

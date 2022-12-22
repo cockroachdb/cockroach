@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1869,7 +1870,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						// Currently, nulls always appear first if the order is ascending,
 						// and always appear last if the order is descending.
 						var thisIndOption tree.DInt
-						if index.GetKeyColumnDirection(i) == catpb.IndexColumn_ASC {
+						if index.GetKeyColumnDirection(i) == fetchpb.IndexColumn_ASC {
 							thisIndOption = indoptionNullsFirst
 						} else {
 							thisIndOption = indoptionDesc

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1111,15 +1112,15 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 
 var (
 	indexDirectionNA   = tree.NewDString("N/A")
-	indexDirectionAsc  = tree.NewDString(catpb.IndexColumn_ASC.String())
-	indexDirectionDesc = tree.NewDString(catpb.IndexColumn_DESC.String())
+	indexDirectionAsc  = tree.NewDString(fetchpb.IndexColumn_ASC.String())
+	indexDirectionDesc = tree.NewDString(fetchpb.IndexColumn_DESC.String())
 )
 
-func dStringForIndexDirection(dir catpb.IndexColumn_Direction) tree.Datum {
+func dStringForIndexDirection(dir fetchpb.IndexColumn_Direction) tree.Datum {
 	switch dir {
-	case catpb.IndexColumn_ASC:
+	case fetchpb.IndexColumn_ASC:
 		return indexDirectionAsc
-	case catpb.IndexColumn_DESC:
+	case fetchpb.IndexColumn_DESC:
 		return indexDirectionDesc
 	}
 	panic("unreachable")

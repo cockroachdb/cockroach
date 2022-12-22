@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -124,7 +124,7 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func appendColumns(details []string, columns []descpb.IndexFetchSpec_Column) []string {
+func appendColumns(details []string, columns []fetchpb.IndexFetchSpec_Column) []string {
 	var b strings.Builder
 	b.WriteString("Columns:")
 	const wrapAt = 100
@@ -155,7 +155,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		keyDirs := make([]encoding.Direction, len(tr.FetchSpec.KeyAndSuffixColumns))
 		for i := range keyDirs {
 			keyDirs[i] = encoding.Ascending
-			if tr.FetchSpec.KeyAndSuffixColumns[i].Direction == catpb.IndexColumn_DESC {
+			if tr.FetchSpec.KeyAndSuffixColumns[i].Direction == fetchpb.IndexColumn_DESC {
 				keyDirs[i] = encoding.Descending
 			}
 		}

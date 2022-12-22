@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -3200,9 +3201,9 @@ CREATE TABLE crdb_internal.index_columns (
 		storing := tree.NewDString("storing")
 		extra := tree.NewDString("extra")
 		composite := tree.NewDString("composite")
-		idxDirMap := map[catpb.IndexColumn_Direction]tree.Datum{
-			catpb.IndexColumn_ASC:  tree.NewDString(catpb.IndexColumn_ASC.String()),
-			catpb.IndexColumn_DESC: tree.NewDString(catpb.IndexColumn_DESC.String()),
+		idxDirMap := map[fetchpb.IndexColumn_Direction]tree.Datum{
+			fetchpb.IndexColumn_ASC:  tree.NewDString(fetchpb.IndexColumn_ASC.String()),
+			fetchpb.IndexColumn_DESC: tree.NewDString(fetchpb.IndexColumn_DESC.String()),
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -25,7 +26,7 @@ import (
 // from. Note that only columns that need to be fetched (i.e. requested by the
 // caller) are included in the internal state.
 type cFetcherTableArgs struct {
-	spec descpb.IndexFetchSpec
+	spec fetchpb.IndexFetchSpec
 	// ColIdxMap is a mapping from ColumnID to the ordinal of the corresponding
 	// column within spec.FetchedColumns.
 	ColIdxMap catalog.TableColMap
@@ -48,7 +49,7 @@ func (a *cFetcherTableArgs) Release() {
 	cFetcherTableArgsPool.Put(a)
 }
 
-func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
+func (a *cFetcherTableArgs) populateTypes(cols []fetchpb.IndexFetchSpec_Column) {
 	if cap(a.typs) < len(cols) {
 		a.typs = make([]*types.T, len(cols))
 	} else {
@@ -61,7 +62,7 @@ func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
 
 // populateTableArgs fills in cFetcherTableArgs.
 func populateTableArgs(
-	ctx context.Context, fetchSpec *descpb.IndexFetchSpec, typeResolver *descs.DistSQLTypeResolver,
+	ctx context.Context, fetchSpec *fetchpb.IndexFetchSpec, typeResolver *descs.DistSQLTypeResolver,
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
@@ -85,7 +86,7 @@ func populateTableArgs(
 	}
 	args.populateTypes(args.spec.FetchedColumns)
 	for i := range args.spec.FetchedColumns {
-		args.ColIdxMap.Set(args.spec.FetchedColumns[i].ColumnID, i)
+		args.ColIdxMap.Set(descpb.ColumnID(args.spec.FetchedColumns[i].ColumnID), i)
 	}
 
 	return args, nil

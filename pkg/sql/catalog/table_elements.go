@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -189,7 +190,7 @@ type Index interface {
 	NumKeyColumns() int
 	GetKeyColumnID(columnOrdinal int) descpb.ColumnID
 	GetKeyColumnName(columnOrdinal int) string
-	GetKeyColumnDirection(columnOrdinal int) catpb.IndexColumn_Direction
+	GetKeyColumnDirection(columnOrdinal int) fetchpb.IndexColumn_Direction
 
 	CollectKeyColumnIDs() TableColSet
 	CollectKeySuffixColumnIDs() TableColSet

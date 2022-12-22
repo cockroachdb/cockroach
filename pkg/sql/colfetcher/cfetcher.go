@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -323,7 +324,7 @@ func (cf *cFetcher) resetBatch() {
 func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, kvFetcher *row.KVFetcher, tableArgs *cFetcherTableArgs,
 ) error {
-	if tableArgs.spec.Version != descpb.IndexFetchSpecVersionInitial {
+	if tableArgs.spec.Version != fetchpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()
@@ -333,7 +334,7 @@ func (cf *cFetcher) Init(
 		table.orderedColIdxMap.ords = make([]int, 0, nCols)
 	}
 	for i := range tableArgs.spec.FetchedColumns {
-		id := tableArgs.spec.FetchedColumns[i].ColumnID
+		id := descpb.ColumnID(tableArgs.spec.FetchedColumns[i].ColumnID)
 		table.orderedColIdxMap.vals = append(table.orderedColIdxMap.vals, id)
 		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
@@ -354,14 +355,14 @@ func (cf *cFetcher) Init(
 	// Check for system columns.
 	for idx := range tableArgs.spec.FetchedColumns {
 		colID := tableArgs.spec.FetchedColumns[idx].ColumnID
-		if colinfo.IsColIDSystemColumn(colID) {
+		if colinfo.IsColIDSystemColumn(descpb.ColumnID(colID)) {
 			// Set up extra metadata for system columns.
 			//
 			// Currently the system columns are present in neededValueColsByIdx,
 			// but we don't want to include them in that set because the
 			// handling of system columns is separate from the standard value
 			// decoding process.
-			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
+			switch colinfo.GetSystemColumnKindFromColumnID(descpb.ColumnID(colID)) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				cf.mvccDecodeStrategy = row.MVCCDecodingRequired
@@ -386,7 +387,7 @@ func (cf *cFetcher) Init(
 	needToDecodeDecimalKey := false
 	for i := range fullColumns {
 		col := &fullColumns[i]
-		colIdx, ok := tableArgs.ColIdxMap.Get(col.ColumnID)
+		colIdx, ok := tableArgs.ColIdxMap.Get(descpb.ColumnID(col.ColumnID))
 		if ok {
 			//gcassert:bce
 			indexColOrdinals[i] = colIdx
@@ -417,7 +418,7 @@ func (cf *cFetcher) Init(
 	if table.spec.NumKeySuffixColumns > 0 && table.spec.IsSecondaryIndex && table.spec.IsUniqueIndex {
 		suffixCols := table.spec.KeySuffixColumns()
 		for i := range suffixCols {
-			id := suffixCols[i].ColumnID
+			id := descpb.ColumnID(suffixCols[i].ColumnID)
 			colIdx, ok := tableArgs.ColIdxMap.Get(id)
 			if ok {
 				if suffixCols[i].IsComposite {
@@ -443,7 +444,7 @@ func (cf *cFetcher) Init(
 		extraValColOrdinals := table.extraValColOrdinals
 		_ = extraValColOrdinals[len(suffixCols)-1]
 		for i := range suffixCols {
-			idx, ok := tableArgs.ColIdxMap.Get(suffixCols[i].ColumnID)
+			idx, ok := tableArgs.ColIdxMap.Get(descpb.ColumnID(suffixCols[i].ColumnID))
 			if ok {
 				//gcassert:bce
 				extraValColOrdinals[i] = idx
@@ -817,7 +818,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				cf.table.rowLastModified = cf.machine.nextKV.Value.Timestamp
 			}
 
-			if familyID == cf.table.spec.MaxFamilyID {
+			if familyID == descpb.FamilyID(cf.table.spec.MaxFamilyID) {
 				// We know the row can't have any more keys, so finalize the row.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateInitFetch
@@ -957,7 +958,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 	}
 
 	val := cf.machine.nextKV.Value
-	if !table.spec.IsSecondaryIndex || table.spec.EncodingType == descpb.PrimaryIndexEncoding {
+	if !table.spec.IsSecondaryIndex || descpb.IndexDescriptorEncodingType(table.spec.EncodingType) == descpb.PrimaryIndexEncoding {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
@@ -989,8 +990,8 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			// Find the default column ID for the family.
 			var defaultColumnID descpb.ColumnID
 			for _, f := range table.spec.FamilyDefaultColumns {
-				if f.FamilyID == familyID {
-					defaultColumnID = f.DefaultColumnID
+				if descpb.FamilyID(f.FamilyID) == familyID {
+					defaultColumnID = descpb.ColumnID(f.DefaultColumnID)
 					break
 				}
 			}

@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

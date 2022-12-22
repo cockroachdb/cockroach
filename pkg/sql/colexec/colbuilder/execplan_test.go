@@ -89,7 +89,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	defer streamingMemAcc.Close(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, keys.SystemSQLCodec,
 		desc, desc.GetPrimaryIndex(),

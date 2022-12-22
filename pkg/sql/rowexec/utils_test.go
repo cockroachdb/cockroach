@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -199,7 +200,7 @@ func (r *rowDisposer) NumRowsDisposed() int {
 //	makeFetchSpec(t, table, "idx_c", "a,b,c")
 func makeFetchSpec(
 	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
-) descpb.IndexFetchSpec {
+) fetchpb.IndexFetchSpec {
 	index, err := table.FindIndexWithName(indexName)
 	if err != nil {
 		t.Fatal(err)
@@ -214,7 +215,7 @@ func makeFetchSpec(
 			colIDs = append(colIDs, col.GetID())
 		}
 	}
-	var fetchSpec descpb.IndexFetchSpec
+	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
 		t.Fatal(err)
 	}

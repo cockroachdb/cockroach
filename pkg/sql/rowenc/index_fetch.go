@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -27,22 +28,22 @@ import (
 // inverted and we fetch the inverted key, the corresponding Column contains the
 // inverted column type.
 func InitIndexFetchSpec(
-	s *descpb.IndexFetchSpec,
+	s *fetchpb.IndexFetchSpec,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 	fetchColumnIDs []descpb.ColumnID,
 ) error {
 	oldFetchedCols := s.FetchedColumns
-	*s = descpb.IndexFetchSpec{
-		Version:             descpb.IndexFetchSpecVersionInitial,
-		TableID:             table.GetID(),
+	*s = fetchpb.IndexFetchSpec{
+		Version:             fetchpb.IndexFetchSpecVersionInitial,
+		TableID:             uint32(table.GetID()),
 		TableName:           table.GetName(),
-		IndexID:             index.GetID(),
+		IndexID:             uint32(index.GetID()),
 		IndexName:           index.GetName(),
 		IsSecondaryIndex:    !index.Primary(),
 		IsUniqueIndex:       index.IsUnique(),
-		EncodingType:        index.GetEncodingType(),
+		EncodingType:        uint32(index.GetEncodingType()),
 		NumKeySuffixColumns: uint32(index.NumKeySuffixColumns()),
 		GeoConfig:           index.GetGeoConfig(),
 	}
@@ -57,8 +58,8 @@ func InitIndexFetchSpec(
 
 	families := table.GetFamilies()
 	for i := range families {
-		if id := families[i].ID; id > s.MaxFamilyID {
-			s.MaxFamilyID = id
+		if id := families[i].ID; uint32(id) > s.MaxFamilyID {
+			s.MaxFamilyID = uint32(id)
 		}
 	}
 
@@ -72,7 +73,7 @@ func InitIndexFetchSpec(
 	if cap(oldFetchedCols) >= len(fetchColumnIDs) {
 		s.FetchedColumns = oldFetchedCols[:len(fetchColumnIDs)]
 	} else {
-		s.FetchedColumns = make([]descpb.IndexFetchSpec_Column, len(fetchColumnIDs))
+		s.FetchedColumns = make([]fetchpb.IndexFetchSpec_Column, len(fetchColumnIDs))
 	}
 	for i, colID := range fetchColumnIDs {
 		col, err := table.FindColumnWithID(colID)
@@ -83,9 +84,9 @@ func InitIndexFetchSpec(
 		if colID == invertedColumnID {
 			typ = index.InvertedColumnKeyType()
 		}
-		s.FetchedColumns[i] = descpb.IndexFetchSpec_Column{
+		s.FetchedColumns[i] = fetchpb.IndexFetchSpec_Column{
 			Name:          col.GetName(),
-			ColumnID:      colID,
+			ColumnID:      uint32(colID),
 			Type:          typ,
 			IsNonNullable: !col.IsNullable() && col.Public(),
 		}
@@ -98,7 +99,7 @@ func InitIndexFetchSpec(
 		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
 		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
 		for i := range s.FetchedColumns {
-			if !colIDs.Contains(s.FetchedColumns[i].ColumnID) {
+			if !colIDs.Contains(descpb.ColumnID(s.FetchedColumns[i].ColumnID)) {
 				return errors.AssertionFailedf("requested column %s not in index", s.FetchedColumns[i].Name)
 			}
 		}

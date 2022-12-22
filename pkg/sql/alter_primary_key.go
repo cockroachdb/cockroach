@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -614,9 +615,9 @@ func (p *planner) shouldCreateIndexes(
 			return true, nil
 		}
 		if (elem.Direction == tree.Ascending &&
-			oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_ASC) ||
+			oldPK.GetKeyColumnDirection(idx) != fetchpb.IndexColumn_ASC) ||
 			(elem.Direction == tree.Descending &&
-				oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_DESC) {
+				oldPK.GetKeyColumnDirection(idx) != fetchpb.IndexColumn_DESC) {
 			return true, nil
 		}
 	}
@@ -654,7 +655,7 @@ func shouldCopyPrimaryKey(
 
 	columnIDsAndDirsWithoutSharded := func(idx *descpb.IndexDescriptor) (
 		columnIDs descpb.ColumnIDs,
-		columnDirs []catpb.IndexColumn_Direction,
+		columnDirs []fetchpb.IndexColumn_Direction,
 	) {
 		for i, colName := range idx.KeyColumnNames {
 			if colName != idx.Sharded.Name {

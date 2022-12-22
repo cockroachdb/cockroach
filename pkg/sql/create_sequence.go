@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -287,7 +288,7 @@ func NewSequenceTableDesc(
 		Name:                tabledesc.LegacyPrimaryKeyIndexName,
 		KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
 		KeyColumnNames:      []string{tabledesc.SequenceColumnName},
-		KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+		KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC},
 		EncodingType:        descpb.PrimaryIndexEncoding,
 		Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 		CreatedAtNanos:      creationTime.WallTime,

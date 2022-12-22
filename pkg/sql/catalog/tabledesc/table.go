@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -212,7 +213,7 @@ func MakeColumnDefDescs(
 			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{string(d.Name)},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC},
 			}
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
@@ -223,7 +224,7 @@ func MakeColumnDefDescs(
 			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{shardColName, string(d.Name)},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC, fetchpb.IndexColumn_ASC},
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         shardColName,

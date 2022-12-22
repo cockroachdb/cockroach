@@ -107,7 +107,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				Name:                "pk",
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeyColumnNames:      []string{"a"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestIndexDescriptorVersion,
 				ConstraintID:        1,

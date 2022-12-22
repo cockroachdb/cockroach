@@ -11,11 +11,11 @@
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "descpb";
+option go_package = "fetchpb";
 
 import "gogoproto/gogo.proto";
+import "sql/catalog/fetchpb/index.proto";
 import "sql/types/types.proto";
-import "sql/catalog/catpb/index.proto";
 import "geo/geoindex/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
@@ -23,8 +23,7 @@ import "geo/geoindex/config.proto";
 message IndexFetchSpec {
   message Column {
     optional uint32 column_id = 1 [(gogoproto.nullable) = false,
-                                   (gogoproto.customname) = "ColumnID",
-                                   (gogoproto.casttype) = "ColumnID"];
+                                   (gogoproto.customname) = "ColumnID"];
 
     // Name of the column, as it is expected to appear in debug and error
     // messages.
@@ -44,7 +43,7 @@ message IndexFetchSpec {
   // KeyColumn describes a column that is encoded using the key encoding.
   message KeyColumn {
     optional Column column = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
-    optional catalog.catpb.IndexColumn.Direction direction = 2 [(gogoproto.nullable) = false];
+    optional sql.catalog.catpb.IndexColumn.Direction direction = 2 [(gogoproto.nullable) = false];
 
     // IsComposite is true if this column can have a composite encoding (i.e. it
     // can appear in the value in addition to the key).
@@ -59,14 +58,12 @@ message IndexFetchSpec {
   // FamilyDefaultColumn specifies the default column ID for a given family ID.
   message FamilyDefaultColumn {
     optional uint32 family_id = 1 [(gogoproto.nullable) = false,
-                                   (gogoproto.customname) = "FamilyID",
-                                   (gogoproto.casttype) = "FamilyID"];
+                                   (gogoproto.customname) = "FamilyID"];
 
     // DefaultColumnID is the implicit column ID when a single value is encoded
     // for the family. See ColumnFamilyDescriptor.DefaultColumnID.
     optional uint32 default_column_id = 2 [(gogoproto.nullable) = false,
-                                           (gogoproto.customname) = "DefaultColumnID",
-                                           (gogoproto.casttype) = "ColumnID"];
+                                           (gogoproto.customname) = "DefaultColumnID"];
   }
 
   // Version is used to allow providing backward compatibility if this spec
@@ -75,13 +72,11 @@ message IndexFetchSpec {
   optional uint32 version = 1 [(gogoproto.nullable) = false];
 
   optional uint32 table_id = 2 [(gogoproto.nullable) = false,
-                                (gogoproto.customname) = "TableID",
-                                (gogoproto.casttype) = "ID"];
+                                (gogoproto.customname) = "TableID"];
   optional string table_name = 3 [(gogoproto.nullable) = false];
 
   optional uint32 index_id = 4 [(gogoproto.nullable) = false,
-                                (gogoproto.customname) = "IndexID",
-                                (gogoproto.casttype) = "IndexID"];
+                                (gogoproto.customname) = "IndexID"];
 
   optional string index_name = 5 [(gogoproto.nullable) = false];
 
@@ -93,8 +88,7 @@ message IndexFetchSpec {
 
   // EncodingType represents what sort of k/v encoding is used to store the
   // table data.
-  optional uint32 encoding_type = 8 [(gogoproto.nullable) = false,
-                                     (gogoproto.casttype) = "IndexDescriptorEncodingType"];
+  optional uint32 encoding_type = 8 [(gogoproto.nullable) = false];
 
   // NumKeySuffixColumns is the number of suffix columns (corresponding to a
   // suffix of KeyAndSuffixColumns).
@@ -115,8 +109,7 @@ message IndexFetchSpec {
   optional uint32 key_prefix_length = 11 [(gogoproto.nullable) = false];
 
   optional uint32 max_family_id = 12 [(gogoproto.nullable) = false,
-                                      (gogoproto.customname) = "MaxFamilyID",
-                                      (gogoproto.casttype) = "FamilyID"];
+                                      (gogoproto.customname) = "MaxFamilyID"];
 
   // FamilyDefaultColumns contains the default column IDs for families with a
   // default column. This is used to decode values that use the single column

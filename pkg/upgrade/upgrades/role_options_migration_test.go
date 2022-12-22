@@ -245,7 +245,7 @@ func getDeprecatedSystemRoleOptionsTable() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"username", "option"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+			KeyColumnDirections: []fetchpb.IndexColumn_Direction{fetchpb.IndexColumn_ASC, fetchpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
 		},
 		NextIndexID:      2,

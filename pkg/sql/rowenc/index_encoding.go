@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
@@ -82,7 +82,7 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
@@ -99,7 +99,7 @@ func EncodePartialIndexSpan(
 // suffix) columns are encoded; these can be a prefix of the index key columns.
 // Does not directly append to keyPrefix.
 func EncodePartialIndexKey(
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
@@ -112,7 +112,7 @@ func EncodePartialIndexKey(
 
 	for i := range keyCols {
 		keyCol := &keyCols[i]
-		val := findColumnValue(keyCol.ColumnID, colMap, values)
+		val := findColumnValue(descpb.ColumnID(keyCol.ColumnID), colMap, values)
 		if val == tree.DNull {
 			containsNull = true
 		}
@@ -129,7 +129,7 @@ func EncodePartialIndexKey(
 	return key, containsNull, nil
 }
 
-type directions []catpb.IndexColumn_Direction
+type directions []fetchpb.IndexColumn_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {
 	if i < len(d) {
@@ -147,7 +147,7 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // specified in the same order as the index key columns and may be a prefix.
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
@@ -343,7 +343,7 @@ func SplitRowKeyIntoFamilySpans(
 // encodings of the given EncDatum values.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Key, containsNull bool, _ error) {
@@ -358,7 +358,7 @@ func MakeKeyFromEncDatums(
 
 	for i, val := range values {
 		encoding := descpb.DatumEncoding_ASCENDING_KEY
-		if keyCols[i].Direction == catpb.IndexColumn_DESC {
+		if keyCols[i].Direction == fetchpb.IndexColumn_DESC {
 			encoding = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		if val.IsNull() {
@@ -427,7 +427,7 @@ func DecodeIndexKey(
 	codec keys.SQLCodec,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []catpb.IndexColumn_Direction,
+	colDirs []fetchpb.IndexColumn_Direction,
 	key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
@@ -450,7 +450,7 @@ func DecodeIndexKey(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []catpb.IndexColumn_Direction, key []byte,
+	types []*types.T, vals []EncDatum, directions []fetchpb.IndexColumn_Direction, key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
@@ -458,7 +458,7 @@ func DecodeKeyVals(
 	}
 	for j := range vals {
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == catpb.IndexColumn_DESC) {
+		if directions != nil && (directions[j] == fetchpb.IndexColumn_DESC) {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
@@ -472,14 +472,14 @@ func DecodeKeyVals(
 }
 
 // DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
-// descpb.IndexFetchSpec_KeyColumn for column metadata.
+// fetchpb.IndexFetchSpec_KeyColumn for column metadata.
 func DecodeKeyValsUsingSpec(
-	keyCols []descpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	for j := range vals {
 		c := keyCols[j]
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if c.Direction == catpb.IndexColumn_DESC {
+		if c.Direction == fetchpb.IndexColumn_DESC {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error

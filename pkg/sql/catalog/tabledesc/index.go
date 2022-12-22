@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -309,7 +310,7 @@ func (w index) GetKeyColumnName(columnOrdinal int) string {
 
 // GetKeyColumnDirection returns the direction of the columnOrdinal-th column in
 // the index key.
-func (w index) GetKeyColumnDirection(columnOrdinal int) catpb.IndexColumn_Direction {
+func (w index) GetKeyColumnDirection(columnOrdinal int) fetchpb.IndexColumn_Direction {
 	return w.desc.KeyColumnDirections[columnOrdinal]
 }
 
