@@ -28,8 +28,8 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-// EncodingVersion determines the EntryEncoding for a given Entry.
-func EncodingVersion(ent raftpb.Entry) (EntryEncoding, error) {
+// EncodingOf determines the EntryEncoding for a given Entry.
+func EncodingOf(ent raftpb.Entry) (EntryEncoding, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
 		return EntryEncodingEmpty, nil
@@ -129,7 +129,7 @@ func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 }
 
 func (e *Entry) load() error {
-	typ, err := EncodingVersion(e.Entry)
+	typ, err := EncodingOf(e.Entry)
 	if err != nil {
 		return err
 	}
