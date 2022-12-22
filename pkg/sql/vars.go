@@ -341,6 +341,10 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/15/datatype-datetime.html.
+	// We always log in UTC.
+	`log_timezone`: makeCompatStringVar(`log_timezone`, `UTC`),
+
 	// This is only kept for backwards compatibility and no longer has any effect.
 	`datestyle_enabled`: makeBackwardsCompatBoolVar(
 		"datestyle_enabled", true,
