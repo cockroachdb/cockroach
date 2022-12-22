@@ -25,10 +25,25 @@ import (
 
 var errRetry = errors.New("retry: orphaned replica")
 
-// getOrCreateReplica returns a replica for the given RangeID, creating an
-// uninitialized replica if necessary. The caller must not hold the store's
-// lock. The returned replica has Replica.raftMu locked and it is the caller's
-// responsibility to unlock it.
+// getOrCreateReplica returns a replica with the given replicaID for the given
+// rangeID, or roachpb.RaftGroupDeletedError if this replicaID has been deleted.
+// If the replica is not in memory, but also is not deleted, it creates and
+// returns an uninitialized replica. The returned replica's Replica.raftMu is
+// locked, and the caller is responsible for unlocking it.
+//
+// If getOrCreateReplica returns a replica, the guarantee is that the following
+// invariants are true while Replica.raftMu is held:
+//
+//   - Store.GetReplica(rangeID) successfully returns this and only this replica
+//   - The RangeTombstone in storage does not see this replica as removed
+//
+// If getOrCreateReplica returns roachpb.RaftGroupDeletedError, the guarantee is:
+//
+//   - Neither getOrCreateReplica nor Store.GetReplica(rangeID) will return a
+//     replica with this replicaID from now on
+//   - The RangeTombstone in storage does see this replica as removed
+//
+// The caller must not hold the store's lock.
 func (s *Store) getOrCreateReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
