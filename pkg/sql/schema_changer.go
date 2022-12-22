@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -3154,10 +3153,10 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 func splitAndScatter(
 	ctx context.Context, db *kv.DB, key roachpb.Key, expirationTime hlc.Timestamp,
 ) error {
-	if err := db.AdminSplit(ctx, key, expirationTime, oppurpose.SplitSchema); err != nil {
+	if err := db.AdminSplit(ctx, key, expirationTime); err != nil {
 		return err
 	}
-	_, err := db.AdminScatter(ctx, key, 0 /* maxSize */, oppurpose.ScatterSchema)
+	_, err := db.AdminScatter(ctx, key, 0 /* maxSize */)
 	return err
 }
 

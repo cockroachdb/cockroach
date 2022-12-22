@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -43,7 +42,7 @@ type splitRun struct {
 	lastExpirationTime hlc.Timestamp
 }
 
-func (n *splitNode) startExec(params runParams) error {
+func (n *splitNode) startExec(runParams) error {
 	return nil
 }
 
@@ -62,11 +61,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	purpose := oppurpose.SplitManual
-	if knobs := execCfg.TenantTestingKnobs; knobs != nil && knobs.AllowSplitAndScatter {
-		purpose = oppurpose.SplitManualTest
-	}
-	if err := execCfg.DB.AdminSplit(params.ctx, rowKey, n.expirationTime, purpose); err != nil {
+	if err := execCfg.DB.AdminSplit(params.ctx, rowKey, n.expirationTime); err != nil {
 		return false, err
 	}
 

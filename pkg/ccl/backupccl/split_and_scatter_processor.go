@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -97,7 +96,7 @@ func (s dbSplitAndScatterer) split(
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
-	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime, oppurpose.SplitBackup); err != nil {
+	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
 		return errors.Wrapf(err, "splitting key %s", newSplitKey)
 	}
 
@@ -140,7 +139,6 @@ func (s dbSplitAndScatterer) scatter(
 		// balancing the span being restored into.
 		RandomizeLeases: true,
 		MaxSize:         1, // don't scatter non-empty ranges on resume.
-		Class:           oppurpose.ScatterBackup,
 	}
 
 	res, pErr := kv.SendWrapped(ctx, s.db.NonTransactionalSender(), req)

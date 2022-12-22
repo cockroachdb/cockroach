@@ -120,7 +120,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*AddSSTableOperation:
 		applyClientOp(ctx, db, op, false)
 	case *SplitOperation:
-		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION)
+		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultInit(ctx, err)
 	case *MergeOperation:
 		err := db.AdminMerge(ctx, o.Key)

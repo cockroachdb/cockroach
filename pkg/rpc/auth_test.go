@@ -174,17 +174,17 @@ func TestTenantAuthRequest(t *testing.T) {
 	makeDisallowedAdminReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeader{Key: s.Key}
-		return &roachpb.AdminUnsplitRequest{RequestHeader: h}
+		return &roachpb.AdminMergeRequest{RequestHeader: h}
 	}
 	makeAdminSplitReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
-		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key, Class: roachpb.AdminSplitRequest_INGESTION}
+		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key}
 	}
 	makeAdminScatterReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
-		return &roachpb.AdminScatterRequest{RequestHeader: h, Class: roachpb.AdminScatterRequest_INGESTION}
+		return &roachpb.AdminScatterRequest{RequestHeader: h}
 	}
 	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
 		ru := make([]roachpb.RequestUnion, len(reqs))
@@ -297,33 +297,33 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeDisallowedAdminReq("a"),
 				)},
-				expErr: `request \[1 AdmUnsplit\] not permitted`,
+				expErr: `request \[1 AdmMerge\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeDisallowedAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 AdmUnsplit\] not permitted`,
+				expErr: `request \[1 AdmMerge\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeDisallowedAdminReq(prefix(50, "a")),
 				)},
-				expErr: `request \[1 AdmUnsplit\] not permitted`,
+				expErr: `request \[1 AdmMerge\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeDisallowedAdminReq(prefix(10, "a")),
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmUnsplit\] not permitted`,
+				expErr: `request \[1 Scan, 1 AdmMerge\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 					makeDisallowedAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmUnsplit\] not permitted`,
+				expErr: `request \[1 Scan, 1 AdmMerge\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
