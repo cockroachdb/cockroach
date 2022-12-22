@@ -679,14 +679,14 @@ func registerRestore(r registry.Registry) {
 				done := ctx.Done()
 				jobID := <-jobIDCh
 
-				// The test has historically taken ~30 minutes to complete, if we pause
-				// every 15 minutes we're likely to get at least one pause during the
+				// The test has historically taken ~20 minutes to complete, if we pause
+				// every 10 minutes we're likely to get at least one pause during the
 				// duration of the test. We'll likely get more because the restore after
 				// resume slows down due to compaction debt.
 				//
 				// Limit the number of pauses to 3 to ensure that the test doesn't get
 				// into a pause-resume-slowdown spiral that eventually times out.
-				pauseJobTick := time.NewTicker(time.Minute * 15)
+				pauseJobTick := time.NewTicker(time.Minute * 10)
 				defer pauseJobTick.Stop()
 				for {
 					if maxPauses == 0 {
