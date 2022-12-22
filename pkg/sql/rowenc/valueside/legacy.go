@@ -169,6 +169,15 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			r.SetBytes(b)
 			return r, nil
 		}
+	case types.TupleFamily:
+		if v, ok := val.(*tree.DTuple); ok {
+			b, err := encodeUntaggedTuple(v, nil /* appendTo */, 0 /* colID */, nil /* scratch */)
+			if err != nil {
+				return r, err
+			}
+			r.SetBytes(b)
+			return r, nil
+		}
 	case types.CollatedStringFamily:
 		if v, ok := val.(*tree.DCollatedString); ok {
 			if lex.LocaleNamesAreEqual(v.Locale, colType.Locale()) {
@@ -351,6 +360,14 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		datum, _, err := decodeArray(a, typ, v)
+		// TODO(yuzefovich): do we want to create a new object via tree.DatumAlloc?
+		return datum, err
+	case types.TupleFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		datum, _, err := decodeTuple(a, typ, v)
 		// TODO(yuzefovich): do we want to create a new object via tree.DatumAlloc?
 		return datum, err
 	case types.JsonFamily:
