@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -543,6 +544,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			p.preAlloc = nil
 			needed := raftlog.RaftCommandPrefixLen + p.command.Size()
 			if cap(data) < needed {
+				if buildutil.CrdbTestBuild && !reproposal {
+					// The preallocation (which lives in (*Replica).propose() didn't do its job.
+					log.Fatalf(ctx, "%s", errors.AssertionFailedf("p.preAlloc was too small, need %d bytes, got only %d: %+v", needed, cap(data), p.command))
+				}
 				data = make([]byte, needed)
 			} else {
 				data = data[:needed:needed]

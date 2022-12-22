@@ -294,6 +294,9 @@ func (pc proposalCreator) newProposal(ba *roachpb.BatchRequest) *ProposalData {
 		Request:     ba,
 		leaseStatus: pc.lease,
 	}
+	// Avoid tripping the assertion in `(*propBuf).FlushLockedWithRaftGroup` that
+	// makes sure that preallocation isn't too stingy or forgotten.
+	p.preAlloc = make([]byte, 1024+p.command.Size())
 	return p
 }
 
