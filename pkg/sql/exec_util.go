@@ -99,6 +99,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -198,19 +199,34 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// SecondaryTenantsZoneConfigsEnabledSettingName controls if secondary tenants
-// are allowed to set zone configurations. It has no effect for the system
-// tenant.
-const SecondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_for_secondary_tenant.enabled"
-
 // SecondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
 // to set zone configurations. It has no effect for the system tenant.
 //
 // This setting has no effect on zone configurations that have already been set.
 var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
-	SecondaryTenantsZoneConfigsEnabledSettingName,
+	"sql.zone_configs.allow_for_secondary_tenant.enabled",
 	"allow secondary tenants to set zone configurations; does not affect the system tenant",
+	false,
+)
+
+// SecondaryTenantSplitAtEnabled controls if secondary tenants are allowed to
+// run ALTER TABLE/INDEX ... SPLIT AT statements. It has no effect for the
+// system tenant.
+var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.split_at.allow_for_secondary_tenant.enabled",
+	"allow secondary tenants to run ALTER TABLE/INDEX ... SPLIT AT commands; does not affect the system tenant",
+	false,
+)
+
+// SecondaryTenantScatterEnabled controls if secondary tenants are allowed to
+// run ALTER TABLE/INDEX ... SCATTER statements. It has no effect for the
+// system tenant.
+var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.scatter.allow_for_secondary_tenant.enabled",
+	"allow secondary tenants to run ALTER TABLE/INDEX ... SCATTER commands; does not affect the system tenant",
 	false,
 )
 
@@ -1543,12 +1559,8 @@ type TenantTestingKnobs struct {
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
 
-	// AllowSplitAndScatter, if set, allows secondary tenants to execute ALTER
-	// TABLE ... SPLIT AT and SCATTER SQL commands.
-	AllowSplitAndScatter bool
-
 	// SkipSQLSystemTentantCheck is a temporary knob to test which admin functions fail for secondary tenants.
-	// TODO(ewall): Remove when https://github.com/cockroachdb/cockroach/issues/91434 is fixed.
+	// TODO(ewall): Remove when usages in multitenant_admin_function_test.go are removed.
 	SkipSQLSystemTentantCheck bool
 
 	// BeforeCheckingForDescriptorIDSequence, if set, is called before
@@ -3527,12 +3539,28 @@ func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 	return cfg.RowMetrics
 }
 
-// IsSystemTenant returns true either if TenantTestingKnobs.SkipSQLSystemTentantCheck is true
-// or if the ExecutorConfig tenant is the system tenant.
-func (cfg *ExecutorConfig) IsSystemTenant() bool {
+// RequireSystemTenant returns an unsupported error if executed from inside a
+// secondary tenant. Tests may circumvent this check using a testing knob.
+// TODO(ewall): Replace usages of this with tenant capability checks in KV.
+func (cfg *ExecutorConfig) RequireSystemTenant() error {
+	if cfg.Codec.ForSystemTenant() {
+		return nil
+	}
 	knobs := cfg.TenantTestingKnobs
 	if knobs != nil && knobs.SkipSQLSystemTentantCheck {
-		return true
+		return nil
 	}
-	return cfg.Codec.ForSystemTenant()
+	return errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+}
+
+// RequireSystemTenantOrClusterSetting returns a setting disabled error if
+// executed from inside a secondary tenant that does not have the specified
+// cluster setting.
+func (cfg *ExecutorConfig) RequireSystemTenantOrClusterSetting(
+	setting *settings.BoolSetting,
+) error {
+	if cfg.Codec.ForSystemTenant() || setting.Get(&cfg.Settings.SV) {
+		return nil
+	}
+	return errors.Newf("tenant cluster setting %s disabled", setting.Key())
 }

@@ -1,5 +1,5 @@
 # LogicTest: 3node-tenant-multiregion
-# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: allow-split-at-for-secondary-tenants allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
 
 # Create a table on the secondary tenant.
 statement ok
