@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	cookie2 "github.com/cockroachdb/cockroach/pkg/server/cookie"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -607,7 +608,7 @@ func TestLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encodedCookie, err := EncodeSessionCookie(cookie, false /* forHTTPSOnly */)
+	encodedCookie, err := cookie2.EncodeSessionCookie(cookie, false /* forHTTPSOnly */)
 	if err != nil {
 		t.Fatal(err)
 	}

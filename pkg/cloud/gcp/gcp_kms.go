@@ -18,6 +18,7 @@ import (
 
 	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/gcp/gcpparams"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
@@ -51,13 +52,13 @@ type kmsURIParams struct {
 
 // resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
 func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
-	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
+	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.ConsumeParam(gcpparams.AssumeRole))
 	params := kmsURIParams{
-		credentials:   kmsURI.ConsumeParam(CredentialsParam),
+		credentials:   kmsURI.ConsumeParam(gcpparams.Credentials),
 		auth:          kmsURI.ConsumeParam(cloud.AuthParam),
 		assumeRole:    assumeRole,
 		delegateRoles: delegateRoles,
-		bearerToken:   kmsURI.ConsumeParam(BearerTokenParam),
+		bearerToken:   kmsURI.ConsumeParam(gcpparams.BearerToken),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -99,7 +100,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		if kmsURIParams.credentials != "" {
 			authOption, err := createAuthOptionFromServiceAccountKey(kmsURIParams.credentials)
 			if err != nil {
-				return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+				return nil, errors.Wrapf(err, "error getting credentials from %s", gcpparams.Credentials)
 			}
 			credentialsOpt = append(credentialsOpt, authOption)
 		} else if kmsURIParams.bearerToken != "" {
@@ -107,8 +108,8 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		} else {
 			return nil, errors.Errorf(
 				"%s or %s must be set if %q is %q",
-				CredentialsParam,
-				BearerTokenParam,
+				gcpparams.Credentials,
+				gcpparams.BearerToken,
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 			)

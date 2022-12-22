@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	cookie2 "github.com/cockroachdb/cockroach/pkg/server/cookie"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -138,7 +138,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 					// Prevent regression of #25771 by also sending authenticated
 					// requests, like would be sent if an admin UI were open against
 					// this node while it booted.
-					cookie, err := server.EncodeSessionCookie(&serverpb.SessionCookie{
+					cookie, err := cookie2.EncodeSessionCookie(&serverpb.SessionCookie{
 						// The actual contents of the cookie don't matter; the presence of
 						// a valid encoded cookie is enough to trigger the authentication
 						// code paths.

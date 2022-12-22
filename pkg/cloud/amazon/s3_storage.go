@@ -32,6 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/amazonparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -48,59 +49,25 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const (
-	// AWSAccessKeyParam is the query parameter for access_key in an AWS URI.
-	AWSAccessKeyParam = "AWS_ACCESS_KEY_ID"
-	// AWSSecretParam is the query parameter for the 'secret' in an AWS URI.
-	AWSSecretParam = "AWS_SECRET_ACCESS_KEY"
-	// AWSTempTokenParam is the query parameter for session_token in an AWS URI.
-	AWSTempTokenParam = "AWS_SESSION_TOKEN"
-	// AWSEndpointParam is the query parameter for the 'endpoint' in an AWS URI.
-	AWSEndpointParam = "AWS_ENDPOINT"
-
-	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
-	// mode to be used for server side encryption. It can either be AES256 or
-	// aws:kms.
-	AWSServerSideEncryptionMode = "AWS_SERVER_ENC_MODE"
-
-	// AWSServerSideEncryptionKMSID is the query parameter in an AWS URI, for the
-	// KMS ID to be used for server side encryption.
-	AWSServerSideEncryptionKMSID = "AWS_SERVER_KMS_ID"
-
-	// S3StorageClassParam is the query parameter used in S3 URIs to configure the
-	// storage class for written objects.
-	S3StorageClassParam = "S3_STORAGE_CLASS"
-
-	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
-	S3RegionParam = "AWS_REGION"
-
-	// KMSRegionParam is the query parameter for the 'region' in every KMS URI.
-	KMSRegionParam = "REGION"
-
-	// AssumeRoleParam is the query parameter for the chain of AWS Role ARNs to
-	// assume.
-	AssumeRoleParam = "ASSUME_ROLE"
-
-	// scheme component of an S3 URI.
-	scheme = "s3"
-)
+// scheme component of an S3 URI.
+const scheme = "s3"
 
 // NightlyEnvVarS3Params maps param keys that get added to an S3
 // URI to the environment variables hard coded on the VM
 // running the nightly cloud unit tests.
 var NightlyEnvVarS3Params = map[string]string{
-	AWSEndpointParam:  "AWS_S3_ENDPOINT",
-	AWSAccessKeyParam: "AWS_ACCESS_KEY_ID",
-	S3RegionParam:     "AWS_DEFAULT_REGION",
-	AWSSecretParam:    "AWS_SECRET_ACCESS_KEY",
+	amazonparams.AWSEndpoint:  "AWS_S3_ENDPOINT",
+	amazonparams.AWSAccessKey: "AWS_ACCESS_KEY_ID",
+	amazonparams.S3Region:     "AWS_DEFAULT_REGION",
+	amazonparams.AWSSecret:    "AWS_SECRET_ACCESS_KEY",
 }
 
 // NightlyEnvVarKMSParams maps param keys that get added to a KMS
 // URI to the environment variables hard coded on the VM
 // running the nightly cloud unit tests.
 var NightlyEnvVarKMSParams = map[string]string{
-	AWSEndpointParam: "AWS_KMS_ENDPOINT",
-	KMSRegionParam:   "AWS_KMS_REGION",
+	amazonparams.AWSEndpoint: "AWS_KMS_ENDPOINT",
+	amazonparams.KMSRegion:   "AWS_KMS_REGION",
 }
 
 type s3Storage struct {
@@ -264,22 +231,22 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 			q.Set(key, value)
 		}
 	}
-	setIf(AWSAccessKeyParam, conf.AccessKey)
-	setIf(AWSSecretParam, conf.Secret)
-	setIf(AWSTempTokenParam, conf.TempToken)
-	setIf(AWSEndpointParam, conf.Endpoint)
-	setIf(S3RegionParam, conf.Region)
+	setIf(amazonparams.AWSAccessKey, conf.AccessKey)
+	setIf(amazonparams.AWSSecret, conf.Secret)
+	setIf(amazonparams.AWSTempToken, conf.TempToken)
+	setIf(amazonparams.AWSEndpoint, conf.Endpoint)
+	setIf(amazonparams.S3Region, conf.Region)
 	setIf(cloud.AuthParam, conf.Auth)
-	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
-	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
-	setIf(S3StorageClassParam, conf.StorageClass)
+	setIf(amazonparams.AWSServerSideEncryptionMode, conf.ServerEncMode)
+	setIf(amazonparams.AWSServerSideEncryptionKMSID, conf.ServerKMSID)
+	setIf(amazonparams.S3StorageClass, conf.StorageClass)
 	if conf.AssumeRoleProvider.Role != "" {
 		roleProviderStrings := make([]string, 0, len(conf.DelegateRoleProviders)+1)
 		for _, p := range conf.DelegateRoleProviders {
 			roleProviderStrings = append(roleProviderStrings, p.EncodeAsString())
 		}
 		roleProviderStrings = append(roleProviderStrings, conf.AssumeRoleProvider.EncodeAsString())
-		q.Set(AssumeRoleParam, strings.Join(roleProviderStrings, ","))
+		q.Set(amazonparams.AssumeRole, strings.Join(roleProviderStrings, ","))
 	}
 
 	s3URL := url.URL{
@@ -301,26 +268,26 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 
 	conf.Provider = cloudpb.ExternalStorageProvider_s3
 
-	// TODO(rui): currently the value of AssumeRoleParam is written into both of
+	// TODO(rui): currently the value of AssumeRole is written into both of
 	// the RoleARN fields and the RoleProvider fields in order to support a mixed
 	// version cluster with nodes on 22.2.0 and 22.2.1+. The logic around the
 	// RoleARN fields can be removed in 23.2.
-	assumeRoleValue := s3URL.ConsumeParam(AssumeRoleParam)
+	assumeRoleValue := s3URL.ConsumeParam(amazonparams.AssumeRole)
 	assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(assumeRoleValue)
 	assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleValue)
 
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,
 		Prefix:                s3URL.Path,
-		AccessKey:             s3URL.ConsumeParam(AWSAccessKeyParam),
-		Secret:                s3URL.ConsumeParam(AWSSecretParam),
-		TempToken:             s3URL.ConsumeParam(AWSTempTokenParam),
-		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
-		Region:                s3URL.ConsumeParam(S3RegionParam),
+		AccessKey:             s3URL.ConsumeParam(amazonparams.AWSAccessKey),
+		Secret:                s3URL.ConsumeParam(amazonparams.AWSSecret),
+		TempToken:             s3URL.ConsumeParam(amazonparams.AWSTempToken),
+		Endpoint:              s3URL.ConsumeParam(amazonparams.AWSEndpoint),
+		Region:                s3URL.ConsumeParam(amazonparams.S3Region),
 		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
-		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
-		ServerKMSID:           s3URL.ConsumeParam(AWSServerSideEncryptionKMSID),
-		StorageClass:          s3URL.ConsumeParam(S3StorageClassParam),
+		ServerEncMode:         s3URL.ConsumeParam(amazonparams.AWSServerSideEncryptionMode),
+		ServerKMSID:           s3URL.ConsumeParam(amazonparams.AWSServerSideEncryptionKMSID),
+		StorageClass:          s3URL.ConsumeParam(amazonparams.S3StorageClass),
 		RoleARN:               assumeRole,
 		DelegateRoleARNs:      delegateRoles,
 		AssumeRoleProvider:    assumeRoleProvider,
@@ -351,7 +318,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AWSAccessKeyParam,
+				amazonparams.AWSAccessKey,
 			)
 		}
 		if conf.S3Config.Secret == "" {
@@ -359,7 +326,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AWSSecretParam,
+				amazonparams.AWSSecret,
 			)
 		}
 	case cloud.AuthParamImplicit:
@@ -411,7 +378,7 @@ func MakeS3Storage(
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AWSAccessKeyParam,
+				amazonparams.AWSAccessKey,
 			)
 		}
 		if conf.Secret == "" {
@@ -419,7 +386,7 @@ func MakeS3Storage(
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AWSSecretParam,
+				amazonparams.AWSSecret,
 			)
 		}
 	case cloud.AuthParamImplicit:
@@ -920,5 +887,5 @@ func withExternalID(externalID string) func(*stscreds.AssumeRoleProvider) {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_s3,
-		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), scheme)
+		parseS3URL, MakeS3Storage, cloud.RedactedParams(amazonparams.AWSSecret, amazonparams.AWSTempToken), scheme)
 }

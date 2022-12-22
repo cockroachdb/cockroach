@@ -49,9 +49,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/amazonparams"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/gcp/gcpparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -1185,7 +1186,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 func redactTestKMSURI(path string) (string, error) {
 	redactedQueryParams := map[string]struct{}{
-		amazon.AWSSecretParam: {},
+		amazonparams.AWSSecret: {},
 	}
 
 	uri, err := url.Parse(path)
@@ -4162,9 +4163,9 @@ func getAWSKMSURI(t *testing.T, regionEnvVariable, keyIDEnvVariable string) (str
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     amazon.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": amazon.AWSSecretParam,
-		regionEnvVariable:       amazon.KMSRegionParam,
+		"AWS_ACCESS_KEY_ID":     amazonparams.AWSAccessKey,
+		"AWS_SECRET_ACCESS_KEY": amazonparams.AWSSecret,
+		regionEnvVariable:       amazonparams.KMSRegion,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -4432,7 +4433,7 @@ func MakeTestKMS(_ context.Context, uri string, _ cloud.KMSEnv) (cloud.KMS, erro
 func constructMockKMSURIsWithKeyID(keyIDs []string) []string {
 	q := make(url.Values)
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-	q.Add(amazon.KMSRegionParam, "blah")
+	q.Add(amazonparams.KMSRegion, "blah")
 
 	var uris []string
 	for _, keyID := range keyIDs {
@@ -9994,7 +9995,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 				uri = fmt.Sprintf("gs://%s/%s?%s=%s",
 					bucket,
 					"backup-test-lexicographical",
-					gcp.CredentialsParam,
+					gcpparams.Credentials,
 					url.QueryEscape(encoded),
 				)
 			case "fileTable":

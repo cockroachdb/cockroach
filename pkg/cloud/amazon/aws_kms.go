@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/amazonparams"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -54,7 +55,7 @@ type kmsURIParams struct {
 }
 
 func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
-	assumeRoleProto, delegateRoleProtos := cloud.ParseRoleProvidersString(kmsURI.ConsumeParam(AssumeRoleParam))
+	assumeRoleProto, delegateRoleProtos := cloud.ParseRoleProvidersString(kmsURI.ConsumeParam(amazonparams.AssumeRole))
 	assumeRoleProvider := makeRoleProvider(assumeRoleProto)
 	delegateProviders := make([]roleProvider, len(delegateRoleProtos))
 	for i := range delegateRoleProtos {
@@ -62,11 +63,11 @@ func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
 	}
 
 	params := kmsURIParams{
-		accessKey:             kmsURI.ConsumeParam(AWSAccessKeyParam),
-		secret:                kmsURI.ConsumeParam(AWSSecretParam),
-		tempToken:             kmsURI.ConsumeParam(AWSTempTokenParam),
-		endpoint:              kmsURI.ConsumeParam(AWSEndpointParam),
-		region:                kmsURI.ConsumeParam(KMSRegionParam),
+		accessKey:             kmsURI.ConsumeParam(amazonparams.AWSAccessKey),
+		secret:                kmsURI.ConsumeParam(amazonparams.AWSSecret),
+		tempToken:             kmsURI.ConsumeParam(amazonparams.AWSTempToken),
+		endpoint:              kmsURI.ConsumeParam(amazonparams.AWSEndpoint),
+		region:                kmsURI.ConsumeParam(amazonparams.KMSRegion),
 		auth:                  kmsURI.ConsumeParam(cloud.AuthParam),
 		roleProvider:          assumeRoleProvider,
 		delegateRoleProviders: delegateProviders,
@@ -146,7 +147,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AWSAccessKeyParam,
+				amazonparams.AWSAccessKey,
 			)
 		}
 		if kmsURIParams.secret == "" {
@@ -154,7 +155,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AWSSecretParam,
+				amazonparams.AWSSecret,
 			)
 		}
 		opts.Config.MergeIn(awsConfig)

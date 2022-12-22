@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachangestatus"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -259,7 +260,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// transactional schema changes. In all likelihood, not holding a lease here
 	// is the right thing to do as we would never want this operation to fail
 	// because a new mutation was enqueued.
-	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
+	tableDesc, err := sc.updateJobRunningStatus(ctx, schemachangestatus.Backfill)
 	if err != nil {
 		return err
 	}
@@ -723,7 +724,7 @@ func (sc *SchemaChanger) validateConstraints(
 	}
 	log.Infof(ctx, "validating %d new constraints", len(constraints))
 
-	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
+	_, err := sc.updateJobRunningStatus(ctx, schemachangestatus.Validation)
 	if err != nil {
 		return err
 	}
@@ -990,7 +991,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return err
 		}
 		if err := sc.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return RunningStatusBackfill, nil
+			return schemachangestatus.Backfill, nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
@@ -1428,7 +1429,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	}
 	log.Info(ctx, "validating new indexes")
 
-	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
+	_, err := sc.updateJobRunningStatus(ctx, schemachangestatus.Validation)
 	if err != nil {
 		return err
 	}
@@ -2269,7 +2270,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 				log.Infof(ctx, "dropping temporary index: %d", idx.IndexDesc().ID)
 				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
 				tbl.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
-				runStatus = RunningStatusDeleteOnly
+				runStatus = schemachangestatus.DeleteOnly
 			} else if m.Merging() {
 				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_WRITE_ONLY
 			}

@@ -22,6 +22,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/gcp/gcpparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -37,25 +38,6 @@ import (
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-)
-
-const (
-	// GoogleBillingProjectParam is the query parameter for the billing project
-	// in a gs URI.
-	GoogleBillingProjectParam = "GOOGLE_BILLING_PROJECT"
-	// CredentialsParam is the query parameter for the base64-encoded contents of
-	// the Google Application Credentials JSON file.
-	CredentialsParam = "CREDENTIALS"
-	// AssumeRoleParam is the query parameter for the chain of service account
-	// email addresses to assume.
-	AssumeRoleParam = "ASSUME_ROLE"
-
-	// BearerTokenParam is the query parameter for a temporary bearer token. There
-	// is no refresh mechanism associated with this token, so it is up to the user
-	// to ensure that its TTL is longer than the duration of the job or query that
-	// is using the token. The job or query may irrecoverably fail if one of its
-	// tokens expire before completion.
-	BearerTokenParam = "BEARER_TOKEN"
 )
 
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
@@ -80,16 +62,16 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
-	assumeRole, delegateRoles := cloud.ParseRoleString(gsURL.ConsumeParam(AssumeRoleParam))
+	assumeRole, delegateRoles := cloud.ParseRoleString(gsURL.ConsumeParam(gcpparams.AssumeRole))
 	conf.GoogleCloudConfig = &cloudpb.ExternalStorage_GCS{
 		Bucket:              uri.Host,
 		Prefix:              uri.Path,
 		Auth:                gsURL.ConsumeParam(cloud.AuthParam),
-		BillingProject:      gsURL.ConsumeParam(GoogleBillingProjectParam),
-		Credentials:         gsURL.ConsumeParam(CredentialsParam),
+		BillingProject:      gsURL.ConsumeParam(gcpparams.GoogleBillingProject),
+		Credentials:         gsURL.ConsumeParam(gcpparams.Credentials),
 		AssumeRole:          assumeRole,
 		AssumeRoleDelegates: delegateRoles,
-		BearerToken:         gsURL.ConsumeParam(BearerTokenParam),
+		BearerToken:         gsURL.ConsumeParam(gcpparams.BearerToken),
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 
@@ -158,7 +140,7 @@ func makeGCSStorage(
 		if conf.Credentials != "" {
 			authOption, err := createAuthOptionFromServiceAccountKey(conf.Credentials)
 			if err != nil {
-				return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+				return nil, errors.Wrapf(err, "error getting credentials from %s", gcpparams.Credentials)
 			}
 			credentialsOpt = append(credentialsOpt, authOption)
 		} else if conf.BearerToken != "" {
@@ -166,8 +148,8 @@ func makeGCSStorage(
 		} else {
 			return nil, errors.Errorf(
 				"%s or %s must be set if %q is %q",
-				CredentialsParam,
-				BearerTokenParam,
+				gcpparams.Credentials,
+				gcpparams.BearerToken,
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 			)
@@ -397,5 +379,5 @@ func shouldRetry(err error) bool {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_gs,
-		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam, BearerTokenParam), gcsScheme)
+		parseGSURL, makeGCSStorage, cloud.RedactedParams(gcpparams.Credentials, gcpparams.BearerToken), gcsScheme)
 }
