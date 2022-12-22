@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -129,7 +129,7 @@ func EncodePartialIndexKey(
 	return key, containsNull, nil
 }
 
-type directions []catpb.IndexColumn_Direction
+type directions []catenumpb.IndexColumn_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {
 	if i < len(d) {
@@ -358,7 +358,7 @@ func MakeKeyFromEncDatums(
 
 	for i, val := range values {
 		encoding := descpb.DatumEncoding_ASCENDING_KEY
-		if keyCols[i].Direction == catpb.IndexColumn_DESC {
+		if keyCols[i].Direction == catenumpb.IndexColumn_DESC {
 			encoding = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		if val.IsNull() {
@@ -427,7 +427,7 @@ func DecodeIndexKey(
 	codec keys.SQLCodec,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []catpb.IndexColumn_Direction,
+	colDirs []catenumpb.IndexColumn_Direction,
 	key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
@@ -450,7 +450,7 @@ func DecodeIndexKey(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []catpb.IndexColumn_Direction, key []byte,
+	types []*types.T, vals []EncDatum, directions []catenumpb.IndexColumn_Direction, key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
@@ -458,7 +458,7 @@ func DecodeKeyVals(
 	}
 	for j := range vals {
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == catpb.IndexColumn_DESC) {
+		if directions != nil && (directions[j] == catenumpb.IndexColumn_DESC) {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
@@ -479,7 +479,7 @@ func DecodeKeyValsUsingSpec(
 	for j := range vals {
 		c := keyCols[j]
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if c.Direction == catpb.IndexColumn_DESC {
+		if c.Direction == catenumpb.IndexColumn_DESC {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -544,7 +545,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		idx := descpb.IndexDescriptor{
 			Unique:              true,
 			KeyColumnNames:      []string{col.Name},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 		}
 		if err := desc.AddPrimaryIndex(idx); err != nil {
 			return err
@@ -965,7 +966,7 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 }
 
 func checkColumnsValidForInvertedIndex(
-	tableDesc *Mutable, indexColNames []string, colDirs []catpb.IndexColumn_Direction,
+	tableDesc *Mutable, indexColNames []string, colDirs []catenumpb.IndexColumn_Direction,
 ) error {
 	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
@@ -976,7 +977,7 @@ func checkColumnsValidForInvertedIndex(
 				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
 					return NewInvalidInvertedColumnError(col.GetName(), col.GetType().String())
 				}
-				if i == lastCol && colDirs[i] == catpb.IndexColumn_DESC {
+				if i == lastCol && colDirs[i] == catenumpb.IndexColumn_DESC {
 					return pgerror.New(pgcode.FeatureNotSupported,
 						"the last column in an inverted index cannot have the DESC option")
 				}

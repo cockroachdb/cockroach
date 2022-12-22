@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -301,13 +302,13 @@ type columnCache struct {
 
 type indexColumnCache struct {
 	all          []catalog.Column
-	allDirs      []catpb.IndexColumn_Direction
+	allDirs      []catenumpb.IndexColumn_Direction
 	key          []catalog.Column
-	keyDirs      []catpb.IndexColumn_Direction
+	keyDirs      []catenumpb.IndexColumn_Direction
 	stored       []catalog.Column
 	keySuffix    []catalog.Column
 	full         []catalog.Column
-	fullDirs     []catpb.IndexColumn_Direction
+	fullDirs     []catenumpb.IndexColumn_Direction
 	keyAndSuffix []descpb.IndexFetchSpec_KeyColumn
 }
 
@@ -405,7 +406,7 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic
 	nKeySuffix := len(idx.KeySuffixColumnIDs)
 	nStored := len(idx.StoreColumnIDs)
 	nAll := nKey + nKeySuffix + nStored
-	ic.allDirs = make([]catpb.IndexColumn_Direction, nAll)
+	ic.allDirs = make([]catenumpb.IndexColumn_Direction, nAll)
 	// Only copy key column directions, others will remain at ASC (default value).
 	copy(ic.allDirs, idx.KeyColumnDirections)
 	ic.all = make([]catalog.Column, 0, nAll)

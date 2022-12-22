@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -64,13 +64,13 @@ func TestExecBackfiller(t *testing.T) {
 	addIndexMutation := func(
 		t *testing.T, mut *tabledesc.Mutable, name string, id descpb.IndexID, isTempIndex bool, columns ...string,
 	) catalog.Index {
-		var dirs []catpb.IndexColumn_Direction
+		var dirs []catenumpb.IndexColumn_Direction
 		var columnIDs, keySuffixColumnIDs []descpb.ColumnID
 		var columnIDSet catalog.TableColSet
 		for _, c := range columns {
 			col, err := mut.FindColumnWithName(tree.Name(c))
 			require.NoError(t, err)
-			dirs = append(dirs, catpb.IndexColumn_ASC)
+			dirs = append(dirs, catenumpb.IndexColumn_ASC)
 			columnIDs = append(columnIDs, col.GetID())
 			columnIDSet.Add(col.GetID())
 		}

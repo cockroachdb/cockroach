@@ -15,9 +15,9 @@ option go_package = "descpb";
 
 import "config/zonepb/zone.proto";
 import "util/hlc/timestamp.proto";
+import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/privilege.proto";
-import "sql/catalog/catpb/index.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";

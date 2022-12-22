@@ -18,7 +18,7 @@ go_library(
         "//pkg/keys",  # keep
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog",  # keep
-        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep
@@ -54,6 +54,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",

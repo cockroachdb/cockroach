@@ -15,7 +15,7 @@ option go_package = "descpb";
 
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
-import "sql/catalog/catpb/index.proto";
+import "sql/catalog/catenumpb/index.proto";
 import "geo/geoindex/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and

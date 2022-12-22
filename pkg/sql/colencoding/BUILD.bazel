@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/roachpb",
-        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",

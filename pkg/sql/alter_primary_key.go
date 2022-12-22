@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -614,9 +615,9 @@ func (p *planner) shouldCreateIndexes(
 			return true, nil
 		}
 		if (elem.Direction == tree.Ascending &&
-			oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_ASC) ||
+			oldPK.GetKeyColumnDirection(idx) != catenumpb.IndexColumn_ASC) ||
 			(elem.Direction == tree.Descending &&
-				oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_DESC) {
+				oldPK.GetKeyColumnDirection(idx) != catenumpb.IndexColumn_DESC) {
 			return true, nil
 		}
 	}
@@ -654,7 +655,7 @@ func shouldCopyPrimaryKey(
 
 	columnIDsAndDirsWithoutSharded := func(idx *descpb.IndexDescriptor) (
 		columnIDs descpb.ColumnIDs,
-		columnDirs []catpb.IndexColumn_Direction,
+		columnDirs []catenumpb.IndexColumn_Direction,
 	) {
 		for i, colName := range idx.KeyColumnNames {
 			if colName != idx.Sharded.Name {

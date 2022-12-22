@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -296,7 +297,7 @@ func TestIndexInterface(t *testing.T) {
 		colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
 		for j := range actualColNames {
 			actualColNames[j] = idx.GetKeyColumnName(j)
-			require.Equalf(t, idx == s1, idx.GetKeyColumnDirection(j) == catpb.IndexColumn_DESC,
+			require.Equalf(t, idx == s1, idx.GetKeyColumnDirection(j) == catenumpb.IndexColumn_DESC,
 				"mismatched column directions for index '%s'", idx.GetName())
 			require.True(t, colIDs.Contains(idx.GetKeyColumnID(j)),
 				"column ID resolution failure for column '%s' in index '%s'", idx.GetKeyColumnName(j), idx.GetName())
@@ -589,13 +590,13 @@ func TestSecKeyLatestIndexDescriptorVersion(t *testing.T) {
 		},
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID: 1, Name: "foo_pkey", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"c1"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 			EncodingType:        descpb.PrimaryIndexEncoding,
 		},
 		Indexes: []descpb.IndexDescriptor{
 			{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
 				KeyColumnNames:      []string{"c2"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				StoreColumnNames:    []string{"c2"},
 				StoreColumnIDs:      []descpb.ColumnID{2},
 				Version:             descpb.EmptyArraysInInvertedIndexesVersion,
@@ -611,7 +612,7 @@ func TestSecKeyLatestIndexDescriptorVersion(t *testing.T) {
 						Unique:              true,
 						KeyColumnIDs:        []descpb.ColumnID{3},
 						KeyColumnNames:      []string{"c3"},
-						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 						EncodingType:        descpb.SecondaryIndexEncoding,
 						ConstraintID:        1,

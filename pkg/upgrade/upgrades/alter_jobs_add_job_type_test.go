@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -232,7 +233,7 @@ func getJobsTableDescriptorPriorToV23_1AddTypeColumnToJobsTable() *descpb.TableD
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -241,7 +242,7 @@ func getJobsTableDescriptorPriorToV23_1AddTypeColumnToJobsTable() *descpb.TableD
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"status", "created"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -251,7 +252,7 @@ func getJobsTableDescriptorPriorToV23_1AddTypeColumnToJobsTable() *descpb.TableD
 				ID:                  3,
 				Unique:              false,
 				KeyColumnNames:      []string{"created_by_type", "created_by_id"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{6, 7},
 				StoreColumnIDs:      []descpb.ColumnID{2},
 				StoreColumnNames:    []string{"status"},
@@ -263,7 +264,7 @@ func getJobsTableDescriptorPriorToV23_1AddTypeColumnToJobsTable() *descpb.TableD
 				ID:                  4,
 				Unique:              false,
 				KeyColumnNames:      []string{"claim_session_id", "status", "created"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{8, 2, 3},
 				StoreColumnNames:    []string{"last_run", "num_runs", "claim_instance_id"},
 				StoreColumnIDs:      []descpb.ColumnID{11, 10, 9},

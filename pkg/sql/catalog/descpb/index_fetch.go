@@ -11,7 +11,7 @@
 package descpb
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -54,7 +54,7 @@ func (s *IndexFetchSpec) FetchedColumnTypes() []*types.T {
 // DatumEncoding returns the datum encoding that corresponds to the key column
 // direction.
 func (c *IndexFetchSpec_KeyColumn) DatumEncoding() DatumEncoding {
-	if c.Direction == catpb.IndexColumn_DESC {
+	if c.Direction == catenumpb.IndexColumn_DESC {
 		return DatumEncoding_DESCENDING_KEY
 	}
 	return DatumEncoding_ASCENDING_KEY
@@ -62,7 +62,7 @@ func (c *IndexFetchSpec_KeyColumn) DatumEncoding() DatumEncoding {
 
 // EncodingDirection returns the encoding direction for the key column.
 func (c *IndexFetchSpec_KeyColumn) EncodingDirection() encoding.Direction {
-	if c.Direction == catpb.IndexColumn_DESC {
+	if c.Direction == catenumpb.IndexColumn_DESC {
 		return encoding.Descending
 	}
 	return encoding.Ascending
