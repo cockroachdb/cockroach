@@ -29,14 +29,15 @@ import {
 import {
   calculateActiveFilters,
   getFullFiltersAsStringRecord,
-} from "../queryFilter/filter";
+} from "../queryFilter";
 import { RecentStatementsSection } from "../recentExecutions/recentStatementsSection";
-import { inactiveFiltersState } from "../queryFilter/filter";
+import { inactiveFiltersState } from "../queryFilter";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
 import { getRecentStatementFiltersFromURL } from "src/queryFilter/utils";
 
 import styles from "./statementsPage.module.scss";
+import {RecentStatementsRequestKey} from "../api";
 
 const cx = classNames.bind(styles);
 
@@ -45,6 +46,7 @@ export type RecentStatementsViewDispatchProps = {
   onFiltersChange: (filters: RecentStatementFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
+  refreshRecentStatements: (req: RecentStatementsRequestKey) => void;
 };
 
 export type RecentStatementsViewStateProps = {
@@ -65,6 +67,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
+  refreshRecentStatements,
   selectedColumns,
   sortSetting,
   statements,
@@ -92,6 +95,15 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   }, [refreshLiveWorkload]);
 
   useEffect(() => {
+    // Refresh every 10 seconds.
+    refreshRecentStatements({ id: "key"});
+    const interval = setInterval(refreshRecentStatements, 10 * 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshRecentStatements]);
+
+  useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
     // with the redux store. The only time we do this is when the user navigates
     // to the page directly via the URL and specifies settings in the query string.
@@ -116,6 +128,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
       {
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
+        page: pagination.current.toString(),
         [RECENT_STATEMENT_SEARCH_PARAM]: search,
         ...getFullFiltersAsStringRecord(filters),
       },
@@ -128,11 +141,19 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
     sortSetting.ascending,
     sortSetting.columnTitle,
     search,
+    pagination,
   ]);
 
   const resetPagination = () => {
     setPagination({
       current: 1,
+      pageSize: 20,
+    });
+  };
+
+  const onPaginationChange = (page: number): void => {
+    setPagination({
+      current: page,
       pageSize: 20,
     });
   };
@@ -206,6 +227,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
             onClearFilters={clearFilters}
             onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
+            onChangePagination={onPaginationChange}
             isTenant={isTenant}
           />
         </Loading>

@@ -23,8 +23,10 @@ import {
 } from "src/selectors/recentExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
+import { actions as recentStatementsActions } from "src/store/recentExecutions/recentStatements"
 import { selectIsTenant } from "src/store/uiConfig";
 import { localStorageSelector } from "../store/utils/selectors";
+import { RecentStatementsRequestKey } from "../api";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveStatementsPage"];
@@ -62,6 +64,7 @@ export const mapDispatchToRecentStatementsPageProps = (
   dispatch: Dispatch,
 ): RecentStatementsViewDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
+  refreshRecentStatements: (req: RecentStatementsRequestKey) => dispatch(recentStatementsActions.refresh(req)),
   onColumnsSelect: columns => {
     dispatch(
       localStorageActions.update({

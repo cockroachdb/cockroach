@@ -15,6 +15,7 @@ import moment from "moment";
 import {
   api as clusterUiApi,
   util,
+  RecentStatement,
   TxnContentionInsightDetails,
   TxnContentionInsightEvent,
   TxnInsightEvent,
@@ -410,6 +411,27 @@ export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
   };
 };
 
+export const recentStatementsRequestKey = (
+  req: clusterUiApi.RecentStatementsRequestKey,
+): string => `${req.id}`;
+
+const recentStatementsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getRecentStatements,
+  "recentStatements",
+  recentStatementsRequestKey,
+  null,
+  moment.duration(30, "s"),
+);
+export const refreshRecentStatements = recentStatementsReducerObj.refresh;
+
+export const refreshRecentStatementsAction = (
+  req: clusterUiApi.RecentStatementsRequestKey,
+  ): ThunkAction<any, any, any, Action> => {
+  return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
+    dispatch(refreshRecentStatements(req));
+  };
+};
+
 const transactionInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getTxnInsightEvents,
   "transactionInsights",
@@ -551,6 +573,7 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
+  recentStatements: KeyedCachedDataReducerState<RecentStatement[]>;
   transactionInsights: CachedDataReducerState<TxnContentionInsightEvent[]>;
   transactionInsightDetails: KeyedCachedDataReducerState<TxnContentionInsightDetails>;
   executionInsights: CachedDataReducerState<TxnInsightEvent[]>;
@@ -600,6 +623,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
+  [recentStatementsReducerObj.actionNamespace]: recentStatementsReducerObj.reducer,
   [transactionInsightsReducerObj.actionNamespace]:
     transactionInsightsReducerObj.reducer,
   [transactionInsightDetailsReducerObj.actionNamespace]:

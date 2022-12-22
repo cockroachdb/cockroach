@@ -11,6 +11,8 @@
 import {
   RecentExecutions,
   selectRecentExecutionsCombiner,
+  selectActiveExecutionsCombiner,
+  selectHistoricalExecutionsCombiner,
   getRecentStatement,
   getRecentTransaction,
   getContentionDetailsFromLocksAndTxns,
@@ -26,11 +28,26 @@ const selectSessions = (state: AdminUIState) => state.cachedData.sessions?.data;
 const selectClusterLocks = (state: AdminUIState) =>
   state.cachedData.clusterLocks?.data;
 
-export const selectRecentExecutions = createSelector(
+const selectHistoricalStatements = (state: AdminUIState) =>
+  state.cachedData.recentStatements?.data?.data;
+
+export const selectHistoricalExecutions = createSelector(
+  selectHistoricalStatements,
+  selectClusterLocks,
+  selectHistoricalExecutionsCombiner,
+)
+
+export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
-  selectRecentExecutionsCombiner,
+  selectActiveExecutionsCombiner,
 );
+
+export const selectRecentExecutions = createSelector(
+  selectHistoricalExecutions,
+  selectActiveExecutions,
+  selectRecentExecutionsCombiner,
+)
 
 export const selectRecentStatements = createSelector(
   selectRecentExecutions,
