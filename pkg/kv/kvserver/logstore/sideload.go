@@ -82,7 +82,7 @@ func MaybeSideloadEntries(
 ) {
 	var output []raftpb.Entry
 	for i := range input {
-		typ, err := raftlog.EncodingVersion(input[i])
+		typ, err := raftlog.EncodingOf(input[i])
 		if err != nil {
 			return nil, 0, 0, 0, err
 		}
@@ -161,7 +161,7 @@ func MaybeInlineSideloadedRaftCommand(
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
-	typ, err := raftlog.EncodingVersion(ent)
+	typ, err := raftlog.EncodingOf(ent)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func MaybeInlineSideloadedRaftCommand(
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	typ, err := raftlog.EncodingVersion(*ent)
+	typ, err := raftlog.EncodingOf(*ent)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

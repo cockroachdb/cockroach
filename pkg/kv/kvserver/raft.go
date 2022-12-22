@@ -269,7 +269,7 @@ func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
 // in ents to ids and returns the result.
 func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase.CmdIDKey {
 	for _, e := range ents {
-		typ, err := raftlog.EncodingVersion(e)
+		typ, err := raftlog.EncodingOf(e)
 		if err != nil {
 			continue
 		}
