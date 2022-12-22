@@ -459,6 +459,7 @@ crdb_internal       session_trace
 crdb_internal       session_variables
 crdb_internal       statement_statistics
 crdb_internal       super_regions
+crdb_internal       system_jobs
 crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
@@ -788,6 +789,7 @@ session_trace
 session_variables
 statement_statistics
 super_regions
+system_jobs
 table_columns
 table_indexes
 table_row_statistics
@@ -1156,6 +1158,7 @@ system         crdb_internal       session_trace                          SYSTEM
 system         crdb_internal       session_variables                      SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       super_regions                          SYSTEM VIEW  NO                  1
+system         crdb_internal       system_jobs                            SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
@@ -2852,6 +2855,7 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
+NULL     public   system         crdb_internal       system_jobs                            SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
@@ -3437,6 +3441,7 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
+NULL     public   system         crdb_internal       system_jobs                            SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES

@@ -619,6 +619,7 @@ session_trace                          NULL
 session_variables                      NULL
 statement_statistics                   NULL
 super_regions                          NULL
+system_jobs                            NULL
 table_columns                          NULL
 table_indexes                          NULL
 table_row_statistics                   NULL

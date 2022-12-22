@@ -364,6 +364,7 @@ func TestGCResumer(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 
 		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
@@ -388,6 +389,7 @@ func TestGCResumer(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 
 		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
@@ -420,6 +422,7 @@ func TestGCResumer(t *testing.T) {
 		record := jobs.Record{
 			Details:  gcDetails,
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 
 		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)

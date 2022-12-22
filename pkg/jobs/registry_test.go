@@ -344,6 +344,7 @@ func TestBatchJobsCreation(t *testing.T) {
 						JobID:    r.MakeJobID(),
 						Details:  jobspb.ImportDetails{},
 						Progress: jobspb.ImportProgress{},
+						Username: username.RootUserName(),
 					})
 				}
 				// Create jobs in a batch.
@@ -391,6 +392,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			_, err := r.CreateJobWithTxn(ctx, Record{
 				Details:  jobspb.ImportDetails{},
 				Progress: jobspb.ImportProgress{},
+				Username: username.TestUserName(),
 			}, jobID, txn)
 			return err
 		}))
@@ -815,6 +817,7 @@ func TestExponentialBackoffSettings(t *testing.T) {
 					// ImportDetails.
 					Details:  jobspb.ImportDetails{},
 					Progress: jobspb.ImportProgress{},
+					Username: username.TestUserName(),
 				}, id, txn)
 				return err
 			}))
@@ -1037,6 +1040,7 @@ func TestJobIdleness(t *testing.T) {
 			_, err := r.CreateJobWithTxn(ctx, Record{
 				Details:  jobspb.ImportDetails{},
 				Progress: jobspb.ImportProgress{},
+				Username: username.TestUserName(),
 			}, jobID, txn)
 			return err
 		}))
@@ -1273,4 +1277,28 @@ func TestJobInfoAccessors(t *testing.T) {
 			return nil
 		}, txn)
 	}))
+}
+
+// TestJobRecordMissingUsername tests that we get an error when
+// trying to produce jobs given records without usernames.
+func TestJobRecordMissingUsername(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	r := s.JobRegistry().(*Registry)
+
+	// This record is missing a username.
+	invalidRecord := Record{
+		Details:  jobspb.ImportDetails{},
+		Progress: jobspb.ImportProgress{},
+	}
+	_, err := r.CreateAdoptableJobWithTxn(ctx, invalidRecord, 0, nil)
+	assert.EqualError(t, err, "job record missing username; could not make payload")
+	_, err = r.CreateJobWithTxn(ctx, invalidRecord, 0, nil)
+	assert.EqualError(t, err, "job record missing username; could not make payload")
+	_, err = r.CreateJobsWithTxn(ctx, nil, r.internalExecutorFactory.MakeInternalExecutorWithoutTxn(), []*Record{&invalidRecord})
+	assert.EqualError(t, err, "job record missing username; could not make payload")
 }
