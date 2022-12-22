@@ -49,7 +49,7 @@ statement ok
 ALTER INDEX geo_table@geom_index SPLIT AT VALUES (1152921574000000000)
 
 query TI colnames,rowsort
-SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
 replicas  lease_holder
 {1}       1
@@ -59,11 +59,11 @@ statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
-start_key             end_key               replicas  lease_holder
-NULL                  /1152921574000000000  {1}       1
-/1152921574000000000  NULL                  {2}       2
+start_key              end_key                replicas  lease_holder
+<before:/Table/53>     …/1152921574000000000  {1}       1
+…/1152921574000000000  <after:/Max>           {2}       2
 
 # Distributed.
 query I
@@ -87,11 +87,11 @@ statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
-start_key             end_key               replicas  lease_holder
-NULL                  /1152921574000000000  {2}       2
-/1152921574000000000  NULL                  {2}       2
+start_key              end_key                replicas  lease_holder
+<before:/Table/53>     …/1152921574000000000  {2}       2
+…/1152921574000000000  <after:/Max>           {2}       2
 
 query I
 SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
@@ -115,7 +115,7 @@ statement ok
 CREATE INVERTED INDEX geom_index2 ON geo_table(s, geom)
 
 query TI colnames,rowsort
-SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2]
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2 WITH DETAILS]
 ----
 replicas  lease_holder
 {2}       2
@@ -136,7 +136,7 @@ statement ok
 ALTER INDEX geo_table@geom_index2 SPLIT AT VALUES ('foo', 1152921574000000000)
 
 query TI colnames,rowsort
-SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2]
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2 WITH DETAILS]
 ----
 replicas  lease_holder
 {2}       2
@@ -146,11 +146,11 @@ statement ok
 ALTER INDEX geo_table@geom_index2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'foo', 1152921574000000000)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2 WITH DETAILS]
 ----
-start_key                   end_key                     replicas  lease_holder
-NULL                        /"foo"/1152921574000000000  {2}       2
-/"foo"/1152921574000000000  NULL                        {1}       1
+start_key                    end_key                      replicas  lease_holder
+…/<IndexMin>                 …/"foo"/1152921574000000000  {2}       2
+…/"foo"/1152921574000000000  <after:/Max>                 {1}       1
 
 # Distributed.
 query I

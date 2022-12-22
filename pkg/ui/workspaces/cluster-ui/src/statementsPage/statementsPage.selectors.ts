@@ -32,6 +32,7 @@ import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
 import { localStorageSelector } from "../store/utils/selectors";
+import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -86,26 +87,16 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
     .concat(Object.keys(apps).sort());
 });
 
-// selectDatabases returns the array of all databases with statement statistics present
-// in the data.
-export const selectDatabases = createSelector(
-  sqlStatsSelector,
-  sqlStatsState => {
-    if (!sqlStatsState.data) {
-      return [];
-    }
+// selectDatabases returns the array of all databases in the cluster.
+export const selectDatabases = createSelector(databasesListSelector, state => {
+  if (!state.data) {
+    return [];
+  }
 
-    return Array.from(
-      new Set(
-        sqlStatsState.data.statements.map(s =>
-          s.key.key_data.database ? s.key.key_data.database : unset,
-        ),
-      ),
-    )
-      .filter((dbName: string) => dbName !== null && dbName.length > 0)
-      .sort();
-  },
-);
+  return state.data.databases
+    .filter((dbName: string) => dbName !== null && dbName.length > 0)
+    .sort();
+});
 
 // selectTotalFingerprints returns the count of distinct statement fingerprints
 // present in the data.

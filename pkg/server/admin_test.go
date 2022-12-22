@@ -637,9 +637,7 @@ func TestRangeCount(t *testing.T) {
 		defer db.Close()
 
 		runner := sqlutils.MakeSQLRunner(db)
-		s := sqlutils.MatrixToStr(runner.QueryStr(t, `
-select range_id, database_name, table_name, start_pretty, end_pretty from crdb_internal.ranges order by range_id asc`,
-		))
+		s := sqlutils.MatrixToStr(runner.QueryStr(t, `SHOW CLUSTER RANGES`))
 		t.Logf("actual ranges:\n%s", s)
 	}
 }

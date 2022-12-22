@@ -47,6 +47,10 @@ RESTORE cfs FROM LATEST IN 'nodelocal://1/foo' WITH into_db='r1';
 ----
 
 query-sql
-SELECT max(length(start_key)) FROM [SHOW RANGES FROM TABLE orig.cfs];
+SELECT start_key FROM [SHOW RANGES FROM TABLE orig.cfs]
 ----
-2
+…/<TableMin>
+…/1/0
+…/1/1
+…/1/2
+…/1/3

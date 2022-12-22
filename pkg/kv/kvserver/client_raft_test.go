@@ -5750,7 +5750,7 @@ func TestElectionAfterRestart(t *testing.T) {
 
 		testutils.SucceedsSoon(t, func() error {
 			for _, row := range sqlutils.MakeSQLRunner(tc.Conns[0]).QueryStr(
-				t, `SELECT range_id FROM crdb_internal.ranges_no_leases WHERE table_name = 't';`,
+				t, `SELECT range_id FROM [SHOW RANGES FROM TABLE t]`,
 			) {
 				n, err := strconv.Atoi(row[0])
 				require.NoError(t, err)

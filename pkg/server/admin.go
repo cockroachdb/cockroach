@@ -642,12 +642,12 @@ func (s *adminServer) databaseDetailsHelper(
 		if err != nil {
 			return nil, err
 		}
-		resp.Stats.NumIndexRecommendations, err = s.getNumDatabaseIndexRecommendations(ctx, req.Database, resp.TableNames)
+		dbIndexRecommendations, err := getDatabaseIndexRecommendations(ctx, req.Database, s.ie, s.st, s.sqlServer.execCfg)
 		if err != nil {
 			return nil, err
 		}
+		resp.Stats.NumIndexRecommendations = int32(len(dbIndexRecommendations))
 	}
-
 	return &resp, nil
 }
 
@@ -758,25 +758,6 @@ func (s *adminServer) getDatabaseStats(
 	})
 
 	return &stats, nil
-}
-
-func (s *adminServer) getNumDatabaseIndexRecommendations(
-	ctx context.Context, databaseName string, tableNames []string,
-) (int32, error) {
-	var numDatabaseIndexRecommendations int
-	idxUsageStatsProvider := s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
-	for _, tableName := range tableNames {
-		tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
-			Database: databaseName,
-			Table:    tableName,
-		}
-		tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.st, s.sqlServer.execCfg)
-		if err != nil {
-			return 0, err
-		}
-		numDatabaseIndexRecommendations += len(tableIndexStatsResponse.IndexRecommendations)
-	}
-	return int32(numDatabaseIndexRecommendations), nil
 }
 
 // getFullyQualifiedTableName, given a database name and a tableName that either
@@ -1051,14 +1032,11 @@ func (s *adminServer) tableDetailsHelper(
 	row, cols, err = s.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-show-mvcc-garbage-info", nil,
 		sessiondata.InternalExecutorOverride{User: userName},
-		`WITH
+		fmt.Sprintf(
+			`WITH
 			range_stats AS (
-				SELECT
-					crdb_internal.range_stats(start_key) AS d
-				FROM
-					crdb_internal.ranges_no_leases
-				WHERE
-					table_id = $1::REGCLASS
+				SELECT crdb_internal.range_stats(raw_start_key) AS d
+				FROM [SHOW RANGES FROM TABLE %s WITH KEYS]
 			),
 			aggregated AS (
 				SELECT
@@ -1077,7 +1055,7 @@ func (s *adminServer) tableDetailsHelper(
 				COALESCE(live, 0)::INT8 as live_bytes,
 				COALESCE(live / NULLIF(total,0), 0)::FLOAT8 as live_percentage
 			FROM aggregated`,
-		escQualTable,
+			escQualTable),
 	)
 	if err != nil {
 		return nil, err

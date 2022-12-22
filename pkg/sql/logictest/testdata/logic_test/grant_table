@@ -59,6 +59,7 @@ test           crdb_internal       gossip_liveness                        public
 test           crdb_internal       gossip_network                         public   SELECT          false
 test           crdb_internal       gossip_nodes                           public   SELECT          false
 test           crdb_internal       index_columns                          public   SELECT          false
+test           crdb_internal       index_spans                            public   SELECT          false
 test           crdb_internal       index_usage_statistics                 public   SELECT          false
 test           crdb_internal       invalid_objects                        public   SELECT          false
 test           crdb_internal       jobs                                   public   SELECT          false
@@ -98,6 +99,7 @@ test           crdb_internal       system_jobs                            public
 test           crdb_internal       table_columns                          public   SELECT          false
 test           crdb_internal       table_indexes                          public   SELECT          false
 test           crdb_internal       table_row_statistics                   public   SELECT          false
+test           crdb_internal       table_spans                            public   SELECT          false
 test           crdb_internal       tables                                 public   SELECT          false
 test           crdb_internal       tenant_usage_details                   public   SELECT          false
 test           crdb_internal       transaction_contention_events          public   SELECT          false

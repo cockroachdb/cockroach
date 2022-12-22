@@ -111,7 +111,7 @@ func TestEndToEndGC(t *testing.T) {
 
 				getTableRangeIDs := func(t *testing.T, db *gosql.DB) ids {
 					t.Helper()
-					rows, err := db.Query("with r as (show ranges from table kv) select range_id from r order by start_key")
+					rows, err := db.Query("WITH r AS (SHOW RANGES FROM TABLE kv) SELECT range_id FROM r ORDER BY start_key")
 					require.NoError(t, err, "failed to query ranges")
 					var rangeIDs []int64
 					for rows.Next() {
@@ -125,7 +125,7 @@ func TestEndToEndGC(t *testing.T) {
 				readSomeKeys := func(t *testing.T, db *gosql.DB) []int64 {
 					t.Helper()
 					var ids []int64
-					rows, err := db.Query("select k from kv limit 5")
+					rows, err := db.Query("SELECT k FROM kv LIMIT 5")
 					require.NoError(t, err, "failed to query kv data")
 					for rows.Next() {
 						var id int64
@@ -137,7 +137,7 @@ func TestEndToEndGC(t *testing.T) {
 
 				getRangeInfo := func(t *testing.T, rangeID int64, db *gosql.DB) (startKey, endKey []byte) {
 					t.Helper()
-					row := db.QueryRow("select start_key, end_key from crdb_internal.ranges_no_leases where range_id=$1",
+					row := db.QueryRow("SELECT start_key, end_key FROM crdb_internal.ranges_no_leases WHERE range_id=$1",
 						rangeID)
 					require.NoError(t, row.Err(), "failed to query range info")
 					require.NoError(t, row.Scan(&startKey, &endKey), "failed to scan range info")
@@ -202,10 +202,10 @@ func TestEndToEndGC(t *testing.T) {
 					execOrFatal(t, sqlDb, `SET CLUSTER SETTING kv.gc.clear_range_min_keys = 0`)
 				}
 
-				execOrFatal(t, sqlDb, `create table kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`)
+				execOrFatal(t, sqlDb, `CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`)
 
 				for i := 0; i < 1000; i++ {
-					execOrFatal(t, sqlDb, "upsert into kv values ($1, $2)", rng.Int63(), "hello")
+					execOrFatal(t, sqlDb, "UPSERT INTO kv VALUES ($1, $2)", rng.Int63(), "hello")
 				}
 				t.Logf("found table range after initializing table data: %s", getTableRangeIDs(t, sqlDb))
 
@@ -236,7 +236,7 @@ func TestEndToEndGC(t *testing.T) {
 				if d.rangeTombstones {
 					deleteRangeDataWithRangeTombstone(t, kvDb, sqlDb)
 				} else {
-					execOrFatal(t, sqlDb, "delete from kv where k is not null")
+					execOrFatal(t, sqlDb, "DELETE FROM kv WHERE k IS NOT NULL")
 				}
 				t.Logf("found table ranges after range deletion: %s", getTableRangeIDs(t, sqlDb))
 

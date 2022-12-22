@@ -424,6 +424,7 @@ crdb_internal       gossip_liveness
 crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
+crdb_internal       index_spans
 crdb_internal       index_usage_statistics
 crdb_internal       invalid_objects
 crdb_internal       jobs
@@ -463,6 +464,7 @@ crdb_internal       system_jobs
 crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
+crdb_internal       table_spans
 crdb_internal       tables
 crdb_internal       tenant_usage_details
 crdb_internal       transaction_contention_events
@@ -754,6 +756,7 @@ gossip_liveness
 gossip_network
 gossip_nodes
 index_columns
+index_spans
 index_usage_statistics
 invalid_objects
 jobs
@@ -793,6 +796,7 @@ system_jobs
 table_columns
 table_indexes
 table_row_statistics
+table_spans
 tables
 tenant_usage_details
 transaction_contention_events
@@ -1079,6 +1083,7 @@ tablespaces
 tables_extensions
 tables
 tables
+table_spans
 table_row_statistics
 table_privileges
 table_indexes
@@ -1123,6 +1128,7 @@ system         crdb_internal       gossip_liveness                        SYSTEM
 system         crdb_internal       gossip_network                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
+system         crdb_internal       index_spans                            SYSTEM VIEW  NO                  1
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
@@ -1162,6 +1168,7 @@ system         crdb_internal       system_jobs                            SYSTEM
 system         crdb_internal       table_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
+system         crdb_internal       table_spans                            SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       tenant_usage_details                   SYSTEM VIEW  NO                  1
 system         crdb_internal       transaction_contention_events          SYSTEM VIEW  NO                  1
@@ -2820,6 +2827,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
+NULL     public   system         crdb_internal       index_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
@@ -2859,6 +2867,7 @@ NULL     public   system         crdb_internal       system_jobs                
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       table_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
@@ -3406,6 +3415,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
+NULL     public   system         crdb_internal       index_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
@@ -3445,6 +3455,7 @@ NULL     public   system         crdb_internal       system_jobs                
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       table_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES

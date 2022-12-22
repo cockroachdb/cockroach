@@ -17,6 +17,7 @@ import { actions as statementDiagnosticsActions } from "src/store/statementDiagn
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as databasesListActions } from "src/store/databasesList";
 import { actions as nodesActions } from "../store/nodes";
 import {
   StatementsPageDispatchProps,
@@ -57,6 +58,7 @@ import {
 } from "./recentStatementsPage.selectors";
 import {
   InsertStmtDiagnosticRequest,
+  SqlExecutionRequest,
   StatementDiagnosticsReport,
 } from "../api";
 
@@ -100,6 +102,7 @@ export const ConnectedStatementsPage = withRouter(
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
+        refreshDatabases: () => dispatch(databasesListActions.refresh()),
         refreshStatements: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.refresh(req)),
         onTimeScaleChange: (ts: TimeScale) => {
