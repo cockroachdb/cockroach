@@ -95,7 +95,8 @@ func impl() error {
 		for obj := range objs {
 			_, ok := usedPkgMap[obj]
 			if !ok {
-				failure := fmt.Sprintf("%s.%s", pkgPath, obj)
+				split := strings.Split(obj, ":")
+				failure := fmt.Sprintf("%s.%s (%s:%s)", pkgPath, split[0], split[1], split[2])
 				if !ignoreUnused(failure) {
 					failures = append(failures, failure)
 				}

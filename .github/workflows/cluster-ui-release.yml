@@ -57,9 +57,12 @@ jobs:
       id: branch-name
 
     - name: Build Cluster UI
+      if: steps.version-check.outputs.published == 'no'
       run: |
         yarn install --frozen-lockfile
-        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
+        yarn build
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'
