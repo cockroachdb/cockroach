@@ -31,9 +31,6 @@ import (
 // DeclareCursor implements the DECLARE statement.
 // See https://www.postgresql.org/docs/current/sql-declare.html for details.
 func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (planNode, error) {
-	if s.Hold {
-		return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD")
-	}
 	if s.Binary {
 		return nil, unimplemented.NewWithIssue(77099, "DECLARE BINARY CURSOR")
 	}
@@ -45,6 +42,9 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 		name: s.String(),
 		constructor: func(ctx context.Context, p *planner) (_ planNode, _ error) {
 			if p.extendedEvalCtx.TxnImplicit {
+				if s.Hold {
+					return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD can only be used in transaction blocks")
+				}
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
@@ -99,6 +99,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				txn:          p.txn,
 				statement:    statement,
 				created:      timeutil.Now(),
+				withHold:     s.Hold,
 			}
 			if err := p.sqlCursors.addCursor(s.Name, cursor); err != nil {
 				// This case shouldn't happen because cursor names are scoped to a session,
@@ -258,6 +259,7 @@ type sqlCursor struct {
 	statement  string
 	created    time.Time
 	curRow     int64
+	withHold   bool
 }
 
 // Next implements the InternalRows interface.
@@ -272,7 +274,7 @@ func (s *sqlCursor) Next(ctx context.Context) (bool, error) {
 // sqlCursors contains a set of active cursors for a session.
 type sqlCursors interface {
 	// closeAll closes all cursors in the set.
-	closeAll()
+	closeAll(errorOnWithHold bool) error
 	// closeCursor closes the named cursor, returning an error if that cursor
 	// didn't exist in the set.
 	closeCursor(tree.Name) error
@@ -291,11 +293,15 @@ type cursorMap struct {
 	cursors map[tree.Name]*sqlCursor
 }
 
-func (c *cursorMap) closeAll() {
-	for _, c := range c.cursors {
+func (c *cursorMap) closeAll(errorOnWithHold bool) error {
+	for n, c := range c.cursors {
+		if c.withHold && errorOnWithHold {
+			return unimplemented.NewWithIssuef(77101, "cursor %s WITH HOLD must be closed before committing", n)
+		}
 		_ = c.Close()
 	}
 	c.cursors = nil
+	return nil
 }
 
 func (c *cursorMap) closeCursor(s tree.Name) error {
@@ -333,8 +339,9 @@ type connExCursorAccessor struct {
 	ex *connExecutor
 }
 
-func (c connExCursorAccessor) closeAll() {
-	c.ex.extraTxnState.sqlCursors.closeAll()
+func (c connExCursorAccessor) closeAll(bool) error {
+	c.ex.extraTxnState.sqlCursors.closeAll(false)
+	return nil
 }
 
 func (c connExCursorAccessor) closeCursor(s tree.Name) error {

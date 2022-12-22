@@ -1153,7 +1153,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
-		ex.extraTxnState.sqlCursors.closeAll()
+		_ = ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */)
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -1728,7 +1728,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	}
 
 	// Close all cursors.
-	ex.extraTxnState.sqlCursors.closeAll()
+	_ = ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */)
 
 	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
