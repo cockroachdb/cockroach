@@ -302,6 +302,7 @@ func (_e *explorer) exploreLimit(
 			} else {
 				_member = _member.NextExpr()
 			}
+			scan = _member
 			if !_partlyExplored || _ord >= _state.start {
 				_scan, _ := _member.(*memo.ScanExpr)
 				if _scan != nil {
@@ -420,6 +421,7 @@ func (_e *explorer) exploreLimit(
 			} else {
 				_member = _member.NextExpr()
 			}
+			input = _member
 			if !_partlyExplored || _ord >= _state.start {
 				_scan, _ := _member.(*memo.ScanExpr)
 				if _scan == nil {
@@ -652,6 +654,7 @@ func (_e *explorer) exploreUnion(
 			} else {
 				_member = _member.NextExpr()
 			}
+			left = _member
 			if !_partlyExplored || _ord >= _state.start {
 				_union, _ := _member.(*memo.UnionExpr)
 				if _union != nil {
