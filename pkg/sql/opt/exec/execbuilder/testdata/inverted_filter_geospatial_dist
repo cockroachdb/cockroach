@@ -61,7 +61,7 @@ statement ok
 ALTER INDEX geo_table@geom_index SPLIT AT VALUES (1152921574000000000)
 
 query TI colnames,rowsort
-SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
 replicas  lease_holder
 {1}       1
@@ -100,11 +100,11 @@ statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
-start_key             end_key               replicas  lease_holder
-NULL                  /1152921574000000000  {1}       1
-/1152921574000000000  NULL                  {2}       2
+start_key              end_key                replicas  lease_holder
+<before:/Table/53>     …/1152921574000000000  {1}       1
+…/1152921574000000000  <after:/Max>           {2}       2
 
 # Distributed. TODO(treilly): This claims to be distributed, but it isn't. What gives?
 query T
@@ -169,11 +169,11 @@ statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
-start_key             end_key               replicas  lease_holder
-NULL                  /1152921574000000000  {2}       2
-/1152921574000000000  NULL                  {2}       2
+start_key              end_key                replicas  lease_holder
+<before:/Table/53>     …/1152921574000000000  {2}       2
+…/1152921574000000000  <after:/Max>           {2}       2
 
 # Filtering is placed at node 2. We need a retry here to account for possibly
 # stale dist sender caches.
@@ -240,18 +240,18 @@ statement ok
 SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index WITH DETAILS]
 ----
-start_key             end_key               replicas  lease_holder
-NULL                  /1152921574000000000  {2}       2
-/1152921574000000000  NULL                  {2}       2
+start_key              end_key                replicas  lease_holder
+<before:/Table/53>     …/1152921574000000000  {2}       2
+…/1152921574000000000  <after:/Max>           {2}       2
 
 query ITTTI colnames,rowsort
-SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@primary]
+SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@primary WITH DETAILS]
 ORDER BY lease_holder, start_key
 ----
-range_id  start_key  end_key  replicas  lease_holder
-54        NULL       NULL     {2}       2
+range_id  start_key           end_key                                   replicas  lease_holder
+54        <before:/Table/53>  <after:/Table/106/2/1152921574000000000>  {2}       2
 
 # We should see a distributed execution (though need to retry to purge possibly
 # stale dist sender caches).

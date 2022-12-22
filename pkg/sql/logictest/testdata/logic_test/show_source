@@ -452,19 +452,25 @@ testuser  ·        {}
 
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+/Table/53  /Max     {1}       1
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]
+----
+start_key     end_key       replicas  lease_holder
+…/<TableMin>  …/<TableMax>  {1}       1
 
 statement ok
 CREATE INDEX ix ON foo(x)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+start_key     end_key       replicas  lease_holder
+…/<IndexMin>  <after:/Max>  {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0

@@ -1281,10 +1281,9 @@ func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cl
 	// Check that we actually wrote MVCC range tombstones.
 	var rangeKeys int
 	require.NoError(t, conn.QueryRowContext(ctx, `
-		SELECT sum((crdb_internal.range_stats(start_key)->'range_key_count')::INT)
-		FROM crdb_internal.ranges
-		WHERE database_name = 'tpch' AND table_name = 'orders'
-	`).Scan(&rangeKeys))
+		SELECT sum((crdb_internal.range_stats(raw_start_key)->'range_key_count')::INT)
+		FROM [SHOW RANGES FROM TABLE tpch.orders WITH KEYS]
+`).Scan(&rangeKeys))
 	require.NotZero(t, rangeKeys, "no MVCC range tombstones found")
 
 	// Fingerprint for restore comparison, and assert that it matches the initial
@@ -1327,9 +1326,8 @@ func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cl
 	err = conn.QueryRowContext(ctx, `
 		SELECT range_id, stats::STRING
 		FROM [
-			SELECT range_id, crdb_internal.range_stats(start_key) AS stats
-			FROM crdb_internal.ranges
-			WHERE database_name = 'tpch'
+			SELECT range_id, crdb_internal.range_stats(raw_start_key) AS stats
+			FROM [SHOW RANGES FROM DATABASE tpch WITH KEYS]
 		]
 		WHERE (stats->'live_count')::INT != 0 OR (
 			(stats->'key_count')::INT > 0 AND (stats->'range_key_count')::INT = 0

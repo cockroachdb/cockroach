@@ -239,17 +239,17 @@ func registerRebalanceLoad(r registry.Registry) {
 
 func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numStores int) (bool, error) {
 	rows, err := db.Query(
-		`select lease_holder, count(*) ` +
-			`from [show ranges from table kv.kv] ` +
-			`group by lease_holder;`)
+		`SELECT lease_holder, count(*) ` +
+			`FROM [SHOW RANGES FROM TABLE kv.kv WITH DETAILS] ` +
+			`GROUP BY lease_holder;`)
 	if err != nil {
 		// TODO(rafi): Remove experimental_ranges query once we stop testing 19.1 or
 		// earlier.
 		if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
 			rows, err = db.Query(
-				`select lease_holder, count(*) ` +
-					`from [show experimental_ranges from table kv.kv] ` +
-					`group by lease_holder;`)
+				`SELECT lease_holder, count(*) ` +
+					`FROM [SHOW RANGES FROM TABLE kv.kv WITH DETAILS] ` +
+					`GROUP BY lease_holder;`)
 		}
 	}
 	if err != nil {

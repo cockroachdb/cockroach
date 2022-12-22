@@ -96,11 +96,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			count := 0
 			if err := conn.QueryRow(
-				"SELECT count(*) "+
-					"FROM crdb_internal.ranges_no_leases "+
-					"WHERE table_name = $1 "+
-					"AND database_name = current_database()",
-				"foo").Scan(&count); err != nil {
+				"SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]").Scan(&count); err != nil {
 				return err
 			}
 			if count == 0 {
@@ -111,14 +107,10 @@ func TestProtectedTimestamps(t *testing.T) {
 	}
 
 	getTableStartKey := func() roachpb.Key {
-		row := conn.QueryRow(
-			"SELECT start_key "+
-				"FROM crdb_internal.ranges_no_leases "+
-				"WHERE table_name = $1 "+
-				"AND database_name = current_database() "+
-				"ORDER BY start_key ASC "+
-				"LIMIT 1",
-			"foo")
+		row := conn.QueryRow(`
+SELECT raw_start_key
+FROM [SHOW RANGES FROM TABLE foo WITH KEYS]
+ORDER BY raw_start_key ASC LIMIT 1`)
 
 		var startKey roachpb.Key
 		require.NoError(t, row.Scan(&startKey))

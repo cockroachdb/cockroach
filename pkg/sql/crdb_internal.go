@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -142,6 +143,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalGossipNetworkTableID:               crdbInternalGossipNetworkTable,
 		catconstants.CrdbInternalTransactionContentionEvents:        crdbInternalTransactionContentionEventsTable,
 		catconstants.CrdbInternalIndexColumnsTableID:                crdbInternalIndexColumnsTable,
+		catconstants.CrdbInternalIndexSpansTableID:                  crdbInternalIndexSpansTable,
 		catconstants.CrdbInternalIndexUsageStatisticsTableID:        crdbInternalIndexUsageStatistics,
 		catconstants.CrdbInternalInflightTraceSpanTableID:           crdbInternalInflightTraceSpanTable,
 		catconstants.CrdbInternalJobsTableID:                        crdbInternalJobsTable,
@@ -168,6 +170,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalStmtStatsTableID:                   crdbInternalStmtStatsView,
 		catconstants.CrdbInternalTableColumnsTableID:                crdbInternalTableColumnsTable,
 		catconstants.CrdbInternalTableIndexesTableID:                crdbInternalTableIndexesTable,
+		catconstants.CrdbInternalTableSpansTableID:                  crdbInternalTableSpansTable,
 		catconstants.CrdbInternalTablesTableLastStatsID:             crdbInternalTablesTableLastStats,
 		catconstants.CrdbInternalTablesTableID:                      crdbInternalTablesTable,
 		catconstants.CrdbInternalClusterTxnStatsTableID:             crdbInternalClusterTxnStatsTable,
@@ -3651,53 +3654,28 @@ CREATE TABLE crdb_internal.forward_dependencies (
 	},
 }
 
+func listColumnNames(cols colinfo.ResultColumns) string {
+	var buf strings.Builder
+	comma := ""
+	for _, c := range cols {
+		buf.WriteString(comma)
+		buf.WriteString(c.Name)
+		comma = ","
+	}
+	return buf.String()
+}
+
 // crdbInternalRangesView exposes system ranges.
 var crdbInternalRangesView = virtualSchemaView{
 	schema: `
-CREATE VIEW crdb_internal.ranges AS SELECT
-	range_id,
-	start_key,
-	start_pretty,
-	end_key,
-	end_pretty,
-  table_id,
-	database_name,
-  schema_name,
-	table_name,
-	index_name,
-	replicas,
-	replica_localities,
-	voting_replicas,
-	non_voting_replicas,
-	learner_replicas,
-	split_enforced_until,
-	crdb_internal.lease_holder(start_key) AS lease_holder,
-	(crdb_internal.range_stats(start_key)->>'key_bytes')::INT +
-	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT +
-	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
-	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
-FROM crdb_internal.ranges_no_leases
-`,
-	resultColumns: colinfo.ResultColumns{
-		{Name: "range_id", Typ: types.Int},
-		{Name: "start_key", Typ: types.Bytes},
-		{Name: "start_pretty", Typ: types.String},
-		{Name: "end_key", Typ: types.Bytes},
-		{Name: "end_pretty", Typ: types.String},
-		{Name: "table_id", Typ: types.Int},
-		{Name: "database_name", Typ: types.String},
-		{Name: "schema_name", Typ: types.String},
-		{Name: "table_name", Typ: types.String},
-		{Name: "index_name", Typ: types.String},
-		{Name: "replicas", Typ: types.Int2Vector},
-		{Name: "replica_localities", Typ: types.StringArray},
-		{Name: "voting_replicas", Typ: types.Int2Vector},
-		{Name: "non_voting_replicas", Typ: types.Int2Vector},
-		{Name: "learner_replicas", Typ: types.Int2Vector},
-		{Name: "split_enforced_until", Typ: types.Timestamp},
-		{Name: "lease_holder", Typ: types.Int},
-		{Name: "range_size", Typ: types.Int},
-	},
+CREATE VIEW crdb_internal.ranges AS SELECT ` +
+		// We'd like to use `*` here but it's not supported yet by our
+		// dialect.
+		listColumnNames(colinfo.RangesNoLeases) + `,` +
+		// Extra columns that are "expensive to compute".
+		colinfo.RangesExtraRenders +
+		`FROM crdb_internal.ranges_no_leases`,
+	resultColumns: colinfo.Ranges,
 }
 
 // descriptorsByType is a utility function that iterates through a slice of
@@ -3804,11 +3782,6 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   start_pretty         STRING NOT NULL,
   end_key              BYTES NOT NULL,
   end_pretty           STRING NOT NULL,
-  table_id             INT NOT NULL,
-  database_name        STRING NOT NULL,
-  schema_name          STRING NOT NULL,
-  table_name           STRING NOT NULL,
-  index_name           STRING NOT NULL,
   replicas             INT[] NOT NULL,
   replica_localities   STRING[] NOT NULL,
   voting_replicas      INT[] NOT NULL,
@@ -3817,6 +3790,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   split_enforced_until TIMESTAMP
 )
 `,
+	resultColumns: colinfo.RangesNoLeases,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
@@ -3836,9 +3810,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) == nil
 		}
 
-		hasPermission, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
-			descriptorsByType(descs, privCheckerFunc)
-
+		hasPermission := false
+		for _, desc := range descs {
+			if privCheckerFunc(desc) {
+				hasPermission = true
+				break
+			}
+		}
 		// if the user has no ZONECONFIG privilege on any table/schema/database
 		if !hasPermission {
 			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
@@ -3914,11 +3892,6 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
-			tableID, dbName, schemaName, tableName, indexName := lookupNamesByKey(
-				p, rangeDesc.StartKey.AsRawKey(), dbNames, tableNames, schemaNames,
-				indexNames, schemaParents, parents,
-			)
-
 			splitEnforcedUntil := tree.DNull
 			if !rangeDesc.StickyBit.IsEmpty() {
 				splitEnforcedUntil = eval.TimestampToInexactDTimestamp(rangeDesc.StickyBit)
@@ -3930,11 +3903,6 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rangeDesc.StartKey.AsRawKey())),
 				tree.NewDBytes(tree.DBytes(rangeDesc.EndKey)),
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rangeDesc.EndKey.AsRawKey())),
-				tree.NewDInt(tree.DInt(tableID)),
-				tree.NewDString(dbName),
-				tree.NewDString(schemaName),
-				tree.NewDString(tableName),
-				tree.NewDString(indexName),
 				votersAndNonVotersArr,
 				replicaLocalityArr,
 				votersArr,
@@ -6488,6 +6456,115 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 	},
 }
 
+var crdbInternalIndexSpansTable = virtualSchemaTable{
+	comment: `key spans per table index`,
+	schema: `
+CREATE TABLE crdb_internal.index_spans (
+  descriptor_id INT NOT NULL,
+  index_id      INT NOT NULL,
+  start_key     BYTES NOT NULL,
+  end_key       BYTES NOT NULL,
+  INDEX(descriptor_id)
+);`,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				descID := catid.DescID(tree.MustBeDInt(constraint))
+				var table catalog.TableDescriptor
+				// We need to include offline tables, like in
+				// forEachTableDescAll() below. So we can't use p.LookupByID()
+				// which only considers online tables.
+				p.runWithOptions(resolveFlags{skipCache: true}, func() {
+					cflags := p.CommonLookupFlagsRequired()
+					cflags.IncludeOffline = true
+					cflags.IncludeDropped = true
+					flags := tree.ObjectLookupFlags{CommonLookupFlags: cflags}
+					table, err = p.Descriptors().GetImmutableTableByID(ctx, p.txn, descID, flags)
+				})
+				if err != nil {
+					return false, err
+				}
+				return true, generateIndexSpans(ctx, p, table, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, db, hideVirtual,
+			func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+				return generateIndexSpans(ctx, p, table, addRow)
+			})
+	},
+}
+
+func generateIndexSpans(
+	ctx context.Context, p *planner, table catalog.TableDescriptor, addRow func(...tree.Datum) error,
+) error {
+	tabID := table.GetID()
+	return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) error {
+		indexID := idx.GetID()
+		start := roachpb.Key(rowenc.MakeIndexKeyPrefix(p.ExecCfg().Codec, tabID, indexID))
+		end := start.PrefixEnd()
+		return addRow(
+			tree.NewDInt(tree.DInt(tabID)),
+			tree.NewDInt(tree.DInt(indexID)),
+			tree.NewDBytes(tree.DBytes(start)),
+			tree.NewDBytes(tree.DBytes(end)),
+		)
+	})
+}
+
+var crdbInternalTableSpansTable = virtualSchemaTable{
+	comment: `key spans per SQL object`,
+	schema: `
+CREATE TABLE crdb_internal.table_spans (
+  descriptor_id INT NOT NULL,
+  start_key     BYTES NOT NULL,
+  end_key       BYTES NOT NULL,
+  INDEX(descriptor_id)
+);`,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				descID := catid.DescID(tree.MustBeDInt(constraint))
+				var table catalog.TableDescriptor
+				// We need to include offline tables, like in
+				// forEachTableDescAll() below. So we can't use p.LookupByID()
+				// which only considers online tables.
+				p.runWithOptions(resolveFlags{skipCache: true}, func() {
+					cflags := p.CommonLookupFlagsRequired()
+					cflags.IncludeOffline = true
+					cflags.IncludeDropped = true
+					flags := tree.ObjectLookupFlags{CommonLookupFlags: cflags}
+					table, err = p.Descriptors().GetImmutableTableByID(ctx, p.txn, descID, flags)
+				})
+				if err != nil {
+					return false, err
+				}
+				return true, generateTableSpan(ctx, p, table, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, db, hideVirtual,
+			func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+				return generateTableSpan(ctx, p, table, addRow)
+			})
+	},
+}
+
+func generateTableSpan(
+	ctx context.Context, p *planner, table catalog.TableDescriptor, addRow func(...tree.Datum) error,
+) error {
+	tabID := table.GetID()
+	start := p.ExecCfg().Codec.TablePrefix(uint32(tabID))
+	end := start.PrefixEnd()
+	return addRow(
+		tree.NewDInt(tree.DInt(tabID)),
+		tree.NewDBytes(tree.DBytes(start)),
+		tree.NewDBytes(tree.DBytes(end)),
+	)
+}
+
 // crdbInternalClusterLocksTable exposes the state of locks, as well as lock waiters,
 // in range lock tables across the cluster.
 var crdbInternalClusterLocksTable = virtualSchemaTable{
@@ -6498,7 +6575,7 @@ CREATE TABLE crdb_internal.cluster_locks (
     range_id            INT NOT NULL,
     table_id            INT NOT NULL,
     database_name       STRING NOT NULL,
-    schema_name         STRING,
+    schema_name         STRING NOT NULL,
     table_name          STRING NOT NULL,
     index_name          STRING,
     lock_key            BYTES NOT NULL,

@@ -1781,9 +1781,9 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	for i := 0; i < 1.5*rangeMaxSize; i++ {
 		sb.WriteRune('a')
 	}
-	_, err = db.Exec("insert into t(i,s) values (1, $1)", sb.String())
+	_, err = db.Exec("INSERT INTO t(i,s) VALUES (1, $1)", sb.String())
 	require.NoError(t, err)
-	_, err = db.Exec("insert into t(i,s) values (2, 'b')")
+	_, err = db.Exec("INSERT INTO t(i,s) VALUES (2, 'b')")
 	require.NoError(t, err)
 
 	// Now ask everybody to up-replicate.
@@ -1804,11 +1804,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show ranges from table t] where start_key='/2'")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%/2'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
 		}
+		t.Logf("replicas: %v", repl)
 		if repl != "{1,2,3,4,5}" {
 			return fmt.Errorf("not up-replicated yet. replicas: %s", repl)
 		}
@@ -1819,7 +1820,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show ranges from table t] where start_key is null")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%TableMin%'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
@@ -1902,10 +1903,10 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	var rangeID roachpb.RangeID
 	var leaseHolderNodeID uint64
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	s.Exec(t, "insert into system.comments values(0,0,0,'abc')")
+	s.Exec(t, "INSERT INTO system.comments VALUES(0,0,0,'abc')")
 	s.QueryRow(t,
-		"select range_id, lease_holder from "+
-			"[show ranges from table system.comments] limit 1",
+		"SELECT range_id, lease_holder FROM "+
+			"[SHOW RANGES FROM TABLE system.comments WITH DETAILS] LIMIT 1",
 	).Scan(&rangeID, &leaseHolderNodeID)
 	remoteNodeID := uint64(1)
 	if leaseHolderNodeID == 1 {
@@ -2250,7 +2251,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 		}
 
 		var rangeID roachpb.RangeID
-		if err := db.QueryRow("select range_id from [show ranges from table t] limit 1").Scan(&rangeID); err != nil {
+		if err := db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID); err != nil {
 			return 0, 0, err
 		}
 		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
@@ -2297,7 +2298,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 
 	// Retrieve the add voter events from the range log.
 	var rangeID roachpb.RangeID
-	err = db.QueryRow("select range_id from [show ranges from table t] limit 1").Scan(&rangeID)
+	err = db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
 	require.NoError(t, err)
 	addVoterEvents, err := filterRangeLog(tc.Conns[0], rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
 	require.NoError(t, err)

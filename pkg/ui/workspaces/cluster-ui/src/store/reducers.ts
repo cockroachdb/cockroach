@@ -16,6 +16,10 @@ import {
   reducer as clusterLocks,
 } from "./clusterLocks/clusterLocks.reducer";
 import {
+  DatabasesListState,
+  reducer as databasesList,
+} from "./databasesList/databasesList.reducers";
+import {
   IndexStatsReducerState,
   reducer as indexStats,
 } from "./indexStats/indexStats.reducer";
@@ -71,6 +75,7 @@ export type AdminUiState = {
   jobs: JobsState;
   job: JobState;
   clusterLocks: ClusterLocksReqState;
+  databasesList: DatabasesListState;
   transactionInsights: TransactionInsightsState;
   transactionInsightDetails: TransactionInsightDetailsCachedState;
   executionInsights: ExecutionInsightsState;
@@ -98,6 +103,7 @@ export const reducers = combineReducers<AdminUiState>({
   jobs,
   job,
   clusterLocks,
+  databasesList,
   schemaInsights,
 });
 
