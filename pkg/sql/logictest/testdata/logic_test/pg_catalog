@@ -2424,7 +2424,7 @@ objoid      classoid    objsubid  description
 4294967011  4294967119  0         pg_ts_config_map was created for compatibility and is currently unimplemented
 4294967012  4294967119  0         triggers (empty - feature does not exist)
 4294967013  4294967119  0         pg_transform was created for compatibility and is currently unimplemented
-4294967014  4294967119  0         pg_timezone_names was created for compatibility and is currently unimplemented
+4294967014  4294967119  0         pg_timezone_names lists all the timezones that are supported by SET timezone
 4294967015  4294967119  0         pg_timezone_abbrevs was created for compatibility and is currently unimplemented
 4294967016  4294967119  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
 4294967017  4294967119  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
@@ -4758,6 +4758,25 @@ WHERE
     AND NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = ANY (ARRAY['typefoo']) AND a.atttypid = oid);
 ----
 1
+
+# pg_timezone_names
+
+# Test using LIKE to scan the whole table.
+# Use Honolulu as there is no DST.
+query TTTB
+SELECT * from pg_timezone_names WHERE name LIKE 'Pacific/Honolulu%'
+----
+Pacific/Honolulu  HST  -10:00:00  false
+
+# Test with the virtual index.
+query TTTB
+SELECT * from pg_timezone_names WHERE name = 'Pacific/Honolulu'
+----
+Pacific/Honolulu  HST  -10:00:00  false
+
+query TTTB
+SELECT * from pg_timezone_names WHERE name = 'DoesNotExist'
+----
 
 # Regression test for incorrectly handling left anti virtual lookup joins
 # (#88096).

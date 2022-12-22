@@ -1834,7 +1834,8 @@ CREATE TABLE pg_catalog.pg_timezone_names (
 	name STRING,
 	abbrev STRING,
 	utc_offset INTERVAL,
-	is_dst BOOL
+	is_dst BOOL,
+	INDEX (name)
 )`
 
 // PgCatalogPartitionedTable is an empty table in the pg_catalog that is not implemented yet
