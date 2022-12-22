@@ -23,6 +23,9 @@ import (
 // and, in some cases, the first byte of the Entry's Data payload.
 type EntryEncoding byte
 
+// TODO(tbg): use auto-assigned consts (iota) for the encodings below, since
+// they aren't on the wire.
+
 const (
 	// EntryEncodingStandard is the default encoding for a CockroachDB raft log
 	// entry.
