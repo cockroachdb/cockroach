@@ -19,10 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -37,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,7 +63,6 @@ func TestRestoreOldVersions(t *testing.T) {
 	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
 		clusterDirs                 = testdataBase + "/cluster"
-		publicSchemaDirs            = testdataBase + "/public-schema-remap"
 		systemUsersDirs             = testdataBase + "/system-users-restore"
 	)
 
@@ -91,28 +86,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			require.NoError(t, err)
 
 			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
-		}
-	})
-
-	t.Run("public_schema_remap", func(t *testing.T) {
-		dirs, err := os.ReadDir(publicSchemaDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restorePublicSchemaRemap(exportDir))
-		}
-	})
-
-	t.Run("missing_public_schema_namespace_entry_cleanup_on_fail", func(t *testing.T) {
-		dirs, err := os.ReadDir(publicSchemaDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir))
 		}
 	})
 
@@ -590,108 +563,6 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 		return exists
 	}
 	require.Falsef(t, hasSameNameSchema(dbName), "corrupted descriptor exists")
-}
-
-// restorePublicSchemaRemap tests that if we're restoring a database from
-// an older version where the database has a synthetic public schema, a real
-// descriptor backed public schema is created and the tables in the schema
-// are correctly mapped to the new public schema.
-func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
-
-		var restoredDBID, publicSchemaID int
-		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='d' AND "parentID"=0`)
-		row.Scan(&restoredDBID)
-		row = sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, restoredDBID))
-		row.Scan(&publicSchemaID)
-
-		if publicSchemaID == keys.PublicSchemaID {
-			t.Fatalf("expected public schema id to not be %d", keys.PublicSchemaID)
-		}
-
-		row = sqlDB.QueryRow(t,
-			fmt.Sprintf(`SELECT count(1) FROM system.namespace WHERE name='t' AND "parentID"=%d AND "parentSchemaID"=%d`, restoredDBID, publicSchemaID))
-		require.NotNil(t, row)
-
-		sqlDB.CheckQueryResults(t, `SELECT x FROM d.s.t`, [][]string{{"1"}, {"2"}})
-		sqlDB.CheckQueryResults(t, `SELECT x FROM d.public.t`, [][]string{{"3"}, {"4"}})
-
-		// Test restoring a single table and ensuring that d.public.t which
-		// previously had a synthetic public schema gets correctly restored into the
-		// descriptor backed public schema of database test.
-		sqlDB.Exec(t, `CREATE DATABASE test`)
-		sqlDB.Exec(t, `RESTORE d.public.t FROM $1 WITH into_db = 'test'`, localFoo)
-
-		row = sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='test' AND "parentID"=0`)
-		var parentDBID int
-		row.Scan(&parentDBID)
-
-		row = sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, parentDBID))
-		row.Scan(&publicSchemaID)
-
-		if publicSchemaID == keys.PublicSchemaID || publicSchemaID == int(descpb.InvalidID) {
-			t.Errorf(fmt.Sprintf("expected public schema id to not be %d or %d, found %d", keys.PublicSchemaID, descpb.InvalidID, publicSchemaID))
-		}
-
-		sqlDB.CheckQueryResults(t, `SELECT x FROM test.public.t`, [][]string{{"3"}, {"4"}})
-	}
-}
-
-func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		tc, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-						Server: &server.TestingKnobs{
-							DisableAutomaticVersionUpgrade: make(chan struct{}),
-						},
-					},
-				}})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-
-		for _, server := range tc.Servers {
-			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
-					r := raw.(*restoreResumer)
-					r.testingKnobs.beforePublishingDescriptors = func() error {
-						return errors.New("boom")
-					}
-					return r
-				},
-			}
-		}
-
-		// Drop the default databases so only the system database remains.
-		sqlDB.Exec(t, "DROP DATABASE defaultdb")
-		sqlDB.Exec(t, "DROP DATABASE postgres")
-
-		restoreQuery := fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo)
-		sqlDB.ExpectErr(t, "boom", restoreQuery)
-
-		// We should have no non-system database with a public schema name space
-		// entry with id 29.
-		sqlDB.CheckQueryResults(t, `SELECT id FROM system.namespace WHERE name = 'public' AND id=29 AND "parentID"!=1`, [][]string{})
-	}
 }
 
 func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
