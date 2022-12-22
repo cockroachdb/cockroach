@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -188,6 +189,9 @@ func NewTenantServer(
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
+
+	args.recentTransactionsCache = recent.NewTransactionsCache(
+		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 
 	// Instantiate the serverIterator to provide fanout to SQL instances. The
 	// serverIterator needs access to sqlServer which is assigned below once we

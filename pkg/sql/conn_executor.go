@@ -576,6 +576,29 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 	return s.txnIDCache
 }
 
+// addToRecentStatementsCache adds a completed statement to the
+// RecentStatementsCache on the Server ExecutorConfig.
+func (s *Server) addRecentStatement(
+	ctx context.Context,
+	txn serverpb.TxnInfo,
+	sessionID clusterunique.ID,
+	appName atomic.Value,
+	username string,
+	clientAddr string,
+	queryID clusterunique.ID,
+	qm *queryMeta,
+	timeNow time.Time,
+) {
+	parsed, err := parser.ParseOne(qm.stmt.SQL)
+	if err != nil {
+		log.Warningf(ctx, "failed to re-parse sql while adding to recent statements cache")
+		return
+	}
+	activeQuery := qm.toActiveQuery(queryID, sessionID, appName, username, clientAddr, parsed, timeNow)
+	// If unable to allocate memory when adding to the cache, ignore the error.
+	_ = s.cfg.RecentTransactionsCache.Add(ctx, txn, activeQuery)
+}
+
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
@@ -3218,10 +3241,19 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		return sql
 	}
 
+	sd := ex.sessionDataStack.Base()
+
+	remoteStr := "<admin>"
+	if sd.RemoteAddr != nil {
+		remoteStr = sd.RemoteAddr.String()
+	}
+	userName := sd.SessionUser().Normalized()
+
 	for id, query := range ex.mu.ActiveQueries {
 		if query.hidden {
 			continue
 		}
+
 		// Note: while it may seem tempting to just use query.stmt.AST instead of
 		// re-parsing the original SQL, it's unfortunately NOT SAFE to do so because
 		// the AST is currently not immutable - doing so will produce data races.
@@ -3237,35 +3269,10 @@ func (ex *connExecutor) serialize() serverpb.Session {
 				"serialization")
 			continue
 		}
-		sqlNoConstants := truncateSQL(formatStatementHideConstants(parsed.AST))
-		nPlaceholders := 0
-		if query.placeholders != nil {
-			nPlaceholders = len(query.placeholders.Values)
-		}
-		placeholders := make([]string, nPlaceholders)
-		for i := range placeholders {
-			placeholders[i] = tree.AsStringWithFlags(query.placeholders.Values[i], tree.FmtSimple)
-		}
-		sql := truncateSQL(query.stmt.SQL)
-		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
-		queryStart := query.start.UTC()
-		activeQueries = append(activeQueries, serverpb.ActiveQuery{
-			TxnID:          query.txnID,
-			ID:             id.String(),
-			Start:          queryStart,
-			ElapsedTime:    timeNow.Sub(queryStart),
-			Sql:            sql,
-			SqlNoConstants: sqlNoConstants,
-			SqlSummary:     formatStatementSummary(parsed.AST),
-			Placeholders:   placeholders,
-			IsDistributed:  query.isDistributed,
-			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
-			Progress:       float32(progress),
-			IsFullScan:     query.isFullScan,
-			PlanGist:       query.planGist,
-			Database:       query.database,
-		})
+		activeQuery := query.toActiveQuery(id, ex.sessionID, ex.applicationName, userName, remoteStr, parsed, timeNow)
+		activeQueries = append(activeQueries, activeQuery)
 	}
+
 	lastActiveQuery := ""
 	lastActiveQueryNoConstants := ""
 	if ex.mu.LastActiveQuery != nil {
@@ -3279,13 +3286,6 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 	// We always use base here as the fields from the SessionData should always
 	// be that of the root session.
-	sd := ex.sessionDataStack.Base()
-
-	remoteStr := "<admin>"
-	if sd.RemoteAddr != nil {
-		remoteStr = sd.RemoteAddr.String()
-	}
-
 	txnFingerprintIDs := ex.txnFingerprintIDCache.GetAllTxnFingerprintIDs()
 	sessionActiveTime := ex.totalActiveTimeStopWatch.Elapsed()
 	if startedAt, started := ex.totalActiveTimeStopWatch.LastStartedAt(); started {
@@ -3293,7 +3293,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:                   sd.SessionUser().Normalized(),
+		Username:                   userName,
 		ClientAddress:              remoteStr,
 		ApplicationName:            ex.applicationName.Load().(string),
 		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),

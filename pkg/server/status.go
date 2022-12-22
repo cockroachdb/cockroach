@@ -18,6 +18,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"io"
 	"net/http"
 	"os"
@@ -430,6 +431,35 @@ func (b *baseStatusServer) localExecutionInsights(
 	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
 	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
 		response.Insights = append(response.Insights, *insight)
+	})
+
+	return &response, nil
+}
+
+func (b *baseStatusServer) localRecentStatements(
+	ctx context.Context,
+) (*serverpb.ListRecentStatementsResponse, error) {
+	var response serverpb.ListRecentStatementsResponse
+
+	reader := b.sqlServer.pgServer.SQLServer.GetExecutorConfig().RecentTransactionsCache
+
+	reader.IterateRecentTransactions(ctx, func(ctx context.Context, txn *serverpb.TxnInfo, stmts *recent.StatementsCache) {
+		stmts.IterateRecentStatements(ctx, func(ctx context.Context, stmt *serverpb.ActiveQuery) {
+			response.Statements = append(response.Statements, *stmt)
+		})
+	})
+
+	return &response, nil
+}
+
+func (b *baseStatusServer) localRecentTransactions(
+	ctx context.Context,
+) (*serverpb.ListRecentTransactionsResponse, error) {
+	var response serverpb.ListRecentTransactionsResponse
+
+	reader := b.sqlServer.pgServer.SQLServer.GetExecutorConfig().RecentTransactionsCache
+	reader.IterateRecentTransactions(ctx, func(ctx context.Context, txn *serverpb.TxnInfo, stmt *recent.StatementsCache) {
+		response.Transactions = append(response.Transactions, *txn)
 	})
 
 	return &response, nil
@@ -3627,4 +3657,124 @@ func (s *statusServer) TransactionContentionEvents(
 	})
 
 	return resp, nil
+}
+
+func (s *statusServer) ListRecentStatements(
+	ctx context.Context, req *serverpb.ListRecentStatementsRequest,
+) (*serverpb.ListRecentStatementsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	localRequest := serverpb.ListRecentStatementsRequest{NodeID: "local"}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return s.localRecentStatements(ctx)
+		}
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.ListRecentStatements(ctx, &localRequest)
+	}
+
+	var response serverpb.ListRecentStatementsResponse
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListRecentStatements(ctx, &localRequest)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	responseFn := func(nodeID roachpb.NodeID, nodeResponse interface{}) {
+		if nodeResponse == nil {
+			return
+		}
+		recentStatementsResponse := nodeResponse.(*serverpb.ListRecentStatementsResponse)
+		response.Statements = append(response.Statements, recentStatementsResponse.Statements...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
+	}
+
+	if err := s.iterateNodes(ctx, "recent statements list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+	return &response, nil
+}
+
+func (s *statusServer) ListRecentTransactions(
+	ctx context.Context, req *serverpb.ListRecentTransactionsRequest,
+) (*serverpb.ListRecentTransactionsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Check permissions early to avoid fan-out to all nodes.
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	localRequest := serverpb.ListRecentTransactionsRequest{NodeID: "local"}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return s.localRecentTransactions(ctx)
+		}
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.ListRecentTransactions(ctx, &localRequest)
+	}
+
+	var response serverpb.ListRecentTransactionsResponse
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListRecentTransactions(ctx, &localRequest)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	responseFn := func(nodeID roachpb.NodeID, nodeResponse interface{}) {
+		if nodeResponse == nil {
+			return
+		}
+		recentTransactionsResponse := nodeResponse.(*serverpb.ListRecentTransactionsResponse)
+		response.Transactions = append(response.Transactions, recentTransactionsResponse.Transactions...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
+	}
+
+	if err := s.iterateNodes(ctx, "recent statements list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+	return &response, nil
 }

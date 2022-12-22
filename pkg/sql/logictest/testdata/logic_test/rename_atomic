@@ -140,3 +140,16 @@ BEGIN;
 DROP VIEW v;
 CREATE VIEW v AS SELECT 1;
 COMMIT
+
+# Check for correct caching behavior when scanning the namespace table.
+subtest regression_93002
+
+statement ok
+CREATE SCHEMA sc93002
+
+statement ok
+BEGIN;
+SHOW TABLES FROM sc93002;
+CREATE TABLE sc93002.t(a INT);
+DROP SCHEMA sc93002 CASCADE;
+COMMIT;

@@ -104,6 +104,8 @@ const (
 	CrdbInternalClusterExecutionInsightsTableID
 	CrdbInternalClusterLocksTableID
 	CrdbInternalClusterQueriesTableID
+	CrdbInternalClusterRecentStatementsTableID
+	CrdbInternalClusterRecentTransactionsTableID
 	CrdbInternalClusterTransactionsTableID
 	CrdbInternalClusterSessionsTableID
 	CrdbInternalClusterSettingsTableID
@@ -132,6 +134,8 @@ const (
 	CrdbInternalLocalContentionEventsTableID
 	CrdbInternalLocalDistSQLFlowsTableID
 	CrdbInternalNodeExecutionInsightsTableID
+	CrdbInternalNodeRecentStatementsTableID
+	CrdbInternalNodeRecentTransactionsTableID
 	CrdbInternalLocalQueriesTableID
 	CrdbInternalLocalTransactionsTableID
 	CrdbInternalLocalSessionsTableID

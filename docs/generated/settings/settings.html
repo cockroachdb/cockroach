@@ -195,6 +195,10 @@
 <tr><td><code>sql.multiregion.drop_primary_region.enabled</code></td><td>boolean</td><td><code>true</code></td><td>allows dropping the PRIMARY REGION of a database if it is the last region</td></tr>
 <tr><td><code>sql.notices.enabled</code></td><td>boolean</td><td><code>true</code></td><td>enable notices in the server/client protocol being sent</td></tr>
 <tr><td><code>sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability</td></tr>
+<tr><td><code>sql.recent.statements_cache.capacity</code></td><td>integer</td><td><code>20000</code></td><td>the maximum number of statements in the cache</td></tr>
+<tr><td><code>sql.recent.statements_cache.time_to_live</code></td><td>duration</td><td><code>1h0m0s</code></td><td>the maximum time to live</td></tr>
+<tr><td><code>sql.recent.transactions_cache.capacity</code></td><td>integer</td><td><code>20000</code></td><td>the maximum number of Transactions in the cache</td></tr>
+<tr><td><code>sql.recent.transactions_cache.time_to_live</code></td><td>duration</td><td><code>1h0m0s</code></td><td>the maximum time to live</td></tr>
 <tr><td><code>sql.schema.telemetry.recurrence</code></td><td>string</td><td><code>@weekly</code></td><td>cron-tab recurrence for SQL schema telemetry job</td></tr>
 <tr><td><code>sql.spatial.experimental_box2d_comparison_operators.enabled</code></td><td>boolean</td><td><code>false</code></td><td>enables the use of certain experimental box2d comparison operators</td></tr>
 <tr><td><code>sql.stats.automatic_collection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>automatic statistics collection mode</td></tr>
