@@ -11,6 +11,8 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -40,6 +42,68 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(casper): disabled due to error when setting a cluster setting
+	// "setting updated but timed out waiting to read new value"
+	skip.UnderStressRace(t, "disabled under stress race")
+
+	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if _, err := w.Write([]byte("42,42\n43,43\n")); err != nil {
+				t.Logf("failed to write: %s", err.Error())
+			}
+		}
+	}))
+	defer dataSrv.Close()
+
+	ctx := context.Background()
+	c, cleanup := createTenantStreamingClusters(ctx, t, defaultTenantStreamingClustersArgs)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
+		tenantSQL.Exec(t, "IMPORT INTO d.x CSV DATA ($1)", dataSrv.URL)
+	})
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
+	var cutoverTime time.Time
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+	})
+
+	// TODO(samiskin): enable this check once #83650 is resolved
+	// // We should not be able to connect to the tenant prior to the cutoff time
+	// <-time.NewTimer(2 * time.Second).C
+	// _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	// require.Error(t, err)
+	c.cutover(producerJobID, ingestionJobID, cutoverTime)
+
+	require.Equal(t, "stream ingestion finished successfully",
+		runningStatus(t, c.destSysSQL, ingestionJobID))
+
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+	c.compareResult("SELECT * FROM d.x")
+	// After cutover, changes to source won't be streamed into destination cluster.
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
+	})
+	// Check the dst cluster didn't receive the change after a while.
+	<-time.NewTimer(3 * time.Second).C
+	require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
+}
 
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
