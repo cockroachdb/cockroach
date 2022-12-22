@@ -286,6 +286,7 @@ func newRaftConfig(
 	return &raft.Config{
 		ID:                        id,
 		Applied:                   appliedIndex,
+		AsyncStorageWrites:        true,
 		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
 		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
 		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
@@ -769,6 +770,7 @@ type Store struct {
 	metrics            *StoreMetrics
 	intentResolver     *intentresolver.IntentResolver
 	recoveryMgr        txnrecovery.Manager
+	syncWaiter         *logstore.SyncWaiterLoop
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
@@ -1290,6 +1292,8 @@ func NewStore(
 	// unnecessary elections when ticks are temporarily delayed and piled up.
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency,
 		cfg.RaftElectionTimeoutTicks)
+
+	s.syncWaiter = logstore.NewSyncWaiterLoop()
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())

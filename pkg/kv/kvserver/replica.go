@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 const (
@@ -248,6 +249,18 @@ type Replica struct {
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
+	}
+
+	// localMsgs contains a collection of raftpb.Message that target the local
+	// RawNode. They are to be delivered on the next iteration of handleRaftReady.
+	//
+	// Locking notes:
+	// - Replica.localMsgs must be held to append messages to active.
+	// - Replica.raftMu and Replica.localMsgs must both be held to switch slices.
+	// - Replica.raftMu < Replica.localMsgs
+	localMsgs struct {
+		syncutil.Mutex
+		active, recycled []raftpb.Message
 	}
 
 	// The last seen replica descriptors from incoming Raft messages. These are

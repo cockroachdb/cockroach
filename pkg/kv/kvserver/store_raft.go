@@ -724,6 +724,8 @@ func (s *Store) processRaft(ctx context.Context) {
 		s.cfg.Transport.Stop(s.StoreID())
 	}))
 
+	s.syncWaiter.Start(ctx, s.stopper)
+
 	// We'll want to cancel all in-flight proposals. Proposals embed tracing
 	// spans in them, and we don't want to be leaking any.
 	s.stopper.AddCloser(stop.CloserFn(func() {
