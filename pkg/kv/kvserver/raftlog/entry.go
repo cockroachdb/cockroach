@@ -57,8 +57,8 @@ func EncodingVersion(ent raftpb.Entry) (EntryEncoding, error) {
 
 // DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the
 // marshaled kvserverpb.RaftCommand from a slice which is known to have come
-// from a raftpb.Entry of type kvserverbase.EntryEncodingStandard or
-// kvserverbase.EntryEncodingSideloaded (which, mod the prefix byte, share an
+// from a raftpb.Entry of type raftlog.EntryEncodingStandard or
+// raftlog.EntryEncodingSideloaded (which, mod the prefix byte, share an
 // encoding).
 func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
