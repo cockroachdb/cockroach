@@ -95,6 +95,8 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
 // Entries requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
+//
+// Entries can return log entries that are not yet stable in durable storage.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.raftMu.sideloaded == nil {

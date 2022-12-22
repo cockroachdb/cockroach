@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
 
@@ -260,6 +261,18 @@ type Replica struct {
 		decoder replicaDecoder
 	}
 
+	// localMsgs contains a collection of raftpb.Message that target the local
+	// RawNode. They are to be delivered on the next iteration of handleRaftReady.
+	//
+	// Locking notes:
+	// - Replica.localMsgs must be held to append messages to active.
+	// - Replica.raftMu and Replica.localMsgs must both be held to switch slices.
+	// - Replica.raftMu < Replica.localMsgs
+	localMsgs struct {
+		syncutil.Mutex
+		active, recycled []raftpb.Message
+	}
+
 	// The last seen replica descriptors from incoming Raft messages. These are
 	// stored so that the replica still knows the replica descriptors for itself
 	// and for its message recipients in the circumstances when its RangeDescriptor
@@ -384,11 +397,11 @@ type Replica struct {
 		mergeTxnID uuid.UUID
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState
-		// Last index/term persisted to the raft log (not necessarily
-		// committed). Note that lastTerm may be 0 (and thus invalid) even when
-		// lastIndex is known, in which case the term will have to be retrieved
-		// from the Raft log entry. Use the invalidLastTerm constant for this
-		// case.
+		// Last index/term written to the raft log (not necessarily durable
+		// locally or committed by the group). Note that lastTerm may be 0 (and
+		// thus invalid) even when lastIndex is known, in which case the term
+		// will have to be retrieved from the Raft log entry. Use the
+		// invalidLastTerm constant for this case.
 		lastIndex, lastTerm uint64
 		// A map of raft log index of pending snapshots to deadlines.
 		// Used to prohibit raft log truncations that would leave a gap between
