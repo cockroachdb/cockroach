@@ -122,6 +122,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterExecutionInsightsTableID:    crdbInternalClusterExecutionInsightsTable,
 		catconstants.CrdbInternalClusterLocksTableID:                crdbInternalClusterLocksTable,
 		catconstants.CrdbInternalClusterQueriesTableID:              crdbInternalClusterQueriesTable,
+		catconstants.CrdbInternalClusterRecentStatementsTableID:     crdbInternalClusterRecentStatementsTable,
 		catconstants.CrdbInternalClusterTransactionsTableID:         crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:             crdbInternalClusterSessionsTable,
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
@@ -154,6 +155,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalSessionsTableID:               crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:                crdbInternalLocalMetricsTable,
 		catconstants.CrdbInternalNodeExecutionInsightsTableID:       crdbInternalNodeExecutionInsightsTable,
+		catconstants.CrdbInternalNodeRecentStatementsTableID:        crdbInternalNodeRecentStatementsTable,
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
@@ -6898,4 +6900,102 @@ func convertContentionEventsToJSON(
 	}
 
 	return sqlstatsutil.BuildContentionEventsJSON(eventWithNames)
+}
+
+// This is the table structure for both cluster_execution_insights and node_execution_insights.
+const recentStatementsSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
+	stmt_id                 STRING NOT NULL,
+	stmt_no_constants			  STRING NOT NULL,
+	txn_id        			    UUID NOT NULL,
+	session_id		          STRING NOT NULL,
+  query			              STRING NOT NULL,
+  status                  STRING NOT NULL,
+  start_time              TIMESTAMP NOT NULL,
+  elapsed_time            INTERVAL NOT NULL,
+  app_name    	          STRING NOT NULL,
+  database_name           STRING NOT NULL,
+  user_name 							STRING NOT NULL,
+  client_address				  STRING NOT NULL,
+  is_full_scan            BOOL NOT NULL,
+  plan_gist               STRING NOT NULL
+)`
+
+var crdbInternalClusterRecentStatementsTable = virtualSchemaTable{
+	schema: fmt.Sprintf(recentStatementsSchemaPattern, "cluster_recent_statements"),
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		return populateRecentStatements(ctx, p, addRow, &serverpb.ListRecentStatementsRequest{})
+	},
+}
+
+var crdbInternalNodeRecentStatementsTable = virtualSchemaTable{
+	schema: fmt.Sprintf(recentStatementsSchemaPattern, "node_recent_statements"),
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		return populateRecentStatements(ctx, p, addRow, &serverpb.ListRecentStatementsRequest{NodeID: "local"})
+	},
+}
+
+func populateRecentStatements(
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	request *serverpb.ListRecentStatementsRequest,
+) (err error) {
+	hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasRoleOption {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"user %s does not have %s or %s privilege",
+			p.User(),
+			roleoption.VIEWACTIVITY,
+			roleoption.VIEWACTIVITYREDACTED,
+		)
+	}
+
+	response, err := p.extendedEvalCtx.SQLStatusServer.ListRecentStatements(ctx, request)
+	if err != nil {
+		return err
+	}
+	for _, stmt := range response.Statements {
+
+		var startTimestamp *tree.DTimestamp
+		startTimestamp, err = tree.MakeDTimestamp(stmt.Start, time.Nanosecond)
+		if err != nil {
+			return err
+		}
+
+		elapsedTime := tree.NewDInterval(
+			duration.MakeDuration(stmt.ElapsedTime.Nanoseconds(), 0, 0),
+			types.DefaultIntervalTypeMetadata,
+		)
+
+		query := stmt.SqlNoConstants
+		if len(stmt.Sql) > 0 {
+			query = stmt.Sql
+		}
+		err = errors.CombineErrors(err, addRow(
+			tree.NewDString(stmt.ID),
+			tree.NewDString(stmt.SqlNoConstants),
+			tree.NewDUuid(tree.DUuid{UUID: stmt.TxnID}),
+			tree.NewDString(hex.EncodeToString(stmt.SessionID)),
+			tree.NewDString(query),
+			tree.NewDString(stmt.Phase.String()),
+			startTimestamp,
+			elapsedTime,
+			tree.NewDString(stmt.AppName),
+			tree.NewDString(stmt.Database),
+			tree.NewDString(stmt.Username),
+			tree.NewDString(stmt.ClientAddress),
+			tree.MakeDBool(tree.DBool(stmt.IsFullScan)),
+			tree.NewDString(stmt.PlanGist),
+		))
+
+		if err != nil {
+			return err
+		}
+	}
+	return
 }

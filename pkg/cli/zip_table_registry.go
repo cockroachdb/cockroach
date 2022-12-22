@@ -198,6 +198,24 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(query) as query",
 		},
 	},
+	"crdb_internal.cluster_recent_statements": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stmt_id",
+			"stmt_no_constants",
+			"txn_id",
+			"session_id",
+			"query",
+			"status",
+			"start_time",
+			"elapsed_time",
+			"app_name",
+			"database_name",
+			"user_name",
+			"client_address",
+			"is_full_scan",
+			"plan_gist",
+		},
+	},
 	"crdb_internal.cluster_sessions": {
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
@@ -641,6 +659,24 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"phase",
 			"full_scan",
 			"crdb_internal.hide_sql_constants(query) as query",
+		},
+	},
+	"crdb_internal.node_recent_statements": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stmt_id",
+			"stmt_no_constants",
+			"txn_id",
+			"session_id",
+			"query",
+			"status",
+			"start_time",
+			"elapsed_time",
+			"app_name",
+			"database_name",
+			"user_name",
+			"client_address",
+			"is_full_scan",
+			"plan_gist",
 		},
 	},
 	"crdb_internal.node_runtime_info": {

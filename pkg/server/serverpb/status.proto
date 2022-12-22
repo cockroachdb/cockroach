@@ -1882,6 +1882,26 @@ message ListExecutionInsightsResponse {
   ];
 }
 
+message ListRecentStatementsRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1 [
+    (gogoproto.customname) = "NodeID"
+  ];
+}
+
+message ListRecentStatementsResponse {
+  // statements is a list of recently completed statements.
+  repeated ActiveQuery statements = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  // errors holds any errors that occurred during fan-out calls to other nodes.
+  repeated errorspb.EncodedError errors = 2 [
+    (gogoproto.nullable) = false
+  ];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2322,4 +2342,7 @@ service Status {
   // ListExecutionInsights returns potentially problematic statements cluster-wide,
   // along with actions we suggest the application developer might take to remedy them.
   rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
+
+  // ListRecentStatements returns a list of recently completed statements.
+  rpc ListRecentStatements(ListRecentStatementsRequest) returns (ListRecentStatementsResponse) {}
 }

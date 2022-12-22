@@ -4941,6 +4941,81 @@ Support status: [reserved](#support-status)
 
 
 
+## ListRecentStatements
+
+
+
+ListRecentStatements returns a list of recently completed statements.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.ListRecentStatementsRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statements | [ActiveQuery](#cockroach.server.serverpb.ListRecentStatementsResponse-cockroach.server.serverpb.ActiveQuery) | repeated | statements is a list of recently completed statements. | [reserved](#support-status) |
+| errors | [cockroach.errorspb.EncodedError](#cockroach.server.serverpb.ListRecentStatementsResponse-cockroach.errorspb.EncodedError) | repeated | errors holds any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListRecentStatementsResponse-cockroach.server.serverpb.ActiveQuery"></a>
+#### ActiveQuery
+
+ActiveQuery represents a query in flight on some Session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | ID of the query (uint128 presented as a hexadecimal string). | [reserved](#support-status) |
+| txn_id | [bytes](#cockroach.server.serverpb.ListRecentStatementsResponse-bytes) |  | The UUID of the transaction this query is running in. | [reserved](#support-status) |
+| sql | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | SQL query string specified by the user. | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListRecentStatementsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
+| is_distributed | [bool](#cockroach.server.serverpb.ListRecentStatementsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
+| phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListRecentStatementsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListRecentStatementsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
+| sql_no_constants | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sql_summary | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
+| is_full_scan | [bool](#cockroach.server.serverpb.ListRecentStatementsResponse-bool) |  | True if the query contains a full table or index scan. Note that this field is only valid if the query is in the EXECUTING phase. | [reserved](#support-status) |
+| elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListRecentStatementsResponse-google.protobuf.Duration) |  | Time elapsed since this query started execution. | [reserved](#support-status) |
+| plan_gist | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
+| placeholders | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) | repeated | The placeholders if any. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | The database the statement was executed on. | [reserved](#support-status) |
+| session_id | [bytes](#cockroach.server.serverpb.ListRecentStatementsResponse-bytes) |  | The ID for the session that the statement was executed on (uint128 represented as raw bytes). | [reserved](#support-status) |
+| app_name | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | The application name for the session that the statement was executed on. | [reserved](#support-status) |
+| username | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | The user name for the session that the statement was executed on. | [reserved](#support-status) |
+| client_address | [string](#cockroach.server.serverpb.ListRecentStatementsResponse-string) |  | The client address for the session that the statement was executed on. | [reserved](#support-status) |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
