@@ -6,13 +6,23 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package replicationutils
 
 import (
+	"context"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // ScanSST scans the SSTable in the given RangeFeedSSTable within
@@ -112,4 +122,76 @@ func ScanSST(
 		}
 	}
 	return nil
+}
+
+func GetStreamIngestionStatsNoHeartbeat(
+	ctx context.Context,
+	streamIngestionDetails jobspb.StreamIngestionDetails,
+	jobProgress jobspb.Progress,
+) (*streampb.StreamIngestionStats, error) {
+	stats := &streampb.StreamIngestionStats{
+		IngestionDetails:  &streamIngestionDetails,
+		IngestionProgress: jobProgress.GetStreamIngest(),
+	}
+	if highwater := jobProgress.GetHighWater(); highwater != nil && !highwater.IsEmpty() {
+		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
+			MinIngestedTimestamp: *highwater,
+		}
+		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
+		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
+		// TODO(casper): track spans that the slowest partition is associated
+		for _, resolvedSpan := range jobProgress.GetStreamIngest().Checkpoint.ResolvedSpans {
+			if resolvedSpan.Timestamp.Less(lagInfo.EarliestCheckpointedTimestamp) {
+				lagInfo.EarliestCheckpointedTimestamp = resolvedSpan.Timestamp
+			}
+
+			if lagInfo.LatestCheckpointedTimestamp.Less(resolvedSpan.Timestamp) {
+				lagInfo.LatestCheckpointedTimestamp = resolvedSpan.Timestamp
+			}
+		}
+		lagInfo.SlowestFastestIngestionLag = lagInfo.LatestCheckpointedTimestamp.GoTime().
+			Sub(lagInfo.EarliestCheckpointedTimestamp.GoTime())
+		lagInfo.ReplicationLag = timeutil.Since(highwater.GoTime())
+		stats.ReplicationLagInfo = lagInfo
+	}
+	return stats, nil
+}
+
+func GetStreamIngestionStats(
+	ctx context.Context,
+	streamIngestionDetails jobspb.StreamIngestionDetails,
+	jobProgress jobspb.Progress,
+) (*streampb.StreamIngestionStats, error) {
+	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, streamIngestionDetails, jobProgress)
+	if err != nil {
+		return nil, err
+	}
+	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
+	if err != nil {
+		return nil, err
+	}
+	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(stats.IngestionDetails.StreamID), hlc.MaxTimestamp)
+	if err != nil {
+		stats.ProducerError = err.Error()
+	} else {
+		stats.ProducerStatus = &streamStatus
+	}
+	return stats, client.Close(ctx)
+}
+
+func TestingGetStreamIngestionStatsFromReplicationJob(
+	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
+) *streampb.StreamIngestionStats {
+	var payloadBytes []byte
+	var progressBytes []byte
+	var payload jobspb.Payload
+	var progress jobspb.Progress
+	sqlRunner.QueryRow(t, "SELECT payload, progress FROM system.jobs WHERE id = $1",
+		ingestionJobID).Scan(&payloadBytes, &progressBytes)
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
+	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	details := payload.GetStreamIngestion()
+	stats, err := GetStreamIngestionStats(ctx, *details, progress)
+	require.NoError(t, err)
+	return stats
 }
