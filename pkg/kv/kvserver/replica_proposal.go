@@ -74,6 +74,11 @@ type ProposalData struct {
 	// reproposals its MaxLeaseIndex field is mutated.
 	command *kvserverpb.RaftCommand
 
+	// preAlloc is an optional byte slice that is populated in (*Replica).propose
+	// to avoid shifting allocation work into propBuf's FlushLockedWithRaftGroup
+	// method. The buffer is sized to hold the fully encoded command.
+	preAlloc []byte
+
 	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
 	// proposal has been passed to raft modifying this field requires holding the
 	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is

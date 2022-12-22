@@ -538,7 +538,15 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				*ctp = ct
 				p.command.ClosedTimestamp = ctp
 			}
-			data := make([]byte, raftlog.RaftCommandPrefixLen+p.command.Size())
+
+			data := p.preAlloc
+			p.preAlloc = nil
+			needed := raftlog.RaftCommandPrefixLen + p.command.Size()
+			if cap(data) < needed {
+				data = make([]byte, needed)
+			} else {
+				data = data[:needed:needed]
+			}
 			// Encode prefix with command ID.
 			prefixByte := raftlog.EntryEncodingStandardPrefixByte
 			if entryEncoding == raftlog.EntryEncodingSideloaded {

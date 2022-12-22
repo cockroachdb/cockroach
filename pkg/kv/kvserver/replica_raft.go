@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"math/rand"
 	"sort"
 	"strings"
@@ -312,6 +313,22 @@ func (r *Replica) evalAndPropose(
 	return proposalCh, abandon, idKey, writeBytes, nil
 }
 
+var maxRaftCommandMLAIAndCTSizeIncrement = func() int {
+	var cmd kvserverpb.RaftCommand
+	pre := cmd.Size()
+	cmd.MaxLeaseIndex = math.MaxUint64
+	cmd.ClosedTimestamp = &hlc.Timestamp{
+		WallTime:  math.MaxInt64,
+		Logical:   math.MaxInt32,
+		Synthetic: true,
+	}
+	return cmd.Size() - pre
+}()
+
+func maxCompletedProposalSize(cmd *kvserverpb.RaftCommand) int {
+	return cmd.Size() + maxRaftCommandMLAIAndCTSizeIncrement
+}
+
 // propose encodes a command, starts tracking it, and proposes it to Raft.
 //
 // The method hands ownership of the command over to the Raft machinery. After
@@ -410,14 +427,24 @@ func (r *Replica) propose(
 			log.Errorf(p.ctx, "%v", e)
 			return roachpb.NewError(e)
 		}
-	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return roachpb.NewErrorf("cannot sideload empty SSTable")
+	} else {
+		// The actual encoding happens in propBuf's FlushLockedWithRaftGroup method.
+		// We want to avoid allocating in that method since it's on the raft
+		// processing goroutine, and since that goroutine is a particular poor
+		// choice for recruitment into Go runtime GC assist. So we preallocate a
+		// slice here (we're on a request goroutine)
+		//
+		// TODO(tbg): make this length determination available via a library method.
+		p.preAlloc = make([]byte, raftlog.RaftCommandPrefixLen+maxCompletedProposalSize(p.command))
+		if p.command.ReplicatedEvalResult.AddSSTable != nil {
+			if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
+				return roachpb.NewErrorf("cannot sideload empty SSTable")
+			}
+			log.VEvent(p.ctx, 4, "sideloadable proposal detected")
+			r.store.metrics.AddSSTableProposals.Inc(1)
+		} else if log.V(4) {
+			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
-		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		r.store.metrics.AddSSTableProposals.Inc(1)
-	} else if log.V(4) {
-		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
 	// Insert into the proposal buffer, which passes the command to Raft to be
