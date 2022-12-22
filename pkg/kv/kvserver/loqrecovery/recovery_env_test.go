@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -541,7 +541,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 		var descriptorViews []storeDescriptorView
 		var localDataViews []localDataView
 		store := e.stores[storeID]
-		err := kvserver.IterateRangeDescriptorsFromDisk(ctx, store.engine,
+		err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, store.engine,
 			func(desc roachpb.RangeDescriptor) error {
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 

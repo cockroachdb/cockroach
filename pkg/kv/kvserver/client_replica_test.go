@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -2701,7 +2702,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	waitForReplicas := func() error {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
-			if err := kvserver.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
+			if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
 				if len(desc.Replicas().LearnerDescriptors()) > 0 {
 					return fmt.Errorf("descriptor contains learners: %v", desc)
 				}

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -124,8 +124,8 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 		//
 		// One initialized engine is always available when this method
 		// is called, so we're still persisting on at least one engine.
-		if _, err := kvserver.ReadStoreIdent(ctx, eng); err != nil {
-			if errors.Is(err, &kvserver.NotBootstrappedError{}) {
+		if _, err := kvstorage.ReadStoreIdent(ctx, eng); err != nil {
+			if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
 				continue
 			}
 			return err
