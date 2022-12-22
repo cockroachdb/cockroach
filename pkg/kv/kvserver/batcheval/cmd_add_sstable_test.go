@@ -296,6 +296,15 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectStatsEst: true,
 			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/2.000000000,0`,
 		},
+		"SSTTimestampToRequestTimestamp with DisallowConflicts causes estimated stats with range key masking": {
+			reqTS:          5,
+			toReqTS:        2, // NB: 2 is below range key at 3, to test range key masking timestamp
+			noConflict:     true,
+			data:           kvs{rangeKV("a", "c", 3, ""), pointKV("b", 1, "b1")},
+			sst:            kvs{pointKV("b", 2, "sst")},
+			expect:         kvs{rangeKV("a", "c", 3, ""), pointKV("b", 5, "sst"), pointKV("b", 1, "b1")},
+			expectStatsEst: !storage.DisableCheckSSTRangeKeyMasking, // assert correct without masking
+		},
 
 		// DisallowConflicts
 		"DisallowConflicts allows above and beside": {
