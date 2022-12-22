@@ -11,7 +11,6 @@ package streamingest
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -137,7 +136,7 @@ func alterReplicationJobHook(
 			// TODO(ssd): We could use the replication manager here, but that embeds a priviledge check which is already completed.
 
 			// Check that the timestamp is above our retained timestamp.
-			stats, err := replicationutils.GetStreamIngestionStatsNoHeartbeat(ctx, details, progress)
+			stats, err := getStreamIngestionStatsNoHeartbeat(ctx, details, progress)
 			if err != nil {
 				return err
 			}

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -607,7 +606,7 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 
 	_, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-buffer-sst")
 	defer sp.Finish()
-	return replicationutils.ScanSST(sst, sst.Span,
+	return streamingccl.ScanSST(sst, sst.Span,
 		func(keyVal storage.MVCCKeyValue) error {
 			return sip.bufferKV(&roachpb.KeyValue{
 				Key: keyVal.Key.Key,

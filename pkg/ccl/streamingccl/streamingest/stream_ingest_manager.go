@@ -11,7 +11,6 @@ package streamingest
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -43,7 +42,7 @@ func (r *streamIngestManagerImpl) GetStreamIngestionStats(
 	streamIngestionDetails jobspb.StreamIngestionDetails,
 	jobProgress jobspb.Progress,
 ) (*streampb.StreamIngestionStats, error) {
-	return replicationutils.GetStreamIngestionStats(ctx, streamIngestionDetails, jobProgress)
+	return getStreamIngestionStats(ctx, streamIngestionDetails, jobProgress)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(

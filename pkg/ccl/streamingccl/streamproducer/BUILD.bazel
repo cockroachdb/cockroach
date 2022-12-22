@@ -13,7 +13,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/streamingccl",
-        "//pkg/ccl/streamingccl/replicationutils",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -68,7 +67,7 @@ go_test(
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
-        "//pkg/ccl/streamingccl/replicationtestutils",
+        "//pkg/ccl/streamingccl/streamingtest",
         "//pkg/ccl/utilccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
