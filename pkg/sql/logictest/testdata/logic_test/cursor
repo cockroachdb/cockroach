@@ -598,3 +598,48 @@ FETCH 1 a b;
 
 statement ok
 COMMIT;
+
+statement error DECLARE CURSOR WITH HOLD can only be used in transaction blocks
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+statement ok
+BEGIN
+
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+statement ok
+DECLARE bar CURSOR WITH HOLD FOR SELECT 2
+
+query I
+FETCH 1 foo
+----
+1
+
+statement ok
+CLOSE foo
+
+statement ok
+CLOSE bar
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+statement error cursor foo WITH HOLD must be closed before committing
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+# ROLLBACK is fine, since it renders the cursor unusable anyway.
+statement ok
+ROLLBACK
