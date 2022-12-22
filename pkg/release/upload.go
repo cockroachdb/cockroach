@@ -35,6 +35,8 @@ type PutReleaseOptions struct {
 	VersionStr string
 
 	ArchivePrefix string
+	// OutputDirectory is where to save a copy of the archive
+	OutputDirectory string
 }
 
 // PutNonReleaseOptions are options to pass into PutNonRelease.
@@ -69,6 +71,18 @@ func CreateArchive(
 func PutRelease(svc ObjectPutGetter, o PutReleaseOptions, body bytes.Buffer) {
 	keys := makeArchiveKeys(o.Platform, o.VersionStr, o.ArchivePrefix)
 	log.Printf("Uploading to %s", svc.URL(keys.archive))
+	// Save local copy
+	if o.OutputDirectory != "" {
+		localCopy := filepath.Join(o.OutputDirectory, keys.archive)
+		dir := filepath.Dir(localCopy)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Fatalf("cannot create output directory %s: %s", dir, err)
+		}
+		log.Printf("saving local copy to %s", localCopy)
+		if err := os.WriteFile(localCopy, body.Bytes(), 0644); err != nil {
+			log.Fatalf("failed to save a local copy of %s: %s", localCopy, err)
+		}
+	}
 	putObjectInput := PutObjectInput{
 		Key:  &keys.archive,
 		Body: bytes.NewReader(body.Bytes()),
@@ -83,6 +97,12 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions, body bytes.Buffer) {
 	checksumContents := fmt.Sprintf("%x  %s\n", sha256.Sum256(body.Bytes()),
 		filepath.Base(keys.archive))
 	targetChecksum := keys.archive + ChecksumSuffix
+	if o.OutputDirectory != "" {
+		localCopy := filepath.Join(o.OutputDirectory, targetChecksum)
+		if err := os.WriteFile(localCopy, []byte(checksumContents), 0644); err != nil {
+			log.Fatalf("failed to save a local copy of %s: %s", localCopy, err)
+		}
+	}
 	log.Printf("Uploading to %s", svc.URL(targetChecksum))
 	putObjectInputChecksum := PutObjectInput{
 		Key:  &targetChecksum,
