@@ -207,7 +207,7 @@ SELECT
         fnv64(crdb_internal.trim_tenant_prefix(key),
               substring(value from 5))
     ) AS fingerprint
-FROM crdb_internal.scan(crdb_internal.tenant_span($1))
+FROM crdb_internal.scan(crdb_internal.tenant_span($1::INT))
 AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime())
 
 	var srcFingerprint int64
