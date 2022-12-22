@@ -6,8 +6,6 @@ MISC_SRCS = [
     "//pkg/sql/scanner:token_names_test.go",
     "//pkg/sql:txnstatetransitions_diagram.gv",
     "//pkg/sql:txnstatetransitions_report.txt",
-    "//pkg/util/interval/generic:example_interval_btree.go",
-    "//pkg/util/interval/generic:example_interval_btree_test.go",
     "//pkg/util/log/channel:channel_generated.go",
     "//pkg/util/log/eventpb/eventpbgen:log_channels_generated.go",
     "//pkg/util/log/eventpb:eventlog_channels_generated.go",
