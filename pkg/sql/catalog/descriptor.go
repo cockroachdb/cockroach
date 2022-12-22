@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -515,7 +516,7 @@ type TableDescriptor interface {
 	IndexKeyColumns(idx Index) []Column
 	// IndexKeyColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index.
-	IndexKeyColumnDirections(idx Index) []catpb.IndexColumn_Direction
+	IndexKeyColumnDirections(idx Index) []catenumpb.IndexColumn_Direction
 	// IndexKeySuffixColumns returns a slice of Column interfaces containing all
 	// key suffix columns in the specified Index.
 	IndexKeySuffixColumns(idx Index) []Column
@@ -526,7 +527,7 @@ type TableDescriptor interface {
 	// IndexFullColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index, plus all key suffix columns if that
 	// index is not a unique index.
-	IndexFullColumnDirections(idx Index) []catpb.IndexColumn_Direction
+	IndexFullColumnDirections(idx Index) []catenumpb.IndexColumn_Direction
 	// IndexStoredColumns returns a slice of Column interfaces containing all
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column

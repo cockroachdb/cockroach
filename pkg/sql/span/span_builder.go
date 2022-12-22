@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -87,7 +87,7 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	startInclusive, endInclusive bool,
 	rangeColTyp *types.T,
 ) (_ roachpb.Span, containsNull, filterRow bool, err error) {
-	isDesc := s.keyAndPrefixCols[prefixLen].Direction == catpb.IndexColumn_DESC
+	isDesc := s.keyAndPrefixCols[prefixLen].Direction == catenumpb.IndexColumn_DESC
 	if isDesc {
 		startBound, endBound = endBound, startBound
 		startInclusive, endInclusive = endInclusive, startInclusive
@@ -433,7 +433,7 @@ func (s *Builder) generateInvertedSpanKey(
 	scratchRow = scratchRow[:keyLen]
 	if len(enc) > 0 {
 		// The encoded inverted value will be passed through unchanged.
-		encDatum := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, enc)
+		encDatum := rowenc.EncDatumFromEncoded(catenumpb.DatumEncoding_ASCENDING_KEY, enc)
 		scratchRow = append(scratchRow, encDatum)
 		keyLen++
 	}

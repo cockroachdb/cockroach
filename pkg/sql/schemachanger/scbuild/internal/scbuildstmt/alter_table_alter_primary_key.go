@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -385,7 +386,7 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 	// It's a row-level-ttl table. Ensure it has no non-descending
 	// key columns, and there is no inbound/outbound foreign keys.
 	for _, col := range t.Columns {
-		if indexColumnDirection(col.Direction) != catpb.IndexColumn_ASC {
+		if indexColumnDirection(col.Direction) != catenumpb.IndexColumn_ASC {
 			panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
 		}
 	}
@@ -745,7 +746,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 	// SUFFIX_KEY columns = new primary index columns - old primary key columns
 	// First find column IDs and dirs by their names, as specified in t.Columns.
 	newPrimaryIndexKeyColumnIDs := make([]catid.ColumnID, len(t.Columns))
-	newPrimaryIndexKeyColumnDirs := make([]catpb.IndexColumn_Direction, len(t.Columns))
+	newPrimaryIndexKeyColumnDirs := make([]catenumpb.IndexColumn_Direction, len(t.Columns))
 	allColumnsNameToIDMapping := getAllColumnsNameToIDMapping(b, tbl.TableID)
 	for i, col := range t.Columns {
 		if colID, exist := allColumnsNameToIDMapping[string(col.Column)]; !exist {
@@ -813,7 +814,7 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		b BuildCtx, tableID catid.DescID, indexID catid.IndexID, excludeShardedCol bool,
 	) (
 		columnIDs descpb.ColumnIDs,
-		columnDirs []catpb.IndexColumn_Direction,
+		columnDirs []catenumpb.IndexColumn_Direction,
 	) {
 		sharding := mustRetrieveIndexElement(b, tableID, indexID).Sharding
 		allKeyIndexColumns := mustRetrieveKeyIndexColumns(b, tableID, indexID)

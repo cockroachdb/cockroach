@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -3530,7 +3531,7 @@ func (dsp *DistSQLPlanner) createValuesSpec(
 	}
 
 	for i, t := range resultTypes {
-		s.Columns[i].Encoding = descpb.DatumEncoding_VALUE
+		s.Columns[i].Encoding = catenumpb.DatumEncoding_VALUE
 		s.Columns[i].Type = t
 	}
 
@@ -3585,7 +3586,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 				return nil, err
 			}
 			encDatum := rowenc.DatumToEncDatum(resultTypes[colIdx], datum)
-			buf, err = encDatum.Encode(resultTypes[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
+			buf, err = encDatum.Encode(resultTypes[colIdx], &a, catenumpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return nil, err
 			}

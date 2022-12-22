@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -192,7 +192,7 @@ func decodeTableStatisticsKV(
 ) (tableDesc descpb.ID, err error) {
 	// The primary key of table_statistics is (tableID INT, statisticID INT).
 	types := []*types.T{types.Int, types.Int}
-	dirs := []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC}
+	dirs := []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC}
 	keyVals := make([]rowenc.EncDatum, 2)
 	if _, _, err := rowenc.DecodeIndexKey(codec, types, keyVals, dirs, kv.Key); err != nil {
 		return 0, err

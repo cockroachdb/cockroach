@@ -13,7 +13,7 @@ package ttljob
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -50,7 +50,7 @@ func keyToDatums(
 		i := len(encDatums)
 		// We currently assume all PRIMARY KEY columns are ascending, and block
 		// creation otherwise.
-		enc := descpb.DatumEncoding_ASCENDING_KEY
+		enc := catenumpb.DatumEncoding_ASCENDING_KEY
 		var val rowenc.EncDatum
 		val, partialKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, partialKey)
 		if err != nil {

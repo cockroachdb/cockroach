@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -107,7 +107,7 @@ func (v *valuesOp) Next() coldata.Batch {
 		for i := 0; i < len(v.typs); i++ {
 			var err error
 			v.row[i], rowData, err = rowenc.EncDatumFromBuffer(
-				v.typs[i], descpb.DatumEncoding_VALUE, rowData,
+				v.typs[i], catenumpb.DatumEncoding_VALUE, rowData,
 			)
 			if err != nil {
 				colexecerror.InternalError(err)

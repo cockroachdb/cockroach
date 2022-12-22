@@ -106,6 +106,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",

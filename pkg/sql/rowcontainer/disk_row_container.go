@@ -15,8 +15,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -64,7 +64,7 @@ type DiskRowContainer struct {
 	ordering colinfo.ColumnOrdering
 	// encodings keeps around the DatumEncoding equivalents of the encoding
 	// directions in ordering to avoid conversions in hot paths.
-	encodings []descpb.DatumEncoding
+	encodings []catenumpb.DatumEncoding
 	// valueIdxs holds the indexes of the columns that we encode as values. The
 	// columns described by ordering will be encoded as keys. See
 	// MakeDiskRowContainer() for more encoding specifics.
@@ -118,7 +118,7 @@ func MakeDiskRowContainer(
 	// The ordering is specified for a subset of the columns. These will be
 	// encoded as a key in the given order according to the given direction so
 	// that the sorting can be delegated to the underlying SortedDiskMap. To
-	// avoid converting encoding.Direction to descpb.DatumEncoding we do this
+	// avoid converting encoding.Direction to catenumpb.DatumEncoding we do this
 	// once at initialization and store the conversions in d.encodings.
 	// We encode the other columns as values. The indexes of these columns are
 	// kept around in d.valueIdxs to have them ready in hot paths.
@@ -139,7 +139,7 @@ func MakeDiskRowContainer(
 		}
 	}
 
-	d.encodings = make([]descpb.DatumEncoding, len(d.ordering))
+	d.encodings = make([]catenumpb.DatumEncoding, len(d.ordering))
 	for i, orderInfo := range ordering {
 		d.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
 	}
@@ -292,7 +292,7 @@ func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow
 	if !d.deDuplicate {
 		for _, i := range d.valueIdxs {
 			var err error
-			d.scratchVal, err = row[i].Encode(d.types[i], d.datumAlloc, descpb.DatumEncoding_VALUE, d.scratchVal)
+			d.scratchVal, err = row[i].Encode(d.types[i], d.datumAlloc, catenumpb.DatumEncoding_VALUE, d.scratchVal)
 			if err != nil {
 				return err
 			}
@@ -420,7 +420,7 @@ func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, 
 	}
 	for _, i := range d.valueIdxs {
 		var err error
-		d.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(d.types[i], descpb.DatumEncoding_VALUE, v)
+		d.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(d.types[i], catenumpb.DatumEncoding_VALUE, v)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"unable to decode row, value idx %d", errors.Safe(i))

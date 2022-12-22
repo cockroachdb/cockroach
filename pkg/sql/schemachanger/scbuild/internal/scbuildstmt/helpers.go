@@ -15,7 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -413,13 +413,13 @@ func getPrimaryIndexes(
 	return existing, freshlyAdded
 }
 
-// indexColumnDirection converts tree.Direction to catpb.IndexColumn_Direction.
-func indexColumnDirection(d tree.Direction) catpb.IndexColumn_Direction {
+// indexColumnDirection converts tree.Direction to catenumpb.IndexColumn_Direction.
+func indexColumnDirection(d tree.Direction) catenumpb.IndexColumn_Direction {
 	switch d {
 	case tree.DefaultDirection, tree.Ascending:
-		return catpb.IndexColumn_ASC
+		return catenumpb.IndexColumn_ASC
 	case tree.Descending:
-		return catpb.IndexColumn_DESC
+		return catenumpb.IndexColumn_DESC
 	default:
 		panic(errors.AssertionFailedf("unknown direction %s", d))
 	}
@@ -606,7 +606,7 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 type indexColumnSpec struct {
 	columnID  catid.ColumnID
 	kind      scpb.IndexColumn_Kind
-	direction catpb.IndexColumn_Direction
+	direction catenumpb.IndexColumn_Direction
 }
 
 func makeIndexColumnSpec(ic *scpb.IndexColumn) indexColumnSpec {

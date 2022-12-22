@@ -13,6 +13,7 @@ package tabledesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
@@ -591,7 +592,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 // version PrimaryIndexWithStoredColumnsVersion whenever possible.
 func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
 	// Always set the correct encoding type for the primary index.
-	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
+	desc.PrimaryIndex.EncodingType = catenumpb.PrimaryIndexEncoding
 	// Check if primary index needs updating.
 	switch desc.PrimaryIndex.Version {
 	case descpb.PrimaryIndexWithStoredColumnsVersion:
@@ -684,10 +685,10 @@ func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
 // maybeFixPrimaryIndexEncoding ensures that the index descriptor for a primary
 // index has the correct encoding type set.
 func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
-	if idx.EncodingType == descpb.PrimaryIndexEncoding {
+	if idx.EncodingType == catenumpb.PrimaryIndexEncoding {
 		return false
 	}
-	idx.EncodingType = descpb.PrimaryIndexEncoding
+	idx.EncodingType = catenumpb.PrimaryIndexEncoding
 	return true
 }
 

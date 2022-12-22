@@ -15,9 +15,9 @@ option go_package = "descpb";
 
 import "config/zonepb/zone.proto";
 import "util/hlc/timestamp.proto";
+import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/privilege.proto";
-import "sql/catalog/catpb/index.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
@@ -436,8 +436,8 @@ message IndexDescriptor {
   // EncodingType represents what sort of k/v encoding is used to store this descriptor on disk.
   // As of now, this includes the existing secondary index encoding, or the primary index encoding.
   // N.B. This field is only recognized on secondary indexes.
-  optional uint32 encoding_type = 19
-    [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexDescriptorEncodingType"];
+  optional uint32 encoding_type = 19 [(gogoproto.nullable) = false,
+                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb.IndexDescriptorEncodingType"];
 
   // Sharded, if it's not the zero value, describes how this index is sharded.
   optional cockroach.sql.catalog.catpb.ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false];

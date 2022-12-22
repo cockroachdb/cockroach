@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -282,11 +283,11 @@ func (w index) GetVersion() descpb.IndexDescriptorVersion {
 // GetEncodingType returns the encoding type of this index. For backward
 // compatibility reasons, this might not match what is stored in
 // w.desc.EncodingType.
-func (w index) GetEncodingType() descpb.IndexDescriptorEncodingType {
+func (w index) GetEncodingType() catenumpb.IndexDescriptorEncodingType {
 	if w.Primary() {
 		// Primary indexes always use the PrimaryIndexEncoding, regardless of what
 		// desc.EncodingType indicates.
-		return descpb.PrimaryIndexEncoding
+		return catenumpb.PrimaryIndexEncoding
 	}
 	return w.desc.EncodingType
 }
@@ -309,7 +310,7 @@ func (w index) GetKeyColumnName(columnOrdinal int) string {
 
 // GetKeyColumnDirection returns the direction of the columnOrdinal-th column in
 // the index key.
-func (w index) GetKeyColumnDirection(columnOrdinal int) catpb.IndexColumn_Direction {
+func (w index) GetKeyColumnDirection(columnOrdinal int) catenumpb.IndexColumn_Direction {
 	return w.desc.KeyColumnDirections[columnOrdinal]
 }
 
@@ -398,7 +399,7 @@ func (w index) UseDeletePreservingEncoding() bool {
 //   - old primary indexes which are being dropped.
 func (w index) ForcePut() bool {
 	return w.Merging() || w.desc.UseDeletePreservingEncoding ||
-		w.Dropped() && w.IsUnique() && w.GetEncodingType() == descpb.PrimaryIndexEncoding
+		w.Dropped() && w.IsUnique() && w.GetEncodingType() == catenumpb.PrimaryIndexEncoding
 }
 
 func (w index) CreatedAt() time.Time {
