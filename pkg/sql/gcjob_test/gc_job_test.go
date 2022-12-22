@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachangestatus"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -196,7 +197,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
-				RunningStatus: sql.RunningStatusWaitingGC,
+				RunningStatus: schemachangestatus.WaitingGC,
 				NonCancelable: true,
 			}
 
@@ -215,7 +216,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			// Check that the job started.
 			jobIDStr := strconv.Itoa(int(job.ID()))
-			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
+			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, schemachangestatus.WaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
 
@@ -310,7 +311,7 @@ SELECT job_id
 	).Scan(&jobID)
 	tdb.CheckQueryResultsRetry(t,
 		"SELECT running_status FROM crdb_internal.jobs WHERE job_id = "+jobID,
-		[][]string{{string(sql.RunningStatusWaitingForMVCCGC)}},
+		[][]string{{string(schemachangestatus.WaitingForMVCCGC)}},
 	)
 }
 

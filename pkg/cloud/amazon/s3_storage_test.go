@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/amazonparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -93,7 +94,7 @@ func TestPutS3(t *testing.T) {
 			`%s is set to '%s', but %s is not set`,
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
-			AWSAccessKeyParam,
+			amazonparams.AWSAccessKey,
 		))
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
@@ -151,7 +152,7 @@ func TestPutS3(t *testing.T) {
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazonparams.AWSServerSideEncryptionMode,
 			"AES256",
 		),
 			false,
@@ -169,8 +170,8 @@ func TestPutS3(t *testing.T) {
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s&%s=%s",
 			bucket, "backup-test-sse-kms",
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
-			"aws:kms", AWSServerSideEncryptionKMSID, v,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazonparams.AWSServerSideEncryptionMode,
+			"aws:kms", amazonparams.AWSServerSideEncryptionKMSID, v,
 		),
 			false,
 			user,
@@ -196,7 +197,7 @@ func TestPutS3(t *testing.T) {
 		invalidSSEModeURI := fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazonparams.AWSServerSideEncryptionMode,
 			"unsupported-algorithm")
 
 		_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
@@ -206,7 +207,7 @@ func TestPutS3(t *testing.T) {
 		invalidKMSURI := fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazonparams.AWSServerSideEncryptionMode,
 			"aws:kms")
 		_, err = makeS3Storage(ctx, invalidKMSURI, user)
 		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
@@ -366,10 +367,10 @@ func TestPutS3Endpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	q := make(url.Values)
 	expectedParams := []string{
-		AWSEndpointParam,
-		AWSAccessKeyParam,
-		AWSSecretParam,
-		S3RegionParam}
+		amazonparams.AWSEndpoint,
+		amazonparams.AWSAccessKey,
+		amazonparams.AWSSecret,
+		amazonparams.S3Region}
 	for _, param := range expectedParams {
 		env := NightlyEnvVarS3Params[param]
 		v := os.Getenv(env)
@@ -449,7 +450,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	}
 	q := make(url.Values)
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-	q.Add(S3RegionParam, "us-east-1")
+	q.Add(amazonparams.S3Region, "us-east-1")
 
 	bucket := "invalid-bucket"
 	u := url.URL{

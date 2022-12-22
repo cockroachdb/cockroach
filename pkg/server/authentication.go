@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/cookie"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,8 +55,6 @@ const (
 	logoutPath = "/logout"
 	// secretLength is the number of random bytes generated for session secrets.
 	secretLength = 16
-	// SessionCookieName is the name of the cookie used for HTTP auth.
-	SessionCookieName = "session"
 	// MultiTenantSessionCookieName is the name of the cookie used for HTTP auth
 	// when the cluster is multitenant.
 	MultitenantSessionCookieName = "multitenant-session"
@@ -301,7 +300,7 @@ func (s *authenticationServer) createSessionFor(
 		ID:     id,
 		Secret: secret,
 	}
-	return EncodeSessionCookie(cookieValue, !s.cfg.DisableTLSForHTTP)
+	return cookie.EncodeSessionCookie(cookieValue, !s.cfg.DisableTLSForHTTP)
 }
 
 // UserLogout allows a user to terminate their currently active session.
@@ -344,7 +343,7 @@ func (s *authenticationServer) UserLogout(
 
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
-	cookie := makeCookieWithValue("", false /* forHTTPSOnly */)
+	cookie := cookie.MakeCookieWithValue("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
 	// Set the cookie header on the outgoing response.
@@ -587,32 +586,6 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	am.inner.ServeHTTP(w, req)
 }
 
-// EncodeSessionCookie encodes a SessionCookie proto into an http.Cookie.
-// The flag forHTTPSOnly, if set, produces the "Secure" flag on the
-// resulting HTTP cookie, which means the cookie should only be
-// transmitted over HTTPS channels. Note that a cookie without
-// the "Secure" flag can be transmitted over either HTTP or HTTPS channels.
-func EncodeSessionCookie(
-	sessionCookie *serverpb.SessionCookie, forHTTPSOnly bool,
-) (*http.Cookie, error) {
-	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
-	if err != nil {
-		return nil, errors.Wrap(err, "session cookie could not be encoded")
-	}
-	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
-	return makeCookieWithValue(value, forHTTPSOnly), nil
-}
-
-func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
-	return &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    value,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   forHTTPSOnly,
-	}
-}
-
 // getSession decodes the cookie from the request, looks up the corresponding session, and
 // returns the logged in user name. If there's an error, it returns an error value and the
 // HTTP error code.
@@ -717,14 +690,14 @@ func findAndDecodeSessionCookie(
 ) (*serverpb.SessionCookie, error) {
 	// Validate the returned cookie.
 	found := false
-	var cookie *serverpb.SessionCookie
+	var cookieProto *serverpb.SessionCookie
 	var err error
 	var sessionCookies []*http.Cookie
 	// Prioritize multitenant session cookies.
 	for _, c := range cookies {
 		if c.Name == MultitenantSessionCookieName {
 			sessionCookies = append([]*http.Cookie{c}, sessionCookies...)
-		} else if c.Name == SessionCookieName {
+		} else if c.Name == cookie.SessionCookieName {
 			sessionCookies = append(sessionCookies, c)
 		}
 	}
@@ -734,13 +707,13 @@ func findAndDecodeSessionCookie(
 		if sessionCookie.Name == MultitenantSessionCookieName {
 			mtSessionVal, err := findSessionCookieValue(st, cookies)
 			if err != nil {
-				return cookie, apiInternalError(ctx, err)
+				return cookieProto, apiInternalError(ctx, err)
 			}
 			if mtSessionVal != "" {
 				sessionCookie.Value = mtSessionVal
 			}
 		}
-		cookie, err = decodeSessionCookie(sessionCookie)
+		cookieProto, err = decodeSessionCookie(sessionCookie)
 		if err != nil {
 			// Multiple cookies with the same name may be included in the
 			// header. We continue searching even if we find a matching
@@ -754,7 +727,7 @@ func findAndDecodeSessionCookie(
 	if err != nil || !found {
 		return nil, http.ErrNoCookie
 	}
-	return cookie, nil
+	return cookieProto, nil
 }
 
 // findSessionCookieValue finds the encoded session in an aggregated

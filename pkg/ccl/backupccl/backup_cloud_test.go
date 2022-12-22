@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/amazonparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -95,22 +96,22 @@ func setupS3URI(
 	t *testing.T, db *sqlutils.SQLRunner, bucket string, prefix string, creds credentials.Value,
 ) url.URL {
 	t.Helper()
-	endpoint := os.Getenv(amazon.NightlyEnvVarS3Params[amazon.AWSEndpointParam])
+	endpoint := os.Getenv(amazon.NightlyEnvVarS3Params[amazonparams.AWSEndpoint])
 	customCACert := os.Getenv("AWS_CUSTOM_CA_CERT")
-	region := os.Getenv(amazon.NightlyEnvVarS3Params[amazon.S3RegionParam])
+	region := os.Getenv(amazon.NightlyEnvVarS3Params[amazonparams.S3Region])
 	if customCACert != "" {
 		db.Exec(t, fmt.Sprintf("SET CLUSTER SETTING cloudstorage.http.custom_ca='%s'", customCACert))
 	}
 
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
 	values := uri.Query()
-	values.Add(amazon.AWSAccessKeyParam, creds.AccessKeyID)
-	values.Add(amazon.AWSSecretParam, creds.SecretAccessKey)
+	values.Add(amazonparams.AWSAccessKey, creds.AccessKeyID)
+	values.Add(amazonparams.AWSSecret, creds.SecretAccessKey)
 	if endpoint != "" {
-		values.Add(amazon.AWSEndpointParam, endpoint)
+		values.Add(amazonparams.AWSEndpoint, endpoint)
 	}
 	if region != "" {
-		values.Add(amazon.S3RegionParam, region)
+		values.Add(amazonparams.S3Region, region)
 	}
 	uri.RawQuery = values.Encode()
 	return uri

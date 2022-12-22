@@ -34,9 +34,9 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/validator"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/webhooksinktest"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -153,11 +153,11 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		// data.
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	case webhookSink:
-		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+		cert, certEncoded, err := webhooksinktest.NewCACertBase64Encoded()
 		if err != nil {
 			ct.t.Fatal(err)
 		}
-		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		sinkDest, err := webhooksinktest.StartMockWebhookSink(cert)
 		if err != nil {
 			ct.t.Fatal(err)
 		}
@@ -173,7 +173,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
 	case pubsubSink:
-		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
+		sinkURI = `gcpubsub://cockroach-ephemeral?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1`
 	case kafkaSink:
 		kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
 		kafka := kafkaManager{
@@ -614,14 +614,14 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	m.Go(func(ctx context.Context) error {
 		defer workloadCancel()
 		defer func() { close(messageBuf) }()
-		v := cdctest.MakeCountValidator(cdctest.NoOpValidator)
+		v := validator.MakeCountValidator(validator.NoOpValidator)
 		for {
 			m := tc.Next(ctx)
 			if m == nil {
 				return fmt.Errorf("unexpected end of changefeed")
 			}
 			messageBuf <- m
-			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
+			updated, resolved, err := validator.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
 				return err
 			}
@@ -652,20 +652,20 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return errors.Wrap(err, "CREATE TABLE failed")
 		}
 
-		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
+		fprintV, err := validator.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
-		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`)
+		baV, err := validator.NewBeforeAfterValidator(db, `bank.bank`)
 		if err != nil {
 			return err
 		}
-		validators := cdctest.Validators{
-			cdctest.NewOrderValidator(`bank`),
+		validators := validator.Validators{
+			validator.NewOrderValidator(`bank`),
 			fprintV,
 			baV,
 		}
-		v := cdctest.MakeCountValidator(validators)
+		v := validator.MakeCountValidator(validators)
 
 		timeSpentValidatingRows := 0 * time.Second
 		numRowsValidated := 0
@@ -675,7 +675,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if !ok {
 				break
 			}
-			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
+			updated, resolved, err := validator.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
 				return err
 			}

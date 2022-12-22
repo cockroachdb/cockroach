@@ -4,18 +4,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cdctest",
     srcs = [
-        "mock_webhook_sink.go",
         "nemeses.go",
         "row.go",
         "schema_registry.go",
         "testfeed.go",
-        "tls_util.go",
-        "validator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/ccl/changefeedccl/validator",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -33,7 +31,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_stretchr_testify//require",
@@ -43,27 +40,17 @@ go_library(
 go_test(
     name = "cdctest_test",
     size = "small",
-    srcs = [
-        "main_test.go",
-        "validator_test.go",
-    ],
+    srcs = ["main_test.go"],
     args = ["-test.timeout=55s"],
-    embed = [":cdctest"],
     deps = [
-        "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/storageccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/hlc",
-        "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

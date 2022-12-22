@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/validator"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
@@ -102,7 +102,7 @@ func sstMaker(t *testing.T, keyValues []roachpb.KeyValue) roachpb.RangeFeedSSTab
 // streamClientValidatorWrapper wraps a Validator and exposes additional methods
 // used by stream ingestion to check for correctness.
 type streamClientValidator struct {
-	cdctest.StreamValidator
+	validator.StreamValidator
 	rekeyer *backupccl.KeyRewriter
 
 	mu syncutil.Mutex
@@ -115,7 +115,7 @@ type streamClientValidator struct {
 // The wrapper also allows querying the orderValidator to retrieve streamed
 // events from an in-memory store.
 func newStreamClientValidator(rekeyer *backupccl.KeyRewriter) *streamClientValidator {
-	ov := cdctest.NewStreamOrderValidator()
+	ov := validator.NewStreamOrderValidator()
 	return &streamClientValidator{
 		StreamValidator: ov,
 		rekeyer:         rekeyer,

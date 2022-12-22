@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	cookie2 "github.com/cockroachdb/cockroach/pkg/server/cookie"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -137,7 +138,7 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 				Secret: secret,
 			}
 			// Encode a session cookie and store it in a cookie jar.
-			cookie, err := EncodeSessionCookie(rawCookie, false /* forHTTPSOnly */)
+			cookie, err := cookie2.EncodeSessionCookie(rawCookie, false /* forHTTPSOnly */)
 			if err != nil {
 				return err
 			}

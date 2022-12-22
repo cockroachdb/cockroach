@@ -33,6 +33,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
         "//pkg/sql/gcjob/gcjobnotifier",
+        "//pkg/sql/schemachangestatus",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sqlutil",
         "//pkg/storage",

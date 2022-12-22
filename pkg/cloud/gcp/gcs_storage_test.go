@@ -22,6 +22,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon/gcp/gcpparams"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,7 +55,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
 			bucket,
 			"backup-test-specified",
-			CredentialsParam,
+			gcpparams.Credentials,
 			url.QueryEscape(encoded),
 		)
 		if specified {
@@ -76,7 +77,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
-			CredentialsParam,
+			gcpparams.Credentials,
 			url.QueryEscape(encoded),
 		), username.RootUserName(),
 			nil, /* ie */
@@ -131,7 +132,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
 			bucket,
 			"backup-test-specified",
-			BearerTokenParam,
+			gcpparams.BearerToken,
 			token.AccessToken,
 		)
 		uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
@@ -150,7 +151,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
-			BearerTokenParam,
+			gcpparams.BearerToken,
 			token.AccessToken,
 		), username.RootUserName(),
 			nil, /* ie */
@@ -184,7 +185,7 @@ func TestGCSAssumeRole(t *testing.T) {
 		// Verify that specified permissions with the credentials do not give us
 		// access to the bucket.
 		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
-			CredentialsParam, url.QueryEscape(encoded)), user,
+			gcpparams.Credentials, url.QueryEscape(encoded)), user,
 			nil, /* ie */
 			nil, /* ief */
 			nil, /* kvDB */
@@ -198,8 +199,8 @@ func TestGCSAssumeRole(t *testing.T) {
 				"backup-test-assume-role",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				AssumeRoleParam,
-				assumedAccount, CredentialsParam,
+				gcpparams.AssumeRole,
+				assumedAccount, gcpparams.Credentials,
 				url.QueryEscape(encoded),
 			), false, user,
 			nil, /* ie */
@@ -213,9 +214,9 @@ func TestGCSAssumeRole(t *testing.T) {
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
-			AssumeRoleParam,
+			gcpparams.AssumeRole,
 			assumedAccount,
-			CredentialsParam,
+			gcpparams.Credentials,
 			url.QueryEscape(encoded),
 		), username.RootUserName(),
 			nil, /* ie */
@@ -241,7 +242,7 @@ func TestGCSAssumeRole(t *testing.T) {
 		)
 
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role",
-			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
+			cloud.AuthParam, cloud.AuthParamImplicit, gcpparams.AssumeRole, assumedAccount), false, user,
 			nil, /* ie */
 			nil, /* ief */
 			nil, /* kvDB */
@@ -253,7 +254,7 @@ func TestGCSAssumeRole(t *testing.T) {
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamImplicit,
-			AssumeRoleParam,
+			gcpparams.AssumeRole,
 			assumedAccount,
 		), username.RootUserName(),
 			nil, /* ie */
@@ -287,12 +288,12 @@ func TestGCSAssumeRole(t *testing.T) {
 			t.Run(tc.auth, func(t *testing.T) {
 				q := make(url.Values)
 				q.Set(cloud.AuthParam, tc.auth)
-				q.Set(CredentialsParam, tc.credentials)
+				q.Set(gcpparams.Credentials, tc.credentials)
 
 				// First verify that none of the individual roles in the chain can be used
 				// to access the storage.
 				for _, role := range roleChain {
-					q.Set(AssumeRoleParam, role)
+					q.Set(gcpparams.AssumeRole, role)
 					roleURI := fmt.Sprintf("gs://%s/%s/%s?%s",
 						limitedBucket,
 						"backup-test-assume-role",
@@ -308,7 +309,7 @@ func TestGCSAssumeRole(t *testing.T) {
 				}
 
 				// Finally, check that the chain of roles can be used to access the storage.
-				q.Set(AssumeRoleParam, roleChainStr)
+				q.Set(gcpparams.AssumeRole, roleChainStr)
 				uri := fmt.Sprintf("gs://%s/%s/%s?%s",
 					limitedBucket,
 					"backup-test-assume-role",

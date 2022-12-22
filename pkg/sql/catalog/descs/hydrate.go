@@ -122,6 +122,7 @@ func makeMutableTypeLookupFunc(
 		}
 		if _, ok := desc.(catalog.MutableDescriptor); !ok {
 			continue
+
 		}
 		mc.UpsertDescriptor(desc)
 	}

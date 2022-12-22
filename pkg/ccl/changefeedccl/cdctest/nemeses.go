@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -30,7 +31,7 @@ import (
 // duplicates, which the two cdctest.Validator implementations verify for the
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
-func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, error) {
+func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (validator.Validator, error) {
 	// possible additional nemeses:
 	// - schema changes
 	// - merges
@@ -169,16 +170,16 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 	if _, err := db.Exec(createFprintStmtBuf.String()); err != nil {
 		return nil, err
 	}
-	baV, err := NewBeforeAfterValidator(db, `foo`)
+	baV, err := validator.NewBeforeAfterValidator(db, `foo`)
 	if err != nil {
 		return nil, err
 	}
-	fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
+	fprintV, err := validator.NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
 	if err != nil {
 		return nil, err
 	}
-	ns.v = MakeCountValidator(Validators{
-		NewOrderValidator(`foo`),
+	ns.v = validator.MakeCountValidator(validator.Validators{
+		validator.NewOrderValidator(`foo`),
 		baV,
 		fprintV,
 	})
@@ -262,7 +263,7 @@ type nemeses struct {
 	maxTestColumnCount int
 	eventMix           map[fsm.Event]int
 
-	v  *CountValidator
+	v  *validator.CountValidator
 	db *gosql.DB
 	f  TestFeed
 
@@ -733,7 +734,7 @@ func noteFeedMessage(a fsm.Args) error {
 		}
 
 		if len(m.Resolved) > 0 {
-			_, ts, err := ParseJSONValueTimestamps(m.Resolved)
+			_, ts, err := validator.ParseJSONValueTimestamps(m.Resolved)
 			if err != nil {
 				return err
 			}
@@ -744,7 +745,7 @@ func noteFeedMessage(a fsm.Args) error {
 			}
 			// Keep consuming until we hit a row
 		} else {
-			ts, _, err := ParseJSONValueTimestamps(m.Value)
+			ts, _, err := validator.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
 				return err
 			}

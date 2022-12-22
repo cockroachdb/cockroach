@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	cookie2 "github.com/cockroachdb/cockroach/pkg/server/cookie"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -420,7 +421,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		sessionCookie, err := r.Cookie(SessionCookieName)
+		sessionCookie, err := r.Cookie(cookie2.SessionCookieName)
 		if err != nil {
 			log.Warning(ctx, "unable to find session cookie")
 			w.WriteHeader(http.StatusInternalServerError)

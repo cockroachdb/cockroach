@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliutils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -36,7 +36,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	lastWords := func(s string) []string {
 		var result []string
-		s = cli.ElideInsecureDeprecationNotice(s)
+		s = cliutils.ElideInsecureDeprecationNotice(s)
 		lines := strings.Split(s, "\n")
 		for _, line := range lines {
 			words := strings.Fields(line)
