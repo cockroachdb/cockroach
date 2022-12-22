@@ -145,6 +145,10 @@ if [[ -n "${PUBLISH_LATEST}" && -z "${PRE_RELEASE}" ]]; then
     BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
 bazel build --config ci //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
+export google_credentials="$gcs_credentials"
+source "build/teamcity-support.sh"  # For log_into_gcloud
+log_into_gcloud
+export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 $BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -bless -release -bucket "$bucket" --gcs-bucket="$gcs_bucket"
 EOF
 
