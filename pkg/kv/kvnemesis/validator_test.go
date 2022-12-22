@@ -192,6 +192,7 @@ func TestValidate(t *testing.T) {
 
 	type sstKV struct {
 		key       string
+		endKey    string
 		tombstone bool
 	}
 
@@ -208,16 +209,27 @@ func TestValidate(t *testing.T) {
 
 		for _, kv := range kvs {
 			key := roachpb.Key(kv.key)
+			endKey := roachpb.Key(kv.endKey)
 			value := storage.MVCCValue{MVCCValueHeader: vh}
 			if !kv.tombstone {
 				value.Value = roachpb.MakeValueFromString(sv(seq))
 			}
-			require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, value))
+
+			if len(endKey) == 0 {
+				require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, value))
+			} else {
+				require.NoError(t, w.PutMVCCRangeKey(
+					storage.MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts}, value))
+			}
 
 			if len(span.Key) == 0 || key.Compare(span.Key) < 0 {
 				span.Key = key.Clone()
 			}
-			if ek := roachpb.Key(tk(fk(kv.key) + 1)); ek.Compare(span.EndKey) > 0 {
+			if len(endKey) > 0 {
+				if endKey.Compare(span.EndKey) > 0 {
+					span.EndKey = endKey.Clone()
+				}
+			} else if ek := roachpb.Key(tk(fk(kv.key) + 1)); ek.Compare(span.EndKey) > 0 {
 				span.EndKey = ek.Clone()
 			}
 		}
@@ -1852,11 +1864,13 @@ func TestValidate(t *testing.T) {
 				step(withResultTS(makeAddSSTable(s1, []sstKV{
 					{key: k1, tombstone: false},
 					{key: k2, tombstone: true},
+					{key: k3, endKey: k4, tombstone: true},
 				}), t1)),
 			},
 			kvs: kvs(
 				kv(k1, t1, s1),
 				tombstone(k2, t1, s1),
+				rd(k3, k4, t1, s1),
 			),
 		},
 		{
@@ -1864,17 +1878,23 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(put(k2, s1), t1)),
+				step(withResultTS(put(k3, s1), t1)),
+				step(withResultTS(put(k4, s1), t1)),
 				step(withResultTS(makeAddSSTable(s2, []sstKV{
 					{key: k1, tombstone: false},
 					{key: k2, tombstone: true},
+					{key: k3, endKey: k4, tombstone: true},
 				}), t2)),
-				step(withScanResultTS(scan(k1, k3), t3, scanKV(k1, v2))),
+				step(withScanResultTS(scan(k1, k5), t3, scanKV(k1, v2), scanKV(k4, v1))),
 			},
 			kvs: kvs(
 				kv(k1, t1, s1),
 				kv(k1, t2, s2),
 				kv(k2, t1, s1),
 				tombstone(k2, t2, s2),
+				rd(k3, k4, t2, s2),
+				kv(k3, t1, s1),
+				kv(k4, t1, s1),
 			),
 		},
 	}

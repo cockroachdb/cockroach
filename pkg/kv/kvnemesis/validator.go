@@ -544,9 +544,8 @@ func (v *validator) processOp(op Operation) {
 			break
 		}
 		err := func() error {
-			// TODO(erikgrinaker): This should handle range tombstones too.
 			iter, err := storage.NewMemSSTIterator(t.Data, false /* verify */, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsOnly,
+				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				LowerBound: keys.MinKey,
 				UpperBound: keys.MaxKey,
 			})
@@ -558,6 +557,50 @@ func (v *validator) processOp(op Operation) {
 				if ok, err := iter.Valid(); !ok {
 					return err
 				}
+				if iter.RangeKeyChanged() {
+					hasPoint, hasRange := iter.HasPointAndRange()
+					if hasRange {
+						rangeKeys := iter.RangeKeys().Clone()
+						// AddSSTable can only write at a single timestamp, so there
+						// can't be overlapping range keys. Assert this.
+						if rangeKeys.Len() != 1 {
+							return errors.AssertionFailedf("got AddSSTable with overlapping range keys: %s",
+								rangeKeys)
+						}
+						rangeKey := rangeKeys.AsRangeKey(rangeKeys.Versions[0])
+						mvccValue, err := storage.DecodeMVCCValue(rangeKeys.Versions[0].Value)
+						if err != nil {
+							return err
+						}
+						seq := mvccValue.KVNemesisSeq.Get()
+						svs, _ := v.tryConsumeRangedWrite(seq, rangeKey.StartKey, rangeKey.EndKey)
+						var unobserved roachpb.SpanGroup
+						unobserved.Add(roachpb.Span{Key: rangeKey.StartKey, EndKey: rangeKey.EndKey})
+						for _, sv := range svs {
+							unobserved.Sub(sv.Span)
+							write := &observedWrite{
+								Key:       sv.Key,
+								EndKey:    sv.EndKey,
+								Seq:       seq,
+								Timestamp: sv.Timestamp,
+							}
+							v.curObservations = append(v.curObservations, write)
+						}
+						// Add unmaterialized versions of the write for any gaps.
+						for _, sp := range unobserved.Slice() {
+							write := &observedWrite{
+								Key:    sp.Key,
+								EndKey: sp.EndKey,
+								Seq:    t.Seq,
+							}
+							v.curObservations = append(v.curObservations, write)
+						}
+					}
+					if !hasPoint { // can only happen at range key start bounds
+						continue
+					}
+				}
+
 				key := iter.Key().Key
 				rawValue, err := iter.Value()
 				if err != nil {
