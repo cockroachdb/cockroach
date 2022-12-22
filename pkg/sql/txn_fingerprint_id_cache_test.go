@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +38,7 @@ func TestTxnFingerprintIDCacheDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var txnFingerprintIDCache *TxnFingerprintIDCache
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "txn_fingerprint_id_cache"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "txn_fingerprint_id_cache"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			ctx := context.Background()
 			switch d.Cmd {

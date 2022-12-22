@@ -16,14 +16,14 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestURL(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "url"), func(t *testing.T, td *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "url"), func(t *testing.T, td *datadriven.TestData) string {
 		var result bytes.Buffer
 
 		var u *URL

@@ -42,7 +42,7 @@ go_test(
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/types",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",

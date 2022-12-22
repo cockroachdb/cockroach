@@ -28,7 +28,7 @@ go_test(
         "//pkg/sql/oidext",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

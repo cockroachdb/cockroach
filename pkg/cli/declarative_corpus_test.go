@@ -13,7 +13,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -31,7 +31,7 @@ func TestDeclarativeCorpus(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, testutils.TestDataPath(t, "declarative-corpus", "corpus_expected"), func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-corpus", "corpus_expected"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})

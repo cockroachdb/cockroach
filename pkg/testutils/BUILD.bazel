@@ -5,7 +5,6 @@ go_library(
     name = "testutils",
     srcs = [
         "base.go",
-        "data_path.go",
         "dir.go",
         "error.go",
         "files.go",
@@ -29,14 +28,12 @@ go_library(
         "//pkg/security/username",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
-        "//pkg/util/envutil",
         "//pkg/util/fileutil",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

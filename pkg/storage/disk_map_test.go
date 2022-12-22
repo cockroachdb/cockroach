@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,7 +179,7 @@ func TestPebbleMap(t *testing.T) {
 	}
 	defer e.Close()
 
-	runTestForEngine(ctx, t, testutils.TestDataPath(t, "diskmap"), e)
+	runTestForEngine(ctx, t, datapathutils.TestDataPath(t, "diskmap"), e)
 }
 
 func TestPebbleMultiMap(t *testing.T) {
@@ -194,7 +195,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	}
 	defer e.Close()
 
-	runTestForEngine(ctx, t, testutils.TestDataPath(t, "diskmap_duplicates_pebble"), e)
+	runTestForEngine(ctx, t, datapathutils.TestDataPath(t, "diskmap_duplicates_pebble"), e)
 
 }
 

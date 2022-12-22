@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,7 +35,7 @@ import (
 func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "replica_raft_overload"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "replica_raft_overload"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var buf strings.Builder
 			tr := tracing.NewTracer()
@@ -181,5 +181,5 @@ func TestIoThresholdMap_SafeFormat(t *testing.T) {
 			L0NumFilesThreshold:     1000,
 		},
 	}}
-	echotest.Require(t, string(redact.Sprint(m)), testutils.TestDataPath(t, "io_threshold_map.txt"))
+	echotest.Require(t, string(redact.Sprint(m)), datapathutils.TestDataPath(t, "io_threshold_map.txt"))
 }

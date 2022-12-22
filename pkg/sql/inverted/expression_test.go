@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -140,7 +140,7 @@ func TestExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	exprsByName := make(map[string]Expression)
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "expression"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "expression"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "new-span-leaf":
 			var name string

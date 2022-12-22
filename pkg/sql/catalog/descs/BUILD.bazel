@@ -122,7 +122,7 @@ go_test(
         "//pkg/sql/sqlutil",
         "//pkg/sql/tests",
         "//pkg/sql/types",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

@@ -56,7 +56,7 @@ go_test(
         "//pkg/build/bazel",
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_google_shlex//:shlex",

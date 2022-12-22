@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"golang.org/x/tools/go/analysis/analysistest"
@@ -28,7 +28,7 @@ func init() {
 
 func Test(t *testing.T) {
 	skip.UnderStress(t)
-	testdata := testutils.TestDataPath(t)
+	testdata := datapathutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
 	analysistest.Run(t, testdata, hash.Analyzer, "a")
 }

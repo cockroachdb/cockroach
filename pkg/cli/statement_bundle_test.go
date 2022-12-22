@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -68,7 +68,7 @@ func TestRunExplainCombinations(t *testing.T) {
 
 	conn := c.ConnCtx.MakeSQLConn(os.Stdout, os.Stdout, pgURL.String())
 	for _, test := range tests {
-		bundle, err := loadStatementBundle(testutils.TestDataPath(t, "explain-bundle", test.bundlePath))
+		bundle, err := loadStatementBundle(datapathutils.TestDataPath(t, "explain-bundle", test.bundlePath))
 		assert.NoError(t, err)
 		// Disable autostats collection, which will override the injected stats.
 		if err := conn.Exec(ctx, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`); err != nil {

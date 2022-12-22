@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -53,7 +53,7 @@ as well as
 		},
 	}
 
-	dir := testutils.TestDataPath(t, "render")
+	dir := datapathutils.TestDataPath(t, "render")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			if td.Cmd != "render" {

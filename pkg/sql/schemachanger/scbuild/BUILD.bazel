@@ -80,7 +80,7 @@ go_test(
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

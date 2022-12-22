@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -41,7 +41,7 @@ func TestRestoreOldSequences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	var (
-		testdataBase = testutils.TestDataPath(t, "restore_old_sequences")
+		testdataBase = datapathutils.TestDataPath(t, "restore_old_sequences")
 		exportDirs   = testdataBase + "/exports"
 	)
 

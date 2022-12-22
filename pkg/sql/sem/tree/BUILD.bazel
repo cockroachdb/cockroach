@@ -225,6 +225,7 @@ go_test(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/duration",
         "//pkg/util/json",

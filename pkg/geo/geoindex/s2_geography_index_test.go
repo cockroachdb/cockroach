@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -34,7 +34,7 @@ func TestS2GeographyIndexBasic(t *testing.T) {
 	ctx := context.Background()
 	var index GeographyIndex
 	shapes := make(map[string]geo.Geography)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "s2_geography"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "s2_geography"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":
 			cfg := s2Config(t, d)
