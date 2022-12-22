@@ -808,6 +808,7 @@ func (tc *Collection) GetAllObjectsInSchema(
 
 // GetAllInDatabase is like the union of GetAllSchemasInDatabase and
 // GetAllObjectsInSchema applied to each of those schemas.
+// Includes virtual objects. Does not include dropped objects.
 func (tc *Collection) GetAllInDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
@@ -849,6 +850,7 @@ func (tc *Collection) GetAllInDatabase(
 }
 
 // GetAllTablesInDatabase is like GetAllInDatabase but filtered to tables.
+// Includes virtual objects. Does not include dropped objects.
 func (tc *Collection) GetAllTablesInDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
@@ -1065,29 +1067,6 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		desc := c.LookupDescriptor(e.GetID())
 		db, err := catalog.AsDatabaseDescriptor(desc)
 		ret = append(ret, db)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	return ret, nil
-}
-
-// GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
-// the transaction under the database with the given ID.
-// Deprecated: prefer GetAllTablesInDatabase.
-func (tc *Collection) GetAllTableDescriptorsInDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
-) (ret []catalog.TableDescriptor, _ error) {
-	c, err := tc.GetAllTablesInDatabase(ctx, txn, db)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if desc.GetParentID() != db.GetID() {
-			return nil
-		}
-		tbl, err := catalog.AsTableDescriptor(desc)
-		ret = append(ret, tbl)
 		return err
 	}); err != nil {
 		return nil, err

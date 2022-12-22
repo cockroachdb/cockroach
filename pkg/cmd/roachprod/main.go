@@ -1014,7 +1014,7 @@ var storageSnapshotCmd = &cobra.Command{
 		cluster := args[0]
 		name := args[1]
 		desc := args[2]
-		return roachprod.SnapshotVolume(roachprodLibraryLogger, cluster, name, desc)
+		return roachprod.SnapshotVolume(context.Background(), roachprodLibraryLogger, cluster, name, desc)
 	}),
 }
 

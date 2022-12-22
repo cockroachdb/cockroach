@@ -1516,7 +1516,9 @@ func PrometheusSnapshot(
 
 // SnapshotVolume snapshots any of the volumes attached to the nodes in a
 // cluster specification.
-func SnapshotVolume(l *logger.Logger, clusterName, name, description string) error {
+func SnapshotVolume(
+	ctx context.Context, l *logger.Logger, clusterName, name, description string,
+) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -1525,10 +1527,18 @@ func SnapshotVolume(l *logger.Logger, clusterName, name, description string) err
 		return err
 	}
 	nodes := c.TargetNodes()
-	for idx := range nodes {
-		cVM := c.VMs[idx]
+	nodesStatus, err := c.Status(ctx, l)
+	if err != nil {
+		return err
+	}
+	for nodeSpecIdx, nodeID := range nodes {
+		cVM := c.VMs[nodeID-1]
+		labels := map[string]string{
+			"roachprod-node-src-spec": cVM.MachineType,
+			"roachprod-cluster-node":  cVM.Name,
+			"roachprod-crdb-version":  nodesStatus[nodeSpecIdx].Version,
+		}
 		foundMatchingVolume := false
-		nodeID := idx + 1
 		if len(cVM.NonBootAttachedVolumes) == 0 {
 			l.Printf("Node %d does not have any non-bootable volumes attached. Did you run `sync --include-volumes`?",
 				nodeID)
@@ -1541,7 +1551,7 @@ func SnapshotVolume(l *logger.Logger, clusterName, name, description string) err
 					nameSuffix = fmt.Sprintf("-%d", nodeID)
 				}
 				err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-					sID, err := provider.SnapshotVolume(volume, name+nameSuffix, description)
+					sID, err := provider.SnapshotVolume(volume, name+nameSuffix, description, labels)
 					if err != nil {
 						return err
 					}

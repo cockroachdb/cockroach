@@ -4824,6 +4824,7 @@ lc_time                                               C.UTF-8
 locality                                              region=test,dc=dc1
 locality_optimized_partitioned_index_scan             on
 lock_timeout                                          0
+log_timezone                                          UTC
 max_identifier_length                                 128
 max_index_keys                                        32
 node_id                                               1
