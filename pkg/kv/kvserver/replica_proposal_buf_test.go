@@ -301,11 +301,11 @@ func (pc proposalCreator) newProposal(ba *roachpb.BatchRequest) *ProposalData {
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	cmdLen := p.command.Size()
-	needed := kvserverbase.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, kvserverbase.RaftCommandPrefixLen, needed)
-	kvserverbase.EncodeRaftCommandPrefix(data, kvserverbase.RaftVersionStandardPrefixByte, p.idKey)
-	data = data[:kvserverbase.RaftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[kvserverbase.RaftCommandPrefixLen:]); err != nil {
+	needed := raftlog.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
+	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
+	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardPrefixByte, p.idKey)
+	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
+	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
 	}
 	return data

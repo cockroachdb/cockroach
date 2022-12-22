@@ -8,7 +8,6 @@ go_library(
         "bulk_adder.go",
         "forced_error.go",
         "knobs.go",
-        "raftversion.go",
         "stores.go",
         "syncing_write.go",
     ],

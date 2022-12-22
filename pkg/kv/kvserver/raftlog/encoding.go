@@ -8,54 +8,60 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserverbase
+package raftlog
 
-import "fmt"
+import (
+	"fmt"
 
-// RaftCommandEncodingVersion versions CockroachDB's raft entries.
-// A raftpb.Entry's RaftCommandEncodingVersion is a function of the
-// Entry's raftpb.EntryType and, in some cases, the first byte of the
-// Entry's Data payload.
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+)
+
+// EntryEncoding enumerates the encodings used in CockroachDB for raftpb.Entry's
+// Data slice.
 //
-// TODO(tbg): rename to RaftCommandEncoding.
-type RaftCommandEncodingVersion byte
+// A raftpb.Entry's EntryEncoding is determined by the Entry's raftpb.EntryType
+// and, in some cases, the first byte of the Entry's Data payload.
+type EntryEncoding byte
+
+// TODO(tbg): use auto-assigned consts (iota) for the encodings below, since
+// they aren't on the wire.
 
 const (
-	// RaftVersionStandard is the default encoding for a CockroachDB raft log
+	// EntryEncodingStandard is the default encoding for a CockroachDB raft log
 	// entry.
 	//
 	// This is a raftpb.Entry of type EntryNormal whose Data slice is either empty
-	// or whose first byte matches RaftVersionStandardPrefixByte. The subsequent
+	// or whose first byte matches EntryEncodingStandardPrefixByte. The subsequent
 	// eight bytes represent a CmdIDKey. The remaining bytes represent a
 	// kvserverpb.RaftCommand.
-	RaftVersionStandard RaftCommandEncodingVersion = 0
-	// RaftVersionSideloaded indicates a proposal representing the result of a
+	EntryEncodingStandard EntryEncoding = 0
+	// EntryEncodingSideloaded indicates a proposal representing the result of a
 	// roachpb.AddSSTableRequest for which the payload (the SST) is stored outside
 	// the storage engine to improve storage performance.
 	//
 	// This is a raftpb.Entry of type EntryNormal whose data slice is either empty
-	// or whose first byte matches RaftVersionSideloadedPrefixByte. The subsequent
+	// or whose first byte matches EntryEncodingSideloadedPrefixByte. The subsequent
 	// eight bytes represent a CmdIDKey. The remaining bytes represent a
 	// kvserverpb.RaftCommand whose kvserverpb.ReplicatedEvalResult holds a
 	// nontrival kvserverpb.ReplicatedEvalResult_AddSSTable, the Data field of
 	// which is an SST to be ingested (and which is present in memory but made
 	// durable via direct storage on the filesystem, bypassing the storage
 	// engine).
-	RaftVersionSideloaded RaftCommandEncodingVersion = 1
-	// RaftVersionEmptyEntry is an empty entry. These are used by raft after
+	EntryEncodingSideloaded EntryEncoding = 1
+	// EntryEncodingEmpty is an empty entry. These are used by raft after
 	// leader election. Since they hold no data, there is nothing in them to
 	// decode.
-	RaftVersionEmptyEntry RaftCommandEncodingVersion = 253
-	// RaftVersionConfChange is a raftpb.Entry whose raftpb.EntryType is
+	EntryEncodingEmpty EntryEncoding = 253
+	// EntryEncodingRaftConfChange is a raftpb.Entry whose raftpb.EntryType is
 	// raftpb.EntryConfChange. The Entry's Data field holds a raftpb.ConfChange
 	// whose Context field is a kvserverpb.ConfChangeContext whose Payload is a
 	// kvserverpb.RaftCommand. In particular, the CmdIDKey requires a round of
 	// protobuf unmarshaling.
-	RaftVersionConfChange RaftCommandEncodingVersion = 254
-	// RaftVersionConfChangeV2 is analogous to RaftVersionConfChange, with
+	EntryEncodingRaftConfChange EntryEncoding = 254
+	// EntryEncodingRaftConfChangeV2 is analogous to EntryEncodingRaftConfChange, with
 	// the replacements raftpb.EntryConfChange{,V2} and raftpb.ConfChange{,V2}
 	// applied.
-	RaftVersionConfChangeV2 RaftCommandEncodingVersion = 255
+	EntryEncodingRaftConfChangeV2 EntryEncoding = 255
 )
 
 // TODO(tbg): when we have a good library for encoding entries, these should
@@ -64,28 +70,30 @@ const (
 	// RaftCommandIDLen is the length of a command ID.
 	RaftCommandIDLen = 8
 	// RaftCommandPrefixLen is the length of the prefix of raft entries that
-	// use the RaftVersionStandard or RaftVersionSideloaded encodings. The
+	// use the EntryEncodingStandard or EntryEncodingSideloaded encodings. The
 	// bytes after the prefix represent the kvserverpb.RaftCommand.
 	//
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
-	// RaftVersionStandardPrefixByte is the first byte of a raftpb.Entry's
-	// Data slice for an Entry of encoding RaftVersionStandard.
-	RaftVersionStandardPrefixByte = byte(0)
-	// RaftVersionSideloadedPrefixByte is the first byte of a raftpb.Entry's Data
-	// slice for an Entry of encoding RaftVersionSideloaded.
-	RaftVersionSideloadedPrefixByte = byte(1)
+	// EntryEncodingStandardPrefixByte is the first byte of a raftpb.Entry's
+	// Data slice for an Entry of encoding EntryEncodingStandard.
+	EntryEncodingStandardPrefixByte = byte(0)
+	// EntryEncodingSideloadedPrefixByte is the first byte of a raftpb.Entry's Data
+	// slice for an Entry of encoding EntryEncodingSideloaded.
+	EntryEncodingSideloadedPrefixByte = byte(1)
 )
 
-// EncodeRaftCommand encodes a raft command (including the versioning prefix).
-func EncodeRaftCommand(prefixByte byte, commandID CmdIDKey, command []byte) []byte {
+// EncodeRaftCommand encodes a raft command of type EntryEncodingStandard or
+// EntryEncodingSideloaded.
+func EncodeRaftCommand(prefixByte byte, commandID kvserverbase.CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], prefixByte, commandID)
 	copy(b[RaftCommandPrefixLen:], command)
 	return b
 }
 
-// EncodeRaftCommandPrefix encodes the versioning prefix for a Raft command.
-func EncodeRaftCommandPrefix(b []byte, prefixByte byte, commandID CmdIDKey) {
+// EncodeRaftCommandPrefix encodes the prefix for a Raft command of type
+// EntryEncodingStandard or EntryEncodingSideloaded.
+func EncodeRaftCommandPrefix(b []byte, prefixByte byte, commandID kvserverbase.CmdIDKey) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
 	}
