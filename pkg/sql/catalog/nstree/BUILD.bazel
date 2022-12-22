@@ -48,7 +48,7 @@ go_test(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

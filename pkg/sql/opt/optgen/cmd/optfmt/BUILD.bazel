@@ -27,7 +27,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":optfmt_lib"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

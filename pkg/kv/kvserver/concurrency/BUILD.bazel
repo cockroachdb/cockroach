@@ -70,6 +70,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

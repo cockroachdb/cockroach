@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/datadriven"
@@ -35,33 +36,33 @@ import (
 func TestMemo(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideStats | memo.ExprFmtHideNotVisibleIndexInfo
-	runDataDrivenTest(t, testutils.TestDataPath(t, "memo"), flags)
+	runDataDrivenTest(t, datapathutils.TestDataPath(t, "memo"), flags)
 }
 
 func TestFormat(t *testing.T) {
-	runDataDrivenTest(t, testutils.TestDataPath(t, "format"), memo.ExprFmtShowAll)
+	runDataDrivenTest(t, datapathutils.TestDataPath(t, "format"), memo.ExprFmtShowAll)
 }
 
 func TestLogicalProps(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats |
 		memo.ExprFmtHideNotVisibleIndexInfo
-	runDataDrivenTest(t, testutils.TestDataPath(t, "logprops"), flags)
+	runDataDrivenTest(t, datapathutils.TestDataPath(t, "logprops"), flags)
 }
 
 func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
-	runDataDrivenTest(t, testutils.TestDataPath(t, "stats"), flags)
+	runDataDrivenTest(t, datapathutils.TestDataPath(t, "stats"), flags)
 }
 
 func TestStatsQuality(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
-	runDataDrivenTest(t, testutils.TestDataPath(t, "stats_quality"), flags)
+	runDataDrivenTest(t, datapathutils.TestDataPath(t, "stats_quality"), flags)
 }
 
 func TestCompositeSensitive(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 

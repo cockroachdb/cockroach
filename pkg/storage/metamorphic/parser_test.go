@@ -14,7 +14,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +22,7 @@ import (
 func TestParseOutputPreamble(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f, err := os.Open(testutils.TestDataPath(t, "sample.meta"))
+	f, err := os.Open(datapathutils.TestDataPath(t, "sample.meta"))
 	require.NoError(t, err)
 
 	cfg, seed, err := parseOutputPreamble(f)

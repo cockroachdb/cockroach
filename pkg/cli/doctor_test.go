@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -44,7 +44,7 @@ func TestDoctorCluster(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_examine_cluster"), func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_cluster"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
@@ -63,7 +63,7 @@ func TestDoctorZipDir(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_examine_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
@@ -75,7 +75,7 @@ func TestDoctorZipDir(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_recreate_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_recreate_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})
@@ -87,7 +87,7 @@ func TestDoctorZipDir(t *testing.T) {
 		}
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
-		datadriven.RunTest(t, testutils.TestDataPath(t, "doctor", "test_examine_zipdir_verbose"), func(t *testing.T, td *datadriven.TestData) string {
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_verbose"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})

@@ -58,6 +58,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/sqlutil",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/metrictestutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

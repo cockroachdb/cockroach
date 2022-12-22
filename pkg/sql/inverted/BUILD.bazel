@@ -25,7 +25,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":inverted"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/treeprinter",

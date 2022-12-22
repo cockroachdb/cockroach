@@ -27,6 +27,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/gcjob",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",

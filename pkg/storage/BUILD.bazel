@@ -154,6 +154,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/testutils/skip",
         "//pkg/testutils/zerofields",

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +106,7 @@ func TestMakeYAMLConfig(t *testing.T) {
 		},
 	}
 
-	w := echotest.NewWalker(t, testutils.TestDataPath(t))
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t))
 	defer w.Check(t)
 	for _, tc := range testCases {
 		t.Run(tc.name, w.Run(t, tc.name, func(t *testing.T) string {

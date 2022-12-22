@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -32,7 +32,7 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 	var admissionStats storeAdmissionStats
 	var cumLSMIngestedBytes uint64
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "store_per_work_token_estimator"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_per_work_token_estimator"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

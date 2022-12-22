@@ -184,6 +184,7 @@ go_test(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/kvclientutils",
         "//pkg/testutils/localtestcluster",
         "//pkg/testutils/serverutils",

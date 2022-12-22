@@ -71,7 +71,7 @@ type Walker struct {
 //
 // Model usage:
 //
-//	   w := NewWalker(t, testutils.TestDataPath(t))
+//	   w := NewWalker(t, datapathutils.TestDataPath(t))
 //		 for _, test := range []struct{ name string }{
 //		    {name: "foo"},
 //		    {name: "bar"},
@@ -81,7 +81,7 @@ type Walker struct {
 //		    }))
 //		 }
 //
-// w := NewWalker(t, testutils.TestDataPath(t))
+// w := NewWalker(t, datapathutils.TestDataPath(t))
 //
 //	for _, test := range []struct{ name string }{
 //		{name: "foo"},

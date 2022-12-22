@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -53,7 +53,7 @@ func TestTokensLinearModelFitter(t *testing.T) {
 		printLinearModelFitter(&b, fitter)
 		return b.String()
 	}
-	datadriven.RunTest(t, testutils.TestDataPath(t, "tokens_linear_model_fitter"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "tokens_linear_model_fitter"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

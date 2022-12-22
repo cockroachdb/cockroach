@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -1674,7 +1675,7 @@ func TestImportRowLimit(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -1992,7 +1993,7 @@ func TestFailedImportGC(t *testing.T) {
 	blockGC := make(chan struct{})
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "pgdump")
+	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
@@ -2104,7 +2105,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	defer TestingSetParallelImporterReaderBatchSize(1)()
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
@@ -2165,7 +2166,7 @@ func TestImportCSVStmt(t *testing.T) {
 	var forceFailure bool
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
@@ -2700,7 +2701,7 @@ func TestImportFeatureFlag(t *testing.T) {
 	rowsPerRaceFile := 16
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -2738,7 +2739,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	const nodes = 3
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "pgdump")
+	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
@@ -2921,7 +2922,7 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		DisableDefaultTestTenant: true,
-		ExternalIODir:            testutils.TestDataPath(t, "csv")}})
+		ExternalIODir:            datapathutils.TestDataPath(t, "csv")}})
 	defer tc.Stopper().Stop(ctx)
 
 	aboutToRunDSP := make(chan struct{})
@@ -2994,7 +2995,7 @@ func TestImportIntoCSV(t *testing.T) {
 	rowsPerRaceFile := 16
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
@@ -4092,7 +4093,7 @@ func TestImportDefault(t *testing.T) {
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -4519,7 +4520,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, numFiles, rowsPerRaceFile)
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -4784,7 +4785,7 @@ func TestImportComputed(t *testing.T) {
 	const nodes = 3
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "csv")
+	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -5373,7 +5374,7 @@ func TestImportMysql(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -5502,7 +5503,7 @@ func TestImportIntoMysql(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -5529,7 +5530,7 @@ func TestImportDelimited(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "mysqlout")
+	baseDir := datapathutils.TestDataPath(t, "mysqlout")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -5609,7 +5610,7 @@ func TestImportPgCopy(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "pgcopy")
+	baseDir := datapathutils.TestDataPath(t, "pgcopy")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -5695,7 +5696,7 @@ func TestImportPgDump(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -6066,7 +6067,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 
 	const nodes = 1
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "pgdump")
+	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 
 	t.Run("geo_shp2pgsql.sql", func(t *testing.T) {
@@ -6141,7 +6142,7 @@ func TestImportPgDumpDropTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -6225,7 +6226,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 	const nodes = 1
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "pgdump")
+	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	mkArgs := func() base.TestServerArgs {
 		s := cluster.MakeTestingClusterSettings()
 		storage.MVCCRangeTombstonesEnabled.Override(ctx, &s.SV, true)
@@ -6460,7 +6461,7 @@ func TestImportCockroachDump(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -6512,7 +6513,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 	const nodes = 1
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -6547,7 +6548,7 @@ func TestImportAvro(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "avro")
+	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -6873,7 +6874,7 @@ func TestDetachedImport(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "avro")
+	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
@@ -6974,7 +6975,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		nodes = 3
 	)
 	ctx := context.Background()
-	baseDir := testutils.TestDataPath(t, "avro")
+	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 	// Test fails within a test tenant. More investigation is required.
 	// Tracked with #76378.

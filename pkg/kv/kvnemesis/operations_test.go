@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -86,7 +86,7 @@ func TestOperationsFormat(t *testing.T) {
 		},
 	}
 
-	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for i, test := range tests {
 		name := fmt.Sprint(i)
 		t.Run(name, w.Run(t, name, func(t *testing.T) string {
