@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -370,7 +371,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Find the problematic range in the storage.
 		var desc *roachpb.RangeDescriptor
-		require.NoError(t, kvserver.IterateRangeDescriptorsFromDisk(context.Background(), cpEng,
+		require.NoError(t, kvstorage.IterateRangeDescriptorsFromDisk(context.Background(), cpEng,
 			func(rd roachpb.RangeDescriptor) error {
 				if rd.RangeID == resp.Result[0].RangeID {
 					desc = &rd
