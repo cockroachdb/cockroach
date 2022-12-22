@@ -75,6 +75,7 @@ go_test(
     size = "large",
     srcs = [
         "alter_replication_job_test.go",
+        "datadriven_test.go",
         "main_test.go",
         "replication_random_client_test.go",
         "replication_stream_e2e_test.go",
@@ -83,6 +84,7 @@ go_test(
         "stream_ingestion_processor_test.go",
     ],
     args = ["-test.timeout=895s"],
+    data = glob(["testdata/**"]),
     embed = [":streamingest"],
     deps = [
         "//pkg/base",
@@ -136,6 +138,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
