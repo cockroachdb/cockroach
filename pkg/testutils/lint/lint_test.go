@@ -2000,6 +2000,7 @@ func TestLint(t *testing.T) {
 
 		gcassertPaths := []string{
 			"../../col/coldata",
+			"../../col/colserde",
 			"../../keys",
 			"../../kv/kvclient/rangecache",
 			"../../roachpb",

@@ -77,7 +77,7 @@ func roundTripBatch(
 		return err
 	}
 
-	var arrowDataOut []*array.Data
+	var arrowDataOut []array.Data
 	batchLength, err := r.Deserialize(&arrowDataOut, buf.Bytes())
 	if err != nil {
 		return err
@@ -221,7 +221,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
 			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
 			require.NoError(b, err)
-			var data []*array.Data
+			var data []array.Data
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				data, _ = c.BatchToArrow(batch)
@@ -238,7 +238,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
 			require.NoError(b, err)
 			data, err := c.BatchToArrow(batch)
-			dataCopy := make([]*array.Data, len(data))
+			dataCopy := make([]array.Data, len(data))
 			require.NoError(b, err)
 			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
 			b.ResetTimer()
