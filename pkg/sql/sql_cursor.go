@@ -31,9 +31,6 @@ import (
 // DeclareCursor implements the DECLARE statement.
 // See https://www.postgresql.org/docs/current/sql-declare.html for details.
 func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (planNode, error) {
-	if s.Hold {
-		return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD")
-	}
 	if s.Binary {
 		return nil, unimplemented.NewWithIssue(77099, "DECLARE BINARY CURSOR")
 	}
@@ -45,6 +42,9 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 		name: s.String(),
 		constructor: func(ctx context.Context, p *planner) (_ planNode, _ error) {
 			if p.extendedEvalCtx.TxnImplicit {
+				if s.Hold {
+					return nil, unimplemented.NewWithIssue(77101, "DECLARE CURSOR WITH HOLD can only be used in transaction blocks")
+				}
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
@@ -99,6 +99,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				txn:          p.txn,
 				statement:    statement,
 				created:      timeutil.Now(),
+				withHold:     s.Hold,
 			}
 			if err := p.sqlCursors.addCursor(s.Name, cursor); err != nil {
 				// This case shouldn't happen because cursor names are scoped to a session,
@@ -258,6 +259,7 @@ type sqlCursor struct {
 	statement  string
 	created    time.Time
 	curRow     int64
+	withHold   bool
 }
 
 // Next implements the InternalRows interface.

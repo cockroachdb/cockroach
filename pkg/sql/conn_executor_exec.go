@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -987,6 +988,12 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error {
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
 	defer sp.Finish()
+
+	for n, c := range ex.extraTxnState.sqlCursors.list() {
+		if c.withHold {
+			return unimplemented.NewWithIssuef(77101, "CURSOR %s WITH HOLD must be closed before committing", n)
+		}
+	}
 
 	// We need to step the transaction before committing if it has stepping
 	// enabled. If it doesn't have stepping enabled, then we just set the
