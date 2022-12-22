@@ -17,12 +17,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -77,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
@@ -1176,19 +1180,20 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer    serverpb.SQLStatusServer
-	TenantStatusServer serverpb.TenantStatusServer
-	MetricsRecorder    nodeStatusGenerator
-	SessionRegistry    *SessionRegistry
-	ClosedSessionCache *ClosedSessionCache
-	SQLLiveness        sqlliveness.Liveness
-	JobRegistry        *jobs.Registry
-	VirtualSchemas     *VirtualSchemaHolder
-	DistSQLPlanner     *DistSQLPlanner
-	TableStatsCache    *stats.TableStatisticsCache
-	StatsRefresher     *stats.Refresher
-	InternalExecutor   *InternalExecutor
-	QueryCache         *querycache.C
+	SQLStatusServer       serverpb.SQLStatusServer
+	TenantStatusServer    serverpb.TenantStatusServer
+	MetricsRecorder       nodeStatusGenerator
+	SessionRegistry       *SessionRegistry
+	ClosedSessionCache    *ClosedSessionCache
+	RecentStatementsCache *recent.StatementsCache
+	SQLLiveness           sqlliveness.Liveness
+	JobRegistry           *jobs.Registry
+	VirtualSchemas        *VirtualSchemaHolder
+	DistSQLPlanner        *DistSQLPlanner
+	TableStatsCache       *stats.TableStatisticsCache
+	StatsRefresher        *stats.Refresher
+	InternalExecutor      *InternalExecutor
+	QueryCache            *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -1638,10 +1643,6 @@ type StreamingTestingKnobs struct {
 	// frontier specs generated for the replication job.
 	AfterReplicationFlowPlan func([]*execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
-
-	// OverrideReplicationTTLSeconds will override the default value of the
-	// `ReplicationTTLSeconds` field on the StreamIngestion job details.
-	OverrideReplicationTTLSeconds int
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -1936,17 +1937,6 @@ func isSetTransaction(ast tree.Statement) bool {
 	return isSet
 }
 
-// queryPhase represents a phase during a query's execution.
-type queryPhase int
-
-const (
-	// The phase before start of execution (includes parsing, building a plan).
-	preparing queryPhase = 0
-
-	// Execution phase.
-	executing queryPhase = 1
-)
-
 // queryMeta stores metadata about a query. Stored as reference in
 // session.mu.ActiveQueries.
 type queryMeta struct {
@@ -1976,7 +1966,7 @@ type queryMeta struct {
 	isFullScan bool
 
 	// Current phase of execution of query.
-	phase queryPhase
+	phase serverpb.ActiveQuery_Phase
 
 	// Cancellation function for the context associated with this query's
 	// statement.
@@ -2000,6 +1990,77 @@ type queryMeta struct {
 // associated stmt context.
 func (q *queryMeta) cancel() {
 	q.cancelQuery()
+}
+
+// toActiveQuery translates the queryMeta to a serverpb.ActiveQuery.
+func (q *queryMeta) toActiveQuery(
+	ctx context.Context,
+	stmtID clusterunique.ID,
+	sessionID clusterunique.ID,
+	appName atomic.Value,
+	username string,
+	clientAddr string,
+	timeNow time.Time,
+) (serverpb.ActiveQuery, error) {
+	truncateSQL := func(sql string) string {
+		if len(sql) > MaxSQLBytes {
+			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
+			// Ensure the resulting string is valid utf8.
+			for {
+				if r, _ := utf8.DecodeLastRuneInString(sql); r != utf8.RuneError {
+					break
+				}
+				sql = sql[:len(sql)-1]
+			}
+			sql += "…"
+		}
+		return sql
+	}
+
+	// Note: while it may seem tempting to just use query.stmt.AST instead of
+	// re-parsing the original SQL, it's unfortunately NOT SAFE to do so because
+	// the AST is currently not immutable - doing so will produce data races.
+	// See issue https://github.com/cockroachdb/cockroach/issues/90965 for the
+	// last time this was hit.
+	// This can go away if we resolve https://github.com/cockroachdb/cockroach/issues/22847.
+	parsed, err := parser.ParseOne(q.stmt.SQL)
+	if err != nil {
+		return serverpb.ActiveQuery{}, err
+	}
+
+	sqlNoConstants := truncateSQL(formatStatementHideConstants(parsed.AST))
+	nPlaceholders := 0
+	if q.placeholders != nil {
+		nPlaceholders = len(q.placeholders.Values)
+	}
+	placeholders := make([]string, nPlaceholders)
+	for i := range placeholders {
+		placeholders[i] = tree.AsStringWithFlags(q.placeholders.Values[i], tree.FmtSimple)
+	}
+	sql := truncateSQL(q.stmt.SQL)
+	progress := math.Float64frombits(atomic.LoadUint64(&q.progressAtomic))
+	queryStart := q.start.UTC()
+	activeQuery := serverpb.ActiveQuery{
+		TxnID:          q.txnID,
+		ID:             stmtID.String(),
+		Start:          queryStart,
+		ElapsedTime:    timeNow.Sub(queryStart),
+		Sql:            sql,
+		SqlNoConstants: sqlNoConstants,
+		SqlSummary:     formatStatementSummary(parsed.AST),
+		Placeholders:   placeholders,
+		IsDistributed:  q.isDistributed,
+		Phase:          q.phase,
+		Progress:       float32(progress),
+		IsFullScan:     q.isFullScan,
+		PlanGist:       q.planGist,
+		Database:       q.database,
+		SessionID:      sessionID.GetBytes(),
+		AppName:        appName.Load().(string),
+		Username:       username,
+		ClientAddress:  clientAddr,
+	}
+	return activeQuery, nil
 }
 
 // SessionDefaults mirrors fields in Session, for restoring default

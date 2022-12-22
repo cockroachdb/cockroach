@@ -47,14 +47,11 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"net"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -107,12 +104,6 @@ const (
 	// "useful" outgoing gossip connection to free up space for a more
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
-
-	// defaultClientsInterval is the default interval for updating the gossip
-	// clients key which allows every node in the cluster to create a map of
-	// gossip connectivity. This value is intentionally small as we want to
-	// detect gossip partitions faster that the node liveness timeout (9s).
-	defaultClientsInterval = 2 * time.Second
 
 	// NodeDescriptorInterval is the interval for gossiping the node descriptor.
 	// Note that increasing this duration may increase the likelihood of gossip
@@ -280,8 +271,6 @@ type Gossip struct {
 
 	locality roachpb.Locality
 
-	lastConnectivity redact.RedactableString
-
 	defaultZoneConfig *zonepb.ZoneConfig
 }
 
@@ -340,7 +329,6 @@ func New(
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
-	// Log gossip connectivity whenever we receive an update.
 	g.mu.Unlock()
 
 	if grpcServer != nil {
@@ -415,7 +403,6 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Wrapf(err, "n%d: couldn't gossip descriptor", desc.NodeID)
 	}
-	g.updateClients()
 	return nil
 }
 
@@ -596,17 +583,10 @@ func (g *Gossip) LogStatus() {
 	}
 	g.mu.RUnlock()
 
-	var connectivity redact.RedactableString
-	if s := redact.Sprint(g.Connectivity()); s != g.lastConnectivity {
-		g.lastConnectivity = s
-		connectivity = s
-	}
-
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Health.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
+	log.Health.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s",
 		status, n, util.Pluralize(int64(n)),
-		g.clientStatus(), g.server.status(),
-		connectivity)
+		g.clientStatus(), g.server.status())
 }
 
 func (g *Gossip) clientStatus() ClientStatus {
@@ -630,63 +610,6 @@ func (g *Gossip) clientStatus() ClientStatus {
 		})
 	}
 	return status
-}
-
-// Connectivity returns the current view of the gossip network as seen by this
-// node.
-func (g *Gossip) Connectivity() Connectivity {
-	ctx := g.AnnotateCtx(context.TODO())
-	var c Connectivity
-
-	g.mu.RLock()
-
-	if i := g.mu.is.getInfo(KeySentinel); i != nil {
-		c.SentinelNodeID = i.NodeID
-	}
-
-	g.nodeDescs.Range(func(nodeID int64, _ unsafe.Pointer) bool {
-		key := MakeGossipClientsKey(roachpb.NodeID(nodeID))
-		i := g.mu.is.getInfo(key)
-		if i == nil {
-			return true
-		}
-
-		v, err := i.Value.GetBytes()
-		if err != nil {
-			log.Errorf(ctx, "unable to retrieve gossip value for %s: %v", key, err)
-			return true
-		}
-		if len(v) == 0 {
-			return true
-		}
-
-		for _, part := range strings.Split(string(v), ",") {
-			id, err := strconv.ParseInt(part, 10 /* base */, 64 /* bitSize */)
-			if err != nil {
-				log.Errorf(ctx, "unable to parse node ID: %v", err)
-			}
-			c.ClientConns = append(c.ClientConns, Connectivity_Conn{
-				SourceID: roachpb.NodeID(nodeID),
-				TargetID: roachpb.NodeID(id),
-			})
-		}
-		return true
-	})
-
-	g.mu.RUnlock()
-
-	sort.Slice(c.ClientConns, func(i, j int) bool {
-		a, b := &c.ClientConns[i], &c.ClientConns[j]
-		if a.SourceID < b.SourceID {
-			return true
-		}
-		if a.SourceID > b.SourceID {
-			return false
-		}
-		return a.TargetID < b.TargetID
-	})
-
-	return c
 }
 
 // EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a
@@ -919,31 +842,6 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	g.storeDescs.Store(int64(desc.StoreID), unsafe.Pointer(&desc))
 }
 
-func (g *Gossip) updateClients() {
-	nodeID := g.NodeID.Get()
-	if nodeID == 0 {
-		return
-	}
-
-	var buf bytes.Buffer
-	var sep string
-
-	g.mu.RLock()
-	g.clientsMu.Lock()
-	for _, c := range g.clientsMu.clients {
-		if c.peerID != 0 {
-			fmt.Fprintf(&buf, "%s%d", sep, c.peerID)
-			sep = ","
-		}
-	}
-	g.clientsMu.Unlock()
-	g.mu.RUnlock()
-
-	if err := g.AddInfo(MakeGossipClientsKey(nodeID), buf.Bytes(), 2*defaultClientsInterval); err != nil {
-		log.Errorf(g.AnnotateCtx(context.Background()), "%v", err)
-	}
-}
-
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
 //
@@ -1149,15 +1047,13 @@ func (g *Gossip) InfoOriginatedHere(key string) bool {
 func (g *Gossip) GetInfoStatus() InfoStatus {
 	clientStatus := g.clientStatus()
 	serverStatus := g.server.status()
-	connectivity := g.Connectivity()
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	is := InfoStatus{
-		Infos:        make(map[string]Info),
-		Client:       clientStatus,
-		Server:       serverStatus,
-		Connectivity: connectivity,
+		Infos:  make(map[string]Info),
+		Client: clientStatus,
+		Server: serverStatus,
 	}
 	for k, v := range g.mu.is.Infos {
 		is.Infos[k] = *protoutil.Clone(v).(*Info)
@@ -1407,14 +1303,11 @@ func (g *Gossip) bootstrap() {
 func (g *Gossip) manage() {
 	ctx := g.AnnotateCtx(context.Background())
 	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-manage", func(ctx context.Context) {
-		clientsTimer := timeutil.NewTimer()
 		cullTimer := timeutil.NewTimer()
 		stallTimer := timeutil.NewTimer()
-		defer clientsTimer.Stop()
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
 
-		clientsTimer.Reset(defaultClientsInterval)
 		cullTimer.Reset(jitteredInterval(g.cullInterval))
 		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
@@ -1425,10 +1318,6 @@ func (g *Gossip) manage() {
 				g.doDisconnected(c)
 			case <-g.tighten:
 				g.tightenNetwork(ctx)
-			case <-clientsTimer.C:
-				clientsTimer.Read = true
-				g.updateClients()
-				clientsTimer.Reset(defaultClientsInterval)
 			case <-cullTimer.C:
 				cullTimer.Read = true
 				cullTimer.Reset(jitteredInterval(g.cullInterval))
@@ -1512,8 +1401,6 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 }
 
 func (g *Gossip) doDisconnected(c *client) {
-	defer g.updateClients()
-
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.removeClientLocked(c)

@@ -143,8 +143,16 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		}
 	}
 
-	v1 := iter.UnsafeValue()
-	v2 := iter.Value()
+	v1, err := iter.UnsafeValue()
+	if err != nil {
+		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err.Error())
+		return
+	}
+	v2, err := iter.Value()
+	if err != nil {
+		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err.Error())
+		return
+	}
 	if !bytes.Equal(v1, v2) {
 		fmt.Fprintf(b, "output: value: %x != %x\n", v1, v2)
 		return

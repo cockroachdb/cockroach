@@ -29,19 +29,19 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL, (a+b+c+d) % 2 = 0 FROM
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /1       {1}       1
-/1         /2       {2}       2
-/2         /3       {3}       3
-/3         /4       {4}       4
-/4         /5       {5}       5
-/5         /6       {1}       1
-/6         /7       {2}       2
-/7         /8       {3}       3
-/8         /9       {4}       4
-/9         NULL     {5}       5
+start_key           end_key       replicas  lease_holder
+<before:/Table/53>  …/1/1         {1}       1
+…/1/1               …/1/2         {2}       2
+…/1/2               …/1/3         {3}       3
+…/1/3               …/1/4         {4}       4
+…/1/4               …/1/5         {5}       5
+…/1/5               …/1/6         {1}       1
+…/1/6               …/1/7         {2}       2
+…/1/7               …/1/8         {3}       3
+…/1/8               …/1/9         {4}       4
+…/1/9               <after:/Max>  {5}       5
 
 # Turn feature flag off and verify errors.
 statement ok
@@ -2201,13 +2201,70 @@ CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES;
 statement error pq: multi-column partial statistics are not currently supported
 CREATE STATISTICS abcd_a_b ON a, c FROM abcd USING EXTREMES;
 
+# Verify that a non-inverted index string column with a string histogram
+# can have partial statistics
+statement ok
+CREATE TABLE s (s STRING, INDEX (s));
+
+statement ok
+INSERT INTO s VALUES ('c'), ('d'), ('e');
+
+statement ok
+CREATE STATISTICS str ON s FROM s;
+
+let $s_stats
+SHOW STATISTICS USING JSON FOR TABLE s;
+
+statement ok
+INSERT INTO s VALUES ('a'), ('b'), ('f');
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE s INJECT STATISTICS '$s_stats'
+
+statement ok
+CREATE STATISTICS s_partial ON s FROM s USING EXTREMES;
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE s];
+----
+statistics_name  partial_predicate                                          row_count  null_count
+str              NULL                                                       3          0
+s_partial        (s IS NULL) OR ((s < 'c':::STRING) OR (s > 'e':::STRING))  3          0
+
+# Verify that inverted index columns return an error.
+statement ok
+CREATE TABLE j (j JSONB, INVERTED INDEX (j));
+
+statement ok
+INSERT INTO j VALUES ('{"1":"10"}'), ('{"2":"20"}'),  ('{"3":"30"}');
+
+statement ok
+CREATE STATISTICS j_full ON j FROM j;
+
+let $j_stats
+SHOW STATISTICS USING JSON FOR TABLE j;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE j INJECT STATISTICS '$j_stats'
+
+statement error pq: cannot create partial statistics on an inverted index column
+CREATE STATISTICS j_partial ON j FROM j USING EXTREMES;
+
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
 
 statement error pq: column x does not have a prior statistic
 CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
 
-statement error pq: column a does not have a prior statistic, or the prior histogram has no buckets and a partial statistic cannot be collected
+statement error pq: the latest full statistic for column a has no histogram
 CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column

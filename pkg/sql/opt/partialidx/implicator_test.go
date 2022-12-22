@@ -167,13 +167,13 @@ func BenchmarkImplicator(b *testing.B) {
 		{
 			name:    "single-exact-match-extra-filters",
 			vars:    "a int, b int, c int, d int, e int",
-			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
+			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND e = 5",
 			pred:    "c >= 10",
 		},
 		{
 			name:    "single-inexact-match-extra-filters",
 			vars:    "a int, b int, c int, d int, e int",
-			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
+			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND e = 5",
 			pred:    "c > 0",
 		},
 		{

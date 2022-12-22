@@ -1304,7 +1304,11 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		p.err = errors.Wrap(err, "unable to decode MVCCKey")
 		return false
 	}
-	p.curRawValue = p.parent.UnsafeValue()
+	p.curRawValue, err = p.parent.UnsafeValue()
+	if err != nil {
+		p.err = err
+		return false
+	}
 
 	// Reset decoded value to avoid bugs.
 	if util.RaceEnabled {

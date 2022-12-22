@@ -404,8 +404,6 @@ export class TransactionsPage extends React.Component<
     const statements = data?.statements || [];
     const { filters } = this.state;
 
-    // If the cluster is a tenant cluster we don't show info
-    // about nodes/regions.
     const nodes = Object.keys(nodeRegions)
       .map(n => Number(n))
       .sort();

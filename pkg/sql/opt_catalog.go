@@ -262,8 +262,11 @@ func (oc *optCatalog) ResolveIndex(
 			ctx,
 			oc.planner,
 			name,
-			true, /* required */
-			true, /* requireActiveIndex */
+			tree.IndexLookupFlags{
+				Required:              true,
+				IncludeNonActiveIndex: flags.IncludeNonActiveIndexes,
+				IncludeOfflineTable:   flags.IncludeOfflineTables,
+			},
 		)
 	})
 	if err != nil {

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -36,37 +37,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 
-func entryEq(l, r raftpb.Entry) error {
-	if reflect.DeepEqual(l, r) {
-		return nil
-	}
-	_, lData := kvserverbase.DecodeRaftCommand(l.Data)
-	_, rData := kvserverbase.DecodeRaftCommand(r.Data)
-	var lc, rc kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(lData, &lc); err != nil {
-		return errors.Wrap(err, "unmarshalling LHS")
-	}
-	if err := protoutil.Unmarshal(rData, &rc); err != nil {
-		return errors.Wrap(err, "unmarshalling RHS")
-	}
-	if !reflect.DeepEqual(lc, rc) {
-		return errors.Newf("unexpected:\n%s", strings.Join(pretty.Diff(lc, rc), "\n"))
-	}
-	return nil
+func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
+	el, err := raftlog.NewEntry(l)
+	require.NoError(t, err)
+	er, err := raftlog.NewEntry(r)
+	require.NoError(t, err)
+	require.Equal(t, el, er)
 }
 
 func mkEnt(
-	v kvserverbase.RaftCommandEncodingVersion,
-	index, term uint64,
-	as *kvserverpb.ReplicatedEvalResult_AddSSTable,
+	v byte, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
-	cmdIDKey := strings.Repeat("x", kvserverbase.RaftCommandIDLen)
+	cmdIDKey := strings.Repeat("x", raftlog.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
@@ -75,7 +62,7 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = kvserverbase.EncodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
+	ent.Data = raftlog.EncodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
 	return ent
 }
 
@@ -371,7 +358,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded
+	v1, v2 := raftlog.EntryEncodingStandardPrefixByte, raftlog.EntryEncodingSideloadedPrefixByte
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -454,16 +441,14 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			}
 		} else if test.expErr != "" {
 			t.Fatalf("%s: success, but expected error: %s", k, test.expErr)
-		} else if err := entryEq(thinCopy, test.thin); err != nil {
-			t.Fatalf("%s: mutated the original entry: %s", k, pretty.Diff(thinCopy, test.thin))
+		} else {
+			mustEntryEq(t, thinCopy, test.thin)
 		}
 
 		if newEnt == nil {
 			newEnt = &thinCopy
 		}
-		if err := entryEq(*newEnt, test.fat); err != nil {
-			t.Fatalf("%s: %+v", k, err)
-		}
+		mustEntryEq(t, *newEnt, test.fat)
 
 		if dump := getRecAndFinish().String(); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
@@ -495,11 +480,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(kvserverbase.RaftVersionStandard, 10, 99, nil)
-	entV1SST := mkEnt(kvserverbase.RaftVersionStandard, 11, 99, &addSST)
-	entV2Reg := mkEnt(kvserverbase.RaftVersionSideloaded, 12, 99, nil)
-	entV2SST := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(raftlog.EntryEncodingStandardPrefixByte, 10, 99, nil)
+	entV1SST := mkEnt(raftlog.EntryEncodingStandardPrefixByte, 11, 99, &addSST)
+	entV2Reg := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 12, 99, nil)
+	entV2SST := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string
@@ -561,9 +546,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 				expNumSideloaded = 1
 			}
 			require.Equal(t, expNumSideloaded, numSideloaded)
-			if !reflect.DeepEqual(postEnts, test.postEnts) {
-				t.Fatalf("result differs from expected: %s", pretty.Diff(postEnts, test.postEnts))
-			}
+			require.Equal(t, test.postEnts, postEnts)
 			if test.size != size {
 				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}

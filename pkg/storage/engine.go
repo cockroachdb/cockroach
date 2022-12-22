@@ -171,7 +171,7 @@ type SimpleMVCCIterator interface {
 	//
 	// The memory is invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// Use Value() if that is undesirable.
-	UnsafeValue() []byte
+	UnsafeValue() ([]byte, error)
 	// MVCCValueLenAndIsTombstone should be called only for MVCC (i.e.,
 	// UnsafeKey().IsValue()) point values, when the actual point value is not
 	// needed, for example when updating stats and making GC decisions, and it
@@ -278,7 +278,7 @@ type MVCCIterator interface {
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
 	// Value is like UnsafeValue, but returns memory owned by the caller.
-	Value() []byte
+	Value() ([]byte, error)
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
@@ -348,10 +348,10 @@ type EngineIterator interface {
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
-	UnsafeValue() []byte
+	UnsafeValue() ([]byte, error)
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
-	Value() []byte
+	Value() ([]byte, error)
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
 	GetRawIter() *pebble.Iterator
@@ -1153,7 +1153,11 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 		return nil, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
 	}
 	var meta enginepb.MVCCMetadata
-	if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+	v, err := iter.UnsafeValue()
+	if err != nil {
+		return nil, err
+	}
+	if err = protoutil.Unmarshal(v, &meta); err != nil {
 		return nil, err
 	}
 	if meta.Txn == nil {
@@ -1236,11 +1240,15 @@ func ScanIntents(
 		if err != nil {
 			return nil, err
 		}
-		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, err
+		}
+		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return nil, err
 		}
 		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
-		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+		intentBytes += int64(len(lockedKey)) + int64(len(v))
 	}
 	if err != nil {
 		return nil, err
@@ -1480,7 +1488,11 @@ func iterateOnReader(
 
 		var kv MVCCKeyValue
 		if hasPoint, _ := it.HasPointAndRange(); hasPoint {
-			kv = MVCCKeyValue{Key: it.Key(), Value: it.Value()}
+			v, err := it.Value()
+			if err != nil {
+				return err
+			}
+			kv = MVCCKeyValue{Key: it.Key(), Value: v}
 		}
 		if !it.RangeBounds().Key.Equal(rangeKeys.Bounds.Key) {
 			rangeKeys = it.RangeKeys().Clone()
@@ -1577,7 +1589,10 @@ func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
 		}
 	}
 	if hasPoint {
-		value := iter.UnsafeValue()
+		value, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
 		valueLen := iter.ValueLen()
 		if len(value) != valueLen {
 			return errors.AssertionFailedf("length of UnsafeValue %d != ValueLen %d", len(value), valueLen)
@@ -1660,7 +1675,15 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 	}
 
 	// Value must equal UnsafeValue.
-	if v, u := iter.Value(), iter.UnsafeValue(); !bytes.Equal(v, u) {
+	u, err := iter.UnsafeValue()
+	if err != nil {
+		return err
+	}
+	v, err := iter.Value()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(v, u) {
 		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
 	}
 
@@ -1732,7 +1755,11 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil
 		}
-		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return false, err
+		}
+		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return false, err
 		}
 		if meta.Txn == nil {

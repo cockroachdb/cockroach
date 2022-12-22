@@ -91,6 +91,23 @@ type Provider struct {
 	}
 }
 
+func (p *Provider) SnapshotVolume(
+	volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
+	// TODO(leon): implement
+	panic("unimplemented")
+}
+
+func (p *Provider) CreateVolume(vm.VolumeCreateOpts) (vm.Volume, error) {
+	// TODO(leon): implement
+	panic("unimplemented")
+}
+
+func (p *Provider) AttachVolumeToVM(vm.Volume, *vm.VM) (string, error) {
+	// TODO(leon): implement
+	panic("unimplemented")
+}
+
 // New constructs a new Provider instance.
 func New() *Provider {
 	p := &Provider{}
@@ -406,7 +423,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 
 // List implements the vm.Provider interface. This will query all
 // Azure VMs in the subscription and select those with a roachprod tag.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 

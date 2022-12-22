@@ -5212,6 +5212,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 		// ImportDetails.
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
+		Username: username.TestUserName(),
 	}
 
 	for _, tc := range []struct {

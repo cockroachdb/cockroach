@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -95,6 +96,57 @@ func sstMaker(t *testing.T, keyValues []roachpb.KeyValue) roachpb.RangeFeedSSTab
 		},
 		WriteTS: batchTS,
 	}
+}
+
+// streamClientValidatorWrapper wraps a Validator and exposes additional methods
+// used by stream ingestion to check for correctness.
+type streamClientValidator struct {
+	cdctest.StreamValidator
+	rekeyer *backupccl.KeyRewriter
+
+	mu syncutil.Mutex
+}
+
+// newStreamClientValidator returns a wrapped Validator, that can be used
+// to validate the events emitted by the cluster to cluster streaming client.
+// The wrapper currently only "wraps" an orderValidator, but can be built out
+// to utilize other Validator's.
+// The wrapper also allows querying the orderValidator to retrieve streamed
+// events from an in-memory store.
+func newStreamClientValidator(rekeyer *backupccl.KeyRewriter) *streamClientValidator {
+	ov := cdctest.NewStreamOrderValidator()
+	return &streamClientValidator{
+		StreamValidator: ov,
+		rekeyer:         rekeyer,
+	}
+}
+
+func (sv *streamClientValidator) noteRow(
+	partition string, key, value string, updated hlc.Timestamp,
+) error {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.NoteRow(partition, key, value, updated)
+}
+
+func (sv *streamClientValidator) noteResolved(partition string, resolved hlc.Timestamp) error {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.NoteResolved(partition, resolved)
+}
+
+func (sv *streamClientValidator) failures() []string {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.Failures()
+}
+
+func (sv *streamClientValidator) getValuesForKeyBelowTimestamp(
+	key string, timestamp hlc.Timestamp,
+) ([]roachpb.KeyValue, error) {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.StreamValidator.GetValuesForKeyBelowTimestamp(key, timestamp)
 }
 
 // TestStreamIngestionJobWithRandomClient creates a stream ingestion job that is
@@ -299,10 +351,12 @@ func assertExactlyEqualKVs(
 		// Since the iterator goes from latest to older versions, we compare
 		// starting from the end of the slice that is sorted by timestamp.
 		latestVersionInChain := valueTimestampTuples[len(valueTimestampTuples)-1]
+		v, err := it.Value()
+		require.NoError(t, err)
 		require.Equal(t, roachpb.KeyValue{
 			Key: it.Key().Key,
 			Value: roachpb.Value{
-				RawBytes:  it.Value(),
+				RawBytes:  v,
 				Timestamp: it.Key().Timestamp,
 			},
 		}, latestVersionInChain)

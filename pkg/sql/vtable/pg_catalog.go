@@ -411,6 +411,7 @@ CREATE TABLE pg_catalog.pg_index (
     indrelid OID,
     indnatts INT2,
     indisunique BOOL,
+    indnullsnotdistinct BOOL,
     indisprimary BOOL,
     indisexclusion BOOL,
     indimmediate BOOL,

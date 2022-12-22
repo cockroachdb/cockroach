@@ -81,7 +81,7 @@ func TestBackendDialTLS(t *testing.T) {
 		name     string
 		addr     string
 		tenantID uint64
-		err      bool
+		errCode  errorCode
 	}{{
 		name:     "tenant10",
 		addr:     sql10.SQLAddr(),
@@ -94,22 +94,22 @@ func TestBackendDialTLS(t *testing.T) {
 		name:     "tenant10To11",
 		addr:     sql11.SQLAddr(),
 		tenantID: 10,
-		err:      true,
+		errCode:  codeBackendDown,
 	}, {
 		name:     "tenant11To10",
 		addr:     sql10.SQLAddr(),
 		tenantID: 11,
-		err:      true,
+		errCode:  codeBackendDown,
 	}, {
 		name:     "tenant10ToStorage",
 		addr:     storageServer.ServingSQLAddr(),
 		tenantID: 10,
-		err:      true,
+		errCode:  codeBackendDown,
 	}, {
 		name:     "tenantWithNodeIDToStoage",
 		addr:     storageServer.ServingSQLAddr(),
 		tenantID: uint64(storageServer.NodeID()),
-		err:      true,
+		errCode:  codeBackendDown,
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -120,8 +120,8 @@ func TestBackendDialTLS(t *testing.T) {
 
 			conn, err := BackendDial(startupMsg, tc.addr, tenantConfig)
 
-			if tc.err {
-				require.Error(t, err)
+			if tc.errCode != codeNone {
+				require.Equal(t, tc.errCode, getErrorCode(err))
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, conn)

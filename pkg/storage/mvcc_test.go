@@ -3732,9 +3732,12 @@ func checkEngineEquality(
 		if !iter1.UnsafeKey().Equal(iter2.UnsafeKey()) {
 			t.Fatalf("keys not equal %s, %s", iter1.UnsafeKey().String(), iter2.UnsafeKey().String())
 		}
-		if !bytes.Equal(iter1.UnsafeValue(), iter2.UnsafeValue()) {
-			t.Fatalf("key %s has different values: %x, %x", iter1.UnsafeKey().String(),
-				iter1.UnsafeValue(), iter2.UnsafeValue())
+		v1, err := iter1.UnsafeValue()
+		require.NoError(t, err)
+		v2, err := iter2.UnsafeValue()
+		require.NoError(t, err)
+		if !bytes.Equal(v1, v2) {
+			t.Fatalf("key %s has different values: %x, %x", iter1.UnsafeKey().String(), v1, v2)
 		}
 		if debug {
 			log.Infof(ctx, "key: %s", iter1.UnsafeKey().String())
@@ -6706,7 +6709,9 @@ func (f *fingerprintOracle) fingerprintPointKeys(t *testing.T, dataSST []byte) u
 		if k.Timestamp.IsEmpty() {
 			_, err := hasher.Write(k.Key)
 			require.NoError(t, err)
-			_, err = hasher.Write(iter.UnsafeValue())
+			v, err := iter.UnsafeValue()
+			require.NoError(t, err)
+			_, err = hasher.Write(v)
 			require.NoError(t, err)
 		} else {
 			_, err := hasher.Write(k.Key)
@@ -6717,7 +6722,9 @@ func (f *fingerprintOracle) fingerprintPointKeys(t *testing.T, dataSST []byte) u
 			encodeMVCCTimestampToBuf(timestampBuf, k.Timestamp)
 			_, err = hasher.Write(timestampBuf)
 			require.NoError(t, err)
-			_, err = hasher.Write(iter.UnsafeValue())
+			v, err := iter.UnsafeValue()
+			require.NoError(t, err)
+			_, err = hasher.Write(v)
 			require.NoError(t, err)
 		}
 		xorAgg = xorAgg ^ hasher.Sum64()
@@ -6766,7 +6773,7 @@ func mvccGetRawWithError(t *testing.T, r Reader, key MVCCKey) ([]byte, error) {
 	if ok, err := iter.Valid(); err != nil || !ok {
 		return nil, err
 	}
-	return iter.Value(), nil
+	return iter.Value()
 }
 
 func TestMVCCLookupRangeKeyValue(t *testing.T) {

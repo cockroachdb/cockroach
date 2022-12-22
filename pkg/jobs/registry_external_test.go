@@ -387,6 +387,7 @@ func TestGCDurationControl(t *testing.T) {
 			// ImportDetails.
 			Details:  jobspb.ImportDetails{},
 			Progress: jobspb.ImportProgress{},
+			Username: username.TestUserName(),
 		}, id, txn)
 		return err
 	}))
@@ -472,6 +473,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 			// ImportDetails.
 			Details:  jobspb.ImportDetails{},
 			Progress: jobspb.ImportProgress{},
+			Username: username.TestUserName(),
 		}, id, nil /* txn */)
 		require.NoError(t, err)
 		return id

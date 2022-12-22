@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
@@ -54,12 +55,18 @@ func (rro *RelocateRangeOp) error(err error) {
 // to generate a suggested replication change.
 type SimRelocateOneOptions struct {
 	allocator allocatorimpl.Allocator
+	storePool storepool.AllocatorStorePool
 	state     state.State
 }
 
 // Allocator returns the allocator for the store this replica is on.
 func (s *SimRelocateOneOptions) Allocator() allocatorimpl.Allocator {
 	return s.allocator
+}
+
+// StorePool returns the store's configured store pool.
+func (s *SimRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
+	return s.storePool
 }
 
 // SpanConfig returns the span configuration for the range with start key.

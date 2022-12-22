@@ -1785,7 +1785,7 @@ func runSSTIterator(b *testing.B, numKeys int, verify bool) {
 				break
 			}
 			_ = iter.UnsafeKey()
-			_ = iter.UnsafeValue()
+			_, _ = iter.UnsafeValue()
 		}
 	}
 }

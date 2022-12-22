@@ -11,6 +11,7 @@
 package kvnemesis
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -21,8 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -110,6 +115,8 @@ type ClientOperationConfig struct {
 	DeleteRange int
 	// DeleteRange is an operation that invokes DeleteRangeUsingTombstone.
 	DeleteRangeUsingTombstone int
+	// AddSSTable is an operations that ingests an SSTable with random KV pairs.
+	AddSSTable int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -190,6 +197,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		DeleteExisting:            1,
 		DeleteRange:               1,
 		DeleteRangeUsingTombstone: 1,
+		AddSSTable:                1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -267,6 +275,11 @@ func NewDefaultConfig() GeneratorConfig {
 	// #45586 has already been addressed.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
+	// AddSSTable cannot be used in transactions, nor in batches.
+	config.Ops.Batch.Ops.AddSSTable = 0
+	config.Ops.ClosureTxn.CommitBatchOps.AddSSTable = 0
+	config.Ops.ClosureTxn.TxnClientOps.AddSSTable = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.AddSSTable = 0
 	return config
 }
 
@@ -459,6 +472,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
+	addOpGen(allowed, randAddSSTable, c.AddSSTable)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -498,6 +512,86 @@ func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
 	key := randMapKey(rng, g.keys)
 	return put(key, seq)
+}
+
+func randAddSSTable(g *generator, rng *rand.Rand) Operation {
+	ctx := context.Background()
+
+	sstTimestamp := hlc.MinTimestamp // replaced via SSTTimestampToRequestTimestamp
+	numKeys := rng.Intn(16) + 1      // number of point keys
+	probReplace := 0.2               // probability to replace existing key, if possible
+	probTombstone := 0.2             // probability to write a tombstone
+	asWrites := rng.Float64() < 0.2  // IngestAsWrites
+
+	// AddSSTable requests cannot span multiple ranges, so we try to fit them
+	// within an existing range. This may race with a concurrent split, in which
+	// case the AddSSTable will fail, but that's ok -- most should still succeed.
+	rangeStart, rangeEnd := randRangeSpan(rng, g.currentSplits)
+	rangeKeys := keysBetween(g.keys, rangeStart, rangeEnd)
+
+	// Generate keys first, to write them in order and without duplicates. We pick
+	// either existing or new keys depending on probReplace, making sure they're
+	// unique.
+	//
+	// TODO(erikgrinaker): For now, only ingest point keys. We currently don't
+	// ingest range keys in production code, although we soon will.
+	sstKeys := []string{}
+	sstKeysMap := map[string]struct{}{}
+	for len(sstKeys) < numKeys {
+		var key string
+		if len(rangeKeys) > 0 && rng.Float64() < probReplace {
+			// Pick a random existing key when appropriate.
+			key = rangeKeys[rng.Intn(len(rangeKeys))]
+		} else {
+			// Generate a new random key in the range.
+			key = randKeyBetween(rng, rangeStart, rangeEnd)
+		}
+		if _, ok := sstKeysMap[key]; !ok {
+			sstKeysMap[key] = struct{}{}
+			sstKeys = append(sstKeys, key)
+		}
+	}
+	sort.Strings(sstKeys)
+
+	sstSpan := roachpb.Span{
+		Key:    roachpb.Key(sstKeys[0]),
+		EndKey: roachpb.Key(tk(fk(sstKeys[len(sstKeys)-1]) + 1)),
+	}
+
+	// Unlike other write operations, AddSSTable sends raw MVCC values directly
+	// through to storage. We therefore don't need to pass the sequence number via
+	// the RequestHeader, but instead write them directly into the MVCCValueHeader
+	// of the MVCC values.
+	seq := g.nextSeq()
+	sstValueHeader := enginepb.MVCCValueHeader{}
+	sstValueHeader.KVNemesisSeq.Set(seq)
+	sstValue := storage.MVCCValue{
+		MVCCValueHeader: sstValueHeader,
+		Value:           roachpb.MakeValueFromString(sv(seq)),
+	}
+	sstTombstone := storage.MVCCValue{MVCCValueHeader: sstValueHeader}
+
+	// Write key/value pairs to the SST.
+	f := &storage.MemFile{}
+	st := cluster.MakeTestingClusterSettings()
+	w := storage.MakeIngestionSSTWriter(ctx, st, f)
+	defer w.Close()
+
+	for _, key := range sstKeys {
+		v := sstValue
+		if rng.Float64() < probTombstone {
+			v = sstTombstone
+		}
+		err := w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(key), Timestamp: sstTimestamp}, v)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if err := w.Finish(); err != nil {
+		panic(err)
+	}
+
+	return addSSTable(f.Data(), sstSpan, sstTimestamp, seq, asWrites)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -749,6 +843,19 @@ func tk(n uint64) string {
 	return string(key)
 }
 
+// keysBetween returns the keys between the given [start,end) span
+// in an undefined order. It takes a map for use with g.keys.
+func keysBetween(keys map[string]struct{}, start, end string) []string {
+	between := []string{}
+	s, e := fk(start), fk(end)
+	for key := range keys {
+		if nk := fk(key); nk >= s && nk < e {
+			between = append(between, key)
+		}
+	}
+	return between
+}
+
 func randKey(rng *rand.Rand) string {
 	// Avoid the endpoints because having point writes at the
 	// endpoints complicates randRangeSpan.
@@ -913,4 +1020,16 @@ func transferLease(key string, target roachpb.StoreID) Operation {
 
 func changeZone(changeType ChangeZoneType) Operation {
 	return Operation{ChangeZone: &ChangeZoneOperation{Type: changeType}}
+}
+
+func addSSTable(
+	data []byte, span roachpb.Span, sstTimestamp hlc.Timestamp, seq kvnemesisutil.Seq, asWrites bool,
+) Operation {
+	return Operation{AddSSTable: &AddSSTableOperation{
+		Data:         data,
+		Span:         span,
+		SSTTimestamp: sstTimestamp,
+		Seq:          seq,
+		AsWrites:     asWrites,
+	}}
 }

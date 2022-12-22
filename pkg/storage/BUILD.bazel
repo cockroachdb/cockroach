@@ -84,6 +84,7 @@ go_library(
         "@com_github_cockroachdb_pebble//bloom",
         "@com_github_cockroachdb_pebble//rangekey",
         "@com_github_cockroachdb_pebble//record",
+        "@com_github_cockroachdb_pebble//replay",
         "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//vfs/atomicfs",

@@ -240,7 +240,7 @@ func iterateSimpleMVCCIterator(t *testing.T, it SimpleMVCCIterator, subtest iter
 			output.WriteRune('M')
 		} else {
 			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
-			v, err := DecodeMVCCValue(it.UnsafeValue())
+			v, err := DecodeMVCCValueAndErr(it.UnsafeValue())
 			require.NoError(t, err)
 			if v.IsTombstone() {
 				output.WriteRune('X')

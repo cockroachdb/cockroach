@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -68,7 +69,7 @@ var (
 )
 
 func makeIDKey() kvserverbase.CmdIDKey {
-	idKeyBuf := make([]byte, 0, kvserverbase.RaftCommandIDLen)
+	idKeyBuf := make([]byte, 0, raftlog.RaftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
 	return kvserverbase.CmdIDKey(idKeyBuf)
 }
@@ -343,7 +344,7 @@ func (r *Replica) propose(
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
-	version := kvserverbase.RaftVersionStandard
+	encodingPrefixByte := raftlog.EntryEncodingStandardPrefixByte
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -415,7 +416,7 @@ func (r *Replica) propose(
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		version = kvserverbase.RaftVersionSideloaded
+		encodingPrefixByte = raftlog.EntryEncodingSideloadedPrefixByte
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -428,7 +429,7 @@ func (r *Replica) propose(
 	// Create encoding buffer.
 	preLen := 0
 	if prefix {
-		preLen = kvserverbase.RaftCommandPrefixLen
+		preLen = raftlog.RaftCommandPrefixLen
 	}
 	cmdLen := p.command.Size()
 	// Allocate the data slice with enough capacity to eventually hold the two
@@ -437,7 +438,7 @@ func (r *Replica) propose(
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		kvserverbase.EncodeRaftCommandPrefix(data, version, p.idKey)
+		raftlog.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
 	}
 	// Encode body of command.
 	data = data[:preLen+cmdLen]
@@ -621,9 +622,9 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	if b, n := s.append.SideloadedBytes, s.append.SideloadedEntries; n > 0 || b > 0 {
 		p.Printf("append-sst=%s (%d), ", humanizeutil.IBytes(b), n)
 	}
-	if b, n := s.apply.entriesProcessedBytes, s.apply.entriesProcessed; n > 0 || b > 0 {
+	if b, n := s.apply.numEntriesProcessedBytes, s.apply.numEntriesProcessed; n > 0 || b > 0 {
 		p.Printf("apply=%s (%d", humanizeutil.IBytes(b), n)
-		if c := s.apply.batchesProcessed; c > 1 {
+		if c := s.apply.numBatchesProcessed; c > 1 {
 			p.Printf(" in %d batches", c)
 		}
 		p.SafeString(")")
@@ -2301,9 +2302,13 @@ func (r *Replica) printRaftTail(
 		if err != nil {
 			return sb.String(), err
 		}
+		v, err := it.Value()
+		if err != nil {
+			return sb.String(), err
+		}
 		kv := storage.MVCCKeyValue{
 			Key:   mvccKey,
-			Value: it.Value(),
+			Value: v,
 		}
 		sb.WriteString(truncateEntryString(SprintMVCCKeyValue(kv, true /* printKey */), 2000))
 		sb.WriteRune('\n')

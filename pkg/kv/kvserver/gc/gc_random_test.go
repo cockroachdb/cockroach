@@ -495,7 +495,8 @@ func getExpectationsGenerator(
 				p, r := it.HasPointAndRange()
 				if p {
 					k := it.Key()
-					v := it.Value()
+					v, err := it.Value()
+					require.NoError(t, err)
 					if len(baseKey) == 0 {
 						baseKey = k.Key
 						// We are only interested in range tombstones covering current point,
@@ -645,7 +646,9 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 				result = append(result, fmt.Sprintf("R:%s", rk.RangeKey.String()))
 			}
 		}
-		result = append(result, fmt.Sprintf("P:%s(%d)", it.UnsafeKey().String(), len(it.UnsafeValue())))
+		v, err := it.UnsafeValue()
+		require.NoError(t, err)
+		result = append(result, fmt.Sprintf("P:%s(%d)", it.UnsafeKey().String(), len(v)))
 		it.Next()
 	}
 

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -399,11 +400,8 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 	testutils.SucceedsSoon(t, func() error {
 		count := 0
 		if err := conn.QueryRow(
-			"SELECT count(*) "+
-				"FROM crdb_internal.ranges_no_leases "+
-				"WHERE table_name = $1 "+
-				"AND database_name = $2",
-			tableName, dbName).Scan(&count); err != nil {
+			fmt.Sprintf("SELECT count(*) FROM [SHOW RANGES FROM TABLE %s.%s]",
+				tree.NameString(dbName), tree.NameString(tableName))).Scan(&count); err != nil {
 			return err
 		}
 		if count == 0 {
@@ -416,13 +414,8 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 func getTableStartKey(t *testing.T, conn *gosql.DB, tableName, dbName string) roachpb.Key {
 	t.Helper()
 	row := conn.QueryRow(
-		"SELECT start_key "+
-			"FROM crdb_internal.ranges_no_leases "+
-			"WHERE table_name = $1 "+
-			"AND database_name = $2 "+
-			"ORDER BY start_key ASC "+
-			"LIMIT 1",
-		tableName, dbName)
+		fmt.Sprintf(`SELECT crdb_internal.table_span('%s.%s'::regclass::oid::int)[1]`,
+			tree.NameString(dbName), tree.NameString(tableName)))
 	var startKey roachpb.Key
 	require.NoError(t, row.Scan(&startKey))
 	return startKey
@@ -450,10 +443,22 @@ func getStoreAndReplica(
 ) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
 	startKey := getTableStartKey(t, conn, tableName, dbName)
+
 	// Okay great now we have a key and can go find replicas and stores and what not.
 	r := tc.LookupRangeOrFatal(t, startKey)
-	l, _, err := tc.FindRangeLease(r, nil)
-	require.NoError(t, err)
+
+	var l roachpb.Lease
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		l, _, err = tc.FindRangeLease(r, nil)
+		if err != nil {
+			return err
+		}
+		if l.Replica.NodeID == 0 {
+			return errors.New("range does not have a lease yet")
+		}
+		return nil
+	})
 
 	lhServer := tc.Server(int(l.Replica.NodeID) - 1)
 	return getFirstStoreReplica(t, lhServer, startKey)
@@ -572,10 +577,10 @@ func runGCAndCheckTraceOnCluster(
 	t.Helper()
 	var startKey roachpb.Key
 	testutils.SucceedsSoon(t, func() error {
-		err := runner.DB.QueryRowContext(ctx, `
-SELECT start_key FROM crdb_internal.ranges_no_leases
-WHERE table_name = $1 AND database_name = $2
-ORDER BY start_key ASC`, tableName, databaseName).Scan(&startKey)
+		err := runner.DB.QueryRowContext(ctx, fmt.Sprintf(`
+SELECT raw_start_key
+FROM [SHOW RANGES FROM TABLE %s.%s WITH KEYS]
+ORDER BY raw_start_key ASC`, tree.NameString(databaseName), tree.NameString(tableName))).Scan(&startKey)
 		if err != nil {
 			return errors.Wrap(err, "failed to query start_key ")
 		}

@@ -52,10 +52,20 @@ jobs:
         fi
 
     - name: Build Cluster UI
+      if: steps.version-check.outputs.published == 'no'
       run: |
         yarn install --frozen-lockfile
-        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
+        yarn build
+
+    - name: Create version tag and push
+      if: steps.version-check.outputs.published == 'no'
+      run: |
+        TAGNAME="@cockroachlabs/cluster-ui@$(cat ./package.json | jq -r '.version')"
+        git tag $TAGNAME
+        git push origin $TAGNAME
 
     - name: Publish prerelease version
       if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag next --dry-run
+      run: yarn publish --access public --tag next

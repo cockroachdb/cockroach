@@ -404,10 +404,12 @@ func assertEqualKVs(
 		// Since the iterator goes from latest to older versions, we compare
 		// starting from the end of the slice that is sorted by timestamp.
 		latestVersionInChain := valueTimestampTuples[len(valueTimestampTuples)-1]
+		v, err := it.Value()
+		require.NoError(t, err)
 		require.Equal(t, roachpb.KeyValue{
 			Key: it.Key().Key,
 			Value: roachpb.Value{
-				RawBytes:  it.Value(),
+				RawBytes:  v,
 				Timestamp: it.Key().Timestamp,
 			},
 		}, latestVersionInChain)

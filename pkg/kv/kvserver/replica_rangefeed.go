@@ -496,18 +496,16 @@ func (r *Replica) numRangefeedRegistrations() int {
 	return p.Len()
 }
 
-// populatePrevValsInLogicalOpLogRaftMuLocked updates the provided logical op
+// populatePrevValsInLogicalOpLog updates the provided logical op
 // log with previous values read from the reader, which is expected to reflect
 // the state of the Replica before the operations in the logical op log are
 // applied. No-op if a rangefeed is not active. Requires raftMu to be locked.
-func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *kvserverpb.LogicalOpLog, prevReader storage.Reader,
-) {
-	p, filter := r.getRangefeedProcessorAndFilter()
-	if p == nil {
-		return
-	}
-
+func populatePrevValsInLogicalOpLog(
+	ctx context.Context,
+	filter *rangefeed.Filter,
+	ops *kvserverpb.LogicalOpLog,
+	prevReader storage.Reader,
+) error {
 	// Read from the Reader to populate the PrevValue fields.
 	for _, op := range ops.Ops {
 		var key []byte
@@ -541,10 +539,7 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 			ctx, prevReader, key, ts, storage.MVCCGetOptions{Tombstones: true, Inconsistent: true},
 		)
 		if err != nil {
-			r.disconnectRangefeedWithErr(p, roachpb.NewErrorf(
-				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
-			))
-			return
+			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)
 		}
 		if prevVal != nil {
 			*prevValPtr = prevVal.RawBytes
@@ -552,6 +547,7 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 			*prevValPtr = nil
 		}
 	}
+	return nil
 }
 
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active

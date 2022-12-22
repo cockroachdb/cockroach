@@ -125,7 +125,11 @@ func computeMinIntentTimestamp(
 			return hlc.Timestamp{}, nil, errors.Wrapf(err, "decoding LockTable key: %v", lockedKey)
 		}
 		// Unmarshal.
-		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return hlc.Timestamp{}, nil, err
+		}
+		if err := protoutil.Unmarshal(v, &meta); err != nil {
 			return hlc.Timestamp{}, nil, errors.Wrapf(err, "unmarshaling mvcc meta: %v", lockedKey)
 		}
 		if meta.Txn == nil {

@@ -138,9 +138,9 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 			const waitLeases = `
 SELECT $1::INT = ALL (
     SELECT lease_holder
-    FROM   crdb_internal.ranges
-    WHERE  (start_pretty = '/System/NodeLiveness' AND end_pretty = '/System/NodeLivenessMax')
-       OR  (database_name = 'system' AND table_name IN ('users', 'role_members', 'role_options'))
+    FROM   [SHOW CLUSTER RANGES WITH TABLES, DETAILS]
+     WHERE (start_key = '/System/NodeLiveness' AND end_key = '/System/NodeLivenessMax')
+       OR  (table_name IN ('users', 'role_members', 'role_options')
 )`
 			t.L().Printf("SQL: %s", waitLeases)
 			require.NoError(t, db.QueryRow(waitLeases, expectedLeaseholder).Scan(&ok))

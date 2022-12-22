@@ -547,17 +547,11 @@ func (p *pebbleIterator) UnsafeRawEngineKey() []byte {
 }
 
 // UnsafeValue implements the MVCCIterator and EngineIterator interfaces.
-func (p *pebbleIterator) UnsafeValue() []byte {
+func (p *pebbleIterator) UnsafeValue() ([]byte, error) {
 	if ok := p.iter.Valid(); !ok {
-		return nil
+		return nil, nil
 	}
-	// TODO(sumeer): change the UnsafeValue and Value interfaces to return an
-	// error. Meanwhile, we rely on the fact that pebble.Iterator will remember
-	// the error, so if the caller subsequently calls pebbleIterator.Valid(),
-	// they will see the error. However, there is no guarantee that a caller
-	// will call Valid() since it may be done iterating.
-	v, _ := p.iter.ValueAndErr()
-	return v
+	return p.iter.ValueAndErr()
 }
 
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
@@ -673,17 +667,22 @@ func (p *pebbleIterator) EngineKey() (EngineKey, error) {
 }
 
 // Value implements the MVCCIterator and EngineIterator interfaces.
-func (p *pebbleIterator) Value() []byte {
-	value := p.UnsafeValue()
+func (p *pebbleIterator) Value() ([]byte, error) {
+	value, err := p.UnsafeValue()
+	if err != nil {
+		return nil, err
+	}
 	valueCopy := make([]byte, len(value))
 	copy(valueCopy, value)
-	return valueCopy
+	return valueCopy, nil
 }
 
 // ValueProto implements the MVCCIterator interface.
 func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
-	value := p.UnsafeValue()
-
+	value, err := p.UnsafeValue()
+	if err != nil {
+		return err
+	}
 	return protoutil.Unmarshal(value, msg)
 }
 

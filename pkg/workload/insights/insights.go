@@ -38,24 +38,28 @@ const (
 		shared_key INT NOT NULL
 	)`
 
-	tableNameA          = "insights_workload_table_a"
-	tableNameB          = "insights_workload_table_b"
-	defaultRows         = 1000
-	defaultBatchSize    = 1000
-	defaultPayloadBytes = 100
-	defaultRanges       = 10
-	maxTransfer         = 999
+	dbNamePrefix            = "insight_workload_db_"
+	tableNamePrefix         = "insights_workload_table_"
+	defaultDbName           = "insights"
+	defaultRows             = 1000
+	defaultBatchSize        = 1000
+	defaultPayloadBytes     = 100
+	defaultRanges           = 10
+	minDbCount              = 1
+	minTotalTableCount      = 2
+	defaultMaxRndTableCount = 20
+	maxTransfer             = 999
 )
-
-var tableNames = []string{tableNameA, tableNameB}
 
 type insights struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                 uint64
-	rowCount, batchSize  int
-	payloadBytes, ranges int
+	seed                     uint64
+	rowCount, batchSize      int
+	payloadBytes, ranges     int
+	dbCount, totalTableCount int
+	maxRndTableCount         int
 }
 
 func init() {
@@ -63,10 +67,9 @@ func init() {
 }
 
 var insightsMeta = workload.Meta{
-	Name:         `insights`,
-	Description:  `This workload executes queries that will be detected by insights`,
-	Version:      `1.0.0`,
-	PublicFacing: false,
+	Name:        `insights`,
+	Description: `This workload executes queries that will be detected by the database insights in the web UI.`,
+	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &insights{}
 		g.flags.FlagSet = pflag.NewFlagSet(`insights`, pflag.ContinueOnError)
@@ -78,6 +81,19 @@ var insightsMeta = workload.Meta{
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in insights table.`)
+		g.flags.IntVar(&g.dbCount, `db-count`, minDbCount, `Number of database to create. Additional dbs will have a random number of tables added, but no data.`)
+		g.flags.IntVar(
+			&g.totalTableCount,
+			`table-count`,
+			minTotalTableCount,
+			`Number of tables to create on default database insights. 100 takes roughly 30 seconds to create and populate.`)
+
+		g.flags.IntVar(
+			&g.maxRndTableCount,
+			`max-table-count`,
+			defaultMaxRndTableCount,
+			`Random number of tables are created for all additional dbs created from db-count. This defines the max random number.`)
+
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -116,6 +132,34 @@ func (b *insights) Flags() workload.Flags { return b.flags }
 // Hooks implements the Hookser interface.
 func (b *insights) Hooks() workload.Hooks {
 	return workload.Hooks{
+		PreCreate: func(db *gosql.DB) error {
+			rowDbCount := db.QueryRow("SELECT count(*) FROM [show databases]")
+			var currDbCount int
+			err := rowDbCount.Scan(&currDbCount)
+			if err != nil {
+				return err
+			}
+
+			rng := rand.New(rand.NewSource(b.seed))
+			numDbsToCreate := b.dbCount - currDbCount
+
+			if numDbsToCreate == 0 {
+				return nil
+			}
+
+			if b.maxRndTableCount <= 0 {
+				b.maxRndTableCount = 1
+			}
+
+			for i := 0; i < numDbsToCreate; i++ {
+				tempDbName := fmt.Sprintf("%s%d", dbNamePrefix, i)
+				numTables := rng.Intn(b.maxRndTableCount)
+				createDbAndTableErr := b.CreateDbAndTables(db, tempDbName, numTables)
+				err = errors.CombineErrors(err, createDbAndTableErr)
+			}
+
+			return err
+		},
 		Validate: func() error {
 			if b.rowCount < b.ranges {
 				return errors.Errorf(
@@ -137,13 +181,47 @@ var insightsTypes = []*types.T{
 	types.Int,
 }
 
+func (b *insights) CreateDbAndTables(db *gosql.DB, dbName string, tableCount int) (err error) {
+	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", dbName))
+	if err != nil {
+		return err
+	}
+
+	rowTableCount := db.QueryRow(fmt.Sprintf("SELECT count(*) from [show tables from %s]", dbName))
+	var currTableCount int
+	err = rowTableCount.Scan(&currTableCount)
+	if err != nil {
+		return err
+	}
+
+	// The database was already created and populated.
+	if currTableCount >= 1 {
+		return nil
+	}
+
+	for j := 0; j < tableCount; j++ {
+		tableName := generateTableName(j)
+		query := fmt.Sprintf("CREATE TABLE %s.%s %s;", dbName, tableName, insightsTableSchema)
+		_, errTableCreate := db.Exec(query)
+		if errTableCreate != nil {
+			err = errors.CombineErrors(err, errTableCreate)
+		}
+	}
+
+	return err
+}
+
 // Tables implements the Generator interface.
 func (b *insights) Tables() []workload.Table {
 	numBatches := (b.rowCount + b.batchSize - 1) / b.batchSize // ceil(b.rows/b.batchSize)
 
-	var tables = make([]workload.Table, len(tableNames))
+	if b.totalTableCount < 2 {
+		b.totalTableCount = 2
+	}
+	var tables = make([]workload.Table, b.totalTableCount)
 
-	for i, tableName := range tableNames {
+	for i := 0; i < b.totalTableCount; i++ {
+		tableName := generateTableName(i)
 		tables[i] = workload.Table{
 			Name:   tableName,
 			Schema: insightsTableSchema,
@@ -209,11 +287,21 @@ func (b *insights) Ops(
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	rng := rand.New(rand.NewSource(b.seed))
 	for i := 0; i < b.connFlags.Concurrency; i++ {
-		temp := i
+		useRandomTable := i < 4
 		hists := reg.GetHandle()
 		workerFn := func(ctx context.Context) error {
+			tableNameA := generateTableName(0)
+			tableNameB := generateTableName(1)
+
+			// First 4 threads should target same table to cause more contention
+			// scenarios. The rest will target random tables.
+			if useRandomTable {
+				tableNameA = generateTableName(rng.Intn(b.totalTableCount))
+				tableNameB = generateTableName(rng.Intn(b.totalTableCount))
+			}
+
 			start := timeutil.Now()
-			err = useTxnToMoveBalance(ctx, db, rng, b.rowCount)
+			err = useTxnToMoveBalance(ctx, db, rng, b.rowCount, tableNameA)
 			if err != nil {
 				return err
 			}
@@ -224,7 +312,7 @@ func (b *insights) Ops(
 			start = timeutil.Now()
 			// May hit contention from balance being moved in
 			// other threads when there is concurrency
-			err = orderByOnNonIndexColumn(ctx, db, b.rowCount)
+			err = orderByOnNonIndexColumn(ctx, db, b.rowCount, tableNameA)
 			if err != nil {
 				return err
 			}
@@ -232,7 +320,7 @@ func (b *insights) Ops(
 			hists.Get(`orderByOnNonIndexColumn`).Record(elapsed)
 
 			start = timeutil.Now()
-			err = joinOnNonIndexColumn(ctx, db)
+			err = joinOnNonIndexColumn(ctx, db, tableNameA, tableNameB)
 			elapsed = timeutil.Since(start)
 			hists.Get(`joinOnNonIndexColumn`).Record(elapsed)
 			if err != nil {
@@ -240,7 +328,7 @@ func (b *insights) Ops(
 			}
 
 			start = timeutil.Now()
-			err = updateWithContention(ctx, db, rng, b.rowCount, temp)
+			err = updateWithContention(ctx, db, rng, b.rowCount, tableNameA)
 			elapsed = timeutil.Since(start)
 			hists.Get(`contention`).Record(elapsed)
 			return err
@@ -248,6 +336,10 @@ func (b *insights) Ops(
 		ql.WorkerFns = append(ql.WorkerFns, workerFn)
 	}
 	return ql, nil
+}
+
+func generateTableName(index int) string {
+	return fmt.Sprintf("%s%d", tableNamePrefix, index)
 }
 
 func generateRandomBase64Bytes(size int) []byte {
@@ -262,27 +354,34 @@ func generateRandomBase64Bytes(size int) []byte {
 	return payloadBase64
 }
 
-func joinOnNonIndexColumn(ctx context.Context, db *gosql.DB) error {
-	_, err := db.ExecContext(ctx, `
-				select a.balance, b.balance from insights_workload_table_a a
-				left join insights_workload_table_b b on a.shared_key = b.shared_key
-				where a.balance < 0;`)
+func joinOnNonIndexColumn(
+	ctx context.Context, db *gosql.DB, tableName1 string, tableName2 string,
+) error {
+	query := fmt.Sprintf(`
+				SELECT a.balance, b.balance FROM %s a
+				LEFT JOIN %s b ON a.shared_key = b.shared_key
+				WHERE a.balance < 0;`, tableName1, tableName2)
+	_, err := db.ExecContext(ctx, query)
 	return err
 }
 
-func orderByOnNonIndexColumn(ctx context.Context, db *gosql.DB, rowCount int) error {
+func orderByOnNonIndexColumn(
+	ctx context.Context, db *gosql.DB, rowCount int, tableName string,
+) error {
 	rowLimit := (rand.Uint32() % uint32(rowCount)) + 1
-	_, err := db.ExecContext(ctx, `
-			select balance 
-			from insights_workload_table_a order by balance desc limit $1;`, rowLimit)
+	query := fmt.Sprintf(`SELECT balance 
+			FROM %s ORDER BY balance DESC limit $1;`, tableName)
+	_, err := db.ExecContext(ctx, query, rowLimit)
 	return err
 }
 
-func useTxnToMoveBalance(ctx context.Context, db *gosql.DB, rng *rand.Rand, rowCount int) error {
+func useTxnToMoveBalance(
+	ctx context.Context, db *gosql.DB, rng *rand.Rand, rowCount int, tableName string,
+) error {
 	amount := rng.Intn(maxTransfer)
 	from := rng.Intn(rowCount)
 	to := rng.Intn(rowCount - 1)
-	// Change the 'to' row if they are the same row
+	// Change the 'to' row if they are the same row.
 	for from == to && rowCount != 1 {
 		to = rng.Intn(rowCount - 1)
 	}
@@ -292,23 +391,23 @@ func useTxnToMoveBalance(ctx context.Context, db *gosql.DB, rng *rand.Rand, rowC
 		return err
 	}
 
-	_, err = txn.ExecContext(ctx, `
-			UPDATE insights_workload_table_a
-			SET balance = balance - $1 WHERE id = $2`,
-		amount, from)
+	query := fmt.Sprintf(`
+			UPDATE %s
+			SET balance = balance - $1 WHERE id = $2`, tableName)
+	_, err = txn.ExecContext(ctx, query, amount, from)
 	if err != nil {
 		return err
 	}
 
-	_, err = txn.ExecContext(ctx, "select pg_sleep(.01);")
+	_, err = txn.ExecContext(ctx, "SELECT pg_sleep(.01);")
 	if err != nil {
 		return err
 	}
 
-	_, err = txn.ExecContext(ctx, `
-					UPDATE insights_workload_table_a
-					SET balance = balance + $1 WHERE id = $2`,
-		amount, to)
+	query = fmt.Sprintf(`
+			UPDATE %s
+					SET balance = balance + $1 WHERE id = $2`, tableName)
+	_, err = txn.ExecContext(ctx, query, amount, to)
 	if err != nil {
 		return err
 	}
@@ -317,7 +416,7 @@ func useTxnToMoveBalance(ctx context.Context, db *gosql.DB, rng *rand.Rand, rowC
 }
 
 func updateWithContention(
-	ctx context.Context, db *gosql.DB, rng *rand.Rand, rowCount int, thread int,
+	ctx context.Context, db *gosql.DB, rng *rand.Rand, rowCount int, tableName string,
 ) error {
 	// Pick random row to cause contention on
 	rowToBlock := rng.Intn(rowCount)
@@ -348,7 +447,8 @@ func updateWithContention(
 			return
 		}
 
-		_, errTxn = tx.ExecContext(ctx, "UPDATE insights_workload_table_a SET balance = $1 where id = $2;", 42, rowToBlock)
+		backgroundQuery := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tableName)
+		_, errTxn = tx.ExecContext(ctx, backgroundQuery, 42, rowToBlock)
 		wgTxnStarted.Done()
 		if errTxn != nil {
 			return
@@ -370,7 +470,8 @@ func updateWithContention(
 
 	// This will be blocked until the background go func commits the txn.
 	amount := rng.Intn(maxTransfer)
-	_, err := db.ExecContext(ctx, "UPDATE insights_workload_table_a SET balance = $1 where id = $2;", amount, rowToBlock)
+	query := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tableName)
+	_, err := db.ExecContext(ctx, query, amount, rowToBlock)
 
 	// wait for the background go func to complete
 	wgTxnDone.Wait()

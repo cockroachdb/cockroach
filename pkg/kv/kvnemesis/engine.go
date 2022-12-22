@@ -89,7 +89,11 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 		return roachpb.Value{}
 	}
 	var valCopy []byte
-	e.b, valCopy = e.b.Copy(iter.Value(), 0 /* extraCap */)
+	v, err := iter.ValueAndErr()
+	if err != nil {
+		panic(err)
+	}
+	e.b, valCopy = e.b.Copy(v, 0 /* extraCap */)
 	mvccVal, err := storage.DecodeMVCCValue(valCopy)
 	if err != nil {
 		panic(err)
@@ -128,7 +132,11 @@ func (e *Engine) Iterate(
 		hasPoint, _ := iter.HasPointAndRange()
 		var keyCopy, valCopy []byte
 		e.b, keyCopy = e.b.Copy(iter.Key(), 0 /* extraCap */)
-		e.b, valCopy = e.b.Copy(iter.Value(), 0 /* extraCap */)
+		v, err := iter.ValueAndErr()
+		if err != nil {
+			fn(nil, nil, hlc.Timestamp{}, nil, err)
+		}
+		e.b, valCopy = e.b.Copy(v, 0 /* extraCap */)
 		if hasPoint {
 			key, err := storage.DecodeMVCCKey(keyCopy)
 			if err != nil {

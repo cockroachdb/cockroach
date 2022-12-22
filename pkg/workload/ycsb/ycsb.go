@@ -115,10 +115,9 @@ func init() {
 }
 
 var ycsbMeta = workload.Meta{
-	Name:         `ycsb`,
-	Description:  `YCSB is the Yahoo! Cloud Serving Benchmark`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
+	Name:        `ycsb`,
+	Description: `YCSB is the Yahoo! Cloud Serving Benchmark.`,
+	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &ycsb{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ycsb`, pflag.ContinueOnError)
@@ -132,10 +131,10 @@ var ycsbMeta = workload.Meta{
 		g.flags.IntVar(&g.insertStart, `insert-start`, 0, `Key to start initial sequential insertions from. (default 0)`)
 		g.flags.IntVar(&g.insertCount, `insert-count`, 10000, `Number of rows to sequentially insert before beginning workload.`)
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
-		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data`)
-		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family`)
-		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write transactions`)
-		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data.`)
+		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family.`)
+		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write transactions.`)
+		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations.`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
 		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, and F is zipfian, and the default for workload D is latest.`)
 		g.flags.StringVar(&g.scanLengthDistribution, `scan-length-distribution`, `uniform`, `Distribution for scan length generation [zipfian, uniform]. Primarily used for workload E.`)

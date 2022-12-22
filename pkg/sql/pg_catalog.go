@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1915,6 +1916,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						tableOid,                                     // indrelid
 						tree.NewDInt(tree.DInt(indnatts)),            // indnatts
 						tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
+						tree.DBoolFalse,                              // indnullsnotdistinct
 						tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
 						tree.DBoolFalse,                              // indisexclusion
 						tree.MakeDBool(tree.DBool(index.IsUnique())), // indimmediate
@@ -3529,8 +3531,12 @@ var pgCatalogStatisticExtTable = virtualSchemaTable{
 	comment: `pg_statistic_ext has the statistics objects created with CREATE STATISTICS
 https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 	schema: vtable.PgCatalogStatisticExt,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		query := `SELECT "statisticID", name, "tableID", "columnIDs" FROM system.table_statistics;`
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+
+		//  '{d}' refers to Postgres code for n-distinct statistics or multi-column
+		//  statistics.
+		query := `SELECT "tableID", name, "columnIDs", "statisticID", '{d}'::"char"[] FROM system.table_statistics;`
+
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 			ctx, "read-statistics-objects", p.txn, query,
 		)
@@ -3538,26 +3544,35 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			return err
 		}
 		h := makeOidHasher()
+		statTgt := tree.NewDInt(-1)
 
 		for _, row := range rows {
-			statisticsID := tree.MustBeDInt(row[0])
-			name := tree.MustBeDString(row[1])
-			tableID := tree.MustBeDInt(row[2])
-			columnIDs := tree.MustBeDArray(row[3])
+			tableID := tree.MustBeDInt(row[0])
+			columnIDs := tree.MustBeDArray(row[2])
+			statisticsID := tree.MustBeDInt(row[3])
+			statisticsKind := tree.MustBeDArray(row[4])
 
 			// The statisticsID is generated from unique_rowid() so it won't fit in a
 			// uint32.
 			h.writeUInt64(uint64(statisticsID))
 			statisticsOID := h.getOid()
+
+			tn, err := descs.GetTableNameByID(ctx, p.Txn(), p.descCollection, descpb.ID(tableID))
+			if err != nil {
+				return err
+			}
+
+			statSchema := db.GetSchemaID(tn.Schema())
+
 			if err := addRow(
 				statisticsOID,                // oid
 				tableOid(descpb.ID(tableID)), // stxrelid
-				&name,                        // stxname
-				tree.DNull,                   // stxnamespace
+				row[1],                       // stxname
+				schemaOid(statSchema),        // stxnamespace
 				tree.DNull,                   // stxowner
-				tree.DNull,                   // stxstattarget
+				statTgt,                      // stxstattarget
 				columnIDs,                    // stxkeys
-				tree.DNull,                   // stxkind
+				statisticsKind,               // stxkind
 			); err != nil {
 				return err
 			}

@@ -116,7 +116,8 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*BatchOperation,
 		*DeleteOperation,
 		*DeleteRangeOperation,
-		*DeleteRangeUsingTombstoneOperation:
+		*DeleteRangeUsingTombstoneOperation,
+		*AddSSTableOperation:
 		applyClientOp(ctx, db, op, false)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION)
@@ -343,6 +344,31 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			return
 		}
 		o.Result.OptionalTimestamp = ts
+	case *AddSSTableOperation:
+		if inTxn {
+			panic(errors.AssertionFailedf(`AddSSTable cannot be used in transactions`))
+		}
+		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			// Unlike other write operations, AddSSTable sends raw MVCC values
+			// directly through to storage, including an MVCCValueHeader already
+			// tagged with the sequence number. We therefore don't need to pass the
+			// sequence number via the RequestHeader here.
+			b.AddRawRequest(&roachpb.AddSSTableRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    o.Span.Key,
+					EndKey: o.Span.EndKey,
+				},
+				Data:                           o.Data,
+				SSTTimestampToRequestTimestamp: o.SSTTimestamp,
+				DisallowConflicts:              true,
+				IngestAsWrites:                 o.AsWrites,
+			})
+		})
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+		o.Result.OptionalTimestamp = ts
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -392,6 +418,8 @@ func applyBatchOp(
 		case *DeleteRangeUsingTombstoneOperation:
 			b.DelRangeUsingTombstone(subO.Key, subO.EndKey)
 			setLastReqSeq(b, subO.Seq)
+		case *AddSSTableOperation:
+			panic(errors.AssertionFailedf(`AddSSTable cannot be used in batches`))
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -449,6 +477,8 @@ func applyBatchOp(
 			}
 		case *DeleteRangeUsingTombstoneOperation:
 			subO.Result = resultInit(ctx, err)
+		case *AddSSTableOperation:
+			panic(errors.AssertionFailedf(`AddSSTable cannot be used in batches`))
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

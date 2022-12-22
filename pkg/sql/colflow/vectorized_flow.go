@@ -727,10 +727,10 @@ func (s *vectorizedFlowCreator) Release() {
 	vectorizedFlowCreatorPool.Put(s)
 }
 
-// setupRemoteOutputStream sets up an Outbox that will operate according to
-// the given StreamEndpointSpec. It will also drain all MetadataSources in the
-// metadataSources.
-// NOTE: The caller must not reuse the metadataSources and toClose.
+// setupRemoteOutputStream sets up a colrpc.Outbox that will operate according
+// to the given execinfrapb.StreamEndpointSpec. It will also drain all
+// MetadataSources in op.
+// NOTE: The caller must not reuse the metadata sources.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -765,14 +765,11 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 }
 
 // setupRouter sets up a vectorized hash router according to the output router
-// spec. If the outputs are local, these are added to s.streamIDToInputOp to be
-// used as inputs in further planning. metadataSources is passed along to any
-// outboxes created to be drained, or stored in streamIDToInputOp for any local
-// outputs to pass that responsibility along. In any case, metadataSources will
-// always be fully consumed.
+// spec. The router takes the responsibility of draining the metadata sources
+// from input.MetadataSources.
 // NOTE: This method supports only BY_HASH routers. Callers should handle
 // PASS_THROUGH routers separately.
-// NOTE: The caller must not reuse the metadataSources and toClose.
+// NOTE: The caller must not reuse the metadata sources.
 func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -821,8 +818,6 @@ func (s *vectorizedFlowCreator) setupRouter(
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
-			// Note that here we pass in nil 'toClose' slice because hash
-			// router is responsible for closing all of the idempotent closers.
 			if _, err := s.setupRemoteOutputStream(
 				ctx, flowCtx, colexecargs.OpWithMetaInfo{
 					Root:            op,
@@ -1004,10 +999,10 @@ func (s *vectorizedFlowCreator) setupInput(
 }
 
 // setupOutput sets up any necessary infrastructure according to the output spec
-// of pspec. The metadataSources and toClose slices are fully consumed by either
-// passing them to an outbox or HashRouter to be drained/closed, or storing them
-// in streamIDToInputOp with the given op to be processed later.
-// NOTE: The caller must not reuse the metadataSources and toClose.
+// of pspec. The metadata sources are fully consumed by either passing them to
+// an outbox or HashRouter to be drained, or storing them in streamIDToInputOp
+// with the given op to be processed later.
+// NOTE: The caller must not reuse the metadata sources.
 func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,

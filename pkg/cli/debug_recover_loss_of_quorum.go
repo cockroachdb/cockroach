@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -465,7 +465,7 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 		defer store.Close()
 		defer batch.Close()
 
-		storeIdent, err := kvserver.ReadStoreIdent(cmd.Context(), store)
+		storeIdent, err := kvstorage.ReadStoreIdent(cmd.Context(), store)
 		if err != nil {
 			return err
 		}

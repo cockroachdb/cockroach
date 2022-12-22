@@ -1386,7 +1386,7 @@ WITH
 					AS prev_lease_holder,
 				lease_holder
 			FROM
-				[SHOW RANGES FROM TABLE data.bank]
+				[SHOW RANGES FROM TABLE data.bank WITH DETAILS]
 		)
 SELECT
 	count(*)
@@ -5748,6 +5748,7 @@ func TestBatchedInsertStats(t *testing.T) {
 			// RestoreDetails.
 			Details:  jobspb.RestoreDetails{},
 			Progress: jobspb.RestoreProgress{},
+			Username: username.TestUserName(),
 		}, id, nil /* txn */)
 		require.NoError(t, err)
 		return job

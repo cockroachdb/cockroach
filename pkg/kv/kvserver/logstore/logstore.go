@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -39,7 +40,7 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 	"set to true to disable synchronization on Raft log writes to persistent storage. "+
 		"Setting to true risks data loss or data corruption on server crashes. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
-	false,
+	envutil.EnvOrDefaultBool("COCKROACH_DISABLE_RAFT_LOG_SYNCHRONIZATION_UNSAFE", false),
 )
 
 // Ready contains the log entries and state to be saved to stable storage. This
@@ -323,7 +324,11 @@ func LoadTerm(
 		// sideloaded entries here to keep the term fetching cheap.
 		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
 		// makes any difference.
-		if !SniffSideloadedRaftCommand(entry.Data) {
+		typ, err := raftlog.EncodingOf(entry)
+		if err != nil {
+			return 0, err
+		}
+		if typ != raftlog.EntryEncodingSideloaded {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
 		return entry.Term, nil
@@ -396,7 +401,11 @@ func LoadEntries(
 		}
 		expectedIndex++
 
-		if SniffSideloadedRaftCommand(ent.Data) {
+		typ, err := raftlog.EncodingOf(ent)
+		if err != nil {
+			return err
+		}
+		if typ == raftlog.EntryEncodingSideloaded {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
 			)

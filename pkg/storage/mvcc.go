@@ -1181,7 +1181,7 @@ func mvccGetMetadata(
 		if err := iter.ValueProto(meta); err != nil {
 			return false, 0, 0, hlc.Timestamp{}, err
 		}
-		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())),
+		return true, int64(unsafeKey.EncodedSize()), int64(iter.ValueLen()),
 			meta.Timestamp.ToTimestamp(), nil
 	}
 
@@ -1213,9 +1213,8 @@ func mvccGetMetadata(
 		}
 	}
 
-	// We're now on a point key. Decode its value.
-	unsafeValRaw := iter.UnsafeValue()
-	isTombstone, err := EncodedMVCCValueIsTombstone(unsafeValRaw)
+	// We're now on a point key.
+	valueLen, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
 	if err != nil {
 		return false, 0, 0, hlc.Timestamp{}, err
 	}
@@ -1239,7 +1238,7 @@ func mvccGetMetadata(
 	}
 
 	// Synthesize metadata for a regular point key.
-	meta.ValBytes = int64(len(unsafeValRaw))
+	meta.ValBytes = int64(valueLen)
 	meta.Deleted = isTombstone
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 
@@ -1824,7 +1823,10 @@ func mvccPutInternal(
 
 					// NOTE: we use Value instead of UnsafeValue so that we can move the
 					// iterator below without invalidating this byte slice.
-					curProvValRaw = iter.Value()
+					curProvValRaw, err = iter.Value()
+					if err != nil {
+						return false, err
+					}
 					curIntentVal, err := DecodeMVCCValue(curProvValRaw)
 					if err != nil {
 						return false, err
@@ -3059,13 +3061,11 @@ func MVCCPredicateDeleteRange(
 
 		// At this point, there exists a point key that shadows all range keys,
 		// if they exist.
-		vRaw := iter.UnsafeValue()
-
 		if endTime.LessEq(k.Timestamp) {
 			return false, false, false, roachpb.NewWriteTooOldError(endTime, k.Timestamp.Next(),
 				k.Key.Clone())
 		}
-		isTombstone, err := EncodedMVCCValueIsTombstone(vRaw)
+		_, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
 		if err != nil {
 			return false, false, false, err
 		}
@@ -4035,7 +4035,7 @@ type iterForKeyVersions interface {
 	SeekGE(key MVCCKey)
 	Next()
 	UnsafeKey() MVCCKey
-	UnsafeValue() []byte
+	UnsafeValue() ([]byte, error)
 	MVCCValueLenAndIsTombstone() (int, bool, error)
 	ValueProto(msg protoutil.Message) error
 	RangeKeys() MVCCRangeKeyStack
@@ -4140,7 +4140,7 @@ func (s *separatedIntentAndVersionIter) UnsafeKey() MVCCKey {
 	return MVCCKey{Key: s.intentKey}
 }
 
-func (s *separatedIntentAndVersionIter) UnsafeValue() []byte {
+func (s *separatedIntentAndVersionIter) UnsafeValue() ([]byte, error) {
 	if s.atMVCCIter {
 		return s.mvccIter.UnsafeValue()
 	}
@@ -4163,7 +4163,10 @@ func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error 
 		// Already parsed.
 		return nil
 	}
-	v := s.engineIter.UnsafeValue()
+	v, err := s.engineIter.UnsafeValue()
+	if err != nil {
+		return err
+	}
 	return protoutil.Unmarshal(v, msg)
 }
 
@@ -4191,8 +4194,13 @@ func mvccGetIntent(
 	if err := iter.ValueProto(meta); err != nil {
 		return false, 0, 0, err
 	}
-	return true, int64(unsafeKey.EncodedSize()),
-		int64(len(iter.UnsafeValue())), nil
+	v, err := iter.UnsafeValue()
+	// iter.ValueProto returned without err, so we should not see an error now.
+	if err != nil {
+		return false, 0, 0, errors.HandleAsAssertionFailure(err)
+	}
+	valLen := int64(len(v))
+	return true, int64(unsafeKey.EncodedSize()), valLen, nil
 }
 
 // With the separated lock table, we are employing a performance optimization:
@@ -4472,7 +4480,11 @@ func mvccResolveWriteIntent(
 			if !valid || !iter.UnsafeKey().Equal(oldKey) {
 				return false, errors.Errorf("existing intent value missing: %s", oldKey)
 			}
-			oldValue, err := DecodeMVCCValue(iter.UnsafeValue())
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return false, err
+			}
+			oldValue, err := DecodeMVCCValue(v)
 			if err != nil {
 				return false, err
 			}
@@ -5792,7 +5804,11 @@ func computeStatsForIterWithVisitors(
 		if pointKeyVisitor != nil {
 			// NB: pointKeyVisitor is typically nil, so we will typically not call
 			// iter.UnsafeValue().
-			if err := pointKeyVisitor(unsafeKey, iter.UnsafeValue()); err != nil {
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			if err := pointKeyVisitor(unsafeKey, v); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
 		}
@@ -5868,7 +5884,11 @@ func computeStatsForIterWithVisitors(
 			first = true
 
 			if !implicitMeta {
-				if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return enginepb.MVCCStats{}, err
+				}
+				if err := protoutil.Unmarshal(v, &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 			}
@@ -6308,7 +6328,10 @@ func mvccExportToWriter(
 		}
 
 		// Process point keys.
-		unsafeValue := iter.UnsafeValue()
+		unsafeValue, err := iter.UnsafeValue()
+		if err != nil {
+			return roachpb.BulkOpSummary{}, MVCCKey{}, err
+		}
 		skip := false
 		if unsafeKey.IsValue() {
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)

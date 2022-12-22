@@ -18,8 +18,10 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -106,11 +108,15 @@ type jsonVM struct {
 		}
 	}
 	MachineType string
+	SelfLink    string
 	Zone        string
+	instanceDisksResponse
 }
 
 // Convert the JSON VM data into our common VM type
-func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
+func (jsonVM *jsonVM) toVM(
+	project string, disks []describeVolumeCommandResponse, opts *ProviderOpts,
+) (ret *vm.VM) {
 	var vmErrors []error
 	var err error
 
@@ -159,24 +165,50 @@ func (jsonVM *jsonVM) toVM(project string, opts *ProviderOpts) (ret *vm.VM) {
 		// local username if requested.
 		remoteUser = config.OSUser.Username
 	}
+
+	var volumes []vm.Volume
+
+	for _, jsonVMDisk := range jsonVM.Disks {
+		if jsonVMDisk.Source != "" && !jsonVMDisk.Boot {
+			for _, detailedDisk := range disks {
+				if detailedDisk.SelfLink == jsonVMDisk.Source {
+					vol := vm.Volume{
+						ProviderResourceID: detailedDisk.Name,
+						ProviderVolumeType: jsonVMDisk.Type,
+						Zone:               jsonVM.Zone,
+						Name:               detailedDisk.Name,
+						Labels:             detailedDisk.Labels,
+					}
+					if val, err := strconv.Atoi(jsonVMDisk.DiskSizeGB); err == nil {
+						vol.Size = val
+					} else {
+						vmErrors = append(vmErrors, errors.Newf("invalid disk size: %q", jsonVMDisk.DiskSizeGB))
+					}
+					volumes = append(volumes, vol)
+				}
+			}
+		}
+	}
+
 	return &vm.VM{
-		Name:        jsonVM.Name,
-		CreatedAt:   jsonVM.CreationTimestamp,
-		Errors:      vmErrors,
-		DNS:         fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
-		Lifetime:    lifetime,
-		Labels:      jsonVM.Labels,
-		PrivateIP:   privateIP,
-		Provider:    ProviderName,
-		ProviderID:  jsonVM.Name,
-		PublicIP:    publicIP,
-		RemoteUser:  remoteUser,
-		VPC:         vpc,
-		MachineType: machineType,
-		Zone:        zone,
-		Project:     project,
-		SQLPort:     config.DefaultSQLPort,
-		AdminUIPort: config.DefaultAdminUIPort,
+		Name:                   jsonVM.Name,
+		CreatedAt:              jsonVM.CreationTimestamp,
+		Errors:                 vmErrors,
+		DNS:                    fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
+		Lifetime:               lifetime,
+		Labels:                 jsonVM.Labels,
+		PrivateIP:              privateIP,
+		Provider:               ProviderName,
+		ProviderID:             jsonVM.Name,
+		PublicIP:               publicIP,
+		RemoteUser:             remoteUser,
+		VPC:                    vpc,
+		MachineType:            machineType,
+		Zone:                   zone,
+		Project:                project,
+		SQLPort:                config.DefaultSQLPort,
+		AdminUIPort:            config.DefaultAdminUIPort,
+		NonBootAttachedVolumes: volumes,
 	}
 }
 
@@ -236,6 +268,240 @@ type ProviderOpts struct {
 type Provider struct {
 	Projects       []string
 	ServiceAccount string
+}
+
+type snapshotCreateJson struct {
+	CreationSizeBytes  string    `json:"creationSizeBytes"`
+	CreationTimestamp  time.Time `json:"creationTimestamp"`
+	Description        string    `json:"description"`
+	DiskSizeGb         string    `json:"diskSizeGb"`
+	DownloadBytes      string    `json:"downloadBytes"`
+	Id                 string    `json:"id"`
+	Kind               string    `json:"kind"`
+	LabelFingerprint   string    `json:"labelFingerprint"`
+	Name               string    `json:"name"`
+	SelfLink           string    `json:"selfLink"`
+	SourceDisk         string    `json:"sourceDisk"`
+	SourceDiskId       string    `json:"sourceDiskId"`
+	Status             string    `json:"status"`
+	StorageBytes       string    `json:"storageBytes"`
+	StorageBytesStatus string    `json:"storageBytesStatus"`
+	StorageLocations   []string  `json:"storageLocations"`
+}
+
+func (p *Provider) SnapshotVolume(
+	volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
+	args := []string{
+		"compute",
+		"snapshots",
+		"create", name,
+		"--source-disk", volume.ProviderResourceID,
+		"--source-disk-zone", volume.Zone,
+		"--description", description,
+		"--format", "json",
+	}
+
+	var createJsonResponse snapshotCreateJson
+	err := runJSONCommand(args, &createJsonResponse)
+	if err != nil {
+		return "", err
+	}
+
+	sb := strings.Builder{}
+	for k, v := range labels {
+		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
+	}
+	s := sb.String()
+
+	args = []string{
+		"compute",
+		"snapshots",
+		"add-labels", name,
+		"--labels", s[:len(s)-1],
+	}
+
+	cmd := exec.Command("gcloud", args...)
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	return createJsonResponse.Name, nil
+}
+
+type describeVolumeCommandResponse struct {
+	CreationTimestamp      time.Time         `json:"creationTimestamp"`
+	ID                     string            `json:"id"`
+	Kind                   string            `json:"kind"`
+	LabelFingerprint       string            `json:"labelFingerprint"`
+	Name                   string            `json:"name"`
+	PhysicalBlockSizeBytes string            `json:"physicalBlockSizeBytes"`
+	SelfLink               string            `json:"selfLink"`
+	SizeGB                 string            `json:"sizeGb"`
+	Status                 string            `json:"status"`
+	Type                   string            `json:"type"`
+	Zone                   string            `json:"zone"`
+	Labels                 map[string]string `json:"labels"`
+	Users                  []string          `json:"users"`
+}
+
+func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+	// TODO(leon): SourceSnapshotID and IOPS, are not handled
+	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
+		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
+		return vol, err
+	}
+	args := []string{
+		"compute",
+		"disks",
+		"create", vco.Name,
+		"--size", strconv.Itoa(vco.Size),
+		"--zone", vco.Zone,
+		"--format", "json",
+	}
+
+	if vco.Size == 0 {
+		return vol, errors.New("Cannot create a volume of size 0")
+	}
+
+	if vco.Encrypted {
+		return vol, errors.New("Volume encryption is not implemented for GCP")
+	}
+
+	if vco.Architecture != "" {
+		if vco.Architecture == "ARM64" || vco.Architecture == "X86_64" {
+			args = append(args, "--architecture=", vco.Architecture)
+		} else {
+			return vol, errors.Newf("Expected architecture to be one of ARM64, X86_64 got %s\n", vco.Architecture)
+		}
+	}
+
+	switch vco.Type {
+	case "local-ssd", "pd-balanced", "pd-extreme", "pd-ssd", "pd-standard":
+		args = append(args, "--type=", vco.Type)
+	case "":
+	// use the default
+	default:
+		return vol, errors.Newf("Expected type to be one of local-ssd, pd-balanced, pd-extreme, pd-ssd, pd-standard got %s\n", vco.Type)
+	}
+
+	var commandResponse []describeVolumeCommandResponse
+	err = runJSONCommand(args, &commandResponse)
+	if err != nil {
+		return vm.Volume{}, err
+	}
+	if len(commandResponse) != 1 {
+		return vol, errors.Newf("Expected to create 1 volume created %d", len(commandResponse))
+	}
+
+	createdVolume := commandResponse[0]
+
+	size, err := strconv.Atoi(createdVolume.SizeGB)
+	if err != nil {
+		return vol, err
+	}
+	sb := strings.Builder{}
+	for k, v := range vco.Labels {
+		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
+	}
+	s := sb.String()
+
+	args = []string{
+		"compute",
+		"disks",
+		"add-labels", vco.Name,
+		"--labels", s[:len(s)-1],
+		"--zone", vco.Zone,
+	}
+	cmd := exec.Command("gcloud", args...)
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		return vol, err
+	}
+
+	return vm.Volume{
+		ProviderResourceID: createdVolume.Name,
+		Name:               createdVolume.Name,
+		ProviderVolumeType: createdVolume.Type,
+		Zone:               vco.Zone,
+		Size:               size,
+		Labels:             vco.Labels,
+	}, err
+}
+
+type instanceDisksResponse struct {
+	Disks []attachDiskCmdDisk `json:"disks"`
+}
+type attachDiskCmdDisk struct {
+	AutoDelete bool   `json:"autoDelete"`
+	Boot       bool   `json:"boot"`
+	DeviceName string `json:"deviceName"`
+	DiskSizeGB string `json:"diskSizeGb"`
+	Index      int    `json:"index"`
+	Interface  string `json:"interface"`
+	Kind       string `json:"kind"`
+	Mode       string `json:"mode"`
+	Source     string `json:"source"`
+	Type       string `json:"type"`
+}
+
+func (p *Provider) AttachVolumeToVM(volume vm.Volume, vm *vm.VM) (string, error) {
+	// Volume attach
+	args := []string{
+		"compute",
+		"instances",
+		"attach-disk",
+		vm.ProviderID,
+		"--disk", volume.ProviderResourceID,
+		"--device-name", volume.ProviderResourceID,
+		"--zone", vm.Zone,
+		"--format=json(disks)",
+	}
+
+	var commandResponse []instanceDisksResponse
+	if err := runJSONCommand(args, &commandResponse); err != nil {
+		return "", err
+	}
+	found := false
+	if len(commandResponse) != 1 {
+		return "", errors.Newf("Expected to get back json with just a single item got %d", len(commandResponse))
+	}
+	cmdRespDisks := commandResponse[0].Disks
+	for _, response := range cmdRespDisks {
+		found = found || strings.Contains(response.Source, volume.ProviderResourceID)
+	}
+	if !found {
+		return "", errors.Newf("Could not find created disk '%s' in list of disks for %s",
+			volume.ProviderResourceID, vm.ProviderID)
+	}
+
+	// Volume auto delete
+	args = []string{
+		"compute",
+		"instances",
+		"set-disk-auto-delete", vm.ProviderID,
+		"--auto-delete",
+		"--device-name", volume.ProviderResourceID,
+		"--zone", vm.Zone,
+		"--format=json(disks)",
+	}
+
+	if err := runJSONCommand(args, &commandResponse); err != nil {
+		return "", err
+	}
+
+	if len(commandResponse) != 1 {
+		return "", errors.Newf("Expected to get back json with just a single item got %d", len(commandResponse))
+	}
+	cmdRespDisks = commandResponse[0].Disks
+	for _, response := range cmdRespDisks {
+		if response.DeviceName == volume.ProviderResourceID && !response.AutoDelete {
+			return "", errors.Newf("Could not set disk '%s' to auto-delete on instance termination",
+				volume.ProviderResourceID)
+		}
+	}
+
+	return "/dev/disk/by-id/google-" + volume.ProviderResourceID, nil
 }
 
 // ProjectsVal is the implementation for the --gce-projects flag. It populates
@@ -692,7 +958,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 }
 
 // List queries gcloud to produce a list of VM info objects.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
@@ -703,14 +969,54 @@ func (p *Provider) List(l *logger.Logger) (vm.List, error) {
 			return nil, err
 		}
 
+		userVMToDetailedDisk := make(map[string][]describeVolumeCommandResponse)
+		if opts.IncludeVolumes {
+			var jsonVMSelfLinks []string
+			for _, jsonVM := range jsonVMS {
+				jsonVMSelfLinks = append(jsonVMSelfLinks, jsonVM.SelfLink)
+			}
+
+			args = []string{
+				"compute",
+				"disks",
+				"list",
+				"--project", prj,
+				"--format", "json",
+				"--filter", "users:(" + strings.Join(jsonVMSelfLinks, ",") + ")",
+			}
+
+			var disks []describeVolumeCommandResponse
+			if err := runJSONCommand(args, &disks); err != nil {
+				return nil, err
+			}
+
+			for _, d := range disks {
+				for _, u := range d.Users {
+					userVMToDetailedDisk[u] = append(userVMToDetailedDisk[u], d)
+				}
+			}
+		}
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
 			defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-			vms = append(vms, *jsonVM.toVM(prj, defaultOpts))
+			disks := userVMToDetailedDisk[jsonVM.SelfLink]
+			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts))
 		}
 	}
 
 	return vms, nil
+}
+
+func serializeLabel(s string) string {
+	var output = make([]rune, len(s))
+	for idx, c := range s {
+		if c != '_' && c != '-' && !unicode.IsDigit(c) && !unicode.IsLetter(c) {
+			output[idx] = '_'
+		} else {
+			output[idx] = unicode.ToLower(c)
+		}
+	}
+	return string(output)
 }
 
 // Name TODO(peter): document

@@ -326,7 +326,7 @@ func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo sto
 			}
 			continue
 		}
-		value, err := storage.DecodeMVCCValue(iter.UnsafeValue())
+		value, err := storage.DecodeMVCCValueAndErr(iter.UnsafeValue())
 		require.NoError(t, err)
 		require.True(t, value.IsTombstone())
 	}

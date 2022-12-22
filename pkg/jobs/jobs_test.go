@@ -244,7 +244,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
 	rts.registry = rts.s.JobRegistry().(*jobs.Registry)
 	rts.done = make(chan struct{})
-	rts.mockJob = jobs.Record{Details: jobspb.ImportDetails{}, Progress: jobspb.ImportProgress{}}
+	rts.mockJob = jobs.Record{Details: jobspb.ImportDetails{}, Progress: jobspb.ImportProgress{}, Username: username.TestUserName()}
 
 	rts.resumeCh = make(chan error)
 	rts.progressCh = make(chan struct{})
@@ -1219,6 +1219,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			Details:   jobspb.BackupDetails{},
 			Progress:  jobspb.BackupProgress{},
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
+			Username:  username.TestUserName(),
 		}
 		job, err := rts.registry.CreateAdoptableJobWithTxn(rts.ctx, record, jobID, nil /* txn */)
 		require.NoError(t, err)
@@ -1296,6 +1297,7 @@ func TestJobLifecycle(t *testing.T) {
 		// ImportDetails.
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
+		Username: username.TestUserName(),
 	}
 
 	createDefaultJob := func() (*jobs.Job, expectation) {
@@ -1624,7 +1626,8 @@ func TestJobLifecycle(t *testing.T) {
 		// Ignore the returned error because this code is expecting the call to
 		// panic.
 		_, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
-			Details: 42,
+			Details:  42,
+			Username: username.TestUserName(),
 		}, registry.MakeJobID(), nil /* txn */)
 	})
 
@@ -1635,6 +1638,7 @@ func TestJobLifecycle(t *testing.T) {
 			job, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 				Details:  jobspb.RestoreDetails{},
 				Progress: jobspb.RestoreProgress{},
+				Username: username.TestUserName(),
 			}, registry.MakeJobID(), txn)
 			return errors.New("boom")
 		}))
@@ -2073,7 +2077,6 @@ func TestShowJobsWithError(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	// Create at least 6 rows, ensuring 3 rows are corrupted.
 	// Ensure there is at least one row in system.jobs.
 	if _, err := sqlDB.Exec(`CREATE TABLE foo(x INT);`); err != nil {
 		t.Fatal(err)
@@ -2087,41 +2090,30 @@ func TestShowJobsWithError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Now insert more rows based on the valid row, some of which are corrupted.
+	// Create 3 rows from the valid row, one of which is corrupted.
 	if _, err := sqlDB.Exec(`
      -- Create a corrupted payload field from the most recent row.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs WHERE id = $1;
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, payload, progress FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`
-     -- Create a corrupted progress field.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
-	`, jobID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`
-     -- Corrupt both fields.
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
-	`, jobID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`
-     -- Test what happens with a NULL progress field (which is a valid value).
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs WHERE id = $1;
-	`, jobID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`
-     -- Test what happens with a NULL progress field (which is a valid value).
-     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs WHERE id = $1;
+	  -- Create a corrupted progress field.
+	  INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs WHERE id = $1;
 	`, jobID); err != nil {
 		t.Fatal(err)
 	}
 
-	// Extract the last 6 rows from the query.
+	if _, err := sqlDB.Exec(`
+	  -- Test what happens with a NULL progress field (which is a valid value).
+	  INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs WHERE id = $1;
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Extract the last 3 rows from the query.
 	rows, err := sqlDB.Query(`
-  WITH a AS (SELECT job_id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 6)
+  WITH a AS (SELECT job_id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 3)
   SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY job_id ASC`)
 	if err != nil {
 		t.Fatal(err)
@@ -2144,19 +2136,6 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	rowNum++
 
-	// Corrupted payload but valid progress.
-	if !rows.Next() {
-		t.Fatalf("%d: too few rows", rowNum)
-	}
-	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-		t.Fatalf("%d: %v", rowNum, err)
-	}
-	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
-	if desc != "NULL" || !strings.HasPrefix(errStr, "error decoding payload") || frac[0] == '-' {
-		t.Fatalf("%d: invalid row", rowNum)
-	}
-	rowNum++
-
 	// Corrupted progress but valid payload.
 	if !rows.Next() {
 		t.Fatalf("%d: too few rows", rowNum)
@@ -2170,22 +2149,6 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	rowNum++
 
-	// Both payload and progress corrupted.
-	if !rows.Next() {
-		t.Fatalf("%d: too few rows", rowNum)
-	}
-	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-		t.Fatalf("%d: %v", rowNum, err)
-	}
-	t.Logf("row: %q %q %v", desc, errStr, frac)
-	if desc != "NULL" ||
-		!strings.Contains(errStr, "error decoding payload") ||
-		!strings.Contains(errStr, "error decoding progress") ||
-		frac[0] != '-' {
-		t.Fatalf("%d: invalid row", rowNum)
-	}
-	rowNum++
-
 	// Valid payload and missing progress.
 	if !rows.Next() {
 		t.Fatalf("%d too few rows", rowNum)
@@ -2195,22 +2158,6 @@ func TestShowJobsWithError(t *testing.T) {
 	}
 	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
 	if desc == "NULL" || errStr != "" || frac[0] != '-' {
-		t.Fatalf("%d: invalid row", rowNum)
-	}
-	rowNum++
-
-	// Invalid payload and missing progress.
-	if !rows.Next() {
-		t.Fatalf("%d too few rows", rowNum)
-	}
-	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
-		t.Fatalf("%d: %v", rowNum, err)
-	}
-	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
-	if desc != "NULL" ||
-		!strings.Contains(errStr, "error decoding payload") ||
-		strings.Contains(errStr, "error decoding progress") ||
-		frac[0] != '-' {
 		t.Fatalf("%d: invalid row", rowNum)
 	}
 	rowNum++
@@ -2229,7 +2176,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 	mockJob := jobs.Record{
-		Username: username.RootUserName(),
+		Username: username.TestUserName(),
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
 	}
@@ -2387,6 +2334,7 @@ func TestJobInTxn(t *testing.T) {
 					Description: st.String(),
 					Details:     jobspb.BackupDetails{},
 					Progress:    jobspb.BackupProgress{},
+					Username:    username.TestUserName(),
 				})
 				return err
 			}
@@ -2426,6 +2374,7 @@ func TestJobInTxn(t *testing.T) {
 					Description: "RESTORE",
 					Details:     jobspb.RestoreDetails{},
 					Progress:    jobspb.RestoreProgress{},
+					Username:    username.TestUserName(),
 				})
 				return err
 			}
@@ -2545,6 +2494,7 @@ func TestStartableJobMixedVersion(t *testing.T) {
 		err = jr.CreateStartableJobWithTxn(ctx, &j, jobID, txn, jobs.Record{
 			Details:  jobspb.ImportDetails{},
 			Progress: jobspb.ImportProgress{},
+			Username: username.RootUserName(),
 		})
 		return err
 	}))
@@ -2780,6 +2730,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	rec := jobs.Record{
 		Details:  jobspb.RestoreDetails{},
 		Progress: jobspb.RestoreProgress{},
+		Username: username.TestUserName(),
 	}
 
 	jobID := jr.MakeJobID()
@@ -2809,6 +2760,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.BackupDetails{},
 		Progress:      jobspb.BackupProgress{},
+		Username:      username.TestUserName(),
 	}
 
 	defer jobs.ResetConstructors()()
@@ -2915,6 +2867,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.BackupDetails{},
 			Progress:      jobspb.BackupProgress{},
+			Username:      username.TestUserName(),
 		}
 		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, registry.MakeJobID(), nil /* txn */)
 		require.NoError(t, err)
@@ -2931,6 +2884,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.ImportDetails{},
 			Progress:      jobspb.ImportProgress{},
+			Username:      username.TestUserName(),
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
@@ -2987,6 +2941,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.ImportDetails{},
 			Progress:      jobspb.ImportProgress{},
+			Username:      username.TestUserName(),
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
@@ -3022,6 +2977,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.ImportDetails{},
 			Progress:      jobspb.ImportProgress{},
+			Username:      username.TestUserName(),
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
@@ -3090,6 +3046,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.BackupDetails{},
 		Progress:      jobspb.BackupProgress{},
+		Username:      username.TestUserName(),
 	}
 
 	defer jobs.ResetConstructors()()
@@ -3201,6 +3158,7 @@ func TestPauseReason(t *testing.T) {
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.ImportDetails{},
 		Progress:      jobspb.ImportProgress{},
+		Username:      username.TestUserName(),
 	}
 	tdb := sqlutils.MakeSQLRunner(db)
 
@@ -3452,6 +3410,7 @@ func TestPausepoints(t *testing.T) {
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.ImportDetails{},
 		Progress:      jobspb.ImportProgress{},
+		Username:      username.TestUserName(),
 	}
 
 	for _, tc := range []struct {

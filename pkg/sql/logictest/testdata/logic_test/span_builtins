@@ -5,6 +5,16 @@ select crdb_internal.trim_tenant_prefix(crdb_internal.table_span(1))
 ----
 {"\\x89","\\x8a"}
 
+skipif config 3node-tenant-default-configs
+statement ok
+CREATE TENANT "foo-bar";
+
+skipif config 3node-tenant-default-configs
+query T
+select crdb_internal.tenant_span('foo-bar')
+----
+{"\\xfe8a","\\xfe8b"}
+
 query T
 select crdb_internal.trim_tenant_prefix(crdb_internal.index_span(1, 1))
 ----

@@ -69,6 +69,8 @@ var (
 	logsFrom              time.Time
 	logsTo                time.Time
 	logsInterval          time.Duration
+	volumeCreateOpts      vm.VolumeCreateOpts
+	listOpts              vm.ListOptions
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
@@ -209,6 +211,8 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
 	stopCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
 
+	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
+
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
@@ -255,6 +259,35 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
+
+	rootStorageCmd.AddCommand(rootStorageCollectionCmd)
+	rootStorageCollectionCmd.AddCommand(collectionStartCmd)
+	rootStorageCollectionCmd.AddCommand(collectionStopCmd)
+	rootStorageCollectionCmd.AddCommand(storageSnapshotCmd)
+	rootStorageCollectionCmd.AddCommand(collectionListVolumes)
+	collectionStartCmd.Flags().IntVarP(&volumeCreateOpts.Size,
+		"volume-size", "s", 10,
+		"the size of the volume in Gigabytes (GB) to create for each store. Note: This volume will be deleted "+
+			"once the VM is deleted.")
+
+	collectionStartCmd.Flags().BoolVar(&volumeCreateOpts.Encrypted,
+		"volume-encrypted", false,
+		"determines if the volume will be encrypted. Note: This volume will be deleted once the VM is deleted.")
+
+	collectionStartCmd.Flags().StringVar(&volumeCreateOpts.Architecture,
+		"volume-arch", "",
+		"the architecture the volume should target. This flag is only relevant for gcp or azure. It is ignored "+
+			"if supplied for other providers. Note: This volume will be deleted once the VM is deleted.")
+
+	collectionStartCmd.Flags().IntVarP(&volumeCreateOpts.IOPS,
+		"volume-iops", "i", 0,
+		"the iops to provision for the volume. Note: This volume will be deleted once the VM is deleted.")
+
+	collectionStartCmd.Flags().StringVarP(&volumeCreateOpts.Type,
+		"volume-type", "t", "",
+		"the volume type that should be created. Provide a volume type that is connected to"+
+			" the provider chosen for the cluster. If no volume type is provided the provider default will be used. "+
+			"Note: This volume will be deleted once the VM is deleted.")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),

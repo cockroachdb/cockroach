@@ -99,6 +99,7 @@ lc_time                                               C.UTF-8
 locality                                              region=test,dc=dc1
 locality_optimized_partitioned_index_scan             on
 lock_timeout                                          0
+log_timezone                                          UTC
 max_identifier_length                                 128
 max_index_keys                                        32
 node_id                                               1
@@ -451,19 +452,25 @@ testuser  ·        {}
 
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+/Table/53  /Max     {1}       1
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]
+----
+start_key     end_key       replicas  lease_holder
+…/<TableMin>  …/<TableMax>  {1}       1
 
 statement ok
 CREATE INDEX ix ON foo(x)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+start_key     end_key       replicas  lease_holder
+…/<IndexMin>  <after:/Max>  {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0

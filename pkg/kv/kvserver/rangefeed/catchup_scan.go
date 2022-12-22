@@ -219,7 +219,10 @@ func (i *CatchUpIterator) CatchUpScan(
 		}
 
 		unsafeKey := i.UnsafeKey()
-		unsafeValRaw := i.UnsafeValue()
+		unsafeValRaw, err := i.UnsafeValue()
+		if err != nil {
+			return err
+		}
 		if !unsafeKey.IsValue() {
 			// Found a metadata key.
 			if err := protoutil.Unmarshal(unsafeValRaw, &meta); err != nil {

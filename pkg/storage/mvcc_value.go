@@ -220,6 +220,15 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 	return decodeExtendedMVCCValue(buf)
 }
 
+// DecodeMVCCValueAndErr is a helper that can be called using the ([]byte,
+// error) pair returned from the iterator UnsafeValue(), Value() methods.
+func DecodeMVCCValueAndErr(buf []byte, err error) (MVCCValue, error) {
+	if err != nil {
+		return MVCCValue{}, err
+	}
+	return DecodeMVCCValue(buf)
+}
+
 // Static error definitions, to permit inlining.
 var errMVCCValueMissingTag = errors.Errorf("invalid encoded mvcc value, missing tag")
 var errMVCCValueMissingHeader = errors.Errorf("invalid encoded mvcc value, missing header")

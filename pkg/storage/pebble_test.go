@@ -1083,7 +1083,9 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, v != nil, valid)
 		if valid {
-			require.Equal(t, v, iter.Value())
+			value, err := iter.Value()
+			require.NoError(t, err)
+			require.Equal(t, v, value)
 		}
 		return v
 	}
@@ -1124,7 +1126,8 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	v3 := MVCCValue{Value: roachpb.MakeValueFromString("3")}
 	vx := MVCCValue{Value: roachpb.MakeValueFromString("x")}
 
-	decodeValue := func(encoded []byte) MVCCValue {
+	decodeValue := func(encoded []byte, err error) MVCCValue {
+		require.NoError(t, err)
 		value, err := DecodeMVCCValue(encoded)
 		require.NoError(t, err)
 		return value

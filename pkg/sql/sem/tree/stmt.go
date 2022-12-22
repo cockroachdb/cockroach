@@ -116,7 +116,7 @@ type canModifySchema interface {
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {
-	if stmt.StatementReturnType() == DDL {
+	if stmt.StatementReturnType() == DDL || stmt.StatementType() == TypeDDL {
 		return true
 	}
 	scm, ok := stmt.(canModifySchema)
@@ -125,12 +125,19 @@ func CanModifySchema(stmt Statement) bool {
 
 // CanWriteData returns true if the statement can modify data.
 func CanWriteData(stmt Statement) bool {
+	if stmt.StatementType() == TypeDCL {
+		// Commands like GRANT and REVOKE modify system tables.
+		return true
+	}
 	switch stmt.(type) {
 	// Normal write operations.
 	case *Insert, *Delete, *Update, *Truncate:
 		return true
 	// Import operations.
 	case *CopyFrom, *Import, *Restore:
+		return true
+	// Backup creates a job and allows you to write into userfiles.
+	case *Backup:
 		return true
 	// CockroachDB extensions.
 	case *Split, *Unsplit, *Relocate, *RelocateRange, *Scatter:
@@ -477,7 +484,7 @@ func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
 func (*AlterRole) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*AlterRole) StatementType() StatementType { return TypeDDL }
+func (*AlterRole) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterRole) StatementTag() string { return "ALTER ROLE" }
@@ -488,7 +495,7 @@ func (*AlterRole) hiddenFromShowQueries() {}
 func (*AlterRoleSet) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*AlterRoleSet) StatementType() StatementType { return TypeDDL }
+func (*AlterRoleSet) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterRoleSet) StatementTag() string { return "ALTER ROLE" }
@@ -844,7 +851,7 @@ func (*CreateType) modifiesSchema() bool { return true }
 func (*CreateRole) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*CreateRole) StatementType() StatementType { return TypeDDL }
+func (*CreateRole) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
@@ -912,7 +919,7 @@ func (d *Discard) StatementTag() string {
 func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*DeclareCursor) StatementType() StatementType { return TypeDCL }
+func (*DeclareCursor) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DeclareCursor) StatementTag() string { return "DECLARE CURSOR" }
@@ -975,7 +982,7 @@ func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
 func (*DropRole) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*DropRole) StatementType() StatementType { return TypeDDL }
+func (*DropRole) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropRole) StatementTag() string { return "DROP ROLE" }
@@ -1342,7 +1349,7 @@ func (*SelectClause) StatementTag() string { return "SELECT" }
 func (*SetVar) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetVar) StatementType() StatementType { return TypeDCL }
+func (*SetVar) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *SetVar) StatementTag() string {
@@ -1365,7 +1372,7 @@ func (*SetClusterSetting) StatementTag() string { return "SET CLUSTER SETTING" }
 func (*SetTransaction) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetTransaction) StatementType() StatementType { return TypeDCL }
+func (*SetTransaction) StatementType() StatementType { return TypeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
@@ -1395,7 +1402,7 @@ func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
 func (*SetSessionAuthorizationDefault) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetSessionAuthorizationDefault) StatementType() StatementType { return TypeDCL }
+func (*SetSessionAuthorizationDefault) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetSessionAuthorizationDefault) StatementTag() string { return "SET" }
@@ -1404,7 +1411,7 @@ func (*SetSessionAuthorizationDefault) StatementTag() string { return "SET" }
 func (*SetSessionCharacteristics) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetSessionCharacteristics) StatementType() StatementType { return TypeDCL }
+func (*SetSessionCharacteristics) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetSessionCharacteristics) StatementTag() string { return "SET" }

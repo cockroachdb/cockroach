@@ -11,7 +11,6 @@ package sqlproxyccl
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/errors"
 )
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
@@ -257,25 +256,22 @@ func (metrics *metrics) updateForError(err error) {
 	if err == nil {
 		return
 	}
-	codeErr := (*codeError)(nil)
-	if errors.As(err, &codeErr) {
-		switch codeErr.code {
-		case codeExpiredClientConnection:
-			metrics.ExpiredClientConnCount.Inc(1)
-		case codeBackendDisconnected, codeBackendReadFailed, codeBackendWriteFailed:
-			metrics.BackendDisconnectCount.Inc(1)
-		case codeClientDisconnected, codeClientWriteFailed, codeClientReadFailed:
-			metrics.ClientDisconnectCount.Inc(1)
-		case codeProxyRefusedConnection:
-			metrics.RefusedConnCount.Inc(1)
-			metrics.BackendDownCount.Inc(1)
-		case codeParamsRoutingFailed, codeUnavailable:
-			metrics.RoutingErrCount.Inc(1)
-			metrics.BackendDownCount.Inc(1)
-		case codeBackendDown:
-			metrics.BackendDownCount.Inc(1)
-		case codeAuthFailed:
-			metrics.AuthFailedCount.Inc(1)
-		}
+	switch getErrorCode(err) {
+	case codeExpiredClientConnection:
+		metrics.ExpiredClientConnCount.Inc(1)
+	case codeBackendDisconnected, codeBackendReadFailed, codeBackendWriteFailed:
+		metrics.BackendDisconnectCount.Inc(1)
+	case codeClientDisconnected, codeClientWriteFailed, codeClientReadFailed:
+		metrics.ClientDisconnectCount.Inc(1)
+	case codeProxyRefusedConnection:
+		metrics.RefusedConnCount.Inc(1)
+		metrics.BackendDownCount.Inc(1)
+	case codeParamsRoutingFailed, codeUnavailable:
+		metrics.RoutingErrCount.Inc(1)
+		metrics.BackendDownCount.Inc(1)
+	case codeBackendDown:
+		metrics.BackendDownCount.Inc(1)
+	case codeAuthFailed:
+		metrics.AuthFailedCount.Inc(1)
 	}
 }

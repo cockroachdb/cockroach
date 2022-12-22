@@ -115,9 +115,12 @@ CREATE TABLE system.tenants (
 	// roles such as root and admin.
 	RoleIDSequenceSchema = `
 CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
+
+	indexUsageComputeExpr = `(statistics->'statistics':::STRING)->'indexes':::STRING`
 )
 
 var tenantNameComputeExprStr = tenantNameComputeExpr
+var indexUsageComputeExprStr = indexUsageComputeExpr
 
 // These system tables are not part of the system config.
 const (
@@ -537,10 +540,12 @@ CREATE TABLE system.statement_statistics (
     ) STORED,
 
     index_recommendations STRING[] NOT NULL DEFAULT (array[]::STRING[]),
+    indexes_usage JSONB AS (` + indexUsageComputeExpr + `) VIRTUAL,
 
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
+    INVERTED INDEX "indexes_usage_idx" (indexes_usage),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
 			aggregated_ts,
@@ -2357,6 +2362,7 @@ var (
 					Hidden:      true,
 				},
 				{Name: "index_recommendations", ID: 12, Type: types.StringArray, Nullable: false, DefaultExpr: &defaultIndexRec},
+				{Name: "indexes_usage", ID: 13, Type: types.Jsonb, Nullable: true, Virtual: true, ComputeExpr: &indexUsageComputeExprStr},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2424,6 +2430,22 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:   "indexes_usage_idx",
+				ID:     3,
+				Unique: false,
+				KeyColumnNames: []string{
+					"indexes_usage",
+				},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{
+					catpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:        []descpb.ColumnID{13},
+				KeySuffixColumnIDs:  []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Type:                descpb.IndexDescriptor_INVERTED,
+				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT},
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {

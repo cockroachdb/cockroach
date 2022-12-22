@@ -796,7 +796,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "127.0.0.2:4567", serverAddress)
 				require.Nil(t, tlsConfig)
-				return nil, newErrorf(codeBackendDown, "bar")
+				return nil, withCode(errors.New("bar"), codeBackendDown)
 			},
 		)()
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.2:4567")

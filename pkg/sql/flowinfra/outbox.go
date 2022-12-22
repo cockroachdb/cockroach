@@ -22,11 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -64,8 +65,18 @@ type Outbox struct {
 	// whenever the consumer returns an error on the stream above. Set
 	// to a non-null value in start().
 	flowCtxCancel context.CancelFunc
+	// outboxCtxCancel is the cancellation function for this Outbox's ctx. It is
+	// used when gracefully shutting down the tree rooted in this Outbox. (Note
+	// that it is possible for a single flow to have multiple Outboxes, and
+	// outboxCtxCancel shuts down only one of them whereas flowCtxCancel shuts
+	// down all of them.)
+	outboxCtxCancel context.CancelFunc
 
-	err error
+	mu struct {
+		syncutil.Mutex
+		// err is only used for testing
+		err error
+	}
 
 	statsCollectionEnabled bool
 	stats                  execinfrapb.ComponentStats
@@ -174,6 +185,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 		}
 	}
 	if sendErr != nil {
+		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
 		// Make sure the stream is not used any more.
 		m.stream = nil
 		if log.V(1) {
@@ -203,10 +215,16 @@ func (m *Outbox) flush(ctx context.Context) error {
 // stream, or otherwise the error has already been forwarded on the stream.
 // Depending on the specific error, the stream might or might not need to be
 // closed. In case it doesn't, m.stream has been set to nil.
-func (m *Outbox) mainLoop(ctx context.Context) error {
+func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error) {
 	// No matter what happens, we need to make sure we close our RowChannel, since
 	// writers could be writing to it as soon as we are started.
 	defer m.RowChannel.ConsumerClosed()
+
+	// Derive a child context so that we can cancel all components rooted in
+	// this outbox. This cancellation function will be called when shutting down
+	// the outbox gracefully (in case of the ungraceful shutdown flowCtxCancel
+	// is called). See comment on startWatchdogGoroutine for more details.
+	ctx, m.outboxCtxCancel = context.WithCancel(ctx)
 
 	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
@@ -219,52 +237,48 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 		}
 	}
 
-	if m.stream == nil {
-		conn, err := execinfra.GetConnForOutbox(
-			ctx, m.flowCtx.Cfg.PodNodeDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
-		)
-		if err != nil {
-			// Log any Dial errors. This does not have a verbosity check due to being
-			// a critical part of query execution: if this step doesn't work, the
-			// receiving side might end up hanging or timing out.
-			log.Infof(ctx, "outbox: connection dial error: %+v", err)
-			return err
-		}
-		client := execinfrapb.NewDistSQLClient(conn)
-		if log.V(2) {
-			log.Infof(ctx, "outbox: calling FlowStream")
-		}
-		// The context used here escapes, so it has to be a background context.
-		// TODO(yuzefovich): the usage of the TODO context here is suspicious.
-		// Investigate this.
-		m.stream, err = client.FlowStream(context.TODO())
-		if err != nil {
-			if log.V(1) {
-				log.Infof(ctx, "FlowStream error: %s", err)
-			}
-			return err
-		}
-		if log.V(2) {
-			log.Infof(ctx, "outbox: FlowStream returned")
-		}
+	conn, err := execinfra.GetConnForOutbox(
+		ctx, m.flowCtx.Cfg.PodNodeDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+	)
+	if err != nil {
+		// Log any Dial errors. This does not have a verbosity check due to being
+		// a critical part of query execution: if this step doesn't work, the
+		// receiving side might end up hanging or timing out.
+		log.Infof(ctx, "outbox: connection dial error: %+v", err)
+		return err
 	}
+	client := execinfrapb.NewDistSQLClient(conn)
+	if log.V(2) {
+		log.Infof(ctx, "outbox: calling FlowStream")
+	}
+	m.stream, err = client.FlowStream(ctx)
+	if err != nil {
+		if log.V(1) {
+			log.Infof(ctx, "FlowStream error: %s", err)
+		}
+		return err
+	}
+	if log.V(2) {
+		log.Infof(ctx, "outbox: FlowStream returned")
+	}
+
+	// Make sure to always close the stream if it is still usable (if not, then
+	// the field is set to nil).
+	defer func() {
+		if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
+			closeErr := stream.CloseSend()
+			if retErr == nil {
+				retErr = closeErr
+			}
+		}
+	}()
 
 	var flushTimer timeutil.Timer
 	defer flushTimer.Stop()
 
 	draining := false
 
-	// TODO(andrei): It's unfortunate that we're spawning a goroutine for every
-	// outgoing stream, but I'm not sure what to do instead. The streams don't
-	// have a non-blocking API. We could start this goroutine only after a
-	// timeout, but that timeout would affect queries that use flows with
-	// LimitHint's (so, queries where the consumer is expected to quickly ask the
-	// producer to drain). Perhaps what we want is a way to tell when all the rows
-	// corresponding to the first KV batch have been sent and only start the
-	// goroutine if more batches are needed to satisfy the query.
-	listenToConsumerCtx, cancel := contextutil.WithCancel(ctx)
-	drainCh, err := m.listenForDrainSignalFromConsumer(listenToConsumerCtx)
-	defer cancel()
+	watchdogCh, err := m.startWatchdogGoroutine(ctx, wg)
 	if err != nil {
 		return err
 	}
@@ -328,109 +342,78 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-		case drainSignal := <-drainCh:
-			if drainSignal.err != nil {
-				// Stop work from proceeding in this flow. This also causes FlowStream
-				// RPCs that have this node as consumer to return errors.
-				m.flowCtxCancel()
-				// The consumer either doesn't care any more (it returned from the
-				// FlowStream RPC with an error), or there was a communication error
-				// and the stream is dead. In any case, the stream has been closed and
-				// the consumer will not consume more rows from this outbox. Make sure
-				// the stream is not used any more.
-				m.stream = nil
-				return drainSignal.err
-			}
-			drainCh = nil
-			if drainSignal.drainRequested {
-				// Enter draining mode.
-				draining = true
-				m.RowChannel.ConsumerDone()
-			} else {
-				// No draining required. We're done; no need to consume any more.
-				// m.RowChannel.ConsumerClosed() is called in a defer above.
+		case _, ok := <-watchdogCh:
+			if !ok {
+				// The watchdog goroutine exited indicating that we should too.
 				return nil
 			}
+			// The consumer requested draining.
+			draining = true
+			m.RowChannel.ConsumerDone()
 		}
 	}
 }
 
-// drainSignal is a signal received from the consumer telling the producer that
-// it doesn't need any more rows and optionally asking the producer to drain.
-type drainSignal struct {
-	// drainRequested, if set, means that the consumer is interested in the
-	// trailing metadata that the producer might have. If not set, the producer
-	// should close immediately (the consumer is probably gone by now).
-	drainRequested bool
-	// err, if set, is either the error that the consumer returned when closing
-	// the FlowStream RPC or a communication error.
-	err error
-}
-
-// listenForDrainSignalFromConsumer returns a channel that will be pinged once the
-// consumer has closed its send-side of the stream, or has sent a drain signal.
+// startWatchdogGoroutine spins up a new goroutine whose job is to listen
+// continually on the stream from the consumer for errors or drain requests.
 //
-// This method runs a task that will run until either the consumer closes the
-// stream or until the caller cancels the context. The caller has to cancel the
-// context once it no longer reads from the channel, otherwise this method might
-// deadlock when attempting to write to the channel.
-func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
-	ch := make(chan drainSignal, 1)
+// This goroutine will tear down the flow (by calling flowCtxCancel) if
+// non-io.EOF error is received - without it, a producer goroutine might spin
+// doing work for a long time after a connection is closed, since it wouldn't
+// notice a closed connection until it tried to Send a message over that
+// connection.
+//
+// Similarly, if an io.EOF error is received, it indicates that the server side
+// of FlowStream RPC (the inbox) has exited gracefully, so the inbox doesn't
+// need anything else from this outbox, and this goroutine will shut down the
+// tree of operators rooted in this outbox (by calling outboxCtxCancel).
+//
+// It returns a channel that serves two purposes:
+// - it will be signaled when draining is requested by the consumer;
+// - it will be closed once the new goroutine exits. When that happens, the main
+// goroutine of the outbox can exit too since the consumer no longer needs
+// anything from the outbox.
+func (m *Outbox) startWatchdogGoroutine(
+	ctx context.Context, wg *sync.WaitGroup,
+) (<-chan struct{}, error) {
+	// The channel is buffered in order to not block the watchdog goroutine when
+	// it is signaling about the drain request to the main goroutine.
+	ch := make(chan struct{}, 1)
 
 	stream := m.stream
-	if err := m.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
-		sendDrainSignal := func(drainRequested bool, err error) (shouldExit bool) {
-			select {
-			case ch <- drainSignal{drainRequested: drainRequested, err: err}:
-				return false
-			case <-ctx.Done():
-				// Listening for consumer signals has been canceled indicating
-				// that the main outbox routine is no longer listening to these
-				// signals.
-				return true
-			}
-		}
-
+	wg.Add(1)
+	if err := m.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "watchdog", func(ctx context.Context) {
 		for {
 			signal, err := stream.Recv()
-			if err == io.EOF {
-				// io.EOF indicates graceful completion of the stream, so we
-				// don't use io.EOF as an error.
-				sendDrainSignal(false, nil)
-				return
-			}
 			if err != nil {
-				sendDrainSignal(false, err)
-				return
+				if err != io.EOF {
+					// io.EOF is considered a graceful termination of the gRPC
+					// stream, so it is ignored.
+					m.setErr(err)
+				}
+				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel)
+				break
 			}
 			switch {
-			case signal.DrainRequest != nil:
-				if shouldExit := sendDrainSignal(true, nil); shouldExit {
-					return
-				}
 			case signal.Handshake != nil:
-				log.Eventf(ctx, "consumer sent handshake.\nConsuming flow scheduled: %t",
-					signal.Handshake.ConsumerScheduled)
+				log.VEventf(ctx, 2, "Outbox received handshake: %s", signal.Handshake)
+			case signal.DrainRequest != nil:
+				log.VEventf(ctx, 2, "Outbox received drain request")
+				ch <- struct{}{}
 			}
 		}
+		close(ch)
+		wg.Done()
 	}); err != nil {
+		wg.Done()
 		return nil, err
 	}
 	return ch, nil
 }
 
 func (m *Outbox) run(ctx context.Context, wg *sync.WaitGroup) {
-	err := m.mainLoop(ctx)
-	if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
-		closeErr := stream.CloseSend()
-		if err == nil {
-			err = closeErr
-		}
-	}
-	m.err = err
-	if wg != nil {
-		wg.Done()
-	}
+	m.setErr(m.mainLoop(ctx, wg))
+	wg.Done()
 }
 
 // Start starts the outbox.
@@ -438,14 +421,42 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	if m.OutputTypes() == nil {
 		panic("outbox not initialized")
 	}
-	if wg != nil {
-		wg.Add(1)
-	}
 	m.flowCtxCancel = flowCtxCancel
+	wg.Add(1)
 	go m.run(ctx, wg)
+}
+
+// setErr sets the error stored in the Outbox if it hasn't been set previously.
+func (m *Outbox) setErr(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.mu.err == nil {
+		m.mu.err = err
+	}
 }
 
 // Err returns the error (if any occurred) while Outbox was running.
 func (m *Outbox) Err() error {
-	return m.err
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mu.err
+}
+
+// HandleStreamErr is a utility method used to handle an error when calling
+// a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
+// called, for all other errors flowCtxCancel is. The given error is logged with
+// the associated opName.
+func HandleStreamErr(
+	ctx context.Context,
+	opName redact.SafeString,
+	err error,
+	flowCtxCancel, outboxCtxCancel context.CancelFunc,
+) {
+	if err == io.EOF {
+		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
+		outboxCtxCancel()
+	} else {
+		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		flowCtxCancel()
+	}
 }

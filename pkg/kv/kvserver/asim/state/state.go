@@ -152,6 +152,8 @@ type State interface {
 	// the allocator and storepool should both be separated out of this
 	// interface, instead using it to populate themselves.
 	MakeAllocator(StoreID) allocatorimpl.Allocator
+	// StorePool returns the store pool for the given storeID.
+	StorePool(StoreID) storepool.AllocatorStorePool
 	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
 	LoadSplitterFor(StoreID) LoadSplitter
 	// RaftStatus returns the current raft status for the replica of the Range

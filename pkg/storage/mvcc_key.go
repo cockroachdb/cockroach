@@ -594,6 +594,8 @@ func (s MVCCRangeKeyStack) CloneInto(c *MVCCRangeKeyStack) {
 }
 
 // Covers returns true if any range key in the stack covers the given point key.
+// A timestamp of 0 (i.e. an intent) is considered to be above all timestamps,
+// and thus not covered by any range key.
 func (s MVCCRangeKeyStack) Covers(k MVCCKey) bool {
 	return s.Versions.Covers(k.Timestamp) && s.Bounds.ContainsKey(k.Key)
 }
@@ -705,8 +707,10 @@ func (v MVCCRangeKeyVersions) CloneInto(c *MVCCRangeKeyVersions) {
 }
 
 // Covers returns true if any version in the stack is above the given timestamp.
+// A timestamp of 0 (i.e. an intent) is considered to be above all timestamps,
+// and thus not covered by any range key.
 func (v MVCCRangeKeyVersions) Covers(ts hlc.Timestamp) bool {
-	return !v.IsEmpty() && ts.LessEq(v[0].Timestamp)
+	return !v.IsEmpty() && !ts.IsEmpty() && ts.LessEq(v[0].Timestamp)
 }
 
 // Equal returns whether versions in the specified MVCCRangeKeyVersions match

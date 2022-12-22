@@ -25,7 +25,6 @@ import {
   RouterState,
 } from "connected-react-router";
 import { History } from "history";
-import { history } from "./history";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
@@ -37,6 +36,7 @@ import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
 import { initializeAnalytics } from "./analytics";
+import { DataFromServer } from "src/util/dataFromServer";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -51,9 +51,25 @@ export interface AdminUIState {
   login: LoginAPIState;
 }
 
+const emptyDataFromServer: DataFromServer = {
+  ExperimentalUseLogin: false,
+  FeatureFlags: {},
+  LoggedInUser: "",
+  LoginEnabled: false,
+  NodeID: "",
+  OIDCAutoLogin: false,
+  OIDCButtonText: "",
+  OIDCLoginEnabled: false,
+  Tag: "",
+  Version: "",
+};
+
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
-export function createAdminUIStore(historyInst: History<any>) {
+export function createAdminUIStore(
+  historyInst: History<any>,
+  dataFromServer: DataFromServer = emptyDataFromServer,
+) {
   const sagaMiddleware = createSagaMiddleware();
   const routerReducer = connectRouter(historyInst);
 
@@ -70,6 +86,16 @@ export function createAdminUIStore(historyInst: History<any>) {
       uiData: uiDataReducer,
       login: loginReducer,
     }),
+    {
+      login: {
+        loggedInUser: dataFromServer.LoggedInUser,
+        error: null,
+        inProgress: false,
+        oidcAutoLogin: dataFromServer.OIDCAutoLogin,
+        oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
+        oidcButtonText: dataFromServer.OIDCButtonText,
+      },
+    },
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
       // Support for redux dev tools
@@ -96,8 +122,4 @@ export function createAdminUIStore(historyInst: History<any>) {
   return s;
 }
 
-const store = createAdminUIStore(history);
-
 export type AppDispatch = ThunkDispatch<AdminUIState, unknown, Action>;
-
-export { store };

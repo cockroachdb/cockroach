@@ -13,9 +13,8 @@ package logstore
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -73,7 +72,7 @@ type SideloadStorage interface {
 // The provided slice is not modified, though the returned slice may be backed
 // in parts or entirely by the same memory.
 func MaybeSideloadEntries(
-	ctx context.Context, entriesToAppend []raftpb.Entry, sideloaded SideloadStorage,
+	ctx context.Context, input []raftpb.Entry, sideloaded SideloadStorage,
 ) (
 	_ []raftpb.Entry,
 	numSideloaded int,
@@ -81,32 +80,33 @@ func MaybeSideloadEntries(
 	otherEntriesSize int64,
 	_ error,
 ) {
-
-	cow := false
-	for i := range entriesToAppend {
-		if !SniffSideloadedRaftCommand(entriesToAppend[i].Data) {
-			otherEntriesSize += int64(len(entriesToAppend[i].Data))
-			continue
-		}
-		log.Event(ctx, "sideloading command in append")
-		if !cow {
-			// Avoid mutating the passed-in entries directly. The caller
-			// wants them to remain "fat".
-			log.Eventf(ctx, "copying entries slice of length %d", len(entriesToAppend))
-			cow = true
-			entriesToAppend = append([]raftpb.Entry(nil), entriesToAppend...)
-		}
-
-		ent := &entriesToAppend[i]
-		cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data) // cheap
-
-		// Unmarshal the command into an object that we can mutate.
-		var strippedCmd kvserverpb.RaftCommand
-		if err := protoutil.Unmarshal(data, &strippedCmd); err != nil {
+	var output []raftpb.Entry
+	for i := range input {
+		typ, err := raftlog.EncodingOf(input[i])
+		if err != nil {
 			return nil, 0, 0, 0, err
 		}
+		if typ != raftlog.EntryEncodingSideloaded {
+			otherEntriesSize += int64(len(input[i].Data))
+			continue
+		}
 
-		if strippedCmd.ReplicatedEvalResult.AddSSTable == nil {
+		log.Event(ctx, "sideloading command in append")
+		if output == nil {
+			// We're seeing the first command that we will sideload, so populate the
+			// output slice with a copy of the input, so that we can replace
+			// individual entries.
+			log.Eventf(ctx, "copying entries slice of length %d", len(input))
+			output = append([]raftpb.Entry(nil), input...)
+		}
+		outputEnt := &output[i]
+
+		// Unmarshal the command into an object that we can mutate.
+		e, err := raftlog.NewEntry(input[i])
+		if err != nil {
+			return nil, 0, 0, 0, err
+		}
+		if e.Cmd.ReplicatedEvalResult.AddSSTable == nil {
 			// Still no AddSSTable; someone must've proposed a v2 command
 			// but not because it contains an inlined SSTable. Strange, but
 			// let's be future proof.
@@ -116,33 +116,35 @@ func MaybeSideloadEntries(
 		numSideloaded++
 
 		// Actually strip the command.
-		dataToSideload := strippedCmd.ReplicatedEvalResult.AddSSTable.Data
-		strippedCmd.ReplicatedEvalResult.AddSSTable.Data = nil
+		dataToSideload := e.Cmd.ReplicatedEvalResult.AddSSTable.Data
+		e.Cmd.ReplicatedEvalResult.AddSSTable.Data = nil
 
 		// Marshal the command and attach to the Raft entry.
+		//
+		// TODO(tbg): this should be supported by a method as well.
 		{
-			data := make([]byte, kvserverbase.RaftCommandPrefixLen+strippedCmd.Size())
-			kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, cmdID)
-			_, err := protoutil.MarshalTo(&strippedCmd, data[kvserverbase.RaftCommandPrefixLen:])
+			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
+			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.EntryEncodingSideloadedPrefixByte, e.ID)
+			_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
-			ent.Data = data
+			outputEnt.Data = data
 		}
 
-		log.Eventf(ctx, "writing payload at index=%d term=%d", ent.Index, ent.Term)
-		if err := sideloaded.Put(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
+		log.Eventf(ctx, "writing payload at index=%d term=%d", outputEnt.Index, outputEnt.Term)
+		if err := sideloaded.Put(ctx, outputEnt.Index, outputEnt.Term, dataToSideload); err != nil { // TODO could verify checksum here
 			return nil, 0, 0, 0, err
 		}
 		sideloadedEntriesSize += int64(len(dataToSideload))
 	}
-	return entriesToAppend, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
-}
 
-// SniffSideloadedRaftCommand returns whether the entry data indicates a
-// sideloaded entry.
-func SniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
-	return len(data) > 0 && data[0] == byte(kvserverbase.RaftVersionSideloaded)
+	if output == nil {
+		// We never saw a sideloaded command.
+		output = input
+	}
+
+	return output, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
 }
 
 // MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
@@ -159,7 +161,11 @@ func MaybeInlineSideloadedRaftCommand(
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
-	if !SniffSideloadedRaftCommand(ent.Data) {
+	typ, err := raftlog.EncodingOf(ent)
+	if err != nil {
+		return nil, err
+	}
+	if typ != raftlog.EntryEncodingSideloaded {
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
@@ -180,15 +186,13 @@ func MaybeInlineSideloadedRaftCommand(
 	ent = entCpy
 
 	log.Event(ctx, "inlined entry not cached")
-	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
-	cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data)
-
-	var command kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(data, &command); err != nil {
+	// (Bad) luck, for whatever reason the inlined proposal isn't in the cache.
+	e, err := raftlog.NewEntry(ent)
+	if err != nil {
 		return nil, err
 	}
 
-	if len(command.ReplicatedEvalResult.AddSSTable.Data) > 0 {
+	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) > 0 {
 		// The entry we started out with was already "fat". This should never
 		// occur since it would imply that a) the entry was not properly
 		// sideloaded during append or b) the entry reached us through a
@@ -204,11 +208,13 @@ func MaybeInlineSideloadedRaftCommand(
 	if err != nil {
 		return nil, errors.Wrap(err, "loading sideloaded data")
 	}
-	command.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
+	e.Cmd.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
+	// TODO(tbg): there should be a helper that properly encodes a command, given
+	// the EntryEncoding.
 	{
-		data := make([]byte, kvserverbase.RaftCommandPrefixLen+command.Size())
-		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, cmdID)
-		_, err := protoutil.MarshalTo(&command, data[kvserverbase.RaftCommandPrefixLen:])
+		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
+		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], raftlog.EntryEncodingSideloadedPrefixByte, e.ID)
+		_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}
@@ -222,19 +228,22 @@ func MaybeInlineSideloadedRaftCommand(
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	if !SniffSideloadedRaftCommand(ent.Data) {
+	typ, err := raftlog.EncodingOf(*ent)
+	if err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
+	if typ != raftlog.EntryEncodingSideloaded {
 		return
 	}
 
-	var command kvserverpb.RaftCommand
-	_, data := kvserverbase.DecodeRaftCommand(ent.Data)
-	if err := protoutil.Unmarshal(data, &command); err != nil {
+	e, err := raftlog.NewEntry(*ent)
+	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	if len(command.ReplicatedEvalResult.AddSSTable.Data) == 0 {
+	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) == 0 {
 		// The entry is "thin", which is what this assertion is checking for.
-		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", command)
+		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
 	}
 }
 

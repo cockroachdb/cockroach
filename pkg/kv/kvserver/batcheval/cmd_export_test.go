@@ -98,7 +98,9 @@ func TestExportCmd(t *testing.T) {
 				newKv := storage.MVCCKeyValue{}
 				newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 				newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
-				newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+				v, err := sst.UnsafeValue()
+				require.NoError(t, err)
+				newKv.Value = append(newKv.Value, v...)
 				kvs = append(kvs, newKv)
 				sst.Next()
 			}
@@ -478,11 +480,15 @@ func exportUsingGoIterator(
 
 		// Skip tombstone (len=0) records when startTime is zero
 		// (non-incremental) and we're not exporting all versions.
-		if skipTombstones && startTime.IsEmpty() && len(iter.UnsafeValue()) == 0 {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, err
+		}
+		if skipTombstones && startTime.IsEmpty() && len(v) == 0 {
 			continue
 		}
 
-		if err := sst.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
+		if err := sst.Put(iter.UnsafeKey(), v); err != nil {
 			return nil, err
 		}
 	}
@@ -530,7 +536,11 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 		newKv := storage.MVCCKeyValue{}
 		newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 		newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
-		newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+		v, err := sst.UnsafeValue()
+		if err != nil {
+			t.Fatal(err)
+		}
+		newKv.Value = append(newKv.Value, v...)
 		kvs = append(kvs, newKv)
 		sst.Next()
 	}

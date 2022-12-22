@@ -584,6 +584,7 @@ gossip_liveness                        NULL
 gossip_network                         NULL
 gossip_nodes                           NULL
 index_columns                          NULL
+index_spans                            NULL
 index_usage_statistics                 NULL
 invalid_objects                        NULL
 jobs                                   NULL
@@ -619,9 +620,11 @@ session_trace                          NULL
 session_variables                      NULL
 statement_statistics                   NULL
 super_regions                          NULL
+system_jobs                            NULL
 table_columns                          NULL
 table_indexes                          NULL
 table_row_statistics                   NULL
+table_spans                            NULL
 tables                                 NULL
 tenant_usage_details                   NULL
 transaction_contention_events          NULL

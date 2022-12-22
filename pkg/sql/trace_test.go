@@ -157,6 +157,7 @@ func TestTrace(t *testing.T) {
 			optionalSpans: []string{
 				"setup-flow-async",
 				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
 				"noop",
 			},
 		},
@@ -230,6 +231,7 @@ func TestTrace(t *testing.T) {
 			optionalSpans: []string{
 				"setup-flow-async",
 				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
 				"noop",
 			},
 		},

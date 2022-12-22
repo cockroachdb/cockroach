@@ -10,6 +10,7 @@ go_library(
         "//pkg/roachprod",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
+        "//pkg/roachprod/vm",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

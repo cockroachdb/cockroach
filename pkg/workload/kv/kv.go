@@ -106,8 +106,7 @@ var kvMeta = workload.Meta{
 	--write-seq can be used to incorporate data produced by a previous run into
 	the current run.
 	`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
+	Version: `1.0.0`,
 	New: func() workload.Generator {
 		g := &kv{}
 		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)
@@ -144,17 +143,17 @@ var kvMeta = workload.Meta{
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of splits to perform before starting normal operations.`)
 		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
-			`Add a secondary index to the schema`)
+			`Add a secondary index to the schema.`)
 		g.flags.IntVar(&g.shards, `num-shards`, 0,
 			`Number of shards to create on the primary key.`)
 		g.flags.Float64Var(&g.targetCompressionRatio, `target-compression-ratio`, 1.0,
-			`Target compression ratio for data blocks. Must be >= 1.0`)
+			`Target compression ratio for data blocks. Must be >= 1.0.`)
 		g.flags.BoolVar(&g.enum, `enum`, false,
-			`Inject an enum column and use it`)
+			`Inject an enum column and use it.`)
 		g.flags.IntVar(&g.insertCount, `insert-count`, 0,
 			`Number of rows to insert before beginning the workload. Keys are inserted `+
 				`uniformly over the key range.`)
-		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout`)
+		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},

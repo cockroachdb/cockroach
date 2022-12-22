@@ -351,6 +351,22 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"num_runs",
 		},
 	},
+	"crdb_internal.system_jobs": {
+		// `payload` column may contain customer info, such as URI params
+		// containing access keys, encryption salts, etc.
+		nonSensitiveCols: NonSensitiveColumns{
+			"id",
+			"status",
+			"created",
+			"progress",
+			"created_by_type",
+			"created_by_id",
+			"claim_session_id",
+			"claim_instance_id",
+			"num_runs",
+			"last_run",
+		},
+	},
 	"crdb_internal.kv_node_liveness": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
@@ -531,12 +547,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"decommissioning",
 			"membership",
 			"updated_at",
-		},
-	},
-	"crdb_internal.gossip_network": {
-		nonSensitiveCols: NonSensitiveColumns{
-			"source_id",
-			"target_id",
 		},
 	},
 	"crdb_internal.gossip_nodes": {

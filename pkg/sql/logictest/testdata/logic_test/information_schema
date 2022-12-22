@@ -424,6 +424,7 @@ crdb_internal       gossip_liveness
 crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
+crdb_internal       index_spans
 crdb_internal       index_usage_statistics
 crdb_internal       invalid_objects
 crdb_internal       jobs
@@ -459,9 +460,11 @@ crdb_internal       session_trace
 crdb_internal       session_variables
 crdb_internal       statement_statistics
 crdb_internal       super_regions
+crdb_internal       system_jobs
 crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
+crdb_internal       table_spans
 crdb_internal       tables
 crdb_internal       tenant_usage_details
 crdb_internal       transaction_contention_events
@@ -753,6 +756,7 @@ gossip_liveness
 gossip_network
 gossip_nodes
 index_columns
+index_spans
 index_usage_statistics
 invalid_objects
 jobs
@@ -788,9 +792,11 @@ session_trace
 session_variables
 statement_statistics
 super_regions
+system_jobs
 table_columns
 table_indexes
 table_row_statistics
+table_spans
 tables
 tenant_usage_details
 transaction_contention_events
@@ -1077,6 +1083,7 @@ tablespaces
 tables_extensions
 tables
 tables
+table_spans
 table_row_statistics
 table_privileges
 table_indexes
@@ -1121,6 +1128,7 @@ system         crdb_internal       gossip_liveness                        SYSTEM
 system         crdb_internal       gossip_network                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
+system         crdb_internal       index_spans                            SYSTEM VIEW  NO                  1
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
@@ -1156,9 +1164,11 @@ system         crdb_internal       session_trace                          SYSTEM
 system         crdb_internal       session_variables                      SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       super_regions                          SYSTEM VIEW  NO                  1
+system         crdb_internal       system_jobs                            SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
+system         crdb_internal       table_spans                            SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       tenant_usage_details                   SYSTEM VIEW  NO                  1
 system         crdb_internal       transaction_contention_events          SYSTEM VIEW  NO                  1
@@ -2251,6 +2261,7 @@ system         public        statement_statistics             app_name          
 system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  11
 system         public        statement_statistics             fingerprint_id                                                                                            2
 system         public        statement_statistics             index_recommendations                                                                                     12
+system         public        statement_statistics             indexes_usage                                                                                             13
 system         public        statement_statistics             metadata                                                                                                  8
 system         public        statement_statistics             node_id                                                                                                   6
 system         public        statement_statistics             plan                                                                                                      10
@@ -2816,6 +2827,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
+NULL     public   system         crdb_internal       index_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
@@ -2851,9 +2863,11 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
+NULL     public   system         crdb_internal       system_jobs                            SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       table_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
@@ -3401,6 +3415,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
+NULL     public   system         crdb_internal       index_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
@@ -3436,9 +3451,11 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
+NULL     public   system         crdb_internal       system_jobs                            SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       table_spans                            SELECT          NO            YES
 NULL     public   system         crdb_internal       tables                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       tenant_usage_details                   SELECT          NO            YES
 NULL     public   system         crdb_internal       transaction_contention_events          SELECT          NO            YES
@@ -4818,6 +4835,7 @@ lc_time                                               C.UTF-8
 locality                                              region=test,dc=dc1
 locality_optimized_partitioned_index_scan             on
 lock_timeout                                          0
+log_timezone                                          UTC
 max_identifier_length                                 128
 max_index_keys                                        32
 node_id                                               1

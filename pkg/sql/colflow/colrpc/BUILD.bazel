@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/flowinfra",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/types",

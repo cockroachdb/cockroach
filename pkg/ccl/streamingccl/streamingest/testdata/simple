@@ -1,0 +1,71 @@
+create-replication-clusters
+----
+
+start-replication-stream
+----
+
+# TODO(adityamaru): This is a hack until we have the time we started replicating
+# from persisted in the replication job details.
+let $start as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+wait-until-high-watermark ts=$start
+----
+
+exec-sql as=source-tenant
+CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
+----
+
+exec-sql as=source-tenant
+EXPORT INTO CSV 'userfile:///dx' FROM SELECT 42, 42 UNION ALL SELECT 43, 43;
+----
+
+exec-sql as=source-tenant
+IMPORT INTO d.x CSV DATA ('userfile:///dx/export*-n*.0.csv');
+----
+
+let $ts as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+cutover ts=$ts
+----
+
+start-replicated-tenant
+----
+
+compare-tenant-fingerprints from=$start to=$ts with_revisions
+----
+
+compare-replication-results
+SELECT * FROM d.t1;
+----
+
+compare-replication-results
+SELECT * FROM d.t2;
+----
+
+compare-replication-results
+SELECT * FROM d.x;
+----
+
+# After cutover, changes to source won't be streamed into destination cluster.
+exec-sql as=source-tenant
+INSERT INTO d.t2 VALUES (3);
+----
+
+# Check the dst cluster didn't receive the change after a while.
+sleep ms=3000
+----
+
+query-sql as=source-tenant
+SELECT * FROM d.t2 ORDER BY i;
+----
+2
+3
+
+query-sql as=destination-tenant
+SELECT * FROM d.t2;
+----
+2

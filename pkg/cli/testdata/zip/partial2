@@ -33,6 +33,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [cluster] retrieving SQL data for crdb_internal.regions... writing output: debug/crdb_internal.regions.txt... done
 [cluster] retrieving SQL data for crdb_internal.schema_changes... writing output: debug/crdb_internal.schema_changes.txt... done
 [cluster] retrieving SQL data for crdb_internal.super_regions... writing output: debug/crdb_internal.super_regions.txt... done
+[cluster] retrieving SQL data for crdb_internal.system_jobs... writing output: debug/crdb_internal.system_jobs.txt... done
 [cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
 [cluster] retrieving SQL data for crdb_internal.transaction_contention_events... writing output: debug/crdb_internal.transaction_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
@@ -78,7 +79,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt... done
-[node 1] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/1/crdb_internal.gossip_network.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
@@ -171,7 +171,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 3] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/3/crdb_internal.feature_usage.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/3/crdb_internal.gossip_alerts.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/3/crdb_internal.gossip_liveness.txt... done
-[node 3] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/3/crdb_internal.gossip_network.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/3/crdb_internal.gossip_nodes.txt... done
 [node 3] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/3/crdb_internal.leases.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/3/crdb_internal.node_build_info.txt... done

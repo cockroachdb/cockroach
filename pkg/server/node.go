@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -845,7 +846,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(specs []base.StoreSpec, engines []stor
 		diskNameToStoreID: make(map[string]roachpb.StoreID),
 	}
 	for i := range engines {
-		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
 			return err
 		}

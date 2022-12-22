@@ -68,6 +68,7 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/opt/invertedexpr",
         "//pkg/sql/opt/invertedidx",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/row",

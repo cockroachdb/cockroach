@@ -100,7 +100,7 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 	)
 }
 
-// getDeprecatedSqlInstancesDescriptor returns the system.sql_instances
+// getDeprecatedStatementStatisticsDescriptor returns the system.statement_statistics
 // table descriptor that was being used before adding a new column in the
 // current version.
 func getDeprecatedStatementStatisticsDescriptor() *descpb.TableDescriptor {

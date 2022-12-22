@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -62,7 +63,7 @@ func init() {
 		fmt.Fprintf(os.Stderr, "unable to configure logger: %s\n", loggerError)
 		os.Exit(1)
 	}
-	if _, err := roachprod.Sync(l); err != nil {
+	if _, err := roachprod.Sync(l, vm.ListOptions{}); err != nil {
 		l.Printf("Failed to sync roachprod data - %v", err)
 		os.Exit(1)
 	}

@@ -1704,7 +1704,7 @@ func TestLint(t *testing.T) {
 				// These binaries are Bazel-only and the unused linter gets confused
 				// about the stub implementation mentioned in
 				// pkg/build/bazel/non_bazel.go above.
-				stream.GrepNot(`pkg/cmd/mirror/mirror.go`),
+				stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
 				stream.GrepNot(`pkg/cmd/generate-distdir/main.go`),
 				// Skip generated file.
 				stream.GrepNot(`pkg/ui/distoss/bindata.go`),

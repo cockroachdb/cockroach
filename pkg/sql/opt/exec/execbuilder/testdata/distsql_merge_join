@@ -103,31 +103,31 @@ ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
 
 # Verify data placement.
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1 WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /8       {1}       1
-/8         /16      {1}       1
-/16        /24      {1}       1
-/24        /32      {1}       1
-/32        NULL     {1}       1
+start_key           end_key                    replicas  lease_holder
+<before:/Table/53>  …/1/8                      {1}       1
+…/1/8               …/1/16                     {1}       1
+…/1/16              …/1/24                     {1}       1
+…/1/24              …/1/32                     {1}       1
+…/1/32              <after:/Table/108/1/4/44>  {1}       1
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1 WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /4/44    {1}       1
-/4/44      /12/52   {1}       1
-/12/52     /20/60   {1}       1
-/20/60     /28/68   {1}       1
-/28/68     /36/76   {1}       1
-/36/76     NULL     {1}       1
+start_key                 end_key                        replicas  lease_holder
+<before:/Table/106/1/32>  …/1/4/44                       {1}       1
+…/1/4/44                  …/1/12/52                      {1}       1
+…/1/12/52                 …/1/20/60                      {1}       1
+…/1/20/60                 …/1/28/68                      {1}       1
+…/1/28/68                 …/1/36/76                      {1}       1
+…/1/36/76                 <after:/Table/111/1/2/42/2/2>  {1}       1
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1 WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+start_key                    end_key                        replicas  lease_holder
+<before:/Table/108/1/36/76>  <after:/Table/111/1/2/42/2/2>  {1}       1
 
 ###############
 # Merge joins #
@@ -750,19 +750,19 @@ ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 
 query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE outer_p1]
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE outer_p1 WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       /0       {5}       5
-/0         /5       {1}       1
-/5         /10      {2}       2
-/10        /15      {3}       3
-/15        /20      {4}       4
-/20        /25      {1}       1
-/25        /30      {2}       2
-/30        /35      {3}       3
-/35        /40      {4}       4
-/40        NULL     {5}       5
+start_key                          end_key       replicas  lease_holder
+<before:/Table/111/1/38/78/38/38>  …/1/0         {5}       5
+…/1/0                              …/1/5         {1}       1
+…/1/5                              …/1/10        {2}       2
+…/1/10                             …/1/15        {3}       3
+…/1/15                             …/1/20        {4}       4
+…/1/20                             …/1/25        {1}       1
+…/1/25                             …/1/30        {2}       2
+…/1/30                             …/1/35        {3}       3
+…/1/35                             …/1/40        {4}       4
+…/1/40                             <after:/Max>  {5}       5
 
 ### Begin OUTER queries
 

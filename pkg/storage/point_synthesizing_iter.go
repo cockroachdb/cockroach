@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"bytes"
 	"sort"
 	"sync"
 
@@ -106,6 +107,14 @@ type PointSynthesizingIter struct {
 	// atPoint is true if the synthesizing iterator is positioned on a real point
 	// key in the underlying iterator. See struct comment for details.
 	atPoint bool
+
+	// pointConflict is true if the current iterator position is on a point key
+	// with the same timestamp as the range key, in which case the range key takes
+	// precedence and the real point key should be skipped. This shouldn't happen
+	// if MVCC conflict checks work correctly, but we'll be defensive as this has
+	// been seen to happen in randomized tests. atPoint is always false if this is
+	// true.
+	pointConflict bool
 
 	// atRangeKeysPos is true if the underlying iterator is at rangeKeysPos.
 	atRangeKeysPos bool
@@ -336,8 +345,8 @@ func (i *PointSynthesizingIter) extendRangeKeysEnd() {
 }
 
 // updateAtPoint updates i.atPoint according to whether the synthesizing
-// iterator is positioned on the real point key in the underlying iterator.
-// Requires i.rangeKeys to have been positioned first.
+// iterator is positioned on the real point key in the underlying iterator, as
+// well as i.pointConflict. Requires i.rangeKeys to have been positioned first.
 func (i *PointSynthesizingIter) updateAtPoint() {
 	if !i.iterHasPoint {
 		i.atPoint = false
@@ -347,11 +356,13 @@ func (i *PointSynthesizingIter) updateAtPoint() {
 		i.atPoint = false
 	} else if !i.reverse {
 		i.atPoint = i.rangeKeysIdx >= i.rangeKeysEnd || !i.iterKey.Timestamp.IsSet() ||
-			i.rangeKeys[i.rangeKeysIdx].Timestamp.LessEq(i.iterKey.Timestamp)
+			i.rangeKeys[i.rangeKeysIdx].Timestamp.Less(i.iterKey.Timestamp)
 	} else {
 		i.atPoint = i.rangeKeysIdx < 0 || (i.iterKey.Timestamp.IsSet() &&
-			i.iterKey.Timestamp.LessEq(i.rangeKeys[i.rangeKeysIdx].Timestamp))
+			i.iterKey.Timestamp.Less(i.rangeKeys[i.rangeKeysIdx].Timestamp))
 	}
+	i.pointConflict = !i.atPoint && i.iterHasPoint && i.atRangeKeysPos &&
+		i.rangeKeys[i.rangeKeysIdx].Timestamp.Equal(i.iterKey.Timestamp)
 }
 
 // updatePosition updates the synthesizing iterator for the position of the
@@ -361,6 +372,7 @@ func (i *PointSynthesizingIter) updatePosition() {
 	if !i.iterHasRange {
 		// Fast path: no range keys, so just clear range keys and bail out.
 		i.atPoint = i.iterHasPoint
+		i.pointConflict = false
 		i.clearRangeKeys()
 
 	} else if !i.reverse {
@@ -445,6 +457,7 @@ func (i *PointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 	// Fast path: no range key, so just reset the iterator and bail out.
 	if !i.iterHasRange {
 		i.atPoint = i.iterHasPoint
+		i.pointConflict = false
 		i.clearRangeKeys()
 		return
 	}
@@ -500,6 +513,8 @@ func (i *PointSynthesizingIter) Next() {
 			return
 		} else if i.atPoint {
 			i.rangeKeysIdx++
+		} else if i.pointConflict {
+			// point key and range key are at same position
 		} else if _, err := i.iterNext(); err != nil {
 			return
 		}
@@ -511,6 +526,12 @@ func (i *PointSynthesizingIter) Next() {
 			return
 		}
 		i.extendRangeKeysEnd()
+	} else if i.pointConflict {
+		if _, err := i.iterNext(); err != nil {
+			return
+		}
+		i.extendRangeKeysEnd()
+		i.rangeKeysIdx++
 	} else {
 		i.rangeKeysIdx++
 	}
@@ -532,7 +553,7 @@ func (i *PointSynthesizingIter) NextKey() {
 	// implement, so we may as well.
 	if i.reverse {
 		i.reverse = false
-		if !i.atPoint {
+		if !i.atPoint && !i.pointConflict {
 			if _, err := i.iterNext(); err != nil {
 				return
 			}
@@ -562,6 +583,7 @@ func (i *PointSynthesizingIter) SeekLT(seekKey MVCCKey) {
 	// Fast path: no range key, so just reset the iterator and bail out.
 	if !i.iterHasRange {
 		i.atPoint = i.iterHasPoint
+		i.pointConflict = false
 		i.clearRangeKeys()
 		return
 	}
@@ -621,6 +643,8 @@ func (i *PointSynthesizingIter) Prev() {
 			return
 		} else if i.atPoint {
 			i.rangeKeysIdx--
+		} else if i.pointConflict {
+			// point key and range key are at same position
 		} else if _, err := i.iterPrev(); err != nil {
 			return
 		}
@@ -631,6 +655,11 @@ func (i *PointSynthesizingIter) Prev() {
 		if _, err := i.iterPrev(); err != nil {
 			return
 		}
+	} else if i.pointConflict {
+		if _, err := i.iterPrev(); err != nil {
+			return
+		}
+		i.rangeKeysIdx--
 	} else {
 		i.rangeKeysIdx--
 	}
@@ -697,22 +726,26 @@ func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 }
 
 // Value implements MVCCIterator.
-func (i *PointSynthesizingIter) Value() []byte {
-	if v := i.UnsafeValue(); v != nil {
-		return append([]byte{}, v...)
+func (i *PointSynthesizingIter) Value() ([]byte, error) {
+	v, err := i.UnsafeValue()
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if v != nil {
+		return append([]byte{}, v...), nil
+	}
+	return nil, nil
 }
 
 // UnsafeValue implements MVCCIterator.
-func (i *PointSynthesizingIter) UnsafeValue() []byte {
+func (i *PointSynthesizingIter) UnsafeValue() ([]byte, error) {
 	if i.atPoint {
 		return i.iter.UnsafeValue()
 	}
 	if i.rangeKeysIdx >= len(i.rangeKeys) || i.rangeKeysIdx < 0 {
-		return nil
+		return nil, nil
 	}
-	return i.rangeKeys[i.rangeKeysIdx].Value
+	return i.rangeKeys[i.rangeKeysIdx].Value, nil
 }
 
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
@@ -742,7 +775,11 @@ func (i *PointSynthesizingIter) ValueLen() int {
 
 // ValueProto implements MVCCIterator.
 func (i *PointSynthesizingIter) ValueProto(msg protoutil.Message) error {
-	return protoutil.Unmarshal(i.UnsafeValue(), msg)
+	v, err := i.UnsafeValue()
+	if err != nil {
+		return err
+	}
+	return protoutil.Unmarshal(v, msg)
 }
 
 // HasPointAndRange implements MVCCIterator.
@@ -841,12 +878,16 @@ func (i *PointSynthesizingIter) assertInvariants() error {
 	}
 
 	// When atPoint is true, the underlying iterator must be valid and on a point.
+	// pointConflict must be false.
 	if i.atPoint {
 		if ok, _ := i.iter.Valid(); !ok {
 			return errors.AssertionFailedf("atPoint with invalid iter")
 		}
 		if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint {
 			return errors.AssertionFailedf("atPoint at non-point position %s", i.iter.UnsafeKey())
+		}
+		if i.pointConflict {
+			return errors.AssertionFailedf("atPoint with pointConflict at %s", i.iter.UnsafeKey())
 		}
 	}
 
@@ -946,9 +987,38 @@ func (i *PointSynthesizingIter) assertInvariants() error {
 		}
 	}
 
+	// Check for an overlapping point/range key timestamp. In this case,
+	// pointConflict must be true, atPoint must be false, and UnsafeValue()
+	// must return the range key's value.
+	var rangeKeyConflict MVCCRangeKeyVersion
+	if i.atRangeKeysPos && i.rangeKeysIdx >= 0 && i.rangeKeysIdx < i.rangeKeysEnd &&
+		i.rangeKeys[i.rangeKeysIdx].Timestamp.Equal(i.iterKey.Timestamp) {
+		rangeKeyConflict = i.rangeKeys[i.rangeKeysIdx]
+	}
+	if rangeKeyConflict.Timestamp.IsSet() && !i.pointConflict {
+		return errors.AssertionFailedf(
+			"conflicting range key and point key without pointConflict at %s", i.iterKey)
+	}
+	if i.pointConflict {
+		if i.atPoint {
+			return errors.AssertionFailedf("pointConflict with atPoint at %s", i.iterKey)
+		}
+		if rangeKeyConflict.Timestamp.IsEmpty() {
+			return errors.AssertionFailedf("pointConflict with no matching range key at %s", i.iterKey)
+		}
+		if value, err := i.UnsafeValue(); err != nil {
+			return err
+		} else if !bytes.Equal(value, rangeKeyConflict.Value) {
+			return errors.AssertionFailedf("pointConflict not returning range key value at %s", i.iterKey)
+		}
+		// We don't need to check the relative positioning below, because
+		// we already checked it.
+		return nil
+	}
+
 	// Check the relative positioning as minimum and maximum iter keys (in MVCC
 	// order). We can assume that overlapping range keys and point keys don't have
-	// the same timestamp, since this is enforced by MVCC mutations.
+	// the same timestamp, since this was checked above.
 	var minKey, maxKey MVCCKey
 
 	// The iterator should never lag behind the range key position.

@@ -341,10 +341,13 @@ export function populateRegionNodeForStatements(
     // E.g. {"gcp-us-east1" : [1,3,4]}
     if (stmt.stats.nodes) {
       stmt.stats.nodes.forEach(node => {
-        if (Object.keys(regions).includes(nodeRegions[node.toString()])) {
-          regions[nodeRegions[node.toString()]].add(longToInt(node));
-        } else {
-          regions[nodeRegions[node.toString()]] = new Set([longToInt(node)]);
+        const region = nodeRegions[node.toString()];
+        if (region) {
+          if (Object.keys(regions).includes(region)) {
+            regions[region].add(longToInt(node));
+          } else {
+            regions[region] = new Set([longToInt(node)]);
+          }
         }
       });
     }

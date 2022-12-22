@@ -18,10 +18,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+)
+
+var (
+	// DisableCheckSSTRangeKeyMasking forcibly disables CheckSSTConflicts range
+	// key masking. This masking causes stats to be estimates, since we can't
+	// adjust stats for point keys masked by range keys, but when we disable this
+	// masking we expect accurate stats and can assert this in various tests
+	// (notably kvnemesis).
+	DisableCheckSSTRangeKeyMasking = util.ConstantWithMetamorphicTestBool(
+		"disable-checksstconflicts-range-key-masking", false)
 )
 
 // NewSSTIterator returns an MVCCIterator for the provided "levels" of
@@ -79,7 +90,9 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 //
 // sstTimestamp, if non-zero, represents the timestamp that all keys in the SST
 // are expected to be at. This method can make performance optimizations with
-// the expectation that no SST keys will be at any other timestamp.
+// the expectation that no SST keys will be at any other timestamp. If the
+// engine contains MVCC range keys in the ingested span then this will cause
+// MVCC stats to be estimates since we can't adjust stats for masked points.
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
 // timestamps), but this is only checked for keys that exist in both sides, for
@@ -114,6 +127,9 @@ func CheckSSTConflicts(
 	}
 	if rightPeekBound == nil {
 		rightPeekBound = keys.MaxKey
+	}
+	if DisableCheckSSTRangeKeyMasking {
+		sstTimestamp = hlc.Timestamp{}
 	}
 
 	// In some iterations below, we try to call Next() instead of SeekGE() for a
@@ -171,6 +187,7 @@ func CheckSSTConflicts(
 	})
 	rkIter.SeekGE(start)
 
+	var engineHasRangeKeys bool
 	if ok, err := rkIter.Valid(); err != nil {
 		rkIter.Close()
 		return enginepb.MVCCStats{}, err
@@ -178,6 +195,7 @@ func CheckSSTConflicts(
 		// If the engine contains range tombstones in this span, we cannot use prefix
 		// iteration.
 		usePrefixSeek = false
+		engineHasRangeKeys = true
 	}
 	rkIter.Close()
 
@@ -186,20 +204,24 @@ func CheckSSTConflicts(
 		// comment on the panic inside pebbleIterator.setOptions.
 		sstTimestamp = hlc.Timestamp{}
 	}
-	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: leftPeekBound,
-		UpperBound: rightPeekBound,
-		// NB: Range key masking is performant, but it skips instances where we need
-		// to adjust GCBytesAge in the returned stats diff. Consider an example
-		// where a point key is masked by a range tombstone, and we added a new
-		// revision of that key above the range tombstone in the SST. The GCBytesAge
-		// contribution of that range tombstone on the point key's key (as opposed
-		// to the version contribution) needs to be un-done as that key is now being
-		// used by the live key.
+	if engineHasRangeKeys && sstTimestamp.IsSet() {
+		// If range key masking is requested and the engine contains range keys
+		// then stats will be estimates. Range key masking is performant, but it
+		// skips instances where we need to adjust GCBytesAge in the returned stats
+		// diff. Consider an example where a point key is masked by a range
+		// tombstone, and we added a new revision of that key above the range
+		// tombstone in the SST. The GCBytesAge contribution of that range tombstone
+		// on the point key's key (as opposed to the version contribution) needs to
+		// be un-done as that key is now being used by the live key.
 		//
-		// TODO(bilal): Add tests that test for this case, and close this gap in
-		// GCBytesAge calculation.
+		// TODO(bilal): Close this gap in GCBytesAge calculation, see:
+		// https://github.com/cockroachdb/cockroach/issues/92254
+		statsDiff.ContainsEstimates++
+	}
+	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		LowerBound:           leftPeekBound,
+		UpperBound:           rightPeekBound,
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
@@ -377,8 +399,16 @@ func CheckSSTConflicts(
 			// pressing optimization since currently the value is cheap to retrieve
 			// for the latest version of a key, and we are seeing the latest version
 			// because of the extIter.SeekGE call above.
-			extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
-			sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+			extValueRaw, err := extIter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			sstValueRaw, err := sstIter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			extKey := extIter.UnsafeKey()
+			sstKey := sstIter.UnsafeKey()
 
 			// We just seeked the engine iter. If it has a mismatching prefix, the
 			// iterator is not obeying its contract.
@@ -765,7 +795,11 @@ func CheckSSTConflicts(
 		}
 
 		extKey := extIter.UnsafeKey()
-		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+		sstValueRaw, err := sstIter.UnsafeValue()
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		sstKey := sstIter.UnsafeKey()
 
 		// Keep seeking the iterators until both keys are equal.
 		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
@@ -782,15 +816,30 @@ func CheckSSTConflicts(
 				// Seeks on the engine are expensive. Try Next()ing if we're very close
 				// to the sst key (which we might be).
 				nextsUntilSeek := numNextsBeforeSeek
+				rangeKeyChanged := false
 				for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 					extIter.NextKey()
 					extOK, _ = extIter.Valid()
+					rangeKeyChanged = rangeKeyChanged || extIter.RangeKeyChanged()
 					nextsUntilSeek--
 					if nextsUntilSeek <= 0 {
 						break
 					}
 				}
-				if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+				// TODO(erikgrinaker): NextKey() may not trigger `RangeKeyChanged()`
+				// on an exhausted iterator, so we check the case where we stepped
+				// from an initial range key onto an exhausted iterator. See:
+				// https://github.com/cockroachdb/cockroach/issues/94041
+				rangeKeyChanged = rangeKeyChanged || (!extOK && !extPrevRangeKeys.IsEmpty())
+				// If we havent't reached the SST key yet, seek to it. Otherwise, if we
+				// stepped past it but the range key changed we have to seek back to it,
+				// since we could otherwise have missed a range key that overlapped
+				// the SST key.
+				extCmp := 1
+				if extOK {
+					extCmp = extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key)
+				}
+				if extCmp < 0 || (extCmp > 0 && rangeKeyChanged) {
 					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 				}
 			}
@@ -803,14 +852,25 @@ func CheckSSTConflicts(
 			// TODO(sumeer): extValueRaw is not always needed below. In many cases
 			// MVCCValueLenAndIsTombstone() suffices. This will require some
 			// rearrangement of the logic in compareForCollision.
-			extValueRaw := extIter.UnsafeValue()
+			extValueRaw, err := extIter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
 			if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
 		} else if extValueDeletedByRange {
 			// Don't double-count the current key.
-			version, _ := extRangeKeys.Versions.FirstAtOrAbove(extKey.Timestamp)
-			statsDiff.AgeTo(version.Timestamp.WallTime)
+			var deletedAt hlc.Timestamp
+			if _, isTombstone, err := extIter.MVCCValueLenAndIsTombstone(); err != nil {
+				return enginepb.MVCCStats{}, err
+			} else if isTombstone {
+				deletedAt = extKey.Timestamp
+			} else {
+				version, _ := extRangeKeys.Versions.FirstAtOrAbove(extKey.Timestamp)
+				deletedAt = version.Timestamp
+			}
+			statsDiff.AgeTo(deletedAt.WallTime)
 			statsDiff.KeyCount--
 			statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		}
@@ -819,7 +879,7 @@ func CheckSSTConflicts(
 		// Since we use range key masking, we can just Next() the ext iterator
 		// past its range key.
 		if sstTimestamp.IsSet() && extHasRange && !extHasPoint && !sstHasRange {
-			if vers, ok := extRangeKeys.FirstAtOrAbove(sstTimestamp); !ok || vers.Timestamp.Equal(sstTimestamp) {
+			if extRangeKeys.Newest().Less(sstTimestamp) {
 				// All range key versions are below the request timestamp. We can seek
 				// past the range key, as all SST points/ranges are going to be above
 				// this range key.
@@ -835,15 +895,30 @@ func CheckSSTConflicts(
 					// Seeks on the engine are expensive. Try Next()ing if we're very close
 					// to the sst key (which we might be).
 					nextsUntilSeek := numNextsBeforeSeek
+					rangeKeyChanged := false
 					for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 						extIter.NextKey()
 						extOK, _ = extIter.Valid()
+						rangeKeyChanged = rangeKeyChanged || extIter.RangeKeyChanged()
 						nextsUntilSeek--
 						if nextsUntilSeek <= 0 {
 							break
 						}
 					}
-					if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+					// TODO(erikgrinaker): NextKey() may not trigger `RangeKeyChanged()`
+					// on an exhausted iterator, so we check the case where we stepped
+					// from an initial range key onto an exhausted iterator. See:
+					// https://github.com/cockroachdb/cockroach/issues/94041
+					rangeKeyChanged = rangeKeyChanged || (!extOK && !extPrevRangeKeys.IsEmpty())
+					// If we havent't reached the SST key yet, seek to it. Otherwise, if we
+					// stepped past it but the range key changed we have to seek back to it,
+					// since we could otherwise have missed a range key that overlapped
+					// the SST key.
+					extCmp := 1
+					if extOK {
+						extCmp = extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key)
+					}
+					if extCmp < 0 || (extCmp > 0 && rangeKeyChanged) {
 						extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 					}
 				}
@@ -1149,7 +1224,11 @@ func UpdateSSTTimestamps(
 			return nil, enginepb.MVCCStats{}, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, from, key.Key)
 		}
-		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, iter.UnsafeValue())
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, enginepb.MVCCStats{}, err
+		}
+		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, v)
 		if err != nil {
 			return nil, enginepb.MVCCStats{}, err
 		}

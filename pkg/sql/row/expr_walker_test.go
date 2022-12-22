@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -65,6 +66,7 @@ func createMockImportJob(
 			SequenceDetails: seqDetails,
 			ResumePos:       []int64{resumePos},
 		},
+		Username: username.TestUserName(),
 	}
 	mockImportJob, err := registry.CreateJobWithTxn(ctx, mockImportRecord, registry.MakeJobID(), nil)
 	require.NoError(t, err)

@@ -81,6 +81,7 @@ func NewSimulator(
 	for _, store := range initialState.Stores() {
 		storeID := store.StoreID()
 		allocator := initialState.MakeAllocator(storeID)
+		storePool := initialState.StorePool(storeID)
 		// TODO(kvoli): Instead of passing in individual settings to construct
 		// the each ticking component, pass a pointer to the simulation
 		// settings struct. That way, the settings may be adjusted dynamically
@@ -90,6 +91,7 @@ func NewSimulator(
 			changer,
 			settings.ReplicaChangeDelayFn(),
 			allocator,
+			storePool,
 			start,
 		)
 		sqs[storeID] = queue.NewSplitQueue(
@@ -109,6 +111,7 @@ func NewSimulator(
 		controllers[storeID] = op.NewController(
 			changer,
 			allocator,
+			storePool,
 			settings,
 		)
 		srs[storeID] = storerebalancer.NewStoreRebalancer(
@@ -116,6 +119,7 @@ func NewSimulator(
 			storeID,
 			controllers[storeID],
 			allocator,
+			storePool,
 			settings,
 			storerebalancer.GetStateRaftStatusFn(initialState),
 		)

@@ -252,14 +252,14 @@ func (c Catalog) Validate(
 func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 	ne := c.LookupNamespaceEntry(key)
 	if ne == nil {
-		return errors.New("invalid descriptor ID")
+		return errors.AssertionFailedf("invalid namespace entry")
 	}
 	// Handle special cases.
 	switch ne.GetID() {
 	case descpb.InvalidID:
 		return errors.New("invalid descriptor ID")
-	case keys.PublicSchemaID:
-		// The public schema doesn't have a descriptor.
+	case keys.SystemPublicSchemaID:
+		// The public schema for the system database doesn't have a descriptor.
 		return nil
 	default:
 		isSchema := ne.GetParentID() != keys.RootNamespaceID && ne.GetParentSchemaID() == keys.RootNamespaceID
@@ -271,19 +271,17 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 	// Compare the namespace entry with the referenced descriptor.
 	desc := c.LookupDescriptor(ne.GetID())
 	if desc == nil {
-		return catalog.ErrDescriptorNotFound
+		return catalog.ErrReferencedDescriptorNotFound
 	}
 	if desc.Dropped() {
-		return errors.Newf("no matching name info in draining names of dropped %s",
-			desc.DescriptorType())
+		return catalog.ErrDescriptorDropped
 	}
 	if ne.GetParentID() == desc.GetParentID() &&
 		ne.GetParentSchemaID() == desc.GetParentSchemaID() &&
 		ne.GetName() == desc.GetName() {
 		return nil
 	}
-	return errors.Newf("no matching name info found in non-dropped %s %q",
-		desc.DescriptorType(), desc.GetName())
+	return errors.Newf("mismatched name %q in %s descriptor", desc.GetName(), desc.DescriptorType())
 }
 
 // ValidateWithRecover is like Validate but which recovers from panics.

@@ -145,7 +145,7 @@ type hashJoinerSourceSpec struct {
 //     - Update the differs array to store whether or not the probe's key tuple
 //     matched the corresponding build's key tuple.
 //     - For the indices that did not differ, we can lazily update the HashTable's
-//     same linked list to store a list of all identical keys starting at head.
+//     Same linked list to store a list of all identical keys starting at head.
 //     Once a key has been added to ht.Same, ht.Visited is set to true. For the
 //     indices that have never been visited, we want to continue checking this
 //     bucket for identical values by adding this key to ToCheck.
@@ -328,22 +328,28 @@ func (hj *hashJoiner) Next() coldata.Batch {
 func (hj *hashJoiner) build() {
 	hj.ht.FullBuild(hj.InputTwo)
 
-	// We might have duplicates in the hash table, so we need to set up
-	// same and visited slices for the prober.
-	if !hj.spec.rightDistinct && !hj.spec.JoinType.IsLeftAntiOrExceptAll() {
-		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
-		// they have separate collectLeftAnti method.
-		hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
-		// At this point, we have fully built the hash table on the right side
-		// (meaning we have fully consumed the right input), so it'd be a shame
-		// to fallback to disk, thus, we use the unlimited allocator.
-		newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
-		// hj.ht.Same will never shrink, so the delta is non-negative.
-		hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableSame)
-		hj.accountedFor.hashtableSame = newAccountedFor
+	// If we might have duplicates in the hash table (meaning that rightDistinct
+	// is false), we need to set up Same and Visited slices for the prober
+	// (depending on the join type).
+	if !hj.spec.rightDistinct {
+		switch hj.spec.JoinType {
+		case descpb.LeftAntiJoin, descpb.ExceptAllJoin, descpb.IntersectAllJoin:
+		default:
+			// We don't need Same with LEFT ANTI, EXCEPT ALL, and INTERSECT ALL
+			// joins because they have a separate collectSingleMatch method.
+			hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
+			// At this point, we have fully built the hash table on the right
+			// side (meaning we have fully consumed the right input), so it'd be
+			// a shame to fallback to disk, thus, we use the unlimited
+			// allocator.
+			newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
+			// hj.ht.Same will never shrink, so the delta is non-negative.
+			hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableSame)
+			hj.accountedFor.hashtableSame = newAccountedFor
+		}
 	}
 	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
-		// visited slice is also used for set-operation joins, regardless of
+		// Visited slice is also used for set-operation joins, regardless of
 		// the fact whether the right side is distinct.
 		hj.ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.ht.Visited, hj.ht.Vals.Length()+1)
 		// At this point, we have fully built the hash table on the right side
@@ -451,9 +457,9 @@ func (hj *hashJoiner) prepareForCollecting(batchSize int) {
 	} else {
 		hj.probeState.probeIdx = hj.probeState.probeIdx[:batchSize]
 	}
-	if hj.spec.JoinType.IsLeftAntiOrExceptAll() {
-		// Left anti and except all joins have special collectLeftAnti method
-		// that only uses probeIdx slice.
+	if hj.spec.JoinType.IsLeftAntiOrExceptAll() || hj.spec.JoinType == descpb.IntersectAllJoin {
+		// Left anti, except all, and intersect all joins have special
+		// collectSingleMatch method that only uses the probeIdx slice.
 		return
 	}
 	if hj.spec.JoinType.IsLeftOuterOrFullOuter() {

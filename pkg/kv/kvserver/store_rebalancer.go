@@ -123,6 +123,7 @@ type StoreRebalancer struct {
 	st               *cluster.Settings
 	storeID          roachpb.StoreID
 	allocator        allocatorimpl.Allocator
+	storePool        storepool.AllocatorStorePool
 	rr               RangeRebalancer
 	replicaRankings  *ReplicaRankings
 	getRaftStatusFn  func(replica CandidateReplica) *raft.Status
@@ -134,6 +135,10 @@ type StoreRebalancer struct {
 func NewStoreRebalancer(
 	ambientCtx log.AmbientContext, st *cluster.Settings, rq *replicateQueue, rr *ReplicaRankings,
 ) *StoreRebalancer {
+	var storePool storepool.AllocatorStorePool
+	if rq.store.cfg.StorePool != nil {
+		storePool = rq.store.cfg.StorePool
+	}
 	sr := &StoreRebalancer{
 		AmbientContext:  ambientCtx,
 		metrics:         makeStoreRebalancerMetrics(),
@@ -141,6 +146,7 @@ func NewStoreRebalancer(
 		storeID:         rq.store.StoreID(),
 		rr:              rq,
 		allocator:       rq.allocator,
+		storePool:       storePool,
 		replicaRankings: rr,
 		getRaftStatusFn: func(replica CandidateReplica) *raft.Status {
 			return replica.RaftStatus()
@@ -159,6 +165,7 @@ func NewStoreRebalancer(
 func SimulatorStoreRebalancer(
 	storeID roachpb.StoreID,
 	alocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
 	getRaftStatusFn func(replica CandidateReplica) *raft.Status,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
@@ -167,6 +174,7 @@ func SimulatorStoreRebalancer(
 		st:              &cluster.Settings{},
 		storeID:         storeID,
 		allocator:       alocator,
+		storePool:       storePool,
 		getRaftStatusFn: getRaftStatusFn,
 	}
 	return sr
@@ -238,7 +246,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *allocatorimpl.QPSScorerOptions {
 	return &allocatorimpl.QPSScorerOptions{
 		StoreHealthOptions:    sr.allocator.StoreHealthOptions(ctx),
-		Deterministic:         sr.allocator.StorePool.IsDeterministic(),
+		Deterministic:         sr.storePool.IsDeterministic(),
 		QPSRebalanceThreshold: allocator.QPSRebalanceThreshold.Get(&sr.st.SV),
 		MinRequiredQPSDiff:    allocator.MinQPSDifferenceForTransfers.Get(&sr.st.SV),
 	}
@@ -252,7 +260,7 @@ func (sr *StoreRebalancer) NewRebalanceContext(
 	hottestRanges []CandidateReplica,
 	rebalancingMode LBRebalancingMode,
 ) *RebalanceContext {
-	allStoresList, _, _ := sr.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+	allStoresList, _, _ := sr.storePool.GetStoreList(storepool.StoreFilterSuspect)
 	// Find the store descriptor for the local store.
 	localDesc, ok := allStoresList.FindStoreByID(sr.storeID)
 	if !ok {
@@ -438,7 +446,7 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 // latest storepool information. After a rebalance or lease transfer the
 // storepool is updated.
 func (sr *StoreRebalancer) RefreshRebalanceContext(ctx context.Context, rctx *RebalanceContext) {
-	allStoresList, _, _ := sr.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+	allStoresList, _, _ := sr.storePool.GetStoreList(storepool.StoreFilterSuspect)
 
 	// Find the local descriptor in the all store list. If the store descriptor
 	// doesn't exist, then log an error rather than just a warning.
@@ -611,7 +619,7 @@ func (sr *StoreRebalancer) PostRangeRebalance(
 	// Finally, update our local copies of the descriptors so that if
 	// additional transfers are needed we'll be making the decisions with more
 	// up-to-date info.
-	sr.allocator.StorePool.UpdateLocalStoreAfterRelocate(
+	sr.storePool.UpdateLocalStoreAfterRelocate(
 		voterTargets, nonVoterTargets,
 		oldVoters, oldNonVoters,
 		rctx.LocalDesc.StoreID,
@@ -624,7 +632,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context, rctx *RebalanceContext,
 ) (CandidateReplica, roachpb.ReplicaDescriptor, []CandidateReplica) {
 	var considerForRebalance []CandidateReplica
-	now := sr.allocator.StorePool.Clock().NowAsClockTimestamp()
+	now := sr.storePool.Clock().NowAsClockTimestamp()
 	for {
 		if len(rctx.hottestRanges) == 0 {
 			return nil, roachpb.ReplicaDescriptor{}, considerForRebalance
@@ -669,6 +677,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 		candidate := sr.allocator.TransferLeaseTarget(
 			ctx,
+			sr.storePool,
 			conf,
 			candidates,
 			candidateReplica,
@@ -694,6 +703,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		filteredStoreList := rctx.allStoresList.ExcludeInvalid(conf.VoterConstraints)
 		if sr.allocator.FollowTheWorkloadPrefersLocal(
 			ctx,
+			sr.storePool,
 			filteredStoreList,
 			rctx.LocalDesc,
 			candidate.StoreID,
@@ -736,7 +746,7 @@ type rangeRebalanceContext struct {
 func (sr *StoreRebalancer) chooseRangeToRebalance(
 	ctx context.Context, rctx *RebalanceContext,
 ) (candidateReplica CandidateReplica, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
-	now := sr.allocator.StorePool.Clock().NowAsClockTimestamp()
+	now := sr.storePool.Clock().NowAsClockTimestamp()
 	if len(rctx.rebalanceCandidates) == 0 && len(rctx.hottestRanges) >= 0 {
 		// NB: In practice, the rebalanceCandidates will be populated with
 		// hottest ranges by the preceeding function call, rebalance leases.
@@ -776,7 +786,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		}
 
 		rangeDesc, conf := candidateReplica.DescAndSpanConfig()
-		clusterNodes := sr.allocator.StorePool.ClusterNodeCount()
+		clusterNodes := sr.storePool.ClusterNodeCount()
 		numDesiredVoters := allocatorimpl.GetNeededVoters(conf.GetNumVoters(), clusterNodes)
 		numDesiredNonVoters := allocatorimpl.GetNeededNonVoters(numDesiredVoters, int(conf.GetNumNonVoters()), clusterNodes)
 		if expected, actual := numDesiredVoters, len(rangeDesc.Replicas().VoterDescriptors()); expected != actual {
@@ -864,6 +874,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// misconfiguration.
 		validTargets := sr.allocator.ValidLeaseTargets(
 			ctx,
+			sr.storePool,
 			rebalanceCtx.conf,
 			targetVoterRepls,
 			rebalanceCtx.candidateReplica,
@@ -935,6 +946,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 		// `AdminRelocateRange` so that these decisions show up in system.rangelog
 		add, remove, _, shouldRebalance := sr.allocator.RebalanceTarget(
 			ctx,
+			sr.storePool,
 			rbCtx.conf,
 			rbCtx.candidateReplica.RaftStatus(),
 			finalVoterTargets,
@@ -999,6 +1011,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	for i := 0; i < len(finalNonVoterTargets); i++ {
 		add, remove, _, shouldRebalance := sr.allocator.RebalanceTarget(
 			ctx,
+			sr.storePool,
 			rbCtx.conf,
 			rbCtx.candidateReplica.RaftStatus(),
 			finalVoterTargets,

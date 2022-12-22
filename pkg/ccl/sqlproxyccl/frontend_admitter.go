@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"net"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -49,8 +50,9 @@ var FrontendAdmit = func(
 	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 	if err != nil {
 		return &FrontendAdmitInfo{
-			Conn: conn, Err: newErrorf(codeClientReadFailed, "while receiving startup message"),
-		}
+			Conn: conn, Err: withCode(
+				errors.New("while receiving startup message"), codeClientReadFailed,
+			)}
 	}
 
 	// CancelRequest is unencrypted and unauthenticated, regardless of whether
@@ -75,12 +77,14 @@ var FrontendAdmit = func(
 	if incomingTLSConfig != nil {
 		if _, ok := m.(*pgproto3.SSLRequest); !ok {
 			code := codeUnexpectedInsecureStartupMessage
-			return &FrontendAdmitInfo{Conn: conn, Err: newErrorf(code, "unsupported startup message: %T", m)}
+			return &FrontendAdmitInfo{Conn: conn, Err: withCode(
+				errors.Newf("unsupported startup message: %T", m), code)}
 		}
 
 		_, err = conn.Write([]byte{pgAcceptSSLRequest})
 		if err != nil {
-			return &FrontendAdmitInfo{Conn: conn, Err: newErrorf(codeClientWriteFailed, "acking SSLRequest: %v", err)}
+			return &FrontendAdmitInfo{Conn: conn, Err: withCode(
+				errors.Wrap(err, "acking SSLRequest"), codeClientWriteFailed)}
 		}
 
 		cfg := incomingTLSConfig.Clone()
@@ -96,7 +100,8 @@ var FrontendAdmit = func(
 		if err != nil {
 			return &FrontendAdmitInfo{
 				Conn: conn,
-				Err:  newErrorf(codeClientReadFailed, "receiving post-TLS startup message: %v", err),
+				Err: withCode(errors.Wrap(err,
+					"receiving post-TLS startup message"), codeClientReadFailed),
 			}
 		}
 	}
@@ -129,11 +134,10 @@ var FrontendAdmit = func(
 		if _, ok := startup.Parameters[sessionRevivalTokenStartupParam]; ok {
 			return &FrontendAdmitInfo{
 				Conn: conn,
-				Err: newErrorf(
-					codeUnexpectedStartupMessage,
+				Err: withCode(errors.Newf(
 					"parameter %s is not allowed",
-					sessionRevivalTokenStartupParam,
-				),
+					sessionRevivalTokenStartupParam),
+					codeUnexpectedStartupMessage),
 			}
 		}
 		return &FrontendAdmitInfo{Conn: conn, Msg: startup, SniServerName: sniServerName}
@@ -142,6 +146,7 @@ var FrontendAdmit = func(
 	code := codeUnexpectedStartupMessage
 	return &FrontendAdmitInfo{
 		Conn: conn,
-		Err:  newErrorf(code, "unsupported post-TLS startup message: %T", m),
+		Err: withCode(errors.Newf(
+			"unsupported post-TLS startup message: %T", m), code),
 	}
 }

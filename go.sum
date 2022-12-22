@@ -474,8 +474,8 @@ github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTy
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f h1:6jduT9Hfc0njg5jJ1DdKCFPdMBrp/mdZfCpa5h+WM74=
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
-github.com/cockroachdb/pebble v0.0.0-20221219140626-6ca7956d84c1 h1:blSuAUKDTqzi+l1WP0RvB2uh4AZYLuAKUm7Xc6e2G68=
-github.com/cockroachdb/pebble v0.0.0-20221219140626-6ca7956d84c1/go.mod h1:JsehdjcR1QgLZkqBeYrbVdE3cdxbdrycA/PN+Cg+RNw=
+github.com/cockroachdb/pebble v0.0.0-20221221181305-caecab07d786 h1:KSCL38HF82L/pXHwetSLd8hYQTdyb84gn7dAoLxFO+s=
+github.com/cockroachdb/pebble v0.0.0-20221221181305-caecab07d786/go.mod h1:JsehdjcR1QgLZkqBeYrbVdE3cdxbdrycA/PN+Cg+RNw=
 github.com/cockroachdb/redact v1.1.3 h1:AKZds10rFSIj7qADf0g46UixK8NNLwWTNdCIGS5wfSQ=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
@@ -2263,8 +2263,8 @@ go.etcd.io/etcd v0.5.0-alpha.5.0.20200910180754-dd1b699fc489/go.mod h1:yVHk9ub3C
 go.etcd.io/etcd/api/v3 v3.5.0/go.mod h1:cbVKeC6lCfl7j/8jBhAK6aIYO9XOjdptoxU/nLQcPvs=
 go.etcd.io/etcd/client/pkg/v3 v3.5.0/go.mod h1:IJHfcCEKxYu1Os13ZdwCwIUTUVGYTSAM3YSwc9/Ac1g=
 go.etcd.io/etcd/client/v2 v2.305.0/go.mod h1:h9puh54ZTgAKtEbut2oe9P4L/oqKCVB6xsXlzd7alYQ=
-go.etcd.io/raft/v3 v3.0.0-20221201111702-eaa6808e1f7a h1:Znv2XJyAf/fsJsFNt9toO8uyXwwHQ44wxqsvdSxipj4=
-go.etcd.io/raft/v3 v3.0.0-20221201111702-eaa6808e1f7a/go.mod h1:eMshmuwXLWZrjHXN8ZgYrOMQRSbHqi5M84DEZWhG+o4=
+go.etcd.io/raft/v3 v3.0.0-20221221215055-65a0bf3b6779 h1:GS8kfvdZ03yoCzHjYjZ2FV0CaNqhcnaAPjn0IHf565E=
+go.etcd.io/raft/v3 v3.0.0-20221221215055-65a0bf3b6779/go.mod h1:eMshmuwXLWZrjHXN8ZgYrOMQRSbHqi5M84DEZWhG+o4=
 go.mongodb.org/mongo-driver v1.0.3/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.1/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.2/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=

@@ -88,31 +88,21 @@ type unsplitAllRun struct {
 
 func (n *unsplitAllNode) startExec(params runParams) error {
 	// Use the internal executor to retrieve the split keys.
-	statement := `
-		SELECT
-			start_key
-		FROM
-			crdb_internal.ranges_no_leases
-		WHERE
-			database_name=$1 AND table_name=$2 AND index_name=$3 AND split_enforced_until IS NOT NULL
-	`
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.GetParentID(), tree.DatabaseLookupFlags{AvoidLeased: true},
-	)
-	if err != nil {
-		return err
-	}
-	indexName := ""
-	if n.index.GetID() != n.tableDesc.GetPrimaryIndexID() {
-		indexName = n.index.GetName()
-	}
+	const statement = `SELECT r.start_key
+FROM crdb_internal.ranges_no_leases r,
+     crdb_internal.index_spans s
+WHERE s.descriptor_id = $1
+  AND s.index_id = $2
+  AND s.start_key < r.end_key
+  AND s.end_key > r.start_key
+  AND r.start_key >= s.start_key -- only consider split points inside the table keyspace.
+  AND split_enforced_until IS NOT NULL`
 	ie := params.p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(params.SessionData())
 	it, err := ie.QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
 		statement,
-		dbDesc.GetName(),
-		n.tableDesc.GetName(),
-		indexName,
+		n.tableDesc.GetID(),
+		n.index.GetID(),
 	)
 	if err != nil {
 		return err

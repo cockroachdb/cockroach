@@ -259,6 +259,8 @@ sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow stateme
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability
+sql.recent.statements_cache.capacity	integer	20000	the maximum number of statements in the cache
+sql.recent.statements_cache.time_to_live	duration	1h0m0s	the maximum time to live
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode
@@ -297,4 +299,4 @@ trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	1000022.2-20	set the active cluster version in the format '<major>.<minor>'
+version	version	1000022.2-22	set the active cluster version in the format '<major>.<minor>'

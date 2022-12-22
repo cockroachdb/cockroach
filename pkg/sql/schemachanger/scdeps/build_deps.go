@@ -170,8 +170,9 @@ func (d *buildDeps) MayResolveIndex(
 	idx catalog.Index,
 ) {
 	found, prefix, tbl, idx, err := resolver.ResolveIndex(
-		ctx, d.schemaResolver, &tableIndexName, false /* required */, false, /* requireActiveIndex */
+		ctx, d.schemaResolver, &tableIndexName, tree.IndexLookupFlags{IncludeNonActiveIndex: true},
 	)
+
 	if err != nil {
 		panic(err)
 	}

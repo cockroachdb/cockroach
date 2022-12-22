@@ -715,7 +715,15 @@ func expandIndexName(
 		return tn, desc, nil
 	}
 
-	found, resolvedPrefix, tbl, _, err := resolver.ResolveIndex(ctx, p, index, requireTable, false /*requireActiveIndex*/)
+	found, resolvedPrefix, tbl, _, err := resolver.ResolveIndex(
+		ctx,
+		p,
+		index,
+		tree.IndexLookupFlags{
+			Required:              requireTable,
+			IncludeNonActiveIndex: true,
+		},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -759,7 +767,11 @@ func (p *planner) getTableAndIndexImpl(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, catalog.Index, error) {
 	_, resolvedPrefix, tbl, idx, err := resolver.ResolveIndex(
-		ctx, p, tableWithIndex, true /* required */, true, /* requireActiveIndex */
+		ctx, p, tableWithIndex,
+		tree.IndexLookupFlags{
+			Required:              true,
+			IncludeNonActiveIndex: false,
+		},
 	)
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, nil, err

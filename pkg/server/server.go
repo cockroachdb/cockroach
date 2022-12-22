@@ -75,11 +75,13 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -794,6 +796,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Instantiate the SQL session registry.
 	sessionRegistry := sql.NewSessionRegistry()
 
+	// Instantiate the cache of recent statements.
+	recentStatementsCache := recent.NewStatementsCache(st, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+
 	// Instantiate the cache of closed SQL sessions.
 	closedSessionCache := sql.NewClosedSessionCache(cfg.Settings, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 
@@ -896,6 +901,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sessionRegistry:          sessionRegistry,
 		closedSessionCache:       closedSessionCache,
 		remoteFlowRunner:         remoteFlowRunner,
+		recentStatementsCache:    recentStatementsCache,
 		circularInternalExecutor: internalExecutor,
 		internalExecutorFactory:  internalExecutorFactory,
 		circularJobRegistry:      jobRegistry,
@@ -1758,6 +1764,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Connect the engines to the disk stats map constructor.
 	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
+	}
+
+	if storage.WorkloadCollectorEnabled {
+		if err := s.debug.RegisterWorkloadCollector(s.node.stores); err != nil {
+			return errors.Wrapf(err, "failed to register workload collector with debug server")
+		}
 	}
 
 	// Register the engines debug endpoints.

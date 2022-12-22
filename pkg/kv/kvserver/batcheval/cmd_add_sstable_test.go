@@ -296,6 +296,15 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectStatsEst: true,
 			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/2.000000000,0`,
 		},
+		"SSTTimestampToRequestTimestamp with DisallowConflicts causes estimated stats with range key masking": {
+			reqTS:          5,
+			toReqTS:        2, // NB: 2 is below range key at 3, to test range key masking timestamp
+			noConflict:     true,
+			data:           kvs{rangeKV("a", "c", 3, ""), pointKV("b", 1, "b1")},
+			sst:            kvs{pointKV("b", 2, "sst")},
+			expect:         kvs{rangeKV("a", "c", 3, ""), pointKV("b", 5, "sst"), pointKV("b", 1, "b1")},
+			expectStatsEst: !storage.DisableCheckSSTRangeKeyMasking, // assert correct without masking
+		},
 
 		// DisallowConflicts
 		"DisallowConflicts allows above and beside": {
@@ -324,10 +333,43 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 3, "sst")},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
+		"DisallowConflicts returns WriteTooOldError at existing range tombstone": {
+			noConflict: true,
+			data:       kvs{rangeKV("a", "c", 3, "")},
+			sst:        kvs{pointKV("b", 3, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		// Regression tests for https://github.com/cockroachdb/cockroach/issues/93968.
+		"DisallowConflicts WriteTooOldError straddling at existing range tombstone": {
+			noConflict: true,
+			data:       kvs{rangeKV("b", "z", 3, "")},
+			sst:        kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts WriteTooOldError straddling multiple existing range tombstones": {
+			noConflict: true,
+			data:       kvs{rangeKV("b", "c", 3, ""), rangeKV("d", "f", 3, "")},
+			sst:        kvs{pointKV("a", 3, "sst"), pointKV("e", 3, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
+		"DisallowConflicts WriteTooOldError with SSTTimestampToRequestTimestamp straddling range keys below and at timestamp": {
+			toReqTS:    1,
+			reqTS:      3,
+			noConflict: true,
+			data:       kvs{rangeKV("a", "c", 2, ""), rangeKV("e", "g", 3, "")},
+			sst:        kvs{pointKV("b", 1, "sst"), pointKV("d", 1, "sst"), pointKV("f", 1, "sst")},
+			expectErr:  &roachpb.WriteTooOldError{},
+		},
 		"DisallowConflicts returns WriteIntentError below intent": {
 			noConflict: true,
 			data:       kvs{pointKV("a", intentTS, "intent")},
 			sst:        kvs{pointKV("a", 3, "sst")},
+			expectErr:  &roachpb.WriteIntentError{},
+		},
+		"DisallowConflicts returns WriteIntentError below intent above range key": {
+			noConflict: true,
+			data:       kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
+			sst:        kvs{pointKV("b", 3, "sst")},
 			expectErr:  &roachpb.WriteIntentError{},
 		},
 		"DisallowConflicts ignores intents in span": { // inconsistent with blind writes
@@ -377,6 +419,13 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 3, "sst")},
 			expectErr:  "inline values are unsupported",
 		},
+		// Regression test for https://github.com/cockroachdb/cockroach/issues/94053.
+		"DisallowConflicts MVCC stats with point tombstone below range tombstone": {
+			noConflict: true,
+			data:       kvs{rangeKV("a", "c", 3, ""), pointKV("b", 2, ""), pointKV("b", 1, "b1")},
+			sst:        kvs{pointKV("b", 5, "sst")},
+			expect:     kvs{rangeKV("a", "c", 3, ""), pointKV("b", 5, "sst"), pointKV("b", 2, ""), pointKV("b", 1, "b1")},
+		},
 
 		// DisallowShadowing
 		"DisallowShadowing errors above existing": {
@@ -419,6 +468,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			noShadow:  true,
 			data:      kvs{pointKV("a", intentTS, "intent")},
 			sst:       kvs{pointKV("a", 3, "sst")},
+			expectErr: &roachpb.WriteIntentError{},
+		},
+		"DisallowShadowing returns WriteIntentError below intent above range key": {
+			noShadow:  true,
+			data:      kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
+			sst:       kvs{pointKV("b", 3, "sst")},
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"DisallowShadowing ignores intents in span": { // inconsistent with blind writes
@@ -541,6 +596,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("a", intentTS, "intent")},
 			sst:           kvs{pointKV("a", 3, "sst")},
+			expectErr:     &roachpb.WriteIntentError{},
+		},
+		"DisallowShadowingBelow returns WriteIntentError below intent above range key": {
+			noShadowBelow: 5,
+			data:          kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
+			sst:           kvs{pointKV("b", 3, "sst")},
 			expectErr:     &roachpb.WriteIntentError{},
 		},
 		"DisallowShadowingBelow ignores intents in span": { // inconsistent with blind writes

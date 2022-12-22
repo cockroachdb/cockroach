@@ -470,7 +470,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 
 			// Split table
 			ranges := sqlDB.QueryStr(t, fmt.Sprintf(
-				`SELECT lease_holder FROM [SHOW RANGES FROM INDEX %s@primary]`,
+				`SELECT lease_holder FROM [SHOW RANGES FROM INDEX %s@primary WITH DETAILS]`,
 				tableName,
 			))
 			require.Equal(t, 1, len(ranges))

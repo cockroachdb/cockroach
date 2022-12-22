@@ -2394,7 +2394,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftTimeoutCampaign: metric.NewCounter(metaRaftTimeoutCampaign),
 
 		// Raft message metrics.
-		RaftRcvdMessages: [...]*metric.Counter{
+		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{
 			raftpb.MsgProp:           metric.NewCounter(metaRaftRcvdProp),
 			raftpb.MsgApp:            metric.NewCounter(metaRaftRcvdApp),
 			raftpb.MsgAppResp:        metric.NewCounter(metaRaftRcvdAppResp),

@@ -85,7 +85,7 @@ func TestLeaseTransferOp(t *testing.T) {
 			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: tc.ranges + 1, 2: tc.ranges + 1, 3: tc.ranges + 1}, 3, 1000 /* keyspace */)
 			settings := config.DefaultSimulationSettings()
 			changer := state.NewReplicaChanger()
-			controller := NewController(changer, allocatorimpl.Allocator{}, settings)
+			controller := NewController(changer, allocatorimpl.Allocator{}, nil /* storePool */, settings)
 
 			for i := 2; i <= tc.ranges+1; i++ {
 				s.TransferLease(state.RangeID(i), 1)
@@ -270,7 +270,8 @@ func TestRelocateRangeOp(t *testing.T) {
 			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 3, 2: 3, 3: 3, 4: 0, 5: 0, 6: 0}, 3, 1000 /* keyspace */)
 			changer := state.NewReplicaChanger()
 			allocator := s.MakeAllocator(state.StoreID(1))
-			controller := NewController(changer, allocator, settings)
+			storePool := s.StorePool(state.StoreID(1))
+			controller := NewController(changer, allocator, storePool, settings)
 
 			// Transfer the lease to store 1 for all ranges.
 			for i := 2; i < 4; i++ {
