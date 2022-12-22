@@ -313,14 +313,16 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	backupDir := datapathutils.TestDataPath(t, "restore_with_dropped_schema", "exports", "v20.2.7")
 	const (
-		dbName  = "foo"
-		fromDir = "nodelocal://0/"
+		dbName         = "foo"
+		restoredDBName = "foorestored"
+		fromDir        = "nodelocal://1/"
 	)
 
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
 	args := base.TestServerArgs{
-		ExternalIODir: backupDir,
+		ExternalIODir: dir,
 		// Disabling the test tenant because this test case traps when run
 		// from within a tenant. The problem occurs because we try to
 		// reference a nil pointer below where we're expecting a database
@@ -332,9 +334,18 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(ctx)
 
-	tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM '%s'", dbName, fromDir))
-	query := fmt.Sprintf("SELECT database_name FROM [SHOW DATABASES] WHERE database_name = '%s'", dbName)
-	tdb.CheckQueryResults(t, query, [][]string{{dbName}})
+	tdb.Exec(t, `
+CREATE DATABASE foo;
+SET DATABASE = foo;
+CREATE SCHEMA bar;
+DROP SCHEMA bar;
+`)
+	tdb.Exec(t, `BACKUP DATABASE foo INTO 'nodelocal://1/'`)
+
+	tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH new_db_name = '%s'",
+		dbName, fromDir, restoredDBName))
+	query := fmt.Sprintf("SELECT database_name FROM [SHOW DATABASES] WHERE database_name = '%s'", restoredDBName)
+	tdb.CheckQueryResults(t, query, [][]string{{restoredDBName}})
 
 	// Read descriptor without validation.
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -361,7 +372,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 		}))
 		return exists
 	}
-	require.Falsef(t, hasSameNameSchema(dbName), "corrupted descriptor exists")
+	require.Falsef(t, hasSameNameSchema(restoredDBName), "corrupted descriptor exists")
 }
 
 func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
