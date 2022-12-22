@@ -119,12 +119,30 @@ func TestComputeSchedulerPercentile(t *testing.T) {
 			Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130},
 		}
 
-		require.Equal(t, 95.0, percentile(&hist, 1.00)) // pmax
-		require.Equal(t, 05.0, percentile(&hist, 0.00)) // pmin
-		require.Equal(t, 45.0, percentile(&hist, 0.50)) // p50
-		require.Equal(t, 75.0, percentile(&hist, 0.75)) // p75
-		require.Equal(t, 95.0, percentile(&hist, 0.90)) // p90
-		require.Equal(t, 95.0, percentile(&hist, 0.99)) // p99
+		require.Equal(t, 100.0, percentile(&hist, 1.00)) // pmax
+		require.Equal(t, 0.0, percentile(&hist, 0.00))   // pmin
+		require.Equal(t, 50.0, percentile(&hist, 0.50))  // p50
+		require.Equal(t, 70.0, percentile(&hist, 0.75))  // p75
+		require.Equal(t, 90.0, percentile(&hist, 0.90))  // p90
+		require.Equal(t, 100.0, percentile(&hist, 0.99)) // p99
+
+		// Compare values against metric.Histogram (prometheus-based implementation)
+		promhist := metric.NewHistogram(metric.Metadata{}, time.Hour, hist.Buckets)
+		for i := 0; i < len(hist.Counts); i++ {
+			for j := 0; j < int(hist.Counts[i]); j++ {
+				// Since the scheduler buckets are non-inclusive of Upper Bound and prometheus
+				// buckets are inclusive, we use i+1 below to create an identical histogram in
+				// prometheus.
+				promhist.RecordValue(int64(hist.Buckets[i+1]))
+			}
+		}
+
+		require.Equal(t, promhist.ValueAtQuantileWindowed(100), percentile(&hist, 1.00)) // pmax
+		require.Equal(t, promhist.ValueAtQuantileWindowed(0), percentile(&hist, 0.00))   // pmin
+		require.Equal(t, promhist.ValueAtQuantileWindowed(50), percentile(&hist, 0.50))  // p50
+		require.Equal(t, promhist.ValueAtQuantileWindowed(75), percentile(&hist, 0.75))  // p75
+		require.Equal(t, promhist.ValueAtQuantileWindowed(90), percentile(&hist, 0.90))  // p90
+		require.Equal(t, promhist.ValueAtQuantileWindowed(99), percentile(&hist, 0.99))  // p99
 	}
 
 	{
