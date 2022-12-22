@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -505,7 +504,6 @@ func (p *planner) copySplitPointsToNewIndexes(
 			},
 			SplitKey:       sp,
 			ExpirationTime: execCfg.Clock.Now().Add(expirationTime, 0),
-			Class:          oppurpose.SplitTruncate,
 		})
 	}
 
@@ -523,7 +521,6 @@ func (p *planner) copySplitPointsToNewIndexes(
 			EndKey: execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexIDs[len(newIndexIDs)-1])).PrefixEnd(),
 		},
 		RandomizeLeases: true,
-		Class:           oppurpose.ScatterTruncate,
 	})
 
 	return p.txn.DB().Run(ctx, &b)
