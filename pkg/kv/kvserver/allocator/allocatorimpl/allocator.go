@@ -669,6 +669,21 @@ func GetNeededNonVoters(numVoters, zoneConfigNonVoterCount, clusterNodes int) in
 	return need
 }
 
+// WillHaveFragileQuorum determines, based on the number of existing voters,
+// incoming voters, and needed voters, if we will be upreplicating to a state
+// in which we don't have enough needed voters and yet will have a fragile quorum
+// due to an even number of voter replicas.
+func WillHaveFragileQuorum(
+	numExistingVoters, numNewVoters, zoneConfigVoterCount, clusterNodes int,
+) bool {
+	neededVoters := GetNeededVoters(int32(zoneConfigVoterCount), clusterNodes)
+	willHave := numExistingVoters + numNewVoters
+	// NB: If willHave >= neededVoters, then always allow up-replicating as that
+	// will be the case when up-replicating a range with a decommissioning
+	// replica.
+	return numNewVoters > 0 && willHave < neededVoters && willHave%2 == 0
+}
+
 // LiveAndDeadVoterAndNonVoterReplicas splits up the replica in the given range
 // descriptor by voters vs non-voters and live replicas vs dead replicas.
 func LiveAndDeadVoterAndNonVoterReplicas(
@@ -1183,6 +1198,50 @@ func (a *Allocator) AllocateTarget(
 		aliveStores:           aliveStoreCount,
 		throttledStores:       len(throttled),
 	}
+}
+
+// CheckAvoidsFragileQuorum ensures that if we are allocating a new voter and
+// will result in an even number of voters, that we can allocate another voter
+// target in order to avoid a fragile quorum state. This check should be
+// performed whenever we are planning or testing allocation of a new voter.
+//
+// We can skip this check if we're swapping a replica or allocating a non-voter,
+// since that does not change the quorum size.
+func (a *Allocator) CheckAvoidsFragileQuorum(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	existingVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor,
+	replicaStatus ReplicaStatus,
+	replicaType TargetReplicaType,
+	newTarget roachpb.ReplicationTarget,
+	isReplacement bool,
+) error {
+	// Validation is only applicable when allocating new voters.
+	if replicaType != VoterTarget {
+		return nil
+	}
+	newVoters := 0
+	if !isReplacement {
+		newVoters = 1
+	}
+	clusterNodes := storePool.ClusterNodeCount()
+	neededVoters := GetNeededVoters(conf.GetNumVoters(), clusterNodes)
+
+	if WillHaveFragileQuorum(len(existingVoters), newVoters, neededVoters, clusterNodes) {
+		// This means we are going to up-replicate to an even replica state.
+		// Check if it is possible to go to an odd replica state beyond it.
+		oldPlusNewReplicas := existingVoters
+		oldPlusNewReplicas = append(
+			oldPlusNewReplicas,
+			roachpb.ReplicaDescriptor{NodeID: newTarget.NodeID, StoreID: newTarget.StoreID},
+		)
+
+		_, _, err := a.AllocateVoter(ctx, storePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
+		return err
+	}
+
+	return nil
 }
 
 // AllocateVoter returns a suitable store for a new allocation of a voting
