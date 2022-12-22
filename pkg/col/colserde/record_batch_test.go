@@ -256,7 +256,7 @@ func TestRecordBatchSerializer(t *testing.T) {
 		firstCol := b.NewArray().Data()
 		b.AppendValues([]int64{3}, nil /* valid */)
 		secondCol := b.NewArray().Data()
-		_, _, err = s.Serialize(&bytes.Buffer{}, []*array.Data{firstCol, secondCol}, firstCol.Len())
+		_, _, err = s.Serialize(&bytes.Buffer{}, []array.Data{*firstCol, *secondCol}, firstCol.Len())
 		require.True(t, testutils.IsError(err, "mismatched data lengths"), err)
 	})
 }
@@ -273,7 +273,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 
 	var (
 		typs            = make([]*types.T, rng.Intn(maxTypes)+1)
-		data            = make([]*array.Data, len(typs))
+		data            = make([]array.Data, len(typs))
 		dataLen         = rng.Intn(maxDataLen) + 1
 		nullProbability = rng.Float64()
 		buf             = bytes.Buffer{}
@@ -281,7 +281,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 
 	for i := range typs {
 		typs[i] = randgen.RandType(rng)
-		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
+		data[i] = *randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 
 	s, err := colserde.NewRecordBatchSerializer(typs)
@@ -292,13 +292,13 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	// Run Serialize/Deserialize in a loop to test reuse.
 	for i := 0; i < 2; i++ {
 		buf.Reset()
-		dataCopy := append([]*array.Data{}, data...)
+		dataCopy := append([]array.Data{}, data...)
 		_, _, err := s.Serialize(&buf, dataCopy, dataLen)
 		require.NoError(t, err)
 		if buf.Len()%8 != 0 {
 			t.Fatal("message length must align to 8 byte boundary")
 		}
-		var deserializedData []*array.Data
+		var deserializedData []array.Data
 		_, err = s.Deserialize(&deserializedData, buf.Bytes())
 		require.NoError(t, err)
 
@@ -373,7 +373,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 	var (
 		typs             = []*types.T{types.Int}
 		buf              = bytes.Buffer{}
-		deserializedData []*array.Data
+		deserializedData []array.Data
 	)
 
 	s, err := colserde.NewRecordBatchSerializer(typs)
@@ -382,8 +382,8 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 	for _, dataLen := range []int{1, 16, 256, 2048, 4096} {
 		// Only calculate useful bytes.
 		numBytes := int64(dataLen * 8)
-		data := []*array.Data{randomDataFromType(rng, typs[0], dataLen, 0 /* nullProbability */)}
-		dataCopy := make([]*array.Data, len(data))
+		data := []array.Data{*randomDataFromType(rng, typs[0], dataLen, 0 /* nullProbability */)}
+		dataCopy := make([]array.Data, len(data))
 		b.Run(fmt.Sprintf("Serialize/dataLen=%d", dataLen), func(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {

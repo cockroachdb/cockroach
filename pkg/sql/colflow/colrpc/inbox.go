@@ -123,7 +123,7 @@ type Inbox struct {
 	deserializationStopWatch *timeutil.StopWatch
 
 	scratch struct {
-		data []*array.Data
+		data []array.Data
 		b    coldata.Batch
 	}
 }
@@ -154,7 +154,7 @@ func NewInbox(
 		errCh:                    make(chan error, 1),
 		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
-	i.scratch.data = make([]*array.Data, len(typs))
+	i.scratch.data = make([]array.Data, len(typs))
 	return i, nil
 }
 
