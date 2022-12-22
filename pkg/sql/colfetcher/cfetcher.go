@@ -1301,7 +1301,7 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func convertFetchError(indexFetchSpec *descpb.IndexFetchSpec, err error) error {
+func convertFetchError(indexFetchSpec *fetchpb.IndexFetchSpec, err error) error {
 	err = row.ConvertFetchError(indexFetchSpec, err)
 	err = colexecerror.NewStorageError(err)
 	return err

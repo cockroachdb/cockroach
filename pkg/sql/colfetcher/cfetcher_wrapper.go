@@ -19,14 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 )
 
 type cFetcherWrapper struct {
@@ -140,15 +139,11 @@ func (c *cFetcherWrapper) Close(ctx context.Context) {
 func newCFetcherWrapper(
 	ctx context.Context,
 	acc *mon.BoundAccount,
-	indexFetchSpec proto.Message,
+	fetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer storage.NextKVer,
 	lastKeyProvider storage.LastKeyProvider,
 	mustSerialize bool,
 ) (_ storage.CFetcherWrapper, willSerialize bool, retErr error) {
-	fetchSpec, ok := indexFetchSpec.(*descpb.IndexFetchSpec)
-	if !ok {
-		return nil, willSerialize, errors.AssertionFailedf("expected an IndexFetchSpec, but found a %T", indexFetchSpec)
-	}
 	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */, true /* allowUnhydratedEnums */)
 	if err != nil {
 		return nil, willSerialize, err

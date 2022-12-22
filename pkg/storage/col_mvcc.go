@@ -15,12 +15,12 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 )
 
 // NextKVer can fetch a new KV from somewhere. If MVCCDecodingStrategy is set
@@ -69,7 +69,7 @@ type LastKeyProvider interface {
 var GetCFetcherWrapper func(
 	ctx context.Context,
 	acc *mon.BoundAccount,
-	indexFetchSpec proto.Message,
+	indexFetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer NextKVer,
 	lastKeyProvider LastKeyProvider,
 	mustSerialize bool,
@@ -152,7 +152,7 @@ func (f *mvccScanFetchAdapter) NextKV(
 func MVCCScanToCols(
 	ctx context.Context,
 	reader Reader,
-	indexFetchSpec proto.Message,
+	indexFetchSpec *fetchpb.IndexFetchSpec,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
@@ -171,7 +171,7 @@ func MVCCScanToCols(
 func mvccScanToCols(
 	ctx context.Context,
 	iter MVCCIterator,
-	indexFetchSpec proto.Message,
+	indexFetchSpec *fetchpb.IndexFetchSpec,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,

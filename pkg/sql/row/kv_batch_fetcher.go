@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
 )
 
 // getKVBatchSize returns the number of keys we request at a time.
@@ -138,7 +138,7 @@ type txnKVFetcher struct {
 	batchBytesLimit rowinfra.BytesLimit
 
 	scanFormat     roachpb.ScanFormat
-	indexFetchSpec *descpb.IndexFetchSpec
+	indexFetchSpec *fetchpb.IndexFetchSpec
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
@@ -418,11 +418,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	if f.indexFetchSpec != nil {
-		out, err := types.MarshalAny(f.indexFetchSpec)
-		if err != nil {
-			return err
-		}
-		ba.Header.IndexFetchSpec = out
+		ba.Header.IndexFetchSpec = f.indexFetchSpec
 		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
 	} else if f.scanFormat == roachpb.COL_BATCH_RESPONSE {
 		return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")

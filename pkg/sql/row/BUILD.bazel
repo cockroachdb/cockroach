@@ -84,7 +84,6 @@ go_library(
         "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//types",
         "@com_github_lib_pq//oid",
     ],
 )
