@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,7 +51,7 @@ func DecodeKeyValsToCols(
 	rowIdx int,
 	indexColIdx []int,
 	checkAllColsForNull bool,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	unseen *intsets.Fast,
 	key []byte,
 	scratch []byte,

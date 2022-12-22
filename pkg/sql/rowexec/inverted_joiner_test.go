@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -670,7 +671,7 @@ func TestInvertedJoiner(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				var fetchSpec descpb.IndexFetchSpec
+				var fetchSpec fetchpb.IndexFetchSpec
 				if err := rowenc.InitIndexFetchSpec(
 					&fetchSpec,
 					keys.SystemSQLCodec,
@@ -788,7 +789,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	}
 
 	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
-		var fetchSpec descpb.IndexFetchSpec
+		var fetchSpec fetchpb.IndexFetchSpec
 		if err := rowenc.InitIndexFetchSpec(
 			&fetchSpec,
 			keys.SystemSQLCodec,

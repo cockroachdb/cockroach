@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -89,7 +90,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	defer streamingMemAcc.Close(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, keys.SystemSQLCodec,
 		desc, desc.GetPrimaryIndex(),

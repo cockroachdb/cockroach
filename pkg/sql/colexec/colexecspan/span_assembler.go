@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
@@ -33,7 +34,7 @@ import (
 func NewColSpanAssembler(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
-	fetchSpec *descpb.IndexFetchSpec,
+	fetchSpec *fetchpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
 	inputTypes []*types.T,
 ) ColSpanAssembler {

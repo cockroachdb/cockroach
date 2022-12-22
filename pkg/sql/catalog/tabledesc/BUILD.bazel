@@ -32,6 +32,7 @@ go_library(
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/schemaexpr",
