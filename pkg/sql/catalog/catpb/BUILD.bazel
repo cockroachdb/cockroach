@@ -10,7 +10,6 @@ proto_library(
     srcs = [
         "catalog.proto",
         "function.proto",
-        "index.proto",
         "privilege.proto",
     ],
     strip_import_prefix = "/pkg",

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -241,7 +242,7 @@ func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"a", "b", "c"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -250,7 +251,7 @@ func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
 				ID:                  2,
 				Unique:              true,
 				KeyColumnNames:      []string{"c", "a", "b"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{3, 1, 2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},

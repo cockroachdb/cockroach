@@ -12,7 +12,7 @@ package bounds
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -59,7 +59,7 @@ func ConstructUsingExtremesSpans(
 ) (constraint.Spans, error) {
 	var lbSpan constraint.Span
 	var ubSpan constraint.Span
-	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
+	if index.GetKeyColumnDirection(0) == catenumpb.IndexColumn_ASC {
 		lbSpan.Init(constraint.EmptyKey, constraint.IncludeBoundary, constraint.MakeKey(lowerBound), constraint.ExcludeBoundary)
 		ubSpan.Init(constraint.MakeKey(upperBound), constraint.ExcludeBoundary, constraint.EmptyKey, constraint.IncludeBoundary)
 	} else {
@@ -70,7 +70,7 @@ func ConstructUsingExtremesSpans(
 	// differently depending on whether we have an ascending or descending
 	// index.
 	var extremesSpans constraint.Spans
-	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
+	if index.GetKeyColumnDirection(0) == catenumpb.IndexColumn_ASC {
 		extremesSpans.InitSingleSpan(&lbSpan)
 		extremesSpans.Append(&ubSpan)
 	} else {

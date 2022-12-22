@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -113,11 +113,11 @@ func MakeCommentKey(objID uint32, subID uint32, cmtType CommentType) CommentKey 
 
 // IndexColumnEncodingDirection converts a direction from the proto to an
 // encoding.Direction.
-func IndexColumnEncodingDirection(dir catpb.IndexColumn_Direction) (encoding.Direction, error) {
+func IndexColumnEncodingDirection(dir catenumpb.IndexColumn_Direction) (encoding.Direction, error) {
 	switch dir {
-	case catpb.IndexColumn_ASC:
+	case catenumpb.IndexColumn_ASC:
 		return encoding.Ascending, nil
-	case catpb.IndexColumn_DESC:
+	case catenumpb.IndexColumn_DESC:
 		return encoding.Descending, nil
 	default:
 		return 0, errors.Errorf("invalid direction: %s", dir)

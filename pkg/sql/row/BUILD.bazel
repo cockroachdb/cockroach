@@ -38,6 +38,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catsessiondata",
         "//pkg/sql/catalog/colinfo",

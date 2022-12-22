@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -185,7 +186,7 @@ func getTableDescForSystemRoleMembersTableBeforeIDCols() *descpb.TableDescriptor
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"role", "member"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -194,7 +195,7 @@ func getTableDescForSystemRoleMembersTableBeforeIDCols() *descpb.TableDescriptor
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"role"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -204,7 +205,7 @@ func getTableDescForSystemRoleMembersTableBeforeIDCols() *descpb.TableDescriptor
 				ID:                  3,
 				Unique:              false,
 				KeyColumnNames:      []string{"member"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,

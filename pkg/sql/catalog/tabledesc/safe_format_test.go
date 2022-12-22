@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
@@ -208,9 +209,9 @@ func TestSafeMessage(t *testing.T) {
 								KeySuffixColumnIDs: []descpb.ColumnID{1},
 								StoreColumnIDs:     []descpb.ColumnID{5},
 								KeyColumnNames:     []string{"j_str", "j"},
-								KeyColumnDirections: []catpb.IndexColumn_Direction{
-									catpb.IndexColumn_ASC,
-									catpb.IndexColumn_DESC,
+								KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+									catenumpb.IndexColumn_ASC,
+									catenumpb.IndexColumn_DESC,
 								},
 								StoreColumnNames: []string{"c"},
 							},

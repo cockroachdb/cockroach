@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -63,17 +63,17 @@ func TestEncDatum(t *testing.T) {
 	}
 	check(x)
 
-	encoded, err := x.Encode(types.Int, a, descpb.DatumEncoding_ASCENDING_KEY, nil)
+	encoded, err := x.Encode(types.Int, a, catenumpb.DatumEncoding_ASCENDING_KEY, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	y := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	y := rowenc.EncDatumFromEncoded(catenumpb.DatumEncoding_ASCENDING_KEY, encoded)
 	check(y)
 
 	if enc, ok := y.Encoding(); !ok {
 		t.Error("no encoding after rowenc.EncDatumFromEncoded")
-	} else if enc != descpb.DatumEncoding_ASCENDING_KEY {
+	} else if enc != catenumpb.DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
 	err = y.EnsureDecoded(types.Int, a)
@@ -84,20 +84,20 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
 	}
 
-	enc2, err := y.Encode(types.Int, a, descpb.DatumEncoding_DESCENDING_KEY, nil)
+	enc2, err := y.Encode(types.Int, a, catenumpb.DatumEncoding_DESCENDING_KEY, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// y's encoding should not change.
 	if enc, ok := y.Encoding(); !ok {
 		t.Error("no encoding")
-	} else if enc != descpb.DatumEncoding_ASCENDING_KEY {
+	} else if enc != catenumpb.DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	z := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_DESCENDING_KEY, enc2)
+	z := rowenc.EncDatumFromEncoded(catenumpb.DatumEncoding_DESCENDING_KEY, enc2)
 	if enc, ok := z.Encoding(); !ok {
 		t.Error("no encoding")
-	} else if enc != descpb.DatumEncoding_DESCENDING_KEY {
+	} else if enc != catenumpb.DatumEncoding_DESCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
 	check(z)
@@ -115,8 +115,8 @@ func TestEncDatum(t *testing.T) {
 	}
 }
 
-func columnTypeCompatibleWithEncoding(typ *types.T, enc descpb.DatumEncoding) bool {
-	return enc == descpb.DatumEncoding_VALUE || colinfo.ColumnTypeIsIndexable(typ)
+func columnTypeCompatibleWithEncoding(typ *types.T, enc catenumpb.DatumEncoding) bool {
+	return enc == catenumpb.DatumEncoding_VALUE || colinfo.ColumnTypeIsIndexable(typ)
 }
 
 func TestEncDatumNull(t *testing.T) {
@@ -135,15 +135,15 @@ func TestEncDatumNull(t *testing.T) {
 	// created from its encoding has the same IsNull() value.
 	for cases := 0; cases < 100; cases++ {
 		a, typ := randgen.RandEncDatum(rng)
-		for enc := range descpb.DatumEncoding_name {
-			if !columnTypeCompatibleWithEncoding(typ, descpb.DatumEncoding(enc)) {
+		for enc := range catenumpb.DatumEncoding_name {
+			if !columnTypeCompatibleWithEncoding(typ, catenumpb.DatumEncoding(enc)) {
 				continue
 			}
-			encoded, err := a.Encode(typ, &alloc, descpb.DatumEncoding(enc), nil)
+			encoded, err := a.Encode(typ, &alloc, catenumpb.DatumEncoding(enc), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			b := rowenc.EncDatumFromEncoded(descpb.DatumEncoding(enc), encoded)
+			b := rowenc.EncDatumFromEncoded(catenumpb.DatumEncoding(enc), encoded)
 			if a.IsNull() != b.IsNull() {
 				t.Errorf("before: %s (null=%t) after: %s (null=%t)",
 					a.String(types.Int), a.IsNull(), b.String(types.Int), b.IsNull())
@@ -161,7 +161,7 @@ func checkEncDatumCmp(
 	a *tree.DatumAlloc,
 	typ *types.T,
 	v1, v2 *rowenc.EncDatum,
-	enc1, enc2 descpb.DatumEncoding,
+	enc1, enc2 catenumpb.DatumEncoding,
 	expectedCmp int,
 	requiresDecode bool,
 ) {
@@ -239,9 +239,9 @@ func TestEncDatumCompare(t *testing.T) {
 			t.Errorf("compare(1, 2) = %d", val)
 		}
 
-		asc := descpb.DatumEncoding_ASCENDING_KEY
-		desc := descpb.DatumEncoding_DESCENDING_KEY
-		noncmp := descpb.DatumEncoding_VALUE
+		asc := catenumpb.DatumEncoding_ASCENDING_KEY
+		desc := catenumpb.DatumEncoding_DESCENDING_KEY
+		noncmp := catenumpb.DatumEncoding_VALUE
 
 		checkEncDatumCmp(t, a, typ, &v1, &v2, asc, asc, -1, false)
 		checkEncDatumCmp(t, a, typ, &v2, &v1, asc, asc, +1, false)
@@ -282,12 +282,12 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		}
 		// Encode them in a single buffer.
 		var buf []byte
-		enc := make([]descpb.DatumEncoding, len(ed))
+		enc := make([]catenumpb.DatumEncoding, len(ed))
 		for i := range ed {
 			if colinfo.CanHaveCompositeKeyEncoding(typs[i]) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
-				enc[i] = descpb.DatumEncoding_VALUE
+				enc[i] = catenumpb.DatumEncoding_VALUE
 			} else {
 				enc[i] = randgen.RandDatumEncoding(rng)
 				for !columnTypeCompatibleWithEncoding(typs[i], enc[i]) {
@@ -567,8 +567,8 @@ func TestEncDatumSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		asc  = descpb.DatumEncoding_ASCENDING_KEY
-		desc = descpb.DatumEncoding_DESCENDING_KEY
+		asc  = catenumpb.DatumEncoding_ASCENDING_KEY
+		desc = catenumpb.DatumEncoding_DESCENDING_KEY
 
 		DIntSize    = unsafe.Sizeof(tree.DInt(0))
 		DFloatSize  = unsafe.Sizeof(tree.DFloat(0))
@@ -701,9 +701,9 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		asc   = descpb.DatumEncoding_ASCENDING_KEY
-		desc  = descpb.DatumEncoding_DESCENDING_KEY
-		value = descpb.DatumEncoding_VALUE
+		asc   = catenumpb.DatumEncoding_ASCENDING_KEY
+		desc  = catenumpb.DatumEncoding_DESCENDING_KEY
+		value = catenumpb.DatumEncoding_VALUE
 
 		i = 123
 		s = "abcde"
@@ -752,7 +752,7 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 }
 
 func encDatumFromEncodedWithDatum(
-	enc descpb.DatumEncoding, encoded []byte, datum tree.Datum,
+	enc catenumpb.DatumEncoding, encoded []byte, datum tree.Datum,
 ) rowenc.EncDatum {
 	encDatum := rowenc.EncDatumFromEncoded(enc, encoded)
 	encDatum.Datum = datum

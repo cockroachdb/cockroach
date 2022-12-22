@@ -13,7 +13,7 @@
 
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "descpb";
+option go_package = "catenumpb";
 
 // DatumEncoding identifies the encoding used for an EncDatum.
 enum DatumEncoding {

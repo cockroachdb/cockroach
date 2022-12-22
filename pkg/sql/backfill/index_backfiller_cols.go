@@ -12,7 +12,7 @@ package backfill
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -103,7 +103,7 @@ func makeIndexBackfillColumns(
 	// Find the adding columns which are being added to new primary indexes.
 	var addedDefaultOrComputed catalog.TableColSet
 	for _, idx := range addedIndexes {
-		if idx.GetEncodingType() != descpb.PrimaryIndexEncoding {
+		if idx.GetEncodingType() != catenumpb.PrimaryIndexEncoding {
 			if !indexColumns(idx).Difference(computedVirtual).SubsetOf(primaryColumns) {
 				return indexBackfillerCols{}, errors.AssertionFailedf(
 					"secondary index for backfill contains physical column not present in " +
@@ -160,7 +160,7 @@ func makeInitialValNeededForCol(
 
 	for _, idx := range addedIndexes {
 		colIDs := idx.CollectKeyColumnIDs()
-		if idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+		if idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 			for _, col := range ib.cols {
 				if !col.IsVirtual() {
 					colIDs.Add(col.GetID())

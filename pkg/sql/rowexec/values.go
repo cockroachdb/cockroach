@@ -13,7 +13,7 @@ package rowexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -90,7 +90,7 @@ func (v *valuesProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			for i, typ := range v.typs {
 				var err error
 				v.rowBuf[i], rowData, err = rowenc.EncDatumFromBuffer(
-					typ, descpb.DatumEncoding_VALUE, rowData,
+					typ, catenumpb.DatumEncoding_VALUE, rowData,
 				)
 				if err != nil {
 					v.MoveToDraining(err)

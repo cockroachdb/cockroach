@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -61,8 +62,8 @@ func TestCreateSystemTable(t *testing.T) {
 			ID:             1,
 			Unique:         true,
 			KeyColumnNames: []string{"id"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{
-				catpb.IndexColumn_ASC,
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+				catenumpb.IndexColumn_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1},
 		},
