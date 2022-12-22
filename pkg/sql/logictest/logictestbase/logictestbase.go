@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 )
 
 var (
@@ -45,8 +47,8 @@ type TestClusterConfig struct {
 	UseFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	OverrideDistSQLMode string
-	// AllowSplitAndScatter enables the AllowSplitAndScatter tenant testing knob.
-	AllowSplitAndScatter bool
+	// ClusterSettings allows overriding cluster settings.
+	ClusterSettings []*settings.BoolSetting
 	// if non-empty, overrides the default vectorize mode.
 	OverrideVectorize string
 	// if set, queries using distSQL processors or vectorized operators that can
@@ -360,7 +362,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		UseTenant:                   true,
 		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
-		AllowSplitAndScatter:        true,
+		ClusterSettings:             []*settings.BoolSetting{sql.SecondaryTenantSplitAtEnabled, sql.SecondaryTenantScatterEnabled},
 		DeclarativeCorpusCollection: true,
 		Localities: map[int]roachpb.Locality{
 			1: {

@@ -39,8 +39,8 @@ type relocateRun struct {
 	lastRangeStartKey []byte
 }
 
-func (n *relocateNode) startExec(runParams) error {
-	return nil
+func (n *relocateNode) startExec(params runParams) error {
+	return params.ExecCfg().RequireSystemTenant()
 }
 
 func (n *relocateNode) Next(params runParams) (bool, error) {

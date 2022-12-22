@@ -409,6 +409,20 @@ func TestTenantID() roachpb.TenantID {
 	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
 }
 
+// TestTenantID2 returns another roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID2() roachpb.TenantID {
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1])
+}
+
+// TestTenantID3 returns another roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID3() roachpb.TenantID {
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[2])
+}
+
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
 func GetJSONProto(ts TestServerInterface, path string, response protoutil.Message) error {

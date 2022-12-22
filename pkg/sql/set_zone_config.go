@@ -228,16 +228,17 @@ func (p *planner) getUpdatedZoneConfigOptions(
 }
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
+
+	execCfg := p.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		p.ExecCfg(),
+		execCfg,
 		"CONFIGURE ZONE",
 	); err != nil {
 		return nil, err
 	}
 
-	if !p.ExecCfg().Codec.ForSystemTenant() &&
-		!SecondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
+	if err := execCfg.RequireTenantClusterSetting(SecondaryTenantZoneConfigsEnabled); err != nil {
 		// Return an unimplemented error here instead of referencing the cluster
 		// setting here as zone configurations for secondary tenants are intended to
 		// be hidden.

@@ -1472,8 +1472,17 @@ func (t *logicTest) newCluster(
 	if cfg.UseTenant {
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
+			var settings *cluster.Settings
+			if len(cfg.ClusterSettings) > 0 {
+				ctx := context.Background()
+				settings = cluster.MakeTestingClusterSettings()
+				for _, tenantCapability := range cfg.ClusterSettings {
+					tenantCapability.Override(ctx, &settings.SV, true)
+				}
+			}
 			tenantArgs := base.TestTenantArgs{
 				TenantID: serverutils.TestTenantID(),
+				Settings: settings,
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						DeterministicExplain:            true,
@@ -1481,9 +1490,6 @@ func (t *logicTest) newCluster(
 					},
 					SQLStatsKnobs: &sqlstats.TestingKnobs{
 						AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					},
-					TenantTestingKnobs: &sql.TenantTestingKnobs{
-						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
 					},
 					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},

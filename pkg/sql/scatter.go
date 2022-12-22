@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -130,19 +129,15 @@ type scatterRun struct {
 }
 
 func (n *scatterNode) startExec(params runParams) error {
-	execCfg := params.p.ExecCfg()
-	db := execCfg.DB
-	class := oppurpose.ScatterManual
-	// Tests can override tenant scatter permissions to allow secondary tenants to scatter.
-	if knobs := execCfg.TenantTestingKnobs; knobs != nil && knobs.AllowSplitAndScatter {
-		class = oppurpose.ScatterManualTest
+	execCfg := params.ExecCfg()
+	if err := execCfg.RequireTenantClusterSetting(SecondaryTenantScatterEnabled); err != nil {
+		return err
 	}
 	req := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
 		RandomizeLeases: true,
-		Class:           class,
 	}
-	res, pErr := kv.SendWrapped(params.ctx, db.NonTransactionalSender(), req)
+	res, pErr := kv.SendWrapped(params.ctx, execCfg.DB.NonTransactionalSender(), req)
 	if pErr != nil {
 		return pErr.GoError()
 	}

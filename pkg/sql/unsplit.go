@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -36,7 +35,7 @@ type unsplitRun struct {
 }
 
 func (n *unsplitNode) startExec(params runParams) error {
-	return nil
+	return params.ExecCfg().RequireSystemTenant()
 }
 
 func (n *unsplitNode) Next(params runParams) (bool, error) {
@@ -50,7 +49,7 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey, oppurpose.UnsplitManual); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
 		ctx := params.p.EvalContext().FmtCtx(tree.FmtSimple)
 		row.Format(ctx)
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", ctx)
@@ -87,6 +86,9 @@ type unsplitAllRun struct {
 }
 
 func (n *unsplitAllNode) startExec(params runParams) error {
+	if err := params.ExecCfg().RequireSystemTenant(); err != nil {
+		return err
+	}
 	// Use the internal executor to retrieve the split keys.
 	const statement = `SELECT r.start_key
 FROM crdb_internal.ranges_no_leases r,
@@ -121,7 +123,7 @@ func (n *unsplitAllNode) Next(params runParams) (bool, error) {
 	rowKey := n.run.keys[0]
 	n.run.keys = n.run.keys[1:]
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey, oppurpose.UnsplitManual); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", keys.PrettyPrint(nil /* valDirs */, rowKey))
 	}
 

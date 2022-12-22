@@ -48,7 +48,9 @@ type relocateResults struct {
 
 func (n *relocateRange) startExec(params runParams) (err error) {
 	execCfg := params.p.ExecCfg()
-
+	if err := params.ExecCfg().RequireSystemTenant(); err != nil {
+		return err
+	}
 	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(params.ctx, execCfg.Codec.TenantSpan())
 	if err != nil {
 		return err
