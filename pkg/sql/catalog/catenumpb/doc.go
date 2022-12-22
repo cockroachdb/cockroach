@@ -8,6 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package catenumpb contains enum definitions extracted from catpb in order to
-// keep catenumpb very low dependency.
+// Package catenumpb contains enum definitions from catalog in order to keep
+// catenumpb very low dependency.
 package catenumpb

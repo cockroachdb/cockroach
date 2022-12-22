@@ -17,6 +17,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/tabledesc",
@@ -50,6 +51,7 @@ go_test(
     embed = [":backfill"],
     deps = [
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "@com_github_stretchr_testify//require",
     ],

@@ -72,10 +72,10 @@ func addNewIndexMutation(
 		indexType = descpb.IndexDescriptor_INVERTED
 	}
 	// Set up the encoding type.
-	encodingType := descpb.PrimaryIndexEncoding
+	encodingType := catenumpb.PrimaryIndexEncoding
 	indexVersion := descpb.LatestIndexDescriptorVersion
 	if isSecondary {
-		encodingType = descpb.SecondaryIndexEncoding
+		encodingType = catenumpb.SecondaryIndexEncoding
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{

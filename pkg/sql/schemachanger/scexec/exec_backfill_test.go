@@ -90,7 +90,7 @@ func TestExecBackfiller(t *testing.T) {
 			KeySuffixColumnIDs:          keySuffixColumnIDs,
 			Type:                        descpb.IndexDescriptor_FORWARD,
 			CreatedExplicitly:           true,
-			EncodingType:                descpb.SecondaryIndexEncoding,
+			EncodingType:                catenumpb.SecondaryIndexEncoding,
 			UseDeletePreservingEncoding: isTempIndex,
 		}, descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_BACKFILLING))
 		idx, err := mut.FindIndexWithName(name)

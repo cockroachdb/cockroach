@@ -109,7 +109,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeyColumnNames:      []string{"a"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestIndexDescriptorVersion,
 				ConstraintID:        1,
 			},

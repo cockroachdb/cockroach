@@ -172,7 +172,7 @@ type Index interface {
 	GetType() descpb.IndexDescriptor_Type
 	GetGeoConfig() geoindex.Config
 	GetVersion() descpb.IndexDescriptorVersion
-	GetEncodingType() descpb.IndexDescriptorEncodingType
+	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
 	GetSharded() catpb.ShardedDescriptor
 	GetShardColumnName() string

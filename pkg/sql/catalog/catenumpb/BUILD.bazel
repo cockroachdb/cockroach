@@ -27,7 +27,10 @@ go_proto_library(
 
 go_library(
     name = "catenumpb",
-    srcs = ["doc.go"],
+    srcs = [
+        "doc.go",
+        "structured.go",
+    ],
     embed = [":catenumpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb",
     visibility = ["//visibility:public"],

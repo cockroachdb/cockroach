@@ -181,7 +181,7 @@ func (p *planner) AlterPrimaryKey(
 		Name:              name,
 		Unique:            true,
 		CreatedExplicitly: true,
-		EncodingType:      descpb.PrimaryIndexEncoding,
+		EncodingType:      catenumpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
 		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
 		// This is not possible until then because of a limitation in 21.2 which
@@ -368,7 +368,7 @@ func (p *planner) AlterPrimaryKey(
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
 		newUniqueIdx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-		newUniqueIdx.EncodingType = descpb.SecondaryIndexEncoding
+		newUniqueIdx.EncodingType = catenumpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
 		}
@@ -503,7 +503,7 @@ func (p *planner) AlterPrimaryKey(
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
 		newIndex.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-		newIndex.EncodingType = descpb.SecondaryIndexEncoding
+		newIndex.EncodingType = catenumpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
 		}

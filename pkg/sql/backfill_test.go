@@ -94,7 +94,7 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 			ID: 1, Name: "pri", KeyColumnIDs: []descpb.ColumnID{1},
 			KeyColumnNames:      []string{"c1"},
 			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-			EncodingType:        descpb.PrimaryIndexEncoding,
+			EncodingType:        catenumpb.PrimaryIndexEncoding,
 			Version:             descpb.LatestIndexDescriptorVersion,
 		},
 		Mutations: []descpb.DescriptorMutation{
@@ -107,7 +107,7 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 							catenumpb.IndexColumn_ASC,
 							catenumpb.IndexColumn_ASC,
 						},
-						EncodingType: descpb.PrimaryIndexEncoding,
+						EncodingType: catenumpb.PrimaryIndexEncoding,
 						Version:      descpb.LatestIndexDescriptorVersion,
 						Sharded: catpb.ShardedDescriptor{
 							IsSharded:    true,

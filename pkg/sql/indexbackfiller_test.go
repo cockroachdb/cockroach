@@ -261,7 +261,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 						mut.Columns[0].ID,
 					},
 					Type:         descpb.IndexDescriptor_FORWARD,
-					EncodingType: descpb.SecondaryIndexEncoding,
+					EncodingType: catenumpb.SecondaryIndexEncoding,
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++
@@ -345,7 +345,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 						computedColumnNotInPrimaryIndex.ID,
 					},
 					Type:         descpb.IndexDescriptor_FORWARD,
-					EncodingType: descpb.PrimaryIndexEncoding,
+					EncodingType: catenumpb.PrimaryIndexEncoding,
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++

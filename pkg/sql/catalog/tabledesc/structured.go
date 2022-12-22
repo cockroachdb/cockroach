@@ -101,7 +101,7 @@ func (desc *wrapper) GetParentSchemaID() descpb.ID {
 
 // IndexKeysPerRow implements the TableDescriptor interface.
 func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
-	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 		return len(desc.Families)
 	}
 	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
@@ -658,7 +658,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				)
 			}
 		}
-		if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+		if idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
 			idx.IndexDesc().KeySuffixColumnIDs = extraColumnIDs
 		} else {
 			colIDs = idx.CollectKeyColumnIDs()
@@ -679,7 +679,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			if err != nil {
 				return err
 			}
-			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
 				// If the primary index contains a stored column, we don't need to
 				// store it - it's already part of the index.
 				err = pgerror.Newf(pgcode.DuplicateColumn,
@@ -1038,7 +1038,7 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		// Only override the index name if it hasn't been set by the user.
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
-	idx.EncodingType = descpb.PrimaryIndexEncoding
+	idx.EncodingType = catenumpb.PrimaryIndexEncoding
 	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
 		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 		// Populate store columns.

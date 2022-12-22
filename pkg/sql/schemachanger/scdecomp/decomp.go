@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -531,7 +532,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			index.Sharding = &cpy.Sharded
 		}
 		idxStatus := maybeMutationStatus(idx)
-		if idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+		if idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 			w.ev(idxStatus, &scpb.PrimaryIndex{Index: index})
 		} else {
 			sec := &scpb.SecondaryIndex{Index: index}

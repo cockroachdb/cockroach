@@ -283,11 +283,11 @@ func (w index) GetVersion() descpb.IndexDescriptorVersion {
 // GetEncodingType returns the encoding type of this index. For backward
 // compatibility reasons, this might not match what is stored in
 // w.desc.EncodingType.
-func (w index) GetEncodingType() descpb.IndexDescriptorEncodingType {
+func (w index) GetEncodingType() catenumpb.IndexDescriptorEncodingType {
 	if w.Primary() {
 		// Primary indexes always use the PrimaryIndexEncoding, regardless of what
 		// desc.EncodingType indicates.
-		return descpb.PrimaryIndexEncoding
+		return catenumpb.PrimaryIndexEncoding
 	}
 	return w.desc.EncodingType
 }
@@ -399,7 +399,7 @@ func (w index) UseDeletePreservingEncoding() bool {
 //   - old primary indexes which are being dropped.
 func (w index) ForcePut() bool {
 	return w.Merging() || w.desc.UseDeletePreservingEncoding ||
-		w.Dropped() && w.IsUnique() && w.GetEncodingType() == descpb.PrimaryIndexEncoding
+		w.Dropped() && w.IsUnique() && w.GetEncodingType() == catenumpb.PrimaryIndexEncoding
 }
 
 func (w index) CreatedAt() time.Time {
