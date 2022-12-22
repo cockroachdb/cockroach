@@ -538,7 +538,7 @@ Store.HandleRaftRequest (which is part of the RaftMessageHandler interface),
 ultimately resulting in a call to Replica.handleRaftReadyRaftMuLocked, which
 houses the integration with the etcd/raft library (raft.RawNode). This may
 generate Raft messages to be sent to other Stores; these are handed to
-Replica.sendRaftMessagesRaftMuLocked which ultimately hands them to the Store's
+Replica.sendRaftMessages which ultimately hands them to the Store's
 RaftTransport.SendAsync method. Raft uses message passing (not
 request-response), and outgoing messages will use a gRPC stream that differs
 from that used for incoming messages (which makes asymmetric partitions more
