@@ -140,7 +140,7 @@ func runTC(queueBuild func(string, map[string]string)) {
 		if testTarget == "//pkg/kv/kvnemesis:kvnemesis_test" {
 			// Disable -maxruns for kvnemesis. Run for the full 1h.
 			maxRuns = 0
-			opts["env.EXTRA_BAZEL_FLAGS"] = "--test_env COCKROACH_KVNEMESIS_STEPS=10000"
+			opts["env.EXTRA_BAZEL_FLAGS"] = "--test_env COCKROACH_KVNEMESIS_STEPS=1000"
 		}
 
 		if testTarget == "//pkg/sql/logictest:logictest_test" || testTarget == "//pkg/kv/kvserver:kvserver_test" {

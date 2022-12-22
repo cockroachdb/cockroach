@@ -13,7 +13,6 @@ package colrpc
 import (
 	"bytes"
 	"context"
-	"io"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -225,25 +225,6 @@ func (o *Outbox) Run(
 	log.VEvent(ctx, 2, "Outbox exiting")
 }
 
-// handleStreamErr is a utility method used to handle an error when calling
-// a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
-// called, for all other errors flowCtxCancel is. The given error is logged with
-// the associated opName.
-func handleStreamErr(
-	ctx context.Context,
-	opName redact.SafeString,
-	err error,
-	flowCtxCancel, outboxCtxCancel context.CancelFunc,
-) {
-	if err == io.EOF {
-		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
-		outboxCtxCancel()
-	} else {
-		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
-		flowCtxCancel()
-	}
-}
-
 func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableString) {
 	if atomic.CompareAndSwapUint32(&o.draining, 0, 1) {
 		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", reason)
@@ -321,7 +302,7 @@ func (o *Outbox) sendBatches(
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
 			if err := stream.Send(o.scratch.msg); err != nil {
-				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
 				return
 			}
 		}
@@ -399,12 +380,12 @@ func (o *Outbox) runWithStream(
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
 				break
 			}
 			switch {
 			case msg.Handshake != nil:
-				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
+				log.VEventf(ctx, 2, "Outbox received handshake: %s", msg.Handshake)
 			case msg.DrainRequest != nil:
 				log.VEventf(ctx, 2, "Outbox received drain request")
 				o.moveToDraining(ctx, "consumer requested draining" /* reason */)
@@ -423,14 +404,14 @@ func (o *Outbox) runWithStream(
 		}
 		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
+			flowinfra.HandleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
+				flowinfra.HandleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
 			}
 		}
 	}
