@@ -101,6 +101,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",

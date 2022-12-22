@@ -24,7 +24,7 @@ import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/join_type.proto";
 import "sql/catalog/descpb/locking.proto";
-import "sql/catalog/descpb/index_fetch.proto";
+import "sql/catalog/fetchpb/index_fetch.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
