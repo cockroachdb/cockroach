@@ -113,7 +113,9 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	tenant11Conn, err := serverutils.OpenDBConnE(tenant11.SQLAddr(), "bank", false, tenant11.Stopper())
 	require.NoError(t, err)
 	tenant11DB := sqlutils.MakeSQLRunner(tenant11Conn)
-	assertEqualQueries(t, tenant10DB, tenant11DB, fmt.Sprintf(`SELECT * FROM bank."%s"`, tableName))
+	countQuery := fmt.Sprintf(`SELECT count(1) FROM bank."%s"`, tableName)
+	assertEqualQueries(t, tenant10DB, tenant11DB, countQuery)
+	require.Equal(t, [][]string{{"0"}}, tenant11DB.QueryStr(t, countQuery))
 }
 
 // TestTenantBackupNemesis runs a seriest of incremental tenant
@@ -220,13 +222,9 @@ func TestTenantBackupNemesis(t *testing.T) {
 		defer close(backupDone)
 		defer nemesisRunner.Stop()
 
-		// Let's make sure at least one nemesis operation has
-		// started before starting the full backup.
-		done := nemesisRunner.RequireStart()
 		t.Logf("backup-nemesis: full backup started")
 		hostSQLDB.Exec(t, fmt.Sprintf("BACKUP TENANT 10 INTO '%s'", backupLoc))
 		t.Logf("backup-nemesis: full backup finished")
-		<-done
 
 		numIncrementals := 30
 		if util.RaceEnabled {
@@ -320,19 +318,13 @@ type randomBackupNemesis struct {
 
 	mu struct {
 		syncutil.Mutex
-		oneTimeListeners []chan nemesisNotification
-		tablesToCheck    []string
+		tablesToCheck []string
 	}
 }
 
 type nemesis struct {
 	name string
 	impl func(context.Context, *randomBackupNemesis, *gosql.DB) error
-}
-
-type nemesisNotification struct {
-	name string
-	done chan struct{}
 }
 
 func newBackupNemesis(t *testing.T, rng *rand.Rand, db *gosql.DB) *randomBackupNemesis {
@@ -436,19 +428,6 @@ func (r *randomBackupNemesis) Stop() {
 	_ = r.grp.Wait()
 }
 
-// RequiredStart blocks until a new nemesis operation begins. The
-// returned channel is closed when the operation completes.
-func (r *randomBackupNemesis) RequireStart() chan struct{} {
-	notifyCh := make(chan nemesisNotification)
-	// Add ourselves to the oneTimeListeners list.
-	r.mu.Lock()
-	r.mu.oneTimeListeners = append(r.mu.oneTimeListeners, notifyCh)
-	r.mu.Unlock()
-	// Wait for the nemesis operation to start.
-	newNemesis := <-notifyCh
-	return newNemesis.done
-}
-
 // TablesToCheck returns the tables that are should be online in any
 // backup taken after it returns. Tables for in-progress nemesis
 // operations aren't returned until the operation has reached some
@@ -466,20 +445,6 @@ func (r *randomBackupNemesis) addTable(name string) {
 	r.mu.Unlock()
 }
 
-// notifyOneTimeListeners is called before a nemesis operation
-// begins. Everyone waiting on a nemsis to start will be passed a
-// notification of the new operation along with the done chan.
-func (r *randomBackupNemesis) notifyOneTimeListeners(done chan struct{}) {
-	r.mu.Lock()
-	for _, l := range r.mu.oneTimeListeners {
-		l <- nemesisNotification{
-			done: done,
-		}
-	}
-	r.mu.oneTimeListeners = nil
-	r.mu.Unlock()
-}
-
 func (r *randomBackupNemesis) runNemesis(ctx context.Context) error {
 	for {
 		select {
@@ -487,22 +452,13 @@ func (r *randomBackupNemesis) runNemesis(ctx context.Context) error {
 			return nil
 		default:
 		}
-		// Randomly pick a nemesis operation and start running
-		// it.
 		n := r.nemeses[r.rng.Intn(len(r.nemeses))]
-		doneCh := make(chan struct{})
-		// We are about to start a new nemesis
-		// operation. Notify anyone who is waiting on
-		// RequireStart().
-		r.notifyOneTimeListeners(doneCh)
 		r.t.Logf("backup-nemesis: %s started", n.name)
 		if err := n.impl(ctx, r, r.db); err != nil {
 			r.t.Logf("backup-nemesis: %s failed: %s", n.name, err)
-			close(doneCh)
 			return err
 		}
 		r.t.Logf("backup-nemesis: %s finished", n.name)
-		close(doneCh)
 	}
 }
 
