@@ -105,145 +105,146 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		var (
 			values       []byte
 			offsetsBytes []byte
-
-			// dataHeader is the reflect.SliceHeader of the coldata.Vec's underlying
-			// data slice that we are casting to bytes.
-			dataHeader *reflect.SliceHeader
-			// datumSize is the size of one datum that we are casting to a byte slice.
-			datumSize int64
 		)
 
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
-		case types.BytesFamily:
-			var offsets []int32
-			values, offsets = vec.Bytes().ToArrowSerializationFormat(n)
-			unsafeCastOffsetsArray(offsets, &offsetsBytes)
-
-		case types.JsonFamily:
-			var offsets []int32
-			values, offsets = vec.JSON().Bytes.ToArrowSerializationFormat(n)
-			unsafeCastOffsetsArray(offsets, &offsetsBytes)
-
-		case types.IntFamily:
-			switch typ.Width() {
-			case 16:
-				ints := vec.Int16()[:n]
-				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = memsize.Int16
-			case 32:
-				ints := vec.Int32()[:n]
-				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = memsize.Int32
-			case 0, 64:
-				ints := vec.Int64()[:n]
-				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
-				datumSize = memsize.Int64
-			default:
-				panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
+		if f := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()); f == types.IntFamily || f == types.FloatFamily {
+			// For ints and floats we have a fast path where we cast the
+			// underlying slice directly to the arrow format.
+			//
+			// dataHeader is the reflect.SliceHeader of the coldata.Vec's underlying
+			// data slice that we are casting to bytes.
+			var dataHeader *reflect.SliceHeader
+			// datumSize is the size of one datum that we are casting to a byte slice.
+			var datumSize int64
+			if f == types.IntFamily {
+				switch typ.Width() {
+				case 16:
+					ints := vec.Int16()[:n]
+					dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
+					datumSize = memsize.Int16
+				case 32:
+					ints := vec.Int32()[:n]
+					dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
+					datumSize = memsize.Int32
+				case 0, 64:
+					ints := vec.Int64()[:n]
+					dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
+					datumSize = memsize.Int64
+				default:
+					panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
+				}
+			} else {
+				floats := vec.Float64()[:n]
+				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
+				datumSize = memsize.Float64
 			}
-
-		case types.FloatFamily:
-			floats := vec.Float64()[:n]
-			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
-			datumSize = memsize.Float64
-
-		case types.DecimalFamily:
-			offsets := make([]int32, 0, n+1)
-			decimals := vec.Decimal()[:n]
-			// We don't know exactly how big a decimal will serialize to. Let's
-			// estimate 16 bytes.
-			values = make([]byte, 0, n*16)
-			for i := range decimals {
-				offsets = append(offsets, int32(len(values)))
-				if nulls != nil && nulls.NullAt(i) {
-					continue
-				}
-				// See apd.Decimal.String(): we use the 'G' format string for
-				// serialization.
-				values = decimals[i].Append(values, 'G')
-			}
-			offsets = append(offsets, int32(len(values)))
-			unsafeCastOffsetsArray(offsets, &offsetsBytes)
-
-		case types.IntervalFamily:
-			offsets := make([]int32, 0, n+1)
-			intervals := vec.Interval()[:n]
-			intervalSize := int(memsize.Int64) * 3
-			// TODO(jordan): we could right-size this values slice by counting up the
-			// number of nulls in the nulls bitmap first, and subtracting from n.
-			values = make([]byte, intervalSize*n)
-			var curNonNullInterval int
-			for i := range intervals {
-				offsets = append(offsets, int32(curNonNullInterval*intervalSize))
-				if nulls != nil && nulls.NullAt(i) {
-					continue
-				}
-				nanos, months, days, err := intervals[i].Encode()
-				if err != nil {
-					return nil, err
-				}
-				curSlice := values[intervalSize*curNonNullInterval : intervalSize*(curNonNullInterval+1)]
-				binary.LittleEndian.PutUint64(curSlice[0:memsize.Int64], uint64(nanos))
-				binary.LittleEndian.PutUint64(curSlice[memsize.Int64:memsize.Int64*2], uint64(months))
-				binary.LittleEndian.PutUint64(curSlice[memsize.Int64*2:memsize.Int64*3], uint64(days))
-				curNonNullInterval++
-			}
-			values = values[:intervalSize*curNonNullInterval]
-			offsets = append(offsets, int32(len(values)))
-			unsafeCastOffsetsArray(offsets, &offsetsBytes)
-
-		case types.TimestampTZFamily:
-			offsets := make([]int32, 0, n+1)
-			timestamps := vec.Timestamp()[:n]
-			// See implementation of time.MarshalBinary.
-			const timestampSize = 14
-			values = make([]byte, 0, n*timestampSize)
-			for i := range timestamps {
-				offsets = append(offsets, int32(len(values)))
-				if nulls != nil && nulls.NullAt(i) {
-					continue
-				}
-				marshaled, err := timestamps[i].MarshalBinary()
-				if err != nil {
-					return nil, err
-				}
-				values = append(values, marshaled...)
-			}
-			offsets = append(offsets, int32(len(values)))
-			unsafeCastOffsetsArray(offsets, &offsetsBytes)
-
-		case typeconv.DatumVecCanonicalTypeFamily:
-			offsets := make([]int32, 0, n+1)
-			datums := vec.Datum().Window(0 /* start */, n)
-			// Make a very very rough estimate of the number of bytes we'll have to
-			// allocate for the datums in this vector. This will likely be an
-			// undercount, but the estimate is better than nothing.
-			size, _ := tree.DatumTypeSize(typ)
-			values = make([]byte, 0, n*int(size))
-			for i := 0; i < n; i++ {
-				offsets = append(offsets, int32(len(values)))
-				if nulls != nil && nulls.NullAt(i) {
-					continue
-				}
-				var err error
-				values, err = datums.MarshalAt(values, i)
-				if err != nil {
-					return nil, err
-				}
-			}
-			offsets = append(offsets, int32(len(values)))
-			unsafeCastOffsetsArray(offsets, &offsetsBytes)
-
-		default:
-			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
-		}
-
-		// Cast values if not set (mostly for non-byte types).
-		if values == nil {
+			// Update values to point to the underlying slices while keeping the
+			// offsetBytes unset.
 			valuesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&values))
 			valuesHeader.Data = dataHeader.Data
 			valuesHeader.Len = dataHeader.Len * int(datumSize)
 			valuesHeader.Cap = dataHeader.Cap * int(datumSize)
+		} else {
+			var offsets []int32
+			switch f {
+			case types.BytesFamily:
+				values, offsets = vec.Bytes().ToArrowSerializationFormat(n)
+				unsafeCastOffsetsArray(offsets, &offsetsBytes)
+
+			case types.JsonFamily:
+				values, offsets = vec.JSON().Bytes.ToArrowSerializationFormat(n)
+				unsafeCastOffsetsArray(offsets, &offsetsBytes)
+
+			case types.DecimalFamily:
+				offsets = make([]int32, 0, n+1)
+				decimals := vec.Decimal()[:n]
+				// We don't know exactly how big a decimal will serialize to. Let's
+				// estimate 16 bytes.
+				values = make([]byte, 0, n*16)
+				for i := range decimals {
+					offsets = append(offsets, int32(len(values)))
+					if nulls != nil && nulls.NullAt(i) {
+						continue
+					}
+					// See apd.Decimal.String(): we use the 'G' format string for
+					// serialization.
+					values = decimals[i].Append(values, 'G')
+				}
+				offsets = append(offsets, int32(len(values)))
+				unsafeCastOffsetsArray(offsets, &offsetsBytes)
+
+			case types.IntervalFamily:
+				offsets = make([]int32, 0, n+1)
+				intervals := vec.Interval()[:n]
+				intervalSize := int(memsize.Int64) * 3
+				// TODO(jordan): we could right-size this values slice by counting up the
+				// number of nulls in the nulls bitmap first, and subtracting from n.
+				values = make([]byte, intervalSize*n)
+				var curNonNullInterval int
+				for i := range intervals {
+					offsets = append(offsets, int32(curNonNullInterval*intervalSize))
+					if nulls != nil && nulls.NullAt(i) {
+						continue
+					}
+					nanos, months, days, err := intervals[i].Encode()
+					if err != nil {
+						return nil, err
+					}
+					curSlice := values[intervalSize*curNonNullInterval : intervalSize*(curNonNullInterval+1)]
+					binary.LittleEndian.PutUint64(curSlice[0:memsize.Int64], uint64(nanos))
+					binary.LittleEndian.PutUint64(curSlice[memsize.Int64:memsize.Int64*2], uint64(months))
+					binary.LittleEndian.PutUint64(curSlice[memsize.Int64*2:memsize.Int64*3], uint64(days))
+					curNonNullInterval++
+				}
+				values = values[:intervalSize*curNonNullInterval]
+				offsets = append(offsets, int32(len(values)))
+				unsafeCastOffsetsArray(offsets, &offsetsBytes)
+
+			case types.TimestampTZFamily:
+				offsets = make([]int32, 0, n+1)
+				timestamps := vec.Timestamp()[:n]
+				// See implementation of time.MarshalBinary.
+				const timestampSize = 14
+				values = make([]byte, 0, n*timestampSize)
+				for i := range timestamps {
+					offsets = append(offsets, int32(len(values)))
+					if nulls != nil && nulls.NullAt(i) {
+						continue
+					}
+					marshaled, err := timestamps[i].MarshalBinary()
+					if err != nil {
+						return nil, err
+					}
+					values = append(values, marshaled...)
+				}
+				offsets = append(offsets, int32(len(values)))
+				unsafeCastOffsetsArray(offsets, &offsetsBytes)
+
+			case typeconv.DatumVecCanonicalTypeFamily:
+				offsets = make([]int32, 0, n+1)
+				datums := vec.Datum().Window(0 /* start */, n)
+				// Make a very very rough estimate of the number of bytes we'll have to
+				// allocate for the datums in this vector. This will likely be an
+				// undercount, but the estimate is better than nothing.
+				size, _ := tree.DatumTypeSize(typ)
+				values = make([]byte, 0, n*int(size))
+				for i := 0; i < n; i++ {
+					offsets = append(offsets, int32(len(values)))
+					if nulls != nil && nulls.NullAt(i) {
+						continue
+					}
+					var err error
+					values, err = datums.MarshalAt(values, i)
+					if err != nil {
+						return nil, err
+					}
+				}
+				offsets = append(offsets, int32(len(values)))
+				unsafeCastOffsetsArray(offsets, &offsetsBytes)
+
+			default:
+				panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
+			}
 		}
 
 		var arrowBitmap []byte

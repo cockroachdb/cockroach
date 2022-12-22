@@ -63,7 +63,9 @@ type RecordBatchSerializer struct {
 	scratch struct {
 		bufferLens     []int
 		metadataLength [metadataLengthNumBytes]byte
-		padding        []byte
+		// padding is used to align metadata to an 8 byte boundary, so doesn't
+		// need to be larger than 7 bytes.
+		padding [7]byte
 	}
 }
 
@@ -78,9 +80,6 @@ func NewRecordBatchSerializer(typs []*types.T) (*RecordBatchSerializer, error) {
 	for i, t := range typs {
 		s.numBuffers[i] = numBuffersForType(t)
 	}
-	// s.scratch.padding is used to align metadata to an 8 byte boundary, so
-	// doesn't need to be larger than 7 bytes.
-	s.scratch.padding = make([]byte, 7)
 	return s, nil
 }
 
@@ -181,10 +180,10 @@ func (s *RecordBatchSerializer) Serialize(
 	metadataBytes := s.builder.FinishedBytes()
 
 	// Use s.scratch.padding to align metadata to 8-byte boundary.
-	s.scratch.padding = s.scratch.padding[:calculatePadding(metadataLengthNumBytes+len(metadataBytes))]
+	padding := s.scratch.padding[:calculatePadding(metadataLengthNumBytes+len(metadataBytes))]
 
 	// Write metadata + padding length as the first metadataLengthNumBytes.
-	metadataLength := uint32(len(metadataBytes) + len(s.scratch.padding))
+	metadataLength := uint32(len(metadataBytes) + len(padding))
 	binary.LittleEndian.PutUint32(s.scratch.metadataLength[:], metadataLength)
 	if _, err := w.Write(s.scratch.metadataLength[:]); err != nil {
 		return 0, 0, err
@@ -196,7 +195,7 @@ func (s *RecordBatchSerializer) Serialize(
 	}
 
 	// Add metadata padding.
-	if _, err := w.Write(s.scratch.padding); err != nil {
+	if _, err := w.Write(padding); err != nil {
 		return 0, 0, err
 	}
 
@@ -221,9 +220,9 @@ func (s *RecordBatchSerializer) Serialize(
 	}
 
 	// Add body padding. The body also needs to be a multiple of 8 bytes.
-	s.scratch.padding = s.scratch.padding[:calculatePadding(bodyLength)]
-	_, err := w.Write(s.scratch.padding)
-	bodyLength += len(s.scratch.padding)
+	padding = s.scratch.padding[:calculatePadding(bodyLength)]
+	_, err := w.Write(padding)
+	bodyLength += len(padding)
 	return metadataLength, uint64(bodyLength), err
 }
 
