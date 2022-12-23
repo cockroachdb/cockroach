@@ -137,14 +137,14 @@ func MakeClusterSettings() *Settings {
 }
 
 // MakeTestingClusterSettings returns a Settings object that has its binary and
-// minimum supported versions set to the baked in binary version. It also
+// minimum supported versions set to the baked in testing versions. It also
 // initializes the cluster version setting to the binary version.
 //
 // It is typically used for testing or one-off situations in which a Settings
 // object is needed, but cluster settings don't play a crucial role.
 func MakeTestingClusterSettings() *Settings {
 	return MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryVersion, true /* initializeVersion */)
+		clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion, true /* initializeVersion */)
 }
 
 // MakeTestingClusterSettingsWithVersions returns a Settings object that has its
