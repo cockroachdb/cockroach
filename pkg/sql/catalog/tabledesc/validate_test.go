@@ -2855,7 +2855,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					{
 						Name: "a",
 						ID:   1,
-						Type: types.MakeCompositeType(catid.TypeIDToOID(500), catid.TypeIDToOID(100500), nil, nil),
+						Type: types.NewCompositeType(catid.TypeIDToOID(500), catid.TypeIDToOID(100500), nil, nil),
 					},
 				},
 			},

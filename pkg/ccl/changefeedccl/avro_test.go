@@ -213,7 +213,7 @@ func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T 
 		Version:     1,
 	}).BuildCreatedMutableType()
 
-	typ, _ := typeDesc.MakeTypesT(context.Background(), &typeName, nil)
+	typ, _ := typedesc.HydratedTFromDesc(context.Background(), &typeName, typeDesc, nil /* res */)
 
 	testTypes[typeName.SQLString()] = typ
 

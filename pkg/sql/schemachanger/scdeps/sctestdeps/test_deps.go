@@ -471,17 +471,12 @@ func (s *TestState) ResolveType(
 		return nil, err
 	}
 	tn := tree.MakeQualifiedTypeName(prefix.Database.GetName(), prefix.Schema.GetName(), typ.GetName())
-	return typ.MakeTypesT(ctx, &tn, s)
+	return typedesc.HydratedTFromDesc(ctx, &tn, typ, s)
 }
 
 // ResolveTypeByOID implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id := typedesc.UserDefinedTypeOIDToID(oid)
-	name, typ, err := s.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return typ.MakeTypesT(ctx, &name, s)
+	return typedesc.ResolveHydratedTByOID(ctx, oid, s)
 }
 
 var _ catalog.TypeDescriptorResolver = (*TestState)(nil)

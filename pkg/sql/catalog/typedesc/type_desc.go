@@ -821,21 +821,13 @@ func (t TypeLookupFunc) GetTypeDescriptor(
 	return t(ctx, id)
 }
 
-// MakeTypesT implements the TypeDescriptor interface.
-func (desc *immutable) MakeTypesT(
-	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
-) (*types.T, error) {
-	switch t := desc.Kind; t {
+// AsTypesT implements the TypeDescriptor interface.
+func (desc *immutable) AsTypesT() *types.T {
+	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		typ := types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
-		ensureTypeMetadataIsHydrated(&typ.TypeMeta, name, desc)
-		return typ, nil
+		return types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
 	case descpb.TypeDescriptor_ALIAS:
-		// Hydrate the alias and return it.
-		if err := EnsureTypeIsHydrated(ctx, desc.Alias, res); err != nil {
-			return nil, err
-		}
-		return desc.Alias, nil
+		return desc.Alias
 	case descpb.TypeDescriptor_COMPOSITE:
 		contents := make([]*types.T, len(desc.Composite.Elements))
 		labels := make([]string, len(desc.Composite.Elements))
@@ -843,20 +835,14 @@ func (desc *immutable) MakeTypesT(
 			contents[i] = e.ElementType
 			labels[i] = e.ElementLabel
 		}
-		typ := types.MakeCompositeType(
+		return types.NewCompositeType(
 			catid.TypeIDToOID(desc.GetID()),
 			catid.TypeIDToOID(desc.ArrayTypeID),
 			contents,
 			labels,
 		)
-		// Hydrate the composite type and return it.
-		if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
-			return nil, err
-		}
-		return typ, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
+	panic(errors.AssertionFailedf("unsupported descriptor kind %s", desc.Kind.String()))
 }
 
 // NumEnumMembers implements the TypeDescriptor interface.

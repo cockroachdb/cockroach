@@ -49,12 +49,7 @@ func (dt *DistSQLTypeResolver) ResolveType(
 func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
-	id := typedesc.UserDefinedTypeOIDToID(oid)
-	name, desc, err := dt.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return desc.MakeTypesT(ctx, &name, dt)
+	return typedesc.ResolveHydratedTByOID(ctx, oid, dt)
 }
 
 // GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.

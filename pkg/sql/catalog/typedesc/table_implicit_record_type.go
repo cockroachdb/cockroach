@@ -11,14 +11,11 @@
 package typedesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -253,11 +250,9 @@ func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	return nil
 }
 
-// MakeTypesT implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) MakeTypesT(
-	_ context.Context, _ *tree.TypeName, _ catalog.TypeDescriptorResolver,
-) (*types.T, error) {
-	return v.typ, nil
+// AsTypesT implements the TypeDescriptor interface.
+func (v TableImplicitRecordType) AsTypesT() *types.T {
+	return v.typ
 }
 
 // HasPendingSchemaChanges implements the TypeDescriptor interface.

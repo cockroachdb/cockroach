@@ -779,8 +779,6 @@ type TypeDescriptor interface {
 	Descriptor
 	// TypeDesc returns the backing descriptor for this type, if one exists.
 	TypeDesc() *descpb.TypeDescriptor
-	// MakeTypesT creates a types.T from the input type descriptor.
-	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	// HasPendingSchemaChanges returns whether or not this descriptor has schema
 	// changes that need to be completed.
 	HasPendingSchemaChanges() bool
@@ -795,7 +793,10 @@ type TypeDescriptor interface {
 	// array type for this type. It is only set when the type descriptor points to
 	// a non-array type.
 	GetArrayTypeID() descpb.ID
-
+	// AsTypesT returns a reference to a types.T corresponding to this type
+	// descriptor. No guarantees are provided as to whether this object is a
+	// singleton or not, or whether it's hydrated or not.
+	AsTypesT() *types.T
 	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
 
