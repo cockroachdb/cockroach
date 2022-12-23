@@ -38,22 +38,23 @@ func splitPostAddWithReplica(
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) error {
-	return splitPostAdd(ctx, r, readWriter, split, initClosedTS)
+	return splitPostAdd(ctx, r, r.StoreID(), readWriter, split, initClosedTS)
 }
 
 func splitPostAdd(
 	ctx context.Context,
 	r *Replica,
+	storeID roachpb.StoreID,
 	readWriter storage.ReadWriter,
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) error {
 	// Sanity check that the store is in the split.
-	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
+	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(storeID)
+	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(storeID)
 	if !hasRightDesc || !hasLeftDesc {
 		return errors.AssertionFailedf("cannot process split on s%s which does not exist in the split: %+v",
-			r.StoreID(), split)
+			storeID, split)
 	}
 
 	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
