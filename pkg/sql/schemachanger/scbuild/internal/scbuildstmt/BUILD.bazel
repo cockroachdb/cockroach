@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",

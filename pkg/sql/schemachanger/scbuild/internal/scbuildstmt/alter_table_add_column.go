@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -174,8 +176,31 @@ func alterTableAddColumn(
 		))
 	}
 	if desc.IsComputed() {
+
 		expr := b.ComputedColumnExpression(tbl, d)
 		spec.colType.ComputeExpr = b.WrapExpression(tbl.TableID, expr)
+
+		// run the same validation in sql/row/row_converter.go GenerateInsertRow function
+		var txCtx transform.ExprTransformContext
+		// compute expression can have dependency to another column,
+		// in this case line below will throw an error and validation is not necessary
+		typedExpr, err := tree.TypeCheck(b, expr, b.SemaCtx(), d.Type.(*types.T))
+		if err == nil {
+			typedExpr, err = txCtx.NormalizeExpr(b, b.EvalCtx(), typedExpr)
+			if err != nil {
+				panic(err)
+			}
+			datum, err := eval.Expr(b, b.EvalCtx(), typedExpr)
+			if err != nil {
+				panic(err)
+			}
+			// AdjustValueToType function does the validation
+			_, err = tree.AdjustValueToType(d.Type.(*types.T), datum)
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		if desc.Virtual {
 			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
 		} else {
@@ -207,12 +232,14 @@ func alterTableAddColumn(
 	}
 	if desc.HasDefault() {
 		expression := b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
+
 		spec.def = &scpb.ColumnDefaultExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
 			Expression: *expression,
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("default_expr")
+
 	}
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
 	// non-empty table by scanning the primary index span with a limit of 1 to see if any key exists.
@@ -256,6 +283,7 @@ func alterTableAddColumn(
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
 	}
+
 }
 
 func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {

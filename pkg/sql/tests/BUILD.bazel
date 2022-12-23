@@ -27,6 +27,7 @@ go_test(
     name = "tests_test",
     size = "large",
     srcs = [
+        "add_column_generated_test.go",
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
         "copy_file_upload_test.go",
@@ -91,6 +92,7 @@ go_test(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/stats",
