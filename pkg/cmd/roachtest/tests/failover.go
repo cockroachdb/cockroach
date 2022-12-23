@@ -706,14 +706,16 @@ func relocateRanges(
 		where := fmt.Sprintf("(%s) AND %d = ANY(replicas)", predicate, source)
 		for {
 			require.NoError(t, conn.QueryRowContext(ctx,
-				`SELECT count(*) FROM crdb_internal.ranges WHERE `+where).Scan(&count))
+				`SELECT count(distinct range_id) FROM [SHOW CLUSTER RANGES WITH TABLES] WHERE `+where).
+				Scan(&count))
 			if count == 0 {
 				break
 			}
 			t.Status(fmt.Sprintf("moving %d ranges off of n%d (%s)", count, source, predicate))
 			for _, target := range to {
 				_, err := conn.ExecContext(ctx, `ALTER RANGE RELOCATE FROM $1::int TO $2::int FOR `+
-					`SELECT range_id FROM crdb_internal.ranges WHERE `+where, source, target)
+					`SELECT DISTINCT range_id FROM [SHOW CLUSTER RANGES WITH TABLES] WHERE `+where,
+					source, target)
 				require.NoError(t, err)
 			}
 			time.Sleep(time.Second)
@@ -729,13 +731,15 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 	where := fmt.Sprintf("%s AND lease_holder != %d", predicate, to)
 	for {
 		require.NoError(t, conn.QueryRowContext(ctx,
-			`SELECT count(*) FROM crdb_internal.ranges WHERE `+where).Scan(&count))
+			`SELECT count(distinct range_id) FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] WHERE `+
+				where).
+			Scan(&count))
 		if count == 0 {
 			break
 		}
 		t.Status(fmt.Sprintf("moving %d leases to n%d (%s)", count, to, predicate))
 		_, err := conn.ExecContext(ctx, `ALTER RANGE RELOCATE LEASE TO $1::int FOR `+
-			`SELECT range_id FROM crdb_internal.ranges WHERE `+where, to)
+			`SELECT DISTINCT range_id FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] WHERE `+where, to)
 		// When a node recovers, it may not have gossiped its store key yet.
 		if err != nil && !strings.Contains(err.Error(), "KeyNotPresentError") {
 			require.NoError(t, err)
