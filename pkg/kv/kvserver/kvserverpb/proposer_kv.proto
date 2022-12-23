@@ -328,7 +328,7 @@ message RaftCommand {
   // this command before the closed timestamp was known and later extended the
   // marshaled representation with a footer containing the closed timestamp. Due
   // to a gogoproto quirk[^1] a zero hlc.Timestamp{} still gets put on the wire,
-  // which we wanted to avoid sincei t caused subtle bugs[^2]. None of this
+  // which we wanted to avoid since it caused subtle bugs[^2]. None of this
   // applies any more but changing a field from nullable to non-nullable can
   // have a migration concern, which would need to be investigated.
   //

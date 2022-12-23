@@ -221,13 +221,11 @@ func (b *propBuf) incAllocatedIdx() int {
 
 // Insert inserts a new command into the proposal buffer to be proposed to the
 // proposer's Raft group. The method accepts the Raft command as part of the
-// ProposalData struct. ProposalData.encodedCommand is expected to contain a
-// partial encoding of the command. That byte slice is expected to contain
-// marshaled information for all of the command's fields except for
-// MaxLeaseIndex, and ClosedTimestamp. These fields will be assigned later, when
-// the buffer is flushed (after the command is sequenced in the buffer). It is
-// also expected that the byte slice has sufficient capacity to marshal these
-// fields into it.
+// ProposalData struct, with the contained RaftCommand's ClosedTimestamp and
+// MaxLeaseIndex fields unset and, for entries of type
+// raftlog.EntryEncodingStandard or raftlog.EntryEncodingSideloaded, with a
+// preAlloc slice that has sufficient capacity to marshal the command after
+// the two fields have been filled in by the proposal buffer.
 //
 // Insert takes ownership of the supplied token; the caller should tok.Move() it
 // into this method. It will be used to untrack the request once it comes out of the
@@ -364,7 +362,7 @@ func (b *propBuf) flushLocked(ctx context.Context) error {
 	})
 }
 
-var ctPool = sync.Pool{
+var closedTimestampPool = sync.Pool{
 	New: func() interface{} {
 		return &hlc.Timestamp{}
 	},
@@ -493,7 +491,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			entryEncoding = raftlog.EntryEncodingStandard
 		}
 
-		var ct hlc.Timestamp
+		var closedTimestamp hlc.Timestamp
 		// Figure out what closed timestamp this command will carry.
 		//
 		// If this is a reproposal, we don't reassign the LAI. We also don't
@@ -503,7 +501,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		if !reproposal {
 			var lai uint64
 			var err error
-			lai, ct, err = b.allocateLAIAndClosedTimestampLocked(ctx, p, closedTSTarget)
+			lai, closedTimestamp, err = b.allocateLAIAndClosedTimestampLocked(ctx, p, closedTSTarget)
 			if err != nil {
 				firstErr = err
 				continue
@@ -513,13 +511,14 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// that if we catch any error below, this proposal will be rejected, so
 			// we can do this upfront.
 			p.command.MaxLeaseIndex = lai
-			// NB: we don't assign to the p.command.ClosedTimestamp here because that
+			// NB: we don't assign to p.command.ClosedTimestamp here because that
 			// would cause an allocation. It'd be nice to assign to it, for
 			// consistency, but nobody needs it. What we do instead is get memory from
 			// a sync.Pool just while we're marshaling the command, and reset the
-			// field again right after. We could make the field nullable, see comment
-			// on p.command.ClosedTimestamp for context.
-			_ = ct
+			// field again right after (see later use of `closedTimestamp`) variable.
+			// We could make the field nullable, see comment on
+			// p.command.ClosedTimestamp for context.
+			_ = closedTimestamp
 		}
 
 		testingSubmitProposalFilter := func(*ProposalData) (drop bool, err error) { return false, nil }
@@ -532,11 +531,12 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		if entryEncoding == raftlog.EntryEncodingStandard || entryEncoding == raftlog.EntryEncodingSideloaded {
 			// Allocate the data slice with just the right capacity. This is a hot
 			// path so we are careful to minimize allocations.
-			if ct.IsSet() {
-				// See assignment to `ct` above to understand ctPool. It's important that we
-				// do this before calling p.command.Size() below or that will be off.
-				ctp := ctPool.Get().(*hlc.Timestamp)
-				*ctp = ct
+			if closedTimestamp.IsSet() {
+				// See assignment to `closedTimestamp` above to understand
+				// closedTimestampPool. It's important that we do this before calling
+				// p.command.Size() below or that will be off.
+				ctp := closedTimestampPool.Get().(*hlc.Timestamp)
+				*ctp = closedTimestamp
 				p.command.ClosedTimestamp = ctp
 			}
 
@@ -568,7 +568,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 			if ctp := p.command.ClosedTimestamp; ctp != nil {
 				p.command.ClosedTimestamp = nil
-				ctPool.Put(ctp)
+				closedTimestampPool.Put(ctp)
 			}
 
 			if drop, err := testingSubmitProposalFilter(p); drop || err != nil {
@@ -602,8 +602,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// First we need to encode the kvserverpb.RaftCommand. No need to optimize
 			// allocations in this case since it's not a hot path.
 			var err error
-			if ct.IsSet() {
-				p.command.ClosedTimestamp = &ct
+			if closedTimestamp.IsSet() {
+				p.command.ClosedTimestamp = &closedTimestamp
 			}
 			raftCmdBytes, err := protoutil.Marshal(p.command)
 			if err != nil {
