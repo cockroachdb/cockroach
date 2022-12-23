@@ -37,6 +37,7 @@ func registerFailover(r registry.Registry) {
 		failureModeBlackholeRecv,
 		failureModeBlackholeSend,
 		failureModeCrash,
+		failureModeDiskStall,
 	} {
 		failureMode := failureMode // pin loop variable
 		r.Add(registry.TestSpec{
@@ -588,6 +589,7 @@ const (
 	failureModeBlackholeRecv failureMode = "blackhole-recv"
 	failureModeBlackholeSend failureMode = "blackhole-send"
 	failureModeCrash         failureMode = "crash"
+	failureModeDiskStall     failureMode = "disk-stall"
 )
 
 // makeFailer creates a new failer for the given failureMode.
@@ -620,6 +622,13 @@ func makeFailer(
 		}
 	case failureModeCrash:
 		return &crashFailer{
+			t:             t,
+			c:             c,
+			startOpts:     opts,
+			startSettings: settings,
+		}
+	case failureModeDiskStall:
+		return &diskStallFailer{
 			t:             t,
 			c:             c,
 			startOpts:     opts,
@@ -714,6 +723,65 @@ func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *crashFailer) Recover(ctx context.Context, nodeID int) {
+	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+}
+
+// diskStallFailer stalls the disk indefinitely. This should cause the node to
+// eventually self-terminate, but we'd want leases to move off before then.
+type diskStallFailer struct {
+	t             test.Test
+	c             cluster.Cluster
+	m             cluster.Monitor
+	startOpts     option.StartOpts
+	startSettings install.ClusterSettings
+}
+
+func (f *diskStallFailer) device() string {
+	switch f.c.Spec().Cloud {
+	case spec.GCE:
+		return "/dev/nvme0n1"
+	case spec.AWS:
+		return "/dev/nvme1n1"
+	default:
+		f.t.Fatalf("unsupported cloud %q", f.c.Spec().Cloud)
+		return ""
+	}
+}
+
+func (f *diskStallFailer) Setup(ctx context.Context) {
+	dev := f.device()
+	f.c.Run(ctx, f.c.All(), `sudo umount /mnt/data1`)
+	f.c.Run(ctx, f.c.All(), `sudo dmsetup remove_all`)
+	f.c.Run(ctx, f.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+		`sudo dmsetup create data1`)
+	f.c.Run(ctx, f.c.All(), `sudo mount /dev/mapper/data1 /mnt/data1`)
+}
+
+func (f *diskStallFailer) Ready(ctx context.Context, m cluster.Monitor) {
+	f.m = m
+}
+
+func (f *diskStallFailer) Cleanup(ctx context.Context) {
+	f.c.Run(ctx, f.c.All(), `sudo dmsetup resume data1`)
+	// We have to stop the cluster to remount /mnt/data1.
+	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
+	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
+	f.c.Run(ctx, f.c.All(), `sudo umount /mnt/data1`)
+	f.c.Run(ctx, f.c.All(), `sudo dmsetup remove_all`)
+	f.c.Run(ctx, f.c.All(), `sudo mount /mnt/data1`)
+}
+
+func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
+	// Pebble's disk stall detector should crash the node.
+	f.m.ExpectDeath()
+	f.c.Run(ctx, f.c.Node(nodeID), `sudo dmsetup suspend --noflush --nolockfs data1`)
+}
+
+func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
+	f.c.Run(ctx, f.c.Node(nodeID), `sudo dmsetup resume data1`)
+	// Pebble's disk stall detector should have terminated the node, but in case
+	// it didn't, we explicitly stop it first.
+	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
 	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
 }
 
