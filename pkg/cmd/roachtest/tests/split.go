@@ -334,8 +334,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 		// up until it has been split off.
 		const query = `
 select concat('r', range_id::string) as range, voting_replicas
-from crdb_internal.ranges_no_leases
-where database_name = 'bank' and cardinality(voting_replicas) >= $1;`
+from [ SHOW RANGES FROM DATABASE bank ] where cardinality(voting_replicas) >= $1;`
 		tBegin := timeutil.Now()
 		m.Go(func(ctx context.Context) error {
 			opts, ch := retryOpts()
