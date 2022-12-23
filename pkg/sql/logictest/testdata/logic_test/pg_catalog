@@ -5700,7 +5700,14 @@ statement ok
 CREATE TABLE stxtbl(a INT, b INT, c INT);
 CREATE STATISTICS stxobj ON b, c FROM stxtbl;
 
-query TTOOTTT colnames
+statement ok
+CREATE SCHEMA test;
+CREATE TABLE test.stxtbl2(a INT, b INT, c INT);
+CREATE STATISTICS stxobj2 ON a, c FROM test.stxtbl2;
+CREATE TABLE stx(stx) AS SELECT generate_series(1,100);
+ANALYZE stx;
+
+query TTOOITT colnames
 SELECT
   relname,
   stxname,
@@ -5713,7 +5720,10 @@ FROM pg_statistic_ext
 JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
 ----
 relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
-stxtbl   stxobj   NULL          NULL      NULL           {2,3}    NULL
+stxtbl   stxobj   2178432656    NULL      -1             {2,3}    {d}
+stxtbl2  stxobj2  568579403     NULL      -1             {1,3}    {d}
+stx      NULL     2178432656    NULL      -1             {2}      {d}
+stx      NULL     2178432656    NULL      -1             {1}      {d}
 
 # Test that pg_shadow doesn't include roles that can't login
 query B colnames
@@ -5880,3 +5890,4 @@ WHERE
     AND t.typname LIKE 'myt%';
 ----
 0
+
