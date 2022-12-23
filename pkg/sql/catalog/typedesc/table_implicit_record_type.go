@@ -111,6 +111,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	}, nil
 }
 
+// TableIsHydrated checks if all visible columns of a table are hydrated.
 func TableIsHydrated(tbl catalog.TableDescriptor) bool {
 	for _, col := range tbl.VisibleColumns() {
 		if !ColumnIsHydrated(col) {
@@ -120,6 +121,7 @@ func TableIsHydrated(tbl catalog.TableDescriptor) bool {
 	return true
 }
 
+// ColumnIsHydrated checks if a column is type hydrated.
 func ColumnIsHydrated(col catalog.Column) bool {
 	return !col.GetType().UserDefined() || col.GetType().IsHydrated()
 }
