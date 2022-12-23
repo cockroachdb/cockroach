@@ -1313,7 +1313,7 @@ ALTER TABLE t_added ADD COLUMN dn DECIMAL(5, 2) GENERATED ALWAYS AS (NULL) VIRTU
 
 # Note that we really should not be able to add this column as the expression
 # does not fit into the type. See #81698.
-statement ok
+statement error pgcode 22003 type DECIMAL(5,2): value with precision 5, scale 2 must round to an absolute value less than 10^3
 ALTER TABLE t_added ADD COLUMN d DECIMAL(5, 2) GENERATED ALWAYS AS (123456.000000::DECIMAL) VIRTUAL;
 
 statement ok

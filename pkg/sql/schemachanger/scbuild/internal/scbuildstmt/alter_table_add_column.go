@@ -184,7 +184,7 @@ func alterTableAddColumn(
 		var txCtx transform.ExprTransformContext
 		// compute expression can have dependency to another column,
 		// in this case line below will throw an error and validation is not necessary
-		typedExpr, err := tree.TypeCheck(b, expr, b.SemaCtx(), d.Type.(*types.T))
+		typedExpr, err := tree.TypeCheck(b, expr, b.SemaCtx(), spec.colType.Type)
 		if err == nil {
 			typedExpr, err = txCtx.NormalizeExpr(b, b.EvalCtx(), typedExpr)
 			if err != nil {
@@ -195,7 +195,7 @@ func alterTableAddColumn(
 				panic(err)
 			}
 			// AdjustValueToType function does the validation
-			_, err = tree.AdjustValueToType(d.Type.(*types.T), datum)
+			_, err = tree.AdjustValueToType(spec.colType.Type, datum)
 			if err != nil {
 				panic(err)
 			}

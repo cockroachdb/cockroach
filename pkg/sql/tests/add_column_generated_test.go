@@ -39,7 +39,8 @@ func TestAddGeneratedColumnValidation(t *testing.T) {
 
 	_, err := db.Exec(`
 	CREATE TABLE t (i INT PRIMARY KEY);
-	INSERT INTO t VALUES (1);`)
+	INSERT INTO t VALUES (1);
+	CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');`)
 	if err != nil {
 		panic(err)
 	}
@@ -79,6 +80,13 @@ func TestAddGeneratedColumnValidation(t *testing.T) {
 	_, err = db.Exec(`ALTER TABLE t ADD COLUMN s4 BOOL AS (32768) VIRTUAL;`)
 	require.Error(t, err)
 	require.True(t, err.Error() == "pq: expected computed column expression to have type bool, but '32768' has type int")
+
+	_, err = db.Exec(`ALTER TABLE t ADD COLUMN w greeting AS ('hi') STORED;`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`ALTER TABLE t ADD COLUMN w2 greeting AS ('none') STORED;`)
+	require.Error(t, err)
+	require.True(t, err.Error() == "pq: invalid input value for enum greeting: \"none\"")
 
 	_, err = db.Exec(`INSERT INTO t VALUES (2);`)
 	require.NoError(t, err)
