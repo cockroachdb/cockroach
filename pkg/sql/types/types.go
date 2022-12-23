@@ -1179,9 +1179,9 @@ func MakeLabeledTuple(contents []*T, labels []string) *T {
 	}}
 }
 
-// MakeCompositeType constructs a new instance of a TupleFamily type with the
+// NewCompositeType constructs a new instance of a TupleFamily type with the
 // given field types and labels, and the given user-defined type OIDs.
-func MakeCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {
+func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {
 	if len(contents) != len(labels) && labels != nil {
 		panic(errors.AssertionFailedf(
 			"tuple contents and labels must be of same length: %v, %v", contents, labels))

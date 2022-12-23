@@ -15,10 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // HydrateTypesInTableDescriptor uses res to install metadata in the types
@@ -79,40 +78,77 @@ func HydrateTypesInSchemaDescriptor(
 	return nil
 }
 
+// ResolveHydratedTByOID is a convenience function which delegates to
+// HydratedTFromDesc after resolving a type descriptor by its OID.
+func ResolveHydratedTByOID(
+	ctx context.Context, oid oid.Oid, res catalog.TypeDescriptorResolver,
+) (*types.T, error) {
+	id := UserDefinedTypeOIDToID(oid)
+	name, desc, err := res.GetTypeDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return HydratedTFromDesc(ctx, &name, desc, res)
+}
+
+// HydratedTFromDesc returns a types.T corresponding to the type descriptor.
+// The types.T return value is hydrated using the provided name if possible.
+func HydratedTFromDesc(
+	ctx context.Context,
+	name *tree.TypeName,
+	desc catalog.TypeDescriptor,
+	res catalog.TypeDescriptorResolver,
+) (*types.T, error) {
+	t := desc.AsTypesT()
+	if err := ensureTypeIsHydratedRecursive(ctx, t, *name, desc, res); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
 // EnsureTypeIsHydrated makes sure that t is a fully-hydrated type.
 func EnsureTypeIsHydrated(
 	ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver,
+) error {
+	return ensureTypeIsHydratedRecursive(ctx, t, tree.TypeName{}, nil /* desc */, res)
+}
+
+func ensureTypeIsHydratedRecursive(
+	ctx context.Context,
+	t *types.T,
+	name tree.TypeName,
+	desc catalog.TypeDescriptor,
+	res catalog.TypeDescriptorResolver,
 ) error {
 	if !t.UserDefined() {
 		return nil
 	}
 	switch t.Family() {
 	case types.ArrayFamily:
-		if err := EnsureTypeIsHydrated(ctx, t.ArrayContents(), res); err != nil {
+		if err := ensureTypeIsHydratedRecursive(ctx, t.ArrayContents(), name, desc, res); err != nil {
 			return err
 		}
 	case types.TupleFamily:
 		for _, e := range t.TupleContents() {
-			if err := EnsureTypeIsHydrated(ctx, e, res); err != nil {
+			if err := ensureTypeIsHydratedRecursive(ctx, e, name, desc, res); err != nil {
 				return err
 			}
 		}
 	}
 	id := GetUserDefinedTypeDescID(t)
-	name, desc, err := res.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return err
+	if desc == nil || desc.GetID() != id {
+		var err error
+		name, desc, err = res.GetTypeDescriptor(ctx, id)
+		if err != nil {
+			return err
+		}
 	}
-	if t.Oid() != catid.TypeIDToOID(desc.GetID()) {
-		return errors.AssertionFailedf("unexpected mismatch during type hydration: "+
-			"type %s has OID %d, descriptor has ID %d", t, t.Oid(), desc.GetID())
-	}
-	ensureTypeMetadataIsHydrated(&t.TypeMeta, &name, desc)
+	ensureTypeMetadataIsHydrated(&t.TypeMeta, name, desc)
 	return nil
 }
 
 func ensureTypeMetadataIsHydrated(
-	tm *types.UserDefinedTypeMetadata, name *tree.TypeName, desc catalog.TypeDescriptor,
+	tm *types.UserDefinedTypeMetadata, name tree.TypeName, desc catalog.TypeDescriptor,
 ) {
 	if *tm != (types.UserDefinedTypeMetadata{}) && tm.Version == uint32(desc.GetVersion()) {
 		return

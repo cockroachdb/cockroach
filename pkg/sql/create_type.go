@@ -236,7 +236,7 @@ func CreateUserDefinedArrayTypeDesc(
 			contents[i] = e.ElementType
 			labels[i] = e.ElementLabel
 		}
-		elemTyp = types.MakeCompositeType(catid.TypeIDToOID(typDesc.GetID()), catid.TypeIDToOID(id), contents, labels)
+		elemTyp = types.NewCompositeType(catid.TypeIDToOID(typDesc.GetID()), catid.TypeIDToOID(id), contents, labels)
 	default:
 		return nil, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}

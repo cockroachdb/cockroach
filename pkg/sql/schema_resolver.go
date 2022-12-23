@@ -333,7 +333,7 @@ func (sr *schemaResolver) ResolveType(
 	tn := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), name.Object())
 	tdesc := desc.(catalog.TypeDescriptor)
 
-	// Disllow cross-database type resolution. Note that we check
+	// Disallow cross-database type resolution. Note that we check
 	// typeResolutionDbID != descpb.InvalidID when we have been restricted to
 	// accessing types in the database with ID = typeResolutionDbID by
 	// p.runWithOptions. So, check to see if the resolved descriptor's parentID
@@ -351,17 +351,12 @@ func (sr *schemaResolver) ResolveType(
 		return nil, err
 	}
 
-	return tdesc.MakeTypesT(ctx, &tn, sr)
+	return typedesc.HydratedTFromDesc(ctx, &tn, tdesc, sr)
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id := typedesc.UserDefinedTypeOIDToID(oid)
-	name, desc, err := sr.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return desc.MakeTypesT(ctx, &name, sr)
+	return typedesc.ResolveHydratedTByOID(ctx, oid, sr)
 }
 
 // GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.

@@ -2496,11 +2496,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	}
 
 	// Convert the enum descriptor into a type
-	enumName := tree.MakeQualifiedTypeName(systemDB.GetName(), "public", enumTypeDesc.GetName())
-	enumType, err := enumTypeDesc.MakeTypesT(ctx, &enumName, nil)
-	if err != nil {
-		return err
-	}
+	enumType := enumTypeDesc.AsTypesT()
 
 	getDescriptor := func(name string) (*tabledesc.Mutable, error) {
 		tableName := tree.MakeTableNameWithSchema(tree.Name("system"), tree.Name("public"), tree.Name(name))

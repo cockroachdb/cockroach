@@ -319,7 +319,7 @@ func makeCache() (*Cache, *Metrics, nstree.MutableCatalog, *descGetterTypeDescri
 }
 
 func mkTypeT(desc catalog.TypeDescriptor, name *tree.TypeName) *types.T {
-	typT, err := desc.MakeTypesT(context.Background(), name, nil)
+	typT, err := typedesc.HydratedTFromDesc(context.Background(), name, desc, nil /* res */)
 	if err != nil {
 		panic(err)
 	}
