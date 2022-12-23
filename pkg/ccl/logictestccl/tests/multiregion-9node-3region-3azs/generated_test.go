@@ -93,6 +93,13 @@ func TestCCLLogic_multi_region(
 	runCCLLogicTest(t, "multi_region")
 }
 
+func TestCCLLogic_multi_region_alter_table_regional_by_row(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_alter_table_regional_by_row")
+}
+
 func TestCCLLogic_multi_region_backup(
 	t *testing.T,
 ) {
