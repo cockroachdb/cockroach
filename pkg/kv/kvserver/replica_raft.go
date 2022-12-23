@@ -347,16 +347,25 @@ func (r *Replica) propose(
 	// Failure to propose will propagate to the client. An invariant of this
 	// package is that proposals which are finished carry a raft command with a
 	// MaxLeaseIndex equal to the proposal command's max lease index.
+	//
+	// TODO(during review): understand what's going on here. I'm keeping notes
+	// at https://github.com/cockroachdb/cockroach/issues/71148#issuecomment-1364104413.
+	// Clean up and write a comments.
 	defer func(prev uint64) {
 		if pErr != nil {
 			p.command.MaxLeaseIndex = prev
 		}
 	}(p.command.MaxLeaseIndex)
 
-	// Make sure the maximum lease index is unset. This field will be set in
-	// propBuf.Insert and its encoded bytes will be appended to the encoding
-	// buffer as a MaxLeaseFooter.
+	// Make sure the MaxLeaseIndex and ClosedTimestamp are unset.
+	//
+	// TODO(during review): I'm still figuring out the case in which they're
+	// set here, which has to do with `Replica.tryReproposeWithNewLeaseIndex`
+	// which is quite complex. I'd move the resetting to that caller, but
+	// then there is also this defer above which I also don't understand,
+	// so making small steps. But once I understand it, clean up.
 	p.command.MaxLeaseIndex = 0
+	p.command.ClosedTimestamp = nil
 
 	// Determine the encoding style for the Raft command.
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {

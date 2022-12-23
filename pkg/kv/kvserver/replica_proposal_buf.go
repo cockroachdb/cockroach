@@ -362,12 +362,6 @@ func (b *propBuf) flushLocked(ctx context.Context) error {
 	})
 }
 
-var closedTimestampPool = sync.Pool{
-	New: func() interface{} {
-		return &hlc.Timestamp{}
-	},
-}
-
 // FlushLockedWithRaftGroup flushes the commands from the proposal buffer and
 // resets the buffer back to an empty state. Each command is handed off to the
 // Raft proposals map, at which point they are owned by the Raft processor.
@@ -424,8 +418,31 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			log.Fatalf(ctx, "unexpected nil proposal in buffer")
 			return 0, nil // unreachable, for linter
 		}
+
 		buf[i] = nil // clear buffer
+		// A reproposal is a command we've already handed to raft (in an earlier
+		// invokation of this method) but which after not seeing it apply for a
+		// while have re-added to the propBuf via ReinsertLocked. The first time
+		// around, the command needs a MaxLeaseIndex and ClosedTimestamp. After
+		// that, we have to re-use the MaxLeaseIndex for correctness - this field
+		// exists precisely to make sure that out of multiple copies of the same
+		// command in the log, only the first will have an effect - and we do the
+		// same for ClosedTimestamp out of convenience.
 		reproposal := !p.tok.stillTracked()
+		if !reproposal {
+			if p.command.MaxLeaseIndex != 0 {
+				return 0, errors.AssertionFailedf("proposal unexpectedly has MLAI set: %+v", p)
+			}
+			if p.command.ClosedTimestamp != nil {
+				return 0, errors.AssertionFailedf("proposal unexpectedly has ClosedTimestamp set: %+v", p)
+			}
+		}
+
+		if !reproposal && (p.command.MaxLeaseIndex != 0 || p.command.ClosedTimestamp != nil) {
+			// NB: the converse isn't true, we don't assign MaxLeaseIndex and
+			// ClosedTimestamp to some requests such as leases.
+			return 0, errors.AssertionFailedf("proposals must not have MaxLeaseIndex or ClosedTimestamp set: %+v", p)
+		}
 
 		// Conditionally reject the proposal based on the state of the raft group.
 		if b.maybeRejectUnsafeProposalLocked(ctx, raftGroup, p) {
@@ -492,12 +509,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		}
 
 		var closedTimestamp hlc.Timestamp
-		// Figure out what closed timestamp this command will carry.
-		//
-		// If this is a reproposal, we don't reassign the LAI. We also don't
-		// reassign the closed timestamp: we could, in principle, but we'd have to
-		// make a copy of the encoded command as to not modify the copy that's
-		// already stored in the local replica's raft entry cache.
+		// Figure out what MaxLeaseIndex and ClosedTimestamp this command will carry.
+		// We initialize these only when we first see the proposal, see
+		// declaration of `reproposal` for details.
 		if !reproposal {
 			var lai uint64
 			var err error
@@ -506,19 +520,16 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				firstErr = err
 				continue
 			}
-			// Also assign MaxLeaseIndex to the in-memory copy. The in-memory copy is
-			// checked for sanity at application time, on the proposing replica. Note
-			// that if we catch any error below, this proposal will be rejected, so
-			// we can do this upfront.
+			// Also assign MaxLeaseIndex to the in-memory copy. Any errors in this
+			// method lead to the proposal failing and never entering raft, so we
+			// don't have to worry about resetting this on errors below.
 			p.command.MaxLeaseIndex = lai
-			// NB: we don't assign to p.command.ClosedTimestamp here because that
-			// would cause an allocation. It'd be nice to assign to it, for
-			// consistency, but nobody needs it. What we do instead is get memory from
-			// a sync.Pool just while we're marshaling the command, and reset the
-			// field again right after (see later use of `closedTimestamp`) variable.
-			// We could make the field nullable, see comment on
-			// p.command.ClosedTimestamp for context.
-			_ = closedTimestamp
+			// To avoid an allocation, p.command.ClosedTimestamp is backed by memory
+			// on `p`. We don't reassign the closed timestamp on reproposals; we could
+			// but there's limited benefit so better to handle it exactly like
+			// MaxLeaseIndex.
+			p.closedTimestamp = closedTimestamp
+			p.command.ClosedTimestamp = &p.closedTimestamp
 		}
 
 		testingSubmitProposalFilter := func(*ProposalData) (drop bool, err error) { return false, nil }
@@ -531,15 +542,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		if entryEncoding == raftlog.EntryEncodingStandard || entryEncoding == raftlog.EntryEncodingSideloaded {
 			// Allocate the data slice with just the right capacity. This is a hot
 			// path so we are careful to minimize allocations.
-			if closedTimestamp.IsSet() {
-				// See assignment to `closedTimestamp` above to understand
-				// closedTimestampPool. It's important that we do this before calling
-				// p.command.Size() below or that will be off.
-				ctp := closedTimestampPool.Get().(*hlc.Timestamp)
-				*ctp = closedTimestamp
-				p.command.ClosedTimestamp = ctp
-			}
-
 			data := p.preAlloc
 			p.preAlloc = nil
 			needed := raftlog.RaftCommandPrefixLen + p.command.Size()
@@ -565,10 +567,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			); err != nil {
 				firstErr = err
 				continue
-			}
-			if ctp := p.command.ClosedTimestamp; ctp != nil {
-				p.command.ClosedTimestamp = nil
-				closedTimestampPool.Put(ctp)
 			}
 
 			if drop, err := testingSubmitProposalFilter(p); drop || err != nil {
@@ -653,9 +651,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	if firstErr != nil {
 		return 0, firstErr
 	}
-	// TODO(during review): we've populated a bunch of in-mem state on the proposal, but
-	// if it fails (say ErrProposalDropped) are we sure we're not erroneously "re-using" some
-	// of that state? Page back in how that works and document it better.
 	return used, proposeBatch(raftGroup, b.p.getReplicaID(), ents)
 }
 

@@ -78,6 +78,10 @@ type ProposalData struct {
 	// to avoid shifting allocation work into propBuf's FlushLockedWithRaftGroup
 	// method. The buffer is sized to hold the fully encoded command.
 	preAlloc []byte
+	// closedTimestamp backs p.command.ClosedTimestamp to avoid an allocation.
+	// This is populated in (*propBuf).FlushLockedWithRaftGroup, together
+	// with p.command.MaxLeaseIndex.
+	closedTimestamp hlc.Timestamp
 
 	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
 	// proposal has been passed to raft modifying this field requires holding the

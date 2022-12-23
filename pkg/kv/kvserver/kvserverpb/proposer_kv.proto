@@ -332,13 +332,8 @@ message RaftCommand {
   // applies any more but changing a field from nullable to non-nullable can
   // have a migration concern, which would need to be investigated.
   //
-  // A negative effect of this nullability is an additional allocation on the
-  // leaseholder to populate this field, which is why we currently leave it
-  // unpopulated there[^3], except during marshaling.
-  //
   // [^1]: https://github.com/cockroachdb/cockroach/issues/85312
   // [^2]: https://github.com/cockroachdb/cockroach/pull/60992
-  // [^3]: See (*propBuf).FlushLockedWithRaftGroup().
   util.hlc.Timestamp closed_timestamp = 17;
 
   reserved 3;
