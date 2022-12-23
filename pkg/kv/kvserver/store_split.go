@@ -25,13 +25,13 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-// splitPreApply is called when the raft command is applied. Any
+// splitPostAddWithReplica is called when the raft command is applied. Any
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
 //
 // initClosedTS is the closed timestamp carried by the split command. It will be
 // used to initialize the new RHS range.
-func splitPreApply(
+func splitPostAddWithReplica(
 	ctx context.Context,
 	r *Replica,
 	readWriter storage.ReadWriter,
