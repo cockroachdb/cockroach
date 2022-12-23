@@ -398,8 +398,9 @@ func visitTableRanges(
 	ctx context.Context, t test.Test, conn *gosql.DB, m tableMetadata, f func(rangeID int) error,
 ) error {
 	t.Helper()
-	rows, err := conn.QueryContext(ctx, `select range_id from crdb_internal.ranges_no_leases where database_name = $1 and table_name = $2`,
-		m.databaseName, m.tableName)
+	rows, err := conn.QueryContext(
+		ctx, fmt.Sprintf(`SELECT range_id FROM [ SHOW RANGES FROM %s.%s ]`, m.databaseName, m.tableName),
+	)
 	if err != nil {
 		t.Fatalf("failed to run consistency check query on table: %s", err)
 	}
