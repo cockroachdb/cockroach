@@ -899,11 +899,6 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion().Version
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
-}
-
 // ClusterVersion returns the version of the table descriptor read from the
 // store, if any.
 //
@@ -1190,11 +1185,6 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 		}
 	}
 	return nil, colinfo.NewUndefinedColumnError(string(name))
-}
-
-// ContainsUserDefinedTypes implements the HydratableDescriptor interface.
-func (desc *wrapper) ContainsUserDefinedTypes() bool {
-	return len(desc.UserDefinedTypeColumns()) > 0
 }
 
 // FindFamilyByID implements the TableDescriptor interface.

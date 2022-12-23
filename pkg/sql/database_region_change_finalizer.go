@@ -255,10 +255,8 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 				}
 			}
 		}
-		if err := typedesc.HydrateTypesInTableDescriptor(
-			ctx,
-			tableDesc.TableDesc(),
-			r.localPlanner,
+		if err := typedesc.HydrateTypesInDescriptor(
+			ctx, tableDesc, r.localPlanner,
 		); err != nil {
 			return nil, nil, err
 		}

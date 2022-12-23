@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -58,9 +59,11 @@ func runImport(
 	// Install type metadata in all of the import tables.
 	importResolver := newImportTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, table.Desc, importResolver); err != nil {
+		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
+		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
 			return nil, err
 		}
+		table.Desc = cpy.TableDesc()
 	}
 
 	evalCtx := flowCtx.NewEvalCtx()

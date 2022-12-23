@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -957,9 +958,25 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 	return desc.rawBytesInStorage
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+	if desc.Alias != nil && catid.IsOIDUserDefined(desc.Alias.Oid()) {
+		if err := fn(desc.Alias); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	if desc.Composite == nil {
+		return nil
+	}
+	for _, e := range desc.Composite.Elements {
+		if !catid.IsOIDUserDefined(e.ElementType.Oid()) {
+			continue
+		}
+		if err := fn(e.ElementType); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
 // GetIDClosure implements the TypeDescriptor interface.

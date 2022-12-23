@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -235,17 +236,11 @@ type Descriptor interface {
 	// GetRawBytesInStorage returns the raw bytes (tag + data) of the descriptor in storage.
 	// It is exclusively used in the CPut when persisting an updated descriptor to storage.
 	GetRawBytesInStorage() []byte
-}
 
-// HydratableDescriptor represent a Descriptor which needs user-define type
-// hydration if it contains any UDT.
-type HydratableDescriptor interface {
-	Descriptor
-
-	// ContainsUserDefinedTypes returns whether or not this descriptor uses any
-	// user defined types. For example, a table column table can use user defined
-	// type and a function can use user defined type as an argument type.
-	ContainsUserDefinedTypes() bool
+	// ForEachUDTDependentForHydration iterates over all the user-defined types.T
+	// referenced by this descriptor which must be hydrated prior to using it.
+	// iterutil.StopIteration is supported.
+	ForEachUDTDependentForHydration(func(t *types.T) error) error
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -284,7 +279,7 @@ type DatabaseDescriptor interface {
 
 // TableDescriptor is an interface around the table descriptor types.
 type TableDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// TableDesc returns the backing protobuf for this database.
 	TableDesc() *descpb.TableDescriptor
@@ -878,7 +873,7 @@ type DefaultPrivilegeDescriptor interface {
 
 // FunctionDescriptor is an interface around the function descriptor types.
 type FunctionDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// GetReturnType returns the function's return type.
 	GetReturnType() descpb.FunctionDescriptor_ReturnType
@@ -1026,4 +1021,14 @@ func IsSystemDescriptor(desc Descriptor) bool {
 // for the legacy schema changer).
 func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
 	return desc.GetDeclarativeSchemaChangerState() != nil
+}
+
+// MaybeRequiresHydration returns false if the descriptor definitely does not
+// depend on any types.T being hydrated.
+func MaybeRequiresHydration(desc Descriptor) (ret bool) {
+	_ = desc.ForEachUDTDependentForHydration(func(t *types.T) error {
+		ret = true
+		return iterutil.StopIteration()
+	})
+	return ret
 }

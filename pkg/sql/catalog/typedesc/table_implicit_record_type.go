@@ -244,6 +244,11 @@ func (v TableImplicitRecordType) GetRawBytesInStorage() []byte {
 	return nil
 }
 
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (v TableImplicitRecordType) ForEachUDTDependentForHydration(_ func(t *types.T) error) error {
+	return nil
+}
+
 // TypeDesc implements the TypeDescriptor interface.
 func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	v.panicNotSupported("TypeDesc")
