@@ -455,13 +455,13 @@ func createChangefeedJobRecord(
 
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
-		normalized, err := validateAndNormalizeChangefeedExpression(
+		normalized, withDiff, err := validateAndNormalizeChangefeedExpression(
 			ctx, p, opts, changefeedStmt.Select, targetDescs, targets, statementTime,
 		)
 		if err != nil {
 			return nil, err
 		}
-		if normalized.RequiresPrev() {
+		if withDiff {
 			opts.ForceDiff()
 		}
 		// TODO: Set the default envelope to row here when using a sink and format
@@ -917,22 +917,21 @@ func validateAndNormalizeChangefeedExpression(
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 	targets []jobspb.ChangefeedTargetSpecification,
 	statementTime hlc.Timestamp,
-) (*cdceval.NormalizedSelectClause, error) {
+) (*cdceval.NormalizedSelectClause, bool, error) {
 	if len(descriptors) != 1 || len(targets) != 1 {
-		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
+		return nil, false, pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
 	}
 	var tableDescr catalog.TableDescriptor
 	for _, d := range descriptors {
 		tableDescr = d.(catalog.TableDescriptor)
 	}
 	splitColFams := opts.IsSet(changefeedbase.OptSplitColumnFamilies)
-	norm, err := cdceval.NormalizeExpression(
-		ctx, execCtx.ExecCfg(), execCtx.User(), execCtx.SessionData().SessionData,
+	norm, withDiff, err := cdceval.NormalizeExpression(ctx, execCtx,
 		tableDescr, statementTime, targets[0], sc, splitColFams)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return norm, nil
+	return norm, withDiff, nil
 }
 
 type changefeedResumer struct {

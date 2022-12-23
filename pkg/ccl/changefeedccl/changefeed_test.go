@@ -4785,7 +4785,7 @@ func TestCDCPrev(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 		// TODO(#85143): remove schema_change_policy='stop' from this test.
-		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT cdc_prev.b AS old FROM foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT (cdc_prev).b AS old FROM foo`)
 		defer closeFeed(t, foo)
 
 		// cdc_prev values are null during initial scan
@@ -6804,7 +6804,7 @@ CREATE TABLE foo (
 		{
 			name:   "no such column",
 			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT no_such_column FROM foo`,
-			err:    `column "foo.no_such_column" does not exist`,
+			err:    `column "no_such_column" does not exist`,
 		},
 		{
 			name:   "wrong type",
@@ -7008,7 +7008,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		},
 		{
 			name:           "alter enum use correct enum version",
-			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, cdc_prev.e AS prev_e FROM foo",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, (cdc_prev).e AS prev_e FROM foo",
 			initialPayload: []string{
 				`foo: [1, "one"]->{"e": "inactive", "prev_e": null}`,
 				`foo: [2, "two"]->{"e": "open", "prev_e": null}`,
