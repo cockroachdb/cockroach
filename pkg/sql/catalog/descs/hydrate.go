@@ -90,8 +90,8 @@ func (tc *Collection) hydrateDescriptors(
 			// was leased.
 			// TODO(ajwerner): Consider surfacing the mechanism used to retrieve the
 			// descriptor up to this layer.
-			if hd := desc.(catalog.HydratableDescriptor); tc.canUseHydratedDescriptorCache(hd.GetID()) {
-				if cached, err := tc.hydrated.GetHydratedDescriptor(ctx, hd, typeFn); err != nil {
+			if tc.canUseHydratedDescriptorCache(desc.GetID()) {
+				if cached, err := tc.hydrated.GetHydratedDescriptor(ctx, desc, typeFn); err != nil {
 					return err
 				} else if cached != nil {
 					descs[i] = cached
@@ -193,18 +193,24 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
 	typeLookupFunc := makeTypeLookupFuncForHydration(c, fakeLookupFunc)
-	return c.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if !isHydratable(desc) {
-			return nil
+	var hydratable []catalog.Descriptor
+	_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if isHydratable(desc) {
+			hydratable = append(hydratable, desc)
 		}
-		if _, isMutable := desc.(catalog.MutableDescriptor); isMutable {
-			return hydrate(ctx, desc, typeLookupFunc)
-		}
-		// Deep-copy the immutable descriptor and overwrite the catalog entry.
-		desc = desc.NewBuilder().BuildImmutable()
-		defer c.UpsertDescriptor(desc)
-		return hydrate(ctx, desc, typeLookupFunc)
+		return nil
 	})
+	for _, desc := range hydratable {
+		if _, isMutable := desc.(catalog.MutableDescriptor); !isMutable {
+			// Deep-copy the immutable descriptor and overwrite the catalog entry.
+			desc = desc.NewBuilder().BuildImmutable()
+			c.UpsertDescriptor(desc)
+		}
+		if err := hydrate(ctx, desc, typeLookupFunc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (tc *Collection) canUseHydratedDescriptorCache(id descpb.ID) bool {
@@ -225,8 +231,7 @@ func isHydratable(desc catalog.Descriptor) bool {
 		// Don't hydrate dropped descriptors.
 		return false
 	}
-	hd, ok := desc.(catalog.HydratableDescriptor)
-	return ok && hd.ContainsUserDefinedTypes()
+	return catalog.MaybeRequiresHydration(desc)
 }
 
 // hydrate ensures that type metadata is present in any type.T objects
@@ -238,16 +243,7 @@ func hydrate(
 	if !isHydratable(desc) {
 		return nil
 	}
-
-	switch t := desc.(type) {
-	case catalog.TableDescriptor:
-		return typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typeLookupFunc)
-	case catalog.SchemaDescriptor:
-		return typedesc.HydrateTypesInSchemaDescriptor(ctx, t.SchemaDesc(), typeLookupFunc)
-	case catalog.FunctionDescriptor:
-		return typedesc.HydrateTypesInFunctionDescriptor(ctx, t.FuncDesc(), typeLookupFunc)
-	}
-	return errors.AssertionFailedf("unknown hydratable type %T", desc)
+	return typedesc.HydrateTypesInDescriptor(ctx, desc, typeLookupFunc)
 }
 
 // makeTypeLookupFuncForHydration builds a typedesc.TypeLookupFunc for the

@@ -17,65 +17,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
-// HydrateTypesInTableDescriptor uses res to install metadata in the types
-// present in a table descriptor. res retrieves the fully qualified name and
-// descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(
-	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
+// HydrateTypesInDescriptor ensures that all types that the descriptor is
+// depending on are hydrated.
+func HydrateTypesInDescriptor(
+	ctx context.Context, desc catalog.Descriptor, res catalog.TypeDescriptorResolver,
 ) error {
-	for i := range desc.Columns {
-		if err := EnsureTypeIsHydrated(ctx, desc.Columns[i].Type, res); err != nil {
-			return err
-		}
-	}
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		if col := mut.GetColumn(); col != nil {
-			if err := EnsureTypeIsHydrated(ctx, col.Type, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// HydrateTypesInFunctionDescriptor uses res to install metadata in the types
-// present in a function descriptor.
-func HydrateTypesInFunctionDescriptor(
-	ctx context.Context, desc *descpb.FunctionDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for i := range desc.Params {
-		if err := EnsureTypeIsHydrated(ctx, desc.Params[i].Type, res); err != nil {
-			return err
-		}
-	}
-	if err := EnsureTypeIsHydrated(ctx, desc.GetReturnType().Type, res); err != nil {
-		return err
-	}
-	return nil
-}
-
-// HydrateTypesInSchemaDescriptor uses res to install metadata in the types
-// present in a function descriptor.
-func HydrateTypesInSchemaDescriptor(
-	ctx context.Context, desc *descpb.SchemaDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for _, f := range desc.Functions {
-		for i := range f.Overloads {
-			for _, t := range f.Overloads[i].ArgTypes {
-				if err := EnsureTypeIsHydrated(ctx, t, res); err != nil {
-					return err
-				}
-			}
-			if err := EnsureTypeIsHydrated(ctx, f.Overloads[i].ReturnType, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return desc.ForEachUDTDependentForHydration(func(t *types.T) error {
+		return EnsureTypeIsHydrated(ctx, t, res)
+	})
 }
 
 // ResolveHydratedTByOID is a convenience function which delegates to
@@ -100,7 +53,7 @@ func HydratedTFromDesc(
 	res catalog.TypeDescriptorResolver,
 ) (*types.T, error) {
 	t := desc.AsTypesT()
-	if err := ensureTypeIsHydratedRecursive(ctx, t, *name, desc, res); err != nil {
+	if err := ensureTypeIsHydratedRecursive(ctx, t, name, desc, res); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -110,70 +63,88 @@ func HydratedTFromDesc(
 func EnsureTypeIsHydrated(
 	ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver,
 ) error {
-	return ensureTypeIsHydratedRecursive(ctx, t, tree.TypeName{}, nil /* desc */, res)
+	return ensureTypeIsHydratedRecursive(ctx, t, nil /* maybeName */, nil /* maybeDesc */, res)
 }
 
 func ensureTypeIsHydratedRecursive(
 	ctx context.Context,
 	t *types.T,
-	name tree.TypeName,
-	desc catalog.TypeDescriptor,
+	maybeName *tree.TypeName,
+	maybeDesc catalog.TypeDescriptor,
 	res catalog.TypeDescriptorResolver,
 ) error {
-	if !t.UserDefined() {
-		return nil
-	}
 	switch t.Family() {
 	case types.ArrayFamily:
-		if err := ensureTypeIsHydratedRecursive(ctx, t.ArrayContents(), name, desc, res); err != nil {
+		e := t.ArrayContents()
+		if err := ensureTypeIsHydratedRecursive(ctx, e, maybeName, maybeDesc, res); err != nil {
 			return err
 		}
 	case types.TupleFamily:
 		for _, e := range t.TupleContents() {
-			if err := ensureTypeIsHydratedRecursive(ctx, e, name, desc, res); err != nil {
+			if err := ensureTypeIsHydratedRecursive(ctx, e, maybeName, maybeDesc, res); err != nil {
 				return err
 			}
 		}
 	}
-	id := GetUserDefinedTypeDescID(t)
-	if desc == nil || desc.GetID() != id {
-		var err error
-		name, desc, err = res.GetTypeDescriptor(ctx, id)
-		if err != nil {
-			return err
+	// Ensure that we have the descriptor for a user-defined type.
+	// Note that non-user-defined types may or may not have descriptors
+	// but still need to be hydrated using the name.
+	if t.UserDefined() {
+		id := GetUserDefinedTypeDescID(t)
+		if maybeDesc == nil || maybeDesc.GetID() != id {
+			if res == nil {
+				return errors.AssertionFailedf("expected non-nil catalog.TypeDescriptorResolver")
+			}
+			var err error
+			var name tree.TypeName
+			name, maybeDesc, err = res.GetTypeDescriptor(ctx, id)
+			if err != nil {
+				return err
+			}
+			maybeName = &name
 		}
 	}
-	ensureTypeMetadataIsHydrated(&t.TypeMeta, name, desc)
+	ensureTypeMetadataIsHydrated(&t.TypeMeta, maybeName, maybeDesc)
 	return nil
 }
 
 func ensureTypeMetadataIsHydrated(
-	tm *types.UserDefinedTypeMetadata, name tree.TypeName, desc catalog.TypeDescriptor,
+	tm *types.UserDefinedTypeMetadata, maybeName *tree.TypeName, maybeDesc catalog.TypeDescriptor,
 ) {
-	if *tm != (types.UserDefinedTypeMetadata{}) && tm.Version == uint32(desc.GetVersion()) {
+	var version uint32
+	if maybeDesc != nil {
+		version = uint32(maybeDesc.GetVersion())
+	} else if maybeName == nil {
+		// Return early because there's nothing to hydrate with.
 		return
 	}
-	*tm = types.UserDefinedTypeMetadata{
-		Name: &types.UserDefinedTypeName{
-			Catalog:        name.Catalog(),
-			ExplicitSchema: name.ExplicitSchema,
-			Schema:         name.Schema(),
-			Name:           name.Object(),
-		},
-		Version: uint32(desc.GetVersion()),
+	if *tm != (types.UserDefinedTypeMetadata{}) && tm.Version == version {
+		return
 	}
-	switch desc.GetKind() {
+	tm.Version = version
+	if maybeName != nil {
+		tm.Name = &types.UserDefinedTypeName{
+			Catalog:        maybeName.Catalog(),
+			ExplicitSchema: maybeName.ExplicitSchema,
+			Schema:         maybeName.Schema(),
+			Name:           maybeName.Object(),
+		}
+	}
+	if maybeDesc == nil {
+		return
+	}
+	switch maybeDesc.GetKind() {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		n := desc.NumEnumMembers()
+		n := maybeDesc.NumEnumMembers()
 		tm.EnumData = &types.EnumMetadata{
 			LogicalRepresentations:  make([]string, n),
 			PhysicalRepresentations: make([][]byte, n),
 			IsMemberReadOnly:        make([]bool, n),
 		}
 		for i := 0; i < n; i++ {
-			tm.EnumData.LogicalRepresentations[i] = desc.GetMemberLogicalRepresentation(i)
-			tm.EnumData.PhysicalRepresentations[i] = desc.GetMemberPhysicalRepresentation(i)
-			tm.EnumData.IsMemberReadOnly[i] = desc.IsMemberReadOnly(i)
+			tm.EnumData.LogicalRepresentations[i] = maybeDesc.GetMemberLogicalRepresentation(i)
+			tm.EnumData.PhysicalRepresentations[i] = maybeDesc.GetMemberPhysicalRepresentation(i)
+			tm.EnumData.IsMemberReadOnly[i] = maybeDesc.IsMemberReadOnly(i)
 		}
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		tm.ImplicitRecordType = true

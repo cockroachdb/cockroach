@@ -151,7 +151,7 @@ func (c *rowFetcherCache) tableDescForKey(
 	// Immediately release the lease, since we only need it for the exact
 	// timestamp requested.
 	desc.Release(ctx)
-	if tableDesc.ContainsUserDefinedTypes() {
+	if catalog.MaybeRequiresHydration(tableDesc) {
 		tableDesc, err = refreshUDT(ctx, tableID, c.db, c.collection, ts)
 		if err != nil {
 			return nil, family, err

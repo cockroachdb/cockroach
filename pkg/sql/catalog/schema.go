@@ -17,7 +17,7 @@ import (
 
 // SchemaDescriptor encapsulates the basic
 type SchemaDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// SchemaKind indicates whether this descriptor
 	SchemaKind() ResolvedSchemaKind
