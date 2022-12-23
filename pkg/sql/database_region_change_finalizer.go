@@ -249,10 +249,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		for i := range tableDesc.Columns {
 			col := &tableDesc.Columns[i]
 			if col.Type.UserDefined() {
-				tid, err := typedesc.UserDefinedTypeOIDToID(col.Type.Oid())
-				if err != nil {
-					return nil, nil, err
-				}
+				tid := typedesc.UserDefinedTypeOIDToID(col.Type.Oid())
 				if tid == r.typeID {
 					col.Type.TypeMeta = types.UserDefinedTypeMetadata{}
 				}

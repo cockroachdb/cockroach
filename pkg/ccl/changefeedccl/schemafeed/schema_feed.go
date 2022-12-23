@@ -197,27 +197,18 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 	}
 }
 
-func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) error {
+func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
 	for _, col := range tbl.UserDefinedTypeColumns() {
-		id, err := typedesc.UserDefinedTypeOIDToID(col.GetType().Oid())
-		if err != nil {
-			return err
-		}
+		id := typedesc.UserDefinedTypeOIDToID(col.GetType().Oid())
 		t.removeDependency(id, tbl.GetID())
 	}
-
-	return nil
 }
 
-func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) error {
+func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
 	for _, col := range tbl.UserDefinedTypeColumns() {
-		id, err := typedesc.UserDefinedTypeOIDToID(col.GetType().Oid())
-		if err != nil {
-			return err
-		}
+		id := typedesc.UserDefinedTypeOIDToID(col.GetType().Oid())
 		t.addDependency(id, tbl.GetID())
 	}
-	return nil
 }
 
 func (t *typeDependencyTracker) containsType(id descpb.ID) bool {
@@ -301,10 +292,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	// Register all types used by the initial set of tables.
 	for _, desc := range initialDescs {
 		tbl := desc.(catalog.TableDescriptor)
-		if err := tf.mu.typeDeps.ingestTable(tbl); err != nil {
-			tf.mu.Unlock()
-			return err
-		}
+		tf.mu.typeDeps.ingestTable(tbl)
 	}
 	tf.mu.Unlock()
 
@@ -548,9 +536,7 @@ func (tf *schemaFeed) validateDescriptor(
 			}
 
 			// Purge the old version of the table from the type mapping.
-			if err := tf.mu.typeDeps.purgeTable(lastVersion); err != nil {
-				return err
-			}
+			tf.mu.typeDeps.purgeTable(lastVersion)
 
 			e := TableEvent{
 				Before: lastVersion,
@@ -576,9 +562,7 @@ func (tf *schemaFeed) validateDescriptor(
 			}
 		}
 		// Add the types used by the table into the dependency tracker.
-		if err := tf.mu.typeDeps.ingestTable(desc); err != nil {
-			return err
-		}
+		tf.mu.typeDeps.ingestTable(desc)
 		tf.mu.previousTableVersion[desc.GetID()] = desc
 		return nil
 	default:

@@ -3313,10 +3313,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, nil
 				}
 
-				id, err := typedesc.UserDefinedTypeOIDToID(ooid)
-				if err != nil {
-					return false, err
-				}
+				id := typedesc.UserDefinedTypeOIDToID(ooid)
 
 				sc, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
 				if err != nil || typDesc == nil {

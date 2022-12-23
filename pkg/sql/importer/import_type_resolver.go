@@ -48,10 +48,7 @@ func (i importTypeResolver) ResolveType(
 }
 
 func (i importTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id, err := typedesc.UserDefinedTypeOIDToID(oid)
-	if err != nil {
-		return nil, err
-	}
+	id := typedesc.UserDefinedTypeOIDToID(oid)
 	name, desc, err := i.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err

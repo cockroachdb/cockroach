@@ -1569,10 +1569,7 @@ func (f *ExprFmtCtx) formatDependencies(
 		n.Child(f.Buffer.String())
 	}
 	for _, typ := range f.Memo.Metadata().AllUserDefinedTypes() {
-		typeID, err := catid.UserDefinedOIDToID(typ.Oid())
-		if err != nil {
-			panic(err)
-		}
+		typeID := catid.UserDefinedOIDToID(typ.Oid())
 		if typeDeps.Contains(int(typeID)) {
 			n.Child(typ.Name())
 		}

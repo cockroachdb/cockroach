@@ -677,10 +677,9 @@ func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.FuncParamClass 
 	return 0
 }
 
-// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID. OID of a
-// UDF must be greater CockroachPredefinedOIDMax. The function returns an error
-// if the given OID is less than or equal to CockroachPredefinedOIDMax.
-func UserDefinedFunctionOIDToID(oid oid.Oid) (descpb.ID, error) {
+// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID.
+// Returns zero if the OID is not for something user-defined.
+func UserDefinedFunctionOIDToID(oid oid.Oid) descpb.ID {
 	return catid.UserDefinedOIDToID(oid)
 }
 

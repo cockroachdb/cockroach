@@ -356,10 +356,7 @@ func (sr *schemaResolver) ResolveType(
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id, err := typedesc.UserDefinedTypeOIDToID(oid)
-	if err != nil {
-		return nil, err
-	}
+	id := typedesc.UserDefinedTypeOIDToID(oid)
 	name, desc, err := sr.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
@@ -598,10 +595,7 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 
 	flags := sr.CommonLookupFlagsRequired()
 	flags.ParentID = sr.typeResolutionDbID
-	descID, err := funcdesc.UserDefinedFunctionOIDToID(oid)
-	if err != nil {
-		return "", nil, err
-	}
+	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
 	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID,
 		tree.ObjectLookupFlags{CommonLookupFlags: flags})
 	if err != nil {
