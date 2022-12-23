@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
@@ -1496,9 +1497,9 @@ func generateWindowFrame(
 			// We can assume that there is exactly one ordering column of an additive
 			// type, since we checked above.
 			colIdx := ordering.Columns[0].ColIdx
-			colEncoding := descpb.DatumEncoding_ASCENDING_KEY
+			colEncoding := catenumpb.DatumEncoding_ASCENDING_KEY
 			if ordering.Columns[0].Direction == execinfrapb.Ordering_Column_DESC {
-				colEncoding = descpb.DatumEncoding_DESCENDING_KEY
+				colEncoding = catenumpb.DatumEncoding_DESCENDING_KEY
 			}
 			offsetType := colexecwindow.GetOffsetTypeFromOrderColType(t, inputTypes[colIdx])
 			startOffset := colexectestutils.MakeRandWindowFrameRangeOffset(t, rng, offsetType)

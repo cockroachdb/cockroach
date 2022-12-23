@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",

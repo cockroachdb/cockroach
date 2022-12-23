@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -107,8 +108,8 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				Name:                "pk",
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeyColumnNames:      []string{"a"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestIndexDescriptorVersion,
 				ConstraintID:        1,
 			},

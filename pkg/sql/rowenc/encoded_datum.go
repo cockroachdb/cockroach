@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -29,14 +29,14 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// EncodingDirToDatumEncoding returns an equivalent descpb.DatumEncoding for the given
+// EncodingDirToDatumEncoding returns an equivalent catenumpb.DatumEncoding for the given
 // encoding direction.
-func EncodingDirToDatumEncoding(dir encoding.Direction) descpb.DatumEncoding {
+func EncodingDirToDatumEncoding(dir encoding.Direction) catenumpb.DatumEncoding {
 	switch dir {
 	case encoding.Ascending:
-		return descpb.DatumEncoding_ASCENDING_KEY
+		return catenumpb.DatumEncoding_ASCENDING_KEY
 	case encoding.Descending:
-		return descpb.DatumEncoding_DESCENDING_KEY
+		return catenumpb.DatumEncoding_DESCENDING_KEY
 	default:
 		panic(errors.AssertionFailedf("invalid encoding direction: %d", dir))
 	}
@@ -47,7 +47,7 @@ func EncodingDirToDatumEncoding(dir encoding.Direction) descpb.DatumEncoding {
 // reencoding.
 type EncDatum struct {
 	// Encoding type. Valid only if encoded is not nil.
-	encoding descpb.DatumEncoding
+	encoding catenumpb.DatumEncoding
 
 	// Encoded datum (according to the encoding field).
 	encoded []byte
@@ -127,7 +127,7 @@ func (ed EncDatum) DiskSize() uintptr {
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
 // The underlying Datum is nil.
-func EncDatumFromEncoded(enc descpb.DatumEncoding, encoded []byte) EncDatum {
+func EncDatumFromEncoded(enc catenumpb.DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
 		panic(errors.AssertionFailedf("empty encoded value"))
 	}
@@ -143,13 +143,13 @@ func EncDatumFromEncoded(enc descpb.DatumEncoding, encoded []byte) EncDatum {
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
 func EncDatumFromBuffer(
-	typ *types.T, enc descpb.DatumEncoding, buf []byte,
+	typ *types.T, enc catenumpb.DatumEncoding, buf []byte,
 ) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
 		return EncDatum{}, nil, errors.New("empty encoded value")
 	}
 	switch enc {
-	case descpb.DatumEncoding_ASCENDING_KEY, descpb.DatumEncoding_DESCENDING_KEY:
+	case catenumpb.DatumEncoding_ASCENDING_KEY, catenumpb.DatumEncoding_DESCENDING_KEY:
 		var encLen int
 		var err error
 		encLen, err = encoding.PeekLength(buf)
@@ -158,7 +158,7 @@ func EncDatumFromBuffer(
 		}
 		ed := EncDatumFromEncoded(enc, buf[:encLen])
 		return ed, buf[encLen:], nil
-	case descpb.DatumEncoding_VALUE:
+	case catenumpb.DatumEncoding_VALUE:
 		typeOffset, encLen, err := encoding.PeekValueLength(buf)
 		if err != nil {
 			return EncDatum{}, nil, err
@@ -171,7 +171,7 @@ func EncDatumFromBuffer(
 }
 
 // EncDatumValueFromBufferWithOffsetsAndType is just like calling
-// EncDatumFromBuffer with descpb.DatumEncoding_VALUE, except it expects that you pass
+// EncDatumFromBuffer with catenumpb.DatumEncoding_VALUE, except it expects that you pass
 // in the result of calling DecodeValueTag on the input buf. Use this if you've
 // already called DecodeValueTag on buf already, to avoid it getting called
 // more than necessary.
@@ -182,7 +182,7 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 	if err != nil {
 		return EncDatum{}, nil, err
 	}
-	ed := EncDatumFromEncoded(descpb.DatumEncoding_VALUE, buf[typeOffset:encLen])
+	ed := EncDatumFromEncoded(catenumpb.DatumEncoding_VALUE, buf[typeOffset:encLen])
 	return ed, buf[encLen:], nil
 }
 
@@ -221,11 +221,11 @@ func (ed *EncDatum) IsNull() bool {
 		panic(errors.AssertionFailedf("IsNull on unset EncDatum"))
 	}
 	switch ed.encoding {
-	case descpb.DatumEncoding_ASCENDING_KEY, descpb.DatumEncoding_DESCENDING_KEY:
+	case catenumpb.DatumEncoding_ASCENDING_KEY, catenumpb.DatumEncoding_DESCENDING_KEY:
 		_, isNull := encoding.DecodeIfNull(ed.encoded)
 		return isNull
 
-	case descpb.DatumEncoding_VALUE:
+	case catenumpb.DatumEncoding_VALUE:
 		_, _, _, typ, err := encoding.DecodeValueTag(ed.encoded)
 		if err != nil {
 			panic(errors.WithAssertionFailure(err))
@@ -248,11 +248,11 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *tree.DatumAlloc) error {
 	var err error
 	var rem []byte
 	switch ed.encoding {
-	case descpb.DatumEncoding_ASCENDING_KEY:
+	case catenumpb.DatumEncoding_ASCENDING_KEY:
 		ed.Datum, rem, err = keyside.Decode(a, typ, ed.encoded, encoding.Ascending)
-	case descpb.DatumEncoding_DESCENDING_KEY:
+	case catenumpb.DatumEncoding_DESCENDING_KEY:
 		ed.Datum, rem, err = keyside.Decode(a, typ, ed.encoded, encoding.Descending)
-	case descpb.DatumEncoding_VALUE:
+	case catenumpb.DatumEncoding_VALUE:
 		ed.Datum, rem, err = valueside.Decode(a, typ, ed.encoded)
 	default:
 		return errors.AssertionFailedf("unknown encoding %d", redact.Safe(ed.encoding))
@@ -270,7 +270,7 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *tree.DatumAlloc) error {
 
 // Encoding returns the encoding that is already available (the latter indicated
 // by the bool return value).
-func (ed *EncDatum) Encoding() (descpb.DatumEncoding, bool) {
+func (ed *EncDatum) Encoding() (catenumpb.DatumEncoding, bool) {
 	if ed.encoded == nil {
 		return 0, false
 	}
@@ -279,10 +279,10 @@ func (ed *EncDatum) Encoding() (descpb.DatumEncoding, bool) {
 
 // Encode appends the encoded datum to the given slice using the requested
 // encoding.
-// Note: descpb.DatumEncoding_VALUE encodings are not unique because they can contain
+// Note: catenumpb.DatumEncoding_VALUE encodings are not unique because they can contain
 // a column ID so they should not be used to test for equality.
 func (ed *EncDatum) Encode(
-	typ *types.T, a *tree.DatumAlloc, enc descpb.DatumEncoding, appendTo []byte,
+	typ *types.T, a *tree.DatumAlloc, enc catenumpb.DatumEncoding, appendTo []byte,
 ) ([]byte, error) {
 	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches that we can use.
@@ -292,11 +292,11 @@ func (ed *EncDatum) Encode(
 		return nil, err
 	}
 	switch enc {
-	case descpb.DatumEncoding_ASCENDING_KEY:
+	case catenumpb.DatumEncoding_ASCENDING_KEY:
 		return keyside.Encode(appendTo, ed.Datum, encoding.Ascending)
-	case descpb.DatumEncoding_DESCENDING_KEY:
+	case catenumpb.DatumEncoding_DESCENDING_KEY:
 		return keyside.Encode(appendTo, ed.Datum, encoding.Descending)
-	case descpb.DatumEncoding_VALUE:
+	case catenumpb.DatumEncoding_VALUE:
 		return valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum, nil /* scratch */)
 	default:
 		panic(errors.AssertionFailedf("unknown encoding requested %s", enc))
@@ -340,7 +340,7 @@ func (ed *EncDatum) Fingerprint(
 		// when already present, but it doesn't seem worth it at this point.
 		// TODO(yuzefovich): consider reusing the descending key encoding when
 		// already present.
-		fingerprint, err = ed.Encode(typ, a, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
+		fingerprint, err = ed.Encode(typ, a, catenumpb.DatumEncoding_ASCENDING_KEY, appendTo)
 	}
 	if err == nil && acc != nil {
 		return fingerprint, acc.Grow(ctx, int64(ed.Size()-memUsageBefore))
@@ -360,9 +360,9 @@ func (ed *EncDatum) Compare(
 	// one would be faster to use?
 	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
 		switch ed.encoding {
-		case descpb.DatumEncoding_ASCENDING_KEY:
+		case catenumpb.DatumEncoding_ASCENDING_KEY:
 			return bytes.Compare(ed.encoded, rhs.encoded), nil
-		case descpb.DatumEncoding_DESCENDING_KEY:
+		case catenumpb.DatumEncoding_DESCENDING_KEY:
 			return bytes.Compare(rhs.encoded, ed.encoded), nil
 		}
 	}
@@ -387,21 +387,21 @@ func (ed *EncDatum) GetInt() (int64, error) {
 	}
 
 	switch ed.encoding {
-	case descpb.DatumEncoding_ASCENDING_KEY:
+	case catenumpb.DatumEncoding_ASCENDING_KEY:
 		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
 			return 0, errors.Errorf("NULL INT value")
 		}
 		_, val, err := encoding.DecodeVarintAscending(ed.encoded)
 		return val, err
 
-	case descpb.DatumEncoding_DESCENDING_KEY:
+	case catenumpb.DatumEncoding_DESCENDING_KEY:
 		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
 			return 0, errors.Errorf("NULL INT value")
 		}
 		_, val, err := encoding.DecodeVarintDescending(ed.encoded)
 		return val, err
 
-	case descpb.DatumEncoding_VALUE:
+	case catenumpb.DatumEncoding_VALUE:
 		_, dataOffset, _, typ, err := encoding.DecodeValueTag(ed.encoded)
 		if err != nil {
 			return 0, err

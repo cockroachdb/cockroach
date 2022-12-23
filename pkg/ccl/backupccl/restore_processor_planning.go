@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -140,7 +140,7 @@ func distRestore(
 			Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
 				{
 					Column:   0,
-					Encoding: descpb.DatumEncoding_ASCENDING_KEY,
+					Encoding: catenumpb.DatumEncoding_ASCENDING_KEY,
 				},
 			},
 		}

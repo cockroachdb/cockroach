@@ -25,6 +25,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":catformat"],
     deps = [
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",

@@ -8,20 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-syntax = "proto3";
-
-package cockroach.sql.catalog.catpb;
-option go_package = "catpb";
-
-import "gogoproto/gogo.proto";
-
-// IndexColumn contains an enum used to represent the direction of a column
-// in an index key.
-message IndexColumn {
-
-  // IndexColumn_Direction refers to the direction of a column in an index.
-  enum Direction {
-    ASC = 0;
-    DESC = 1;
-  }
-}
+// Package catenumpb contains enum definitions from catalog in order to keep
+// catenumpb very low dependency.
+package catenumpb

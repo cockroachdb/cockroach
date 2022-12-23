@@ -15,7 +15,7 @@ option go_package = "descpb";
 
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
-import "sql/catalog/catpb/index.proto";
+import "sql/catalog/catenumpb/index.proto";
 import "geo/geoindex/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
@@ -94,7 +94,7 @@ message IndexFetchSpec {
   // EncodingType represents what sort of k/v encoding is used to store the
   // table data.
   optional uint32 encoding_type = 8 [(gogoproto.nullable) = false,
-                                     (gogoproto.casttype) = "IndexDescriptorEncodingType"];
+                                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb.IndexDescriptorEncodingType"];
 
   // NumKeySuffixColumns is the number of suffix columns (corresponding to a
   // suffix of KeyAndSuffixColumns).
