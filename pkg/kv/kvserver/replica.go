@@ -331,6 +331,9 @@ type Replica struct {
 		// scheduled for destruction or has been GCed.
 		// destroyStatus should only be set while also holding the raftMu and
 		// readOnlyCmdMu.
+		//
+		// When this replica is being removed, the destroyStatus is updated and
+		// RangeTombstone is written in the same raftMu critical section.
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
