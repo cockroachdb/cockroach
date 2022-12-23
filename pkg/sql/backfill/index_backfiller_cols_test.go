@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/stretchr/testify/require"
 )
@@ -406,9 +407,9 @@ func (fi fakeIndex) CollectSecondaryStoredColumnIDs() catalog.TableColSet {
 	return catalog.MakeTableColSet(fi.secondaryValueCols...)
 }
 
-func (fi fakeIndex) GetEncodingType() descpb.IndexDescriptorEncodingType {
+func (fi fakeIndex) GetEncodingType() catenumpb.IndexDescriptorEncodingType {
 	if fi.primary {
-		return descpb.PrimaryIndexEncoding
+		return catenumpb.PrimaryIndexEncoding
 	}
-	return descpb.SecondaryIndexEncoding
+	return catenumpb.SecondaryIndexEncoding
 }

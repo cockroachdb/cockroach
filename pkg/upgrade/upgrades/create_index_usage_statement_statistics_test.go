@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -162,14 +163,14 @@ func getStatementStatisticsNoIndexDescriptor() *descpb.TableDescriptor {
 				"app_name",
 				"node_id",
 			},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{
-				catpb.IndexColumn_ASC,
-				catpb.IndexColumn_ASC,
-				catpb.IndexColumn_ASC,
-				catpb.IndexColumn_ASC,
-				catpb.IndexColumn_ASC,
-				catpb.IndexColumn_ASC,
-				catpb.IndexColumn_ASC,
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+				catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC,
+				catenumpb.IndexColumn_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
 			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -196,9 +197,9 @@ func getStatementStatisticsNoIndexDescriptor() *descpb.TableDescriptor {
 					"fingerprint_id",
 					"transaction_fingerprint_id",
 				},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{
-					catpb.IndexColumn_ASC,
-					catpb.IndexColumn_ASC,
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs:       []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},

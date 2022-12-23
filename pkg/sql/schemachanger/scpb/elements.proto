@@ -12,8 +12,8 @@ syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
 option go_package = "scpb";
 
+import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
-import "sql/catalog/catpb/index.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 import "geo/geoindex/config.proto";

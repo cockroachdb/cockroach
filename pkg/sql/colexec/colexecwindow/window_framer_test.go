@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -355,9 +355,9 @@ func initWindowFramers(
 
 	datums, colBuffer := makeSortedPartition(testCfg)
 
-	datumEncoding := descpb.DatumEncoding_ASCENDING_KEY
+	datumEncoding := catenumpb.DatumEncoding_ASCENDING_KEY
 	if !testCfg.asc {
-		datumEncoding = descpb.DatumEncoding_DESCENDING_KEY
+		datumEncoding = catenumpb.DatumEncoding_DESCENDING_KEY
 	}
 	frame := &execinfrapb.WindowerSpec_Frame{
 		Mode: modeToExecinfrapb(testCfg.mode),

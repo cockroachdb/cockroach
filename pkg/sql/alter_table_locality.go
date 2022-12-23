@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -408,7 +409,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	newColumnID *descpb.ColumnID,
 	newColumnDefaultExpr *string,
 	pkColumnNames []string,
-	pkColumnDirections []catpb.IndexColumn_Direction,
+	pkColumnDirections []catenumpb.IndexColumn_Direction,
 ) error {
 	// Preserve the same PK columns - implicit partitioning will be added in
 	// AlterPrimaryKey.
@@ -418,9 +419,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 			Column: tree.Name(col),
 		}
 		switch dir := pkColumnDirections[i]; dir {
-		case catpb.IndexColumn_ASC:
+		case catenumpb.IndexColumn_ASC:
 			cols[i].Direction = tree.Ascending
-		case catpb.IndexColumn_DESC:
+		case catenumpb.IndexColumn_DESC:
 			cols[i].Direction = tree.Descending
 		default:
 			return errors.AssertionFailedf("unknown direction: %v", dir)

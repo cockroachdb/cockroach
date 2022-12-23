@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -251,8 +251,8 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					KeyColumnNames: []string{
 						mut.Columns[2].Name,
 					},
-					KeyColumnDirections: []catpb.IndexColumn_Direction{
-						catpb.IndexColumn_ASC,
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+						catenumpb.IndexColumn_ASC,
 					},
 					KeyColumnIDs: []descpb.ColumnID{
 						mut.Columns[2].ID,
@@ -261,7 +261,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 						mut.Columns[0].ID,
 					},
 					Type:         descpb.IndexDescriptor_FORWARD,
-					EncodingType: descpb.SecondaryIndexEncoding,
+					EncodingType: catenumpb.SecondaryIndexEncoding,
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++
@@ -329,8 +329,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 					KeyColumnNames: []string{
 						mut.Columns[0].Name,
 					},
-					KeyColumnDirections: []catpb.IndexColumn_Direction{
-						catpb.IndexColumn_ASC,
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+						catenumpb.IndexColumn_ASC,
 					},
 					StoreColumnNames: []string{
 						columnWithDefault.Name,
@@ -345,7 +345,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 						computedColumnNotInPrimaryIndex.ID,
 					},
 					Type:         descpb.IndexDescriptor_FORWARD,
-					EncodingType: descpb.PrimaryIndexEncoding,
+					EncodingType: catenumpb.PrimaryIndexEncoding,
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++

@@ -30,6 +30,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/types",
@@ -47,6 +48,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",

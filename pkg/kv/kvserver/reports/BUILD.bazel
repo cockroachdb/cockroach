@@ -69,6 +69,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descbuilder",

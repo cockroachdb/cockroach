@@ -13,8 +13,8 @@ package flowinfra
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,7 +24,7 @@ import (
 
 // PreferredEncoding is the encoding used for EncDatums that don't already have
 // an encoding available.
-const PreferredEncoding = descpb.DatumEncoding_ASCENDING_KEY
+const PreferredEncoding = catenumpb.DatumEncoding_ASCENDING_KEY
 
 // StreamEncoder converts EncDatum rows into a sequence of ProducerMessage.
 //
@@ -44,7 +44,7 @@ const PreferredEncoding = descpb.DatumEncoding_ASCENDING_KEY
 type StreamEncoder struct {
 	types []*types.T
 	// encodings is fully initialized when the first row is received.
-	encodings            []descpb.DatumEncoding
+	encodings            []catenumpb.DatumEncoding
 	encodingsInitialized bool
 
 	rowBuf       []byte
@@ -78,7 +78,7 @@ func (se *StreamEncoder) SetHeaderFields(flowID execinfrapb.FlowID, streamID exe
 // Init initializes the encoder.
 func (se *StreamEncoder) Init(types []*types.T) {
 	se.types = types
-	se.encodings = make([]descpb.DatumEncoding, len(types))
+	se.encodings = make([]catenumpb.DatumEncoding, len(types))
 }
 
 // AddMetadata encodes a metadata message. Unlike AddRow(), it cannot fail. This
@@ -109,10 +109,10 @@ func (se *StreamEncoder) AddRow(row rowenc.EncDatumRow) error {
 				enc = PreferredEncoding
 			}
 			sType := se.types[i]
-			if enc != descpb.DatumEncoding_VALUE &&
+			if enc != catenumpb.DatumEncoding_VALUE &&
 				(colinfo.CanHaveCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
-				enc = descpb.DatumEncoding_VALUE
+				enc = catenumpb.DatumEncoding_VALUE
 			}
 			se.encodings[i] = enc
 		}

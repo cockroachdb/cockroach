@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -100,7 +101,7 @@ func (desc *wrapper) GetParentSchemaID() descpb.ID {
 
 // IndexKeysPerRow implements the TableDescriptor interface.
 func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
-	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 		return len(desc.Families)
 	}
 	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
@@ -544,7 +545,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		idx := descpb.IndexDescriptor{
 			Unique:              true,
 			KeyColumnNames:      []string{col.Name},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 		}
 		if err := desc.AddPrimaryIndex(idx); err != nil {
 			return err
@@ -657,7 +658,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				)
 			}
 		}
-		if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+		if idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
 			idx.IndexDesc().KeySuffixColumnIDs = extraColumnIDs
 		} else {
 			colIDs = idx.CollectKeyColumnIDs()
@@ -678,7 +679,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			if err != nil {
 				return err
 			}
-			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
+			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
 				// If the primary index contains a stored column, we don't need to
 				// store it - it's already part of the index.
 				err = pgerror.Newf(pgcode.DuplicateColumn,
@@ -965,7 +966,7 @@ func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error
 }
 
 func checkColumnsValidForInvertedIndex(
-	tableDesc *Mutable, indexColNames []string, colDirs []catpb.IndexColumn_Direction,
+	tableDesc *Mutable, indexColNames []string, colDirs []catenumpb.IndexColumn_Direction,
 ) error {
 	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
@@ -976,7 +977,7 @@ func checkColumnsValidForInvertedIndex(
 				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
 					return NewInvalidInvertedColumnError(col.GetName(), col.GetType().String())
 				}
-				if i == lastCol && colDirs[i] == catpb.IndexColumn_DESC {
+				if i == lastCol && colDirs[i] == catenumpb.IndexColumn_DESC {
 					return pgerror.New(pgcode.FeatureNotSupported,
 						"the last column in an inverted index cannot have the DESC option")
 				}
@@ -1037,7 +1038,7 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		// Only override the index name if it hasn't been set by the user.
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
-	idx.EncodingType = descpb.PrimaryIndexEncoding
+	idx.EncodingType = catenumpb.PrimaryIndexEncoding
 	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
 		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 		// Populate store columns.

@@ -18,6 +18,7 @@ genrule(
         "//pkg/server/serverpb:serverpb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
         "//pkg/settings:settings_proto",
+        "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",

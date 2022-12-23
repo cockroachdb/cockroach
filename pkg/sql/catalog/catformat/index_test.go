@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -74,7 +75,7 @@ func TestIndexForDisplay(t *testing.T) {
 		ID:                  0x0,
 		KeyColumnNames:      []string{"a", "b"},
 		KeyColumnIDs:        descpb.ColumnIDs{1, 2},
-		KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_DESC},
+		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
 	}
 
 	// UNIQUE INDEX baz (a ASC, b DESC)
@@ -99,8 +100,8 @@ func TestIndexForDisplay(t *testing.T) {
 	expressionIndex := baseIndex
 	expressionIndex.KeyColumnNames = []string{"a", "d", "b"}
 	expressionIndex.KeyColumnIDs = descpb.ColumnIDs{1, 4, 2}
-	expressionIndex.KeyColumnDirections = []catpb.IndexColumn_Direction{
-		catpb.IndexColumn_ASC, catpb.IndexColumn_DESC, catpb.IndexColumn_ASC,
+	expressionIndex.KeyColumnDirections = []catenumpb.IndexColumn_Direction{
+		catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC, catenumpb.IndexColumn_ASC,
 	}
 
 	// Hash Sharded INDEX baz (a)
