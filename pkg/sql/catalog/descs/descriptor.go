@@ -339,6 +339,7 @@ func getDescriptorsByID(
 	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
 		return err
 	}
+	// Hydration is skipped if "SkipHydration" flag is true.
 	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
 		return err
 	}

@@ -2635,3 +2635,82 @@ query I
 SELECT f93083()
 ----
 NULL
+
+# Regression test for #93314
+subtest regression_93314
+
+statement ok
+CREATE TYPE e_93314 AS ENUM ('a', 'b');
+CREATE TABLE t_93314 (i INT, e e_93314);
+INSERT INTO t_93314 VALUES (1, 'a');
+
+statement ok
+CREATE OR REPLACE FUNCTION f_93314 () RETURNS t_93314 AS
+$$
+  SELECT i, e
+  FROM t_93314
+  ORDER BY i
+  LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_93314();
+----
+(1,a)
+
+statement ok
+CREATE TABLE t_93314_alias (i INT, e _e_93314);
+INSERT INTO t_93314_alias VALUES (1, ARRAY['a', 'b']::_e_93314);
+
+statement ok
+CREATE OR REPLACE FUNCTION f_93314_alias () RETURNS t_93314_alias AS
+$$
+  SELECT i, e
+  FROM t_93314_alias
+  ORDER BY i
+  LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_93314_alias();
+----
+(1,"{a,b}")
+
+statement ok
+CREATE TYPE comp_93314 AS (a INT, b INT);
+CREATE TABLE t_93314_comp (a INT, c comp_93314, FAMILY (a, c));
+
+statement ok
+INSERT INTO t_93314_comp VALUES (1, (2,3));
+
+statement ok
+CREATE FUNCTION f_93314_comp() RETURNS comp_93314 AS
+$$
+  SELECT (1, 2);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_93314_comp()
+----
+(1,2)
+
+statement ok
+CREATE FUNCTION f_93314_comp_t() RETURNS t_93314_comp AS
+$$
+  SELECT a, c FROM t_93314_comp LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_93314_comp_t()
+----
+(1,"(2,3)")
+
+query TTTTTBBBTITTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
+ORDER BY oid;
+----
+100251  f_93314        105  1546506610  14  false  false  false  v  0  100250  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100253  f_93314_alias  105  1546506610  14  false  false  false  v  0  100252  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100257  f_93314_comp    105  1546506610  14  false  false  false  v  0  100254  ·  {}  NULL  SELECT (1, 2);
+100258  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100256  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
