@@ -3021,35 +3021,33 @@ CREATE TABLE user_settings_cascades (
 # user_settings and avoid visiting all regions.
 query T retry
 EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
-  FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
+  FROM users INNER LOOKUP JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
 vectorized: true
 ·
-• merge join
-│ equality: (user_id) = (id)
-│ right cols are key
+• lookup join
+│ table: user_settings@user_settings_pkey
+│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality cols are key
 │
-├── • index join
-│   │ table: user_settings@user_settings_pkey
-│   │
-│   └── • scan
-│         missing stats
-│         table: user_settings@user_settings_user_id_idx
-│         spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
-│
-└── • union all
-    │ limit: 1
+└── • lookup join
+    │ table: user_settings@user_settings_user_id_idx
+    │ equality: (crdb_region, id) = (crdb_region,user_id)
+    │ pred: user_id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
     │
-    ├── • scan
-    │     missing stats
-    │     table: users@users_pkey
-    │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
-    │
-    └── • scan
-          missing stats
-          table: users@users_pkey
-          spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: users@users_pkey
+        │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+        │
+        └── • scan
+              missing stats
+              table: users@users_pkey
+              spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 
 # Ensure that the FK checks and cascades are efficient.
 query T
