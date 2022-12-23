@@ -158,7 +158,7 @@ func BuildLookupJoinLookupTableDistribution(
 	lookupTableMeta := lookupJoin.Memo().Metadata().TableMeta(lookupJoin.Table)
 	lookupTable := lookupTableMeta.Table
 
-	if lookupJoin.LocalityOptimized {
+	if lookupJoin.LocalityOptimized || lookupJoin.ChildOfLocalityOptimizedSearch {
 		provided.FromLocality(evalCtx.Locality)
 		return provided
 	} else if lookupTable.IsGlobalTable() {
@@ -190,6 +190,10 @@ func BuildLookupJoinLookupTableDistribution(
 			if filterIdx, ok := lookupJoin.GetConstPrefixFilter(lookupJoin.Memo().Metadata()); ok {
 				firstIndexColEqExpr := lookupJoin.LookupJoinPrivate.LookupExpr[filterIdx].Condition
 				if firstIndexColEqExpr.Op() == opt.EqOp {
+					// TODO(msirek): For a join between 2 REGIONAL BY ROW tables, check if
+					//               there is a crdb_region = crdb_region term. If there
+					//               is, use the Distribution of the input table as the
+					//               Distribution of the lookup table.
 					if regionName, ok := GetDEnumAsStringFromConstantExpr(firstIndexColEqExpr.Child(1)); ok {
 						provided.Regions = []string{regionName}
 						return provided

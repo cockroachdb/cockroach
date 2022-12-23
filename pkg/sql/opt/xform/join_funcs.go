@@ -385,12 +385,36 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey :=
 		c.GetEquijoinStrictKeyCols(on, scanPrivate, input)
 
+	var input2 memo.RelExpr
+	var scanPrivate2 *memo.ScanPrivate
+	var lookupIsKey2 bool
+	var indexCols2 opt.ColSet
+	// Look up strict key cols in the reverse direction for the purposes of
+	// deriving a `t1.crdb_region = t2.crdb_region` term based on foreign key
+	// constraints.
+	if !lookupIsKey {
+		possibleScanExpr := input
+		if selectExpr, ok := input.(*memo.SelectExpr); ok {
+			possibleScanExpr = selectExpr.Input
+		}
+		if scanExpr, ok := possibleScanExpr.(*memo.ScanExpr); ok {
+			scanPrivate2 = &scanExpr.ScanPrivate
+			// The scan should already exist in the memo. We need to look it up so we
+			// have a `ScanExpr` with properties fully populated.
+			input2 = scanExpr.Memo().MemoizeScan(scanPrivate)
+			tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate2.Table)
+			indexCols2 = tabMeta.IndexColumns(scanPrivate2.Index)
+			onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey2 =
+				c.GetEquijoinStrictKeyCols(on, scanPrivate2, input2)
+		}
+	}
+
 	var pkCols opt.ColList
 	var newScanPrivate *memo.ScanPrivate
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
-		// Skip indexes that do no cover all virtual projection columns, if
+		// Skip indexes that do not cover all virtual projection columns, if
 		// there are any. This can happen when there are multiple virtual
 		// columns indexed in different indexes.
 		//
@@ -405,6 +429,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		if lookupIsKey {
 			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input, scanPrivate, indexCols, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
+		} else if lookupIsKey2 {
+			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
+				input2, scanPrivate2, indexCols2, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
 		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
