@@ -207,12 +207,14 @@ func alterTableAddColumn(
 	}
 	if desc.HasDefault() {
 		expression := b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
+
 		spec.def = &scpb.ColumnDefaultExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
 			Expression: *expression,
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("default_expr")
+
 	}
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
 	// non-empty table by scanning the primary index span with a limit of 1 to see if any key exists.
@@ -256,6 +258,7 @@ func alterTableAddColumn(
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
 	}
+
 }
 
 func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {
