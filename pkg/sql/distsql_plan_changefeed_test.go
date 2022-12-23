@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -41,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,6 +131,7 @@ CREATE TABLE foo (
 
 	for _, tc := range []struct {
 		stmt        string
+		opts        []CDCOption
 		expectErr   string
 		expectSpans roachpb.Spans
 		present     colinfo.ResultColumns
@@ -136,6 +140,23 @@ CREATE TABLE foo (
 			stmt:        "SELECT * FROM foo WHERE 5 > 1",
 			expectSpans: roachpb.Spans{primarySpan},
 			present:     mainColumns,
+		},
+		{
+			stmt: "SELECT * FROM foo",
+			opts: []CDCOption{
+				// Add extra hidden column -- should not show up in the presentation.
+				WithExtraColumn(copyColumnAs(t, fooDesc, colinfo.MVCCTimestampColumnName, "mvcc")),
+			},
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     mainColumns,
+		},
+		{
+			stmt: "SELECT *, mvcc FROM foo",
+			opts: []CDCOption{
+				WithExtraColumn(copyColumnAs(t, fooDesc, colinfo.MVCCTimestampColumnName, "mvcc")),
+			},
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     append(mainColumns, rc("mvcc", colinfo.MVCCTimestampColumnType)),
 		},
 		{
 			// Star scoped to column family.
@@ -365,7 +386,7 @@ CREATE TABLE foo (
 			require.NoError(t, err)
 			expr := stmt.AST.(*tree.Select)
 
-			plan, err := PlanCDCExpression(ctx, p, expr)
+			plan, err := PlanCDCExpression(ctx, p, expr, tc.opts...)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err, err)
 				return
@@ -376,6 +397,56 @@ CREATE TABLE foo (
 			checkPresentation(t, tc.present, plan.Presentation)
 		})
 	}
+
+	t.Run("collector", func(t *testing.T) {
+		for _, tc := range []struct {
+			stmt       string
+			opts       []CDCOption
+			expectCols []string
+		}{
+			{
+				stmt:       "SELECT * FROM foo",
+				expectCols: []string{"a", "b", "c"},
+			},
+			{
+				stmt: "SELECT * FROM foo",
+				opts: []CDCOption{
+					WithExtraColumn(copyColumnAs(t, fooDesc, colinfo.MVCCTimestampColumnName, "mvcc")),
+				},
+				expectCols: []string{"a", "b", "c"},
+			},
+			{
+				stmt:       "SELECT * FROM foo WHERE crdb_internal_mvcc_timestamp > 0",
+				expectCols: []string{"a", "b", "c", "crdb_internal_mvcc_timestamp"},
+			},
+			{
+				stmt: "SELECT *, mvcc FROM foo WHERE crdb_internal_mvcc_timestamp > 0",
+				opts: []CDCOption{
+					WithExtraColumn(copyColumnAs(t, fooDesc, colinfo.MVCCTimestampColumnName, "mvcc")),
+				},
+				expectCols: []string{"a", "b", "c", "crdb_internal_mvcc_timestamp", "mvcc"},
+			},
+		} {
+			stmt, err := parser.ParseOne(tc.stmt)
+			require.NoError(t, err)
+			expr := stmt.AST.(*tree.Select)
+
+			plan, err := PlanCDCExpression(ctx, p, expr, tc.opts...)
+			require.NoError(t, err)
+			collected := make(map[uint32]string)
+			plan.CollectPlanColumns(
+				func(c colinfo.ResultColumn) bool {
+					collected[c.PGAttributeNum] = c.Name
+					return false
+				})
+			collectedNames := make([]string, 0, len(collected))
+			for _, v := range collected {
+				collectedNames = append(collectedNames, v)
+			}
+			sort.Strings(collectedNames)
+			require.Equal(t, tc.expectCols, collectedNames)
+		}
+	})
 }
 
 // Ensure the physical plan does not buffer results.
@@ -454,6 +525,7 @@ FAMILY extra (extra)
 	for _, tc := range []struct {
 		name      string
 		stmt      string
+		hiddenCol bool
 		expectRow func(row rowenc.EncDatumRow) (expected []string)
 	}{
 		{
@@ -466,6 +538,16 @@ FAMILY extra (extra)
 					c := tree.AsStringWithFlags(row[2].Datum, tree.FmtExport)
 					expected = append(expected, a, b, c)
 				}
+				return expected
+			},
+		},
+		{
+			name:      "hidden column",
+			stmt:      "SELECT a, hidden FROM foo",
+			hiddenCol: true,
+			expectRow: func(row rowenc.EncDatumRow) (expected []string) {
+				a := tree.AsStringWithFlags(row[0].Datum, tree.FmtExport)
+				expected = append(expected, a, fmt.Sprintf("%d", fooDesc.GetID()))
 				return expected
 			},
 		},
@@ -497,9 +579,29 @@ FAMILY extra (extra)
 			stmt, err := parser.ParseOne(tc.stmt)
 			require.NoError(t, err)
 			expr := stmt.AST.(*tree.Select)
+
+			var inputCols catalog.TableColMap
+			var inputTypes []*types.T
+			// We target main family; so only 3 columns should be used.
+			for _, id := range fooDesc.GetFamilies()[0].ColumnIDs {
+				col, err := fooDesc.FindColumnWithID(id)
+				require.NoError(t, err)
+				inputCols.Set(col.GetID(), len(inputTypes))
+				inputTypes = append(inputTypes, col.GetType())
+			}
+
+			var opts []CDCOption
+			var oidCol catalog.Column
+			if tc.hiddenCol {
+				oidCol = copyColumnAs(t, fooDesc, colinfo.TableOIDColumnName, "hidden")
+				opts = append(opts, WithExtraColumn(oidCol))
+				inputCols.Set(oidCol.GetID(), len(inputTypes))
+				inputTypes = append(inputTypes, oidCol.GetType())
+			}
+
 			var input execinfra.RowChannel
-			input.InitWithNumSenders([]*types.T{types.Int, types.Int, types.String}, 1)
-			plan, err := PlanCDCExpression(ctx, p, expr)
+			input.InitWithBufSizeAndNumSenders(inputTypes, 1024, 1)
+			plan, err := PlanCDCExpression(ctx, p, expr, opts...)
 			require.NoError(t, err)
 
 			var rows [][]string
@@ -527,8 +629,7 @@ FAMILY extra (extra)
 				)
 				defer r.Release()
 
-				if err := RunCDCEvaluation(ctx, plan, &input,
-					catalog.ColumnIDToOrdinalMap(fooDesc.PublicColumns()), r); err != nil {
+				if err := RunCDCEvaluation(ctx, plan, &input, inputCols, r); err != nil {
 					return err
 				}
 				return writer.Err()
@@ -537,23 +638,31 @@ FAMILY extra (extra)
 			rng, _ := randutil.NewTestRand()
 
 			var expectedRows [][]string
-			for i := 0; i < 100; i++ {
-				row := randEncDatumRow(rng, fooDesc)
-				input.Push(row, nil)
-				if expected := tc.expectRow(row); expected != nil {
-					expectedRows = append(expectedRows, tc.expectRow(row))
+			func() {
+				defer input.ProducerDone()
+				for i := 0; i < 100; i++ {
+					row := randEncDatumRow(rng, fooDesc, inputCols)
+					if tc.hiddenCol {
+						row = append(row, rowenc.EncDatum{Datum: tree.NewDOid(oid.Oid(fooDesc.GetID()))})
+					}
+					input.Push(row, nil)
+					if expected := tc.expectRow(row); expected != nil {
+						expectedRows = append(expectedRows, tc.expectRow(row))
+					}
 				}
-			}
-			input.ProducerDone()
+			}()
+
 			require.NoError(t, g.Wait())
 			require.Equal(t, expectedRows, rows)
 		})
 	}
 }
 
-func randEncDatumRow(rng *rand.Rand, desc catalog.TableDescriptor) (row rowenc.EncDatumRow) {
+func randEncDatumRow(
+	rng *rand.Rand, desc catalog.TableDescriptor, includeCols catalog.TableColMap,
+) (row rowenc.EncDatumRow) {
 	for _, col := range desc.PublicColumns() {
-		if !col.IsVirtual() {
+		if _, include := includeCols.Get(col.GetID()); include && !col.IsVirtual() {
 			row = append(row, rowenc.EncDatum{Datum: randgen.RandDatum(rng, col.GetType(), col.IsNullable())})
 		}
 	}
@@ -576,4 +685,17 @@ func mkPkKey(t *testing.T, tableID descpb.ID, vals ...int) roachpb.Key {
 	}
 
 	return key
+}
+
+func copyColumnAs(t *testing.T, table catalog.TableDescriptor, from, to tree.Name) catalog.Column {
+	t.Helper()
+	src, err := table.FindColumnWithName(from)
+	require.NoError(t, err)
+	dst := src.DeepCopy()
+	desc := dst.ColumnDesc()
+	desc.Name = string(to)
+	desc.ID = table.GetNextColumnID()
+	desc.Nullable = true
+	desc.SystemColumnKind = catpb.SystemColumnKind_NONE
+	return dst
 }

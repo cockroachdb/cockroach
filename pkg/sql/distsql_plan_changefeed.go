@@ -35,6 +35,20 @@ import (
 // context.
 type CDCExpression = *tree.Select
 
+// CDCOption is an option to configure cdc expression planning and execution.
+type CDCOption interface {
+	apply(cfg *cdcConfig)
+}
+
+// WithExtraColumn returns an option to add column to the
+// CDC table. The caller expected to provide the value
+// of this column when executing this flow.
+func WithExtraColumn(c catalog.Column) CDCOption {
+	return funcOpt(func(config *cdcConfig) {
+		config.extraColumns = append(config.extraColumns, c)
+	})
+}
+
 // CDCExpressionPlan encapsulates execution plan for evaluation of CDC expressions.
 type CDCExpressionPlan struct {
 	Plan         planMaybePhysical     // Underlying plan...
@@ -53,11 +67,16 @@ type CDCExpressionPlan struct {
 // planning and execution of CDC expressions. This planner ought to be
 // configured appropriately to resolve correct descriptor versions.
 func PlanCDCExpression(
-	ctx context.Context, localPlanner interface{}, cdcExpr CDCExpression,
+	ctx context.Context, localPlanner interface{}, cdcExpr CDCExpression, opts ...CDCOption,
 ) (cdcPlan CDCExpressionPlan, _ error) {
 	p, ok := localPlanner.(*planner)
 	if !ok {
 		return CDCExpressionPlan{}, errors.AssertionFailedf("expected planner, found %T", localPlanner)
+	}
+
+	var cfg cdcConfig
+	for _, opt := range opts {
+		opt.apply(&cfg)
 	}
 
 	p.stmt = makeStatement(parser.Statement{
@@ -69,6 +88,8 @@ func PlanCDCExpression(
 	opc := &p.optPlanningCtx
 	opc.init(p)
 	opc.reset(ctx)
+	opc.useCache = false
+	opc.allowMemoReuse = false
 
 	familyID, err := extractFamilyID(cdcExpr)
 	if err != nil {
@@ -76,6 +97,7 @@ func PlanCDCExpression(
 	}
 	cdcCat := &cdcOptCatalog{
 		optCatalog:     opc.catalog.(*optCatalog),
+		cdcConfig:      cfg,
 		targetFamilyID: familyID,
 		semaCtx:        &p.semaCtx,
 	}
@@ -204,6 +226,25 @@ func prepareCDCPlan(
 	return plan, nil
 }
 
+// CollectPlanColumns invokes collector callback for each column accessed
+// by this plan.  Collector may return false to stop iteration.
+// Collector function may be invoked multiple times for the same column.
+func (p CDCExpressionPlan) CollectPlanColumns(collector func(column colinfo.ResultColumn) bool) {
+	v := makePlanVisitor(context.Background(), planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			cols := planColumns(plan)
+			for _, c := range cols {
+				stop := collector(c)
+				if stop {
+					return false, nil
+				}
+			}
+			return true, nil // Continue onto the next node.
+		},
+	})
+	_ = v.visit(p.Plan.planNode)
+}
+
 // cdcValuesNode replaces regular scanNode with cdc specific implementation
 // which returns values from the execinfra.RowSource.
 // The input source produces a never ending stream of encoded datums, and those
@@ -285,6 +326,7 @@ func (n *cdcValuesNode) Close(ctx context.Context) {
 
 type cdcOptCatalog struct {
 	*optCatalog
+	cdcConfig
 	targetFamilyID catid.FamilyID
 	semaCtx        *tree.SemaContext
 }
@@ -361,7 +403,7 @@ func (c *cdcOptCatalog) ResolveFunction(
 func (c *cdcOptCatalog) newCDCDataSource(
 	original catalog.TableDescriptor, familyID catid.FamilyID,
 ) (cat.DataSource, error) {
-	d, err := newFamilyTableDescriptor(original, familyID)
+	d, err := newFamilyTableDescriptor(original, familyID, c.extraColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -373,10 +415,11 @@ func (c *cdcOptCatalog) newCDCDataSource(
 type familyTableDescriptor struct {
 	catalog.TableDescriptor
 	includeSet catalog.TableColSet
+	extraCols  []catalog.Column
 }
 
 func newFamilyTableDescriptor(
-	original catalog.TableDescriptor, familyID catid.FamilyID,
+	original catalog.TableDescriptor, familyID catid.FamilyID, extraCols []catalog.Column,
 ) (catalog.TableDescriptor, error) {
 	// Build the set of columns in the family, along with the primary
 	// key columns.
@@ -397,6 +440,7 @@ func newFamilyTableDescriptor(
 	return &familyTableDescriptor{
 		TableDescriptor: original,
 		includeSet:      includeSet,
+		extraCols:       extraCols,
 	}, nil
 }
 
@@ -449,6 +493,24 @@ func (d *familyTableDescriptor) EnforcedUniqueConstraintsWithoutIndex() []catalo
 	return filtered
 }
 
+// FindColumnWithID implements catalog.TableDescriptor and provides
+// access to extra CDC columns.
+func (d *familyTableDescriptor) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
+	c, err := d.TableDescriptor.FindColumnWithID(id)
+	if err != nil {
+		for _, extra := range d.extraCols {
+			if extra.GetID() == id {
+				c = extra
+				break
+			}
+		}
+		if c != nil {
+			err = nil
+		}
+	}
+	return c, err
+}
+
 // EnforcedCheckConstraints implements catalog.TableDescriptor interface.
 // This implementation filters out constraints that reference columns outside of
 // target column family.
@@ -464,11 +526,14 @@ func (d *familyTableDescriptor) EnforcedCheckConstraints() []catalog.CheckConstr
 }
 
 func (d *familyTableDescriptor) filterColumns(cols []catalog.Column) []catalog.Column {
-	filtered := make([]catalog.Column, 0, len(cols))
+	filtered := make([]catalog.Column, 0, len(cols)+1)
 	for _, col := range cols {
 		if d.includeSet.Contains(col.GetID()) {
 			filtered = append(filtered, &remappedOrdinalColumn{Column: col, ord: len(filtered)})
 		}
+	}
+	for _, col := range d.extraCols {
+		filtered = append(filtered, &remappedOrdinalColumn{Column: col, ord: len(filtered)})
 	}
 	return filtered
 }
@@ -483,4 +548,14 @@ type remappedOrdinalColumn struct {
 // Ordinal implements catalog.Column interface.
 func (c *remappedOrdinalColumn) Ordinal() int {
 	return c.ord
+}
+
+type cdcConfig struct {
+	extraColumns []catalog.Column
+}
+
+type funcOpt func(config *cdcConfig)
+
+func (fn funcOpt) apply(config *cdcConfig) {
+	fn(config)
 }

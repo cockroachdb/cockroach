@@ -792,6 +792,7 @@ func newOptTable(
 		// "stored" from the perspective of the optimizer because they are
 		// written to the primary index and all secondary indexes.
 		if !col.IsVirtual() || pkCols.Contains(col.GetID()) {
+			cd := col.ColumnDesc()
 			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
@@ -800,11 +801,11 @@ func newOptTable(
 				col.GetType(),
 				col.IsNullable(),
 				visibility,
-				col.ColumnDesc().DefaultExpr,
-				col.ColumnDesc().ComputeExpr,
-				col.ColumnDesc().OnUpdateExpr,
+				cd.DefaultExpr,
+				cd.ComputeExpr,
+				cd.OnUpdateExpr,
 				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
-				col.ColumnDesc().GeneratedAsIdentitySequenceOption,
+				cd.GeneratedAsIdentitySequenceOption,
 			)
 		} else {
 			// We need to propagate the mutation state for computed columns, so that
@@ -839,6 +840,7 @@ func newOptTable(
 		found, _ := desc.FindColumnWithName(sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
+			cd := sysCol.ColumnDesc()
 			col.Init(
 				ord,
 				cat.StableID(sysCol.GetID()),
@@ -847,11 +849,11 @@ func newOptTable(
 				sysCol.GetType(),
 				sysCol.IsNullable(),
 				cat.MaybeHidden(sysCol.IsHidden()),
-				sysCol.ColumnDesc().DefaultExpr,
-				sysCol.ColumnDesc().ComputeExpr,
-				sysCol.ColumnDesc().OnUpdateExpr,
+				cd.DefaultExpr,
+				cd.ComputeExpr,
+				cd.OnUpdateExpr,
 				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
-				sysCol.ColumnDesc().GeneratedAsIdentitySequenceOption,
+				cd.GeneratedAsIdentitySequenceOption,
 			)
 		}
 	}
@@ -2066,6 +2068,7 @@ func newOptVirtualTable(
 		nil, /* generatedAsIdentitySequenceOption */
 	)
 	for i, d := range desc.PublicColumns() {
+		cd := d.ColumnDesc()
 		ot.columns[i+1].Init(
 			i+1,
 			cat.StableID(d.GetID()),
@@ -2074,11 +2077,11 @@ func newOptVirtualTable(
 			d.GetType(),
 			d.IsNullable(),
 			cat.MaybeHidden(d.IsHidden()),
-			d.ColumnDesc().DefaultExpr,
-			d.ColumnDesc().ComputeExpr,
-			d.ColumnDesc().OnUpdateExpr,
+			cd.DefaultExpr,
+			cd.ComputeExpr,
+			cd.OnUpdateExpr,
 			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
-			d.ColumnDesc().GeneratedAsIdentitySequenceOption,
+			cd.GeneratedAsIdentitySequenceOption,
 		)
 	}
 
