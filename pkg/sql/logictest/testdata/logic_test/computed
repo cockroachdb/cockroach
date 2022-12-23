@@ -1095,3 +1095,84 @@ FROM t88128
 ----
 b1    expected_b1  b2    expected_b2
 true  true         true  true
+
+# Regression tests for #81698 computed columns are not validated on existing data"
+subtest regression_81698
+
+statement ok
+CREATE TABLE t81698 (i INT PRIMARY KEY);
+
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+
+statement ok
+ALTER TABLE t81698 ADD COLUMN s VARCHAR(2) AS ('st') STORED;
+
+statement ok
+ALTER TABLE t81698 ADD COLUMN test INT;
+
+statement ok
+ALTER TABLE t81698 ADD COLUMN ii INT AS (test*2) STORED;
+
+statement ok
+ALTER TABLE t81698 ADD COLUMN iii INT AS (test*3) VIRTUAL;
+
+statement error pgcode 22001 pq: value too long for type VARCHAR\(2\)
+ALTER TABLE t81698 ADD COLUMN v2 VARCHAR(2) AS ('virtual') VIRTUAL;
+
+statement error pgcode 22001 pq: value too long for type VARCHAR\(2\)
+ALTER TABLE t81698 ADD COLUMN v2 VARCHAR(2) AS ('stored') STORED;
+
+statement error pgcode 22003 pq: integer out of range for type int2
+ALTER TABLE t81698 ADD COLUMN s3 INT2 AS (32768) STORED;
+
+# should this error be categorized?
+statement error pgcode XXUUU pq: expected computed column expression to have type bool, but '32768' has type int
+ALTER TABLE t81698 ADD COLUMN s4 BOOL AS (32768) STORED;
+
+statement error pgcode 22003 pq: integer out of range for type int2
+ALTER TABLE t81698 ADD COLUMN s3 INT2 AS (32768) VIRTUAL;
+
+# should this error be categorized?
+statement error pgcode XXUUU pq: expected computed column expression to have type bool, but '32768' has type int
+ALTER TABLE t81698 ADD COLUMN s4 BOOL AS (32768) VIRTUAL;
+
+statement ok
+ALTER TABLE t81698 ADD COLUMN w greeting AS ('hi') STORED;
+
+statement error pgcode 22P02 pq: invalid input value for enum greeting: "none"
+ALTER TABLE t81698 ADD COLUMN w2 greeting AS ('none') STORED;
+
+statement ok
+INSERT INTO t81698 VALUES (2);
+
+statement ok
+DROP TABLE t81698;
+
+statement error pgcode 22001 pq: value too long for type VARCHAR\(2\)
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+v VARCHAR(2) AS ('virtual') VIRTUAL);
+
+statement error pgcode 22001 pq: value too long for type VARCHAR\(2\)
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+v VARCHAR(2) AS ('stored') STORED);
+
+statement error pgcode 22003 pq: integer out of range for type int2
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+s3 INT2 AS (32768) STORED);
+
+statement error pgcode 22003 pq: integer out of range for type int2
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+s3 INT2 AS (32768) VIRTUAL);
+
+statement error pgcode XXUUU pq: expected computed column expression to have type bool, but '32768' has type int
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+s4 BOOL AS (32768) STORED);
+
+statement error pgcode XXUUU pq: expected computed column expression to have type bool, but '32768' has type int
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+s4 BOOL AS (32768) VIRTUAL);
+
+statement error pgcode 22P02 pq: invalid input value for enum greeting: "none"
+CREATE TABLE t81698 (i INT PRIMARY KEY,
+w2 greeting AS ('none') STORED);
