@@ -52,7 +52,9 @@ import (
 func (tc *Collection) hydrateDescriptors(
 	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
 ) error {
-
+	if flags.SkipHydration {
+		return nil
+	}
 	var hydratableMutableIndexes, hydratableImmutableIndexes intsets.Fast
 	for i, desc := range descs {
 		if desc == nil || !hydrateddesc.IsHydratable(desc) {
@@ -120,7 +122,7 @@ func makeMutableTypeLookupFunc(
 		}
 		mut.UpsertDescriptor(desc)
 	}
-	mutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	mutableLookupFunc := func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		// This special case exists to deal with the desire to use enums in the
 		// system database, and the fact that the hydration contract is such that
 		// when we resolve types mutably, we resolve the mutable type descriptors
@@ -130,13 +132,21 @@ func makeMutableTypeLookupFunc(
 		// let the caller have the immutable copy.
 		if id == catconstants.PublicSchemaID {
 			return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
+				Required:      true,
+				AvoidLeased:   true,
+				SkipHydration: skipHydration,
 			})
 		}
-		return tc.GetMutableDescriptorByID(ctx, txn, id)
+		return tc.getDescriptorByID(ctx, txn, tree.CommonLookupFlags{
+			Required:       true,
+			AvoidLeased:    true,
+			RequireMutable: true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+			SkipHydration:  skipHydration,
+		}, id)
 	}
-	return hydrateddesc.MakeTypeLookupFuncForHydration(mut.Catalog, mutableLookupFunc)
+	return hydrateddesc.MakeTypeLookupFuncForHydration(mut, mutableLookupFunc)
 }
 
 func makeImmutableTypeLookupFunc(
@@ -152,15 +162,16 @@ func makeImmutableTypeLookupFunc(
 		}
 		imm.UpsertDescriptor(desc)
 	}
-	immutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	immutableLookupFunc := func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
 			Required:       true,
 			AvoidLeased:    flags.AvoidLeased,
 			IncludeOffline: flags.IncludeOffline,
 			AvoidSynthetic: true,
+			SkipHydration:  skipHydration,
 		})
 	}
-	return hydrateddesc.MakeTypeLookupFuncForHydration(imm.Catalog, immutableLookupFunc)
+	return hydrateddesc.MakeTypeLookupFuncForHydration(imm, immutableLookupFunc)
 }
 
 // HydrateCatalog installs type metadata in the type.T objects present for all
@@ -169,10 +180,10 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 	ctx, sp := tracing.ChildSpan(ctx, "descs.HydrateCatalog")
 	defer sp.Finish()
 
-	fakeLookupFunc := func(_ context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	fakeLookupFunc := func(_ context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
-	typeLookupFunc := hydrateddesc.MakeTypeLookupFuncForHydration(c.Catalog, fakeLookupFunc)
+	typeLookupFunc := hydrateddesc.MakeTypeLookupFuncForHydration(c, fakeLookupFunc)
 	return c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if !hydrateddesc.IsHydratable(desc) {
 			return nil
