@@ -238,14 +238,14 @@ CREATE TABLE foo (
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
 			stmt:       "SELECT a, c FROM _",
-			expectErr:  `column "foo.c" does not exist`,
+			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/no_col_c_star",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
 			stmt:       "SELECT *, c FROM _",
-			expectErr:  `column "foo.c" does not exist`,
+			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/non_primary_family_with_var_free",
@@ -318,10 +318,10 @@ CREATE TABLE foo (
 			},
 			stmt: `SELECT
                a, b, c,
-               (CASE WHEN cdc_prev.c IS NULL THEN 'not there' ELSE cdc_prev.c END) AS old_c
+               (CASE WHEN (cdc_prev).c IS NULL THEN 'not there' ELSE (cdc_prev).c END) AS old_c
              FROM foo
-             WHERE cdc_prev.crdb_internal_mvcc_timestamp IS NULL OR
-                   cdc_prev.crdb_internal_mvcc_timestamp < crdb_internal_mvcc_timestamp`,
+             WHERE (cdc_prev).crdb_internal_mvcc_timestamp IS NULL OR
+                   (cdc_prev).crdb_internal_mvcc_timestamp < crdb_internal_mvcc_timestamp`,
 			expectMainFamily: []decodeExpectation{
 				{
 					expectUnwatchedErr: true,
@@ -394,7 +394,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
 			},
 			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
-			expectErr: `column "foo.h" does not exist`,
+			expectErr: `column "h" does not exist`,
 		},
 		// {
 		//  // TODO(yevgeniy): Test currently disable since session data is not serialized.
@@ -487,7 +487,7 @@ CREATE TABLE foo (
 					"SELECT x, 'only_some_deleted_values', x::string FROM s",
 			},
 			actions:          []string{"DELETE FROM foo WHERE b='only_some_deleted_values'"},
-			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND cdc_prev.a % 33 = 0`,
+			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND (cdc_prev).a % 33 = 0`,
 			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 100),
 			expectOnlyCFamily: func() (expectations []decodeExpectation) {
 				for i := 1; i <= 100; i++ {
@@ -739,7 +739,7 @@ func newEvaluatorWithNormCheck(
 	}
 
 	const splitFamilies = true
-	norm, err := NormalizeExpression(
+	norm, _, _, err := normalizeAndPlan(
 		context.Background(), execCfg, username.RootUserName(), defaultDBSessionData, desc, schemaTS,
 		jobspb.ChangefeedTargetSpecification{
 			Type:       target.Type,
