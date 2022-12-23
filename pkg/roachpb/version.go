@@ -19,6 +19,14 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// devOffset is the value by which all versions (including the minimum version
+// from which upgrades are supported) are offset in a dev binary.
+//
+// Refer to
+// https://github.com/cockroachdb/cockroach/blob/master/pkg/clusterversion/cockroach_versions.go#L665
+// for more documentation.
+const devOffset = 1000000
+
 // Less compares two Versions.
 func (v Version) Less(otherV Version) bool {
 	if v.Major < otherV.Major {
@@ -59,6 +67,25 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 		return
 	}
 	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Internal)
+}
+
+// VersionWithDevOffset returns v with a devOffset.
+// Refer to devOffset for more documentation.
+func (v Version) VersionWithDevOffset() Version {
+	retV := v
+	retV.Major += devOffset
+	return retV
+}
+
+// VersionWithoutDevOffset returns v without a devOffset.
+// Refer to devOffset for more documentation.
+func (v Version) VersionWithoutDevOffset() (Version, error) {
+	if v.Major < devOffset {
+		return Version{}, errors.Newf("version %s is less than the dev offset")
+	}
+	retV := v
+	retV.Major -= devOffset
+	return retV, nil
 }
 
 // PrettyPrint returns the value in a format that makes it apparent whether or

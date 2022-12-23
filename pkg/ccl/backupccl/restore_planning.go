@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
@@ -1528,6 +1529,12 @@ func doRestorePlan(
 	// version into a cluster that is on the same version or the next major
 	// version.
 	minimumRestorableVersion := p.ExecCfg().Settings.Version.BinaryMinSupportedVersion()
+	if !build.IsRelease() {
+		minimumRestorableVersion, err = minimumRestorableVersion.VersionWithoutDevOffset()
+		if err != nil {
+			return err
+		}
+	}
 	for i := range mainBackupManifests {
 		v := mainBackupManifests[i].ClusterVersion
 		if v.Major == 0 {
