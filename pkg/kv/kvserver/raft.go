@@ -207,8 +207,8 @@ func raftDescribeMessage(m raftpb.Message, f raft.EntryFormatter) string {
 		}
 		fmt.Fprintf(&buf, "]")
 	}
-	if m.Snapshot != nil && !raft.IsEmptySnap(*m.Snapshot) {
-		snap := m.Snapshot
+	if m.Snapshot != nil {
+		snap := *m.Snapshot
 		snap.Data = nil
 		fmt.Fprintf(&buf, " Snapshot:%v", snap)
 	}
