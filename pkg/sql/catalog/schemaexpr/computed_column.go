@@ -146,6 +146,28 @@ func ValidateComputedColumnExpression(
 		}
 	}
 
+	// run the same validation in sql/row/row_converter.go => GenerateInsertRow function
+	var txCtx transform.ExprTransformContext
+	evalCtx := &eval.Context{}
+	// compute expression can have dependency to another column,
+	// in this case line below will throw an error and validation is not necessary
+	typedExpr, err := tree.TypeCheck(ctx, d.Computed.Expr, semaCtx, defType)
+	if err == nil {
+		typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr)
+		if err != nil {
+			return "", nil, err
+		}
+		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
+		if err != nil {
+			return "", nil, err
+		}
+		// AdjustValueToType function does the validation
+		_, err = tree.AdjustValueToType(defType, datum)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+
 	return expr, typ, nil
 }
 
