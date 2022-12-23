@@ -370,7 +370,8 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 
 			numInputBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
 			numDequeuedBatches := 0
-			batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), coldata.BatchSize(), 0.1 /* nullProbability */)
+			args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: 0.1}
+			batch := coldatatestutils.RandomBatch(testAllocator, args, typs, coldata.BatchSize(), coldata.BatchSize())
 			batchSize := colmem.GetBatchMemSize(batch)
 			getExpectedMemUsage := func(numEnqueuedBatches int) int64 {
 				batchesAccountedFor := numEnqueuedBatches

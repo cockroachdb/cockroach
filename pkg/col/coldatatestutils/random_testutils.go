@@ -235,27 +235,18 @@ func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
 }
 
 // RandomBatch returns a batch with a capacity of capacity and a number of
-// random elements equal to length (capacity if length is 0). The values will be
-// null with a probability of nullProbability.
+// random elements equal to length (capacity if length is 0).
 func RandomBatch(
-	allocator *colmem.Allocator,
-	rng *rand.Rand,
-	typs []*types.T,
-	capacity int,
-	length int,
-	nullProbability float64,
+	allocator *colmem.Allocator, args RandomVecArgs, typs []*types.T, capacity int, length int,
 ) coldata.Batch {
 	batch := allocator.NewMemBatchWithFixedCapacity(typs, capacity)
 	if length == 0 {
 		length = capacity
 	}
+	args.N = length
 	for _, colVec := range batch.ColVecs() {
-		RandomVec(RandomVecArgs{
-			Rand:            rng,
-			Vec:             colVec,
-			N:               length,
-			NullProbability: nullProbability,
-		})
+		args.Vec = colVec
+		RandomVec(args)
 	}
 	batch.SetLength(length)
 	return batch
@@ -294,7 +285,7 @@ func RandomBatchWithSel(
 	nullProbability float64,
 	selProbability float64,
 ) coldata.Batch {
-	batch := RandomBatch(allocator, rng, typs, n, 0 /* length */, nullProbability)
+	batch := RandomBatch(allocator, RandomVecArgs{Rand: rng, NullProbability: nullProbability}, typs, n, 0 /* length */)
 	if selProbability != 0 {
 		sel := RandomSel(rng, n, 1-selProbability)
 		batch.SetSelection(true)
