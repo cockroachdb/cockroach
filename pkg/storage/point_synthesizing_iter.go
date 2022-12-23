@@ -264,12 +264,13 @@ func (i *PointSynthesizingIter) updateIter() (bool, error) {
 		i.iterKey = i.iter.UnsafeKey()
 		i.atRangeKeysPos = (i.prefix && i.iterHasRange) ||
 			(!i.prefix && i.iterKey.Key.Equal(i.rangeKeysPos))
+		i.rangeKeyChanged = i.rangeKeyChanged || i.iter.RangeKeyChanged()
 	} else {
 		i.iterHasPoint, i.iterHasRange = false, false
 		i.iterKey = MVCCKey{}
 		i.atRangeKeysPos = false
+		// recall previous i.rangeKeyChanged state
 	}
-	i.rangeKeyChanged = i.rangeKeyChanged || i.iter.RangeKeyChanged()
 	return i.iterValid, i.iterErr
 }
 

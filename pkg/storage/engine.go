@@ -204,7 +204,9 @@ type SimpleMVCCIterator interface {
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 	RangeKeys() MVCCRangeKeyStack
 	// RangeKeyChanged returns true if the previous seek or step moved to a
-	// different range key (or none at all). This includes an exhausted iterator.
+	// different range key (or none at all). Requires a valid iterator, but an
+	// exhausted iterator is considered to have had no range keys when calling
+	// this after repositioning.
 	RangeKeyChanged() bool
 }
 
