@@ -1295,10 +1295,11 @@ func (h *decommTestHelper) waitUpReplicated(
 		// Check to see that there are no ranges where the target node is
 		// not part of the replica set.
 		stmtReplicaCount := fmt.Sprintf(
-			"SELECT count(*) FROM crdb_internal.ranges "+
-				"WHERE array_position(replicas, %d) IS NULL and database_name = '%s';",
-			targetLogicalNodeID, database,
-		)
+			`SELECT count(*) FROM [ SHOW RANGES FROM DATABASE %s ] WHERE
+array_position(voting_replicas, %[2]d) IS NULL AND
+array_position(non_voting_replicas, %[2]d) IS NULL AND
+array_position(learner_replicas, %[2]d) IS NULL
+`, database, targetLogicalNodeID)
 		if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
 			return err
 		}

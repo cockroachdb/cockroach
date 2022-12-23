@@ -2436,9 +2436,11 @@ func typeCheckSameTypedExprs(
 			case !constIdxs.Empty():
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 			case !placeholderIdxs.Empty():
-				next, _ := placeholderIdxs.Next(0)
-				p := s.exprs[next].(*Placeholder)
-				return nil, nil, placeholderTypeAmbiguityError(p.Idx)
+				typ, err := typeCheckSameTypedPlaceholders(s, desired)
+				if err != nil {
+					return nil, nil, err
+				}
+				return typedExprs, typ, nil
 			default:
 				if desired != types.Any {
 					return typedExprs, desired, nil
