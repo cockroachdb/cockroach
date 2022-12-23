@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package hydrateddesc contains logic to cache table descriptors with user
+// Package hydrateddesccache contains logic to cache descriptors with user
 // defined types hydrated.
-package hydrateddesc
+package hydrateddesccache
 
 import (
 	"context"
