@@ -329,7 +329,9 @@ func maxCompletedProposalSize(cmd *kvserverpb.RaftCommand) int {
 	return cmd.Size() + maxRaftCommandMLAIAndCTSizeIncrement
 }
 
-// propose encodes a command, starts tracking it, and proposes it to Raft.
+// propose takes a ProposalData, performs a number of checks on it, optionally
+// preallocates a buffer for later entry encoding, and hands the command to the
+// proposal buf for being flushed in a future call to FlushLockedWithRaftGroup.
 //
 // The method hands ownership of the command over to the Raft machinery. After
 // the method returns, all access to the command must be performed while holding
@@ -338,6 +340,153 @@ func maxCompletedProposalSize(cmd *kvserverpb.RaftCommand) int {
 // propose takes ownership of the supplied token; the caller should tok.Move()
 // it into this method. It will be used to untrack the request once it comes out
 // of the proposal buffer.
+//
+// `propose` is called in two ways.
+//
+// The first case is straightforward: we have
+// a ProposalData that was never handed to propose before. Its MaxLeaseIndex
+// and ClosedTimestamp will be zero, as these fields are assigned only when
+// flushing the proposal buffer (FlushLockedWithRaftGroup).
+//
+// The second case, sadly, is quite complex, and is best illustrated with an
+// example. Let's say we have a ProposalData with CmdIDKey "deadbeef". We
+// propose it the first time (i.e. the "easy case" above).
+//
+// FlushLockedWithRaftGroup runs; the command gets added to the
+// `r.mu.proposals`, is assigned MaxLeaseIndex 100, and is handed to raft, which
+// does add it to its (unstable, then later stable, log). Let's say the system
+// is slow; perhaps raft has lost leadership, there is a network blip, etc.
+// `refreshProposalsLocked` will periodically look at `r.mu.proposals` and hand
+// everything that has been inflight back to the proposal buffer for
+// re-insertion in the log (via `propBuf.ReinsertLocked`). In this example, say
+// this happens twice, and let's assume the commands actually all made it into
+// the log, i.e. we didn't get ErrProposalDropped from `rawNode.Propose`.
+//
+// So we have this situation (where N is some base index not relevant to the
+// example):
+//
+//	r.mu.proposals["deadbeef"] = p{Cmd{MaxLeaseIndex: 100, ...}}
+//
+//	... (unrelated entries)
+//	raftlog[N] = Cmd{MaxLeaseIndex: 100, ...}
+//	... (unrelated entries)
+//	raftlog[N+12] = (same as N)
+//	... (unrelated entries)
+//	raftlog[N+15] = (same as N)
+//
+// Note how three log entries refer to the same proposal. So far this is not an
+// issue, since all three entries refer to the exact identical proposal. If they
+// applied now, in the order in which they appear, the first one would show up,
+// bump the MaxLeaseAppliedIndex and notify the client of, and the other
+// two copies would apply as no-ops (i.e. with a ForcedError).
+//
+// On the other hand, if the first command fails the lease check (i.e. wrong
+// LeaseSequence), it gets rejected with a NotLeaseholderError (to the client).
+// The same will happen to the other copies. No problem there either.
+//
+// The trouble starts if the first command passes the lease check but gets
+// rejected due to its LeaseAppliedIndex. In that case, we currently do *not*
+// want to communicate an error to the client and fail the proposal: many writes
+// are pipelined, meaning that the client is no longer around and will only come
+// back as part of their parallel commit. If the write is not present then, this
+// causes a transaction retry, which is expensive[^pipeline].
+//
+// Instead, we will internally repropose the same command under a new
+// MaxLeaseIndex[reprop-lai]. Why is this allowed? After all, the entire point of
+// the MaxLeaseIndex is to prevent multiple copies of the command from having an
+// effect? The reason is that we know that any copies of this current command will
+// fail the MaxLeaseCheck, so we can introduce a modified copy that can actually
+// apply.
+// Say the LeaseAppliedIndex for that modified copy is 333 and it ends up at log
+// position N+27. Then we have
+//
+//	r.mu.proposals["deadbeef"] = p{Cmd{MaxLeaseIndex: 333, ...}} <-- mutated
+//
+//	... (unrelated entries)
+//	raftlog[N] = Cmd{MaxLeaseIndex: 100, ...}                    <-- already applied
+//	... (unrelated entries)
+//	raftlog[N+12] = (same as N)
+//	... (unrelated entries)
+//	raftlog[N+15] = (same as N)
+//	... (unrelated entries)
+//	raftlog[N+27] = Cmd{MaxLeaseIndex: 333, ...}                 <-- new
+//
+// Note that how when we made N+27, we justified this by saying that all future copies
+// of the command were doomed to fail since our own copy failed. This is no longer true!
+// The one at N+27 will likely succeeed. It is effectively a new command as far as
+// replay protection is concerned.
+//
+// When we apply N+12, it will fail. If we made another modified copy, it would
+// go in the log, then N+27 would succeed, and then the new copy would succeed
+// as well, in effect doubly applying the command. So we can't "blindly"
+// repropose; we need to first check that there isn't a mutated copy ahead of us
+// in the log. The way we do this is by checking whether the log entry's
+// MaxLeaseIndex matches that of our command in the proposal map. One way of
+// interpreting this is that the entry in the proposal map is really "also"
+// keyed on the MaxLeaseIndex in it, and we can only repropose under new
+// LeaseAppliedIndex as long as our "own" entry is in it[^reprop-check]. Note
+// that this last link also handles a case not discussed here: if N actually
+// applied, then N+12 would fail, and we must not mint a mutated entry at that
+// point either. So we track on the `*ProposalData` whether it has already
+// applied. This is conceptually the same as the check for MaxLeaseIndex match,
+// but backwards-looking.
+//
+// The long and short of it is, we may see calls to propose for a proposal that
+// was already previously in the proposals map (though it isn't at the time
+// of the call), and for which we will be assigning a new MaxLeaseIndex.
+//
+// TODO(during review): I would like to just reset the lease index in
+// tryReproposeWithNewLeaseIndex before calling into this method, but need to
+// first understand the resetting of the proposal's LAI at the beginning of
+// propose. Need to nuderstand understand what's going on here. I'm keeping
+// notes at
+// https://github.com/cockroachdb/cockroach/issues/71148#issuecomment-1364104413.
+// I think it has to do with the case in which an error occurs when proposing
+// the reproposal and it's probably connected to the MaxLeaseIndex check getting
+// misguided in that case (thinking there a new proposal in the log ahead if it
+// when there really isn't).
+//
+// TODO(during review): I thought we could simplify by handling
+// ErrProposalDropped[errpd] better. But we can't. The idea was: the reason we
+// end up with multiple copies of the same entry in the unapplied log is because
+// we don't handle ErrProposalDropped[^errpd] well. The Replica has no idea
+// which ProposalData in r.mu.proposals are in the log. This is why it has to
+// assume the worst and needs to periodically throw copies into the log until
+// one comes out (which may then create a mutated copy, etc). If we handled
+// ErrProposalDropped, we can track on the ProposalData whether raft accepted
+// the proposal. But! There are ways for the entry to not enter the
+// log even though we didn't get ErrProposalDropped: raft leadership might
+// change and the new leader might truncate our entry - call this A - and
+// the second reason is that we use raft proposal forwarding, meaning that
+// our RawNode isn't the leader to begin with (or thinks it's the leader but
+// isn't), but still claims it has the entry but without the guarantee that
+// we're after of it showing up in the log.
+//
+// TODO(during review): continuing the above. But we could still simplify these
+// non-mutating reproposals: we don't need to apply the same entry. If we have
+// proposals outstanding, we can propose a dummy (~empty but with a
+// LeaseAppliedIndex) proposal that has no effect on the state machine (other
+// than the LeaseAppliedIndex update) and whose sole purpose is to help flush
+// the pipeline. This is also a more stable option; if a Range starts limping,
+// constantly bombarding it with its inflight commands isn't a great move.
+// Anyway, if we did this, then we'd never have multiple copies of the same
+// command in the unapplied log. This would simplify `tryReproposeWithNewLeaseIndex`
+// because we know that the "mutated copy" we're creating is the only such copy;
+// meaning we can drop both the checks[^reprop-check]. This is a nice conceptual
+// simplification, and may or may not help reduce complexity around reproposal
+// errors that I still need to fill my understanding for.
+//
+// [^pipeline]: https://github.com/cockroachdb/cockroach/pull/35261 - the TL;DR is that
+// we don't really expect to need this in steady state but it happened enough
+// around testing edge cases, where unexpected txn retries matter for testing
+// ergonomics. It would be wise to revisit whether such an amount of core
+// complexity is warranted here, and if we could potentially find a less
+// efficient solution that also solves the problem. For example, while we do no
+// longer have a client goroutine, we do still have the batch, and can spawn our
+// own goroutine.
+// [^reprop-lai]: https://github.com/cockroachdb/cockroach/blob/54e3708c8ccc850e5edd7a77c74bdb70aacde3a5/pkg/kv/kvserver/replica_application_result.go#L105-L110
+// [^reprop-check]: https://github.com/cockroachdb/cockroach/blob/54e3708c8ccc850e5edd7a77c74bdb70aacde3a5/pkg/kv/kvserver/replica_application_result.go#L154-L170
+// [^errpd]: https://github.com/cockroachdb/cockroach/issues/21849
 func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
 ) (pErr *roachpb.Error) {
@@ -348,22 +497,16 @@ func (r *Replica) propose(
 	// package is that proposals which are finished carry a raft command with a
 	// MaxLeaseIndex equal to the proposal command's max lease index.
 	//
-	// TODO(during review): understand what's going on here. I'm keeping notes
-	// at https://github.com/cockroachdb/cockroach/issues/71148#issuecomment-1364104413.
-	// Clean up and write a comments.
+	// TODO(during review): see comment on propose.
 	defer func(prev uint64) {
 		if pErr != nil {
 			p.command.MaxLeaseIndex = prev
 		}
 	}(p.command.MaxLeaseIndex)
-
-	// Make sure the MaxLeaseIndex and ClosedTimestamp are unset.
+	// Make sure the MaxLeaseIndex and ClosedTimestamp are unset since they
+	// are assigned only later.
 	//
-	// TODO(during review): I'm still figuring out the case in which they're
-	// set here, which has to do with `Replica.tryReproposeWithNewLeaseIndex`
-	// which is quite complex. I'd move the resetting to that caller, but
-	// then there is also this defer above which I also don't understand,
-	// so making small steps. But once I understand it, clean up.
+	// TODO(during review): see comment on propose.
 	p.command.MaxLeaseIndex = 0
 	p.command.ClosedTimestamp = nil
 
