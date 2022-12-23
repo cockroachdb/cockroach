@@ -345,7 +345,29 @@ func (p *planner) AlterPrimaryKey(
 		if err != nil {
 			return err
 		}
-		tabledesc.UpdateIndexPartitioning(newPrimaryIndexDesc, true /* isIndexPrimary */, newImplicitCols, newPartitioning)
+		tabledesc.UpdateIndexPartitioning(
+			newPrimaryIndexDesc, true, /* isIndexPrimary */
+			newImplicitCols, newPartitioning,
+		)
+
+		// We need to now also update the partitioning for the new temp primary
+		// index. If we didn't, it wouldn't be partitioned, and writes which
+		// were merged into the new primary index will be wrong.
+		//
+		// We know that the temp index will have the subsequent index ID.
+		// This is hacky, sure, but it's about as good of an invariant
+		// as most of this code relies upon for correctness. This code will
+		// all be replaced by code in the declarative schema changer before
+		// too long where we'll model this all correctly.
+		newTempPrimaryIndex, err := tableDesc.FindIndexWithID(newPrimaryIndexDesc.ID + 1)
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to find newly created temporary index for backfill")
+		}
+		tabledesc.UpdateIndexPartitioning(
+			newTempPrimaryIndex.IndexDesc(), true, /* isIndexPrimary */
+			newImplicitCols, newPartitioning,
+		)
 	}
 
 	// Create a new index that indexes everything the old primary index
