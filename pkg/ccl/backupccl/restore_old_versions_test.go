@@ -58,27 +58,18 @@ func TestRestoreOldVersions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testdataBase := datapathutils.TestDataPath(t, "restore_old_versions")
 	var (
-		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
-		clusterDirs                 = testdataBase + "/cluster"
-		systemUsersDirs             = testdataBase + "/system-users-restore"
+		clusterDirs     = testdataBase + "/cluster"
+		systemUsersDirs = testdataBase + "/system-users-restore"
 	)
-
-	t.Run("table-restore", func(t *testing.T) {
-		dirs, err := os.ReadDir(exportDirsWithoutInterleave)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(exportDirsWithoutInterleave, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
-		}
-	})
 
 	t.Run("cluster-restore", func(t *testing.T) {
 		dirs, err := os.ReadDir(clusterDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
+			// Skip over the `create.sql` file.
+			if !dir.IsDir() {
+				continue
+			}
 			exportDir, err := filepath.Abs(filepath.Join(clusterDirs, dir.Name()))
 			require.NoError(t, err)
 
@@ -109,41 +100,10 @@ func TestRestoreOldVersions(t *testing.T) {
 	})
 }
 
-func restoreOldVersionTest(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		params := base.TestServerArgs{}
-		const numAccounts = 1000
-		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
-		require.NoError(t, err)
-		sqlDB.Exec(t, `CREATE DATABASE test`)
-		var unused string
-		var importedRows int
-		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, localFoo).Scan(
-			&unused, &unused, &unused, &importedRows, &unused, &unused,
-		)
-		const totalRows = 12
-		if importedRows != totalRows {
-			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
-		}
-		results := [][]string{
-			{"1", "1", "1"},
-			{"2", "2", "2"},
-			{"3", "3", "3"},
-		}
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t2 ORDER BY k`, results)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t4 ORDER BY k`, results)
-
-		results = append(results, []string{"4", "5", "6"})
-		sqlDB.Exec(t, `INSERT INTO test.t1 VALUES (4, 5 ,6)`)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
-	}
-}
-
 func TestRestoreFKRevTest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	params := base.TestServerArgs{}
 	const numAccounts = 1000
 	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
