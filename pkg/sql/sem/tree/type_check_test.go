@@ -517,3 +517,30 @@ func TestTypeCheckCaseExprWithConstantsAndUnresolvedPlaceholders(t *testing.T) {
 		require.Equal(t, types.Int4, pTyp)
 	}
 }
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/94192.
+// If an array has only nulls and placeholders, then the type-checker should
+// still infer the types using the placeholder hints.
+func TestTypeCheckArrayWithNullAndPlaceholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Typecheck without any restrictions.
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.Properties.Require("", 0 /* flags */)
+
+	placeholderTypes := []*types.T{types.Int}
+	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
+	require.NoError(t, err)
+
+	expr, err := parser.ParseExpr("array[null, $1]::int[]")
+	require.NoError(t, err)
+	typed, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+	require.NoError(t, err)
+	require.Equal(t, types.IntArray, typed.ResolvedType())
+
+	pTyp, _, err := semaCtx.Placeholders.Type(tree.PlaceholderIdx(0))
+	require.NoError(t, err)
+	require.Equal(t, types.Int, pTyp)
+}
