@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -58,8 +57,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testdataBase := datapathutils.TestDataPath(t, "restore_old_versions")
 	var (
-		clusterDirs     = testdataBase + "/cluster"
-		systemUsersDirs = testdataBase + "/system-users-restore"
+		clusterDirs = testdataBase + "/cluster"
 	)
 
 	t.Run("cluster-restore", func(t *testing.T) {
@@ -74,28 +72,6 @@ func TestRestoreOldVersions(t *testing.T) {
 			require.NoError(t, err)
 
 			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
-		}
-	})
-
-	t.Run("system-users-restore", func(t *testing.T) {
-		dirs, err := os.ReadDir(systemUsersDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(systemUsersDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), restoreSystemUsersWithoutIDs(exportDir))
-		}
-	})
-
-	t.Run("full-cluster-restore-users-without-ids", func(t *testing.T) {
-		dirs, err := os.ReadDir(systemUsersDirs)
-		require.NoError(t, err)
-		for _, dir := range dirs {
-			require.True(t, dir.IsDir())
-			exportDir, err := filepath.Abs(filepath.Join(systemUsersDirs, dir.Name()))
-			require.NoError(t, err)
-			t.Run(dir.Name(), fullClusterRestoreUsersWithoutIDs(exportDir))
 		}
 	})
 }
@@ -333,146 +309,4 @@ DROP SCHEMA bar;
 		return exists
 	}
 	require.Falsef(t, hasSameNameSchema(restoredDBName), "corrupted descriptor exists")
-}
-
-func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-					},
-				}})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s'", localFoo))
-
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "100"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "102"},
-			{"testuser3", "NULL", "false", "103"},
-			{"testuser4", "NULL", "false", "104"},
-		})
-
-		sqlDB.CheckQueryResults(t, `SELECT * FROM system.role_options`, [][]string{
-			{"testrole", "NOLOGIN", "NULL", "100"},
-			{"testuser", "CREATEROLE", "NULL", "101"},
-			{"testuser", "VALID UNTIL", "2021-01-10 00:00:00+00:00", "101"},
-			{"testuser2", "CONTROLCHANGEFEED", "NULL", "102"},
-			{"testuser2", "CONTROLJOB", "NULL", "102"},
-			{"testuser2", "CREATEDB", "NULL", "102"},
-			{"testuser2", "CREATELOGIN", "NULL", "102"},
-			{"testuser2", "NOLOGIN", "NULL", "102"},
-			{"testuser2", "VIEWACTIVITY", "NULL", "102"},
-			{"testuser3", "CANCELQUERY", "NULL", "103"},
-			{"testuser3", "MODIFYCLUSTERSETTING", "NULL", "103"},
-			{"testuser3", "VIEWACTIVITYREDACTED", "NULL", "103"},
-			{"testuser3", "VIEWCLUSTERSETTING", "NULL", "103"},
-			{"testuser4", "NOSQLLOGIN", "NULL", "104"},
-		})
-
-		// Verify that the next user we create uses the next biggest ID.
-		sqlDB.Exec(t, "CREATE USER testuser5")
-
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "100"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "102"},
-			{"testuser3", "NULL", "false", "103"},
-			{"testuser4", "NULL", "false", "104"},
-			{"testuser5", "NULL", "false", "105"},
-		})
-	}
-}
-
-func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
-	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
-
-		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
-			InitManualReplication, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-					},
-				}})
-		defer cleanup()
-		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
-		require.NoError(t, err)
-
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE SYSTEM USERS FROM '%s'", localFoo))
-
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "100"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "102"},
-			{"testuser3", "NULL", "false", "103"},
-			{"testuser4", "NULL", "false", "104"},
-		})
-
-		// Verify that the next user we create uses the next biggest ID.
-		sqlDB.Exec(t, "CREATE USER testuser5")
-
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "100"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "102"},
-			{"testuser3", "NULL", "false", "103"},
-			{"testuser4", "NULL", "false", "104"},
-			{"testuser5", "NULL", "false", "105"},
-		})
-
-		// Drop some users and try restoring again.
-		sqlDB.Exec(t, "DROP ROLE testrole")
-		sqlDB.Exec(t, "DROP ROLE testuser2")
-		sqlDB.Exec(t, "DROP ROLE testuser3")
-		sqlDB.Exec(t, "DROP ROLE testuser4")
-
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE SYSTEM USERS FROM '%s'", localFoo))
-
-		// testrole, testuser2, testuser3, testuser4 should be reassigned higher ids.
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "106"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "107"},
-			{"testuser3", "NULL", "false", "108"},
-			{"testuser4", "NULL", "false", "109"},
-			{"testuser5", "NULL", "false", "105"},
-		})
-
-		// Verify that the next user we create uses the next biggest ID.
-		sqlDB.Exec(t, "CREATE USER testuser6")
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "106"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "107"},
-			{"testuser3", "NULL", "false", "108"},
-			{"testuser4", "NULL", "false", "109"},
-			{"testuser5", "NULL", "false", "105"},
-			{"testuser6", "NULL", "false", "110"},
-		})
-
-	}
 }
