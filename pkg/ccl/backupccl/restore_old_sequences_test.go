@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,7 +32,7 @@ import (
 //
 //	VERSION=...
 //	roachprod create local
-//	roachprod wipe localÅ
+//	roachprod wipe local
 //	roachprod stage local release ${VERSION}
 //	roachprod start local
 //	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_sequences/create.sql)"
@@ -66,6 +68,8 @@ func TestRestoreOldSequences(t *testing.T) {
 func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
+		params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion,
+			clusterversion.TestingBinaryMinSupportedVersion, false /* initializeVersion */)
 		const numAccounts = 1000
 		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
@@ -75,7 +79,7 @@ func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testin
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
-		restoreQuery := `RESTORE test.* FROM $1`
+		restoreQuery := `RESTORE test.* FROM LATEST IN $1`
 		if isSchemaOnly {
 			restoreQuery = restoreQuery + " with schema_only"
 		}

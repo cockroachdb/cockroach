@@ -547,6 +547,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		SSLCertsDir:               ts.params.SSLCertsDir,
 		TestingKnobs:              ts.params.Knobs,
 		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
+		Settings:                  ts.params.Settings,
 	}
 
 	// Since we're creating a tenant, it doesn't make sense to pass through the
