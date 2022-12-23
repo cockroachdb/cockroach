@@ -49,9 +49,6 @@ func splitPostAdd(
 	initClosedTS *hlc.Timestamp,
 ) error {
 	// Sanity check that the store is in the split.
-	//
-	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
-	// enabled.
 	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
