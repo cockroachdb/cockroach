@@ -779,13 +779,6 @@ type TypeDescriptor interface {
 	Descriptor
 	// TypeDesc returns the backing descriptor for this type, if one exists.
 	TypeDesc() *descpb.TypeDescriptor
-	// HydrateTypeInfoWithName fills in user defined type metadata for
-	// a type and also sets the name in the metadata to the passed in name.
-	// This is used when hydrating a type with a known qualified name.
-	//
-	// Note that if the passed type is already hydrated, regardless of the version
-	// with which it has been hydrated, this is a no-op.
-	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
 	// MakeTypesT creates a types.T from the input type descriptor.
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	// HasPendingSchemaChanges returns whether or not this descriptor has schema

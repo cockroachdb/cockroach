@@ -828,13 +828,11 @@ func (desc *immutable) MakeTypesT(
 	switch t := desc.Kind; t {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		typ := types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
-		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
-			return nil, err
-		}
+		ensureTypeMetadataIsHydrated(&typ.TypeMeta, name, desc)
 		return typ, nil
 	case descpb.TypeDescriptor_ALIAS:
 		// Hydrate the alias and return it.
-		if err := desc.HydrateTypeInfoWithName(ctx, desc.Alias, name, res); err != nil {
+		if err := EnsureTypeIsHydrated(ctx, desc.Alias, res); err != nil {
 			return nil, err
 		}
 		return desc.Alias, nil
@@ -845,157 +843,20 @@ func (desc *immutable) MakeTypesT(
 			contents[i] = e.ElementType
 			labels[i] = e.ElementLabel
 		}
-		typ := types.MakeCompositeType(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID),
-			contents, labels)
+		typ := types.MakeCompositeType(
+			catid.TypeIDToOID(desc.GetID()),
+			catid.TypeIDToOID(desc.ArrayTypeID),
+			contents,
+			labels,
+		)
 		// Hydrate the composite type and return it.
-		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
+		if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
 			return nil, err
 		}
 		return typ, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
-}
-
-// EnsureTypeIsHydrated makes sure that t is a fully-hydrated type.
-func EnsureTypeIsHydrated(
-	ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver,
-) error {
-	if t.Family() == types.TupleFamily {
-		for _, typ := range t.TupleContents() {
-			if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
-				return err
-			}
-		}
-	}
-	if !t.UserDefined() {
-		return nil
-	}
-	id := GetUserDefinedTypeDescID(t)
-	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return err
-	}
-	return elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res)
-}
-
-// HydrateTypesInTableDescriptor uses res to install metadata in the types
-// present in a table descriptor. res retrieves the fully qualified name and
-// descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(
-	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for i := range desc.Columns {
-		if err := EnsureTypeIsHydrated(ctx, desc.Columns[i].Type, res); err != nil {
-			return err
-		}
-	}
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		if col := mut.GetColumn(); col != nil {
-			if err := EnsureTypeIsHydrated(ctx, col.Type, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// HydrateTypesInFunctionDescriptor uses res to install metadata in the types
-// present in a function descriptor.
-func HydrateTypesInFunctionDescriptor(
-	ctx context.Context, desc *descpb.FunctionDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for i := range desc.Params {
-		if err := EnsureTypeIsHydrated(ctx, desc.Params[i].Type, res); err != nil {
-			return err
-		}
-	}
-	if err := EnsureTypeIsHydrated(ctx, desc.GetReturnType().Type, res); err != nil {
-		return err
-	}
-	return nil
-}
-
-// HydrateTypesInSchemaDescriptor uses res to install metadata in the types
-// present in a function descriptor.
-func HydrateTypesInSchemaDescriptor(
-	ctx context.Context, desc *descpb.SchemaDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for _, f := range desc.Functions {
-		for i := range f.Overloads {
-			for _, t := range f.Overloads[i].ArgTypes {
-				if err := EnsureTypeIsHydrated(ctx, t, res); err != nil {
-					return err
-				}
-			}
-			if err := EnsureTypeIsHydrated(ctx, f.Overloads[i].ReturnType, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// HydrateTypeInfoWithName implements the TypeDescriptor interface.
-func (desc *immutable) HydrateTypeInfoWithName(
-	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
-) error {
-	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(desc.GetVersion()) {
-		return nil
-	}
-	var enumData *types.EnumMetadata
-	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		if typ.Family() != types.EnumFamily {
-			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
-		}
-		enumData = &types.EnumMetadata{
-			LogicalRepresentations:  desc.logicalReps,
-			PhysicalRepresentations: desc.physicalReps,
-			IsMemberReadOnly:        desc.readOnlyMembers,
-		}
-	case descpb.TypeDescriptor_ALIAS:
-		if typ.UserDefined() {
-			switch typ.Family() {
-			case types.ArrayFamily:
-				// Hydrate the element type.
-				elemType := typ.ArrayContents()
-				if err := EnsureTypeIsHydrated(ctx, elemType, res); err != nil {
-					return err
-				}
-			case types.TupleFamily:
-				if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
-					return err
-				}
-			default:
-				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
-			}
-		}
-	case descpb.TypeDescriptor_COMPOSITE:
-		for _, e := range desc.Composite.Elements {
-			if err := EnsureTypeIsHydrated(ctx, e.ElementType, res); err != nil {
-				return err
-			}
-		}
-	default:
-		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
-	}
-
-	// Only hydrate the type if we did not fail to perform any of the above
-	// steps. If we were to populate these before something that might fail,
-	// the type may end up partially hydrated.
-	typ.TypeMeta = types.UserDefinedTypeMetadata{
-		Name: &types.UserDefinedTypeName{
-			Catalog:        name.Catalog(),
-			ExplicitSchema: name.ExplicitSchema,
-			Schema:         name.Schema(),
-			Name:           name.Object(),
-		},
-		Version:  uint32(desc.Version),
-		EnumData: enumData,
-	}
-	return nil
 }
 
 // NumEnumMembers implements the TypeDescriptor interface.

@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "typedesc",
     srcs = [
+        "hydrate.go",
         "safe_format.go",
         "table_implicit_record_type.go",
         "type_desc.go",

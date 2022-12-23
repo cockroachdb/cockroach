@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -252,31 +251,6 @@ func (v TableImplicitRecordType) GetRawBytesInStorage() []byte {
 func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	v.panicNotSupported("TypeDesc")
 	return nil
-}
-
-// HydrateTypeInfoWithName implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) HydrateTypeInfoWithName(
-	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
-) error {
-	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(v.desc.GetVersion()) {
-		return nil
-	}
-	if typ.Family() != types.TupleFamily {
-		return errors.AssertionFailedf("unexpected hydration of non-tuple type %s with table implicit record type %d",
-			typ, v.GetID())
-	}
-	if typ.Oid() != catid.TypeIDToOID(v.GetID()) {
-		return errors.AssertionFailedf("unexpected mismatch during table implicit record type hydration: "+
-			"type %s has id %d, descriptor has id %d", typ, typ.Oid(), v.GetID())
-	}
-	typ.TypeMeta.Name = &types.UserDefinedTypeName{
-		Catalog:        name.Catalog(),
-		ExplicitSchema: name.ExplicitSchema,
-		Schema:         name.Schema(),
-		Name:           name.Object(),
-	}
-	typ.TypeMeta.Version = uint32(v.desc.GetVersion())
-	return EnsureTypeIsHydrated(ctx, typ, res)
 }
 
 // MakeTypesT implements the TypeDescriptor interface.
