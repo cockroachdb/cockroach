@@ -93,7 +93,7 @@ func registerFailover(r registry.Registry) {
 //
 // The test runs a kv50 workload with batch size 1, using 256 concurrent workers
 // directed at n1-n3 with a rate of 2048 reqs/s. n4-n6 fail and recover in
-// order, with 30 seconds between each operation, for 3 cycles totaling 9
+// order, with 1 minute between each operation, for 3 cycles totaling 9
 // failures.
 func runFailoverNonSystem(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
@@ -150,14 +150,14 @@ func runFailoverNonSystem(
 	// the ranges across all nodes regardless.
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
 
-	// Start workload on n7, using n1-n3 as gateways. Run it for 10 minutes, since
-	// we take ~1 minute to fail and recover each node, and we do 3 cycles of each
-	// of the 3 nodes in order.
+	// Start workload on n7, using n1-n3 as gateways. Run it for 20
+	// minutes, since we take ~2 minutes to fail and recover each node, and
+	// we do 3 cycles of each of the 3 nodes in order.
 	t.Status("running workload")
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 600s --concurrency 256 --max-rate 2048 --timeout 30s --tolerate-errors `+
+			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
 			`{pgurl:1-3}`)
 		return nil
@@ -170,7 +170,7 @@ func runFailoverNonSystem(
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
 
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 
 		for i := 0; i < 3; i++ {
@@ -242,8 +242,8 @@ func runFailoverNonSystem(
 // n5:    Workload runner.
 //
 // The test runs a kv50 workload with batch size 1, using 256 concurrent workers
-// directed at n1-n3 with a rate of 2048 reqs/s. n4 fails and recovers, with 30
-// seconds between each operation, for 9 cycles.
+// directed at n1-n3 with a rate of 2048 reqs/s. n4 fails and recovers, with 1
+// minute between each operation, for 9 cycles.
 //
 // TODO(erikgrinaker): The metrics resolution of 10 seconds isn't really good
 // enough to accurately measure the number of invalid leases, but it's what we
@@ -330,13 +330,13 @@ func runFailoverLiveness(
 	// We also make sure the lease is located on n4.
 	relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
-	// Start workload on n7, using n1-n3 as gateways. Run it for 10 minutes, since
-	// we take ~1 minute to fail and recover the node, and we do 9 cycles.
+	// Start workload on n7, using n1-n3 as gateways. Run it for 20 minutes, since
+	// we take ~2 minutes to fail and recover the node, and we do 9 cycles.
 	t.Status("running workload")
 	m := c.NewMonitor(ctx, c.Range(1, 4))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 600s --concurrency 256 --max-rate 2048 --timeout 30s --tolerate-errors `+
+			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
 			`{pgurl:1-3}`)
 		return nil
@@ -350,7 +350,7 @@ func runFailoverLiveness(
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
 
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 
 		for i := 0; i < 9; i++ {
@@ -446,7 +446,7 @@ func runFailoverLiveness(
 //
 // The test runs a kv50 workload with batch size 1, using 256 concurrent workers
 // directed at n1-n3 with a rate of 2048 reqs/s. n4-n6 fail and recover in
-// order, with 30 seconds between each operation, for 3 cycles totaling 9
+// order, with 1 minute between each operation, for 3 cycles totaling 9
 // failures.
 func runFailoverSystemNonLiveness(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
@@ -511,14 +511,14 @@ func runFailoverSystemNonLiveness(
 	relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
 		[]int{1, 2, 3}, []int{4, 5, 6})
 
-	// Start workload on n7, using n1-n3 as gateways. Run it for 10 minutes, since
-	// we take ~1 minute to fail and recover each node, and we do 3 cycles of each
+	// Start workload on n7, using n1-n3 as gateways. Run it for 20 minutes, since
+	// we take ~2 minutes to fail and recover each node, and we do 3 cycles of each
 	// of the 3 nodes in order.
 	t.Status("running workload")
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 600s --concurrency 256 --max-rate 2048 --timeout 30s --tolerate-errors `+
+			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
 			`{pgurl:1-3}`)
 		return nil
@@ -531,7 +531,7 @@ func runFailoverSystemNonLiveness(
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
 
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 
 		for i := 0; i < 3; i++ {
