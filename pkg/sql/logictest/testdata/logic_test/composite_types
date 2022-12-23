@@ -31,7 +31,7 @@ statement error could not identify column \"foo\"
 SELECT ((1, 2)::t).foo
 
 statement ok
-CREATE TABLE tab (a t)
+CREATE TABLE tab (a t, i int default 0)
 
 statement ok
 INSERT INTO tab VALUES (NULL), ((1, 2))
