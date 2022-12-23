@@ -476,10 +476,7 @@ func (s *TestState) ResolveType(
 
 // ResolveTypeByOID implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id, err := typedesc.UserDefinedTypeOIDToID(oid)
-	if err != nil {
-		return nil, err
-	}
+	id := typedesc.UserDefinedTypeOIDToID(oid)
 	name, typ, err := s.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err

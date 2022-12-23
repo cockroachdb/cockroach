@@ -13,7 +13,6 @@ package catid
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
-	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -40,14 +39,13 @@ func idToUserDefinedOID(id DescID) oid.Oid {
 	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
 }
 
-// UserDefinedOIDToID converts an oid to a descriptor id. Error is returned if
-// the given oid is not user defined.
-func UserDefinedOIDToID(oid oid.Oid) (DescID, error) {
+// UserDefinedOIDToID converts the OID of a user-defined type or function
+// to a descriptor ID. Returns zero if the OID is not user-defined.
+func UserDefinedOIDToID(oid oid.Oid) DescID {
 	if !IsOIDUserDefined(oid) {
-		return 0, errors.Newf("user-defined OID %d should be greater "+
-			"than predefined Max: %d.", oid, oidext.CockroachPredefinedOIDMax)
+		return InvalidDescID
 	}
-	return DescID(oid) - oidext.CockroachPredefinedOIDMax, nil
+	return DescID(oid) - oidext.CockroachPredefinedOIDMax
 }
 
 // IsOIDUserDefined returns true if oid is greater than

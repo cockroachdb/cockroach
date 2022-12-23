@@ -196,10 +196,7 @@ func allocateDescriptorRewrites(
 			// Ensure that all referenced types are present.
 			if col.Type.UserDefined() {
 				// TODO (rohany): This can be turned into an option later.
-				id, err := typedesc.GetUserDefinedTypeDescID(col.Type)
-				if err != nil {
-					return nil, err
-				}
+				id := typedesc.GetUserDefinedTypeDescID(col.Type)
 				if _, ok := typesByID[id]; !ok {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced type %d",

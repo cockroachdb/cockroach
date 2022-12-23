@@ -129,26 +129,24 @@ func TableIDToImplicitTypeOID(id descpb.ID) oid.Oid {
 }
 
 // UserDefinedTypeOIDToID converts a user defined type OID into a descriptor ID.
-// OID of a user-defined type must be greater than CockroachPredefinedOIDMax.
-// The function returns an error if the given OID is less than or equals to
-// CockroachPredefinedMax. If the OID is for a virtual table, then the ID itself
-// is returned, since the type can then be assumed to be the implict record type
-// for that table.
-func UserDefinedTypeOIDToID(oid oid.Oid) (descpb.ID, error) {
+// Returns zero when the OID is not for a user-defined type. If the OID is for
+// a virtual table, then the ID itself is returned, since the type can then be
+// assumed to be the implict record type for that table.
+func UserDefinedTypeOIDToID(oid oid.Oid) descpb.ID {
 	if descpb.IsVirtualTable(descpb.ID(oid)) {
-		return descpb.ID(oid), nil
+		return descpb.ID(oid)
 	}
 	return catid.UserDefinedOIDToID(oid)
 }
 
 // GetUserDefinedTypeDescID gets the type descriptor ID from a user defined type.
-func GetUserDefinedTypeDescID(t *types.T) (descpb.ID, error) {
+func GetUserDefinedTypeDescID(t *types.T) descpb.ID {
 	return UserDefinedTypeOIDToID(t.Oid())
 }
 
 // GetUserDefinedArrayTypeDescID gets the ID of the array type descriptor from a user
 // defined type.
-func GetUserDefinedArrayTypeDescID(t *types.T) (descpb.ID, error) {
+func GetUserDefinedArrayTypeDescID(t *types.T) descpb.ID {
 	return UserDefinedTypeOIDToID(t.UserDefinedArrayOID())
 }
 
@@ -672,10 +670,7 @@ func (desc *immutable) ValidateForwardReferences(
 
 	// Validate that the forward-referenced types exist.
 	if desc.GetKind() == descpb.TypeDescriptor_ALIAS && desc.GetAlias().UserDefined() {
-		aliasedID, err := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
-		if err != nil {
-			vea.Report(err)
-		}
+		aliasedID := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
 		if typ, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
 			vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
 		} else if typ.Dropped() {
@@ -876,10 +871,7 @@ func EnsureTypeIsHydrated(
 	if !t.UserDefined() {
 		return nil
 	}
-	id, err := GetUserDefinedTypeDescID(t)
-	if err != nil {
-		return err
-	}
+	id := GetUserDefinedTypeDescID(t)
 	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return err
@@ -1167,10 +1159,7 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	if !typ.UserDefined() {
 		return map[descpb.ID]struct{}{}, nil
 	}
-	id, err := GetUserDefinedTypeDescID(typ)
-	if err != nil {
-		return nil, err
-	}
+	id := GetUserDefinedTypeDescID(typ)
 	// Collect the type's descriptor ID.
 	ret := map[descpb.ID]struct{}{
 		id: {},
@@ -1198,10 +1187,7 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		}
 	default:
 		// Otherwise, take the array type ID.
-		id, err := GetUserDefinedArrayTypeDescID(typ)
-		if err != nil {
-			return nil, err
-		}
+		id := GetUserDefinedArrayTypeDescID(typ)
 		ret[id] = struct{}{}
 	}
 	return ret, nil

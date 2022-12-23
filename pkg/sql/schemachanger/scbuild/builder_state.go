@@ -415,10 +415,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 			if !types.IsOIDUserDefinedType(oid) {
 				continue
 			}
-			id, err := typedesc.UserDefinedTypeOIDToID(oid)
-			if err != nil {
-				panic(err)
-			}
+			id := typedesc.UserDefinedTypeOIDToID(oid)
 			b.ensureDescriptor(id)
 			desc := b.descCache[id].desc
 			// Implicit record types will lead to table references, which will be

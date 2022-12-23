@@ -142,10 +142,7 @@ func alterTableAddColumn(
 
 	spec.colType.TypeT = b.ResolveTypeRef(d.Type)
 	if spec.colType.TypeT.Type.UserDefined() {
-		typeID, err := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
-		if err != nil {
-			panic(err)
-		}
+		typeID := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
 		_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
 		_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
 		if typeNamespace.DatabaseID != tableNamespace.DatabaseID {

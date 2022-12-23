@@ -49,10 +49,7 @@ func (dt *DistSQLTypeResolver) ResolveType(
 func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
-	id, err := typedesc.UserDefinedTypeOIDToID(oid)
-	if err != nil {
-		return nil, err
-	}
+	id := typedesc.UserDefinedTypeOIDToID(oid)
 	name, desc, err := dt.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
