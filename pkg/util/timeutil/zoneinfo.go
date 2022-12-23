@@ -11,7 +11,9 @@
 package timeutil
 
 import (
+	"sort"
 	"strings"
+	"sync"
 	"time"
 	// embed tzdata in case system tzdata is not available.
 	_ "time/tzdata"
@@ -43,4 +45,19 @@ func LoadLocation(name string) (*time.Location, error) {
 		}
 	}
 	return time.LoadLocation(name)
+}
+
+var tzsOnce sync.Once
+var tzs []string
+
+// TimeZones lists all supported timezones.
+func TimeZones() []string {
+	tzsOnce.Do(func() {
+		tzs = make([]string, 0, len(lowercaseTimezones))
+		for _, tz := range lowercaseTimezones {
+			tzs = append(tzs, tz)
+		}
+		sort.Strings(tzs)
+	})
+	return tzs
 }

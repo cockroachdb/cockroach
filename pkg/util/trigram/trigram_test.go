@@ -38,6 +38,10 @@ func TestMakeTrigrams(t *testing.T) {
 		{"bcaabc",
 			[]string{"  b", " bc", "aab", "abc", "bc ", "bca", "caa"},
 			[]string{"aab", "abc", "bca", "caa"}},
+		{"Приветhi",
+			[]string{"  п", " пр", "hi ", "вет", "етh", "иве", "при", "рив", "тhi"},
+			[]string{"вет", "етh", "иве", "при", "рив", "тhi"},
+		},
 	} {
 		padded := MakeTrigrams(tc.s, true)
 		unpadded := MakeTrigrams(tc.s, false)
@@ -79,5 +83,21 @@ func TestSimilarity(t *testing.T) {
 		{"tritri", "trntri", 0.4444},
 	} {
 		assert.InDelta(t, tc.want, Similarity(tc.l, tc.r), 0.0001, "for %s %% %s", tc.l, tc.r)
+	}
+}
+
+func BenchmarkSimilarity(b *testing.B) {
+	for _, t := range []struct {
+		x string
+		y string
+	}{
+		{"trigram", "trigarm"},
+		{"Приветhi", "Привeтho"},
+	} {
+		b.Run(t.x+t.y, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = Similarity(t.x, t.y)
+			}
+		})
 	}
 }
