@@ -126,23 +126,6 @@ func (r Row) DatumAt(at int) (tree.Datum, error) {
 	return encDatum.Datum, nil
 }
 
-// CopyInto decodes and copies encdatums to specified tuple.
-func (r Row) CopyInto(tuple *tree.DTuple) error {
-	tupleTypes := tuple.ResolvedType().InternalType.TupleContents
-	if len(tupleTypes) != len(r.datums) {
-		return errors.AssertionFailedf("cannot copy row with %d datums into tuple with %d",
-			len(r.datums), len(tupleTypes))
-	}
-
-	for i, typ := range tupleTypes {
-		if err := r.datums[i].EnsureDecoded(typ, r.alloc); err != nil {
-			return errors.Wrapf(err, "error decoding column [%d] as type %s", i, typ)
-		}
-		tuple.D[i] = r.datums[i].Datum
-	}
-	return nil
-}
-
 // IsDeleted returns true if event corresponds to a deletion event.
 func (r Row) IsDeleted() bool {
 	return r.deleted

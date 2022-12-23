@@ -35,12 +35,6 @@ type NormalizedSelectClause struct {
 	desc *cdcevent.EventDescriptor
 }
 
-// RequiresPrev returns true if expression requires access to the previous
-// version of the row.
-func (n *NormalizedSelectClause) RequiresPrev() bool {
-	return len(n.From.Tables) > 1
-}
-
 // SelectStatementForFamily returns tree.Select representing this object.
 func (n *NormalizedSelectClause) SelectStatementForFamily() *tree.Select {
 	if !n.desc.HasOtherFamilies {
@@ -286,11 +280,6 @@ func normalizeSelectClause(
 		tableAlias.Alias = tree.Name(desc.TableName)
 	}
 
-	if tableAlias.Alias == prevTupleName {
-		return nil, pgerror.Newf(pgcode.ReservedName,
-			"%s is a reserved name in CDC; Specify different alias with AS clause", prevTupleName)
-	}
-
 	sc.From.Tables[0] = &tree.TableRef{
 		TableID: int64(desc.TableID),
 		As:      tableAlias,
@@ -299,7 +288,7 @@ func normalizeSelectClause(
 	// Setup sema ctx to handle cdc expressions. We want to make sure we only
 	// override some properties, while keeping other properties (type resolver)
 	// intact.
-	defer configSemaForCDC(semaCtx, desc)()
+	defer configSemaForCDC(semaCtx)()
 
 	// Keep track of user defined types used in the expression.
 	var udts map[oid.Oid]struct{}
@@ -320,7 +309,6 @@ func normalizeSelectClause(
 		return typ, nil
 	}
 
-	requiresPrev := false
 	stmt, err := tree.SimpleStmtVisit(
 		sc,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -349,37 +337,6 @@ func normalizeSelectClause(
 			case *tree.Subquery:
 				return false, e, pgerror.New(
 					pgcode.FeatureNotSupported, "sub-query expressions not supported by CDC")
-			case *tree.UnresolvedName:
-				switch e.NumParts {
-				case 1:
-					if e.Parts[0] == prevTupleName {
-						if _, err := desc.TableDescriptor().FindColumnWithName(prevTupleName); err == nil {
-							return false, e,
-								pgerror.Newf(pgcode.AmbiguousColumn,
-									"ambiguous cdc_prev column collides with CDC reserved keyword.  "+
-										"Disambiguate with %s.cdc_prev", desc.TableName)
-						}
-
-						requiresPrev = true
-						return true, e, nil
-					}
-
-					// Qualify unqualified names.  Since we might be adding access to the
-					// previous row, column names become ambiguous if they are not
-					// qualified.
-					return true, tree.NewUnresolvedName(string(tableAlias.Alias), e.Parts[0]), nil
-				case 2:
-					if e.Parts[1] == prevTupleName {
-						requiresPrev = true
-					}
-				}
-				return true, e, nil
-			case tree.UnqualifiedStar:
-				// Qualify unqualified stars.  Since we might be adding
-				// access to the previous row, column names become ambiguous.
-				return true, &tree.AllColumnsSelector{
-					TableName: tree.NewUnqualifiedTableName(tableAlias.Alias).ToUnresolvedObjectName(),
-				}, nil
 			default:
 				return true, expr, nil
 			}
@@ -392,9 +349,6 @@ func normalizeSelectClause(
 	var norm *NormalizedSelectClause
 	switch t := stmt.(type) {
 	case *tree.SelectClause:
-		if err := scopeAndRewrite(t, requiresPrev); err != nil {
-			return nil, err
-		}
 		norm = &NormalizedSelectClause{
 			SelectClause: t,
 			desc:         desc,
@@ -463,51 +417,4 @@ func (c *checkColumnsVisitor) FindColumnFamilies(sc *tree.SelectClause) error {
 		return recurse, newExpr, nil
 	})
 	return err
-}
-
-// scopeAndRewrite restricts this expression scope only to the columns
-// being accessed, and rewrites select clause as needed to reflect that.
-func scopeAndRewrite(sc *tree.SelectClause, requiresPrev bool) error {
-	tables := append(tree.TableExprs(nil), sc.From.Tables...)
-	if len(tables) != 1 {
-		return errors.AssertionFailedf("expected single table")
-	}
-
-	if requiresPrev {
-		// prevTupleTableExpr is a table expression to select contents of tuple
-		// representing the previous row state.
-		// That's a bit of a mouthful, but all we're doing here is adding
-		// another table sub-select to the query to produce cdc_prev tuple:
-		// SELECT ... FROM tbl, (SELECT ((crdb_internal.cdc_prev_row()).*)) AS cdc_prev
-		// Note: even though this expression is the same for all queries, we should not
-		// make it global because the underlying call (FunctionReference) to previous row
-		// function will be replaced with function definition (concrete implementation).
-		// Thus, if we reuse the same expression across different versions of event
-		// descriptors, we will get unexpected errors.
-		prevTupleTableExpr := &tree.AliasedTableExpr{
-			As: tree.AliasClause{Alias: prevTupleName},
-			Expr: &tree.Subquery{
-				Select: &tree.ParenSelect{
-					Select: &tree.Select{
-						Select: &tree.SelectClause{
-							Exprs: tree.SelectExprs{
-								tree.SelectExpr{
-									Expr: &tree.TupleStar{
-										Expr: &tree.FuncExpr{
-											Func: tree.ResolvableFunctionReference{FunctionReference: &prevRowFnName},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		tables = append(tables, prevTupleTableExpr)
-	}
-
-	sc.From = tree.From{Tables: tables}
-	return nil
 }
