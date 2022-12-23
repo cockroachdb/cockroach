@@ -57,6 +57,8 @@ func splitPostAdd(
 			storeID, split)
 	}
 
+	rsl := stateloader.Make(split.RightDesc.RangeID)
+
 	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
 	// less than or equal to the replica we're about to initialize.
 	//
@@ -107,7 +109,7 @@ func splitPostAdd(
 				return errors.AssertionFailedf("unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			var err error
-			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
+			hs, err = rsl.LoadHardState(ctx, readWriter)
 			if err != nil {
 				return errors.Wrap(err, "failed to load hard state for removed rhs")
 			}
@@ -121,10 +123,10 @@ func splitPostAdd(
 			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
 			// values. NB: rightRepl.raftMu is still locked since HardState was read,
 			// so it can't have been rewritten in the meantime (fixed in #75918).
-			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
+			if err := rsl.SetHardState(ctx, readWriter, hs); err != nil {
 				return errors.Wrap(err, "failed to set hard state with 0 commit index for removed rhs")
 			}
-			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
+			if err := rsl.SetRaftReplicaID(
 				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
 				return errors.Wrap(err, "failed to set RaftReplicaID for removed rhs")
 			}
@@ -135,7 +137,6 @@ func splitPostAdd(
 	// Update the raft HardState with the new Commit value now that the
 	// replica is initialized (combining it with existing or default
 	// Term and Vote). This is the common case.
-	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		return err
 	}
