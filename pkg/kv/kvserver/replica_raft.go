@@ -475,6 +475,10 @@ func maxCompletedProposalSize(cmd *kvserverpb.RaftCommand) int {
 // meaning we can drop both the checks[^reprop-check]. This is a nice conceptual
 // simplification, and may or may not help reduce complexity around reproposal
 // errors that I still need to fill my understanding for.
+// ^-- hmm - even if *we* don't repropose identical copies might raft create some
+// due to proposal forwarding? I don't think so - but only if *we* don't accidentally
+// forward messages multiple times (retries, etc). Forwarded proposals don't have an
+// index yet, for obvious reasons.
 //
 // [^pipeline]: https://github.com/cockroachdb/cockroach/pull/35261 - the TL;DR is that
 // we don't really expect to need this in steady state but it happened enough
