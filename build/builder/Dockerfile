@@ -36,6 +36,7 @@ RUN apt-get update \
     git \
     gnupg2 \
     libncurses-dev \
+    llvm \
     make \
     patch \
     patchelf \
@@ -197,6 +198,10 @@ RUN apt-get purge -y \
     rsync \
     texinfo \
  && apt-get autoremove -y
+
+# Replace the nm command with LLVM's version, llvm-nm, which knows how to read
+# binaries build for platforms others than Linux.
+RUN ln -sf /usr/bin/llvm-nm /usr/bin/nm
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
