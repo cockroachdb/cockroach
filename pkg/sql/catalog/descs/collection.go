@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -115,7 +115,7 @@ type Collection struct {
 
 	// hydrated is node-level cache of table descriptors which utilize
 	// user-defined types.
-	hydrated *hydrateddesc.Cache
+	hydrated *hydrateddesccache.Cache
 
 	// skipValidationOnWrite should only be set to true during forced descriptor
 	// repairs.

@@ -45,7 +45,7 @@ go_library(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/funcdesc",
-        "//pkg/sql/catalog/hydrateddesc",
+        "//pkg/sql/catalog/hydrateddesccache",
         "//pkg/sql/catalog/internal/catkv",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/lease",

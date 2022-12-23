@@ -12,17 +12,20 @@ package descs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // hydrateDescriptors installs user defined type metadata in all types.T present
@@ -57,7 +60,7 @@ func (tc *Collection) hydrateDescriptors(
 	}
 	var hydratableMutableIndexes, hydratableImmutableIndexes intsets.Fast
 	for i, desc := range descs {
-		if desc == nil || !hydrateddesc.IsHydratable(desc) {
+		if desc == nil || !isHydratable(desc) {
 			continue
 		}
 		if _, ok := desc.(catalog.MutableDescriptor); ok {
@@ -67,11 +70,11 @@ func (tc *Collection) hydrateDescriptors(
 		}
 	}
 
-	// Hydrate mutable hydratable descriptors of the slice in-place.
+	// hydrate mutable hydratable descriptors of the slice in-place.
 	if !hydratableMutableIndexes.Empty() {
 		typeFn := makeMutableTypeLookupFunc(tc, txn, descs)
 		for _, i := range hydratableMutableIndexes.Ordered() {
-			if err := hydrateddesc.Hydrate(ctx, descs[i], typeFn); err != nil {
+			if err := hydrate(ctx, descs[i], typeFn); err != nil {
 				return err
 			}
 		}
@@ -100,7 +103,7 @@ func (tc *Collection) hydrateDescriptors(
 			// this transaction has a stale view of one of the relevant descriptors.
 			// Proceed to hydrating a fresh copy.
 			desc = desc.NewBuilder().BuildImmutable()
-			if err := hydrateddesc.Hydrate(ctx, desc, typeFn); err != nil {
+			if err := hydrate(ctx, desc, typeFn); err != nil {
 				return err
 			}
 			descs[i] = desc
@@ -146,7 +149,7 @@ func makeMutableTypeLookupFunc(
 		g := ByIDGetter(makeGetterBase(txn, tc, flags))
 		return g.Desc(ctx, id)
 	}
-	return hydrateddesc.MakeTypeLookupFuncForHydration(mc, mutableLookupFunc)
+	return makeTypeLookupFuncForHydration(mc, mutableLookupFunc)
 }
 
 func makeImmutableTypeLookupFunc(
@@ -177,7 +180,7 @@ func makeImmutableTypeLookupFunc(
 		g := ByIDGetter(makeGetterBase(txn, tc, f))
 		return g.Desc(ctx, id)
 	}
-	return hydrateddesc.MakeTypeLookupFuncForHydration(mc, immutableLookupFunc)
+	return makeTypeLookupFuncForHydration(mc, immutableLookupFunc)
 }
 
 // HydrateCatalog installs type metadata in the type.T objects present for all
@@ -189,18 +192,18 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 	fakeLookupFunc := func(_ context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
-	typeLookupFunc := hydrateddesc.MakeTypeLookupFuncForHydration(c, fakeLookupFunc)
+	typeLookupFunc := makeTypeLookupFuncForHydration(c, fakeLookupFunc)
 	return c.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if !hydrateddesc.IsHydratable(desc) {
+		if !isHydratable(desc) {
 			return nil
 		}
 		if _, isMutable := desc.(catalog.MutableDescriptor); isMutable {
-			return hydrateddesc.Hydrate(ctx, desc, typeLookupFunc)
+			return hydrate(ctx, desc, typeLookupFunc)
 		}
 		// Deep-copy the immutable descriptor and overwrite the catalog entry.
 		desc = desc.NewBuilder().BuildImmutable()
 		defer c.UpsertDescriptor(desc)
-		return hydrateddesc.Hydrate(ctx, desc, typeLookupFunc)
+		return hydrate(ctx, desc, typeLookupFunc)
 	})
 }
 
@@ -209,4 +212,116 @@ func (tc *Collection) canUseHydratedDescriptorCache(id descpb.ID) bool {
 		!tc.cr.IsIDInCache(id) &&
 		tc.uncommitted.getUncommittedByID(id) == nil &&
 		tc.synthetic.getSyntheticByID(id) == nil
+}
+
+// hydrationLookupFunc is the type of function required to look up type
+// descriptors and their parent schemas and databases when hydrating an object.
+type hydrationLookupFunc func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error)
+
+// isHydratable returns false iff the descriptor definitely does not require
+// hydration
+func isHydratable(desc catalog.Descriptor) bool {
+	if desc.Dropped() {
+		// Don't hydrate dropped descriptors.
+		return false
+	}
+	hd, ok := desc.(catalog.HydratableDescriptor)
+	return ok && hd.ContainsUserDefinedTypes()
+}
+
+// hydrate ensures that type metadata is present in any type.T objects
+// referenced by the descriptor. Beware when calling on immutable descriptors:
+// this is not thread-safe.
+func hydrate(
+	ctx context.Context, desc catalog.Descriptor, typeLookupFunc typedesc.TypeLookupFunc,
+) error {
+	if !isHydratable(desc) {
+		return nil
+	}
+
+	switch t := desc.(type) {
+	case catalog.TableDescriptor:
+		return typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typeLookupFunc)
+	case catalog.SchemaDescriptor:
+		return typedesc.HydrateTypesInSchemaDescriptor(ctx, t.SchemaDesc(), typeLookupFunc)
+	case catalog.FunctionDescriptor:
+		return typedesc.HydrateTypesInFunctionDescriptor(ctx, t.FuncDesc(), typeLookupFunc)
+	}
+	return errors.AssertionFailedf("unknown hydratable type %T", desc)
+}
+
+// makeTypeLookupFuncForHydration builds a typedesc.TypeLookupFunc for the
+// use with hydrate. Type descriptors and their parent schema and database are
+// looked up in the nstree.Catalog object before being looked up via the
+// hydrationLookupFunc.
+func makeTypeLookupFuncForHydration(
+	c nstree.MutableCatalog, lookupFn hydrationLookupFunc,
+) typedesc.TypeLookupFunc {
+	var typeLookupFunc func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error)
+
+	typeLookupFunc = func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error) {
+		typDesc := c.LookupDescriptor(id)
+		if typDesc == nil {
+			typDesc, err = lookupFn(ctx, id, false /* skipHydration */)
+			if err != nil {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					n := tree.Name(fmt.Sprintf("[%d]", id))
+					return tree.TypeName{}, nil, sqlerrors.NewUndefinedTypeError(&n)
+				}
+				return tree.TypeName{}, nil, err
+			}
+			c.UpsertDescriptor(typDesc)
+		}
+		switch t := typDesc.(type) {
+		case catalog.TypeDescriptor:
+			typ = t
+		case catalog.TableDescriptor:
+			if !typedesc.TableIsHydrated(t) {
+				if err := hydrate(ctx, t, typeLookupFunc); err != nil {
+					return tree.TypeName{}, nil, err
+				}
+				c.UpsertDescriptor(t)
+			}
+			typ, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
+		default:
+			typ, err = catalog.AsTypeDescriptor(typDesc)
+		}
+		if err != nil {
+			return tree.TypeName{}, nil, err
+		}
+		dbDesc := c.LookupDescriptor(typ.GetParentID())
+		if dbDesc == nil {
+			dbDesc, err = lookupFn(ctx, typ.GetParentID(), true /* skipHydration */)
+			if err != nil {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					n := fmt.Sprintf("[%d]", typ.GetParentID())
+					return tree.TypeName{}, nil, sqlerrors.NewUndefinedDatabaseError(n)
+				}
+				return tree.TypeName{}, nil, err
+			}
+			c.UpsertDescriptor(dbDesc)
+		}
+		if _, err = catalog.AsDatabaseDescriptor(dbDesc); err != nil {
+			return tree.TypeName{}, nil, err
+		}
+		scDesc := c.LookupDescriptor(typ.GetParentSchemaID())
+		if scDesc == nil {
+			scDesc, err = lookupFn(ctx, typ.GetParentSchemaID(), true /* skipHydration */)
+			if err != nil {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					n := fmt.Sprintf("[%d]", typ.GetParentSchemaID())
+					return tree.TypeName{}, nil, sqlerrors.NewUndefinedSchemaError(n)
+				}
+				return tree.TypeName{}, nil, err
+			}
+			c.UpsertDescriptor(scDesc)
+		}
+		if _, err = catalog.AsSchemaDescriptor(scDesc); err != nil {
+			return tree.TypeName{}, nil, err
+		}
+		tn = tree.MakeQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), typ.GetName())
+		return tn, typ, nil
+	}
+
+	return typeLookupFunc
 }

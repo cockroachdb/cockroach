@@ -2,12 +2,9 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "hydrateddesc",
-    srcs = [
-        "hydrate.go",
-        "hydratedcache.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc",
+    name = "hydrateddesccache",
+    srcs = ["hydratedcache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
@@ -16,28 +13,25 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/lease",
-        "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlerrors",
         "//pkg/util/cache",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
         "@com_github_biogo_store//llrb",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_model//go",
     ],
 )
 
 go_test(
-    name = "hydrateddesc_test",
+    name = "hydrateddesccache_test",
     srcs = ["hydratedcache_test.go"],
     args = ["-test.timeout=295s"],
-    embed = [":hydrateddesc"],
+    embed = [":hydrateddesccache"],
     deps = [
         "//pkg/security/username",
         "//pkg/settings/cluster",

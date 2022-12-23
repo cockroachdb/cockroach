@@ -631,7 +631,7 @@ func (sc *TableStatisticsCache) parseStats(
 	}
 	res := &TableStatistic{TableStatisticProto: *tsp}
 	if res.HistogramData != nil {
-		// Hydrate the type in case any user defined types are present.
+		// hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
 		if typ := res.HistogramData.ColumnType; typ != nil && typ.UserDefined() {
 			// The metadata accessed here is never older than the metadata used when
