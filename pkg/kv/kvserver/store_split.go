@@ -38,6 +38,16 @@ func splitPostAddWithReplica(
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) error {
+	return splitPostAdd(ctx, r, readWriter, split, initClosedTS)
+}
+
+func splitPostAdd(
+	ctx context.Context,
+	r *Replica,
+	readWriter storage.ReadWriter,
+	split roachpb.SplitTrigger,
+	initClosedTS *hlc.Timestamp,
+) error {
 	// Sanity check that the store is in the split.
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
