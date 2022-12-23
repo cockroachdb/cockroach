@@ -134,7 +134,18 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	}
 }
 
-func BenchmarkArrowBatchConverter(b *testing.B) {
+// runConversionBenchmarks runs two kinds ("from coldata.Batch" and "to
+// coldata.Batch") of conversion benchmarks over different input types and null
+// fractions. Both benchmark kinds are represented by a "run" function which is
+// expected to perform some optional setup first before resetting the timer and
+// then running the benchmark loop.
+func runConversionBenchmarks(
+	b *testing.B,
+	fromBatchBenchName string,
+	fromBatch func(*testing.B, coldata.Batch, *types.T),
+	toBatchBenchName string,
+	toBatch func(*testing.B, coldata.Batch, *types.T),
+) {
 	const bytesInlinedLen = 16
 	const bytesNonInlinedLen = 64
 
@@ -178,8 +189,6 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				tc.numBytes += int64(len(marshaled))
 			}
 		}
-		c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
-		require.NoError(b, err)
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
 			vec := batch.ColVec(0)
@@ -192,47 +201,63 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		}
 		for _, nullFraction := range nullFractions {
 			setNullFraction(batch, nullFraction)
-			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String()+typNameSuffix, nullFraction)
-			var data []*array.Data
-			b.Run(testPrefix+"/BatchToArrow", func(b *testing.B) {
+			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f/", typ.String()+typNameSuffix, nullFraction)
+			b.Run(testPrefix+fromBatchBenchName, func(b *testing.B) {
 				b.SetBytes(tc.numBytes)
-				for i := 0; i < b.N; i++ {
-					data, _ = c.BatchToArrow(batch)
-					if len(data) != 1 {
-						b.Fatal("expected arrow batch of length 1")
-					}
-					if data[0].Len() != coldata.BatchSize() {
-						b.Fatal("unexpected number of elements")
-					}
-				}
+				fromBatch(b, batch, typ)
 			})
-		}
-		for _, nullFraction := range nullFractions {
-			setNullFraction(batch, nullFraction)
-			data, err := c.BatchToArrow(batch)
-			dataCopy := make([]*array.Data, len(data))
-			require.NoError(b, err)
-			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String()+typNameSuffix, nullFraction)
-			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
-			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
+			b.Run(testPrefix+toBatchBenchName, func(b *testing.B) {
 				b.SetBytes(tc.numBytes)
-				for i := 0; i < b.N; i++ {
-					// Since ArrowToBatch eagerly nils things out, we have to make a
-					// shallow copy each time.
-					copy(dataCopy, data)
-					// Using require.NoError here causes large enough allocations to
-					// affect the result.
-					if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
-						b.Fatal(err)
-					}
-					if result.Width() != 1 {
-						b.Fatal("expected one column")
-					}
-					if result.Length() != coldata.BatchSize() {
-						b.Fatal("unexpected number of elements")
-					}
-				}
+				toBatch(b, batch, typ)
 			})
 		}
 	}
+}
+
+func BenchmarkArrowBatchConverter(b *testing.B) {
+	runConversionBenchmarks(
+		b,
+		"BatchToArrow",
+		func(b *testing.B, batch coldata.Batch, typ *types.T) {
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
+			require.NoError(b, err)
+			var data []*array.Data
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				data, _ = c.BatchToArrow(batch)
+				if len(data) != 1 {
+					b.Fatal("expected arrow batch of length 1")
+				}
+				if data[0].Len() != coldata.BatchSize() {
+					b.Fatal("unexpected number of elements")
+				}
+			}
+		},
+		"ArrowToBatch",
+		func(b *testing.B, batch coldata.Batch, typ *types.T) {
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
+			require.NoError(b, err)
+			data, err := c.BatchToArrow(batch)
+			dataCopy := make([]*array.Data, len(data))
+			require.NoError(b, err)
+			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// Since ArrowToBatch eagerly nils things out, we have to make a
+				// shallow copy each time.
+				copy(dataCopy, data)
+				// Using require.NoError here causes large enough allocations to
+				// affect the result.
+				if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
+					b.Fatal(err)
+				}
+				if result.Width() != 1 {
+					b.Fatal("expected one column")
+				}
+				if result.Length() != coldata.BatchSize() {
+					b.Fatal("unexpected number of elements")
+				}
+			}
+		},
+	)
 }

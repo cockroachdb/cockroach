@@ -33,6 +33,7 @@ go_test(
     size = "small",
     srcs = [
         "arrowbatchconverter_test.go",
+        "conversion_test.go",
         "file_test.go",
         "main_test.go",
         "record_batch_test.go",
