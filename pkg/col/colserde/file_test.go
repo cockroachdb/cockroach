@@ -65,7 +65,8 @@ func TestFileRoundtrip(t *testing.T) {
 				// batch) to make sure that the second serialized batch is
 				// unchanged.
 				length := rng.Intn(original.Length()) + 1
-				r := coldatatestutils.RandomBatch(testAllocator, rng, typs, length, length, rng.Float64())
+				args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: rng.Float64()}
+				r := coldatatestutils.RandomBatch(testAllocator, args, typs, length, length)
 				for vecIdx, vec := range roundtrip.ColVecs() {
 					vec.Append(coldata.SliceArgs{
 						Src:       r.ColVec(vecIdx),

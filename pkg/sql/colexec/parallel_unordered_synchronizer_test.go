@@ -78,7 +78,8 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
 		var source colexecop.Operator
-		batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
+		args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: rng.Float64()}
+		batch := coldatatestutils.RandomBatch(testAllocator, args, typs, coldata.BatchSize(), 0 /* length */)
 		if i < numInputs-1 {
 			s := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 			s.ResetBatchesToReturn(numBatches)
