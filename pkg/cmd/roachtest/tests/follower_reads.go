@@ -477,7 +477,7 @@ func initFollowerReadsDB(
 		q1 := fmt.Sprintf(`
 			SELECT
 				%s, %s
-			FROM [SHOW RANGES FROM TABLE test]`, votersCol, nonVotersCol)
+			FROM [SHOW RANGES FROM TABLE test.test]`, votersCol, nonVotersCol)
 
 		var voters, nonVoters int
 		err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters)
