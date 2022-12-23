@@ -37,7 +37,7 @@ func splitPreApply(
 	readWriter storage.ReadWriter,
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
-) {
+) error {
 	// Sanity check that the store is in the split.
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
@@ -45,7 +45,7 @@ func splitPreApply(
 	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
-		log.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
+		return errors.AssertionFailedf("cannot process split on s%s which does not exist in the split: %+v",
 			r.StoreID(), split)
 	}
 
@@ -96,32 +96,32 @@ func splitPreApply(
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.
 			if rightRepl.IsInitialized() {
-				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
+				return errors.AssertionFailedf("unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			var err error
 			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
 			if err != nil {
-				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
+				return errors.Wrap(err, "failed to load hard state for removed rhs")
 			}
 		}
 		const rangeIDLocalOnly = false
 		const mustUseClearRange = false
 		if err := clearRangeData(&split.RightDesc, readWriter, readWriter, rangeIDLocalOnly, mustUseClearRange); err != nil {
-			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+			return errors.Wrap(err, "failed to clear range data for removed rhs")
 		}
 		if rightRepl != nil {
 			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
 			// values. NB: rightRepl.raftMu is still locked since HardState was read,
 			// so it can't have been rewritten in the meantime (fixed in #75918).
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
-				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
+				return errors.Wrap(err, "failed to set hard state with 0 commit index for removed rhs")
 			}
 			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
 				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
-				log.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
+				return errors.Wrap(err, "failed to set RaftReplicaID for removed rhs")
 			}
 		}
-		return
+		return nil
 	}
 
 	// Update the raft HardState with the new Commit value now that the
@@ -129,7 +129,7 @@ func splitPreApply(
 	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		return err
 	}
 	// Write the RaftReplicaID for the RHS to maintain the invariant that any
 	// replica (uninitialized or initialized), with persistent state, has a
@@ -137,7 +137,7 @@ func splitPreApply(
 	// introduce node startup code that will write this value for existing
 	// ranges.
 	if err := rsl.SetRaftReplicaID(ctx, readWriter, rightDesc.ReplicaID); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		return err
 	}
 	// Persist the closed timestamp.
 	//
@@ -151,9 +151,7 @@ func splitPreApply(
 		initClosedTS = &hlc.Timestamp{}
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
-	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
-		log.Fatalf(ctx, "%s", err)
-	}
+	return rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS)
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
