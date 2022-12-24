@@ -56,6 +56,7 @@ CREATE TABLE foo (
   e status DEFAULT 'inactive',
   f STRING,
   g STRING,
+  h STRING NOT VISIBLE,
   flag BOOL,
   PRIMARY KEY (b, a),
   FAMILY main (a, b, e),
