@@ -171,17 +171,9 @@ if [ $ARCH = x86_64 ]; then
     git submodule update --init --recursive
     for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
     do
-        # Clean out all non-checked-in files. This is because of the check-in of
-        # the generated execgen files. Once we are no longer building 20.1 builds,
-        # the `git clean -dxf` line can be removed.
-        git clean -dxf
-
         git checkout "$branch"
-        # Stupid submodules.
-        rm -rf vendor; git checkout vendor; git submodule update --init --recursive
-        COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTTIMEOUT=45m TESTS=-
         # TODO(benesch): store the acceptanceversion somewhere more accessible.
-       docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
+        docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
     done
     cd -
 fi
