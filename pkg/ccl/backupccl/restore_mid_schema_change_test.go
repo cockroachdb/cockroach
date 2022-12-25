@@ -31,11 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	clusterRestoreVersion = version.MustParse("v20.1.0")
-	noNonMVCCAddSSTable   = version.MustParse("v22.1.0")
-)
-
 // TestRestoreMidSchemaChanges attempts to RESTORE several BACKUPs that are
 // already constructed and store in
 // ccl/backupccl/testdata/restore_mid_schema_change. These backups were taken on
@@ -68,12 +63,14 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 		testdataBase = datapathutils.TestDataPath(t, "restore_mid_schema_change")
 		exportDirs   = testdataBase + "/exports"
 	)
-	for _, isSchemaOnly := range []bool{true, false} {
+	testutils.RunTrueAndFalse(t, "schema-only", func(t *testing.T, isSchemaOnly bool) {
 		name := "regular-"
 		if isSchemaOnly {
 			name = "schema-only-"
 		}
-		for _, isClusterRestore := range []bool{true, false} {
+		testutils.RunTrueAndFalse(t, "cluster-restore", func(t *testing.T, isClusterRestore bool) {
+			// TODO(adityamaru): Regenerate fixtures with cluster backups.
+			isClusterRestore = false
 			name = name + "table"
 			if isClusterRestore {
 				name = name + "cluster"
@@ -88,10 +85,6 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 						for _, clusterVersionDir := range versionDirs {
 							clusterVersion, err := parseMajorVersion(clusterVersionDir.Name())
 							require.NoError(t, err)
-
-							if !clusterVersion.AtLeast(clusterRestoreVersion) && isClusterRestore {
-								continue
-							}
 
 							t.Run(clusterVersionDir.Name(), func(t *testing.T) {
 								require.True(t, clusterVersionDir.IsDir())
@@ -115,8 +108,8 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 					})
 				}
 			})
-		}
-	}
+		})
+	})
 }
 
 // parseMajorVersion parses our major-versioned directory names as if they were
@@ -139,15 +132,10 @@ func expectedSCJobCount(scName string, ver *version.Version) int {
 	case "midmultitable":
 		expNumSCJobs = 2 // this test perform a schema change for each table
 	case "midprimarykeyswap":
-		if ver.AtLeast(noNonMVCCAddSSTable) {
-			// PK change and PK cleanup
-			expNumSCJobs = 2
-		} else {
-			// This will fail so we expect no cleanup job.
-			expNumSCJobs = 1
-		}
+		// PK change and PK cleanup
+		expNumSCJobs = 2
 	case "midprimarykeyswapcleanup":
-		expNumSCJobs = 1
+		expNumSCJobs = 2
 	default:
 		// Most test cases only have 1 schema change under test.
 		expNumSCJobs = 1
@@ -257,14 +245,14 @@ func restoreMidSchemaChange(
 		require.NoError(t, err)
 
 		sqlDB.Exec(t, "USE defaultdb")
-		restoreQuery := "RESTORE defaultdb.* FROM $1"
+		restoreQuery := "RESTORE defaultdb.* FROM LATEST IN $1"
 		if isClusterRestore {
-			restoreQuery = "RESTORE FROM $1"
+			restoreQuery = "RESTORE FROM LATEST IN $1"
 		}
 		if isSchemaOnly {
 			restoreQuery = restoreQuery + "with schema_only"
 		}
-		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", localFoo))
+		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP LATEST IN $1", localFoo))
 		sqlDB.Exec(t, restoreQuery, localFoo)
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
