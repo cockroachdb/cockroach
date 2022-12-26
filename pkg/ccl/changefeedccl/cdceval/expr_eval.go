@@ -42,8 +42,9 @@ type Evaluator struct {
 	alloc        tree.DatumAlloc
 
 	// Execution context.
-	execCfg *sql.ExecutorConfig
-	user    username.SQLUsername
+	execCfg     *sql.ExecutorConfig
+	user        username.SQLUsername
+	sessionData sessiondatapb.SessionData
 
 	// rowCh receives projection datums.
 	rowCh      chan tree.Datums
@@ -56,11 +57,15 @@ type Evaluator struct {
 
 // NewEvaluator constructs new evaluator for changefeed expression.
 func NewEvaluator(
-	sc *tree.SelectClause, execCfg *sql.ExecutorConfig, user username.SQLUsername,
+	sc *tree.SelectClause,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	sd sessiondatapb.SessionData,
 ) (*Evaluator, error) {
 	e := Evaluator{
-		execCfg: execCfg,
-		user:    user,
+		execCfg:     execCfg,
+		user:        user,
+		sessionData: sd,
 		norm: &NormalizedSelectClause{
 			SelectClause: sc,
 		},
@@ -181,7 +186,7 @@ func (e *Evaluator) preparePlan(
 	ctx context.Context,
 ) (plan sql.CDCExpressionPlan, prevCol catalog.Column, err error) {
 	err = withPlanner(
-		ctx, e.execCfg, e.user, e.currDesc.SchemaTS, sessiondatapb.SessionData{},
+		ctx, e.execCfg, e.user, e.currDesc.SchemaTS, e.sessionData,
 		func(ctx context.Context, execCtx sql.JobExecContext) error {
 			semaCtx := execCtx.SemaCtx()
 			var r CDCFunctionResolver

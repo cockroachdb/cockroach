@@ -20,6 +20,7 @@ import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
+import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
@@ -932,6 +933,7 @@ message ChangefeedDetails {
   repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
   string select = 10;
+  sessiondatapb.SessionData session_data = 11 [(gogoproto.nullable) = false];
   reserved 1, 2, 5;
   reserved "targets";
 }

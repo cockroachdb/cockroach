@@ -2567,6 +2567,35 @@ func TestChangefeedBareAvro(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.ExecMultiple(t,
+			// Create target table in a different database.
+			// Session data should be serialized to point to the
+			// correct database.
+			`CREATE DATABASE session`,
+			`USE session`,
+			`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+			`INSERT INTO foo values (0, 'hello')`,
+			`INSERT INTO foo values (1, 'howdy')`,
+		)
+
+		// Trigram similarity threshold should be 30%; so that "howdy" matches,
+		// but hello doesn't.  This threshold should be serialized
+		// in the changefeed jobs record, and correctly propagated to the aggregators.
+		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy=stop `+
+			`AS SELECT * FROM foo WHERE b % 'how'`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{`foo: [1]->{"a": 1, "b": "howdy"}`})
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedBareJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
