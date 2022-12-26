@@ -180,7 +180,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, e) VALUES (4, '4th test', 'closed')",
 				"INSERT INTO foo (a, b, e) VALUES (5, '4th test', 'inactive')",
 			},
-			stmt: "SELECT a FROM _ WHERE e IN ('open', 'inactive')",
+			stmt: "SELECT a FROM foo WHERE e IN ('open', 'inactive')",
 			expectMainFamily: []decodeExpectation{
 				{
 					expectFiltered: true,
@@ -237,14 +237,14 @@ CREATE TABLE foo (
 			testName:   "main/no_col_c",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			stmt:       "SELECT a, c FROM _",
+			stmt:       "SELECT a, c FROM foo",
 			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/no_col_c_star",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			stmt:       "SELECT *, c FROM _",
+			stmt:       "SELECT *, c FROM foo",
 			expectErr:  `column "c" does not exist`,
 		},
 		{
@@ -345,7 +345,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b) VALUES (123, 'select_if')",
 				"DELETE FROM foo where a=123",
 			},
-			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM _",
+			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"select_if", "123"},
@@ -363,7 +363,7 @@ CREATE TABLE foo (
 			actions: []string{
 				"INSERT INTO foo (a, b) VALUES (1, '   spaced out      ')",
 			},
-			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM _",
+			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"   spaced out      ", "1"},
@@ -396,22 +396,20 @@ CREATE TABLE foo (
 			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
 			expectErr: `column "h" does not exist`,
 		},
-		// {
-		//  // TODO(yevgeniy): Test currently disable since session data is not serialized.
-		//  // Issue #90421
-		//	testName:   "main/trigram",
-		//	familyName: "main",
-		//	actions: []string{
-		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
-		//	},
-		//	stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
-		//	expectMainFamily: []decodeExpectation{
-		//		{
-		//			keyValues: []string{"hello", "1"},
-		//			allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
-		//		},
-		//	},
-		//},
+		{
+			testName:   "main/trigram",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (a, b) VALUES (1,  'hello')",
+			},
+			stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"hello", "1"},
+					allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
+				},
+			},
+		},
 		{
 			testName:   "main/btrim_wrong_type",
 			familyName: "main",
@@ -752,10 +750,11 @@ func newEvaluatorWithNormCheck(
 		return nil, err
 	}
 
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
 }
 
 var defaultDBSessionData = sessiondatapb.SessionData{
-	Database:   "defaultdb",
-	SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+	Database:                   "defaultdb",
+	SearchPath:                 sessiondata.DefaultSearchPath.GetPathArray(),
+	TrigramSimilarityThreshold: 0.3,
 }
