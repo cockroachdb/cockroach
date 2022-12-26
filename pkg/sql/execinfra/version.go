@@ -77,7 +77,8 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 71
 Please add new entries at the top.
 
 - Version: 71 (MinAcceptedVersion: 71)
-  - On-wire representation of booleans in the Arrow format has changed.
+  - On-wire representation of booleans and bytes-like values in the Arrow format
+    has changed.
 
 - Version: 70 (MinAcceptedVersion: 70)
   - HashGroupJoinerSpec has been introduced.
