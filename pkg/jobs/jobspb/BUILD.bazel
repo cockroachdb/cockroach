@@ -31,6 +31,7 @@ proto_library(
         "//pkg/clusterversion:clusterversion_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -52,6 +53,7 @@ go_proto_library(
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/sessiondatapb",
         "//pkg/util/hlc",
         "//pkg/util/tracing/tracingpb",  # keep
         "//pkg/util/uuid",  # keep
