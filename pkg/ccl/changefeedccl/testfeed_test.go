@@ -64,6 +64,7 @@ type sinklessFeedFactory struct {
 	s           serverutils.TestTenantInterface
 	sink        url.URL
 	sinkForUser sinkForUser
+	currentDB   func(db *string) error
 }
 
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
@@ -102,7 +103,13 @@ func setPassword(user, password string, uri url.URL) error {
 func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
 	sink := f.sink
 	sink.RawQuery = sink.Query().Encode()
-	sink.Path = `d`
+	if f.currentDB == nil {
+		sink.Path = `d`
+	} else {
+		if err := f.currentDB(&sink.Path); err != nil {
+			return nil, err
+		}
+	}
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).
 	pgxConfig, err := pgx.ParseConfig(sink.String())

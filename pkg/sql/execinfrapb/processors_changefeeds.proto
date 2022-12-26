@@ -22,6 +22,7 @@ option go_package = "execinfrapb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
+import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -59,6 +60,7 @@ message ChangeAggregatorSpec {
 
   // select is the "select clause" for predicate changefeed.
   optional Expression select = 6 [(gogoproto.nullable) = false];
+  optional sessiondatapb.SessionData session_data = 7 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives

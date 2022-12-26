@@ -341,9 +341,10 @@ func newEvaluator(
 		return nil, err
 	}
 
+	defer configSemaForCDC(semaCtx)()
 	norm, err := normalizeSelectClause(context.Background(), semaCtx, sc, ed)
 	if err != nil {
 		return nil, err
 	}
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
 }
