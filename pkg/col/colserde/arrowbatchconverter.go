@@ -181,11 +181,11 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 			}
 			switch f {
 			case types.BytesFamily:
-				values, offsets = vec.Bytes().ToArrowSerializationFormat(n, values, offsets)
+				values, offsets = vec.Bytes().Serialize(n, values, offsets)
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case types.JsonFamily:
-				values, offsets = vec.JSON().Bytes.ToArrowSerializationFormat(n, values, offsets)
+				values, offsets = vec.JSON().Bytes.Serialize(n, values, offsets)
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
 
 			case types.DecimalFamily:
@@ -349,11 +349,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BytesFamily:
 			valueBytes, offsets := getValueBytesAndOffsets(d, vec.Nulls(), batchLength)
-			coldata.BytesFromArrowSerializationFormat(vec.Bytes(), valueBytes, offsets)
+			vec.Bytes().Deserialize(valueBytes, offsets)
 
 		case types.JsonFamily:
 			valueBytes, offsets := getValueBytesAndOffsets(d, vec.Nulls(), batchLength)
-			coldata.BytesFromArrowSerializationFormat(&vec.JSON().Bytes, valueBytes, offsets)
+			vec.JSON().Bytes.Deserialize(valueBytes, offsets)
 
 		case types.DecimalFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve
