@@ -10,7 +10,6 @@ package cdceval
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -49,7 +48,6 @@ func TestNormalizeAndValidate(t *testing.T) {
 	)
 
 	fooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
-	otherFooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "other", "foo")
 	bazDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "baz")
 	bopDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "bop")
 
@@ -92,71 +90,46 @@ func TestNormalizeAndValidate(t *testing.T) {
 			splitColFams: false,
 		},
 		{
-			name:         "replaces table name with ref",
-			desc:         fooDesc,
-			stmt:         "SELECT * FROM foo",
-			expectStmt:   fmt.Sprintf("SELECT * FROM [%d AS foo]", fooDesc.GetID()),
-			splitColFams: false,
-		},
-		{
-			name:         "replaces table name with other.ref",
-			desc:         otherFooDesc,
-			stmt:         "SELECT * FROM other.foo",
-			expectStmt:   fmt.Sprintf("SELECT * FROM [%d AS foo]", otherFooDesc.GetID()),
-			splitColFams: false,
-		},
-		{
-			name:         "replaces table name with ref aliased",
-			desc:         fooDesc,
-			stmt:         "SELECT * FROM foo AS bar",
-			expectStmt:   fmt.Sprintf("SELECT * FROM [%d AS bar]", fooDesc.GetID()),
-			splitColFams: false,
-		},
-		{
 			name: "UDTs fully qualified",
 			desc: fooDesc,
 			stmt: "SELECT *, 'inactive':::status FROM foo AS bar WHERE status = 'open':::status",
-			expectStmt: fmt.Sprintf(
-				"SELECT *, 'inactive':::defaultdb.public.status "+
-					"FROM [%d AS bar] WHERE status = 'open':::defaultdb.public.status",
-				fooDesc.GetID()),
+			expectStmt: "SELECT *, 'inactive':::defaultdb.public.status " +
+				"FROM foo AS bar WHERE status = 'open':::defaultdb.public.status",
 			splitColFams: false,
 		},
 		{
-			name: "can cast to standard type",
-			desc: fooDesc,
-			stmt: "SELECT 'cast'::string, 'type_annotation':::string FROM foo AS bar",
-			expectStmt: fmt.Sprintf(
-				"SELECT 'cast'::STRING, 'type_annotation':::STRING FROM [%d AS bar]",
-				fooDesc.GetID()),
+			name:         "can cast to standard type",
+			desc:         fooDesc,
+			stmt:         "SELECT 'cast'::string, 'type_annotation':::string FROM foo AS bar",
+			expectStmt:   "SELECT 'cast'::STRING, 'type_annotation':::STRING FROM foo AS bar",
 			splitColFams: false,
 		},
 		{
 			name:         "can target one column family",
 			desc:         bazDesc,
 			stmt:         "SELECT a, b FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT a, b FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT a, b FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT a, b FROM bop",
 			desc:         bopDesc,
 			stmt:         "SELECT a, b FROM bop",
-			expectStmt:   fmt.Sprintf("SELECT a, b FROM [%d AS bop]", bopDesc.GetID()),
+			expectStmt:   "SELECT a, b FROM bop",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT a, c FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT a, c FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT a, c FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT a, c FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT b, b+1 AS c FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT b, b+1 AS c FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT b, b + 1 AS c FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT b, b + 1 AS c FROM baz",
 			splitColFams: false,
 		},
 		{
@@ -170,21 +143,21 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "SELECT B FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT B FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT b FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT b FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT baz.b FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT baz.b FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT baz.b FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:       "SELECT baz.b, row_to_json((cdc_prev).*) FROM baz",
 			desc:       bazDesc,
 			stmt:       "SELECT baz.b, row_to_json((cdc_prev).*) FROM baz",
-			expectStmt: fmt.Sprintf("SELECT baz.b, row_to_json((cdc_prev).*) FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt: "SELECT baz.b, row_to_json((cdc_prev).*) FROM baz",
 			// Currently, accessing cdc_prev.* is treated in such a way as to require
 			// split column families option.  This might not be needed since the above
 			// expression targets main column family only. Perhaps this restriction
@@ -209,7 +182,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "SELECT b::string = 'c' FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT b::string = 'c' FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT b::STRING = 'c' FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT b::STRING = 'c' FROM baz",
 			splitColFams: false,
 		},
 		{
@@ -223,7 +196,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "no explicit column references",
 			desc:         bazDesc,
 			stmt:         "SELECT pi() FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT pi() FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT pi() FROM baz",
 			splitColFams: false,
 		},
 		{

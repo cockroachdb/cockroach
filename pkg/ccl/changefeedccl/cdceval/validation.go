@@ -259,37 +259,6 @@ func normalizeSelectClause(
 	sc *tree.SelectClause,
 	desc *cdcevent.EventDescriptor,
 ) (*NormalizedSelectClause, error) {
-	// Turn FROM clause to table reference.
-	// Note: must specify AliasClause for TableRef expression; otherwise we
-	// won't be able to deserialize string representation (grammar requires
-	// "select ... from [table_id as tableAlias]")
-	var tableAlias tree.AliasClause
-	switch t := sc.From.Tables[0].(type) {
-	case *tree.AliasedTableExpr:
-		tableAlias = t.As
-	case tree.TablePattern:
-	case *tree.TableRef:
-		tableAlias = t.As
-	default:
-		// This is verified by sql.y -- but be safe.
-		return nil, errors.AssertionFailedf("unexpected table expression type %T",
-			sc.From.Tables[0])
-	}
-
-	if tableAlias.Alias == "" {
-		tableAlias.Alias = tree.Name(desc.TableName)
-	}
-
-	sc.From.Tables[0] = &tree.TableRef{
-		TableID: int64(desc.TableID),
-		As:      tableAlias,
-	}
-
-	// Setup sema ctx to handle cdc expressions. We want to make sure we only
-	// override some properties, while keeping other properties (type resolver)
-	// intact.
-	defer configSemaForCDC(semaCtx)()
-
 	// Keep track of user defined types used in the expression.
 	var udts map[oid.Oid]struct{}
 

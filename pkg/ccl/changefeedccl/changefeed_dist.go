@@ -203,7 +203,7 @@ func fetchSpansForTables(
 			"could not parse changefeed expression")
 	}
 	return cdceval.SpansForExpression(
-		ctx, execCtx.ExecCfg(), execCtx.User(), execCtx.SessionData().SessionData,
+		ctx, execCtx.ExecCfg(), execCtx.User(), details.SessionData,
 		tableDescs[0], initialHighwater, target, sc)
 }
 
