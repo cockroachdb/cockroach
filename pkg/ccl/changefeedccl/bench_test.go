@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -250,8 +249,8 @@ func createBenchmarkChangefeed(
 	}
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	eventConsumer, err := newKVEventToRowConsumer(ctx, &execCfg, sf, initialHighWater,
-		sink, encoder, makeChangefeedConfigFromJobDetails(details),
-		execinfrapb.Expression{}, username.PublicRoleName(), TestingKnobs{}, nil, nil)
+		sink, encoder, makeChangefeedConfigFromJobDetails(details), execinfrapb.ChangeAggregatorSpec{},
+		TestingKnobs{}, nil, nil)
 
 	if err != nil {
 		return nil, nil, err
