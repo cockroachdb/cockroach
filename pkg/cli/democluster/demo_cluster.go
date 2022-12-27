@@ -100,6 +100,10 @@ type transientCluster struct {
 // be connected.
 const maxNodeInitTime = 30 * time.Second
 
+// secondaryTenantID is the ID of the secondary tenant to use when
+// --multitenant=true.
+const secondaryTenantID = 2
+
 // demoOrg is the organization to use to request an evaluation
 // license.
 const demoOrg = "Cockroach Demo"
@@ -180,9 +184,12 @@ func NewDemoCluster(
 	c.httpFirstPort = c.demoCtx.HTTPPort
 	c.sqlFirstPort = c.demoCtx.SQLPort
 	if c.demoCtx.Multitenant {
-		// This allows the first demo tenant to get the desired ports (i.e., those
-		// configured by --http-port or --sql-port, or the default) without
-		// conflicting with the system tenant.
+		// This allows the first secondary tenant server to get the
+		// desired ports (i.e., those configured by --http-port or
+		// --sql-port, or the default) without conflicting with the system
+		// tenant.
+		// Note: this logic can be removed once we use a single
+		// listener for HTTP and SQL.
 		c.httpFirstPort += c.demoCtx.NumNodes
 		c.sqlFirstPort += c.demoCtx.NumNodes
 	}
@@ -379,23 +386,25 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 
 			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
+				createTenant := i == 0
+
 				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).
 					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
 				tenantStopper := stop.NewStopper()
-				tenID := uint64(i + 2)
 				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
-					TenantName:            roachpb.TenantName(fmt.Sprintf("demo-tenant-%d", tenID)),
-					TenantID:              roachpb.MustMakeTenantID(tenID),
+					DisableCreateTenant:   !createTenant,
+					TenantName:            roachpb.TenantName(fmt.Sprintf("demo-tenant-%d", secondaryTenantID)),
+					TenantID:              roachpb.MustMakeTenantID(secondaryTenantID),
 					Stopper:               tenantStopper,
 					ForceInsecure:         c.demoCtx.Insecure,
 					SSLCertsDir:           c.demoDir,
-					StartingRPCAndSQLPort: c.demoCtx.SQLPort - 2,
-					StartingHTTPPort:      c.demoCtx.HTTPPort - 2,
+					StartingRPCAndSQLPort: c.demoCtx.SQLPort - secondaryTenantID + i,
+					StartingHTTPPort:      c.demoCtx.HTTPPort - secondaryTenantID + i,
 					Locality:              c.demoCtx.Localities[i],
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
@@ -417,14 +426,14 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					return err
 				}
 				c.tenantServers[i] = ts
-				c.infoLog(ctx, "started tenant %d: %s", i, ts.SQLAddr())
+				c.infoLog(ctx, "started tenant server %d: %s", i, ts.SQLAddr())
 
 				// Propagate the tenant server tags to the initialization
 				// context, so that the initialization messages below are
 				// properly annotated in traces.
 				ctx = ts.AnnotateCtx(ctx)
 
-				if !c.demoCtx.Insecure {
+				if i == 0 && !c.demoCtx.Insecure {
 					// Set up the demo username and password on each tenant.
 					ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
 					_, err = ie.Exec(ctx, "tenant-password", nil,
@@ -1117,36 +1126,33 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 			return err
 		}
 
-		for i := 0; i < demoCtx.NumNodes; i++ {
-			// Create a cert for each tenant.
-			hostAddrs := []string{
-				"127.0.0.1",
-				"::1",
-				"localhost",
-				"*.local",
-			}
-			tenantID := uint64(i + 2)
-			pair, err := security.CreateTenantPair(
-				certsDir,
-				tenantCAKeyPath,
-				demoCtx.DefaultKeySize,
-				demoCtx.DefaultCertLifetime,
-				tenantID,
-				hostAddrs,
-			)
-			if err != nil {
-				return err
-			}
-			if err := security.WriteTenantPair(certsDir, pair, false /* overwrite */); err != nil {
-				return err
-			}
-			if err := security.CreateTenantSigningPair(
-				certsDir, demoCtx.DefaultCertLifetime, false /* overwrite */, tenantID,
-			); err != nil {
-				return err
-			}
-			rootUserScope = append(rootUserScope, roachpb.MustMakeTenantID(tenantID))
+		// Create a cert for the secondary tenant.
+		hostAddrs := []string{
+			"127.0.0.1",
+			"::1",
+			"localhost",
+			"*.local",
 		}
+		pair, err := security.CreateTenantPair(
+			certsDir,
+			tenantCAKeyPath,
+			demoCtx.DefaultKeySize,
+			demoCtx.DefaultCertLifetime,
+			secondaryTenantID,
+			hostAddrs,
+		)
+		if err != nil {
+			return err
+		}
+		if err := security.WriteTenantPair(certsDir, pair, false /* overwrite */); err != nil {
+			return err
+		}
+		if err := security.CreateTenantSigningPair(
+			certsDir, demoCtx.DefaultCertLifetime, false /* overwrite */, secondaryTenantID,
+		); err != nil {
+			return err
+		}
+		rootUserScope = append(rootUserScope, roachpb.MustMakeTenantID(secondaryTenantID))
 	}
 	// Create a certificate for the root user. This certificate will be scoped to the
 	// system tenant and all other tenants created as a part of the demo.
@@ -1467,9 +1473,6 @@ func (c *transientCluster) GetLocality(nodeID int32) string {
 func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 	numNodesLive := 0
 	// First, list system tenant nodes.
-	if c.demoCtx.Multitenant {
-		fmt.Fprintln(w, "system tenant")
-	}
 	for i, s := range c.servers {
 		if s.TestServer == nil {
 			continue
@@ -1489,6 +1492,32 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 			// the demo.
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
+		if c.demoCtx.Multitenant {
+			fmt.Fprintln(w, "  Application tenant:")
+			tenantUiURLstr := c.tenantServers[i].AdminURL()
+			tenantUiURL, err := url.Parse(tenantUiURLstr)
+			if err != nil {
+				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
+			} else {
+				tenantSqlURL, err := c.getNetworkURLForServer(context.Background(), i,
+					false /* includeAppName */, true /* forSecondaryTenant */)
+				if err != nil {
+					fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
+				} else {
+					// The unix socket is currently not defined for secondary
+					// tenant servers.
+					//
+					// NB: it will become defined once we use a single SQL
+					// listener for all tenants; after which this code can be
+					// simplified.
+					tenantSocket := unixSocketDetails{}
+					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket)
+				}
+			}
+			fmt.Fprintln(w)
+			fmt.Fprintln(w, "  System tenant:")
+		}
+		// Connection parameters for the system tenant follow.
 		uiURL := s.Cfg.AdminURL()
 		sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
 			false /* includeAppName */, false /* forSecondaryTenant */)
@@ -1498,33 +1527,6 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 			c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i))
 		}
 		fmt.Fprintln(w)
-	}
-	// Print the SQL address of each tenant if in MT mode.
-	if c.demoCtx.Multitenant {
-		for i := range c.servers {
-			fmt.Fprintf(w, "tenant %d:\n", i+1)
-			uiURLstr := c.tenantServers[i].AdminURL()
-			uiURL, err := url.Parse(uiURLstr)
-			if err != nil {
-				fmt.Fprintln(ew, errors.Wrap(err, "retrieving tenant network URL"))
-			} else {
-				sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
-					false /* includeAppName */, true /* forSecondaryTenant */)
-				if err != nil {
-					fmt.Fprintln(ew, errors.Wrap(err, "retrieving tenant network URL"))
-				} else {
-					// The unix socket is currently not defined for secondary
-					// tenant servers.
-					//
-					// NB: it will become defined once we use a single SQL
-					// listener for all tenants; after which this code can be
-					// simplified.
-					socket := unixSocketDetails{}
-					c.printURLs(w, ew, sqlURL, uiURL, socket)
-				}
-			}
-			fmt.Fprintln(w)
-		}
 	}
 
 	if numNodesLive == 0 {
@@ -1549,11 +1551,11 @@ func (c *transientCluster) printURLs(
 		uiURL.Path = server.DemoLoginPath
 		uiURL.RawQuery = pwauth.Encode()
 	}
-	fmt.Fprintln(w, "  (webui)   ", uiURL)
-	fmt.Fprintln(w, "  (sql)     ", sqlURL.ToPQ())
-	fmt.Fprintln(w, "  (sql/jdbc)", sqlURL.ToJDBC())
+	fmt.Fprintln(w, "   (webui)   ", uiURL)
+	fmt.Fprintln(w, "   (sql)     ", sqlURL.ToPQ())
+	fmt.Fprintln(w, "   (sql/jdbc)", sqlURL.ToJDBC())
 	if socket.exists() {
-		fmt.Fprintln(w, "  (sql/unix)", socket)
+		fmt.Fprintln(w, "   (sql/unix)", socket)
 	}
 }
 
