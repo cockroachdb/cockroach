@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -293,9 +294,9 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 	require.NoError(t, c.Start(ctx))
 
-	for i := 0; i < demoCtx.NumNodes; i++ {
-		url, err := c.getNetworkURLForServer(ctx, i,
-			true /* includeAppName */, true /* isTenant */)
+	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
+		url, err := c.getNetworkURLForServer(ctx, 0,
+			true /* includeAppName */, forSecondaryTenant)
 		require.NoError(t, err)
 		sqlConnCtx := clisqlclient.Context{}
 		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
@@ -307,5 +308,5 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 		// Create a table on each tenant to make sure that the tenants are separate.
 		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
-	}
+	})
 }
