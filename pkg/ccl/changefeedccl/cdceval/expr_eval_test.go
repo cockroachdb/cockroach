@@ -56,12 +56,10 @@ CREATE TABLE foo (
   e status DEFAULT 'inactive',
   f STRING,
   g STRING,
-  h STRING NOT VISIBLE,
-  flag BOOL,
   PRIMARY KEY (b, a),
   FAMILY main (a, b, e),
   FAMILY only_c (c),
-  FAMILY f_g_fam(f, g, flag)
+  FAMILY f_g_fam(f,g)
 )`)
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
@@ -265,7 +263,7 @@ CREATE TABLE foo (
 			},
 		},
 		{
-			testName:   "concat",
+			testName:   "main/concat",
 			familyName: "f_g_fam",
 			actions: []string{
 				"INSERT INTO foo (a, b, f) VALUES (42, 'concat', 'hello')",
@@ -280,32 +278,6 @@ CREATE TABLE foo (
 				{
 					keyValues: []string{"concat", "42"},
 					allValues: map[string]string{"a": "42", "b": "concat", "ff": "hellohello", "gg": "NULL"},
-				},
-			},
-		},
-		{
-			testName:   "boolean flag",
-			familyName: "f_g_fam",
-			actions: []string{
-				"INSERT INTO foo (a, b, g, flag) VALUES (42, 'true', 'gee', true)",
-				"INSERT INTO foo (a, b, g, flag) VALUES (42, 'false', 'gee', false)",
-				"INSERT INTO foo (a, b, g) VALUES (42, 'maybe', 'gee')", // NULL flag should be treated as false.
-			},
-			stmt:             "SELECT a, b, flag FROM foo WHERE flag",
-			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 3),
-			expectFGFamily: []decodeExpectation{
-				{
-					keyValues:      []string{"false", "42"},
-					expectFiltered: true,
-				},
-				{
-					// null boolean value should also be filtered.
-					keyValues:      []string{"maybe", "42"},
-					expectFiltered: true,
-				},
-				{
-					keyValues: []string{"true", "42"},
-					allValues: map[string]string{"a": "42", "b": "true", "flag": "true"},
 				},
 			},
 		},

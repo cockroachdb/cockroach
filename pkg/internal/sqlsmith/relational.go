@@ -185,7 +185,6 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 	if !ok {
 		return nil, nil, false
 	}
-
 	maxJoinType := len(joinTypes)
 	if s.disableCrossJoins {
 		maxJoinType = len(joinTypes) - 1
