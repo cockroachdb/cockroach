@@ -1,7 +1,7 @@
 stmt_without_legacy_transaction ::=
 	preparable_stmt
 	| analyze_stmt
-	| copy_from_stmt
+	| copy_stmt
 	| comment_stmt
 	| execute_stmt
 	| deallocate_stmt

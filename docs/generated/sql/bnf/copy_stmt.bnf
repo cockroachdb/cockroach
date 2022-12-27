@@ -1,0 +1,10 @@
+copy_stmt ::=
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' 'WITH' copy_options ( ( copy_options ) )* 
+	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  copy_options ( ( copy_options ) )* 
+	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  
+	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
+	| 'COPY' table_name opt_column_list 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
+	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' 
+	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' 'WITH' copy_options ( ( copy_options ) )*
+	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT'  copy_options ( ( copy_options ) )*
+	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' 
