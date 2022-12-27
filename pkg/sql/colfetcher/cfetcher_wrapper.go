@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -52,6 +53,8 @@ type cFetcherWrapper struct {
 	// startKey is only used as an additional detail for some error messages.
 	startKey roachpb.Key
 
+	// Fields below are only used when serializing the response.
+
 	converterAcc *mon.BoundAccount
 	// TODO(yuzefovich): consider extracting a serializer component that would
 	// be also reused by the colrpc.Outbox.
@@ -71,7 +74,7 @@ func (c *cFetcherWrapper) nextBatchAdapter() {
 }
 
 // NextBatch implements the storage.CFetcherWrapper interface.
-func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
+func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, interface{}, error) {
 	// cFetcher propagates some errors as "internal" panics, so we have to wrap
 	// a call to cFetcher.NextBatch with a panic-catcher.
 	c.adapter.ctx = ctx
@@ -79,26 +82,29 @@ func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
 		// Most likely this error indicates that a memory limit was reached by
 		// the wrapped cFetcher, so we want to augment it with an additional
 		// detail about the start key.
-		return nil, storage.IncludeStartKeyIntoErr(c.startKey, err)
+		return nil, nil, storage.IncludeStartKeyIntoErr(c.startKey, err)
 	}
 	if c.adapter.err != nil {
 		// If an error is propagated in a "regular" fashion, as a return
 		// parameter, then we don't include the start key - the pebble MVCC
 		// scanner has already done so if needed.
-		return nil, c.adapter.err
+		return nil, nil, c.adapter.err
 	}
 	if c.adapter.batch.Length() == 0 {
-		return nil, nil
+		return nil, nil, nil
+	}
+	if c.converter == nil {
+		return nil, c.adapter.batch, nil
 	}
 	data, err := c.converter.BatchToArrow(ctx, c.adapter.batch)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	oldBufCap := c.buf.Cap()
 	c.buf.Reset()
 	_, _, err = c.serializer.Serialize(&c.buf, data, c.adapter.batch.Length())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if newBufCap := c.buf.Cap(); newBufCap > oldBufCap {
 		// Account for the capacity of the buffer since we're reusing it across
@@ -107,10 +113,10 @@ func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
 		// shrinks the account according to its own usage and never relies on
 		// the total used value.
 		if err = c.converterAcc.Grow(ctx, int64(newBufCap-oldBufCap)); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return c.buf.Bytes(), nil
+	return c.buf.Bytes(), nil, nil
 }
 
 // Close implements the storage.CFetcherWrapper interface.
@@ -134,7 +140,8 @@ func newCFetcherWrapper(
 	fetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer storage.NextKVer,
 	startKey roachpb.Key,
-) (_ storage.CFetcherWrapper, retErr error) {
+	mustSerialize bool,
+) (_ storage.CFetcherWrapper, willSerialize bool, retErr error) {
 	// At the moment, we always serialize the columnar batches, so it is safe to
 	// handle enum types without proper hydration - we just treat them as bytes
 	// values, and it is the responsibility of the ColBatchDirectScan to hydrate
@@ -142,7 +149,18 @@ func newCFetcherWrapper(
 	const allowUnhydratedEnums = true
 	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */, allowUnhydratedEnums)
 	if err != nil {
-		return nil, err
+		return nil, willSerialize, err
+	}
+	willSerialize = mustSerialize
+	if !mustSerialize {
+		// Check whether we have an enum return type in which case we still must
+		// serialize the response.
+		for _, t := range tableArgs.typs {
+			if t.Family() == types.EnumFamily {
+				willSerialize = true
+				break
+			}
+		}
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -157,6 +175,9 @@ func newCFetcherWrapper(
 	// MaxSpanRequestKeys limits of the BatchRequest), so we just have a
 	// reasonable default here.
 	const memoryLimit = execinfra.DefaultMemoryLimit
+	// We must be allocating fresh batches if we're not serializing the
+	// response.
+	allocateFreshBatches := !willSerialize
 	// TODO(yuzefovich, 23.1): think through estimatedRowCount (#94850) and
 	// traceKV arguments.
 	fetcher.cFetcherArgs = cFetcherArgs{
@@ -165,7 +186,7 @@ func newCFetcherWrapper(
 		false, /* traceKV */
 		true,  /* singleUse */
 		false, /* collectStats */
-		true,  /* allocateFreshBatches */
+		allocateFreshBatches,
 	}
 
 	// We don't need to provide the eval context here since we will only decode
@@ -173,7 +194,7 @@ func newCFetcherWrapper(
 	// (at least until we implement the filter pushdown).
 	allocator := colmem.NewAllocator(ctx, fetcherAccount, coldataext.NewExtendedColumnFactoryNoEvalCtx())
 	if err = fetcher.Init(allocator, nextKVer, tableArgs); err != nil {
-		return nil, err
+		return nil, willSerialize, err
 	}
 	// TODO(yuzefovich, 23.1): consider pooling the allocations of some objects.
 	wrapper := cFetcherWrapper{
@@ -181,13 +202,15 @@ func newCFetcherWrapper(
 		startKey:     startKey,
 		converterAcc: converterAccount,
 	}
-	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs, colserde.BatchToArrowOnly, converterAccount)
-	if err != nil {
-		return nil, err
+	if willSerialize {
+		wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs, colserde.BatchToArrowOnly, converterAccount)
+		if err != nil {
+			return nil, willSerialize, err
+		}
+		wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+		if err != nil {
+			return nil, willSerialize, err
+		}
 	}
-	wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
-	if err != nil {
-		return nil, err
-	}
-	return &wrapper, nil
+	return &wrapper, willSerialize, nil
 }

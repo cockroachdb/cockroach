@@ -369,6 +369,9 @@ func (sr *ScanResponse) combine(c combinable) error {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
 		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
+		// TODO: we cannot intertwine responses in different format when we need
+		// to maintain the ordering.
+		sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -385,6 +388,9 @@ func (sr *ReverseScanResponse) combine(c combinable) error {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
 		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
+		// TODO: we cannot intertwine responses in different format when we need
+		// to maintain the ordering.
+		sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}

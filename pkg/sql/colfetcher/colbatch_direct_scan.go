@@ -17,6 +17,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -38,7 +39,9 @@ type ColBatchDirectScan struct {
 	allocator   *colmem.Allocator
 	spec        *fetchpb.IndexFetchSpec
 	resultTypes []*types.T
+	hasDatumVec bool
 
+	// TODO: lazily allocate all of these fields.
 	data      []array.Data
 	batch     coldata.Batch
 	converter *colserde.ArrowBatchConverter
@@ -89,6 +92,21 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 		}
 		if res.KVs != nil {
 			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
+		}
+		// TODO: make sure that someone is accounting for the memory footprint of
+		// this batch.
+		if res.ColBatch != nil {
+			if s.hasDatumVec {
+				for _, vec := range res.ColBatch.ColVecs() {
+					if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+						vec.Datum().SetEvalCtx(s.flowCtx.EvalCtx)
+					}
+				}
+			}
+			s.mu.Lock()
+			s.mu.rowsRead += int64(res.ColBatch.Length())
+			s.mu.Unlock()
+			return res.ColBatch
 		}
 		if res.BatchResponse != nil {
 			break
@@ -186,12 +204,21 @@ func NewColBatchDirectScan(
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	)
 
+	var hasDatumVec bool
+	for _, t := range tableArgs.typs {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			hasDatumVec = true
+			break
+		}
+	}
+
 	return &ColBatchDirectScan{
 		colBatchScanBase: base,
 		allocator:        allocator,
 		fetcher:          fetcher,
 		spec:             &spec.FetchSpec,
 		resultTypes:      tableArgs.typs,
+		hasDatumVec:      hasDatumVec,
 		data:             make([]array.Data, len(tableArgs.typs)),
 	}, tableArgs.typs, nil
 }

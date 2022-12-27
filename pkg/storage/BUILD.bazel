@@ -66,6 +66,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
+        "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/iterutil",

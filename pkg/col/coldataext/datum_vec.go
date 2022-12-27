@@ -241,3 +241,8 @@ func convertToDatum(v coldata.Datum) tree.Datum {
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
+
+// SetEvalCtx implements coldata.DatumVec interface.
+func (dv *datumVec) SetEvalCtx(evalCtx interface{}) {
+	dv.evalCtx = evalCtx.(*eval.Context)
+}

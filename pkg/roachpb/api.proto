@@ -561,6 +561,7 @@ enum ScanFormat {
   // The serialized (in the Apache Arrow format) representation of
   // coldata.Batch'es that contain only necessary (according to the
   // fetchpb.IndexFetchSpec) columns.
+  // TODO: comment.
   COL_BATCH_RESPONSE = 2;
 }
 
@@ -576,6 +577,7 @@ message ScanRequest {
   // The desired format for the response. If set to BATCH_RESPONSE or
   // COL_BATCH_RESPONSE, the server will set the batch_responses field in the
   // ScanResponse instead of the rows field.
+  // TODO: comment.
   ScanFormat scan_format = 4;
 
   // The desired key-level locking mode used during this scan. When set to None
@@ -619,7 +621,20 @@ message ScanResponse {
   // coldata.Batch'es in this field.
   //
   // If set, rows will not be set and vice versa.
+  // TODO: comment.
   repeated bytes batch_responses = 4;
+  // TODO: comment.
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
+}
+
+message ColBatches {
+  option (gogoproto.gostring) = false;
+  option (gogoproto.equal) = false;
+  option (gogoproto.stringer) = false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+  option (gogoproto.unmarshaler) = false;
+  repeated bytes col_batches = 1 [(gogoproto.customtype) = "interface{}", (gogoproto.nullable) = false];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -633,6 +648,7 @@ message ReverseScanRequest {
   // The desired format for the response. If set to BATCH_RESPONSE or
   // COL_BATCH_RESPONSE, the server will set the batch_responses field in the
   // ScanResponse instead of the rows field.
+  // TODO: comment.
   ScanFormat scan_format = 4;
 
   // The desired key-level locking mode used during this scan. When set to None
@@ -676,7 +692,10 @@ message ReverseScanResponse {
   // coldata.Batch'es in this field.
   //
   // If set, rows will not be set and vice versa.
+  // TODO: comment.
   repeated bytes batch_responses = 4;
+  // TODO: comment.
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
 }
 
 
