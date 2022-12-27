@@ -2991,15 +2991,19 @@ subtest foreign_keys
 statement ok
 CREATE TABLE users (
     id         UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
-    username   STRING NOT NULL
+    id2        INT,
+    username   STRING NOT NULL,
+    UNIQUE INDEX id2_idx(id2)
 ) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE TABLE user_settings (
     id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    id2     INT,
     user_id UUID   NOT NULL,
     value   STRING NOT NULL,
     INDEX(user_id),
+    INDEX id2_idx(id2),
     FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 
@@ -3021,7 +3025,7 @@ CREATE TABLE user_settings_cascades (
 # user_settings and avoid visiting all regions.
 query T retry
 EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
-  FROM users INNER LOOKUP JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
+  FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
 vectorized: true
@@ -3049,6 +3053,116 @@ vectorized: true
               table: users@users_pkey
               spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 
+# A locality-optimized scan in a derived table with index join as the input to
+# lookup join should propagate its Distribution to the lookup table if there is
+# a crdb_region = crdb_region join term, causing lower costs and lookup join to
+# be picked.
+query T
+EXPLAIN SELECT users_dt.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
+  FROM (SELECT crdb_region, * FROM users@id2_idx LIMIT 1) users_dt JOIN user_settings ON
+  users_dt.id2+1 = user_settings.id2 AND users_dt.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882' AND
+  users_dt.crdb_region = user_settings.crdb_region
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: user_settings@user_settings_pkey
+│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality cols are key
+│
+└── • lookup join
+    │ table: user_settings@id2_idx
+    │ equality: (crdb_region, column14) = (crdb_region,id2)
+    │
+    └── • render
+        │
+        └── • filter
+            │ filter: id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
+            │
+            └── • index join
+                │ table: users@users_pkey
+                │
+                └── • union all
+                    │ limit: 1
+                    │
+                    ├── • scan
+                    │     missing stats
+                    │     table: users@id2_idx
+                    │     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+                    │     limit: 1
+                    │
+                    └── • scan
+                          missing stats
+                          table: users@id2_idx
+                          spans: [/'ca-central-1' - /'us-east-1']
+                          limit: 1
+
+# A locality-optimized scan in a derived table with an inequality `LookupExpr`
+# should propagate the input table's Distribution to the lookup table if there
+# is a crdb_region = crdb_region join term, causing lower costs and lookup join
+# to be picked.
+query T
+EXPLAIN SELECT users_dt.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
+  FROM (SELECT crdb_region, * FROM users@id2_idx LIMIT 1) users_dt JOIN user_settings ON users_dt.id2+1 > user_settings.id2 AND users_dt.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882' and users_dt.crdb_region = user_settings.crdb_region
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: user_settings@user_settings_pkey
+│ equality: (crdb_region) = (crdb_region)
+│ pred: column14 > id2
+│
+└── • render
+    │
+    └── • filter
+        │ filter: id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
+        │
+        └── • index join
+            │ table: users@users_pkey
+            │
+            └── • union all
+                │ limit: 1
+                │
+                ├── • scan
+                │     missing stats
+                │     table: users@id2_idx
+                │     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+                │     limit: 1
+                │
+                └── • scan
+                      missing stats
+                      table: users@id2_idx
+                      spans: [/'ca-central-1' - /'us-east-1']
+                      limit: 1
+
+# An explicit join on the crdb_region column of both tables should be costed to
+# prefer lookup join.
+query T
+EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
+  FROM users JOIN user_settings ON users.crdb_region = user_settings.crdb_region AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: user_settings@user_settings_pkey
+│ equality: (crdb_region) = (crdb_region)
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: users@users_pkey
+    │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+    │
+    └── • scan
+          missing stats
+          table: users@users_pkey
+          spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+
 # Ensure that the FK checks and cascades are efficient.
 query T
 EXPLAIN INSERT INTO user_settings (user_id, value) VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
@@ -3057,10 +3171,10 @@ distribution: local
 vectorized: true
 ·
 • insert fast path
-  into: user_settings(id, user_id, value, crdb_region)
+  into: user_settings(id, id2, user_id, value, crdb_region)
   auto commit
   FK check: users@users_pkey
-  size: 5 columns, 1 row
+  size: 6 columns, 1 row
 
 query T
 EXPLAIN INSERT INTO user_settings_cascades (user_id, value) VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
