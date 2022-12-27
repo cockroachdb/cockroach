@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -2601,7 +2602,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					return false, err
 				}
 
-				if overload.IsUDF {
+				if funcdesc.IsOIDUserDefinedFunc(ooid) {
 					fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
 						ctx, p.Txn(), descpb.ID(overload.Oid),
 						tree.ObjectLookupFlags{
