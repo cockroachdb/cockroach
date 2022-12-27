@@ -81,7 +81,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:column_table_def.html",
     "//docs/generated/sql/bnf:comment.html",
     "//docs/generated/sql/bnf:commit_transaction.html",
-    "//docs/generated/sql/bnf:copy_from.html",
+    "//docs/generated/sql/bnf:copy.html",
     "//docs/generated/sql/bnf:create.html",
     "//docs/generated/sql/bnf:create_as_col_qual_list.html",
     "//docs/generated/sql/bnf:create_as_constraint_def.html",
