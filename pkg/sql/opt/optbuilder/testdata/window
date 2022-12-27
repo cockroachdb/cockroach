@@ -1536,3 +1536,12 @@ sort
            │         └── v:3 IS NULL [as=rank_1_nulls_ordering_1_1:8]
            └── windows
                 └── rank [as=rank:7]
+
+# Regression test for an internal error with RANGE mode with offsets and NULLS
+# LAST.
+# TODO(yuzefovich): teach the execution engine to support this special case
+# (#94032).
+build
+SELECT avg(k) OVER (ORDER BY id NULLS LAST RANGE 0 PRECEDING) FROM nulls_last_test
+----
+error: NULLS LAST with RANGE mode with OFFSET is currently unsupported
