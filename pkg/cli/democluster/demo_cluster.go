@@ -43,7 +43,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -55,7 +57,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
+	"github.com/nightlyone/lockfile"
 	"golang.org/x/time/rate"
 )
 
@@ -108,6 +112,9 @@ const secondaryTenantID = 2
 // demoOrg is the organization to use to request an evaluation
 // license.
 const demoOrg = "Cockroach Demo"
+
+// demoUsername is the name of the predefined non-root user.
+const demoUsername = "demo"
 
 // LoggerFn is the type of a logger function to use by the
 // demo cluster to report special events.
@@ -171,13 +178,29 @@ func NewDemoCluster(
 
 	// Create a temporary directory for certificates (if secure) and
 	// the unix sockets.
-	// The directory is removed in the Close() method.
-	if c.demoDir, err = os.MkdirTemp("", "demo"); err != nil {
+	if !testingForceRandomizeDemoPorts {
+		// Common case.
+		// The directory is NOT removed in the Close() method: this way,
+		// we can preserve configuration across `demo` calls.
+		homeDir, err := envutil.HomeDir()
+		if err != nil {
+			return c, err
+		}
+		c.demoDir = filepath.Join(homeDir, ".cockroach-demo")
+	} else {
+		// We are running multiple tests concurrently, and we don't want
+		// them to conflict on access to the shared directory. Randomize
+		// the directory in that case.
+		if c.demoDir, err = os.MkdirTemp("", "demo"); err != nil {
+			return c, err
+		}
+	}
+	if err := os.Mkdir(c.demoDir, 0700); err != nil && !oserror.IsExist(err) {
 		return c, err
 	}
 
 	if !c.demoCtx.Insecure {
-		if err := c.demoCtx.generateCerts(c.demoDir); err != nil {
+		if err := c.generateCerts(ctx, c.demoDir); err != nil {
 			return c, err
 		}
 	}
@@ -381,7 +404,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		return err
 	}
 
-	const demoUsername = "demo"
 	demoPassword := genDemoPassword(demoUsername)
 
 	// Step 8: initialize tenant servers, if enabled.
@@ -840,7 +862,10 @@ func (c *transientCluster) Close(ctx context.Context) {
 		}
 		c.stopper.Stop(ctx)
 	}
-	if c.demoDir != "" {
+	if testingForceRandomizeDemoPorts {
+		// Note: unless we're running in unit tests, c.demoDir is NOT
+		// removed in the Close() method: this way, we can preserve
+		// configuration across `demo` calls.
 		if err := clierror.CheckAndMaybeLog(os.RemoveAll(c.demoDir), c.shoutLog); err != nil {
 			// There's nothing to do here anymore if err != nil.
 			_ = err
@@ -1098,92 +1123,241 @@ This server is running at increased risk of memory-related failures.`,
 }
 
 // generateCerts generates some temporary certificates for cockroach demo.
-func (demoCtx *Context) generateCerts(certsDir string) (err error) {
-	caKeyPath := filepath.Join(certsDir, certnames.EmbeddedCAKey)
-	// Create a CA-Key.
-	if err := security.CreateCAPair(
-		certsDir,
-		caKeyPath,
-		demoCtx.DefaultKeySize,
-		demoCtx.DefaultCALifetime,
-		false, /* allowKeyReuse */
-		false, /*overwrite */
-	); err != nil {
+func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (err error) {
+	// Prevent concurrent access while we write the certificates.
+	cleanup, err := c.lockDir(ctx, certsDir, "certgen")
+	if err != nil {
 		return err
 	}
-	// Generate a certificate for the demo nodes.
-	if err := security.CreateNodePair(
-		certsDir,
-		caKeyPath,
-		demoCtx.DefaultKeySize,
-		demoCtx.DefaultCertLifetime,
-		false, /* overwrite */
-		[]string{"127.0.0.1"},
-	); err != nil {
+	defer cleanup()
+
+	// Make a CA key/cert pair.
+	caKeyPath := filepath.Join(certsDir, certnames.CAKeyFilename())
+	caKeyExists, err := fileExists(caKeyPath)
+	if err != nil {
+		return err
+	}
+	caCertPath := filepath.Join(certsDir, certnames.CACertFilename())
+	caCertExists, err := fileExists(caCertPath)
+	if err != nil {
+		return err
+	}
+	nodeKeyPath := filepath.Join(certsDir, certnames.NodeKeyFilename())
+	nodeKeyExists, err := fileExists(nodeKeyPath)
+	if err != nil {
+		return err
+	}
+	nodeCertPath := filepath.Join(certsDir, certnames.NodeCertFilename())
+	nodeCertExists, err := fileExists(nodeCertPath)
+	if err != nil {
+		return err
+	}
+	tenantKeyPath := filepath.Join(certsDir, certnames.TenantKeyFilename("2"))
+	tenantKeyExists, err := fileExists(tenantKeyPath)
+	if err != nil {
+		return err
+	}
+	tenantCertPath := filepath.Join(certsDir, certnames.TenantCertFilename("2"))
+	tenantCertExists, err := fileExists(tenantCertPath)
+	if err != nil {
+		return err
+	}
+	rootClientCertPath := filepath.Join(certsDir, certnames.ClientCertFilename(username.RootUserName()))
+	rootClientCertExists, err := fileExists(rootClientCertPath)
+	if err != nil {
+		return err
+	}
+	rootClientKeyPath := filepath.Join(certsDir, certnames.ClientKeyFilename(username.RootUserName()))
+	rootClientKeyExists, err := fileExists(rootClientKeyPath)
+	if err != nil {
+		return err
+	}
+	demoUser := username.MakeSQLUsernameFromPreNormalizedString(demoUsername)
+	demoClientCertPath := filepath.Join(certsDir, certnames.ClientCertFilename(demoUser))
+	demoClientCertExists, err := fileExists(demoClientCertPath)
+	if err != nil {
+		return err
+	}
+	demoClientKeyPath := filepath.Join(certsDir, certnames.ClientKeyFilename(demoUser))
+	demoClientKeyExists, err := fileExists(demoClientKeyPath)
+	if err != nil {
+		return err
+	}
+	tenantSigningCertPath := filepath.Join(certsDir, certnames.TenantSigningCertFilename("2"))
+	tenantSigningCertExists, err := fileExists(tenantSigningCertPath)
+	if err != nil {
+		return err
+	}
+	tenantSigningKeyPath := filepath.Join(certsDir, certnames.TenantSigningKeyFilename("2"))
+	tenantSigningKeyExists, err := fileExists(tenantSigningKeyPath)
+	if err != nil {
 		return err
 	}
 
-	// rootUserScope contains the tenant IDs the root user is allowed to access.
-	rootUserScope := []roachpb.TenantID{roachpb.SystemTenantID}
-	if demoCtx.Multitenant {
-		tenantCAKeyPath := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
-		// Create a CA key for the tenants.
-		if err := security.CreateTenantCAPair(
-			certsDir,
-			tenantCAKeyPath,
-			demoCtx.DefaultKeySize,
-			// We choose a lifetime that is over the default cert lifetime because,
-			// without doing this, the tenant connection complains that the certs
-			// will expire too soon.
-			demoCtx.DefaultCertLifetime+time.Hour,
-			false, /* allowKeyReuse */
-			false, /* ovewrite */
-		); err != nil {
+	// Do we have everything we need to run a cluster?
+	// NB: we do not need the CA key in this test - it's not needed to
+	// _run_ a cluster, only to generate new certs. See below for that.
+	if caCertExists &&
+		nodeKeyExists && nodeCertExists &&
+		rootClientKeyExists && rootClientCertExists &&
+		demoClientKeyExists && demoClientCertExists &&
+		tenantSigningKeyExists && tenantSigningCertExists &&
+		tenantKeyExists && tenantCertExists {
+		// All good.
+		return nil
+	}
+
+	allFilenamesCreatedFromCA := []string{
+		nodeKeyPath, nodeCertPath,
+		tenantKeyPath, tenantCertPath,
+		rootClientKeyPath, rootClientKeyPath + ".pk8", rootClientCertPath,
+		demoClientKeyPath, demoClientKeyPath + ".pk8", demoClientCertPath,
+	}
+
+	// Here we will need to create _some_ certs. Do we have a CA key to go with?
+	if !caKeyExists || !caCertExists {
+		// If there's some certificate left over from a previous session, we
+		// can't exclude that a demo session is still running and is using
+		// them; and we can't regenerate them piecemeal without invalidating
+		// the others. Bail out in that case.
+		//
+		// Note: the tenant signing key/cert pair is independent from the CA
+		// so we do not need to check this here.
+		if caCertExists ||
+			nodeKeyExists || nodeCertExists ||
+			tenantKeyExists || tenantCertExists ||
+			rootClientKeyExists || rootClientCertExists ||
+			demoClientKeyExists || demoClientCertExists {
+			err := errors.Newf("cannot create demo TLS certs: stray certificates left over in %q", certsDir)
+			err = errors.WithHint(err, "Remove them manually before trying again.")
+			for _, f := range allFilenamesCreatedFromCA {
+				if exists, _ := fileExists(f); exists {
+					err = errors.WithDetailf(err, "Stray file: %q", f)
+				}
+			}
 			return err
 		}
 
-		// Create a cert for the secondary tenant.
-		hostAddrs := []string{
-			"127.0.0.1",
-			"::1",
-			"localhost",
-			"*.local",
+		if !(caKeyExists && caCertExists) {
+			// We need to regenerate CA cert/key pair. This will invalidate
+			// any pre-existing cert in the directory, so we will need to
+			// regenerate them below.
+			for _, f := range allFilenamesCreatedFromCA {
+				err := os.Remove(f)
+				if err != nil && !oserror.IsNotExist(err) {
+					return err
+				}
+				if err == nil {
+					c.infoLog(ctx, "removed stray file: %q", f)
+				}
+			}
+			nodeKeyExists = false
+			nodeCertExists = false
+			tenantKeyExists = false
+			tenantCertExists = false
+			rootClientKeyExists = false
+			rootClientCertExists = false
+			demoClientKeyExists = false
+			demoClientCertExists = false
+			// Actually create the key/cert pair.
+			c.infoLog(ctx, "generating CA key/cert pair in %q", certsDir)
+			if err := security.CreateCAPair(
+				certsDir,
+				caKeyPath,
+				c.demoCtx.DefaultKeySize,
+				c.demoCtx.DefaultCALifetime,
+				true,  /* allowKeyReuse */
+				false, /*overwrite */
+			); err != nil {
+				return err
+			}
 		}
+	}
+
+	// At this point we have a CA cert/key pair, and we need to re-generate
+	// some of the certs. Do it now.
+
+	tlsServerNames := []string{
+		"127.0.0.1", "*.local", "::1", "localhost",
+	}
+
+	if !(nodeKeyExists && nodeCertExists) {
+		// Generate a certificate for the demo nodes.
+		c.infoLog(ctx, "generating node key/cert pair in %q", certsDir)
+		if err := security.CreateNodePair(
+			certsDir,
+			caKeyPath,
+			c.demoCtx.DefaultKeySize,
+			c.demoCtx.DefaultCertLifetime,
+			true, /* overwrite */
+			tlsServerNames,
+		); err != nil {
+			return err
+		}
+	}
+
+	if !(rootClientKeyExists && rootClientCertExists) {
+		c.infoLog(ctx, "generating root client key/cert pair in %q", certsDir)
+		if err := security.CreateClientPair(
+			certsDir,
+			caKeyPath,
+			c.demoCtx.DefaultKeySize,
+			c.demoCtx.DefaultCertLifetime,
+			true, /* overwrite */
+			username.RootUserName(),
+			nil,  /* tenantIDs - this makes it valid for all tenants */
+			true, /* generatePKCS8Key */
+		); err != nil {
+			return err
+		}
+	}
+
+	if !(demoClientKeyExists && demoClientCertExists) {
+		c.infoLog(ctx, "generating demo client key/cert pair in %q", certsDir)
+		if err := security.CreateClientPair(
+			certsDir,
+			caKeyPath,
+			c.demoCtx.DefaultKeySize,
+			c.demoCtx.DefaultCertLifetime,
+			true, /* overwrite */
+			demoUser,
+			nil,  /* tenantIDs - this makes it valid for all tenants */
+			true, /* generatePKCS8Key */
+		); err != nil {
+			return err
+		}
+	}
+
+	if !(tenantKeyExists && tenantCertExists) {
+		c.infoLog(ctx, "generating tenant server key/cert pair in %q", certsDir)
 		pair, err := security.CreateTenantPair(
 			certsDir,
-			tenantCAKeyPath,
-			demoCtx.DefaultKeySize,
-			demoCtx.DefaultCertLifetime,
-			secondaryTenantID,
-			hostAddrs,
+			caKeyPath,
+			c.demoCtx.DefaultKeySize,
+			c.demoCtx.DefaultCertLifetime,
+			2,
+			tlsServerNames,
 		)
 		if err != nil {
 			return err
 		}
-		if err := security.WriteTenantPair(certsDir, pair, false /* overwrite */); err != nil {
+		if err := security.WriteTenantPair(certsDir, pair, true /* overwrite */); err != nil {
 			return err
 		}
+	}
+
+	if !(tenantSigningKeyExists && tenantSigningCertExists) {
+		c.infoLog(ctx, "generating tenant signing key/cert pair in %q", certsDir)
 		if err := security.CreateTenantSigningPair(
-			certsDir, demoCtx.DefaultCertLifetime, false /* overwrite */, secondaryTenantID,
+			certsDir,
+			c.demoCtx.DefaultCertLifetime,
+			true, /* overwrite */
+			2,
 		); err != nil {
 			return err
 		}
-		rootUserScope = append(rootUserScope, roachpb.MustMakeTenantID(secondaryTenantID))
 	}
-	// Create a certificate for the root user. This certificate will be scoped to the
-	// system tenant and all other tenants created as a part of the demo.
-	if err := security.CreateClientPair(
-		certsDir,
-		caKeyPath,
-		demoCtx.DefaultKeySize,
-		demoCtx.DefaultCertLifetime,
-		false, /* overwrite */
-		username.RootUserName(),
-		rootUserScope,
-		false, /* generatePKCS8Key */
-	); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -1217,10 +1391,6 @@ func (c *transientCluster) getNetworkURLForServer(
 		u.WithInsecure()
 	} else {
 		caCert := certnames.CACertFilename()
-		if forSecondaryTenant {
-			caCert = certnames.TenantClientCACertFilename()
-		}
-
 		u.
 			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
 			WithTransport(pgurl.TransportTLS(
@@ -1567,6 +1737,18 @@ func (c *transientCluster) printURLs(
 		uiURL.RawQuery = pwauth.Encode()
 	}
 	fmt.Fprintln(w, "   (webui)   ", uiURL)
+
+	_, _, port := sqlURL.GetNetworking()
+	portArg := ""
+	if port != fmt.Sprint(base.DefaultPort) {
+		portArg = " -p " + port
+	}
+	secArgs := " --certs-dir=" + c.demoDir + " -u " + demoUsername
+	if c.demoCtx.Insecure {
+		secArgs = " --insecure"
+	}
+	fmt.Fprintln(w, "   (cli)     ", "cockroach sql"+secArgs+portArg)
+
 	fmt.Fprintln(w, "   (sql)     ", sqlURL.ToPQ())
 	fmt.Fprintln(w, "   (sql/jdbc)", sqlURL.ToJDBC())
 	if socket.exists() {
@@ -1589,4 +1771,62 @@ func (c *transientCluster) printURLs(
 func genDemoPassword(username string) string {
 	mypid := os.Getpid()
 	return fmt.Sprintf("%s%d", username, mypid)
+}
+
+// lockDir uses a file lock to prevent concurrent writes to the
+// demo directory.
+func (c *transientCluster) lockDir(
+	ctx context.Context, dir, operation string,
+) (cleanup func(), err error) {
+	defer func() {
+		if err != nil && cleanup != nil {
+			cleanup()
+			cleanup = nil
+		}
+	}()
+
+	// Prevent concurrent generation.
+	lockPath := filepath.Join(dir, operation+".lock")
+	// The lockfile package wants an absolute path.
+	absLockPath, err := filepath.Abs(lockPath)
+	if err != nil {
+		return cleanup, errors.Wrap(err, "computing absolute path")
+	}
+	tlsLock, err := lockfile.New(absLockPath)
+	if err != nil {
+		// This should only fail on non-absolute paths, but we
+		// just made it absolute above.
+		return cleanup, errors.NewAssertionErrorWithWrappedErrf(err, "creating lock")
+	}
+	cleanup = func() {
+		if err := tlsLock.Unlock(); err != nil {
+			c.warnLog(ctx, "removing lock: %v", err)
+		}
+	}
+
+	every := log.Every(1 * time.Second)
+	for retry := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 20}); retry.Next(); {
+		if err := tlsLock.TryLock(); err != nil {
+			if errors.Is(err, lockfile.ErrBusy) {
+				if every.ShouldLog() {
+					c.warnLog(ctx, "lock busy; waiting to try again: %q", lockPath)
+				}
+				// Retry later.
+				continue
+			}
+			return cleanup, errors.Wrap(err, "acquiring lock")
+		}
+		// Lock succeeded.
+		return cleanup, nil
+	}
+	return cleanup, errors.Newf("timeout while acquiring lock: %q", lockPath)
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	exists := err == nil
+	if oserror.IsNotExist(err) {
+		err = nil
+	}
+	return exists, err
 }

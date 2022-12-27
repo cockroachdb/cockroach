@@ -271,8 +271,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	securityassets.ResetLoader()
 	certsDir := t.TempDir()
 
-	require.NoError(t, demoCtx.generateCerts(certsDir))
-
 	ctx := context.Background()
 
 	// Setup the transient cluster.
@@ -289,6 +287,8 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	// This also calls the Stop() method on the stopper, and thus
 	// cancels everything controlled by the stopper.
 	defer c.Close(ctx)
+
+	require.NoError(t, c.generateCerts(ctx, certsDir))
 
 	// Also ensure the context gets canceled when the stopper
 	// terminates above.
