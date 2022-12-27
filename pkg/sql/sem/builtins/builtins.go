@@ -4090,7 +4090,7 @@ value if you rely on the HLC for accuracy.`,
 			getJobPayloadType := func(data []byte) (tree.Datum, error) {
 				var msg jobspb.Payload
 				if err := protoutil.Unmarshal(data, &msg); err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid protocol message")
 				}
 				return tree.NewDString(msg.Type().String()), nil
 			}
