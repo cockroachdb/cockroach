@@ -185,7 +185,6 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 	if !ok {
 		return nil, nil, false
 	}
-
 	maxJoinType := len(joinTypes)
 	if s.disableCrossJoins {
 		maxJoinType = len(joinTypes) - 1
@@ -650,7 +649,11 @@ func (s *Smither) makeSelectClause(
 		}
 		clause.From.Tables = append(clause.From.Tables, from)
 		// Restrict so that we don't have a crazy amount of rows due to many joins.
-		if len(clause.From.Tables) >= 4 {
+		tableLimit := 4
+		if s.disableJoins {
+			tableLimit = 1
+		}
+		if len(clause.From.Tables) >= tableLimit {
 			break
 		}
 	}
