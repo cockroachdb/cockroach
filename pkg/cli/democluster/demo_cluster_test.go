@@ -53,7 +53,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 	stickyEnginesRegistry := server.NewStickyInMemEnginesRegistry()
 
 	testCases := []struct {
-		nodeID            roachpb.NodeID
+		serverIdx         int
 		joinAddr          string
 		sqlPoolMemorySize int64
 		cacheSize         int64
@@ -61,7 +61,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		expected base.TestServerArgs
 	}{
 		{
-			nodeID:            roachpb.NodeID(1),
+			serverIdx:         0,
 			joinAddr:          "127.0.0.1",
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
@@ -84,7 +84,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			},
 		},
 		{
-			nodeID:            roachpb.NodeID(3),
+			serverIdx:         2,
 			joinAddr:          "127.0.0.1",
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
@@ -114,14 +114,14 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.SQLPoolMemorySize = tc.sqlPoolMemorySize
 			demoCtx.CacheSize = tc.cacheSize
 
-			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
+			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
 			assert.Len(t, actual.StoreSpecs, 1)
 			assert.Equal(
 				t,
-				fmt.Sprintf("demo-node%d", tc.nodeID),
+				fmt.Sprintf("demo-server%d", tc.serverIdx),
 				actual.StoreSpecs[0].StickyInMemoryEngineID,
 			)
 
