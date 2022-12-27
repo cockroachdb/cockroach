@@ -1230,26 +1230,14 @@ SELECT description
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oidArg := tree.MustBeDOid(args[0])
-				row, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_function_is_visible",
-					sessiondata.NoSessionDataOverride,
-					"SELECT n.nspname from pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.oid=$1 LIMIT 1",
-					oidArg,
-				)
-				if err != nil {
-					return nil, err
-				}
-				if row == nil {
-					return tree.DNull, nil
-				}
-				foundSchemaName := string(tree.MustBeDString(row[0]))
-				isVisible := evalCtx.SessionData().SearchPath.Contains(foundSchemaName, true /* includeImplicit */)
-				return tree.MakeDBool(tree.DBool(isVisible)), nil
-			},
+			Body: `SELECT n.nspname = any current_schemas(true)
+             FROM pg_proc p
+             INNER LOOKUP JOIN pg_namespace n
+             ON p.pronamespace = n.oid
+             WHERE p.oid=$1 LIMIT 1`,
 			Info:       "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
 		},
@@ -1259,26 +1247,14 @@ SELECT description
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_table_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oidArg := tree.MustBeDOid(args[0])
-				row, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_table_is_visible",
-					sessiondata.NoSessionDataOverride,
-					"SELECT n.nspname from pg_class c INNER LOOKUP JOIN pg_namespace n ON c.relnamespace = n.oid WHERE c.oid=$1 LIMIT 1",
-					oidArg,
-				)
-				if err != nil {
-					return nil, err
-				}
-				if row == nil {
-					return tree.DNull, nil
-				}
-				foundSchemaName := string(tree.MustBeDString(row[0]))
-				isVisible := evalCtx.SessionData().SearchPath.Contains(foundSchemaName, true /* includeImplicit */)
-				return tree.MakeDBool(tree.DBool(isVisible)), nil
-			},
+			Body: `SELECT n.nspname = any current_schemas(true)
+             FROM pg_class c
+             INNER LOOKUP JOIN pg_namespace n
+             ON c.relnamespace = n.oid
+             WHERE c.oid=$1 LIMIT 1`,
 			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
 		},
@@ -1292,26 +1268,14 @@ SELECT description
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_type_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oidArg := tree.MustBeDOid(args[0])
-				row, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_type_is_visible",
-					sessiondata.NoSessionDataOverride,
-					"SELECT n.nspname from pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid WHERE t.oid=$1 LIMIT 1",
-					oidArg,
-				)
-				if err != nil {
-					return nil, err
-				}
-				if row == nil {
-					return tree.DNull, nil
-				}
-				foundSchemaName := string(tree.MustBeDString(row[0]))
-				isVisible := evalCtx.SessionData().SearchPath.Contains(foundSchemaName, true /* includeImplicit */)
-				return tree.MakeDBool(tree.DBool(isVisible)), nil
-			},
+			Body: `SELECT n.nspname = any current_schemas(true)
+             FROM pg_type t
+             INNER LOOKUP JOIN pg_namespace n
+             ON t.typnamespace = n.oid
+             WHERE t.oid=$1 LIMIT 1`,
 			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
 		},
