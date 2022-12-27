@@ -1449,6 +1449,9 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 			continue
 		}
 
+		// Print the RPC address for the node.
+		fmt.Fprintln(w, "  (rpc)     ", s.ServingRPCAddr())
+
 		nodeID := s.NodeID()
 		if !justOne {
 			// We skip the node ID if we're in the top level introduction of
