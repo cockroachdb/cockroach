@@ -871,6 +871,28 @@ func (lj *LookupJoinPrivate) GetConstPrefixFilter(md *opt.Metadata) (pos int, ok
 	return 0, false
 }
 
+// ColIsEquivalentWithLookupIndexPrefix returns true if there is a term in
+// `LookupExpr` equating the first column in the lookup index with `col`.
+func (lj *LookupJoinPrivate) ColIsEquivalentWithLookupIndexPrefix(md *opt.Metadata, col opt.ColumnID) bool {
+	lookupTable := md.Table(lj.Table)
+	lookupIndex := lookupTable.Index(lj.Index)
+
+	idxCol := lj.Table.IndexColumnID(lookupIndex, 0)
+	var desiredEquivalentCols opt.ColSet
+	desiredEquivalentCols.Add(idxCol)
+	desiredEquivalentCols.Add(col)
+
+	for i := range lj.LookupExpr {
+		props := lj.LookupExpr[i].ScalarProps()
+
+		equivCols := props.FuncDeps.ComputeEquivGroup(idxCol)
+		if desiredEquivalentCols.SubsetOf(equivCols) {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {
