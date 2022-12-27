@@ -558,8 +558,7 @@ enum ScanFormat {
   // The batch_response format: a byte slice of alternating keys and values,
   // each prefixed by their length as a varint.
   BATCH_RESPONSE = 1;
-  // The serialized (in Apache Arrow format) representation of coldata.Batch'es
-  // that contain only necessary (according to the IndexFetchSpec) columns.
+  // TODO: comment.
   COL_BATCH_RESPONSE = 2;
 }
 
@@ -613,7 +612,19 @@ message ScanResponse {
   // ResponseHeader. If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
 
-  repeated bytes col_batches = 5;
+  repeated bytes serialized_col_batches = 5;
+
+  ColBatches col_batches = 6 [(gogoproto.nullable) = false];
+}
+
+message ColBatches {
+  option (gogoproto.gostring) = false;
+  option (gogoproto.equal) = false;
+  option (gogoproto.stringer) = false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+  option (gogoproto.unmarshaler) = false;
+  repeated bytes col_batches = 1 [(gogoproto.customtype) = "interface{}", (gogoproto.nullable) = false];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -665,7 +676,9 @@ message ReverseScanResponse {
   // ResponseHeader. If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
 
-  repeated bytes col_batches = 5;
+  repeated bytes serialized_col_batches = 5;
+
+  ColBatches col_batches = 6 [(gogoproto.nullable) = false];
 }
 
 

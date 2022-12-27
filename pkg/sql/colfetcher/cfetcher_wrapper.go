@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -45,28 +46,31 @@ func init() {
 	storage.GetCFetcherWrapper = newCFetcherWrapper
 }
 
-func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
+func (c *cFetcherWrapper) NextBatch(ctx context.Context) ([]byte, interface{}, error) {
 	batch, err := c.fetcher.NextBatch(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if l := batch.Length(); c.removeLastRow && l > 0 {
 		batch.SetLength(l - 1)
 	}
 	if batch.Length() == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	c.sawBatch = true
+	if c.converter == nil {
+		return nil, batch, nil
+	}
 	data, err := c.converter.BatchToArrow(batch)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	c.buf.Reset()
 	_, _, err = c.serializer.Serialize(&c.buf, data, batch.Length())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return c.buf.Bytes(), nil
+	return c.buf.Bytes(), nil, nil
 }
 
 // ContinuesFirstRow returns true if the given key belongs to the same SQL row
@@ -139,15 +143,26 @@ func newCFetcherWrapper(
 	indexFetchSpec proto.Message,
 	nextKVer storage.NextKVer,
 	lastKeyProvider storage.LastKeyProvider,
-) (_ storage.CFetcherWrapper, retErr error) {
+	mustSerialize bool,
+) (_ storage.CFetcherWrapper, willSerialize bool, retErr error) {
 	fetchSpec, ok := indexFetchSpec.(*descpb.IndexFetchSpec)
 	if !ok {
-		return nil, errors.AssertionFailedf("expected an IndexFetchSpec, but found a %T", indexFetchSpec)
+		return nil, willSerialize, errors.AssertionFailedf("expected an IndexFetchSpec, but found a %T", indexFetchSpec)
 	}
-	// TODO: typeResolver.
 	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */, true /* allowUnhydratedEnums */)
 	if err != nil {
-		return nil, err
+		return nil, willSerialize, err
+	}
+	willSerialize = mustSerialize
+	if !mustSerialize {
+		// Check whether we have an enum return type in which case we still must
+		// serialize the response.
+		for _, t := range tableArgs.typs {
+			if t.Family() == types.EnumFamily {
+				willSerialize = true
+				break
+			}
+		}
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -163,7 +178,7 @@ func newCFetcherWrapper(
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
-		false, /* allocateFreshBatches */
+		true,  /* allocateFreshBatches */
 		allowNullsInNonNullableOnLastRowInBatch,
 	}
 
@@ -172,17 +187,19 @@ func newCFetcherWrapper(
 	// (at least until we implement the filter pushdown).
 	allocator := colmem.NewAllocator(ctx, acc, coldataext.NewExtendedColumnFactoryNoEvalCtx())
 	if err = fetcher.Init(allocator, nextKVer, tableArgs); err != nil {
-		return nil, err
+		return nil, willSerialize, err
 	}
 	wrapper := cFetcherWrapper{lastKeyProvider: lastKeyProvider}
 	wrapper.fetcher = fetcher
-	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
-	if err != nil {
-		return nil, err
+	if willSerialize {
+		wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
+		if err != nil {
+			return nil, willSerialize, err
+		}
+		wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+		if err != nil {
+			return nil, willSerialize, err
+		}
 	}
-	wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
-	if err != nil {
-		return nil, err
-	}
-	return &wrapper, nil
+	return &wrapper, willSerialize, nil
 }

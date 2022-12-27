@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/row",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

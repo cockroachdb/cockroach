@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -72,8 +73,9 @@ type KVBatchFetcherResponse struct {
 	// values. An empty BatchResponse indicates that nothing was fetched for the
 	// corresponding ScanRequest, and the caller is expected to skip over the
 	// response.
-	BatchResponse []byte
-	ColBatch      []byte
+	BatchResponse      []byte
+	SerializedColBatch []byte
+	ColBatch           coldata.Batch
 	// spanID is the ID associated with the span that generated this response.
 	spanID int
 }
