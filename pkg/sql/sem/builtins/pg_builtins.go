@@ -1238,7 +1238,7 @@ SELECT description
 					ctx, "pg_function_is_visible",
 					sessiondata.NoSessionDataOverride,
 					"SELECT n.nspname from pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.oid=$1 LIMIT 1",
-					oidArg.Oid,
+					oidArg,
 				)
 				if err != nil {
 					return nil, err
@@ -1267,7 +1267,7 @@ SELECT description
 					ctx, "pg_table_is_visible",
 					sessiondata.NoSessionDataOverride,
 					"SELECT n.nspname from pg_class c INNER LOOKUP JOIN pg_namespace n ON c.relnamespace = n.oid WHERE c.oid=$1 LIMIT 1",
-					oidArg.Oid,
+					oidArg,
 				)
 				if err != nil {
 					return nil, err
@@ -1300,7 +1300,7 @@ SELECT description
 					ctx, "pg_type_is_visible",
 					sessiondata.NoSessionDataOverride,
 					"SELECT n.nspname from pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid WHERE t.oid=$1 LIMIT 1",
-					oidArg.Oid,
+					oidArg,
 				)
 				if err != nil {
 					return nil, err
