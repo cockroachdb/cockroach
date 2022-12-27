@@ -59,6 +59,11 @@ type Coster interface {
 	// real-world metric, but does expect costs to be comparable to one another,
 	// as well as summable.
 	ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost
+
+	// MaybeGetBestCostRelation returns the best-cost relation for the given memo
+	// group if the group has been fully optimized for the `required` physical
+	// properties.
+	MaybeGetBestCostRelation(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool)
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -88,17 +93,22 @@ type coster struct {
 
 	// rng is used for deterministic perturbation.
 	rng *rand.Rand
+
+	o *Optimizer
 }
 
 var _ Coster = &coster{}
 
 // MakeDefaultCoster creates an instance of the default coster.
-func MakeDefaultCoster(ctx context.Context, evalCtx *eval.Context, mem *memo.Memo) Coster {
+func MakeDefaultCoster(
+	ctx context.Context, evalCtx *eval.Context, mem *memo.Memo, o *Optimizer,
+) Coster {
 	return &coster{
 		ctx:      ctx,
 		evalCtx:  evalCtx,
 		mem:      mem,
 		locality: evalCtx.Locality,
+		o:        o,
 	}
 }
 
@@ -482,7 +492,12 @@ var fnCost = map[string]memo.Cost{
 
 // Init initializes a new coster structure with the given memo.
 func (c *coster) Init(
-	ctx context.Context, evalCtx *eval.Context, mem *memo.Memo, perturbation float64, rng *rand.Rand,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	perturbation float64,
+	rng *rand.Rand,
+	o *Optimizer,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -493,7 +508,15 @@ func (c *coster) Init(
 		locality:     evalCtx.Locality,
 		perturbation: perturbation,
 		rng:          rng,
+		o:            o,
 	}
+}
+
+// MaybeGetBestCostRelation is part of the xform.Coster interface.
+func (c *coster) MaybeGetBestCostRelation(
+	grp memo.RelExpr, required *physical.Required,
+) (best memo.RelExpr, ok bool) {
+	return c.o.MaybeGetBestCostRelation(grp, required)
 }
 
 // ComputeCost calculates the estimated cost of the top-level operator in a
@@ -1010,6 +1033,75 @@ func (c *coster) computeIndexJoinCost(
 	)
 }
 
+// getCRBDRegionColFromInput examines the input to a lookup join. If it is a
+// Scan or LocalityOptimizedSearch from a REGIONAL BY ROW table, the column id
+// of the crdb_region column and Distribution of the operation are returned.
+// Otherwise, 0 and an empty Distribution are returned.
+func (c *coster) getCRBDRegionColFromInput(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (crdbRegionColID opt.ColumnID, inputDistribution physical.Distribution) {
+	var needRemap bool
+	var setOpCols opt.ColSet
+	if bestCostInputRel, ok := c.MaybeGetBestCostRelation(join.Input, required); ok {
+		maybeScan := bestCostInputRel
+		var projectExpr *memo.ProjectExpr
+		if projectExpr, ok = maybeScan.(*memo.ProjectExpr); ok {
+			maybeScan, ok = c.MaybeGetBestCostRelation(projectExpr.Input, required)
+			if !ok {
+				return 0, physical.Distribution{}
+			}
+		}
+		if selectExpr, ok := maybeScan.(*memo.SelectExpr); ok {
+			maybeScan, ok = c.MaybeGetBestCostRelation(selectExpr.Input, required)
+			if !ok {
+				return 0, physical.Distribution{}
+			}
+		}
+		if indexJoinExpr, ok := maybeScan.(*memo.IndexJoinExpr); ok {
+			maybeScan, ok = c.MaybeGetBestCostRelation(indexJoinExpr.Input, required)
+			if !ok {
+				return 0, physical.Distribution{}
+			}
+		}
+		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
+			maybeScan = localityOptimizedScan.Local
+			needRemap = true
+			setOpCols = localityOptimizedScan.Relational().OutputCols
+		}
+		scanExpr, ok := maybeScan.(*memo.ScanExpr)
+		if !ok {
+			return 0, physical.Distribution{}
+		}
+		tab := maybeScan.Memo().Metadata().Table(scanExpr.Table)
+		if !tab.IsRegionalByRow() {
+			return 0, physical.Distribution{}
+		}
+		inputDistribution =
+			distribution.BuildProvided(c.ctx, c.evalCtx, scanExpr, &required.Distribution)
+		index := tab.Index(scanExpr.Index)
+		crdbRegionColID = scanExpr.Table.IndexColumnID(index, 0)
+		if needRemap {
+			scanCols := scanExpr.Relational().OutputCols
+			if scanCols.Len() == setOpCols.Len() {
+				destCol, _ := setOpCols.Next(0)
+				for srcCol, ok := scanCols.Next(0); ok; srcCol, ok = scanCols.Next(srcCol + 1) {
+					if srcCol == crdbRegionColID {
+						crdbRegionColID = destCol
+						break
+					}
+					destCol, _ = setOpCols.Next(destCol + 1)
+				}
+			}
+		}
+		if projectExpr != nil {
+			if !projectExpr.Passthrough.Contains(crdbRegionColID) {
+				return 0, physical.Distribution{}
+			}
+		}
+	}
+	return crdbRegionColID, inputDistribution
+}
+
 func (c *coster) computeLookupJoinCost(
 	join *memo.LookupJoinExpr, required *physical.Required,
 ) memo.Cost {
@@ -1027,7 +1119,8 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
-	provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
+	crdbRegionColID, inputDistribution := c.getCRBDRegionColFromInput(join, required)
+	provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join, crdbRegionColID, inputDistribution)
 	extraCost := c.distributionCost(provided)
 	cost += extraCost
 	return cost
