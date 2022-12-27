@@ -59,6 +59,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type serverEntry struct {
+	*server.TestServer
+	nodeID roachpb.NodeID
+}
+
 type transientCluster struct {
 	demoCtx *Context
 
@@ -67,7 +72,7 @@ type transientCluster struct {
 	useSockets    bool
 	stopper       *stop.Stopper
 	firstServer   *server.TestServer
-	servers       []*server.TestServer
+	servers       []serverEntry
 	tenantServers []serverutils.TestTenantInterface
 	defaultDB     string
 
@@ -514,9 +519,8 @@ func (c *transientCluster) createAndAddNode(
 		// computing its RPC listen address.
 		joinAddr = c.firstServer.ServingRPCAddr()
 	}
-	nodeID := roachpb.NodeID(idx + 1)
 	args := c.demoCtx.testServerArgsForTransientCluster(
-		c.sockForServer(nodeID, "" /* databaseNameOverride */), nodeID, joinAddr, c.demoDir,
+		c.sockForServer(idx), idx, joinAddr, c.demoDir,
 		c.sqlFirstPort,
 		c.httpFirstPort,
 		c.stickyEngineRegistry,
@@ -581,7 +585,7 @@ func (c *transientCluster) createAndAddNode(
 
 	// Remember this server for the stop/restart primitives in the SQL
 	// shell.
-	c.servers = append(c.servers, serv)
+	c.servers = append(c.servers, serverEntry{TestServer: serv, nodeID: serv.NodeID()})
 
 	return rpcAddrReadyCh, nil
 }
@@ -675,11 +679,13 @@ func (c *transientCluster) waitForNodeIDReadiness(
 			return errors.Newf("demo cluster shut down prematurely while waiting for server %d to have a node ID", idx)
 
 		default:
-			if c.servers[idx].NodeID() == 0 {
+			nodeID := c.servers[idx].NodeID()
+			if nodeID == 0 {
 				c.infoLog(ctx, "server %d does not know its node ID yet", idx)
 				continue
 			} else {
-				c.infoLog(ctx, "server %d: n%d", idx, c.servers[idx].NodeID())
+				c.infoLog(ctx, "server %d: n%d", idx, nodeID)
+				c.servers[idx].nodeID = nodeID
 			}
 		}
 		break
@@ -723,7 +729,7 @@ func (c *transientCluster) waitForSQLReadiness(
 // a necessary server in the demo cluster.
 func (demoCtx *Context) testServerArgsForTransientCluster(
 	sock unixSocketDetails,
-	nodeID roachpb.NodeID,
+	serverIdx int,
 	joinAddr string,
 	demoDir string,
 	sqlBasePort, httpBasePort int,
@@ -731,7 +737,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
+	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-server%d", serverIdx)
 
 	args := base.TestServerArgs{
 		SocketFile:              sock.filename(),
@@ -763,11 +769,11 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	if !testingForceRandomizeDemoPorts {
 		// Unit tests can be run with multiple processes side-by-side with
 		// `make stress`. This is bound to not work with fixed ports.
-		sqlPort := sqlBasePort + int(nodeID) - 1
+		sqlPort := sqlBasePort + serverIdx
 		if sqlBasePort == 0 {
 			sqlPort = 0
 		}
-		httpPort := httpBasePort + int(nodeID) - 1
+		httpPort := httpBasePort + serverIdx
 		if httpBasePort == 0 {
 			httpPort = 0
 		}
@@ -776,7 +782,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	}
 
 	if demoCtx.Localities != nil {
-		args.Locality = demoCtx.Localities[int(nodeID-1)]
+		args.Locality = demoCtx.Localities[serverIdx]
 	}
 	if demoCtx.Insecure {
 		args.Insecure = true
@@ -823,24 +829,33 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if c.demoCtx.SimulateLatency {
 		return errors.Errorf("shutting down nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
-	nodeIndex := int(nodeID - 1)
 
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+	// Find which server has the requested node ID. We need to do this
+	// search because the mapping between server index and node ID is
+	// not guaranteed.
+	serverIdx := -1
+	for i, s := range c.servers {
+		if s.nodeID == roachpb.NodeID(nodeID) {
+			serverIdx = i
+		}
+	}
+
+	if serverIdx == -1 {
 		return errors.Errorf("node %d does not exist", nodeID)
+	}
+	if c.servers[serverIdx].TestServer == nil {
+		return errors.Errorf("node %d is already shut down", nodeID)
 	}
 	// This is possible if we re-assign c.s and make the other nodes to the new
 	// base node.
-	if nodeIndex == 0 {
+	if serverIdx == 0 {
 		return errors.Errorf("cannot shutdown node %d", nodeID)
-	}
-	if c.servers[nodeIndex] == nil {
-		return errors.Errorf("node %d is already shut down", nodeID)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
+	adminClient, finish, err := c.getAdminClient(ctx, *(c.servers[serverIdx].Cfg))
 	if err != nil {
 		return err
 	}
@@ -849,7 +864,7 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if err := c.drainAndShutdown(ctx, adminClient); err != nil {
 		return err
 	}
-	c.servers[nodeIndex] = nil
+	c.servers[serverIdx].TestServer = nil
 	return nil
 }
 
@@ -932,29 +947,44 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 // The node must have been shut down beforehand.
 // The node will restart, connecting to the same in memory node.
 func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error {
-	nodeIndex := int(nodeID - 1)
+	// Find which server has the requested node ID. We need to do this
+	// search because the mapping between server index and node ID is
+	// not guaranteed.
+	serverIdx := -1
+	for i, s := range c.servers {
+		if s.nodeID == roachpb.NodeID(nodeID) {
+			serverIdx = i
+		}
+	}
 
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+	if serverIdx == -1 {
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
-	if c.servers[nodeIndex] != nil {
+	if c.servers[serverIdx].TestServer != nil {
 		return errors.Errorf("node %d is already running", nodeID)
 	}
 
+	_, err := c.startServerInternal(ctx, serverIdx)
+	return err
+}
+
+func (c *transientCluster) startServerInternal(
+	ctx context.Context, serverIdx int,
+) (newNodeID int32, err error) {
 	// TODO(#42243): re-compute the latency mapping.
+	if c.demoCtx.SimulateLatency {
+		return 0, errors.Errorf("restarting nodes is not supported in --%s configurations", cliflags.Global.Name)
+	}
 	// TODO(...): the RPC address of the first server may not be available
 	// if the first server was shut down.
-	if c.demoCtx.SimulateLatency {
-		return errors.Errorf("restarting nodes is not supported in --%s configurations", cliflags.Global.Name)
-	}
 	args := c.demoCtx.testServerArgsForTransientCluster(
-		c.sockForServer(roachpb.NodeID(nodeID), "" /* databaseNameOverride */),
-		roachpb.NodeID(nodeID),
+		c.sockForServer(serverIdx),
+		serverIdx,
 		c.firstServer.ServingRPCAddr(), c.demoDir,
 		c.sqlFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
 	s, err := server.TestServerFactory.New(args)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	serv := s.(*server.TestServer)
 
@@ -965,19 +995,20 @@ func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error 
 	}
 
 	if err := serv.Start(ctx); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Wait until the server is ready to action.
 	select {
 	case <-readyCh:
 	case <-time.After(maxNodeInitTime):
-		return errors.Newf("could not initialize node %d in time", nodeID)
+		return 0, errors.Newf("could not initialize server %d in time", serverIdx)
 	}
 
 	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
-	c.servers[nodeIndex] = serv
-	return nil
+	nodeID := serv.NodeID()
+	c.servers[serverIdx] = serverEntry{TestServer: serv, nodeID: nodeID}
+	return int32(nodeID), nil
 }
 
 // AddNode create a new node in the cluster and start it.
@@ -1013,15 +1044,12 @@ func (c *transientCluster) AddNode(
 	}
 
 	// Create a new empty server element and add associated locality info.
-	// When we call RestartNode below, this element will be properly initialized.
-	c.servers = append(c.servers, nil)
+	// When we call startServerInternal below, this element will be properly initialized.
+	c.servers = append(c.servers, serverEntry{})
 	c.demoCtx.Localities = append(c.demoCtx.Localities, loc)
 	c.demoCtx.NumNodes++
-	// TODO(knz): this should start the server and then retrieve its node ID
-	// instead of assuming the node ID will always be at the end.
-	nodeID := int32(c.demoCtx.NumNodes)
 
-	return nodeID, c.RestartNode(ctx, nodeID)
+	return c.startServerInternal(ctx, c.demoCtx.NumNodes-1)
 }
 
 func (c *transientCluster) maybeWarnMemSize(ctx context.Context) {
@@ -1373,16 +1401,19 @@ func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error)
 // sockForServer generates the metadata for a unix socket for the given node.
 // For example, node 1 gets socket /tmpdemodir/.s.PGSQL.26267,
 // node 2 gets socket /tmpdemodir/.s.PGSQL.26268, etc.
-func (c *transientCluster) sockForServer(
-	nodeID roachpb.NodeID, databaseNameOverride string,
-) unixSocketDetails {
+func (c *transientCluster) sockForServer(serverIdx int) unixSocketDetails {
 	if !c.useSockets {
 		return unixSocketDetails{}
 	}
-	port := strconv.Itoa(c.sqlFirstPort + int(nodeID) - 1)
+	port := strconv.Itoa(c.sqlFirstPort + serverIdx)
 	databaseName := c.defaultDB
-	if databaseNameOverride != "" {
-		databaseName = databaseNameOverride
+	if c.demoCtx.Multitenant {
+		// TODO(knz): for now, we only define the unix socket for the
+		// system tenant, which is not where the workload database is
+		// running.
+		// NB: This logic can be simplified once we use a single
+		// SQL listener for all tenants.
+		databaseName = catalogkeys.DefaultDatabaseName
 	}
 	return unixSocketDetails{
 		socketDir: c.demoDir,
@@ -1426,7 +1457,7 @@ func (c *transientCluster) NumServers() int {
 }
 
 func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
-	return c.servers[i]
+	return c.servers[i].TestServer
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {
@@ -1440,7 +1471,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 		fmt.Fprintln(w, "system tenant")
 	}
 	for i, s := range c.servers {
-		if s == nil {
+		if s.TestServer == nil {
 			continue
 		}
 		numNodesLive++
@@ -1482,12 +1513,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 		}
 		// Print unix socket if defined.
 		if c.useSockets {
-			databaseNameOverride := ""
-			if c.demoCtx.Multitenant {
-				databaseNameOverride = catalogkeys.DefaultDatabaseName
-			}
-			sock := c.sockForServer(nodeID, databaseNameOverride)
-			fmt.Fprintln(w, "  (sql/unix)", sock)
+			fmt.Fprintln(w, "  (sql/unix)", c.sockForServer(i))
 		}
 		fmt.Fprintln(w)
 	}
