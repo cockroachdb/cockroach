@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -74,7 +75,7 @@ func makeSinklessFeedFactory(
 	return &sinklessFeedFactory{s: s, sink: sink, sinkForUser: sinkForUser}
 }
 
-func (f *sinklessFeedFactory) AsUser(user string, fn func()) error {
+func (f *sinklessFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) error {
 	prevSink := f.sink
 	password := `hunter2`
 	if err := setPassword(user, password, f.sink); err != nil {
@@ -83,7 +84,19 @@ func (f *sinklessFeedFactory) AsUser(user string, fn func()) error {
 	defer func() { f.sink = prevSink }()
 	var cleanup func()
 	f.sink, cleanup = f.sinkForUser(user, password)
-	fn()
+	pgconn := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   f.Server().SQLAddr(),
+		Path:   `d`,
+	}
+	db2, err := gosql.Open("postgres", pgconn.String())
+	if err != nil {
+		return err
+	}
+	defer db2.Close()
+	userDB := sqlutils.MakeSQLRunner(db2)
+	fn(userDB)
 	cleanup()
 	return nil
 }
@@ -242,8 +255,9 @@ type logger interface {
 
 type externalConnectionFeedFactory struct {
 	cdctest.TestFeedFactory
-	db     *gosql.DB
-	logger logger
+	db                *gosql.DB
+	logger            logger
+	externalConnUsers []string
 }
 
 type externalConnectionCreator func(uri string) error
@@ -261,6 +275,14 @@ func (e *externalConnectionFeedFactory) Feed(
 		e.logger.Log("ran create external connection")
 		if err != nil {
 			e.logger.Log("error creating external connection:" + err.Error())
+		}
+		for _, user := range e.externalConnUsers {
+			grantUsageStmt := fmt.Sprintf(`GRANT USAGE ON EXTERNAL CONNECTION %s TO %s`, randomExternalConnectionName, user)
+			_, err := e.db.Exec(grantUsageStmt)
+			if err != nil {
+				e.logger.Log("error creating external connection:" + err.Error())
+			}
+			e.logger.Log("granted usage on external conn %s to user %s", randomExternalConnectionName, user)
 		}
 		return err
 	}
@@ -736,7 +758,7 @@ func (e *enterpriseFeedFactory) jobsTableConn() *gosql.DB {
 // AsUser uses the previous (assumed to be root) connection to ensure
 // the user has the ability to authenticate, and saves it to poll
 // job status, then implements TestFeedFactory.AsUser().
-func (e *enterpriseFeedFactory) AsUser(user string, fn func()) error {
+func (e *enterpriseFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) error {
 	prevDB := e.db
 	e.rootDB = e.db
 	defer func() { e.db = prevDB }()
@@ -756,8 +778,10 @@ func (e *enterpriseFeedFactory) AsUser(user string, fn func()) error {
 		return err
 	}
 	defer db2.Close()
+	userDB := sqlutils.MakeSQLRunner(db2)
+
 	e.db = db2
-	fn()
+	fn(userDB)
 	return nil
 }
 

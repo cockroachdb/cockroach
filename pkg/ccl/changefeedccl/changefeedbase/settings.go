@@ -10,6 +10,7 @@ package changefeedbase
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -269,4 +270,15 @@ var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	"changefeed.cpu.per_event_elastic_control.enabled",
 	"determines whether changefeed event processing integrates with elastic CPU control",
 	true,
+)
+
+// EnforceExternalConnectionsForChangefeedPriv is used to restrict non-admins
+// with the CHANGEFEED privilege to create changefeeds to external connections only.
+var EnforceExternalConnectionsForChangefeedPriv = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.permissions.enforce_external_connections",
+	fmt.Sprintf("if enabled, this settings restricts users with the CHANGEFEED privilege"+
+		" to create changefeeds with external connection sinks only. see %s",
+		"https://www.cockroachlabs.com/docs/stable/create-external-connection.html"),
+	false,
 )

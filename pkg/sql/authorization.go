@@ -928,3 +928,9 @@ func insufficientPrivilegeError(
 		"user %s does not have %s privilege on %s %s",
 		user, kind, typeForError, object.GetName())
 }
+
+// IsInsufficientPrivilegeError returns true if the error is a pgerror
+// with code pgcode.InsufficientPrivilege.
+func IsInsufficientPrivilegeError(err error) bool {
+	return pgerror.GetPGCode(err).String() == pgcode.InsufficientPrivilege.String()
+}

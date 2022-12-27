@@ -960,7 +960,7 @@ func populateSystemJobsTableRows(
 	if err != nil {
 		return matched, err
 	}
-	userHasControlJobRoleOption, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
+	userHasControlJob, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
 	if err != nil {
 		return matched, err
 	}
@@ -998,24 +998,22 @@ func populateSystemJobsTableRows(
 		}
 
 		currentRow := it.Cur()
+		jobID, err := strconv.Atoi(currentRow[jobIdIdx].String())
+		if err != nil {
+			return matched, err
+		}
 		payloadBytes := currentRow[jobPayloadIdx]
 		payload, err := jobs.UnmarshalPayload(payloadBytes)
 		if err != nil {
 			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
 		}
-		jobOwnerUser := payload.UsernameProto.Decode()
-		jobOwnerIsAdmin, err := p.UserHasAdminRole(ctx, jobOwnerUser)
+
+		canAccess, _, err := JobTypeSpecificPrivilegeCheck(ctx, p, jobspb.JobID(jobID), payload, userIsAdmin, userHasControlJob, true)
+
 		if err != nil {
 			return matched, err
 		}
-
-		// The user can access the row if the meet one of the conditions:
-		//  1. The user is an admin.
-		//  2. The job is owned by the user.
-		//  3. The user has CONTROLJOB privilege and the job is not owned by
-		//     an admin.
-		if canAccess := userIsAdmin || (!jobOwnerIsAdmin &&
-			userHasControlJobRoleOption) || user == jobOwnerUser; !canAccess {
+		if !canAccess {
 			continue
 		}
 
@@ -1029,6 +1027,77 @@ func populateSystemJobsTableRows(
 func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
 	return errors.WithHintf(err, "could not decode the payload for job %s."+
 		" consider deleting this job from system.jobs", jobID)
+}
+
+// changefeedPrivilegeCheck determines if a user has access to the changefeed defined
+// by the supplied payload.
+func changefeedPrivilegeCheck(
+	ctx context.Context, p PlanHookState, payload *jobspb.Payload,
+) (canAccess bool, userErr error, err error) {
+	privToCheck := privilege.CHANGEFEED
+
+	specs := payload.UnwrapDetails().(jobspb.ChangefeedDetails).TargetSpecifications
+	descs, err := p.Descriptors().GetAll(ctx, p.Txn())
+	if err != nil {
+		return false, nil, err
+	}
+	for _, spec := range specs {
+		tableDesc := descs.LookupDescriptor(spec.TableID)
+
+		// We must distinguish between errors due to the privilege
+		// check failing and other errors.
+		err := p.CheckPrivilege(ctx, tableDesc, privToCheck)
+		if err != nil {
+			// Return the privilege error as a user error.
+			if pgerror.GetPGCode(err).String() == pgcode.InsufficientPrivilege.String() {
+				return false, err, nil
+			}
+			return false, nil, err
+		}
+	}
+	return true, nil, nil
+}
+
+// JobTypeSpecificPrivilegeCheck returns true if the user should be able to access
+// the job. If the returned value is false and err is nil, then userErr will be
+// returned with an appropriate error that can be passed up to the user.
+// allowSameUserAccess specifies if users can access their own jobs.
+func JobTypeSpecificPrivilegeCheck(
+	ctx context.Context,
+	p PlanHookState,
+	jobID jobspb.JobID,
+	payload *jobspb.Payload,
+	userIsAdmin bool,
+	userHasControlJob bool,
+	allowSameUserAccess bool,
+) (canAccess bool, userErr error, err error) {
+
+	jobOwnerUser := payload.UsernameProto.Decode()
+	jobOwnerIsAdmin, err := p.UserHasAdminRole(ctx, jobOwnerUser)
+	if err != nil {
+		return false, nil, err
+	}
+
+	if jobOwnerIsAdmin {
+		if !userIsAdmin {
+			return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only admins can control jobs owned by other admins"), nil
+		}
+		return true, nil, nil
+	}
+
+	if userHasControlJob || (allowSameUserAccess && p.User() == jobOwnerUser) {
+		return true, nil, nil
+	}
+
+	switch payload.Type() {
+	case jobspb.TypeChangefeed:
+		return changefeedPrivilegeCheck(ctx, p, payload)
+	default:
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s privilege for job $d",
+			p.User(), roleoption.CONTROLJOB, jobID), nil
+	}
 }
 
 const (

@@ -309,6 +309,40 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 	}
 }
 
+// typeStringToTypeMap maps the result of calling Type.String() to the type it was called on.
+var typeStringToTypeMap = map[string]Type{
+	"UNSPECIFIED":                     TypeUnspecified,
+	"BACKUP":                          TypeBackup,
+	"RESTORE":                         TypeRestore,
+	"SCHEMA CHANGE":                   TypeSchemaChange,
+	"IMPORT":                          TypeImport,
+	"CHANGEFEED":                      TypeChangefeed,
+	"CREATE STATS":                    TypeCreateStats,
+	"AUTO CREATE STATS":               TypeAutoCreateStats,
+	"SCHEMA CHANGE GC":                TypeSchemaChangeGC,
+	"TYPEDESC SCHEMA CHANGE":          TypeTypeSchemaChange,
+	"STREAM INGESTION":                TypeStreamIngestion,
+	"NEW SCHEMA CHANGE":               TypeNewSchemaChange,
+	"MIGRATION":                       TypeMigration,
+	"AUTO SPAN CONFIG RECONCILIATION": TypeAutoSpanConfigReconciliation,
+	"AUTO SQL STATS COMPACTION":       TypeAutoSQLStatsCompaction,
+	"STREAM REPLICATION":              TypeStreamReplication,
+	"ROW LEVEL TTL":                   TypeRowLevelTTL,
+	"AUTO SCHEMA TELEMETRY":           TypeAutoSchemaTelemetry,
+}
+
+// GetTypeFromString takes result of calling Type.String() and returns the type it was
+// called on. This is useful when the type string is read from the database as a string
+// datum.
+func GetTypeFromString(s string) (Type, error) {
+	s = strings.Trim(s, "'")
+	typ, ok := typeStringToTypeMap[s]
+	if !ok {
+		return TypeUnspecified, errors.Newf("could not look up type from string %s", s)
+	}
+	return typ, nil
+}
+
 func (t Type) String() string {
 	// Protobufs, by convention, use CAPITAL_SNAKE_CASE for enum identifiers.
 	// Since Type's string representation is used as a SHOW JOBS output column, we
@@ -432,6 +466,26 @@ func assertDetailsMap() {
 	)
 }
 
+// assertTypeFromString asserts that GetTypeFromString is correct. It should
+// correctly map the string for each Type to the correct Type.
+func assertTypeFromString() {
+	if len(typeStringToTypeMap) != NumJobTypes {
+		panic("typeStringToTypeMap does not have an entry for each Type")
+	}
+	ForEachType(
+		func(typ Type) {
+			returnedType, err := GetTypeFromString(typ.String())
+			if err != nil {
+				panic(err)
+			}
+			if returnedType != typ {
+				panicStr := fmt.Sprintf("GetTypeFromString returned the wrong type for string %s. got: %d expected: %d", typ.String(), returnedType, typ)
+				panic(panicStr)
+			}
+		}, false,
+	)
+}
+
 func init() {
 	if len(Type_name) != NumJobTypes {
 		panic(fmt.Errorf("NumJobTypes (%d) does not match generated job type name map length (%d)",
@@ -439,6 +493,7 @@ func init() {
 	}
 
 	assertDetailsMap()
+	assertTypeFromString()
 
 	protoreflect.RegisterShorthands((*Progress)(nil), "progress")
 	protoreflect.RegisterShorthands((*Payload)(nil), "payload")
