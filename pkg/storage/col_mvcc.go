@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -51,7 +52,7 @@ type NextKVer interface {
 type CFetcherWrapper interface {
 	// NextBatch gives back the next column-oriented batch, serialized in Arrow
 	// batch format.
-	NextBatch(ctx context.Context) ([]byte, error)
+	NextBatch(ctx context.Context) ([]byte, interface{}, error)
 
 	// Close release the resources held by this CFetcherWrapper. It *must* be
 	// called after use of the wrapper.
@@ -70,7 +71,8 @@ var GetCFetcherWrapper func(
 	acc *mon.BoundAccount,
 	indexFetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer NextKVer,
-) (CFetcherWrapper, error)
+	mustSerialize bool,
+) (_ CFetcherWrapper, willSerialize bool, _ error)
 
 // mvccScanFetchAdapter is a NextKVer that is implemented directly by a
 // pebbleMVCCScanner. Each time its NextKV is called, it iterates the pebble
@@ -236,11 +238,13 @@ func mvccScanToCols(
 	defer unlimitedMonitor.Stop(ctx)
 	acc := unlimitedMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
-	wrapper, err := GetCFetcherWrapper(
+	mustSerialize := !grpcutil.IsLocalRequestContext(ctx)
+	wrapper, serialize, err := GetCFetcherWrapper(
 		ctx,
 		&acc,
 		indexFetchSpec,
 		&adapter,
+		mustSerialize,
 	)
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -253,18 +257,22 @@ func mvccScanToCols(
 
 	adapter.onNextKV = onNextKVSeek
 	for {
-		batch, err := wrapper.NextBatch(ctx)
+		serializedBatch, colBatch, err := wrapper.NextBatch(ctx)
 		if err != nil {
 			return res, err
 		}
-		if batch == nil {
+		if serializedBatch == nil && colBatch == nil {
 			break
 		}
-		// We need to make a copy since the wrapper reuses underlying bytes
-		// buffer.
-		b := make([]byte, len(batch))
-		copy(b, batch)
-		res.ColBatches = append(res.ColBatches, b)
+		if serialize {
+			// We need to make a copy since the wrapper reuses underlying bytes
+			// buffer.
+			b := make([]byte, len(serializedBatch))
+			copy(b, serializedBatch)
+			res.SerializedColBatches = append(res.SerializedColBatches, b)
+		} else {
+			res.ColBatches = append(res.ColBatches, colBatch)
+		}
 	}
 
 	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.afterScan()
