@@ -878,10 +878,6 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		// TODO: PopulateTableWithRandData doesn't work with enums
 		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _enum")
 
-		// TODO: known issue now, https://github.com/cockroachdb/cockroach/issues/90411
-		// Dropping this because sqlsmith generates too many failing expressions otherwise.
-		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _bool")
-
 		for rows := 0; rows < 100; {
 			var err error
 			var newRows int
@@ -911,38 +907,20 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		)
 		require.NoError(t, err)
 		defer queryGen.Close()
+		numNonTrivialTestRuns := 0
+		whereClausesChecked := make(map[string]struct{}, 1000)
 		for i := 0; i < 1000; i++ {
 			query := queryGen.Generate()
-			query = regexp.MustCompile(`tab_\d+`).ReplaceAllString(query, "seed")
-			query = strings.ReplaceAll(query, "@[0]", "")
-			query = strings.ReplaceAll(query, "seed.", "")
 			where, ok := getWhereClause(query)
 			if !ok {
 				continue
 			}
-			if strings.EqualFold(where, "true") {
-				// too easy
+			if _, alreadyChecked := whereClausesChecked[where]; alreadyChecked {
 				continue
 			}
-			if strings.Contains(where, "EXISTS") || strings.Contains(where, "SELECT") {
-				// https://github.com/cockroachdb/cockroach/issues/90416
-				continue
-			}
-			if strings.Contains(where, " % ") {
-				// https://github.com/cockroachdb/cockroach/issues/90421
-				continue
-			}
-			if strings.Contains(where, "internal_mvcc_timestamp") || strings.Contains(where, "tableoid") {
-				// https://github.com/cockroachdb/cockroach/issues/90442
-				continue
-			}
-			// Most remaining errors here are cases where the regular SQL optimizer is lazier than ours.
-			// For example, WHERE (1/0 > 3) or true won't error in a regular query, but will in changefeed expressions.
-			// I don't think that's really a bug, but I also don't know how to statically detect it here.
-			if strings.Contains(strings.ToLower(where), "or true") || strings.Contains(strings.ToLower(where), "and false") {
-				continue
-			}
+			whereClausesChecked[where] = struct{}{}
 			query = "SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE " + where
+			t.Log(query)
 			rows := s.DB.QueryRow(query)
 			var expectedRowIDsStr string
 			if err := rows.Scan(&expectedRowIDsStr); err != nil {
@@ -957,28 +935,31 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			createStmt := `CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT rowid FROM seed WHERE ` + where
 			t.Logf("Expecting statement %s to emit %d events", createStmt, len(expectedRowIDs))
 			seedFeed, err := f.Feed(createStmt)
-			defer closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				t.Logf("Test tolerating create changefeed error: %s", err.Error())
+				closeFeedIgnoreError(t, seedFeed)
 				continue
 			}
+			numNonTrivialTestRuns++
 			assertedPayloads := make([]string, len(expectedRowIDs))
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
-			if err != nil && (strings.Contains(err.Error(), "expected\n") || strings.Contains(err.Error(), "ordering guarantee")) {
+			closeFeedIgnoreError(t, seedFeed)
+			if err != nil {
 				t.Error(err)
-			} else if err != nil {
-				t.Logf("Test tolerating running changefeed error: %s", err.Error())
 			}
 		}
+		require.Greater(t, numNonTrivialTestRuns, 1)
+		t.Logf("%d predicates checked: all had the same result in SELECT and CHANGEFEED", numNonTrivialTestRuns)
 
 	}
 
 	cdcTest(t, testFn, feedTestForceSink(`kafka`))
 }
 
+// getWhereClause extracts the predicate from a randomly generated SQL statement.
 func getWhereClause(query string) (string, bool) {
 	var p parser.Parser
 	stmts, err := p.Parse(query)
@@ -992,10 +973,22 @@ func getWhereClause(query string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if selectStmt.Where == nil {
+	if selectStmt.Where == nil || len(selectStmt.From.Tables) == 0 {
 		return "", false
 	}
-	return selectStmt.Where.Expr.String(), true
+	// Replace all table references with "seed" because we're not using the FROM clause so we can't reference aliases.
+	replaced, err := tree.SimpleVisit(selectStmt.Where.Expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if ci, ok := expr.(*tree.ColumnItem); ok {
+			newCI := *ci
+			newCI.TableName = &tree.UnresolvedObjectName{NumParts: 1, Parts: [3]string{``, ``, `seed`}}
+			expr = &newCI
+		}
+		if un, ok := expr.(*tree.UnresolvedName); ok && un.NumParts > 1 {
+			un.Parts[un.NumParts-1] = `seed`
+		}
+		return true, expr, nil
+	})
+	return replaced.String(), err == nil
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
