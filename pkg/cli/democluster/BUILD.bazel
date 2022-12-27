@@ -69,6 +69,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils/regionlatency",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",

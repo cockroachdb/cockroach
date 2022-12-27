@@ -6,10 +6,8 @@ start_test "Check --multitenant flag runs as expected"
 # Start a demo with --multitenant set
 spawn $argv demo --no-line-editor --empty --nodes 3 --multitenant
 
-eexpect "system tenant"
-eexpect "tenant 1"
-eexpect "tenant 2"
-eexpect "tenant 3"
+eexpect "Application tenant"
+eexpect "System tenant"
 
 # Ideally, we'd also check that you can connect to each of the tenants
 # with \connect. But, it's a little annoying to try to parse the randomly
