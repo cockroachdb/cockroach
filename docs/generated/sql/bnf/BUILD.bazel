@@ -79,7 +79,7 @@ FILES = [
     "column_table_def",
     "comment",
     "commit_transaction",
-    "copy_from_stmt",
+    "copy_stmt",
     "create_as_col_qual_list",
     "create_as_constraint_def",
     "create_changefeed_stmt",

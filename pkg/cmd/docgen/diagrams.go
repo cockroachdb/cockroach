@@ -648,7 +648,7 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
 	},
 	{
-		name:    "copy_from_stmt",
+		name:    "copy_stmt",
 		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},

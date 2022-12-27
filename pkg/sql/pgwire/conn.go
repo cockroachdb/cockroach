@@ -1293,7 +1293,7 @@ func cookTag(
 			tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 		}
 
-	case tree.CopyIn:
+	case tree.CopyIn, tree.CopyOut:
 		// Nothing to do. The CommandComplete message has been sent elsewhere.
 		panic(errors.AssertionFailedf("CopyIn statements should have been handled elsewhere " +
 			"and not produce results"))

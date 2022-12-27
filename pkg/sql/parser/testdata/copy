@@ -85,3 +85,85 @@ COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' ESCA
 COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (' ') destination = ('filename') ESCAPE ('x') HEADER -- fully parenthesized
 COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' ESCAPE '_' HEADER -- literals removed
 COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' ESCAPE 'x' HEADER -- identifiers removed
+
+parse
+COPY t TO STDOUT
+----
+COPY t TO STDOUT
+COPY t TO STDOUT -- fully parenthesized
+COPY t TO STDOUT -- literals removed
+COPY _ TO STDOUT -- identifiers removed
+
+parse
+COPY t TO STDOUT BINARY
+----
+COPY t TO STDOUT WITH BINARY -- normalized!
+COPY t TO STDOUT WITH BINARY -- fully parenthesized
+COPY t TO STDOUT WITH BINARY -- literals removed
+COPY _ TO STDOUT WITH BINARY -- identifiers removed
+
+error
+COPY t TO 'file'
+----
+----
+at or near "file": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY t TO 'file'
+          ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+parse
+COPY t (a, b, c) TO STDOUT
+----
+COPY t (a, b, c) TO STDOUT
+COPY t (a, b, c) TO STDOUT -- fully parenthesized
+COPY t (a, b, c) TO STDOUT -- literals removed
+COPY _ (_, _, _) TO STDOUT -- identifiers removed
+
+parse
+COPY (SELECT * FROM t) TO STDOUT
+----
+COPY (SELECT * FROM t) TO STDOUT
+COPY (SELECT (*) FROM t) TO STDOUT -- fully parenthesized
+COPY (SELECT * FROM t) TO STDOUT -- literals removed
+COPY (SELECT * FROM _) TO STDOUT -- identifiers removed
+
+parse
+COPY (SELECT * FROM t) TO STDOUT BINARY
+----
+COPY (SELECT * FROM t) TO STDOUT WITH BINARY -- normalized!
+COPY (SELECT (*) FROM t) TO STDOUT WITH BINARY -- fully parenthesized
+COPY (SELECT * FROM t) TO STDOUT WITH BINARY -- literals removed
+COPY (SELECT * FROM _) TO STDOUT WITH BINARY -- identifiers removed
+
+error
+COPY (SELECT * FROM t) TO 'file'
+----
+----
+at or near "file": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+COPY (SELECT * FROM t) TO 'file'
+                          ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----

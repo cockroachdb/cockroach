@@ -13,12 +13,13 @@ func _() {
 	_ = x[RowsAffected-2]
 	_ = x[Rows-3]
 	_ = x[CopyIn-4]
-	_ = x[Unknown-5]
+	_ = x[CopyOut-5]
+	_ = x[Unknown-6]
 }
 
-const _StatementReturnType_name = "AckDDLRowsAffectedRowsCopyInUnknown"
+const _StatementReturnType_name = "AckDDLRowsAffectedRowsCopyInCopyOutUnknown"
 
-var _StatementReturnType_index = [...]uint8{0, 3, 6, 18, 22, 28, 35}
+var _StatementReturnType_index = [...]uint8{0, 3, 6, 18, 22, 28, 35, 42}
 
 func (i StatementReturnType) String() string {
 	if i < 0 || i >= StatementReturnType(len(_StatementReturnType_index)-1) {

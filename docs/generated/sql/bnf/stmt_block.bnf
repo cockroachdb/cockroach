@@ -10,7 +10,7 @@ stmt ::=
 stmt_without_legacy_transaction ::=
 	preparable_stmt
 	| analyze_stmt
-	| copy_from_stmt
+	| copy_stmt
 	| comment_stmt
 	| execute_stmt
 	| deallocate_stmt
@@ -63,8 +63,10 @@ analyze_stmt ::=
 	'ANALYZE' analyze_target
 	| 'ANALYSE' analyze_target
 
-copy_from_stmt ::=
+copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
+	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' opt_with_copy_options
+	| 'COPY' '(' preparable_stmt ')' 'TO' 'STDOUT' opt_with_copy_options
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -1361,6 +1363,7 @@ unreserved_keyword ::=
 	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STDIN'
+	| 'STDOUT'
 	| 'STORAGE'
 	| 'STORE'
 	| 'STORED'
