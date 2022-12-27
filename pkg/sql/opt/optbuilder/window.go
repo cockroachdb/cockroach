@@ -99,13 +99,15 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		// Build appropriate partitions.
 		partitions[i] = b.buildWindowPartition(def.Partitions, i, w.def.Name, inScope, argScope)
 
-		// Build appropriate orderings.
-		ord := b.buildWindowOrdering(def.OrderBy, i, w.def.Name, inScope, argScope)
-		orderings[i].FromOrdering(ord)
-
+		var isRangeModeWithOffsets bool
 		if def.Frame != nil {
 			windowFrames[i] = *def.Frame
+			isRangeModeWithOffsets = windowFrames[i].Mode == treewindow.RANGE && def.Frame.Bounds.HasOffset()
 		}
+
+		// Build appropriate orderings.
+		ord := b.buildWindowOrdering(def.OrderBy, i, w.def.Name, inScope, argScope, isRangeModeWithOffsets)
+		orderings[i].FromOrdering(ord)
 
 		if w.Filter != nil {
 			col := b.buildFilterCol(w.Filter, i, w.def.Name, inScope, argScope)
@@ -256,7 +258,7 @@ func (b *Builder) buildAggregationAsWindow(
 
 		// Build appropriate orderings.
 		if !agg.isCommutative() {
-			ord := b.buildWindowOrdering(agg.OrderBy, i, agg.def.Name, fromScope, g.aggInScope)
+			ord := b.buildWindowOrdering(agg.OrderBy, i, agg.def.Name, fromScope, g.aggInScope, false /* isRangeModeWithOffsets */)
 			orderings[i].FromOrdering(ord)
 		}
 
@@ -401,7 +403,11 @@ func (b *Builder) buildWindowPartition(
 
 // buildWindowOrdering builds the appropriate orderings for window functions.
 func (b *Builder) buildWindowOrdering(
-	orderBy tree.OrderBy, windowIndex int, funcName string, inScope, outScope *scope,
+	orderBy tree.OrderBy,
+	windowIndex int,
+	funcName string,
+	inScope, outScope *scope,
+	isRangeModeWithOffsets bool,
 ) opt.Ordering {
 	ord := make(opt.Ordering, 0, len(orderBy))
 	for j, t := range orderBy {
@@ -415,6 +421,11 @@ func (b *Builder) buildWindowOrdering(
 				expr := tree.NewTypedIsNullExpr(e)
 				col := outScope.findExistingCol(expr, false /* allowSideEffects */)
 				if col == nil {
+					if isRangeModeWithOffsets {
+						// TODO(yuzefovich): teach the execution engine to
+						// support this special case (#94032).
+						panic(errors.New("NULLS LAST with RANGE mode with OFFSET is currently unsupported"))
+					}
 					// Use an anonymous name because the column cannot be referenced
 					// in other expressions.
 					colName := scopeColName("").WithMetadataName(
