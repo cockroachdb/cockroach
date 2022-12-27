@@ -3786,10 +3786,11 @@ func (opts *MVCCScanOptions) errOnIntents() bool {
 // Depending on the operation invoked, KVData, ColBatches, or KVs is populated,
 // but never more than one.
 type MVCCScanResult struct {
-	KVData     [][]byte
-	ColBatches [][]byte
-	KVs        []roachpb.KeyValue
-	NumKeys    int64
+	KVData               [][]byte
+	SerializedColBatches [][]byte
+	ColBatches           []interface{}
+	KVs                  []roachpb.KeyValue
+	NumKeys              int64
 	// NumBytes is the number of bytes this scan result accrued in terms of the
 	// MVCCScanOptions.TargetBytes parameter. This roughly measures the bytes
 	// used for encoding the uncompressed kv pairs contained in the result.

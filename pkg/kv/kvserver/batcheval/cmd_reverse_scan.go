@@ -70,7 +70,11 @@ func ReverseScan(
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.ColBatches = scanRes.ColBatches
+		if scanRes.ColBatches != nil {
+			reply.ColBatches.ColBatches = scanRes.ColBatches
+		} else {
+			reply.SerializedColBatches = scanRes.SerializedColBatches
+		}
 	case roachpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)

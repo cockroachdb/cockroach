@@ -16,6 +16,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -35,6 +36,7 @@ type ColBatchDirectScan struct {
 	allocator   *colmem.Allocator
 	spec        *fetchpb.IndexFetchSpec
 	resultTypes []*types.T
+	hasDatumVec bool
 
 	// Only used when coldata.Batches are sent across the wire.
 	data      []*array.Data
@@ -93,17 +95,29 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 		if res.KVs != nil || res.BatchResponse != nil {
 			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs or BatchResponse in a direct scan"))
 		}
+		// TODO: make sure that someone is accounting for the memory footprint of
+		// this batch.
 		if res.ColBatch != nil {
+			if s.hasDatumVec {
+				for _, vec := range res.ColBatch.ColVecs() {
+					if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+						vec.Datum().SetEvalCtx(s.flowCtx.EvalCtx)
+					}
+				}
+			}
+			return res.ColBatch
+		}
+		if res.SerializedColBatch != nil {
 			break
 		}
-		// If ColBatch is nil, then it was an empty response for a ScanRequest,
-		// and we need to proceed further.
+		// If both ColBatch and SerializedColBatch are nil, then it was an empty
+		// response for a ScanRequest, and we need to proceed further.
 	}
 	// Update the allocator since we're holding onto the serialized bytes for
 	// now.
-	s.allocator.AdjustMemoryUsageAfterAllocation(int64(len(res.ColBatch)))
+	s.allocator.AdjustMemoryUsageAfterAllocation(int64(len(res.SerializedColBatch)))
 	s.data = s.data[:0]
-	batchLength, err := s.deser.Deserialize(&s.data, res.ColBatch)
+	batchLength, err := s.deser.Deserialize(&s.data, res.SerializedColBatch)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -117,7 +131,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	// At this point, we have lost all references to the serialized bytes
 	// (because ArrowToBatch nils out elements in s.data once processed), so we
 	// update the allocator accordingly.
-	s.allocator.AdjustMemoryUsage(-int64(len(res.ColBatch)))
+	s.allocator.AdjustMemoryUsage(-int64(len(res.SerializedColBatch)))
 	return s.batch
 }
 
@@ -190,12 +204,21 @@ func NewColBatchDirectScan(
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	)
 
+	var hasDatumVec bool
+	for _, t := range tableArgs.typs {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			hasDatumVec = true
+			break
+		}
+	}
+
 	return &ColBatchDirectScan{
 		colBatchScan: scan,
 		allocator:    allocator,
 		fetcher:      fetcher,
 		spec:         &spec.FetchSpec,
 		resultTypes:  tableArgs.typs,
+		hasDatumVec:  hasDatumVec,
 		data:         make([]*array.Data, len(tableArgs.typs)),
 	}, tableArgs.typs, nil
 }
