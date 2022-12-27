@@ -116,7 +116,11 @@ func (e *Evaluator) Eval(
 	case err := <-e.errCh:
 		return cdcevent.Row{}, err
 	case row := <-e.rowCh:
-		if !tree.MustBeDBool(row[0]) {
+		filter, err := tree.GetBool(row[0])
+		if err != nil {
+			return cdcevent.Row{}, err
+		}
+		if !filter {
 			// Filter did not match.
 			return cdcevent.Row{}, nil
 		}
