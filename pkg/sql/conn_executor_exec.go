@@ -1018,6 +1018,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
 	defer sp.Finish()
 
+	if err := ex.extraTxnState.sqlCursors.closeAll(true /* errorOnWithHold */); err != nil {
+		return err
+	}
+
 	// We need to step the transaction before committing if it has stepping
 	// enabled. If it doesn't have stepping enabled, then we just set the
 	// stepping mode back to what it was.
@@ -1100,6 +1104,9 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 func (ex *connExecutor) rollbackSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
+	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+		return ex.makeErrEvent(err, stmt)
+	}
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
