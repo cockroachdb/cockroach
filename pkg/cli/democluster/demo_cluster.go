@@ -1138,7 +1138,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 }
 
 func (c *transientCluster) getNetworkURLForServer(
-	ctx context.Context, serverIdx int, includeAppName bool, isTenant bool,
+	ctx context.Context, serverIdx int, includeAppName bool, forSecondaryTenant bool,
 ) (*pgurl.URL, error) {
 	u := pgurl.New()
 	if includeAppName {
@@ -1148,10 +1148,10 @@ func (c *transientCluster) getNetworkURLForServer(
 	}
 	sqlAddr := c.servers[serverIdx].ServingSQLAddr()
 	database := c.defaultDB
-	if isTenant {
+	if forSecondaryTenant {
 		sqlAddr = c.tenantServers[serverIdx].SQLAddr()
 	}
-	if !isTenant && c.demoCtx.Multitenant {
+	if !forSecondaryTenant && c.demoCtx.Multitenant {
 		database = catalogkeys.DefaultDatabaseName
 	}
 	host, port, _ := addr.SplitHostPort(sqlAddr, "")
@@ -1167,7 +1167,7 @@ func (c *transientCluster) getNetworkURLForServer(
 		u.WithInsecure()
 	} else {
 		caCert := certnames.CACertFilename()
-		if isTenant {
+		if forSecondaryTenant {
 			caCert = certnames.TenantClientCACertFilename()
 		}
 
@@ -1197,7 +1197,7 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 		return nil
 	}
 
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* isTenant */)
+	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* forSecondaryTenant */)
 	if err != nil {
 		return err
 	}
@@ -1218,7 +1218,7 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 func (c *transientCluster) SetClusterSetting(
 	ctx context.Context, setting string, value interface{},
 ) error {
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* isTenant */)
+	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* forSecondaryTenant */)
 	if err != nil {
 		return err
 	}
@@ -1470,7 +1470,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 		fmt.Fprintln(w, "  (webui)   ", serverURL)
 		// Print network URL if defined.
 		netURL, err := c.getNetworkURLForServer(context.Background(), i,
-			false /* includeAppName */, false /* isTenant */)
+			false /* includeAppName */, false /* forSecondaryTenant */)
 		if err != nil {
 			fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
 		} else {
@@ -1493,7 +1493,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 		for i := range c.servers {
 			fmt.Fprintf(w, "tenant %d:\n", i+1)
 			tenantURL, err := c.getNetworkURLForServer(context.Background(), i,
-				false /* includeAppName */, true /* isTenant */)
+				false /* includeAppName */, true /* forSecondaryTenant */)
 			if err != nil {
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving tenant network URL"))
 			} else {
