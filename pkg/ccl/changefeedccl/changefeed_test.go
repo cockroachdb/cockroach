@@ -878,10 +878,6 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		// TODO: PopulateTableWithRandData doesn't work with enums
 		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _enum")
 
-		// TODO: known issue now, https://github.com/cockroachdb/cockroach/issues/90411
-		// Dropping this because sqlsmith generates too many failing expressions otherwise.
-		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _bool")
-
 		for rows := 0; rows < 100; {
 			var err error
 			var newRows int
@@ -943,6 +939,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 				continue
 			}
 			query = "SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE " + where
+			t.Log(query)
 			rows := s.DB.QueryRow(query)
 			var expectedRowIDsStr string
 			if err := rows.Scan(&expectedRowIDsStr); err != nil {
@@ -957,9 +954,9 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			createStmt := `CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT rowid FROM seed WHERE ` + where
 			t.Logf("Expecting statement %s to emit %d events", createStmt, len(expectedRowIDs))
 			seedFeed, err := f.Feed(createStmt)
-			defer closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				t.Logf("Test tolerating create changefeed error: %s", err.Error())
+				closeFeedIgnoreError(t, seedFeed)
 				continue
 			}
 			assertedPayloads := make([]string, len(expectedRowIDs))
@@ -967,10 +964,11 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			closeFeedIgnoreError(t, seedFeed)
 			if err != nil && (strings.Contains(err.Error(), "expected\n") || strings.Contains(err.Error(), "ordering guarantee")) {
 				t.Error(err)
 			} else if err != nil {
-				t.Logf("Test tolerating running changefeed error: %s", err.Error())
+				t.Error(err)
 			}
 		}
 
