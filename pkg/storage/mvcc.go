@@ -3557,6 +3557,9 @@ func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
 		ValueBytes:                     stats.InternalStats.ValueBytes,
 		PointCount:                     stats.InternalStats.PointCount,
 		PointsCoveredByRangeTombstones: stats.InternalStats.PointsCoveredByRangeTombstones,
+		RangeKeyCount:                  uint64(stats.RangeKeyStats.Count),
+		RangeKeyContainedPoints:        uint64(stats.RangeKeyStats.ContainedPoints),
+		RangeKeySkippedPoints:          uint64(stats.RangeKeyStats.SkippedPoints),
 	})
 }
 
