@@ -153,7 +153,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		// unoptimized-query-oracle roachtest.
 		disableRuleProbability = p
 	}
-	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng)
+	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng, o)
 	o.coster = &o.defaultCoster
 	if disableRuleProbability > 0 {
 		o.disableRulesRandom(disableRuleProbability)
@@ -847,6 +847,25 @@ func (o *Optimizer) getScratchSort() *memo.SortExpr {
 	return o.scratchSort
 }
 
+// MaybeGetBestCostRelation returns the best-cost relation for the given memo
+// group if the group has been fully optimized for the `required` physical
+// properties.
+func (o *Optimizer) MaybeGetBestCostRelation(
+	grp memo.RelExpr, required *physical.Required,
+) (best memo.RelExpr, ok bool) {
+	if o == nil {
+		return nil, false
+	}
+	state := o.lookupOptState(grp, required)
+	if state == nil {
+		return nil, false
+	}
+	if state.best == nil || !state.fullyOptimized {
+		return nil, false
+	}
+	return state.best, true
+}
+
 // lookupOptState looks up the state associated with the given group and
 // properties. If no state exists yet, then lookupOptState returns nil.
 func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {
@@ -1102,7 +1121,7 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 // the real computed cost, not the perturbed cost.
 func (o *Optimizer) RecomputeCost() {
 	var c coster
-	c.Init(o.ctx, o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */)
+	c.Init(o.ctx, o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */, o /* o */)
 
 	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
