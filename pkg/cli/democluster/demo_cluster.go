@@ -1460,31 +1460,13 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 			// the demo.
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
-		serverURL := s.Cfg.AdminURL()
-		if !c.demoCtx.Insecure {
-			// Print node ID and web UI URL. Embed the autologin feature inside the URL.
-			// We avoid printing those when insecure, as the autologin path is not available
-			// in that case.
-			pwauth := url.Values{
-				"username": []string{c.adminUser.Normalized()},
-				"password": []string{c.adminPassword},
-			}
-			serverURL.Path = server.DemoLoginPath
-			serverURL.RawQuery = pwauth.Encode()
-		}
-		fmt.Fprintln(w, "  (webui)   ", serverURL)
-		// Print network URL if defined.
-		netURL, err := c.getNetworkURLForServer(context.Background(), i,
+		uiURL := s.Cfg.AdminURL()
+		sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
 			false /* includeAppName */, false /* forSecondaryTenant */)
 		if err != nil {
 			fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
 		} else {
-			fmt.Fprintln(w, "  (sql)     ", netURL.ToPQ())
-			fmt.Fprintln(w, "  (sql/jdbc)", netURL.ToJDBC())
-		}
-		// Print unix socket if defined.
-		if c.useSockets {
-			fmt.Fprintln(w, "  (sql/unix)", c.sockForServer(i))
+			c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i))
 		}
 		fmt.Fprintln(w)
 	}
@@ -1492,12 +1474,25 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 	if c.demoCtx.Multitenant {
 		for i := range c.servers {
 			fmt.Fprintf(w, "tenant %d:\n", i+1)
-			tenantURL, err := c.getNetworkURLForServer(context.Background(), i,
-				false /* includeAppName */, true /* forSecondaryTenant */)
+			uiURLstr := c.tenantServers[i].AdminURL()
+			uiURL, err := url.Parse(uiURLstr)
 			if err != nil {
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving tenant network URL"))
 			} else {
-				fmt.Fprintln(w, "   (sql): ", tenantURL.ToPQ())
+				sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
+					false /* includeAppName */, true /* forSecondaryTenant */)
+				if err != nil {
+					fmt.Fprintln(ew, errors.Wrap(err, "retrieving tenant network URL"))
+				} else {
+					// The unix socket is currently not defined for secondary
+					// tenant servers.
+					//
+					// NB: it will become defined once we use a single SQL
+					// listener for all tenants; after which this code can be
+					// simplified.
+					socket := unixSocketDetails{}
+					c.printURLs(w, ew, sqlURL, uiURL, socket)
+				}
 			}
 			fmt.Fprintln(w)
 		}
@@ -1508,6 +1503,28 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 	}
 	if justOne && numNodesLive > 1 {
 		fmt.Fprintln(w, `To display connection parameters for other nodes, use \demo ls.`)
+	}
+}
+
+func (c *transientCluster) printURLs(
+	w, ew io.Writer, sqlURL *pgurl.URL, uiURL *url.URL, socket unixSocketDetails,
+) {
+	if !c.demoCtx.Insecure {
+		// Print node ID and web UI URL. Embed the autologin feature inside the URL.
+		// We avoid printing those when insecure, as the autologin path is not available
+		// in that case.
+		pwauth := url.Values{
+			"username": []string{c.adminUser.Normalized()},
+			"password": []string{c.adminPassword},
+		}
+		uiURL.Path = server.DemoLoginPath
+		uiURL.RawQuery = pwauth.Encode()
+	}
+	fmt.Fprintln(w, "  (webui)   ", uiURL)
+	fmt.Fprintln(w, "  (sql)     ", sqlURL.ToPQ())
+	fmt.Fprintln(w, "  (sql/jdbc)", sqlURL.ToJDBC())
+	if socket.exists() {
+		fmt.Fprintln(w, "  (sql/unix)", socket)
 	}
 }
 
