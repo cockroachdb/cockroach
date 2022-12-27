@@ -561,6 +561,7 @@ func NewColIndexJoin(
 		0, /* estimatedRowCount */
 		flowCtx.TraceKV,
 		false, /* singleUse */
+		false, /* allocateFreshBatches */
 		false, /* allowNullsInNonNullableOnLastRowInBatch */
 	}
 	if err = fetcher.Init(

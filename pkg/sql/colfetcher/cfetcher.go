@@ -175,6 +175,9 @@ type cFetcherArgs struct {
 	// single set of spans. This allows the cFetcher to close itself eagerly,
 	// once it finishes the first fetch.
 	singleUse bool
+	// allocateFreshBatches indicates whether the cFetcher will allocate new
+	// batches on each Next invocation, or instead just reuse a single batch.
+	allocateFreshBatches bool
 	// TODO: comment.
 	allowNullsInNonNullableOnLastRowInBatch bool
 }
@@ -307,9 +310,16 @@ func (cf *cFetcher) resetBatch() {
 			tuplesToBeSet = int(cf.estimatedRowCount)
 		}
 	}
-	cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
-		cf.table.typs, cf.machine.batch, tuplesToBeSet,
-	)
+	if cf.allocateFreshBatches {
+		cf.machine.batch = cf.accountingHelper.AllocateNewBatch(
+			cf.table.typs, cf.machine.batch, tuplesToBeSet,
+		)
+		reallocated = true
+	} else {
+		cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
+			cf.table.typs, cf.machine.batch, tuplesToBeSet,
+		)
+	}
 	if reallocated {
 		cf.machine.colvecs.SetBatch(cf.machine.batch)
 		// Pull out any requested system column output vecs.
