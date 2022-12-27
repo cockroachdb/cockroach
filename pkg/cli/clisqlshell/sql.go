@@ -109,8 +109,8 @@ More documentation about our SQL dialect and the CLI shell is available online:
 	demoCommandsHelp = `
 Commands specific to the demo shell (EXPERIMENTAL):
   \demo ls                     list the demo nodes and their connection URLs.
-  \demo shutdown <nodeid>      stop a demo node.
-  \demo restart <nodeid>       restart a stopped demo node.
+  \demo shutdown <idx>         stop a demo server.
+  \demo restart <idx>          restart a stopped demo server.
   \demo decommission <nodeid>  decommission a node.
   \demo recommission <nodeid>  recommission a node.
   \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
@@ -703,13 +703,13 @@ func (c *cliState) handleDemoNodeCommands(
 		if err := c.sqlCtx.DemoCluster.DrainAndShutdown(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
-		fmt.Fprintf(c.iCtx.stdout, "node %d has been shutdown\n", nodeID)
+		fmt.Fprintf(c.iCtx.stdout, "server %d has been shutdown\n", nodeID)
 		return nextState
 	case "restart":
 		if err := c.sqlCtx.DemoCluster.RestartNode(ctx, int32(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
-		fmt.Fprintf(c.iCtx.stdout, "node %d has been restarted\n", nodeID)
+		fmt.Fprintf(c.iCtx.stdout, "server %d has been restarted\n", nodeID)
 		return nextState
 	case "recommission":
 		if err := c.sqlCtx.DemoCluster.Recommission(ctx, int32(nodeID)); err != nil {

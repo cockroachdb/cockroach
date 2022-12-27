@@ -35,11 +35,11 @@ type DemoCluster interface {
 	NumNodes() int
 
 	// DrainAndShutdown shuts down a node gracefully.
-	DrainAndShutdown(ctx context.Context, nodeID int32) error
+	DrainAndShutdown(ctx context.Context, userFriendlyServerIdx int32) error
 
 	// RestartNode starts the given node. The node must be down
 	// prior to the call.
-	RestartNode(ctx context.Context, nodeID int32) error
+	RestartNode(ctx context.Context, userFriendlyServerIdx int32) error
 
 	// Decommission decommissions the given node.
 	Decommission(ctx context.Context, nodeID int32) error
