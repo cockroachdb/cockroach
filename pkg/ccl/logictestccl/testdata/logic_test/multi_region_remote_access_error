@@ -553,7 +553,7 @@ ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
 
 # Regression test for issue #88788
 # A full scan on an RBT table should error out lookup join.
-statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
 SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
 
 # Select from REGIONAL BY TABLE should indicate the gateway region to use.

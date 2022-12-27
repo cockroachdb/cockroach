@@ -3021,7 +3021,7 @@ CREATE TABLE user_settings_cascades (
 # user_settings and avoid visiting all regions.
 query T retry
 EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
-  FROM users INNER LOOKUP JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
+  FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
 vectorized: true
@@ -3048,6 +3048,32 @@ vectorized: true
               missing stats
               table: users@users_pkey
               spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+
+# An explicit join on the crdb_region column of both tables should be costed to
+# prefer lookup join.
+query T
+EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS user_settings_region, *
+  FROM users JOIN user_settings ON users.crdb_region = user_settings.crdb_region AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: user_settings@user_settings_pkey
+│ equality: (crdb_region) = (crdb_region)
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: users@users_pkey
+    │     spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
+    │
+    └── • scan
+          missing stats
+          table: users@users_pkey
+          spans: [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 
 # Ensure that the FK checks and cascades are efficient.
 query T
