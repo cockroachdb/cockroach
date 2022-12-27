@@ -42,7 +42,7 @@ func registerFailover(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("failover/non-system/%s", failureMode),
 			Owner:   registry.OwnerKV,
-			Timeout: 20 * time.Minute,
+			Timeout: 30 * time.Minute,
 			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverNonSystem(ctx, t, c, failureMode)
@@ -51,7 +51,7 @@ func registerFailover(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("failover/liveness/%s", failureMode),
 			Owner:   registry.OwnerKV,
-			Timeout: 20 * time.Minute,
+			Timeout: 30 * time.Minute,
 			Cluster: r.MakeClusterSpec(5, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverLiveness(ctx, t, c, failureMode)
@@ -60,7 +60,7 @@ func registerFailover(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("failover/system-non-liveness/%s", failureMode),
 			Owner:   registry.OwnerKV,
-			Timeout: 20 * time.Minute,
+			Timeout: 30 * time.Minute,
 			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverSystemNonLiveness(ctx, t, c, failureMode)
