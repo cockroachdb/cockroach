@@ -820,16 +820,13 @@ func CheckSSTConflicts(
 				for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 					extIter.NextKey()
 					extOK, _ = extIter.Valid()
-					rangeKeyChanged = rangeKeyChanged || extIter.RangeKeyChanged()
+					rangeKeyChanged = rangeKeyChanged || (extOK && extIter.RangeKeyChanged())
 					nextsUntilSeek--
 					if nextsUntilSeek <= 0 {
 						break
 					}
 				}
-				// TODO(erikgrinaker): NextKey() may not trigger `RangeKeyChanged()`
-				// on an exhausted iterator, so we check the case where we stepped
-				// from an initial range key onto an exhausted iterator. See:
-				// https://github.com/cockroachdb/cockroach/issues/94041
+				// Handle moving from a range key to an exhausted iterator.
 				rangeKeyChanged = rangeKeyChanged || (!extOK && !extPrevRangeKeys.IsEmpty())
 				// If we havent't reached the SST key yet, seek to it. Otherwise, if we
 				// stepped past it but the range key changed we have to seek back to it,
@@ -899,16 +896,13 @@ func CheckSSTConflicts(
 					for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 						extIter.NextKey()
 						extOK, _ = extIter.Valid()
-						rangeKeyChanged = rangeKeyChanged || extIter.RangeKeyChanged()
+						rangeKeyChanged = rangeKeyChanged || (extOK && extIter.RangeKeyChanged())
 						nextsUntilSeek--
 						if nextsUntilSeek <= 0 {
 							break
 						}
 					}
-					// TODO(erikgrinaker): NextKey() may not trigger `RangeKeyChanged()`
-					// on an exhausted iterator, so we check the case where we stepped
-					// from an initial range key onto an exhausted iterator. See:
-					// https://github.com/cockroachdb/cockroach/issues/94041
+					// Handle moving from a range key to an exhausted iterator.
 					rangeKeyChanged = rangeKeyChanged || (!extOK && !extPrevRangeKeys.IsEmpty())
 					// If we havent't reached the SST key yet, seek to it. Otherwise, if we
 					// stepped past it but the range key changed we have to seek back to it,
