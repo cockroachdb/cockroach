@@ -1,0 +1,129 @@
+diff --git a/pkg/cmd/roachtest/cluster.go b/pkg/cmd/roachtest/cluster.go
+index 8a2e72b44a..f60d494df5 100644
+--- a/pkg/cmd/roachtest/cluster.go
++++ b/pkg/cmd/roachtest/cluster.go
+@@ -657,6 +657,7 @@ type clusterImpl struct {
+ 
+ 	// destroyState contains state related to the cluster's destruction.
+ 	destroyState destroyState
++	debugMode    debugMode
+ }
+ 
+ // Name returns the cluster name, i.e. something like `teamcity-....`
+@@ -837,7 +838,7 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
+ //
+ // NOTE: setTest() needs to be called before a test can use this cluster.
+ func (f *clusterFactory) newCluster(
+-	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
++	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType, debugMode debugMode,
+ ) (*clusterImpl, *vm.CreateOpts, error) {
+ 	if ctx.Err() != nil {
+ 		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
+@@ -932,6 +933,7 @@ func (f *clusterFactory) newCluster(
+ 			if err := f.r.registerCluster(c); err != nil {
+ 				return nil, nil, err
+ 			}
++			c.debugMode = debugMode
+ 			c.status("idle")
+ 			l.Close()
+ 			return c, &createVMOpts, nil
+@@ -1540,6 +1542,10 @@ func (c *clusterImpl) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger.
+ 		return
+ 	}
+ 
++	if c.debugMode == DebugAllowReuse {
++		c.r.unregisterCluster(c)
++		return
++	}
+ 	ch := c.doDestroy(ctx, l)
+ 	<-ch
+ 	// NB: Closing the logger without waiting on c.destroyState.destroyed above
+diff --git a/pkg/cmd/roachtest/main.go b/pkg/cmd/roachtest/main.go
+index cac9809ccc..39c4b8a447 100644
+--- a/pkg/cmd/roachtest/main.go
++++ b/pkg/cmd/roachtest/main.go
+@@ -86,6 +86,7 @@ func main() {
+ 	var httpPort int
+ 	var debugOnFailure bool
+ 	var debugAlways bool
++	var debugReuse bool
+ 	var runSkipped bool
+ 	var skipInit bool
+ 	var clusterID string
+@@ -101,6 +102,9 @@ func main() {
+ 		if debugOnFailure {
+ 			return DebugKeepOnFailure
+ 		}
++		if debugReuse {
++			return DebugAllowReuse
++		}
+ 		return NoDebug
+ 	}
+ 
+@@ -303,6 +307,8 @@ runner itself.
+ 			&debugOnFailure, "debug", "d", debugOnFailure, "don't wipe and destroy cluster if test fails")
+ 		cmd.Flags().BoolVar(
+ 			&debugAlways, "debug-always", debugAlways, "never wipe and destroy the cluster")
++		cmd.Flags().BoolVar(
++			&debugReuse, "debug-reuse", debugReuse, "never wipe and destroy the cluster")
+ 		cmd.Flags().BoolVar(
+ 			&runSkipped, "run-skipped", runSkipped, "run skipped tests")
+ 		cmd.Flags().BoolVar(
+@@ -441,6 +447,10 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
+ 		return errors.Newf("--debug-always is only allowed when running a single test")
+ 	}
+ 
++	if opt.debugMode == DebugAllowReuse && (n > 1 || cfg.parallelism != 1) {
++		return errors.Newf("--debug-reuse is only allowed when running a single test")
++	}
++
+ 	runnerDir := filepath.Join(cfg.artifactsDir, runnerLogsDir)
+ 	runnerLogPath := filepath.Join(
+ 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+diff --git a/pkg/cmd/roachtest/test_runner.go b/pkg/cmd/roachtest/test_runner.go
+index fd1a8a5f9e..1c1919d990 100644
+--- a/pkg/cmd/roachtest/test_runner.go
++++ b/pkg/cmd/roachtest/test_runner.go
+@@ -167,6 +167,8 @@ const (
+ 	DebugKeepOnFailure
+ 	// DebugKeepAlways never wipes or destroys a cluster.
+ 	DebugKeepAlways
++	// TODO: WIP to allow re use of cluster between test runs
++	DebugAllowReuse
+ )
+ 
+ func (p debugMode) IsDebug() bool {
+@@ -372,6 +374,7 @@ func defaultClusterAllocator(
+ 		alloc *quotapool.IntAlloc,
+ 		artifactsDir string,
+ 		wStatus *workerStatus,
++		debugMode debugMode,
+ 	) (*clusterImpl, *vm.CreateOpts, error) {
+ 		wStatus.SetStatus("creating cluster")
+ 		defer wStatus.SetStatus("")
+@@ -415,7 +418,7 @@ func defaultClusterAllocator(
+ 			localCluster: clustersOpt.typ == localCluster,
+ 			alloc:        alloc,
+ 		}
+-		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
++		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee, debugMode)
+ 	}
+ 	return allocateCluster
+ }
+@@ -426,6 +429,7 @@ type clusterAllocatorFn func(
+ 	alloc *quotapool.IntAlloc,
+ 	artifactsDir string,
+ 	wStatus *workerStatus,
++	debugMOde debugMode,
+ ) (*clusterImpl, *vm.CreateOpts, error)
+ 
+ // runWorker runs tests in a loop until work is exhausted.
+@@ -593,7 +597,7 @@ func (r *testRunner) runWorker(
+ 			// N.B. non-reusable cluster would have been destroyed above.
+ 			wStatus.SetTest(nil /* test */, testToRun)
+ 			wStatus.SetStatus("creating cluster")
+-			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
++			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus, debugMode)
+ 			if clusterCreateErr != nil {
+ 				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
+ 				atomic.AddInt32(&r.numClusterErrs, 1)

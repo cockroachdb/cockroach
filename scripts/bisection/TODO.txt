@@ -1,0 +1,7 @@
+- informational logging should go straight to stdout (about to build, run etc)
+  - remove 2022-12-21T18:46:13Z   [5ae6412534] Running to collect a baseline bad threshold
+- actual collected numbers go to the log
+- ctrl c trap to ask user good/bad/skip/quit
+- [5ae6412534] Baseline bad threshold is average ops/s: [95876]  - remove "is"
+- duration override in minutes
+- add to trap git reset --hard
