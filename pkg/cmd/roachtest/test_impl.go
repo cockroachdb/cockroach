@@ -317,7 +317,7 @@ func (t *testImpl) addFailure(format string, args ...interface{}) {
 	if format == "" {
 		format = strings.Repeat(" %v", len(args))[1:]
 	}
-	reportFailure := newFailure(errors.NewWithDepthf(1, format, args...), collectErrors(args))
+	reportFailure := newFailure(errors.NewWithDepthf(2, format, args...), collectErrors(args))
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
