@@ -3344,6 +3344,10 @@ func (m *sessionDataMutator) SetVariableInequalityLookupJoinEnabled(val bool) {
 	m.data.VariableInequalityLookupJoinEnabled = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseImprovedDisjunctionStats(val bool) {
+	m.data.OptimizerUseImprovedDisjunctionStats = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

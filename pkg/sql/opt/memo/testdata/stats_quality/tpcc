@@ -1649,7 +1649,7 @@ scalar-group-by
  ├── select
  │    ├── save-table-name: consistency_12_select_2
  │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int)
- │    ├── stats: [rows=629393.8, distinct(1)=2999, null(1)=440513, distinct(2)=10, null(2)=440513, distinct(3)=10, null(3)=440513, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0]
+ │    ├── stats: [rows=629603.7, distinct(1)=2999, null(1)=440660, distinct(2)=10, null(2)=440660, distinct(3)=10, null(3)=440660, distinct(11)=2999, null(11)=0, distinct(12)=10, null(12)=0, distinct(13)=10, null(13)=0]
  │    ├── full-join (merge)
  │    │    ├── save-table-name: consistency_12_merge_join_3
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int)
@@ -1739,12 +1739,12 @@ column_names  row_count  distinct_count  null_count
 {ol_w_id}     0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_d_id}      629394.00      +Inf <==       10.00               +Inf <==            440513.00       +Inf <==
-{o_id}        629394.00      +Inf <==       2999.00             +Inf <==            440513.00       +Inf <==
-{o_w_id}      629394.00      +Inf <==       10.00               +Inf <==            440513.00       +Inf <==
-{ol_d_id}     629394.00      +Inf <==       10.00               +Inf <==            0.00            1.00
-{ol_o_id}     629394.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
-{ol_w_id}     629394.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{o_d_id}      629604.00      +Inf <==       10.00               +Inf <==            440660.00       +Inf <==
+{o_id}        629604.00      +Inf <==       2999.00             +Inf <==            440660.00       +Inf <==
+{o_w_id}      629604.00      +Inf <==       10.00               +Inf <==            440660.00       +Inf <==
+{ol_d_id}     629604.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{ol_o_id}     629604.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
+{ol_w_id}     629604.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 
 ----Stats for consistency_12_merge_join_3----
 column_names  row_count  distinct_count  null_count
