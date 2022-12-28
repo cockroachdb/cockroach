@@ -397,15 +397,17 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
-					DisableCreateTenant:   !createTenant,
-					TenantName:            roachpb.TenantName(fmt.Sprintf("demo-tenant-%d", secondaryTenantID)),
-					TenantID:              roachpb.MustMakeTenantID(secondaryTenantID),
-					Stopper:               tenantStopper,
-					ForceInsecure:         c.demoCtx.Insecure,
-					SSLCertsDir:           c.demoDir,
-					StartingRPCAndSQLPort: c.demoCtx.SQLPort - secondaryTenantID + i,
-					StartingHTTPPort:      c.demoCtx.HTTPPort - secondaryTenantID + i,
-					Locality:              c.demoCtx.Localities[i],
+					DisableCreateTenant:     !createTenant,
+					TenantName:              roachpb.TenantName(fmt.Sprintf("demo-tenant-%d", secondaryTenantID)),
+					TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
+					Stopper:                 tenantStopper,
+					ForceInsecure:           c.demoCtx.Insecure,
+					SSLCertsDir:             c.demoDir,
+					DisableTLSForHTTP:       true,
+					EnableDemoLoginEndpoint: true,
+					StartingRPCAndSQLPort:   c.demoCtx.SQLPort - secondaryTenantID + i,
+					StartingHTTPPort:        c.demoCtx.HTTPPort - secondaryTenantID + i,
+					Locality:                c.demoCtx.Localities[i],
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
@@ -1483,9 +1485,6 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 			continue
 		}
 
-		// Print the RPC address for the node.
-		fmt.Fprintln(w, "  (rpc)     ", s.ServingRPCAddr())
-
 		nodeID := s.NodeID()
 		if !justOne {
 			// We skip the node ID if we're in the top level introduction of
@@ -1494,6 +1493,8 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 		}
 		if c.demoCtx.Multitenant {
 			fmt.Fprintln(w, "  Application tenant:")
+
+			rpcAddr := c.tenantServers[i].RPCAddr()
 			tenantUiURLstr := c.tenantServers[i].AdminURL()
 			tenantUiURL, err := url.Parse(tenantUiURLstr)
 			if err != nil {
@@ -1511,7 +1512,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 					// listener for all tenants; after which this code can be
 					// simplified.
 					tenantSocket := unixSocketDetails{}
-					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket)
+					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket, rpcAddr)
 				}
 			}
 			fmt.Fprintln(w)
@@ -1524,7 +1525,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 		if err != nil {
 			fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
 		} else {
-			c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i))
+			c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i), s.ServingRPCAddr())
 		}
 		fmt.Fprintln(w)
 	}
@@ -1538,7 +1539,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 }
 
 func (c *transientCluster) printURLs(
-	w, ew io.Writer, sqlURL *pgurl.URL, uiURL *url.URL, socket unixSocketDetails,
+	w, ew io.Writer, sqlURL *pgurl.URL, uiURL *url.URL, socket unixSocketDetails, rpcAddr string,
 ) {
 	if !c.demoCtx.Insecure {
 		// Print node ID and web UI URL. Embed the autologin feature inside the URL.
@@ -1557,6 +1558,7 @@ func (c *transientCluster) printURLs(
 	if socket.exists() {
 		fmt.Fprintln(w, "   (sql/unix)", socket)
 	}
+	fmt.Fprintln(w, "   (rpc)     ", rpcAddr)
 }
 
 // genDemoPassword generates a password that prevents accidental
