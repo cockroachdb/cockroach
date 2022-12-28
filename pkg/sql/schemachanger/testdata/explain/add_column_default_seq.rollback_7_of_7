@@ -38,7 +38,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 3}
            └── 10 Mutation operations
                 ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
-                ├── UpdateBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
+                ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}

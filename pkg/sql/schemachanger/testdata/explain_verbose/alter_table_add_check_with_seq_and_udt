@@ -31,7 +31,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │           │     - 105
 │           │     - 106
 │           │
-│           └── • UpdateBackReferencesInSequences
+│           └── • UpdateTableBackReferencesInSequences
 │                 BackReferencedTableID: 107
 │                 SequenceIDs:
 │                 - 104

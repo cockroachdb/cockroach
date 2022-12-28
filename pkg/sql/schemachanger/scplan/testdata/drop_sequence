@@ -109,7 +109,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 105
-    *scop.UpdateBackReferencesInSequences
+    *scop.UpdateTableBackReferencesInSequences
       BackReferencedColumnID: 2
       BackReferencedTableID: 105
       SequenceIDs:
@@ -117,7 +117,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 106
-    *scop.UpdateBackReferencesInSequences
+    *scop.UpdateTableBackReferencesInSequences
       BackReferencedColumnID: 2
       BackReferencedTableID: 106
       SequenceIDs:

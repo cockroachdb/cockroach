@@ -408,9 +408,9 @@ type RemoveBackReferenceInTypes struct {
 	TypeIDs                    []descpb.ID
 }
 
-// UpdateBackReferencesInSequences updates back references to a table expression
+// UpdateTableBackReferencesInSequences updates back references to a table expression
 // (in a column or a check constraint) in the specified sequences.
-type UpdateBackReferencesInSequences struct {
+type UpdateTableBackReferencesInSequences struct {
 	mutationOp
 	BackReferencedTableID  descpb.ID
 	BackReferencedColumnID descpb.ColumnID

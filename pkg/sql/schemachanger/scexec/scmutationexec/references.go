@@ -159,6 +159,8 @@ func (m *visitor) RemoveBackReferenceInTypes(
 	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedDescriptorID, catalog.DescriptorIDSet{})
 }
 
+// updateBackReferencesInTypes updates back references of `backReferencedDescID`
+// in types represented by `typeIDs`, given the
 func updateBackReferencesInTypes(
 	ctx context.Context,
 	m *visitor,
@@ -191,8 +193,8 @@ func updateBackReferencesInTypes(
 	return nil
 }
 
-func (m *visitor) UpdateBackReferencesInSequences(
-	ctx context.Context, op scop.UpdateBackReferencesInSequences,
+func (m *visitor) UpdateTableBackReferencesInSequences(
+	ctx context.Context, op scop.UpdateTableBackReferencesInSequences,
 ) error {
 	var forwardRefs catalog.DescriptorIDSet
 	if desc, err := m.s.GetDescriptor(ctx, op.BackReferencedTableID); err != nil {

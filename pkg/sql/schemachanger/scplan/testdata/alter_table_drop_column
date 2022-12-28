@@ -1427,7 +1427,7 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 12 MutationType ops
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 107
-    *scop.UpdateBackReferencesInSequences
+    *scop.UpdateTableBackReferencesInSequences
       BackReferencedColumnID: 3
       BackReferencedTableID: 107
       SequenceIDs:

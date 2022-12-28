@@ -70,7 +70,7 @@ type MutationVisitor interface {
 	RemoveColumnOnUpdateExpression(context.Context, RemoveColumnOnUpdateExpression) error
 	UpdateTableBackReferencesInTypes(context.Context, UpdateTableBackReferencesInTypes) error
 	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
-	UpdateBackReferencesInSequences(context.Context, UpdateBackReferencesInSequences) error
+	UpdateTableBackReferencesInSequences(context.Context, UpdateTableBackReferencesInSequences) error
 	RemoveViewBackReferencesInRelations(context.Context, RemoveViewBackReferencesInRelations) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
@@ -342,8 +342,8 @@ func (op RemoveBackReferenceInTypes) Visit(ctx context.Context, v MutationVisito
 }
 
 // Visit is part of the MutationOp interface.
-func (op UpdateBackReferencesInSequences) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.UpdateBackReferencesInSequences(ctx, op)
+func (op UpdateTableBackReferencesInSequences) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateTableBackReferencesInSequences(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

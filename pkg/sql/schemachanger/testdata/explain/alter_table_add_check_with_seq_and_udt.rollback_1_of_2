@@ -15,7 +15,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
            └── 8 Mutation operations
                 ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":107}
                 ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
-                ├── UpdateBackReferencesInSequences {"BackReferencedTableID":107}
+                ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
