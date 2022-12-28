@@ -4537,6 +4537,10 @@ func TestChangefeedErrors(t *testing.T) {
 		`kafka://nope`,
 	)
 
+	// Unordered flag required for some options, disallowed for others.
+	sqlDB.ExpectErr(t, `resolved timestamps cannot be guaranteed to be correct in unordered mode`, `CREATE CHANGEFEED FOR foo WITH resolved, unordered`)
+	sqlDB.ExpectErr(t, `Use of gcpubsub without specifying a region requires the WITH unordered option.`, `CREATE CHANGEFEED FOR foo INTO "gcpubsub://foo"`)
+
 	// The topics option should not be exposed to users since it is used
 	// internally to display topics in the show changefeed jobs query
 	sqlDB.ExpectErr(
