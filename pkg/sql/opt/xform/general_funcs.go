@@ -501,7 +501,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 		scanCount = maxScanCount
 	}
 	rowCount := scan.Relational().Statistics().RowCount
-	if limit > 0 {
+	if !c.e.evalCtx.SessionData().DisableSplitLimitedScanCostCheck && limit > 0 {
 		nLogN := rowCount * math.Log2(rowCount)
 		if scan.Relational().Statistics().Available &&
 			float64(scanCount*randIOCostFactor+limit*seqIOCostFactor) >= nLogN {

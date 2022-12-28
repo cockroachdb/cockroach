@@ -323,10 +323,16 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 0
 	notStale()
 
-	// Stale testing_optimizer_disable_rule_probability.
+	// Stale allow_ordinal_column_references.
 	evalCtx.SessionData().AllowOrdinalColumnReferences = true
 	stale()
 	evalCtx.SessionData().AllowOrdinalColumnReferences = false
+	notStale()
+
+	// Stale disable_split_limited_scans_cost_check.
+	evalCtx.SessionData().DisableSplitLimitedScanCostCheck = true
+	stale()
+	evalCtx.SessionData().DisableSplitLimitedScanCostCheck = false
 	notStale()
 
 	// Stale data sources and schema. Create new catalog so that data sources are

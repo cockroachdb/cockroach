@@ -1570,8 +1570,10 @@ scalar-group-by
            └── data1:6
 
 # No-op case because the same number of rows would be scanned by the split-up
-# scans as by the original.
-opt expect-not=SplitLimitedScanIntoUnionScans
+# scans as by the original, and the legacy cost check is enabled.
+# TODO(mgartner): Remove this test when the legacy cost check is removed
+# entirely in v23.2.
+opt set=disable_split_limited_scans_cost_check=false expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE id > 0 AND id < 4
 ----
 scalar-group-by
@@ -1651,6 +1653,123 @@ scalar-group-by
  └── aggregations
       └── max [as=max:12, outer=(6)]
            └── data1:6
+
+# Regression test for #94385. SplitLimitedScansIntoUnionScans should fire when
+# the original scan is highly selective.
+exec-ddl
+CREATE TABLE t94385 (
+  crdb_region STRING,
+  id INT,
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (crdb_region, id),
+  CHECK (crdb_region IN ('ca', 'us', 'eu')),
+  INDEX (crdb_region, a, b, c)
+)
+----
+
+exec-ddl
+ALTER TABLE t94385 INJECT STATISTICS '[
+  {
+    "columns": ["crdb_region"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 3,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 330000, "num_range": 0, "distinct_range": 0, "upper_bound": "ca"},
+      {"num_eq": 330000, "num_range": 0, "distinct_range": 0, "upper_bound": "eu"},
+      {"num_eq": 340000, "num_range": 0, "distinct_range": 0, "upper_bound": "us"}
+    ]
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 9, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 1, "num_range": 999989, "distinct_range": 999989, "upper_bound": "1000000"}
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1000, "num_range": 9, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 1, "num_range": 998990, "distinct_range": 998990, "upper_bound": "1000"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1000, "num_range": 9, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 1, "num_range": 998990, "distinct_range": 998990, "upper_bound": "1000"}
+    ]
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1000, "num_range": 9, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 1, "num_range": 998990, "distinct_range": 998990, "upper_bound": "1000"}
+    ]
+  }
+]'
+----
+
+opt expect=SplitLimitedScanIntoUnionScans format=hide-all
+SELECT * FROM t94385
+WHERE a = 10 AND b = 10 AND c = 10 AND id > 10
+ORDER BY id LIMIT 1
+----
+limit
+ ├── union-all
+ │    ├── union-all
+ │    │    ├── scan t94385@t94385_crdb_region_a_b_c_idx
+ │    │    │    ├── constraint: /8/10/11/12/9: [/'ca'/10/10/10/11 - /'ca'/10/10/10]
+ │    │    │    └── limit: 1
+ │    │    └── scan t94385@t94385_crdb_region_a_b_c_idx
+ │    │         ├── constraint: /15/17/18/19/16: [/'eu'/10/10/10/11 - /'eu'/10/10/10]
+ │    │         └── limit: 1
+ │    └── scan t94385@t94385_crdb_region_a_b_c_idx
+ │         ├── constraint: /22/24/25/26/23: [/'us'/10/10/10/11 - /'us'/10/10/10]
+ │         └── limit: 1
+ └── 1
+
+# It does not fire if the legacy cost check is performed, i.e.,
+# disable_split_limited_scans_cost_check=false.
+# TODO(mgartner): Remove this test when the legacy cost check is removed
+# entirely in v23.2.
+opt set=disable_split_limited_scans_cost_check=false expect-not=SplitLimitedScanIntoUnionScans format=hide-all
+SELECT * FROM t94385
+WHERE a = 10 AND b = 10 AND c = 10 AND id > 10
+ORDER BY id LIMIT 1
+----
+top-k
+ ├── k: 1
+ └── scan t94385@t94385_crdb_region_a_b_c_idx
+      └── constraint: /1/3/4/5/2
+           ├── [/'ca'/10/10/10/11 - /'ca'/10/10/10]
+           ├── [/'eu'/10/10/10/11 - /'eu'/10/10/10]
+           └── [/'us'/10/10/10/11 - /'us'/10/10/10]
+
 
 # ---------------------------------------------------
 # GenerateTopK

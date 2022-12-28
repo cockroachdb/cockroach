@@ -2389,6 +2389,21 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+	`disable_split_limited_scan_cost_check`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_split_limited_scan_cost_check`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_split_limited_scan_cost_check", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableSplitLimitedScanCostCheck(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableSplitLimitedScanCostCheck), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

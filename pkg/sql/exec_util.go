@@ -3446,6 +3446,10 @@ func (m *sessionDataMutator) SetAllowOrdinalColumnReference(val bool) {
 	m.data.AllowOrdinalColumnReferences = val
 }
 
+func (m *sessionDataMutator) SetDisableSplitLimitedScanCostCheck(val bool) {
+	m.data.DisableSplitLimitedScanCostCheck = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
