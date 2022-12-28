@@ -78,6 +78,7 @@ type transientCluster struct {
 
 	httpFirstPort int
 	sqlFirstPort  int
+	rpcFirstPort  int
 
 	adminPassword string
 	adminUser     username.SQLUsername
@@ -183,6 +184,10 @@ func NewDemoCluster(
 
 	c.httpFirstPort = c.demoCtx.HTTPPort
 	c.sqlFirstPort = c.demoCtx.SQLPort
+	// +100 is the offset we've chosen to recommend to separate the SQL
+	// port from the RPC port when we deprecated the use of merged
+	// ports.
+	c.rpcFirstPort = c.demoCtx.SQLPort + 100
 	if c.demoCtx.Multitenant {
 		// This allows the first secondary tenant server to get the
 		// desired ports (i.e., those configured by --http-port or
@@ -192,6 +197,7 @@ func NewDemoCluster(
 		// listener for HTTP and SQL.
 		c.httpFirstPort += c.demoCtx.NumNodes
 		c.sqlFirstPort += c.demoCtx.NumNodes
+		c.rpcFirstPort += c.demoCtx.NumNodes
 	}
 
 	c.stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
@@ -533,6 +539,7 @@ func (c *transientCluster) createAndAddNode(
 	args := c.demoCtx.testServerArgsForTransientCluster(
 		c.sockForServer(idx), idx, joinAddr, c.demoDir,
 		c.sqlFirstPort,
+		c.rpcFirstPort,
 		c.httpFirstPort,
 		c.stickyEngineRegistry,
 	)
@@ -743,7 +750,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	serverIdx int,
 	joinAddr string,
 	demoDir string,
-	sqlBasePort, httpBasePort int,
+	sqlBasePort, rpcBasePort, httpBasePort int,
 	stickyEngineRegistry server.StickyInMemEnginesRegistry,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
@@ -777,19 +784,26 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		},
 	}
 
+	// Unit tests can be run with multiple processes side-by-side with
+	// `make stress`. This is bound to not work with fixed ports.
+	// So by default we use :0 to auto-allocate ports.
+	args.Addr = "127.0.0.1:0"
 	if !testingForceRandomizeDemoPorts {
-		// Unit tests can be run with multiple processes side-by-side with
-		// `make stress`. This is bound to not work with fixed ports.
 		sqlPort := sqlBasePort + serverIdx
 		if sqlBasePort == 0 {
 			sqlPort = 0
+		}
+		rpcPort := rpcBasePort + serverIdx
+		if rpcBasePort == 0 {
+			rpcPort = 0
 		}
 		httpPort := httpBasePort + serverIdx
 		if httpBasePort == 0 {
 			httpPort = 0
 		}
-		args.SQLAddr = fmt.Sprintf(":%d", sqlPort)
-		args.HTTPAddr = fmt.Sprintf(":%d", httpPort)
+		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
+		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
+		args.HTTPAddr = fmt.Sprintf("127.0.0.1:%d", httpPort)
 	}
 
 	if demoCtx.Localities != nil {
@@ -992,7 +1006,7 @@ func (c *transientCluster) startServerInternal(
 		c.sockForServer(serverIdx),
 		serverIdx,
 		c.firstServer.ServingRPCAddr(), c.demoDir,
-		c.sqlFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
+		c.sqlFirstPort, c.rpcFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
 	s, err := server.TestServerFactory.New(args)
 	if err != nil {
 		return 0, err
