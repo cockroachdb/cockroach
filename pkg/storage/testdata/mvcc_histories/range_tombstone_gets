@@ -147,6 +147,33 @@ get: "e" -> intent {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 mi
 get: "e" -> /<empty> @4.000000000,0
 
 run ok
+get k=f ts=1
+get k=f ts=2
+get k=f ts=3
+get k=f ts=4
+get k=f ts=5
+get k=f ts=6
+get k=f ts=1 tombstones
+get k=f ts=2 tombstones
+get k=f ts=3 tombstones
+get k=f ts=4 tombstones
+get k=f ts=5 tombstones
+get k=f ts=6 tombstones
+----
+get: "f" -> /BYTES/f1 @1.000000000,0
+get: "f" -> /BYTES/f1 @1.000000000,0
+get: "f" -> /BYTES/f3 @3.000000000,0
+get: "f" -> <no data>
+get: "f" -> /BYTES/f5 @5.000000000,0
+get: "f" -> /BYTES/f5 @5.000000000,0
+get: "f" -> /BYTES/f1 @1.000000000,0
+get: "f" -> /BYTES/f1 @1.000000000,0
+get: "f" -> /BYTES/f3 @3.000000000,0
+get: "f" -> /<empty> @4.000000000,0
+get: "f" -> /BYTES/f5 @5.000000000,0
+get: "f" -> /BYTES/f5 @5.000000000,0
+
+run ok
 get k=g ts=3
 get k=g ts=4
 get k=g ts=5
@@ -183,6 +210,36 @@ get: "h" -> /BYTES/h2 @2.000000000,0
 get: "h" -> /BYTES/h2 @2.000000000,0
 get: "h" -> /<empty> @4.000000000,0
 get: "h" -> /<empty> @4.000000000,0
+
+run ok
+get k=j ts=3
+get k=j ts=4
+get k=j ts=5
+get k=j ts=3 tombstones
+get k=j ts=4 tombstones
+get k=j ts=5 tombstones
+----
+get: "j" -> <no data>
+get: "j" -> <no data>
+get: "j" -> <no data>
+get: "j" -> <no data>
+get: "j" -> /<empty> @4.000000000,0
+get: "j" -> /<empty> @4.000000000,0
+
+run ok
+get k=k ts=3
+get k=k ts=4
+get k=k ts=5
+get k=k ts=3 tombstones
+get k=k ts=4 tombstones
+get k=k ts=5 tombstones
+----
+get: "k" -> <no data>
+get: "k" -> <no data>
+get: "k" -> <no data>
+get: "k" -> <no data>
+get: "k" -> /<empty> @4.000000000,0
+get: "k" -> /<empty> @4.000000000,0
 
 # failOnMoreRecent: c
 run error
@@ -262,6 +319,18 @@ run error
 get k=b ts=1 globalUncertaintyLimit=2
 ----
 get: "b" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 2.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+
+# globalUncertaintyLimit: d
+run ok
+get k=d ts=1 globalUncertaintyLimit=1
+----
+get: "d" -> <no data>
+
+run error
+get k=d ts=1 globalUncertaintyLimit=2
+----
+get: "d" -> <no data>
 error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 2.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
 
 # globalUncertaintyLimit: g
