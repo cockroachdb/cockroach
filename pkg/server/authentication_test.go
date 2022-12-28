@@ -88,7 +88,7 @@ func TestSSLEnforcement(t *testing.T) {
 		// client certificates over HTTP endpoints. Web session authentication
 		// is disabled in order to avoid the need to authenticate the individual
 		// clients being instantiated.
-		DisableWebSessionAuthentication: true,
+		InsecureWebAccess: true,
 	})
 	defer s.Stopper().Stop(ctx)
 

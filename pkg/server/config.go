@@ -183,9 +183,11 @@ type BaseConfig struct {
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
-	// EnableWebSessionAuthentication enables session-based authentication for
-	// the Admin API's HTTP endpoints.
-	EnableWebSessionAuthentication bool
+	// TestingInsecureWebAccess enables uses of the HTTP and UI
+	// endpoints without a valid authentication token. This should be
+	// used only in tests what want a secure cluster with RPC
+	// auth but no auth in HTTP.
+	TestingInsecureWebAccess bool
 
 	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
 	// which a feature unique to the demo shell.
@@ -250,7 +252,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
-	cfg.EnableWebSessionAuthentication = !disableWebLogin
+	cfg.TestingInsecureWebAccess = disableWebLogin
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
 	}
@@ -865,10 +867,10 @@ func (cfg *Config) FilterGossipBootstrapAddresses(ctx context.Context) []util.Un
 	return filtered
 }
 
-// RequireWebSession indicates whether the server should require authentication
-// sessions when serving admin API requests.
-func (cfg *BaseConfig) RequireWebSession() bool {
-	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
+// InsecureWebAccess indicates whether the server should allow
+// access to the HTTP endpoints without a valid auth cookie.
+func (cfg *BaseConfig) InsecureWebAccess() bool {
+	return cfg.Insecure || cfg.TestingInsecureWebAccess
 }
 
 func (cfg *Config) readSQLEnvironmentVariables() {
