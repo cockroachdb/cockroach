@@ -5766,7 +5766,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
-	types.OidFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
+	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
