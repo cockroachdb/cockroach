@@ -213,7 +213,7 @@ func getSink(
 			})
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
-			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg))
+			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered))
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				// Placeholder id for canary sink
