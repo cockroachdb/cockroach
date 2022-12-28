@@ -240,6 +240,7 @@ type EventDescriptor struct {
 	valueCols []int // All column family columns.
 	udtCols   []int // Columns containing UDTs.
 	allCols   []int // Contains all the columns
+
 }
 
 // NewEventDescriptor returns EventDescriptor for specified table and family descriptors.

@@ -36,6 +36,7 @@ const credentialsParam = "CREDENTIALS"
 const GcpScheme = "gcpubsub"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
 const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
+const globalGCPEndpoint = "pubsub.googleapis.com:443"
 
 // TODO: make numOfWorkers configurable
 const numOfWorkers = 128
@@ -78,7 +79,7 @@ type gcpPubsubClient struct {
 	client     *pubsub.Client
 	ctx        context.Context
 	projectID  string
-	region     string
+	endpoint   string
 	topicNamer *TopicNamer
 	url        sinkURL
 
@@ -186,6 +187,7 @@ func MakePubsubSink(
 	u *url.URL,
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
+	unordered bool,
 ) (Sink, error) {
 
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
@@ -226,8 +228,17 @@ func MakePubsubSink(
 			return nil, errors.New("missing project name")
 		}
 		region := pubsubURL.consumeParam(regionParam)
+		var endpoint string
 		if region == "" {
-			return nil, errors.New("region query parameter not found")
+			if unordered {
+				endpoint = globalGCPEndpoint
+			} else {
+				return nil, errors.WithHintf(errors.New("region query parameter not found"),
+					"Using of gcpubsub without specifying a region requires the WITH %s option.",
+					changefeedbase.OptUnordered)
+			}
+		} else {
+			endpoint = gcpEndpointForRegion(region)
 		}
 		tn, err := MakeTopicNamer(targets, WithSingleName(pubsubTopicName))
 		if err != nil {
@@ -237,7 +248,7 @@ func MakePubsubSink(
 			topicNamer: tn,
 			ctx:        ctx,
 			projectID:  projectID,
-			region:     gcpEndpointForRegion(region),
+			endpoint:   endpoint,
 			url:        pubsubURL,
 		}
 		p.client = g
@@ -512,7 +523,7 @@ func (p *gcpPubsubClient) init() error {
 		p.ctx,
 		p.projectID,
 		creds,
-		option.WithEndpoint(p.region),
+		option.WithEndpoint(p.endpoint),
 	)
 
 	if err != nil {
