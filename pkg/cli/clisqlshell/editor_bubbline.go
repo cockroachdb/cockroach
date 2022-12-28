@@ -117,15 +117,9 @@ func (b *bubblineReader) setPrompt(prompt string) {
 }
 
 func (b *bubblineReader) getLine() (string, error) {
+	// bubbline's GetLine takes care of handling the newline from the input, so
+	// we don't need to check for one or add one if it's missing.
 	l, err := b.ins.GetLine()
-	if len(l) > 0 && l[len(l)-1] == '\n' {
-		// Strip the final newline.
-		l = l[:len(l)-1]
-	} else {
-		// There was no newline at the end of the input
-		// (e.g. Ctrl+C was entered). Force one.
-		fmt.Fprintln(b.wout)
-	}
 	if errors.Is(err, bubbline.ErrTerminated) {
 		// Bubbline returns this go error when it sees SIGTERM. Convert it
 		// back into a signal, so that the process exit code matches.
