@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -179,7 +180,7 @@ func TestStoreRebalancer(t *testing.T) {
 			ctx := context.Background()
 			s := tc.s
 
-			exchange := state.NewFixedDelayExhange(
+			exchange := gossip.NewFixedDelayExhange(
 				start,
 				time.Second,
 				time.Second*0, /* no state update delay */
@@ -288,7 +289,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			s.TransferLease(5, 3)
 			distributeQPS(s, tc.qpsCounts)
 
-			exchange := state.NewFixedDelayExhange(
+			exchange := gossip.NewFixedDelayExhange(
 				start,
 				time.Second,
 				time.Second*0, /* no state update delay */

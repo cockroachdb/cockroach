@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
@@ -136,7 +137,7 @@ func TestReplicateQueue(t *testing.T) {
 
 			results := make(map[int64]map[int]int)
 			// Initialize the store pool information.
-			exchange := state.NewFixedDelayExhange(
+			exchange := gossip.NewFixedDelayExhange(
 				start,
 				testSettings.StateExchangeInterval,
 				time.Second*0, /* no state update delay */

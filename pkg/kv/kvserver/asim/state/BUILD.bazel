@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "change.go",
         "config_loader.go",
-        "exchange.go",
         "helpers.go",
         "impl.go",
         "load.go",
@@ -44,7 +43,6 @@ go_test(
     srcs = [
         "change_test.go",
         "config_loader_test.go",
-        "exchange_test.go",
         "split_decider_test.go",
         "state_test.go",
     ],
