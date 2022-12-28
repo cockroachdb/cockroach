@@ -959,13 +959,12 @@ func newMVCCIterator(
 // In tombstones mode, if the most recent value is a deletion tombstone, the
 // result will be a non-nil roachpb.Value whose RawBytes field is nil.
 // Otherwise, a deletion tombstone results in a nil roachpb.Value. MVCC range
-// tombstones will be emitted as synthetic point tombstones, regardless of whether
-// there is an existing point key.
+// tombstones are emitted as synthetic point tombstones, even if there is no
+// existing point key at the position.
 //
 // NB: Synthetic tombstones generated for MVCC range tombstones may not be
-// visible to an MVCCScan if there is no existing point key at the key, since
-// MVCCScan only synthesizes them at the MVCC range tombstone's start key and
-// around existing keys. Callers must not rely on such semantics.
+// visible to an MVCCScan, since MVCCScan will only synthesize point tombstones
+// above existing point keys.
 //
 // In inconsistent mode, if an intent is encountered, it will be placed in the
 // dedicated return parameter. By contrast, in consistent mode, an intent will
@@ -3817,21 +3816,11 @@ type MVCCScanResult struct {
 // In tombstones mode, if the most recent value for a key is a deletion
 // tombstone, the scan result will contain a roachpb.KeyValue for that key whose
 // RawBytes field is nil. Otherwise, the key-value pair will be omitted from the
-// result entirely. For MVCC range tombstones, synthetic MVCC point tombstones
-// will be emitted at the start of the range tombstone and where they overlap a
-// point key.
-//
-// NB: Synthetic MVCC point tombstones emitted for MVCC range tombstones are
-// not stable, nor are they fully deterministic. For example, the start key will
-// be truncated by iterator bounds, so an MVCCScan over a given key span may see
-// a synthetic point tombstone at its start (if it overlaps an MVCC range
-// tombstone), but this will not be emitted if a broader span is used (a
-// different point tombstone will be emitted instead). Similarly, a CRDB range
-// split/merge will split/merge MVCC range tombstones, changing which point
-// tombstones are emitted. Furthermore, MVCCGet will synthesize an MVCC point
-// tombstone if it overlaps an MVCC range tombstone and there is no existing
-// point key there, while an MVCCScan will not emit these. Callers must take
-// care not to rely on such semantics for MVCC tombstones.
+// result entirely. MVCC range tombstones will be emitted as synthetic point
+// tombstones above existing point keys, but not below them and not if they
+// don't overlap any point keys at all. This is unlike MVCCGet, which will
+// always synthesize point tombstones if the key overlaps a range tombstone,
+// regardless of whether a point key exists below it.
 //
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
@@ -3921,8 +3910,7 @@ func MVCCScanAsTxn(
 // scan options specify an inconsistent scan, all "ignored" intents will be
 // returned. In consistent mode, intents are only ever returned as part of a
 // WriteIntentError. In Tombstones mode, MVCC range tombstones are emitted as
-// synthetic point tombstones at their start key and around overlapping point
-// keys.
+// synthetic point tombstones above existing point keys.
 func MVCCIterate(
 	ctx context.Context,
 	reader Reader,

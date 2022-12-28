@@ -402,39 +402,38 @@ However, callers may request tombstones to be emitted via the `Tombstones`
 option, e.g. for conflict checks and rangefeed value diffs. We do not want to
 burden the rest of the codebase with having to handle MVCC range tombstones
 explicitly, and therefore do not expose them directly. Instead, we synthesize
-MVCC point tombstones at the start of MVCC range tombstones and wherever they
-overlap MVCC point keys, via `pointSynthesizingIter`.
+MVCC point tombstones. A scan emits synthetic point tombstones above existing
+point keys, while a get emits synthetic point tombstones if a range tombstone
+overlaps the key, regardless of whether there is an existing point key below it.
 
 Consider this example:
 
 ```
 Time
-4  [---|----------)
-3          c3
+6  [---|----------)
+5          c5
+4      [----------)
+3
 2      [----------)
-1          c1  d1
+1              d1
    a   b   c   d  e    Key
 ```
 
-An `MVCCScan` with `Tombstones` across this span at timestamp >= 4 would emit
-synthetic MVCC point tombstones at `a@4`, `b@4`, `c@4`, and `d@4`.
-
-Note, however, that these synthetic point tombstones are not always stable,
-because the start key of MVCC range tombstones can change, e.g. due to iterator
-truncation, fragmentation, and CRDB range splits or merges. For example, an
-`MVCCScan` across `[bar-foo)` would emit a synthetic MVCC point tombstone at
-`bar@4`, because this is the truncated start bound of the range tombstone, but
-a scan across `[abc-def)` would not see `bar@4`, but instead see `abc@4`. The
-same would happen if the CRDB range was split or merged at the key `bar`.
+An `MVCCScan` with `Tombstones` across this span at timestamp >= 6 would emit
+synthetic MVCC point tombstones at `c@6` and `d@6`. However, a scan at timestamp
+3 would only emit a synthetic tombstone at `d@2`, because the range tombstone is
+below the point `c@5` and point tombstones are not synthesized below point keys.
+Similarly, a scan across `[a-b)` at any timestamp would not emit anything.
 
 Additionally, an `MVCCGet` will emit a synthetic point tombstone for the key
-even if it has no existing point keys: `Get(bar)` at timestamp >= 4 would return
-a tombstone `bar@4` even though there is no real point key at `bar`, as this
-might be required e.g. for conflict checks. These synthetic tombstones would
-similarly not be visible to an `MVCCScan`.
+even if it has no existing point key below it, as these might be required for
+conflict checks. For example, `Get(bar)` at timestamp >= 6 would return a
+tombstone `bar@6` even though there is no real point key at `bar`. Similarly, a
+`Get(c)` at timestamp 3 would return `c@2` even though the point key `c@5` is
+above it. These synthetic tombstones would not be visible to an `MVCCScan`.
 
-Callers must take care not to rely on these point tombstones being stable, or
-use an `MVCCIterator` that exposes MVCC range tombstones directly if needed.
+If callers need better visibility into range tombstones, they must use an
+`MVCCIterator` that exposes them directly.
 
 ### KV APIs
 
