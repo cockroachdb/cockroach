@@ -556,12 +556,26 @@ func DecodeDatum(
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.NewDInt(tree.DInt(i)), nil
-		case oid.T_oid:
+		case oid.T_oid,
+			oid.T_regoper,
+			oid.T_regproc,
+			oid.T_regrole,
+			oid.T_regclass,
+			oid.T_regtype,
+			oid.T_regconfig,
+			oid.T_regoperator,
+			oid.T_regnamespace,
+			oid.T_regprocedure,
+			oid.T_regdictionary:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "oid requires 4 bytes for binary format")
 			}
 			u := binary.BigEndian.Uint32(b)
-			return tree.NewDOid(oid.Oid(u)), nil
+			oidTyp := types.Oid
+			if t, ok := types.OidToType[id]; ok {
+				oidTyp = t
+			}
+			return tree.NewDOidWithType(oid.Oid(u), oidTyp), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")
