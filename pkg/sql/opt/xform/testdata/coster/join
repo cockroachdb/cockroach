@@ -162,13 +162,13 @@ inner-join (cross)
  ├── columns: k:1!null geom:2 k:6!null geom:7
  ├── flags: force inverted join (into right side)
  ├── immutable
- ├── stats: [rows=333333.3]
+ ├── stats: [rows=1000000]
  ├── cost: 1e+100
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
  ├── scan g [as=g1]
  │    ├── columns: g1.k:1!null g1.geom:2
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
  │    ├── cost: 1064.42
  │    ├── key: (1)
  │    └── fd: (1)-->(2)

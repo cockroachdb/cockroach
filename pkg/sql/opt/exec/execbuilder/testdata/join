@@ -758,7 +758,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b, n, sq)
-│ estimated row count: 116 (missing stats)
+│ estimated row count: 1 (missing stats)
 │ filter: ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
 │
 └── • hash join (left outer)
@@ -800,7 +800,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b, n, sq)
-│ estimated row count: 44 (missing stats)
+│ estimated row count: 4 (missing stats)
 │ filter: ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
 │
 └── • hash join (left outer)
@@ -838,26 +838,26 @@ vectorized: true
 ·
 • hash join (inner)
 │ columns: (a, b, n, sq)
-│ estimated row count: 6 (missing stats)
-│ equality: (b) = (sq)
+│ estimated row count: 3 (missing stats)
+│ equality: (sq) = (b)
 │
-├── • filter
-│   │ columns: (a, b)
-│   │ estimated row count: 113 (missing stats)
-│   │ filter: ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
-│   │
-│   └── • scan
-│         columns: (a, b)
-│         estimated row count: 1,000 (missing stats)
-│         table: pairs@pairs_pkey
-│         spans: FULL SCAN
+├── • scan
+│     columns: (n, sq)
+│     estimated row count: 4 (missing stats)
+│     table: square@square_pkey
+│     spans: /2-/6
+│     parallel
 │
-└── • scan
-      columns: (n, sq)
-      estimated row count: 4 (missing stats)
-      table: square@square_pkey
-      spans: /2-/6
-      parallel
+└── • filter
+    │ columns: (a, b)
+    │ estimated row count: 3 (missing stats)
+    │ filter: ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1,000 (missing stats)
+          table: pairs@pairs_pkey
+          spans: FULL SCAN
 
 
 statement ok

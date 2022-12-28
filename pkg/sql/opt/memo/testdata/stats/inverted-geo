@@ -293,7 +293,7 @@ SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)',
 select
  ├── columns: i:1(int) g:2(geometry)
  ├── immutable
- ├── stats: [rows=733.3333, distinct(1)=598.889, null(1)=18.3333, avgsize(1)=4, distinct(2)=7, null(2)=36.6667, avgsize(2)=4]
+ ├── stats: [rows=100, distinct(1)=97.5, null(1)=2.5, avgsize(1)=4, distinct(2)=7, null(2)=5, avgsize(2)=4]
  ├── scan t
  │    ├── columns: i:1(int) g:2(geometry)
  │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, avgsize(1)=4, distinct(2)=7, null(2)=100, avgsize(2)=4]
