@@ -46,6 +46,15 @@ func runQueryComparison(
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
 	defer cancel()
+
+	// A cluster context with a slightly longer timeout is used so cluster
+	// creation or cleanup commands should never time out and result in "context
+	// deadline exceeded" Github issues being created.
+	var clusterCancel context.CancelFunc
+	var clusterCtx context.Context
+	clusterCtx, clusterCancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-2*time.Minute)
+	defer clusterCancel()
+
 	done := ctx.Done()
 	shouldExit := func() bool {
 		select {
@@ -56,13 +65,13 @@ func runQueryComparison(
 		}
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(clusterCtx, t.Cockroach(), "./cockroach")
 
 	for i := 0; ; i++ {
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		if shouldExit() {
 			return
 		}
+		c.Start(clusterCtx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		runOneRoundQueryComparison(ctx, i, roundTimeout, t, c, qct)
 		// If this iteration was interrupted because the timeout of ctx has been
@@ -71,8 +80,8 @@ func runQueryComparison(
 		if shouldExit() {
 			return
 		}
-		c.Stop(ctx, t.L(), option.DefaultStopOpts())
-		c.Wipe(ctx)
+		c.Stop(clusterCtx, t.L(), option.DefaultStopOpts())
+		c.Wipe(clusterCtx)
 	}
 }
 
