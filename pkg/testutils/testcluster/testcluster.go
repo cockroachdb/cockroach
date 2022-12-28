@@ -191,15 +191,14 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			var ids []uint64
 			for _, sp := range sps {
 				trace := sp.GetFullRecording(tracingpb.RecordingVerbose)
-				rec := trace.Flatten()
-				for _, rs := range rec {
+				for _, rs := range trace.Flatten() {
 					// NB: it would be a sight easier to just include these in the output of
 					// the string formatted recording, but making a change there presumably requires
 					// lots of changes across various testdata in the codebase and the author is
 					// trying to be nimble.
 					ids = append(ids, rs.GoroutineID)
 				}
-				fmt.Fprintln(&buf, rec)
+				fmt.Fprintln(&buf, trace)
 				fmt.Fprintln(&buf)
 			}
 			sl := make([]byte, 5<<20 /* 5mb */)

@@ -6224,6 +6224,26 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_mozillazg_go_slugify",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/mozillazg/go-slugify",
+        sha256 = "06949c23c6eafacfab588c17df0302f1374a35ddcfb8c4fb6aa7efa916a2ca43",
+        strip_prefix = "github.com/mozillazg/go-slugify@v0.2.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mozillazg/go-slugify/com_github_mozillazg_go_slugify-v0.2.0.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_mozillazg_go_unidecode",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/mozillazg/go-unidecode",
+        sha256 = "6f8673fc37505ecac2f2506db75ac8841404a85bb587e04597f99778148c76fd",
+        strip_prefix = "github.com/mozillazg/go-unidecode@v0.2.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mozillazg/go-unidecode/com_github_mozillazg_go_unidecode-v0.2.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_mrunalp_fileutils",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mrunalp/fileutils",
