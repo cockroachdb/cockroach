@@ -160,6 +160,14 @@ func evalExport(
 		resumeKeyTS = args.ResumeKeyTS
 	}
 
+	maybeAnnotateExceedMaxSizeError := func(err error) error {
+		if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
+			return errors.WithHintf(err,
+				"consider increasing cluster setting %q", MaxExportOverageSetting)
+		}
+		return err
+	}
+
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
@@ -186,16 +194,26 @@ func evalExport(
 				StripTenantPrefix:  true,
 				StripValueChecksum: true,
 			}
-			summary, resume, fingerprint, err = storage.MVCCExportFingerprint(ctx, cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
-		} else {
-			summary, resume, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
-		}
-		if err != nil {
-			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
-				err = errors.WithHintf(err,
-					"consider increasing cluster setting %q", MaxExportOverageSetting)
+			var hasRangeKeys bool
+			summary, resume, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(ctx,
+				cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
+			if err != nil {
+				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
 			}
-			return result.Result{}, err
+
+			// If no range keys were encountered during fingerprinting then we zero
+			// out the underlying SST file as there is no use in sending an empty file
+			// part of the ExportResponse. This frees up the memory used by the empty
+			// SST file.
+			if !hasRangeKeys {
+				destFile = &storage.MemFile{}
+			}
+		} else {
+			summary, resume, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
+				opts, destFile)
+			if err != nil {
+				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
+			}
 		}
 		data := destFile.Data()
 
@@ -222,12 +240,26 @@ func evalExport(
 		} else {
 			span.EndKey = args.EndKey
 		}
-		exported := roachpb.ExportResponse_File{
-			Span:        span,
-			EndKeyTS:    resume.Timestamp,
-			Exported:    summary,
-			SST:         data,
-			Fingerprint: fingerprint,
+
+		var exported roachpb.ExportResponse_File
+		if args.ExportFingerprint {
+			// A fingerprinting ExportRequest does not need to return the
+			// BulkOpSummary or the exported Span. This is because we do not expect
+			// the sender of a fingerprint ExportRequest to use anything but the
+			// `Fingerprint` for point-keys and the SST file that contains the
+			// rangekeys we encountered during ExportRequest evaluation.
+			exported = roachpb.ExportResponse_File{
+				EndKeyTS:    resume.Timestamp,
+				SST:         data,
+				Fingerprint: fingerprint,
+			}
+		} else {
+			exported = roachpb.ExportResponse_File{
+				Span:     span,
+				EndKeyTS: resume.Timestamp,
+				Exported: summary,
+				SST:      data,
+			}
 		}
 		reply.Files = append(reply.Files, exported)
 		start = resume.Key
