@@ -1,0 +1,49 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "fetchpb",
+    srcs = ["index_fetch.go"],
+    embed = [":fetchpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/sem/catid",  # keep
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+    ],
+)
+
+proto_library(
+    name = "fetchpb_proto",
+    srcs = [
+        "index_fetch.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/sql/catalog/catenumpb:catenumpb_proto",
+        "//pkg/sql/types:types_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "fetchpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb",
+    proto = ":fetchpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/types",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+get_x_data(name = "get_x_data")

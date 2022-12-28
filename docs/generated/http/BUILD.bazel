@@ -21,6 +21,7 @@ genrule(
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/catalog/fetchpb:fetchpb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
         "//pkg/sql/execinfrapb:execinfrapb_proto",
         "//pkg/sql/inverted:inverted_proto",
