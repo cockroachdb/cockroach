@@ -312,6 +312,10 @@ message LocalOnlySessionData {
   // AllowOrdinalColumnReferences indicates whether the deprecated ordinal
   // column reference syntax (e.g., `SELECT @1 FROM t`) is allowed.
   bool allow_ordinal_column_references = 85;
+  // OptimizerUseImprovedDisjunctionStats, when true, indicates that the
+  // optimizer should use improved statistics calculations for disjunctive
+  // filters.
+  bool optimizer_use_improved_disjunction_stats = 86;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

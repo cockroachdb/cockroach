@@ -1301,7 +1301,7 @@ project
 
 # Sample testcase using exprgen.
 expr colstat=1 colstat=2
-(Select 
+(Select
   (FakeRel
     [
       (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
@@ -1310,15 +1310,15 @@ expr colstat=1 colstat=2
         {
           "columns": ["a"],
           "distinct_count": 100,
-          "null_count": 0, 
-          "row_count": 100, 
+          "null_count": 0,
+          "row_count": 100,
           "created_at": "2018-01-01 1:00:00.00000+00:00"
         },
         {
           "columns": ["b"],
           "distinct_count": 20,
-          "null_count": 5, 
-          "row_count": 100, 
+          "null_count": 5,
+          "row_count": 100,
           "created_at": "2018-01-01 1:00:00.00000+00:00"
         }
       ]`)
@@ -3762,6 +3762,27 @@ project
  └── select
       ├── columns: c0:1(int) c1:2(int)
       ├── stats: [rows=1.9]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── (c0:1 = 1) OR (c1:2 = 3) [type=bool, outer=(1,2)]
+
+# The row counts are slightly different when using legacy disjunction stats
+# calculation.
+opt set=optimizer_use_improved_disjunction_stats=false
+SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=2]
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── stats: [rows=2]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
