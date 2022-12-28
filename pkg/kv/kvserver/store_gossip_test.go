@@ -46,22 +46,22 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 		{
 			desc:           "delta less than abs: shouldn't gossip",
 			lastGossiped:   roachpb.StoreCapacity{QueriesPerSecond: 100, WritesPerSecond: 100, RangeCount: 100, LeaseCount: 100},
-			cached:         roachpb.StoreCapacity{QueriesPerSecond: 199, WritesPerSecond: 199, RangeCount: 109, LeaseCount: 109},
+			cached:         roachpb.StoreCapacity{QueriesPerSecond: 199, WritesPerSecond: 199, RangeCount: 104, LeaseCount: 104},
 			expectedReason: "",
 			expectedShould: false,
 		},
 		{
 			desc:           "should gossip on qps delta (>50%)",
 			lastGossiped:   roachpb.StoreCapacity{QueriesPerSecond: 100, WritesPerSecond: 100, RangeCount: 100, LeaseCount: 100},
-			cached:         roachpb.StoreCapacity{QueriesPerSecond: 200, WritesPerSecond: 199, RangeCount: 91, LeaseCount: 91},
+			cached:         roachpb.StoreCapacity{QueriesPerSecond: 200, WritesPerSecond: 199, RangeCount: 96, LeaseCount: 96},
 			expectedReason: "queries-per-second(100.0) change",
 			expectedShould: true,
 		},
 		{
 			desc:           "should gossip on all delta",
 			lastGossiped:   roachpb.StoreCapacity{QueriesPerSecond: 100, WritesPerSecond: 100, RangeCount: 10, LeaseCount: 10},
-			cached:         roachpb.StoreCapacity{QueriesPerSecond: 200, WritesPerSecond: 0, RangeCount: 20, LeaseCount: 0},
-			expectedReason: "queries-per-second(100.0) writes-per-second(-100.0) range-count(10.0) lease-count(-10.0) change",
+			cached:         roachpb.StoreCapacity{QueriesPerSecond: 200, WritesPerSecond: 0, RangeCount: 15, LeaseCount: 5},
+			expectedReason: "queries-per-second(100.0) writes-per-second(-100.0) range-count(5.0) lease-count(-5.0) change",
 			expectedShould: true,
 		},
 	}
