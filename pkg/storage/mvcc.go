@@ -6050,7 +6050,7 @@ func MVCCIsSpanEmpty(
 // fingerprinting scheme across all returned range keys.
 func MVCCExportFingerprint(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, MVCCKey, uint64, error) {
+) (roachpb.BulkOpSummary, MVCCKey, uint64, bool, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportFingerprint")
 	defer span.Finish()
 
@@ -6060,11 +6060,16 @@ func MVCCExportFingerprint(
 
 	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
 	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, err
+		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
 	}
 
 	fingerprint, err := fingerprintWriter.Finish()
-	return summary, resumeKey, fingerprint, err
+	if err != nil {
+		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
+	}
+
+	hasRangeKeys := fingerprintWriter.sstWriter.DataSize != 0
+	return summary, resumeKey, fingerprint, hasRangeKeys, err
 }
 
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
@@ -6087,9 +6092,9 @@ func MVCCExportToSST(
 		// If no records were added to the sstable, skip
 		// completing it and return an empty summary.
 		//
-		// We still propogate the resumeKey because our
+		// We still propagate the resumeKey because our
 		// iteration may have been halted because of resource
-		// limitiations before any keys were added to the
+		// limitations before any keys were added to the
 		// returned SST.
 		return roachpb.BulkOpSummary{}, resumeKey, nil
 	}

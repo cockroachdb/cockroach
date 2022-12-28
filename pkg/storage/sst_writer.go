@@ -26,7 +26,6 @@ import (
 // SSTWriter writes SSTables.
 type SSTWriter struct {
 	fw *sstable.Writer
-	f  io.Writer
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
@@ -101,7 +100,6 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw:                sstable.NewWriter(noopSyncCloser{f}, opts),
-		f:                 f,
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
 	}
 }
@@ -115,7 +113,6 @@ func MakeIngestionSSTWriter(
 	opts := MakeIngestionWriterOptions(ctx, cs)
 	return SSTWriter{
 		fw:                sstable.NewWriter(f, opts),
-		f:                 f,
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
 	}
 }
