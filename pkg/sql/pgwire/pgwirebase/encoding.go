@@ -556,12 +556,6 @@ func DecodeDatum(
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.NewDInt(tree.DInt(i)), nil
-		case oid.T_oid:
-			if len(b) < 4 {
-				return nil, pgerror.Newf(pgcode.Syntax, "oid requires 4 bytes for binary format")
-			}
-			u := binary.BigEndian.Uint32(b)
-			return tree.NewDOid(oid.Oid(u)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")
@@ -832,6 +826,17 @@ func DecodeDatum(
 			}
 			if typ.Family() == types.TupleFamily {
 				return decodeBinaryTuple(ctx, evalCtx, b)
+			}
+			if typ.Family() == types.OidFamily {
+				if len(b) < 4 {
+					return nil, pgerror.Newf(pgcode.Syntax, "oid requires 4 bytes for binary format")
+				}
+				u := binary.BigEndian.Uint32(b)
+				oidTyp := types.Oid
+				if t, ok := types.OidToType[id]; ok {
+					oidTyp = t
+				}
+				return tree.NewDOidWithType(oid.Oid(u), oidTyp), nil
 			}
 		}
 	default:
