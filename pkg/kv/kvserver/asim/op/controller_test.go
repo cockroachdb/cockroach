@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
@@ -290,7 +291,7 @@ func TestRelocateRangeOp(t *testing.T) {
 				}
 			}
 
-			exchange := state.NewFixedDelayExhange(
+			exchange := gossip.NewFixedDelayExhange(
 				start,
 				time.Second,
 				time.Second*0, /* no state update delay */
