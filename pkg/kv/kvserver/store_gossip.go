@@ -42,13 +42,13 @@ const (
 	//  last gossiped store capacity lease count which needs to be exceeded
 	//  before the store will gossip immediately without waiting for the periodic
 	//  gossip interval.
-	gossipWhenLeaseCountDeltaExceeds = 10
+	gossipWhenLeaseCountDeltaExceeds = 5
 
 	// gossipWhenRangeCountDeltaExceeds specifies the absolute change from the
 	// last gossiped store capacity range count which needs to be exceeded
 	// before the store will gossip immediately without waiting for the
 	// periodic gossip interval.
-	gossipWhenRangeCountDeltaExceeds = 10
+	gossipWhenRangeCountDeltaExceeds = 5
 
 	// gossipWhenLoadDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity load which needs to be exceeded before the store
