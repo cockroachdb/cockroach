@@ -61,11 +61,14 @@ type ClusterAdminClient interface {
 
 type Server struct {
 	stores               *kvserver.Stores
+	planStore            PlanStore
 	metadataQueryTimeout time.Duration
 	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
 
-func NewServer(stores *kvserver.Stores, knobs base.ModuleTestingKnobs) *Server {
+func NewServer(
+	stores *kvserver.Stores, planStore PlanStore, knobs base.ModuleTestingKnobs,
+) *Server {
 	// Server side timeouts are necessary in recovery collector since we do best
 	// effort operations where cluster info collection as an operation succeeds
 	// even if some parts of it time out.
@@ -79,6 +82,7 @@ func NewServer(stores *kvserver.Stores, knobs base.ModuleTestingKnobs) *Server {
 	}
 	return &Server{
 		stores:               stores,
+		planStore:            planStore,
 		metadataQueryTimeout: metadataQueryTimeout,
 		forwardReplicaFilter: forwardReplicaFilter,
 	}
