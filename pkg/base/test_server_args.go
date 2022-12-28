@@ -124,7 +124,7 @@ type TestServerArgs struct {
 
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
-	DisableWebSessionAuthentication bool
+	InsecureWebAccess bool
 
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool

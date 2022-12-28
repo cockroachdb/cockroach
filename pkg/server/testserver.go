@@ -108,8 +108,6 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	baseCfg.User = username.NodeUserName()
-	// Enable web session authentication.
-	baseCfg.EnableWebSessionAuthentication = true
 	return baseCfg
 }
 
@@ -230,9 +228,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
 	cfg.DisableTLSForHTTP = params.DisableTLSForHTTP
-	if params.DisableWebSessionAuthentication {
-		cfg.EnableWebSessionAuthentication = false
-	}
+	cfg.TestingInsecureWebAccess = params.InsecureWebAccess
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
 	}

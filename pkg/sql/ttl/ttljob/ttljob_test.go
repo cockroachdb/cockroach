@@ -98,8 +98,8 @@ func newRowLevelTTLTestJobTestHelper(
 	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
-			Knobs:                           baseTestingKnobs,
-			DisableWebSessionAuthentication: true,
+			Knobs:             baseTestingKnobs,
+			InsecureWebAccess: true,
 		},
 	})
 	th.testCluster = testCluster

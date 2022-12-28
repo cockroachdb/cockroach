@@ -52,10 +52,9 @@ export interface AdminUIState {
 }
 
 const emptyDataFromServer: DataFromServer = {
-  ExperimentalUseLogin: false,
+  Insecure: true,
   FeatureFlags: {},
   LoggedInUser: "",
-  LoginEnabled: false,
   NodeID: "",
   OIDCAutoLogin: false,
   OIDCButtonText: "",

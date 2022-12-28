@@ -107,10 +107,9 @@ func (s *httpServer) setupRoutes(
 
 	// Define the http.Handler for UI assets.
 	assetHandler := ui.Handler(ui.Config{
-		ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
-		LoginEnabled:         s.cfg.RequireWebSession(),
-		NodeID:               s.cfg.IDContainer,
-		OIDC:                 oidc,
+		Insecure: s.cfg.InsecureWebAccess(),
+		NodeID:   s.cfg.IDContainer,
+		OIDC:     oidc,
 		GetUser: func(ctx context.Context) *string {
 			if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 				return &u
@@ -130,7 +129,7 @@ func (s *httpServer) setupRoutes(
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
 	var authenticatedHandler = handleRequestsUnauthenticated
-	if s.cfg.RequireWebSession() {
+	if !s.cfg.InsecureWebAccess() {
 		authenticatedHandler = newAuthenticationMux(authnServer, authenticatedHandler)
 	}
 
@@ -166,7 +165,7 @@ func (s *httpServer) setupRoutes(
 
 	// Register debugging endpoints.
 	handleDebugAuthenticated := handleDebugUnauthenticated
-	if s.cfg.RequireWebSession() {
+	if !s.cfg.InsecureWebAccess() {
 		// Mandate both authentication and admin authorization.
 		handleDebugAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleDebugAuthenticated)
 		handleDebugAuthenticated = newAuthenticationMux(authnServer, handleDebugAuthenticated)

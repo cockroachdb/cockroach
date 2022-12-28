@@ -32,7 +32,7 @@ func TestTenantRangeQPSStat(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DisableWebSessionAuthentication: true,
+			InsecureWebAccess: true,
 			// Must disable test tenant because test below assumes that
 			// it is connecting to the host tenant.
 			DisableDefaultTestTenant: true,

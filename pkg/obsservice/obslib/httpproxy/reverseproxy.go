@@ -135,8 +135,7 @@ func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 	// configured in `obsservice` and not hardcoded into `obslib`. This
 	// gives lib users a chance to do whatever they want with the UI.
 	mux.Handle("/", ui.Handler(ui.Config{
-		ExperimentalUseLogin: false,
-		LoginEnabled:         false,
+		Insecure: true,
 		GetUser: func(ctx context.Context) *string {
 			u := "Observability Service"
 			return &u
