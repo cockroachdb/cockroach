@@ -440,9 +440,7 @@ func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS float64) {
 		if s.gossipOngoing.Get() {
 			return
 		}
-		// TODO(a-robinson): Use the provided values to avoid having to recalculate
-		// them in GossipStore.
-		s.asyncGossipStore(context.TODO(), reason, false /* useCached */)
+		s.asyncGossipStore(context.TODO(), reason, true /* useCached */)
 	}
 }
 
