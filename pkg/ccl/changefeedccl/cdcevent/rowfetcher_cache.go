@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -216,7 +217,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		}
 	}
 
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 
 	var relevantColumns descpb.ColumnIDs
 	if keyOnly {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -96,7 +97,7 @@ type KVBatchFetcher interface {
 
 type tableInfo struct {
 	// -- Fields initialized once --
-	spec descpb.IndexFetchSpec
+	spec fetchpb.IndexFetchSpec
 
 	// The set of indexes into spec.FetchedColumns that are required for columns
 	// in the value part.
@@ -249,7 +250,7 @@ type FetcherInitArgs struct {
 	// Alloc is used for buffered allocation of decoded datums.
 	Alloc      *tree.DatumAlloc
 	MemMonitor *mon.BytesMonitor
-	Spec       *descpb.IndexFetchSpec
+	Spec       *fetchpb.IndexFetchSpec
 	// TraceKV indicates whether or not session tracing is enabled.
 	TraceKV                    bool
 	ForceProductionKVBatchSize bool
@@ -263,7 +264,7 @@ type FetcherInitArgs struct {
 
 // Init sets up a Fetcher for a given table and index.
 func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
-	if args.Spec.Version != descpb.IndexFetchSpecVersionInitial {
+	if args.Spec.Version != fetchpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", args.Spec.Version)
 	}
 
@@ -731,7 +732,7 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ erro
 }
 
 func (rf *Fetcher) prettyKeyDatums(
-	cols []descpb.IndexFetchSpec_KeyColumn, vals []rowenc.EncDatum,
+	cols []fetchpb.IndexFetchSpec_KeyColumn, vals []rowenc.EncDatum,
 ) string {
 	var buf strings.Builder
 	for i, v := range vals {

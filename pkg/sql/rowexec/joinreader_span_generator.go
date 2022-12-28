@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -179,7 +180,7 @@ type defaultSpanGenerator struct {
 func (g *defaultSpanGenerator) init(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
-	fetchSpec *descpb.IndexFetchSpec,
+	fetchSpec *fetchpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
 	uniqueRows bool,
 	lookupCols []uint32,
@@ -380,7 +381,7 @@ var _ multiSpanGeneratorColInfo = &multiSpanGeneratorIndexVarColInfo{}
 func (g *multiSpanGenerator) init(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
-	fetchSpec *descpb.IndexFetchSpec,
+	fetchSpec *fetchpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
 	numInputCols int,
 	exprHelper *execinfrapb.ExprHelper,
@@ -766,7 +767,7 @@ type localityOptimizedSpanGenerator struct {
 func (g *localityOptimizedSpanGenerator) init(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
-	fetchSpec *descpb.IndexFetchSpec,
+	fetchSpec *fetchpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
 	numInputCols int,
 	localExprHelper *execinfrapb.ExprHelper,

@@ -16,6 +16,7 @@ go_library(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/inverted",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/rowenc",

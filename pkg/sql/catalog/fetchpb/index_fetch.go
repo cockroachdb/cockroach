@@ -8,13 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descpb
+package fetchpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
+
+// TODO(yuzefovich): consider moving this package somewhere close to rowenc
+// given that effectively using this package in roachpb is saying that rows and
+// column encoding is a shared concept between sql and KV. Furthermore, we could
+// probably make keyside and valueside not depend on sql/catalog and then pull
+// them out of the sql tree altogether.
 
 // IndexFetchSpecVersionInitial is the initial IndexFetchSpec version.
 const IndexFetchSpecVersionInitial = 1

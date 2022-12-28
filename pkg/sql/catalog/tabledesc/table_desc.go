@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -476,7 +477,7 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 }
 
 // FamilyDefaultColumns implements the TableDescriptor interface.
-func (desc *wrapper) FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn {
+func (desc *wrapper) FamilyDefaultColumns() []fetchpb.IndexFetchSpec_FamilyDefaultColumn {
 	return desc.getExistingOrNewColumnCache().familyDefaultColumns
 }
 
@@ -605,7 +606,7 @@ func (desc *wrapper) UniqueWithoutIndexColumns(
 // IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.
 func (desc *wrapper) IndexFetchSpecKeyAndSuffixColumns(
 	idx catalog.Index,
-) []descpb.IndexFetchSpec_KeyColumn {
+) []fetchpb.IndexFetchSpec_KeyColumn {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.keyAndSuffix
 	}

@@ -12,7 +12,6 @@ go_library(
         "constraint.go",
         "descriptor.go",
         "index.go",
-        "index_fetch.go",
         "join_type.go",
         "locking.go",
         "structured.go",
@@ -32,7 +31,6 @@ go_library(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
@@ -51,7 +49,6 @@ go_test(
 proto_library(
     name = "descpb_proto",
     srcs = [
-        "index_fetch.proto",
         "join_type.proto",
         "locking.proto",
         "structured.proto",

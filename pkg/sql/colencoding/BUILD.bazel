@@ -13,7 +13,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/roachpb",
         "//pkg/sql/catalog/catenumpb",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",

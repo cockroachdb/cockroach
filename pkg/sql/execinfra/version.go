@@ -83,11 +83,11 @@ Please add new entries at the top.
   - ProducerMessage no longer includes the typing information.
 
 - Version: 68 (MinAcceptedVersion: 68)
-  - ZigzagJoinerSpec now uses descpb.IndexFetchSpec instead of table and
+  - ZigzagJoinerSpec now uses fetchpb.IndexFetchSpec instead of table and
     index descriptors.
 
 - Version: 67 (MinAcceptedVersion: 67)
-  - InvertedJoinerSpec now uses descpb.IndexFetchSpec instead of table and
+  - InvertedJoinerSpec now uses fetchpb.IndexFetchSpec instead of table and
     index descriptors.
 
 - Version: 66 (MinAcceptedVersion: 66)
@@ -106,11 +106,11 @@ Please add new entries at the top.
     running v63, thus the MinAcceptedVersion is kept at 63.
 
 - Version: 63 (MinAcceptedVersion: 63):
- - Changed JoinReaderSpec to use a descpb.IndexFetchSpec and a list of family
+ - Changed JoinReaderSpec to use a fetchpb.IndexFetchSpec and a list of family
    IDs instead of table and index descriptors.
 
 - Version: 62 (MinAcceptedVersion: 62):
- - Changed TableReaderSpec to use a descpb.IndexFetchSpec instead of table and
+ - Changed TableReaderSpec to use a fetchpb.IndexFetchSpec instead of table and
    index descriptors.
 
 - Version: 61 (MinAcceptedVersion: 60)

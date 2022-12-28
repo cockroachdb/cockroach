@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
@@ -116,7 +117,7 @@ func TestSpanAssembler(t *testing.T) {
 									builder.Init(&evalCtx, codec, testTable, testTable.GetPrimaryIndex())
 									splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
 
-									var fetchSpec descpb.IndexFetchSpec
+									var fetchSpec fetchpb.IndexFetchSpec
 									if err := rowenc.InitIndexFetchSpec(
 										&fetchSpec, codec, testTable, testTable.GetPrimaryIndex(), nil, /* fetchedColumnIDs */
 									); err != nil {
