@@ -312,6 +312,11 @@ message LocalOnlySessionData {
   // AllowOrdinalColumnReferences indicates whether the deprecated ordinal
   // column reference syntax (e.g., `SELECT @1 FROM t`) is allowed.
   bool allow_ordinal_column_references = 85;
+  // OptimizerDisableSplitLimitedScanCostCheck disables the cost check in the
+  // exploration rules SplitLimitedScanIntoUnionScans and
+  // SplitLimitedSelectIntoUnionSelects when true. It defaults to true.
+  // TODO(mgartner): Remove this option in v23.2.
+  bool optimizer_disable_split_limited_scan_cost_check = 87;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
