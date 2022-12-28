@@ -191,7 +191,6 @@ func FingerprintRangekeys(
 ) (uint64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "storage.FingerprintRangekeys")
 	defer sp.Finish()
-	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 
 	if len(ssts) == 0 {
 		return 0, nil
