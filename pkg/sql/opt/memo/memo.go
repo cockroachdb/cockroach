@@ -155,6 +155,7 @@ type Memo struct {
 	testingOptimizerRandomSeed             int64
 	testingOptimizerCostPerturbation       float64
 	testingOptimizerDisableRuleProbability float64
+	useImprovedDisjunctionStats            bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -205,6 +206,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		testingOptimizerRandomSeed:             evalCtx.SessionData().TestingOptimizerRandomSeed,
 		testingOptimizerCostPerturbation:       evalCtx.SessionData().TestingOptimizerCostPerturbation,
 		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+		useImprovedDisjunctionStats:            evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -332,7 +334,8 @@ func (m *Memo) IsStale(
 		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize ||
 		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
 		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
-		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability {
+		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
+		m.useImprovedDisjunctionStats != evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats {
 		return true, nil
 	}
 
