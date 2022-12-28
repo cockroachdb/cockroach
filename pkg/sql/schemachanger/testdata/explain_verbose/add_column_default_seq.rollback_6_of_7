@@ -210,7 +210,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
             │     ColumnID: 2
             │     TableID: 106
             │
-            ├── • UpdateBackReferencesInSequences
+            ├── • UpdateTableBackReferencesInSequences
             │     BackReferencedColumnID: 2
             │     BackReferencedTableID: 106
             │     SequenceIDs:

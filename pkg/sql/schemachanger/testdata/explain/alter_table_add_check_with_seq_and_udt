@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │         └── 3 Mutation operations
  │              ├── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
- │              └── UpdateBackReferencesInSequences {"BackReferencedTableID":107}
+ │              └── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC

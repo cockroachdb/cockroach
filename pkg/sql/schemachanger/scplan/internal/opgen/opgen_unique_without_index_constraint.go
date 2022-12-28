@@ -42,11 +42,11 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateBackReferencesInSequences {
+				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateTableBackReferencesInSequences {
 					if this.Predicate == nil || this.Predicate.UsesSequenceIDs == nil || len(this.Predicate.UsesSequenceIDs) == 0 {
 						return nil
 					}
-					return &scop.UpdateBackReferencesInSequences{
+					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:           this.Predicate.UsesSequenceIDs,
 						BackReferencedTableID: this.TableID,
 					}
