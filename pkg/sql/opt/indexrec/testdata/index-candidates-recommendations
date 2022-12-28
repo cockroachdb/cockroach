@@ -231,10 +231,10 @@ index recommendations: 2
 Optimal Plan.
 project
  ├── columns: i:2
- ├── cost: 814.144374
+ ├── cost: 816.218448
  └── project
       ├── columns: k:1 i:2 f:3
-      ├── cost: 808.716967
+      ├── cost: 809.754004
       └── distinct-on
            ├── columns: k:1 i:2 f:3 rowid:5!null
            ├── grouping columns: rowid:5!null

@@ -271,6 +271,10 @@ message LocalOnlySessionData {
   // disable_hoist_projection_in_join_limitation disables the restrictions
   // placed on projection hoisting during query planning in the optimizer.
   bool disable_hoist_projection_in_join_limitation = 76;
+  // OptimizerUseImprovedDisjunctionStats, when true, indicates that the
+  // optimizer should use improved statistics calculations for disjunctive
+  // filters.
+  bool optimizer_use_improved_disjunction_stats = 86;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
