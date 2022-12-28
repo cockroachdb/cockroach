@@ -35,7 +35,6 @@ feature.restore.enabled	boolean	true	set to true to enable restore, false to dis
 feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true
 jobs.retention_time	duration	336h0m0s	the amount of time to retain records for completed jobs before
-kv.bulk_io_write.max_rate	byte size	1.0 TiB	the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
 kv.bulk_sst.max_allowed_overage	byte size	64 MiB	if positive, allowed size in excess of target size for SSTs from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
 kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
 kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information
