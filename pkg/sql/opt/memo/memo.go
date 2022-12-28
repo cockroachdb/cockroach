@@ -159,6 +159,7 @@ type Memo struct {
 	enforceHomeRegion                      bool
 	variableInequalityLookupJoinEnabled    bool
 	allowOrdinalColumnReferences           bool
+	useImprovedDisjunctionStats            bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -213,6 +214,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		enforceHomeRegion:                      evalCtx.SessionData().EnforceHomeRegion,
 		variableInequalityLookupJoinEnabled:    evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
 		allowOrdinalColumnReferences:           evalCtx.SessionData().AllowOrdinalColumnReferences,
+		useImprovedDisjunctionStats:            evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -350,7 +352,8 @@ func (m *Memo) IsStale(
 		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
 		m.enforceHomeRegion != evalCtx.SessionData().EnforceHomeRegion ||
 		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled ||
-		m.allowOrdinalColumnReferences != evalCtx.SessionData().AllowOrdinalColumnReferences {
+		m.allowOrdinalColumnReferences != evalCtx.SessionData().AllowOrdinalColumnReferences ||
+		m.useImprovedDisjunctionStats != evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats {
 		return true, nil
 	}
 
