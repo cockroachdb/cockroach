@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package state
+package gossip
 
 import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ import (
 // TestTickUpperBound asserts that finding the smallest end time a tick is
 // bounded by, given the current end time and the interval behaves correctly.
 func TestTickUpperBound(t *testing.T) {
-	start := TestingStartTime()
+	start := state.TestingStartTime()
 
 	// The cases that can occur are a combination of the remainder of (tick -
 	// end) / interval, and whether tick < end. The possible cases are outlined
@@ -81,7 +82,7 @@ func TestTickUpperBound(t *testing.T) {
 // Put inserts store descriptors at tick t. These store descriptors will become
 // visible to other stores at the same time.
 func TestFixedDelayExchange(t *testing.T) {
-	start := TestingStartTime()
+	start := state.TestingStartTime()
 	interval := time.Second * 10
 	delay := time.Second * 2
 
@@ -146,7 +147,7 @@ func TestFixedDelayExchange(t *testing.T) {
 			stateExchange := NewFixedDelayExhange(start, interval, delay)
 			// Put the store updates for each tick.
 			for _, tick := range tc.putOrder {
-				stateExchange.Put(OffsetTick(start, tick), makeStoreDescriptors(tc.puts[tick])...)
+				stateExchange.Put(state.OffsetTick(start, tick), makeStoreDescriptors(tc.puts[tick])...)
 			}
 			// Collect the results for the stores, here we expect each store to
 			// view a symmetrical map of state.
@@ -154,9 +155,9 @@ func TestFixedDelayExchange(t *testing.T) {
 			for tick, storeMap := range tc.expected {
 				results[tick] = make(map[int32]int64)
 				for store := range storeMap {
-					storeDetailMap := stateExchange.Get(OffsetTick(start, tick), roachpb.StoreID(store))
+					storeDetailMap := stateExchange.Get(state.OffsetTick(start, tick), roachpb.StoreID(store))
 					for store, storeDetail := range storeDetailMap {
-						results[tick][int32(store)] = ReverseOffsetTick(start, storeDetail.LastAvailable)
+						results[tick][int32(store)] = state.ReverseOffsetTick(start, storeDetail.LastAvailable)
 					}
 				}
 			}

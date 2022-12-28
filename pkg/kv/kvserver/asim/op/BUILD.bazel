@@ -31,6 +31,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
