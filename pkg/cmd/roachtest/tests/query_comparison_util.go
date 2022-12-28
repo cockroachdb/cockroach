@@ -40,10 +40,19 @@ func runQueryComparison(
 	ctx context.Context, t test.Test, c cluster.Cluster, qct *queryComparisonTest,
 ) {
 	roundTimeout := 10 * time.Minute
+
+	// A cluster context with a slightly longer timeout than the test timeout is
+	// used so cluster creation or cleanup commands should never time out and
+	// result in "context deadline exceeded" Github issues being created.
+	var clusterCancel context.CancelFunc
+	var clusterCtx context.Context
+	clusterCtx, clusterCancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-2*time.Minute)
+	defer clusterCancel()
+
 	// Run 10 minute iterations of query comparison in a loop for about the entire
 	// test, giving 5 minutes at the end to allow the test to shut down cleanly.
 	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
+	ctx, cancel = context.WithTimeout(clusterCtx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
 	defer cancel()
 	done := ctx.Done()
 	shouldExit := func() bool {
@@ -55,13 +64,13 @@ func runQueryComparison(
 		}
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(clusterCtx, t.Cockroach(), "./cockroach")
 
 	for i := 0; ; i++ {
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		if shouldExit() {
 			return
 		}
+		c.Start(clusterCtx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		runOneRoundQueryComparison(ctx, i, roundTimeout, t, c, qct)
 		// If this iteration was interrupted because the timeout of ctx has been
@@ -70,8 +79,8 @@ func runQueryComparison(
 		if shouldExit() {
 			return
 		}
-		c.Stop(ctx, t.L(), option.DefaultStopOpts())
-		c.Wipe(ctx)
+		c.Stop(clusterCtx, t.L(), option.DefaultStopOpts())
+		c.Wipe(clusterCtx)
 	}
 }
 
