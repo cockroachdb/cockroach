@@ -1001,9 +1001,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	)
 
-	// Recovery server, might need moving up if loq functionality to be
-	// merged into it.
-	recoveryServer := loqrecovery.NewRecoveryServer(stores, cfg.TestingKnobs.LOQRecovery)
+	recoveryServer, err := NewRecoveryServer(cfg, stores)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create loss of quorum recovery server")
+	}
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
@@ -1165,6 +1166,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.startMonitoringForwardClockJumps(workersCtx); err != nil {
 		return err
 	}
+
+	// Start loss of quorum recovery server early as it needs to patch
+	// engine data before any replica initialization happens.
+	_ = s.recoveryServer
 
 	// Connect the node as loopback handler for RPC requests to the
 	// local node.

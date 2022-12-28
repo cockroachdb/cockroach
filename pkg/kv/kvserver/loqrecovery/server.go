@@ -75,11 +75,14 @@ type ClusterAdminClient interface {
 
 type Server struct {
 	stores               *kvserver.Stores
+	storage              PlanStorage
 	metadataQueryTimeout time.Duration
 	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
 
-func NewRecoveryServer(stores *kvserver.Stores, knobs base.ModuleTestingKnobs) *Server {
+func NewRecoveryServer(
+	stores *kvserver.Stores, planStore PlanStorage, knobs base.ModuleTestingKnobs,
+) *Server {
 	metadataQueryTimeout := 1 * time.Minute
 	var forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 	if rk, ok := knobs.(*TestingKnobs); ok && rk.MetadataScanTimeout > 0 {
@@ -88,6 +91,7 @@ func NewRecoveryServer(stores *kvserver.Stores, knobs base.ModuleTestingKnobs) *
 	}
 	return &Server{
 		stores:               stores,
+		storage:              planStore,
 		metadataQueryTimeout: metadataQueryTimeout,
 		forwardReplicaFilter: forwardReplicaFilter,
 	}
