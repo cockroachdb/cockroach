@@ -739,6 +739,7 @@ message LeafTxnFinalState {
   // budget.
   bool refresh_invalid = 7;
   reserved 8;
+  repeated Span lock_spans = 9 [(gogoproto.nullable) = false];
 }
 
 // RangeClosedTimestampPolicy represents the policy used by the leaseholder of a

@@ -274,9 +274,8 @@ func (tp *txnPipeliner) SendLocked(
 	// request (think ResumeSpan); even if the check passes, we might end up over
 	// budget.
 	rejectOverBudget := rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV)
-	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
 	if rejectOverBudget {
-		if err := tp.maybeRejectOverBudget(ba, maxBytes); err != nil {
+		if err := tp.maybeRejectOverBudget(ba, TrackedWritesMaxSize.Get(&tp.st.SV)); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -299,7 +298,7 @@ func (tp *txnPipeliner) SendLocked(
 	// go over budget despite the earlier pre-emptive check, then we stay over
 	// budget. Further requests will be rejected if they attempt to take more
 	// locks.
-	tp.updateLockTracking(ctx, ba, br, pErr, maxBytes, !rejectOverBudget /* condenseLocksIfOverBudget */)
+	tp.updateLockTracking(ctx, ba, br, pErr, !rejectOverBudget /* condenseLocksIfOverBudget */)
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
@@ -601,44 +600,19 @@ func (tp *txnPipeliner) updateLockTracking(
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
-	maxBytes int64,
 	condenseLocksIfOverBudget bool,
 ) {
 	tp.updateLockTrackingInner(ctx, ba, br, pErr)
 
-	// Deal with compacting the lock spans.
-
-	// Compute how many bytes are left for locks after accounting for the
-	// in-flight writes.
-	locksBudget := maxBytes - tp.ifWrites.byteSize()
-	// If we're below budget, there's nothing more to do.
-	if tp.lockFootprint.bytesSize() <= locksBudget {
-		return
-	}
-
-	// We're over budget. If condenseLocksIfOverBudget is set, we condense the
-	// lock spans. If not set, we defer the work to a future locking request where
-	// we're going to try to save space without condensing and perhaps reject the
-	// txn if we fail (see the estimateSize() call).
-
+	// Deal with compacting the lock spans unless condenseLocksIfOverBudget is
+	// not set. In such a case we defer the work to a future locking request
+	// where we're going to try to save space without condensing and perhaps
+	// reject the txn if we fail (see the estimateSize() call).
 	if !condenseLocksIfOverBudget {
 		return
 	}
 
-	// After adding new writes to the lock footprint, check whether we need to
-	// condense the set to stay below memory limits.
-	alreadyCondensed := tp.lockFootprint.condensed
-	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, locksBudget)
-	if condensed && !alreadyCondensed {
-		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.Warningf(ctx,
-				"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
-					"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
-				ba.Txn, ba.Summary())
-		}
-		tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
-		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
-	}
+	tp.maybeCondenseLockFootprint(ctx, ba)
 }
 
 func (tp *txnPipeliner) updateLockTrackingInner(
@@ -734,6 +708,40 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 	}
 }
 
+// maybeCondenseLockFootprint checks whether the lock footprint combined with
+// the in-flight writes exceed the maximum size (as determined by the
+// TrackedWritesMaxSize cluster setting) and attempts to condense the lock
+// footprint if so.
+//
+// ba is optional and only used when logging a warning in case the budget is
+// exceeded.
+func (tp *txnPipeliner) maybeCondenseLockFootprint(ctx context.Context, ba *roachpb.BatchRequest) {
+	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
+	// Compute how many bytes are left for locks after accounting for the
+	// in-flight writes.
+	locksBudget := maxBytes - tp.ifWrites.byteSize()
+	// If we're below budget, there's nothing more to do.
+	if tp.lockFootprint.bytesSize() <= locksBudget {
+		return
+	}
+
+	alreadyCondensed := tp.lockFootprint.condensed
+	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, locksBudget)
+	if condensed && !alreadyCondensed {
+		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
+			var baDetails string
+			if ba != nil {
+				baDetails = fmt.Sprintf(" txn: %s ba: %s", ba.Txn, ba.Summary())
+			}
+			log.Warning(ctx,
+				"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
+					"is it a bulk operation? Intent cleanup will be slower. "+baDetails)
+		}
+		tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
+		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
+	}
+}
+
 func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {
 	tp.lockFootprint.insert(s)
 }
@@ -805,10 +813,18 @@ func (tp *txnPipeliner) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 }
 
 // populateLeafFinalState is part of the txnInterceptor interface.
-func (tp *txnPipeliner) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
+func (tp *txnPipeliner) populateLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
+	// Copy mutable state so access is safe for the caller.
+	lockSpans := tp.lockFootprint.asSlice()
+	tfs.LockSpans = make([]roachpb.Span, len(lockSpans))
+	copy(tfs.LockSpans, lockSpans)
+}
 
 // importLeafFinalState is part of the txnInterceptor interface.
-func (tp *txnPipeliner) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
+func (tp *txnPipeliner) importLeafFinalState(ctx context.Context, tfs *roachpb.LeafTxnFinalState) {
+	tp.lockFootprint.insert(tfs.LockSpans...)
+	tp.maybeCondenseLockFootprint(ctx, nil /* ba */)
+}
 
 // epochBumpedLocked implements the txnInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
