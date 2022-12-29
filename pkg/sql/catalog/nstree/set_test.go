@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -35,7 +35,7 @@ import (
 //	clear
 //	  Clears the tree.
 func TestSetDataDriven(t *testing.T) {
-	datadriven.Walk(t, testutils.TestDataPath(t, "set"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "set"), func(t *testing.T, path string) {
 		var tr Set
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return testSetDataDriven(t, d, &tr)

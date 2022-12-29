@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -74,7 +74,7 @@ func TestRegistry(t *testing.T) {
 	registryMap := make(map[string]*contention.Registry)
 	// registry is the current registry.
 	var registry *contention.Registry
-	datadriven.RunTest(t, testutils.TestDataPath(t, "contention_registry"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "contention_registry"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "use":
 			var registryKey string

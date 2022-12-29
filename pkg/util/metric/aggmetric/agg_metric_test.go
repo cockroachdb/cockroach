@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -90,7 +90,7 @@ func TestAggMetric(t *testing.T) {
 		f3.Update(2.5)
 		h2.RecordValue(10)
 		h3.RecordValue(90)
-		echotest.Require(t, writePrometheusMetrics(t), testutils.TestDataPath(t, "basic.txt"))
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "basic.txt"))
 	})
 
 	t.Run("destroy", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestAggMetric(t *testing.T) {
 		c2.Destroy()
 		f3.Destroy()
 		h3.Destroy()
-		echotest.Require(t, writePrometheusMetrics(t), testutils.TestDataPath(t, "destroy.txt"))
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "destroy.txt"))
 	})
 
 	t.Run("panic on already exists", func(t *testing.T) {
@@ -119,7 +119,7 @@ func TestAggMetric(t *testing.T) {
 		c2 = c.AddChild(tenant2.String())
 		f3 = f.AddChild(tenant3.String())
 		h3 = h.AddChild(tenant3.String())
-		echotest.Require(t, writePrometheusMetrics(t), testutils.TestDataPath(t, "add_after_destroy.txt"))
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "add_after_destroy.txt"))
 	})
 
 	t.Run("panic on label length mismatch", func(t *testing.T) {

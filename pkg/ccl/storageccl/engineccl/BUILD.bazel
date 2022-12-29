@@ -49,6 +49,7 @@ go_test(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/storageutils",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

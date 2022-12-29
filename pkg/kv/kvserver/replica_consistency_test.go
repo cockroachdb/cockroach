@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -234,5 +235,5 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "stats: %s\n", string(json))
 
-	echotest.Require(t, sb.String(), testutils.TestDataPath(t, "replica_consistency_sha512"))
+	echotest.Require(t, sb.String(), datapathutils.TestDataPath(t, "replica_consistency_sha512"))
 }

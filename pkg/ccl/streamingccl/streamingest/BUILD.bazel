@@ -122,6 +122,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

@@ -32,7 +32,7 @@ go_test(
     deps = [
         ":unconvert",
         "//pkg/build/bazel",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

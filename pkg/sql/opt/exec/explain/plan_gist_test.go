@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -117,8 +117,8 @@ func TestPlanGistBuilder(t *testing.T) {
 		}
 	}
 	// RFC: should I move this to opt_tester?
-	datadriven.RunTest(t, testutils.TestDataPath(t, "gists"), testGists)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "gists_tpce"), testGists)
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gists"), testGists)
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gists_tpce"), testGists)
 }
 
 func TestPlanGistHashEquivalency(t *testing.T) {

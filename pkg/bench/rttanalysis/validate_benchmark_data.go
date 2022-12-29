@@ -22,7 +22,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -258,7 +258,7 @@ func resultsToExpectations(t *testing.T, results []benchmarkResult) benchmarkExp
 }
 
 func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
-	f, err := os.Create(testutils.TestDataPath(t, expectationsFilename))
+	f, err := os.Create(datapathutils.TestDataPath(t, expectationsFilename))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, f.Close()) }()
 	w := csv.NewWriter(f)
@@ -272,7 +272,7 @@ func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
 }
 
 func readExpectationsFile(t testing.TB) benchmarkExpectations {
-	f, err := os.Open(testutils.TestDataPath(t, expectationsFilename))
+	f, err := os.Open(datapathutils.TestDataPath(t, expectationsFilename))
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 

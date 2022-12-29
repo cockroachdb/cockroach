@@ -66,6 +66,7 @@ go_test(
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",

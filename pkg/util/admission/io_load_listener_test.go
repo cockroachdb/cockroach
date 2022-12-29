@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
@@ -43,7 +43,7 @@ func TestIOLoadListener(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	datadriven.RunTest(t, testutils.TestDataPath(t, "io_load_listener"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -269,7 +269,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 			100, 10, 0.50)
 		buf.Printf("%s\n", res)
 	}
-	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(testutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
+	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
 }
 
 // TestBadIOLoadListenerStats tests that bad stats (non-monotonic cumulative

@@ -53,7 +53,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":metric"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/util/log",
         "@com_github_dustin_go_humanize//:go-humanize",

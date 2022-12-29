@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +46,7 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 	hlcRE, err := regexp.Compile(`"wallTime":"\d*"(,"logical":\d*)?`)
 	require.NoError(t, err)
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "bootstrap"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "bootstrap"), func(t *testing.T, path string) {
 		// initialize per-test state
 		// New database for each test file.
 		s, db, _ := serverutils.StartServer(t, createTestServerParams())

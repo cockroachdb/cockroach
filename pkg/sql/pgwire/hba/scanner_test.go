@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 )
@@ -42,7 +42,7 @@ func TestSpecialCharacters(t *testing.T) {
 }
 
 func TestScanner(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "scan"), func(t *testing.T, td *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "scan"), func(t *testing.T, td *datadriven.TestData) string {
 		switch td.Cmd {
 		case "token":
 			remaining, tok, trailingComma, err := nextToken(td.Input)

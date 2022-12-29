@@ -46,6 +46,7 @@ go_test(
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql/sqlutil",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

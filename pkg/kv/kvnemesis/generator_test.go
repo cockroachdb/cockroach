@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -350,5 +350,5 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 
 	fmt.Fprintf(&buf, "------------------\ntotal         %.3f", fracSingleRange+fracPoint+fracCrossRange)
 
-	echotest.Require(t, buf.String(), testutils.TestDataPath(t, t.Name()+".txt"))
+	echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, t.Name()+".txt"))
 }

@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -781,7 +781,7 @@ func testRandomSyntax(
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)
 
-	yBytes, err := os.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
+	yBytes, err := os.ReadFile(datapathutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}

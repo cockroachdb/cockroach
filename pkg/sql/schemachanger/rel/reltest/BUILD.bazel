@@ -15,6 +15,7 @@ go_library(
     deps = [
         "//pkg/sql/schemachanger/rel",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

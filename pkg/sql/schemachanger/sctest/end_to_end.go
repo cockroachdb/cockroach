@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -119,7 +119,7 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 	skip.UnderStress(t)
 	skip.UnderStressRace(t)
 	ctx := context.Background()
-	path := testutils.RewritableDataPath(t, relPath)
+	path := datapathutils.RewritableDataPath(t, relPath)
 	// Create a test cluster.
 	db, cleanup := newCluster(t, nil /* knobs */)
 	tdb := sqlutils.MakeSQLRunner(db)

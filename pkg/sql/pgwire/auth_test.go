@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -175,7 +176,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		httpScheme = "https://"
 	}
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)

@@ -64,7 +64,7 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",

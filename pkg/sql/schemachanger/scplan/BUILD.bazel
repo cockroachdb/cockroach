@@ -58,7 +58,7 @@ go_test(
         "//pkg/sql/schemachanger/scplan/internal/scstage",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/tree",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

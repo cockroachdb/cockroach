@@ -32,7 +32,7 @@ go_test(
         ":aggmetric",
         "//pkg/base",
         "//pkg/roachpb",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/util/leaktest",
         "//pkg/util/metric",

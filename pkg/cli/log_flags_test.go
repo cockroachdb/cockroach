@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -141,7 +141,7 @@ func TestSetupLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "logflags"), func(t *testing.T, td *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "logflags"), func(t *testing.T, td *datadriven.TestData) string {
 		args := strings.Split(td.Input, "\n")
 
 		initCLIDefaults()

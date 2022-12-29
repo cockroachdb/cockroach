@@ -54,7 +54,7 @@ go_test(
         "//pkg/sql/schemachanger/scplan/internal/opgen",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/types",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v3//:yaml_v3",

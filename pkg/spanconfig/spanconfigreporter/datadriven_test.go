@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -66,7 +66,7 @@ func TestDataDriven(t *testing.T) {
 	st := clustersettings.MakeTestingClusterSettings()
 	scKnobs := &spanconfig.TestingKnobs{}
 
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		cluster := newMockCluster(t, st, scKnobs)
 		reporter := spanconfigreporter.New(cluster, cluster, cluster, cluster, st, scKnobs)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
