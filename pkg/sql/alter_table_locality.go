@@ -233,7 +233,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 	// crdb_region column.
 	partColName := newLocality.RegionalByRowColumn
 
-	primaryIndexColIdxStart := 0
 	if n.tableDesc.IsLocalityRegionalByRow() {
 		as := n.tableDesc.LocalityConfig.GetRegionalByRow().As
 
@@ -243,21 +242,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		if defaultColumnSpecified || sameAsColumnSpecified {
 			return nil
 		}
-
-		// Otherwise, signal that we have to omit the implicit partitioning columns
-		// when modifying the primary key.
-		primaryIndexColIdxStart = int(n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns)
 	}
-
-	for _, idx := range n.tableDesc.AllIndexes() {
-		if idx.IsSharded() {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"cannot convert %s to REGIONAL BY ROW as the table contains hash sharded indexes",
-				tree.Name(n.tableDesc.GetName()),
-			)
-		}
-	}
+	// We have to omit the implicit partitioning columns when modifying the
+	// primary key.
+	primaryIndexColIdxStart := n.tableDesc.PrimaryIndex.ExplicitColumnStartIdx()
 
 	if newLocality.RegionalByRowColumn == tree.RegionalByRowRegionNotSpecifiedName {
 		partColName = tree.RegionalByRowRegionDefaultColName
@@ -435,13 +423,20 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	// being re-written to point to the correct PRIMARY KEY and also being
 	// implicitly partitioned. The AlterPrimaryKey will also set the relevant
 	// zone configurations on the newly re-created indexes and table itself.
+
+	alterPKNode := tree.AlterTableAlterPrimaryKey{
+		Name:    tree.Name(n.tableDesc.PrimaryIndex.Name),
+		Columns: cols,
+	}
+	if n.tableDesc.PrimaryIndex.IsSharded() {
+		alterPKNode.Sharded = &tree.ShardedIndexDef{
+			ShardBuckets: tree.NewDInt(tree.DInt(n.tableDesc.PrimaryIndex.Sharded.ShardBuckets)),
+		}
+	}
 	if err := params.p.AlterPrimaryKey(
 		params.ctx,
 		n.tableDesc,
-		tree.AlterTableAlterPrimaryKey{
-			Name:    tree.Name(n.tableDesc.PrimaryIndex.Name),
-			Columns: cols,
-		},
+		alterPKNode,
 		&alterPrimaryKeyLocalitySwap{
 			localityConfigSwap: descpb.PrimaryKeySwap_LocalityConfigSwap{
 				OldLocalityConfig:                 *n.tableDesc.LocalityConfig,
@@ -532,7 +527,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
 	case *catpb.LocalityConfig_RegionalByRow_:
-		explicitColStart := n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns
+		explicitColStart := n.tableDesc.PrimaryIndex.ExplicitColumnStartIdx()
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			return n.alterTableLocalityFromOrToRegionalByRow(
