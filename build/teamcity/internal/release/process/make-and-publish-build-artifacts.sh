@@ -15,7 +15,6 @@ release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
-  bucket="cockroach-builds"
   gcs_bucket="cockroach-builds-artifacts-prod"
   google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
@@ -24,7 +23,6 @@ if [[ -z "${DRY_RUN}" ]] ; then
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_PROD"
 else
-  bucket="cockroach-builds-test"
   gcs_bucket="cockroach-builds-artifacts-dryrun"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
@@ -40,7 +38,6 @@ cat << EOF
   build_name:      $build_name
   release_branch:  $release_branch
   is_custom_build: $is_custom_build
-  bucket:          $bucket
   gcs_bucket:      $gcs_bucket
   gcr_repository:  $gcr_repository
 
@@ -54,17 +51,17 @@ tc_start_block "Tag the release"
 git tag "${build_name}"
 tc_end_block "Tag the release"
 
-tc_start_block "Compile and publish S3 artifacts"
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
+tc_start_block "Compile and publish artifacts"
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
 bazel build --config ci //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release -bucket "$bucket" --gcs-bucket="$gcs_bucket"
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket"
 EOF
-tc_end_block "Compile and publish S3 artifacts"
+tc_end_block "Compile and publish artifacts"
 
 tc_start_block "Make and push multiarch docker images"
 configure_docker_creds
