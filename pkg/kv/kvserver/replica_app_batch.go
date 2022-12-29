@@ -604,9 +604,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	deltaStats.Subtract(prevStats)
 	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, deltaStats)
 
-	// Record the number of keys written to the replica.
-	b.r.loadStats.RecordWriteKeys(float64(b.ab.numMutations))
-
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
