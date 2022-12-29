@@ -22,8 +22,9 @@ import (
 type DemoCluster interface {
 	// ListDemoNodes produces a listing of servers on the specified
 	// writer. If justOne is specified, only the first node is listed.
+	// If verbose is specified, more URLs are printed.
 	// Listing is printed to 'w'. Errors/warnings are printed to 'ew'.
-	ListDemoNodes(w, ew io.Writer, justOne bool)
+	ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 
 	// AddNode creates a new node with the given locality string.
 	AddNode(ctx context.Context, localityString string) (newNodeID int32, err error)
