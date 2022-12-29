@@ -45,7 +45,8 @@ func NormalizeExpression(
 	// Even though we have a job exec context, we shouldn't muck with it.
 	// Make our own copy of the planner instead.
 	err = withPlanner(ctx, execCtx.ExecCfg(), execCtx.User(), schemaTS, execCtx.SessionData().SessionData,
-		func(ctx context.Context, execCtx sql.JobExecContext) error {
+		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			defer cleanup()
 			norm, withDiff, err = normalizeExpression(ctx, execCtx, descr, schemaTS, target, sc, splitFams)
 			return err
 		})
@@ -114,7 +115,8 @@ func SpansForExpression(
 
 	var plan sql.CDCExpressionPlan
 	if err := withPlanner(ctx, execCfg, user, schemaTS, sd,
-		func(ctx context.Context, execCtx sql.JobExecContext) error {
+		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			defer cleanup()
 			defer configSemaForCDC(execCtx.SemaCtx())()
 			norm := &NormalizedSelectClause{SelectClause: sc, desc: d}
 
@@ -160,7 +162,7 @@ func withPlanner(
 	user username.SQLUsername,
 	schemaTS hlc.Timestamp,
 	sd sessiondatapb.SessionData,
-	fn func(ctx context.Context, execCtx sql.JobExecContext) error,
+	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
 	return sql.DescsTxn(ctx, execCfg,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
@@ -174,12 +176,11 @@ func withPlanner(
 			planner, cleanup := sql.NewInternalPlanner(
 				"cdc-expr", txn,
 				user,
-				&sql.MemoryMetrics{},
+				&sql.MemoryMetrics{}, // TODO(yevgeniy): Use appropriate metrics.
 				execCfg,
 				sd,
 				sql.WithDescCollection(col),
 			)
-			defer cleanup()
-			return fn(ctx, planner.(sql.JobExecContext))
+			return fn(ctx, planner.(sql.JobExecContext), cleanup)
 		})
 }
