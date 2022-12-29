@@ -693,6 +693,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if bld.ContainsMutation {
 		planTop.flags.Set(planFlagContainsMutation)
 	}
+	if bld.ContainsNonDefaultKeyLocking {
+		planTop.flags.Set(planFlagContainsNonDefaultLocking)
+	}
 	if planTop.instrumentation.ShouldSaveMemo() {
 		planTop.mem = mem
 		planTop.catalog = opc.catalog
