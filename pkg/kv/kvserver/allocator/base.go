@@ -100,7 +100,7 @@ var QPSRebalanceThreshold = func() *settings.FloatSetting {
 }()
 
 // LoadBasedRebalanceInterval controls how frequently each store checks for
-// load-base lease/replica rebalancing opportunties.
+// load-base lease/replica rebalancing opportunities.
 var LoadBasedRebalanceInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing_interval",
