@@ -131,6 +131,7 @@ func buildStatementBundle(
 	planString string,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
+	queryErr, payloadErr, commErr error,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
@@ -144,6 +145,7 @@ func buildStatementBundle(
 	b.addExplainVec()
 	b.addTrace()
 	b.addEnv(ctx)
+	b.addErrors(queryErr, payloadErr, commErr)
 
 	buf, err := b.finalize()
 	if err != nil {
@@ -440,6 +442,17 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
 	}
+}
+
+func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
+	if queryErr == nil && payloadErr == nil && commErr == nil {
+		return
+	}
+	output := fmt.Sprintf(
+		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n",
+		queryErr, payloadErr, commErr,
+	)
+	b.z.AddFile("errors.txt", output)
 }
 
 // finalize generates the zipped bundle and returns it as a buffer.
