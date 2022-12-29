@@ -798,6 +798,11 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 	return &Placeholder{Idx: PlaceholderIdx(uval - 1)}, nil
 }
 
+// FormatWireText implements the Datum interface.
+func (d *Placeholder) FormatWireText(w *WireCtx, t *types.T) error {
+	return errors.AssertionFailedf("tried to evaluate placeholder on the wire")
+}
+
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(ctx *FmtCtx) {
 	if ctx.placeholderFormat != nil {

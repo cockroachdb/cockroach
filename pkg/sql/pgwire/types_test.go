@@ -36,7 +36,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
+
+// TestWriteTestDatumMatchesFormatWireText is required so long as writeTextDatum
+// has a separate implementation to tree.Datum.FormatWireText.
+func TestWriteTestDatumMatchesFormatWire(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defaultConv, defaultLoc := makeTestingConvCfg()
+
+	rng := rand.New(rand.NewSource(0))
+	for _, typ := range types.Scalar {
+		t.Run(typ.SQLString(), func(t *testing.T) {
+			for it := 0; it < 100; it++ {
+				d := randgen.RandDatum(rng, typ, false)
+				writeBuf := newWriteBuffer(nil /* bytecount */)
+				writeBuf.writeTextDatum(context.Background(), d, defaultConv, defaultLoc, typ)
+
+				var b bytes.Buffer
+				w := tree.NewWireCtx(&b, defaultConv, defaultLoc)
+				require.NoError(t, d.FormatWireText(w, typ))
+				// Remove the leading 4 bytes which contain the size when comparing.
+				if len(b.Bytes()) == 0 {
+					require.Empty(t, writeBuf.wrapped.Bytes()[4:])
+				} else {
+					require.Equal(t, b.Bytes(), writeBuf.wrapped.Bytes()[4:])
+				}
+			}
+		})
+	}
+}
 
 // The assertions in this test should also be caught by the integration tests on
 // various drivers.
@@ -80,7 +111,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 		return decoded.UTC()
 	}
 
-	if actual := parse(formatTs(ts, nil, nil)); !ts.Equal(actual) {
+	if actual := parse(tree.WireFormatTimestamp(ts, nil, nil)); !ts.Equal(actual) {
 		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
 	}
 
@@ -89,7 +120,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 	EST := time.FixedZone("America/New_York", 0)
 
 	for _, tz := range []*time.Location{time.UTC, CET, EST} {
-		if actual := parse(formatTs(ts, tz, nil)); !ts.Equal(actual) {
+		if actual := parse(tree.WireFormatTimestamp(ts, tz, nil)); !ts.Equal(actual) {
 			t.Fatalf("[%s]: timestamp did not roundtrip got [%s] expected [%s]", tz, actual, ts)
 		}
 	}

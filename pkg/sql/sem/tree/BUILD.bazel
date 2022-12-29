@@ -97,6 +97,7 @@ go_library(
         "tenant_settings.go",
         "testutils.go",
         "time.go",
+        "time_format.go",
         "truncate.go",
         "txn.go",
         "type_check.go",

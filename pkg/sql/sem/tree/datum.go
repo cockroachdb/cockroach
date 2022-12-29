@@ -166,12 +166,65 @@ type Datum interface {
 	// false. Used by Next().
 	Min(ctx CompareContext) (Datum, bool)
 
+	// FormatWireText writes the text to send the given message over pgwire
+	// into the WireCtx.Buf.
+	// It is analgous to the`typoutput` regproc in pg_catalog.pg_type.
+	// TODO(#sql-sessions): merge with pgwire.writeTextDatum implementation.
+	FormatWireText(w *WireCtx, t *types.T) error
+
 	// Size returns a lower bound on the total size of the receiver in bytes,
 	// including memory that is pointed at (even if shared between Datum
 	// instances) but excluding allocation overhead.
 	//
 	// It holds for every Datum d that d.Size().
 	Size() uintptr
+}
+
+// WireCtx contains necessary information to write to the wire.
+type WireCtx struct {
+	buf          *bytes.Buffer
+	exportFmtCtx *FmtCtx
+	simpleFmtCtx *FmtCtx
+	loc          *time.Location
+	scratch      [64]byte
+}
+
+// NewWireCtx creates a new wire context.
+func NewWireCtx(
+	buf *bytes.Buffer, dcc sessiondatapb.DataConversionConfig, loc *time.Location,
+) *WireCtx {
+	e := NewFmtCtx(FmtExport)
+	e.SetDataConversionConfig(dcc)
+	s := NewFmtCtx(FmtSimple)
+	e.SetDataConversionConfig(dcc)
+	return &WireCtx{
+		buf:          buf,
+		exportFmtCtx: e,
+		simpleFmtCtx: s,
+		loc:          loc,
+	}
+}
+
+func (w *WireCtx) exportFormatAndWrite(n NodeFormatter) error {
+	w.exportFmtCtx.FormatNode(n)
+	_, err := w.exportFmtCtx.Buffer.WriteTo(w.buf)
+	return err
+}
+
+func (w *WireCtx) simpleFormatAndWrite(n NodeFormatter) error {
+	w.simpleFmtCtx.FormatNode(n)
+	_, err := w.simpleFmtCtx.Buffer.WriteTo(w.buf)
+	return err
+}
+
+func (w *WireCtx) writeString(s string) error {
+	_, err := w.buf.WriteString(s)
+	return err
+}
+
+func (w *WireCtx) write(b []byte) error {
+	_, err := w.buf.Write(b)
+	return err
 }
 
 // Datums is a slice of Datum values.
@@ -513,6 +566,11 @@ func (d *DBool) Format(ctx *FmtCtx) {
 	ctx.WriteString(strconv.FormatBool(bool(*d)))
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DBool) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.buf.WriteByte(PgwireFormatBool(bool(*d)))
+}
+
 // Size implements the Datum interface.
 func (d *DBool) Size() uintptr {
 	return unsafe.Sizeof(*d)
@@ -659,6 +717,11 @@ func (d *DBitArray) Max(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DBitArray) AmbiguousFormat() bool { return false }
+
+// FormatWireText implements the Datum interface.
+func (d *DBitArray) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DBitArray) Format(ctx *FmtCtx) {
@@ -812,6 +875,13 @@ func (d *DInt) Min(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DInt) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DInt) FormatWireText(w *WireCtx, t *types.T) error {
+	s := strconv.AppendInt(w.scratch[4:4], int64(*d), 10)
+	_, err := w.buf.Write(s)
+	return err
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DInt) Format(ctx *FmtCtx) {
@@ -974,6 +1044,13 @@ func (d *DFloat) Min(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DFloat) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DFloat) FormatWireText(w *WireCtx, t *types.T) error {
+	s := PgwireFormatFloat(w.scratch[4:4], float64(*d), w.exportFmtCtx.dataConversionConfig, t)
+	_, err := w.buf.Write(s)
+	return err
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(ctx *FmtCtx) {
@@ -1150,6 +1227,11 @@ func (d *DDecimal) Min(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DDecimal) AmbiguousFormat() bool { return true }
 
+// FormatWireText implements the Datum interface.
+func (d *DDecimal) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
@@ -1308,6 +1390,11 @@ func (d *DString) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DString) AmbiguousFormat() bool { return true }
 
+// FormatWireText implements the Datum interface.
+func (d *DString) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.writeString(ResolveBlankPaddedChar(string(*d), t))
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
@@ -1387,6 +1474,11 @@ func NewDCollatedString(
 
 // AmbiguousFormat implements the Datum interface.
 func (*DCollatedString) AmbiguousFormat() bool { return false }
+
+// FormatWireText implements the Datum interface.
+func (d *DCollatedString) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.writeString(ResolveBlankPaddedChar(d.Contents, t))
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
@@ -1566,6 +1658,16 @@ func writeAsHexString(ctx *FmtCtx, b string) {
 	}
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DBytes) FormatWireText(w *WireCtx, t *types.T) error {
+	result := lex.EncodeByteArrayToRawBytes(
+		string(*d),
+		w.exportFmtCtx.dataConversionConfig.BytesEncodeFormat,
+		false, /* skipHexPrefix */
+	)
+	return w.writeString(result)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -1656,6 +1758,11 @@ func (d *DEncodedKey) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DEncodedKey) AmbiguousFormat() bool {
 	panic(errors.AssertionFailedf("not implemented"))
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DEncodedKey) FormatWireText(w *WireCtx, t *types.T) error {
+	return errors.AssertionFailedf("tried to format EncodedKey on the wire")
 }
 
 // Format implements the NodeFormatter interface.
@@ -1774,6 +1881,13 @@ func (*DUuid) Max(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DUuid) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DUuid) FormatWireText(w *WireCtx, t *types.T) error {
+	s := w.scratch[4 : 4+36]
+	d.StringBytes(s)
+	return w.write(s)
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {
@@ -1949,6 +2063,11 @@ func (*DIPAddr) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DIPAddr) AmbiguousFormat() bool {
 	return true
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DIPAddr) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
 }
 
 // Format implements the NodeFormatter interface.
@@ -2240,6 +2359,11 @@ func FormatDate(d pgdate.Date, ctx *FmtCtx) {
 	}
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DDate) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(ctx *FmtCtx) {
 	FormatDate(d.Date, ctx)
@@ -2355,6 +2479,12 @@ func (d *DTime) Min(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DTime) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DTime) FormatWireText(w *WireCtx, t *types.T) error {
+	s := WireFormatTime(timeofday.TimeOfDay(*d), w.scratch[4:4])
+	return w.write(s)
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
@@ -2531,6 +2661,12 @@ func (d *DTimeTZ) Min(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DTimeTZ) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DTimeTZ) FormatWireText(w *WireCtx, t *types.T) error {
+	s := WireFormatTimeTZ(d.TimeTZ, w.scratch[4:4])
+	return w.write(s)
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DTimeTZ) Format(ctx *FmtCtx) {
@@ -2831,6 +2967,12 @@ func FormatTimestamp(t time.Time) string {
 	return t.UTC().Format(timestampOutputFormat)
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DTimestamp) FormatWireText(w *WireCtx, t *types.T) error {
+	s := WireFormatTimestamp(d.Time, nil, w.scratch[4:4])
+	return w.write(s)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -3013,6 +3155,12 @@ func FormatTimestampTZ(t time.Time, buf *bytes.Buffer) {
 		buf.WriteByte(':')
 		buf.WriteString(fmt.Sprintf("%02d", secondOffset))
 	}
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DTimestampTZ) FormatWireText(w *WireCtx, t *types.T) error {
+	s := WireFormatTimestamp(d.Time, w.loc, w.scratch[4:4])
+	return w.write(s)
 }
 
 // Format implements the NodeFormatter interface.
@@ -3215,6 +3363,11 @@ func FormatDuration(d duration.Duration, ctx *FmtCtx) {
 	}
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DInterval) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(ctx *FmtCtx) {
 	FormatDuration(d.Duration, ctx)
@@ -3328,6 +3481,11 @@ func (d *DGeography) Min(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DGeography) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DGeography) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.writeString(d.EWKBHex())
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DGeography) Format(ctx *FmtCtx) {
@@ -3451,6 +3609,11 @@ func (d *DGeometry) Min(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DGeometry) AmbiguousFormat() bool { return true }
 
+// FormatWireText implements the Datum interface.
+func (d *DGeometry) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.writeString(d.EWKBHex())
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DGeometry) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -3572,6 +3735,11 @@ func (d *DBox2D) Min(ctx CompareContext) (Datum, bool) {
 
 // AmbiguousFormat implements the Datum interface.
 func (*DBox2D) AmbiguousFormat() bool { return true }
+
+// FormatWireText implements the Datum interface.
+func (d *DBox2D) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.writeString(d.Repr())
+}
 
 // Format implements the NodeFormatter interface.
 func (d *DBox2D) Format(ctx *FmtCtx) {
@@ -3804,6 +3972,11 @@ func (d *DJSON) Min(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DJSON) AmbiguousFormat() bool { return true }
 
+// FormatWireText implements the Datum interface.
+func (d *DJSON) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.writeString(d.JSON.String())
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
@@ -3827,6 +4000,11 @@ func (d *DJSON) Size() uintptr {
 // DTSQuery is the tsquery Datum.
 type DTSQuery struct {
 	tsearch.TSQuery
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DTSQuery) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
 }
 
 // Format implements the NodeFormatter interface.
@@ -3958,6 +4136,11 @@ func ParseDTSQuery(s string) (Datum, error) {
 // DTSVector is the tsvector Datum.
 type DTSVector struct {
 	tsearch.TSVector
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DTSVector) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
 }
 
 // Format implements the NodeFormatter interface.
@@ -4313,6 +4496,11 @@ func (d *DTuple) IsMin(ctx CompareContext) bool {
 // AmbiguousFormat implements the Datum interface.
 func (*DTuple) AmbiguousFormat() bool { return false }
 
+// FormatWireText implements the Datum interface.
+func (d *DTuple) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DTuple) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
@@ -4534,6 +4722,11 @@ func (dNull) Min(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (dNull) AmbiguousFormat() bool { return false }
 
+// FormatWireText implements the Datum interface.
+func (dNull) FormatWireText(w *WireCtx, t *types.T) error {
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (dNull) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
@@ -4730,6 +4923,11 @@ func (d *DArray) AmbiguousFormat() bool {
 	return !d.HasNonNulls
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DArray) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
 	if ctx.flags.HasAnyFlags(fmtPgwireFormat | FmtPGCatalog) {
@@ -4887,6 +5085,11 @@ func (d *DVoid) Min(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DVoid) AmbiguousFormat() bool { return true }
 
+// FormatWireText implements the Datum interface.
+func (d *DVoid) FormatWireText(w *WireCtx, t *types.T) error {
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DVoid) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
@@ -5003,6 +5206,11 @@ func MakeAllDEnumsInType(typ *types.T) []Datum {
 		}
 	}
 	return result
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DEnum) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
 }
 
 // Format implements the NodeFormatter interface.
@@ -5319,6 +5527,11 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 	return 0, nil
 }
 
+// FormatWireText implements the Datum interface.
+func (d *DOid) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.simpleFormatAndWrite(d)
+}
+
 // Format implements the Datum interface.
 func (d *DOid) Format(ctx *FmtCtx) {
 	if d.semanticType.Oid() == oid.T_oid || d.name == "" {
@@ -5507,6 +5720,11 @@ func (d *DOidWrapper) Min(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (d *DOidWrapper) AmbiguousFormat() bool {
 	return d.Wrapped.AmbiguousFormat()
+}
+
+// FormatWireText implements the Datum interface.
+func (d *DOidWrapper) FormatWireText(w *WireCtx, t *types.T) error {
+	return w.exportFormatAndWrite(d)
 }
 
 // Format implements the NodeFormatter interface.
