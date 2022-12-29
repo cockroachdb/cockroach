@@ -2618,6 +2618,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					if err != nil {
 						return false, err
 					}
+					if fnDesc.Dropped() || fnDesc.GetParentID() != dbContext.GetID() {
+						return false, nil
+					}
 
 					err = addPgProcUDFRow(h, scDesc, fnDesc, addRow)
 					if err != nil {
@@ -3323,6 +3326,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, err
 				}
 
+				if typDesc.Dropped() || typDesc.GetParentID() != db.GetID() {
+					return false, nil
+				}
 				// It's an entry for the implicit record type created on behalf of each
 				// table. We have special logic for this case.
 				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
