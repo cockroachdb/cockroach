@@ -407,9 +407,12 @@ func (ih *instrumentationHelper) Finish(
 			)
 			warnings = ob.GetWarnings()
 			bundle = buildStatementBundle(
-				ctx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
+				ctx, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan, ob.BuildString(), trace,
+				placeholders,
 			)
-			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest)
+			bundle.insert(
+				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
 		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
