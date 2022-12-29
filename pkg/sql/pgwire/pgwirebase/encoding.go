@@ -830,6 +830,9 @@ func DecodeDatum(
 			if typ.Family() == types.ArrayFamily {
 				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code)
 			}
+			if typ.Family() == types.TupleFamily {
+				return decodeBinaryTuple(ctx, evalCtx, b)
+			}
 		}
 	default:
 		return nil, errors.AssertionFailedf(

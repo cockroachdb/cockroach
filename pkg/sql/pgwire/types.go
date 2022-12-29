@@ -702,9 +702,14 @@ func writeBinaryDatumNotNull(
 		b.putInt32(int32(len(v.D)))
 		tupleTypes := t.TupleContents()
 		for i, elem := range v.D {
-			oid := tupleTypes[i].Oid()
-			b.putInt32(int32(oid))
-			b.writeBinaryDatum(ctx, elem, sessionLoc, tupleTypes[i])
+			// Untyped tuples don't know the types of the tuple contents, so fallback
+			// to using the datum's type.
+			elemTyp := elem.ResolvedType()
+			if i < len(tupleTypes) && tupleTypes[i].Family() != types.AnyFamily {
+				elemTyp = tupleTypes[i]
+			}
+			b.putInt32(int32(elemTyp.Oid()))
+			b.writeBinaryDatum(ctx, elem, sessionLoc, elemTyp)
 		}
 
 		lengthToWrite := b.Len() - (initialLen + 4)
