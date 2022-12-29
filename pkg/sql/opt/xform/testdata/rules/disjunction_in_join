@@ -2113,10 +2113,12 @@ project
  ├── immutable
  ├── project
  │    ├── columns: a1:1!null a2:2!null a3:3!null
- │    └── inner-join (lookup a)
+ │    └── inner-join (hash)
  │         ├── columns: a1:1!null a2:2!null a3:3!null b1:7!null
- │         ├── key columns: [7] = [1]
+ │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │         ├── fd: (1)==(7), (7)==(1)
+ │         ├── scan a
+ │         │    └── columns: a1:1!null a2:2!null a3:3!null
  │         ├── distinct-on
  │         │    ├── columns: b1:7
  │         │    ├── grouping columns: b1:7
@@ -2234,7 +2236,8 @@ project
  │         │                   │    └── b2:8
  │         │                   └── const-agg [as=b3:9, outer=(9)]
  │         │                        └── b3:9
- │         └── filters (true)
+ │         └── filters
+ │              └── a1:1 = b1:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  └── projections
       └── (a1:1 + a3:3) - a2:2 [as="?column?":22, outer=(1-3), immutable]
 
@@ -2246,130 +2249,126 @@ SELECT a1+a3-a2 FROM a WHERE (a1,a2) IN (SELECT b1,b2 FROM b WHERE
 project
  ├── columns: "?column?":23!null
  ├── immutable
- ├── project
+ ├── semi-join (hash)
  │    ├── columns: a1:1!null a2:2!null a3:3!null
- │    └── inner-join (lookup a)
- │         ├── columns: a1:1!null a2:2!null a3:3!null b1:7!null b2:8!null
- │         ├── key columns: [7 8] = [1 2]
- │         ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
- │         ├── distinct-on
- │         │    ├── columns: b1:7 b2:8
- │         │    ├── grouping columns: b1:7 b2:8
- │         │    ├── key: (7,8)
- │         │    └── project
- │         │         ├── columns: b1:7 b2:8 b3:9
- │         │         └── distinct-on
- │         │              ├── columns: b1:7 b2:8 b3:9 b.rowid:11!null
- │         │              ├── grouping columns: b.rowid:11!null
- │         │              ├── key: (11)
- │         │              ├── fd: (11)-->(7-9)
- │         │              ├── union-all
- │         │              │    ├── columns: b1:7 b2:8 b3:9 b.rowid:11!null
- │         │              │    ├── left columns: b1:24 b2:25 b3:26 b.rowid:28
- │         │              │    ├── right columns: b1:38 b2:39 b3:40 b.rowid:42
- │         │              │    ├── project
- │         │              │    │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
- │         │              │    │    ├── key: (28)
- │         │              │    │    ├── fd: (28)-->(24-26)
- │         │              │    │    └── inner-join (hash)
- │         │              │    │         ├── columns: b1:24 b2:25!null b3:26 b.rowid:28!null c2:32!null
- │         │              │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │              │    │         ├── key: (28)
- │         │              │    │         ├── fd: (28)-->(24-26), (25)==(32), (32)==(25)
- │         │              │    │         ├── scan b
- │         │              │    │         │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
- │         │              │    │         │    ├── key: (28)
- │         │              │    │         │    └── fd: (28)-->(24-26)
- │         │              │    │         ├── distinct-on
- │         │              │    │         │    ├── columns: c2:32
- │         │              │    │         │    ├── grouping columns: c2:32
- │         │              │    │         │    ├── key: (32)
- │         │              │    │         │    └── scan c
- │         │              │    │         │         └── columns: c2:32
- │         │              │    │         └── filters
- │         │              │    │              └── c2:32 = b2:25 [outer=(25,32), constraints=(/25: (/NULL - ]; /32: (/NULL - ]), fd=(25)==(32), (32)==(25)]
- │         │              │    └── project
- │         │              │         ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
- │         │              │         ├── key: (42)
- │         │              │         ├── fd: (42)-->(38-40)
- │         │              │         └── distinct-on
- │         │              │              ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
- │         │              │              ├── grouping columns: b.rowid:42!null
- │         │              │              ├── key: (42)
- │         │              │              ├── fd: (42)-->(38-40)
- │         │              │              ├── union-all
- │         │              │              │    ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
- │         │              │              │    ├── left columns: b1:192 b2:193 b3:194 b.rowid:196
- │         │              │              │    ├── right columns: b1:206 b2:207 b3:208 b.rowid:210
- │         │              │              │    ├── project
- │         │              │              │    │    ├── columns: b1:192 b2:193 b3:194 b.rowid:196!null
- │         │              │              │    │    ├── key: (196)
- │         │              │              │    │    ├── fd: (196)-->(192-194)
- │         │              │              │    │    └── inner-join (hash)
- │         │              │              │    │         ├── columns: b1:192 b2:193 b3:194!null b.rowid:196!null c2:200!null
- │         │              │              │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │              │              │    │         ├── key: (196)
- │         │              │              │    │         ├── fd: (196)-->(192-194), (194)==(200), (200)==(194)
- │         │              │              │    │         ├── scan b
- │         │              │              │    │         │    ├── columns: b1:192 b2:193 b3:194 b.rowid:196!null
- │         │              │              │    │         │    ├── key: (196)
- │         │              │              │    │         │    └── fd: (196)-->(192-194)
- │         │              │              │    │         ├── distinct-on
- │         │              │              │    │         │    ├── columns: c2:200
- │         │              │              │    │         │    ├── grouping columns: c2:200
- │         │              │              │    │         │    ├── key: (200)
- │         │              │              │    │         │    └── scan c
- │         │              │              │    │         │         └── columns: c2:200
- │         │              │              │    │         └── filters
- │         │              │              │    │              └── c2:200 = b3:194 [outer=(194,200), constraints=(/194: (/NULL - ]; /200: (/NULL - ]), fd=(194)==(200), (200)==(194)]
- │         │              │              │    └── project
- │         │              │              │         ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
- │         │              │              │         ├── key: (210)
- │         │              │              │         ├── fd: (210)-->(206-208)
- │         │              │              │         └── project
- │         │              │              │              ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
- │         │              │              │              ├── key: (210)
- │         │              │              │              ├── fd: (210)-->(206-208)
- │         │              │              │              └── inner-join (cross)
- │         │              │              │                   ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null c2:214
- │         │              │              │                   ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │              │              │                   ├── key: (210)
- │         │              │              │                   ├── fd: ()-->(214), (210)-->(206-208)
- │         │              │              │                   ├── scan b
- │         │              │              │                   │    ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
- │         │              │              │                   │    ├── key: (210)
- │         │              │              │                   │    └── fd: (210)-->(206-208)
- │         │              │              │                   ├── limit
- │         │              │              │                   │    ├── columns: c2:214
- │         │              │              │                   │    ├── cardinality: [0 - 1]
- │         │              │              │                   │    ├── key: ()
- │         │              │              │                   │    ├── fd: ()-->(214)
- │         │              │              │                   │    ├── select
- │         │              │              │                   │    │    ├── columns: c2:214
- │         │              │              │                   │    │    ├── fd: ()-->(214)
- │         │              │              │                   │    │    ├── limit hint: 1.00
- │         │              │              │                   │    │    ├── scan c
- │         │              │              │                   │    │    │    ├── columns: c2:214
- │         │              │              │                   │    │    │    └── limit hint: 100.00
- │         │              │              │                   │    │    └── filters
- │         │              │              │                   │    │         └── c2:214 IS NULL [outer=(214), constraints=(/214: [/NULL - /NULL]; tight), fd=()-->(214)]
- │         │              │              │                   │    └── 1
- │         │              │              │                   └── filters (true)
- │         │              │              └── aggregations
- │         │              │                   ├── const-agg [as=b1:38, outer=(38)]
- │         │              │                   │    └── b1:38
- │         │              │                   ├── const-agg [as=b2:39, outer=(39)]
- │         │              │                   │    └── b2:39
- │         │              │                   └── const-agg [as=b3:40, outer=(40)]
- │         │              │                        └── b3:40
- │         │              └── aggregations
- │         │                   ├── const-agg [as=b1:7, outer=(7)]
- │         │                   │    └── b1:7
- │         │                   ├── const-agg [as=b2:8, outer=(8)]
- │         │                   │    └── b2:8
- │         │                   └── const-agg [as=b3:9, outer=(9)]
- │         │                        └── b3:9
- │         └── filters (true)
+ │    ├── scan a
+ │    │    └── columns: a1:1!null a2:2!null a3:3!null
+ │    ├── project
+ │    │    ├── columns: b1:7 b2:8 b3:9
+ │    │    └── distinct-on
+ │    │         ├── columns: b1:7 b2:8 b3:9 b.rowid:11!null
+ │    │         ├── grouping columns: b.rowid:11!null
+ │    │         ├── key: (11)
+ │    │         ├── fd: (11)-->(7-9)
+ │    │         ├── union-all
+ │    │         │    ├── columns: b1:7 b2:8 b3:9 b.rowid:11!null
+ │    │         │    ├── left columns: b1:24 b2:25 b3:26 b.rowid:28
+ │    │         │    ├── right columns: b1:38 b2:39 b3:40 b.rowid:42
+ │    │         │    ├── project
+ │    │         │    │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
+ │    │         │    │    ├── key: (28)
+ │    │         │    │    ├── fd: (28)-->(24-26)
+ │    │         │    │    └── inner-join (hash)
+ │    │         │    │         ├── columns: b1:24 b2:25!null b3:26 b.rowid:28!null c2:32!null
+ │    │         │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         │    │         ├── key: (28)
+ │    │         │    │         ├── fd: (28)-->(24-26), (25)==(32), (32)==(25)
+ │    │         │    │         ├── scan b
+ │    │         │    │         │    ├── columns: b1:24 b2:25 b3:26 b.rowid:28!null
+ │    │         │    │         │    ├── key: (28)
+ │    │         │    │         │    └── fd: (28)-->(24-26)
+ │    │         │    │         ├── distinct-on
+ │    │         │    │         │    ├── columns: c2:32
+ │    │         │    │         │    ├── grouping columns: c2:32
+ │    │         │    │         │    ├── key: (32)
+ │    │         │    │         │    └── scan c
+ │    │         │    │         │         └── columns: c2:32
+ │    │         │    │         └── filters
+ │    │         │    │              └── c2:32 = b2:25 [outer=(25,32), constraints=(/25: (/NULL - ]; /32: (/NULL - ]), fd=(25)==(32), (32)==(25)]
+ │    │         │    └── project
+ │    │         │         ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
+ │    │         │         ├── key: (42)
+ │    │         │         ├── fd: (42)-->(38-40)
+ │    │         │         └── distinct-on
+ │    │         │              ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
+ │    │         │              ├── grouping columns: b.rowid:42!null
+ │    │         │              ├── key: (42)
+ │    │         │              ├── fd: (42)-->(38-40)
+ │    │         │              ├── union-all
+ │    │         │              │    ├── columns: b1:38 b2:39 b3:40 b.rowid:42!null
+ │    │         │              │    ├── left columns: b1:192 b2:193 b3:194 b.rowid:196
+ │    │         │              │    ├── right columns: b1:206 b2:207 b3:208 b.rowid:210
+ │    │         │              │    ├── project
+ │    │         │              │    │    ├── columns: b1:192 b2:193 b3:194 b.rowid:196!null
+ │    │         │              │    │    ├── key: (196)
+ │    │         │              │    │    ├── fd: (196)-->(192-194)
+ │    │         │              │    │    └── inner-join (hash)
+ │    │         │              │    │         ├── columns: b1:192 b2:193 b3:194!null b.rowid:196!null c2:200!null
+ │    │         │              │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         │              │    │         ├── key: (196)
+ │    │         │              │    │         ├── fd: (196)-->(192-194), (194)==(200), (200)==(194)
+ │    │         │              │    │         ├── scan b
+ │    │         │              │    │         │    ├── columns: b1:192 b2:193 b3:194 b.rowid:196!null
+ │    │         │              │    │         │    ├── key: (196)
+ │    │         │              │    │         │    └── fd: (196)-->(192-194)
+ │    │         │              │    │         ├── distinct-on
+ │    │         │              │    │         │    ├── columns: c2:200
+ │    │         │              │    │         │    ├── grouping columns: c2:200
+ │    │         │              │    │         │    ├── key: (200)
+ │    │         │              │    │         │    └── scan c
+ │    │         │              │    │         │         └── columns: c2:200
+ │    │         │              │    │         └── filters
+ │    │         │              │    │              └── c2:200 = b3:194 [outer=(194,200), constraints=(/194: (/NULL - ]; /200: (/NULL - ]), fd=(194)==(200), (200)==(194)]
+ │    │         │              │    └── project
+ │    │         │              │         ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
+ │    │         │              │         ├── key: (210)
+ │    │         │              │         ├── fd: (210)-->(206-208)
+ │    │         │              │         └── project
+ │    │         │              │              ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
+ │    │         │              │              ├── key: (210)
+ │    │         │              │              ├── fd: (210)-->(206-208)
+ │    │         │              │              └── inner-join (cross)
+ │    │         │              │                   ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null c2:214
+ │    │         │              │                   ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │         │              │                   ├── key: (210)
+ │    │         │              │                   ├── fd: ()-->(214), (210)-->(206-208)
+ │    │         │              │                   ├── scan b
+ │    │         │              │                   │    ├── columns: b1:206 b2:207 b3:208 b.rowid:210!null
+ │    │         │              │                   │    ├── key: (210)
+ │    │         │              │                   │    └── fd: (210)-->(206-208)
+ │    │         │              │                   ├── limit
+ │    │         │              │                   │    ├── columns: c2:214
+ │    │         │              │                   │    ├── cardinality: [0 - 1]
+ │    │         │              │                   │    ├── key: ()
+ │    │         │              │                   │    ├── fd: ()-->(214)
+ │    │         │              │                   │    ├── select
+ │    │         │              │                   │    │    ├── columns: c2:214
+ │    │         │              │                   │    │    ├── fd: ()-->(214)
+ │    │         │              │                   │    │    ├── limit hint: 1.00
+ │    │         │              │                   │    │    ├── scan c
+ │    │         │              │                   │    │    │    ├── columns: c2:214
+ │    │         │              │                   │    │    │    └── limit hint: 100.00
+ │    │         │              │                   │    │    └── filters
+ │    │         │              │                   │    │         └── c2:214 IS NULL [outer=(214), constraints=(/214: [/NULL - /NULL]; tight), fd=()-->(214)]
+ │    │         │              │                   │    └── 1
+ │    │         │              │                   └── filters (true)
+ │    │         │              └── aggregations
+ │    │         │                   ├── const-agg [as=b1:38, outer=(38)]
+ │    │         │                   │    └── b1:38
+ │    │         │                   ├── const-agg [as=b2:39, outer=(39)]
+ │    │         │                   │    └── b2:39
+ │    │         │                   └── const-agg [as=b3:40, outer=(40)]
+ │    │         │                        └── b3:40
+ │    │         └── aggregations
+ │    │              ├── const-agg [as=b1:7, outer=(7)]
+ │    │              │    └── b1:7
+ │    │              ├── const-agg [as=b2:8, outer=(8)]
+ │    │              │    └── b2:8
+ │    │              └── const-agg [as=b3:9, outer=(9)]
+ │    │                   └── b3:9
+ │    └── filters
+ │         ├── b1:7 = a1:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │         └── b2:8 = a2:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  └── projections
       └── (a1:1 + a3:3) - a2:2 [as="?column?":23, outer=(1-3), immutable]
 

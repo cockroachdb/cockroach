@@ -1750,7 +1750,7 @@ left-join (cross)
  │    └── stats: [rows=1000]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10]
+ │    ├── stats: [rows=1000]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1823,7 +1823,7 @@ semi-join (cross)
  │    └── stats: [rows=1000]
  ├── scan classrequest
  │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
- │    └── stats: [rows=1000, distinct(8)=100, null(8)=10]
+ │    └── stats: [rows=1000]
  └── filters
       └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = 5) [type=bool, outer=(1,7,8)]
 
