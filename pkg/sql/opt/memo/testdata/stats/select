@@ -3738,7 +3738,7 @@ ALTER TABLE t00 INJECT STATISTICS '[
 ----
 
 # Expect estimate of 10 rows.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 IS NOT NULL) OR (1 < ALL (c0, c0))
 ----
 select
@@ -3753,15 +3753,15 @@ select
       └── (c0:1 IS NOT NULL) OR (NOT (1 >= ANY (c0:1, c0:1))) [type=bool, outer=(1)]
 
 # ORed predicate selectivity should be approximately additive.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3)
 ----
 project
  ├── columns: c0:1(int)
- ├── stats: [rows=2]
+ ├── stats: [rows=1.9]
  └── select
       ├── columns: c0:1(int) c1:2(int)
-      ├── stats: [rows=2]
+      ├── stats: [rows=1.9]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
@@ -3774,7 +3774,7 @@ project
 
 # The row counts are slightly different when using legacy disjunction stats
 # calculation.
-opt set=optimizer_use_improved_disjunction_stats=false
+opt
 SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3)
 ----
 project
@@ -3795,17 +3795,17 @@ project
 
 # ORed predicate selectivity when ANDed with a predicate which selects all rows
 # should not change.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 BETWEEN 1 AND 10) AND (c0 = 1 OR c1 = 3)
 ----
 project
  ├── columns: c0:1(int!null)
- ├── stats: [rows=2]
+ ├── stats: [rows=1.9]
  └── select
       ├── columns: c0:1(int!null) c1:2(int)
-      ├── stats: [rows=2, distinct(1)=2, null(1)=0]
-      │   histogram(1)=  0  0  1.8 0.2
-      │                <--- 0 ----- 10
+      ├── stats: [rows=1.9, distinct(1)=1.9, null(1)=0]
+      │   histogram(1)=  0  0  1.71 0.19
+      │                <--- 0 ------ 10
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
@@ -3818,16 +3818,16 @@ project
            └── (c0:1 = 1) OR (c1:2 = 3) [type=bool, outer=(1,2)]
 
 # Extra zero-cardinality terms should not reduce estimated row count.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3) OR
                          (c0 = -1) OR (c1 = -1)
 ----
 project
  ├── columns: c0:1(int)
- ├── stats: [rows=2]
+ ├── stats: [rows=1.9]
  └── select
       ├── columns: c0:1(int) c1:2(int)
-      ├── stats: [rows=2]
+      ├── stats: [rows=1.9]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
@@ -3839,7 +3839,7 @@ project
            └── (((c0:1 = 1) OR (c1:2 = 3)) OR (c0:1 = -1)) OR (c1:2 = -1) [type=bool, outer=(1,2)]
 
 # Selectivity should not exceed 1.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 between 0 and 10) OR (c1 between 0 and 10)
 ----
 project
@@ -3859,16 +3859,16 @@ project
            └── ((c0:1 >= 0) AND (c0:1 <= 10)) OR ((c1:2 >= 0) AND (c1:2 <= 10)) [type=bool, outer=(1,2)]
 
 # Selectivity of ORed terms on multiple different columns is roughly additive.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE
 (c0 = 1) OR (c1 = 1) OR (c2 = 1) OR (c3 = 1) OR (c4 = 1) OR (c5 = 1)
 ----
 project
  ├── columns: c0:1(int)
- ├── stats: [rows=6]
+ ├── stats: [rows=4.68559]
  └── select
       ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
-      ├── stats: [rows=6]
+      ├── stats: [rows=4.68559]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(4)=10, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0]
@@ -3888,18 +3888,18 @@ project
            └── (((((c0:1 = 1) OR (c1:2 = 1)) OR (c2:3 = 1)) OR (c3:4 = 1)) OR (c4:5 = 1)) OR (c5:6 = 1) [type=bool, outer=(1-6)]
 
 # Expected row count 0.19
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 = 1 AND (c1 = 1 OR c2 = 1))
 ----
 project
  ├── columns: c0:1(int!null)
- ├── stats: [rows=0.2]
+ ├── stats: [rows=0.19]
  ├── fd: ()-->(1)
  └── select
       ├── columns: c0:1(int!null) c1:2(int) c2:3(int)
-      ├── stats: [rows=0.2, distinct(1)=0.2, null(1)=0]
-      │   histogram(1)=  0 0.2
-      │                <--- 1
+      ├── stats: [rows=0.19, distinct(1)=0.19, null(1)=0]
+      │   histogram(1)=  0 0.19
+      │                <--- 1 -
       ├── fd: ()-->(1)
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int) c2:3(int)
@@ -3918,7 +3918,7 @@ project
 # query, but the optimizer is currently unable to handle more complex
 # predicates and ends up using the default 1/3 selectivity.
 # TODO(msirek): More work is needed for nested ANDs and ORs.
-opt
+opt set=optimizer_use_improved_disjunction_stats=true
 SELECT c0 FROM t00 WHERE (c0 = 1 AND (c1 = 1 OR c2 = 1)) OR
                          (c3 = 2 AND (c4 = 2 OR c5 = 2))
 ----
