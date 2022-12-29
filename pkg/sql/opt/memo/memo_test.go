@@ -331,9 +331,9 @@ func TestMemoIsStale(t *testing.T) {
 	notStale()
 
 	// Stale optimizer_use_improve_disjunction_stats.
-	evalCtx.SessionData().AllowOrdinalColumnReferences = true
+	evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats = true
 	stale()
-	evalCtx.SessionData().AllowOrdinalColumnReferences = false
+	evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats = false
 	notStale()
 
 	// Stale data sources and schema. Create new catalog so that data sources are
