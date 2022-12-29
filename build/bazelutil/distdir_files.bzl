@@ -635,6 +635,8 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mostynb/go-grpc-compression/com_github_mostynb_go_grpc_compression-v1.1.12.zip": "a260a65018fbde39f8b3b996bbb1b6f76f1ea5db26f8892842b249ba7cd5f318",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/moul/http2curl/com_github_moul_http2curl-v1.0.0.zip": "3600be3621038727f856bf7403d3ef0ffcc2a6729716bab67b592dcd19b3fee2",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mozilla/tls-observatory/com_github_mozilla_tls_observatory-v0.0.0-20190404164649-a3c1b6cfecfd.zip": "0798e35f31fdea023c3ded1e0d217295d932ed47f628c7e7c08f54e03da98ca8",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mozillazg/go-slugify/com_github_mozillazg_go_slugify-v0.2.0.zip": "06949c23c6eafacfab588c17df0302f1374a35ddcfb8c4fb6aa7efa916a2ca43",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mozillazg/go-unidecode/com_github_mozillazg_go_unidecode-v0.2.0.zip": "6f8673fc37505ecac2f2506db75ac8841404a85bb587e04597f99778148c76fd",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mrunalp/fileutils/com_github_mrunalp_fileutils-v0.5.0.zip": "202a6e33b519ddcbece708c3779845114bb7324d4c9ff9899f7c4f80f1e7b1bf",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mschoch/smat/com_github_mschoch_smat-v0.0.0-20160514031455-90eadee771ae.zip": "488e193897c7d8e3b3758cbeb8a5bc1b58b9619f3f14288a2ea9e0baa5ed9b3e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/munnerz/goautoneg/com_github_munnerz_goautoneg-v0.0.0-20191010083416-a7dc8b61c822.zip": "3d7ce17916779890be02ea6b3dd6345c3c30c1df502ad9d8b5b9b310e636afd9",
