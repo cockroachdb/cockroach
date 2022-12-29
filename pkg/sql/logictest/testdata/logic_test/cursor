@@ -643,3 +643,11 @@ DECLARE foo CURSOR WITH HOLD FOR SELECT 1
 # ROLLBACK is fine, since it renders the cursor unusable anyway.
 statement ok
 ROLLBACK
+
+# Regression test for using a SQL cursor that buffers a notice.
+# See https://github.com/cockroachdb/cockroach/issues/94344
+statement ok
+BEGIN;
+declare a cursor for select * from crdb_internal.gossip_network;
+FETCH 1 FROM a;
+COMMIT
