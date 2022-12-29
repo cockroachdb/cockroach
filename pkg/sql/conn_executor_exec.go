@@ -513,6 +513,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ast,
 				sql,
 				res,
+				retPayload,
 				retErr,
 			)
 		}()
