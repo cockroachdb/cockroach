@@ -17,7 +17,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/sql",
         "//pkg/sql/parser",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util",

@@ -27,7 +27,7 @@ go_test(
     embed = [":githubpost"],
     deps = [
         "//pkg/cmd/internal/issues",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

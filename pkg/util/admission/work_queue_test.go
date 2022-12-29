@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -181,7 +181,7 @@ func TestWorkQueueBasic(t *testing.T) {
 	var st *cluster.Settings
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "work_queue"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -501,7 +501,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "store_work_queue"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

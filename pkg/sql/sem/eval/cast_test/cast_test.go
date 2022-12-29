@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -200,7 +200,7 @@ func loadCasesToSkip(t *testing.T, skipFile string) map[testCase]int {
 }
 
 func csvForEach(t *testing.T, csvFile string, each func(lineno int, line []string)) {
-	csvPath := testutils.TestDataPath(t, csvFile)
+	csvPath := datapathutils.TestDataPath(t, csvFile)
 	f, err := os.Open(csvPath)
 	if err != nil {
 		t.Fatal(err)

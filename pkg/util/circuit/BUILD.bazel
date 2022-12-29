@@ -26,6 +26,7 @@ go_test(
     embed = [":circuit"],
     deps = [
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

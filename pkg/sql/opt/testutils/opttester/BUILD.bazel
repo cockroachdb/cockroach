@@ -46,7 +46,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/stats",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
@@ -73,7 +73,7 @@ go_test(
         ":opttester",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/testcat",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

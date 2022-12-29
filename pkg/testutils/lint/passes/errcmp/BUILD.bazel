@@ -24,7 +24,7 @@ go_test(
     deps = [
         ":errcmp",
         "//pkg/build/bazel",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "@com_github_cockroachdb_errors//:errors",  # keep
         "@org_golang_x_tools//go/analysis/analysistest",

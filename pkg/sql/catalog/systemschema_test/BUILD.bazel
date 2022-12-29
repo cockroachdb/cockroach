@@ -19,7 +19,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/schematelemetry",
         "//pkg/sql/tests",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",

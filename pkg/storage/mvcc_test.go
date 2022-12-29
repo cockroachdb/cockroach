@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
@@ -6902,6 +6903,6 @@ func TestMVCCLookupRangeKeyValue(t *testing.T) {
 			}
 		}
 	}
-	path := testutils.TestDataPath(t, t.Name())
+	path := datapathutils.TestDataPath(t, t.Name())
 	echotest.Require(t, buf.String(), path)
 }

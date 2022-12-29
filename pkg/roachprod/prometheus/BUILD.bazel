@@ -24,7 +24,7 @@ go_test(
     embed = [":prometheus"],
     deps = [
         "//pkg/roachprod/install",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "@com_github_stretchr_testify//require",
     ],

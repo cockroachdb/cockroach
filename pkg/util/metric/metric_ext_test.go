@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
@@ -32,5 +32,5 @@ func TestHistogramPrometheus(t *testing.T) {
 	h.RecordValue(10)
 	act, err := json.MarshalIndent(*h.ToPrometheusMetric().Histogram, "", "  ")
 	require.NoError(t, err)
-	echotest.Require(t, string(act), testutils.TestDataPath(t, "histogram.txt"))
+	echotest.Require(t, string(act), datapathutils.TestDataPath(t, "histogram.txt"))
 }
