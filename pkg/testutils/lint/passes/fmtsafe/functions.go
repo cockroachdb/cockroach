@@ -32,8 +32,14 @@ var requireConstMsg = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/sql.optPlanningCtx).log": true,
 }
 
-// requireConstFmt records functions for which the string arg
-// before the final ellipsis must be a constant string.
+/*
+requireConstFmt records functions for which the string arg
+before the final ellipsis must be a constant string.
+
+Definitions surrounded in parentheses are functions attached to a struct.
+For functions defined in the main package, a *second* entry is required
+in the form (main.yourStruct).yourFuncF
+*/
 var requireConstFmt = map[string]bool{
 	// Logging things.
 	"log.Printf":           true,
@@ -84,6 +90,17 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Warningf": true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Errorf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Fatalf":   true,
+
+	// Both of these signatures need to be included for the linter to not flag
+	// roachtest testImpl.addFailure since it is in the main package
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).addFailure": true,
+	"(*main.testImpl).addFailure": true,
+
+	"(*main.testImpl).Fatalf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).Fatalf": true,
+
+	"(*main.testImpl).Errorf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).Errorf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Debugf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Infof":    true,

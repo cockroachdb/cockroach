@@ -30,7 +30,11 @@ var (
   aliases:
     cockroachdb/rfc-prs: other
   triage_column_id: 0
-  label: T-testeng`
+cockroachdb/test-eng:
+  label: T-testeng
+  triage_column_id: 14041337
+cockroachdb/dev-inf:
+  triage_column_id: 10210759`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
@@ -58,7 +62,7 @@ func TestShouldPost(t *testing.T) {
 		envTcBuildBranch  string
 		expected          bool
 	}{
-		/* Cases 1 - 4 verify that issues are not posted if any of on the relevant criteria checks fail */
+		/* Cases 1 - 4 verify that issues are not posted if any of the relevant criteria checks fail */
 		// disable
 		{true, 1, "token", "master", false},
 		// nodeCount
@@ -103,10 +107,11 @@ func TestCreatePostRequest(t *testing.T) {
 		clusterCreationFailed bool
 		loadTeamsFailed       bool
 		localSSD              bool
+		category              issueCategory
 		expectedPost          bool
 		expectedParams        map[string]string
 	}{
-		{true, false, false, false, true,
+		{true, false, false, false, otherErr, true,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -116,7 +121,7 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "false",
 			}),
 		},
-		{true, false, false, true, true,
+		{true, false, false, true, clusterCreationErr, true,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -129,7 +134,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// Assert that release-blocker label exists when !nonReleaseBlocker
 		// Also ensure that in the event of a failed cluster creation,
 		// nil `vmOptions` and `clusterImpl` are not dereferenced
-		{false, true, false, false, true,
+		{false, true, false, false, sshErr, true,
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
@@ -137,7 +142,7 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, false, nil},
+		{true, false, true, false, otherErr, false, nil},
 	}
 
 	reg, _ := makeTestRegistry(spec.GCE, "", "", false)
@@ -146,7 +151,7 @@ func TestCreatePostRequest(t *testing.T) {
 		clusterSpec := reg.MakeClusterSpec(1)
 
 		testSpec := &registry.TestSpec{
-			Name:              "githubPost",
+			Name:              "github_test",
 			Owner:             OwnerUnitTest,
 			Cluster:           clusterSpec,
 			NonReleaseBlocker: c.nonReleaseBlocker,
@@ -184,9 +189,9 @@ func TestCreatePostRequest(t *testing.T) {
 
 		if c.loadTeamsFailed {
 			// Assert that if TEAMS.yaml cannot be loaded then function panics.
-			assert.Panics(t, func() { github.createPostRequest(ti, "message") })
+			assert.Panics(t, func() { github.createPostRequest(ti, c.category, "message") })
 		} else {
-			req := github.createPostRequest(ti, "message")
+			req := github.createPostRequest(ti, c.category, "message")
 
 			if c.expectedParams != nil {
 				require.Equal(t, c.expectedParams, req.ExtraParams)
@@ -197,7 +202,29 @@ func TestCreatePostRequest(t *testing.T) {
 			if !c.nonReleaseBlocker {
 				require.True(t, contains(req.ExtraLabels, nil, "release-blocker"))
 			}
-			require.Contains(t, req.ExtraLabels, "T-testeng")
+
+			expectedTeam := "@cockroachdb/unowned"
+			expectedName := "github_test"
+			expectedLabel := ""
+			expectedMessagePrefix := ""
+
+			if c.category == clusterCreationErr {
+				expectedTeam = "@cockroachdb/dev-inf"
+				expectedName = "cluster_creation"
+				expectedMessagePrefix = "test github_test was skipped due to "
+			} else if c.category == sshErr {
+				expectedTeam = "@cockroachdb/test-eng"
+				expectedName = "ssh_problem"
+				expectedLabel = "T-testeng"
+				expectedMessagePrefix = "test github_test failed due to "
+			}
+
+			require.Contains(t, req.MentionOnCreate, expectedTeam)
+			require.Equal(t, expectedName, req.TestName)
+			require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
+			if expectedLabel != "" {
+				require.Contains(t, req.ExtraLabels, expectedLabel)
+			}
 		}
 	}
 }

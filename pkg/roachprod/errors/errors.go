@@ -33,6 +33,10 @@ const (
 	unclassifiedExitCode = 1
 )
 
+// ErrSSH255 is a reference error used to mark an SSH error with an exit
+// code of 255. This could be indicative of an SSH flake.
+var ErrSSH255 = errors.New("SSH error occurred with exit code 255")
+
 // Cmd wraps errors that result from a command run against the cluster.
 type Cmd struct {
 	Err error
@@ -114,14 +118,24 @@ func ClassifyCmdError(err error) Error {
 		return nil
 	}
 
-	if exitErr, ok := asExitError(err); ok {
-		if exitErr.ExitCode() == 255 {
-			return SSH{err}
+	if exitCode, ok := GetExitCode(err); ok {
+		if exitCode == 255 {
+			return SSH{errors.Mark(err, ErrSSH255)}
 		}
 		return Cmd{err}
 	}
 
 	return Unclassified{err}
+}
+
+// GetExitCode returns an exit code, true if the error is an instance
+// of an ExitError, or -1, false otherwise
+func GetExitCode(err error) (int, bool) {
+	if exitErr, ok := asExitError(err); ok {
+		return exitErr.ExitCode(), true
+	}
+
+	return -1, false
 }
 
 // Extract the ExitError from err's error tree or (nil, false) if none exists.
@@ -141,40 +155,3 @@ func AsError(err error) (Error, bool) {
 	}
 	return nil, false
 }
-
-// SelectPriorityError selects an error from the list in this priority order:
-//
-// - the Error with the highest exit code
-// - one of the `error`s
-// - nil
-func SelectPriorityError(errors []error) error {
-	var result Error
-	for _, err := range errors {
-		if err == nil {
-			continue
-		}
-
-		rpErr, _ := AsError(err)
-		if result == nil {
-			result = rpErr
-			continue
-		}
-
-		if rpErr.ExitCode() > result.ExitCode() {
-			result = rpErr
-		}
-	}
-
-	if result != nil {
-		return result
-	}
-
-	for _, err := range errors {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-var _ = SelectPriorityError

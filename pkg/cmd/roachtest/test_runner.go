@@ -50,8 +50,13 @@ import (
 )
 
 var (
-	errTestsFailed               = fmt.Errorf("some tests failed")
-	errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+	errTestsFailed = fmt.Errorf("some tests failed")
+
+	// reference error used by main.go at the end of a run of tests
+	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+
+	// reference error used when cluster creation fails for a test
+	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 )
 
 // testRunner runs tests.
@@ -309,7 +314,7 @@ func (r *testRunner) Run(
 
 	if r.numClusterErrs > 0 {
 		shout(ctx, l, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
-		return errClusterProvisioningFailed
+		return errSomeClusterProvisioningFailed
 	}
 
 	if len(r.status.fail) > 0 {
@@ -571,27 +576,29 @@ func (r *testRunner) runWorker(
 			wStatus.SetStatus("creating cluster")
 			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
+				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
 			}
 		}
-		// Prepare the test's logger.
-		logPath := ""
-		var artifactsDir string
-		var artifactsSpec string
-		if artifactsRootDir != "" {
-			escapedTestName := teamCityNameEscape(testToRun.spec.Name)
-			runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
-
-			artifactsDir = filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
-			logPath = filepath.Join(artifactsDir, "test.log")
-
-			// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
-			// for this test exactly as they are laid out on disk (when the time
-			// comes).
-			artifactsSpec = fmt.Sprintf("%s/%s/** => %s/%s", filepath.Join(literalArtifactsDir, escapedTestName), runSuffix, escapedTestName, runSuffix)
+		// Prepare the test's logger. Always set this up with real files, using a
+		// temp dir if necessary. This simplifies testing.
+		if artifactsRootDir == "" {
+			artifactsRootDir, _ = os.MkdirTemp("", "roachtest-logger")
 		}
+
+		escapedTestName := teamCityNameEscape(testToRun.spec.Name)
+		runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
+
+		artifactsDir := filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
+		logPath := filepath.Join(artifactsDir, "test.log")
+
+		// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
+		// for this test exactly as they are laid out on disk (when the time
+		// comes).
+		artifactsSpec := fmt.Sprintf("%s/%s/** => %s/%s", filepath.Join(literalArtifactsDir, escapedTestName), runSuffix, escapedTestName, runSuffix)
+
 		testL, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			return err
@@ -617,24 +624,13 @@ func (r *testRunner) runWorker(
 			// N.B. cluster creation must have failed...
 			// We don't want to prematurely abort the test suite since it's likely a transient issue.
 			// Instead, let's report an infrastructure issue, mark the test as failed and continue with the next test.
-			// Note, we fake the test name so that all cluster creation errors are posted to the same github issue.
-			oldName := t.spec.Name
-			oldOwner := t.spec.Owner
-			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
-			t.printAndFail(0, clusterCreateErr)
-			issueOutput := "test %s was skipped due to %s"
-			issueOutput = fmt.Sprintf(issueOutput, oldName, t.FailureMsg())
-			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			t.spec.Name = "cluster_creation"
-			t.spec.Owner = registry.OwnerDevInf
 
-			if err := github.MaybePost(t, issueOutput); err != nil {
+			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
+			t.Error(clusterCreateErr)
+			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
+			if err := github.MaybePost(t, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
-
-			// Restore test name and owner.
-			t.spec.Name = oldName
-			t.spec.Owner = oldOwner
 		} else {
 			c.setTest(t)
 			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
@@ -668,7 +664,7 @@ func (r *testRunner) runWorker(
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
 			if !t.Failed() {
-				t.printAndFail(0 /* skip */, err)
+				t.Error(err)
 			}
 		} else {
 			msg := "test passed: %s (run %d)"
@@ -684,7 +680,7 @@ func (r *testRunner) runWorker(
 			if err != nil {
 				failureMsg += fmt.Sprintf("%+v", err)
 			} else {
-				failureMsg += t.FailureMsg()
+				failureMsg += t.failureMsg()
 			}
 			if c != nil {
 				if debug {
@@ -807,10 +803,7 @@ func (r *testRunner) runTest(
 		// goroutine accidentally ends up calling t.Fatal; the test runs in a
 		// different goroutine.
 		if err := recover(); err != nil && err != errTestFatal {
-			t.mu.Lock()
-			t.mu.failed = true
-			t.mu.output = append(t.mu.output, t.decorate(0 /* skip */, fmt.Sprint(err))...)
-			t.mu.Unlock()
+			t.Error(err)
 		}
 
 		t.mu.Lock()
@@ -819,9 +812,7 @@ func (r *testRunner) runTest(
 
 		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 		if t.Failed() {
-			t.mu.Lock()
-			output := fmt.Sprintf("test artifacts and logs in: %s\n", t.ArtifactsDir()) + string(t.mu.output)
-			t.mu.Unlock()
+			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
@@ -867,7 +858,7 @@ func (r *testRunner) runTest(
 			start:   t.start,
 			end:     t.end,
 			pass:    !t.Failed(),
-			failure: t.FailureMsg(),
+			failure: t.failureMsg(),
 		})
 		r.status.Lock()
 		delete(r.status.running, t)
@@ -922,6 +913,8 @@ func (r *testRunner) runTest(
 			// produced by t.Fatal*().
 			if r := recover(); r != nil && r != errTestFatal {
 				// NB: we're careful to avoid t.Fatalf here, which re-panics.
+				// Note that the error will be logged to a file, and the stack will
+				// contain the source of the panic.
 				t.Errorf("test panicked: %v", r)
 			}
 		}()
@@ -1193,14 +1186,15 @@ func (r *testRunner) removeWorker(ctx context.Context, name string) {
 // runHTTPServer starts a server running in the background.
 //
 // httpPort: The port on which to serve the web interface. Pass 0 for allocating
+// bindTo: The host/ip on which to bind. Leave empty to bind on all local ips
 //
 //	a port automatically (which will be printed to stdout).
-func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
+func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer, bindTo string) error {
 	http.HandleFunc("/", r.serveHTTP)
 	// Run an http server in the background.
 	// We handle the case where httpPort is 0, which means we automatically
 	// allocate a port.
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", httpPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", bindTo, httpPort))
 	if err != nil {
 		return err
 	}
@@ -1210,7 +1204,11 @@ func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
 			panic(err)
 		}
 	}()
-	fmt.Fprintf(stdout, "HTTP server listening on all network interfaces, port %d.\n", httpPort)
+	bindToDesc := "all network interfaces"
+	if bindTo != "" {
+		bindToDesc = bindTo
+	}
+	fmt.Fprintf(stdout, "HTTP server listening on %s, port %d.\n", bindToDesc, httpPort)
 	return nil
 }
 
