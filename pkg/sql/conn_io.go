@@ -935,12 +935,12 @@ func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.Re
 
 // BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) BufferParamStatusUpdate(key string, val string) {
-	panic("unimplemented")
+	// Unimplemented: the internal executor does not support status updated.
 }
 
 // BufferNotice is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
-	panic("unimplemented")
+	// Unimplemented: the internal executor does not support notices.
 }
 
 // ResetStmtType is part of the RestrictedCommandResult interface.
