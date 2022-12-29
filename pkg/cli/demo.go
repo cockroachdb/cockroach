@@ -320,7 +320,7 @@ func runDemoInternal(
 # Reminder: your changes to data stored in the demo session will not be saved!`)
 
 		var nodeList strings.Builder
-		c.ListDemoNodes(&nodeList, stderr, true /* justOne */)
+		c.ListDemoNodes(&nodeList, stderr, true /* justOne */, false /* verbose */)
 		cliCtx.PrintlnUnlessEmbedded(
 			// Only print the server details when the shell is not embedded;
 			// if embedded, the embedding platform owns the network

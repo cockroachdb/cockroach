@@ -8,6 +8,8 @@ spawn $argv demo --empty --no-line-editor --multitenant=true
 eexpect "Welcome"
 
 start_test "Check that the cli connect instructions get printed out."
+eexpect "defaultdb>"
+send "\\demo ls\r"
 eexpect "Application tenant"
 eexpect "(cli)"
 eexpect "cockroach sql"

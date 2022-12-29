@@ -1656,7 +1656,7 @@ func (c *transientCluster) GetLocality(nodeID int32) string {
 	return c.demoCtx.Localities[nodeID-1].String()
 }
 
-func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
+func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool) {
 	numNodesLive := 0
 	// First, list system tenant nodes.
 	for i, s := range c.servers {
@@ -1676,7 +1676,9 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
 		if c.demoCtx.Multitenant {
-			fmt.Fprintln(w, "  Application tenant:")
+			if verbose {
+				fmt.Fprintln(w, "  Application tenant:")
+			}
 
 			rpcAddr := c.tenantServers[i].RPCAddr()
 			tenantUiURLstr := c.tenantServers[i].AdminURL()
@@ -1696,22 +1698,27 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 					// listener for all tenants; after which this code can be
 					// simplified.
 					tenantSocket := unixSocketDetails{}
-					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket, rpcAddr)
+					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket, rpcAddr, verbose)
 				}
 			}
 			fmt.Fprintln(w)
-			fmt.Fprintln(w, "  System tenant:")
+			if verbose {
+				fmt.Fprintln(w, "  System tenant:")
+			}
 		}
-		// Connection parameters for the system tenant follow.
-		uiURL := s.Cfg.AdminURL()
-		sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
-			false /* includeAppName */, false /* forSecondaryTenant */)
-		if err != nil {
-			fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
-		} else {
-			c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i), s.ServingRPCAddr())
+		if !c.demoCtx.Multitenant || verbose {
+			// Connection parameters for the system tenant follow.
+
+			uiURL := s.Cfg.AdminURL()
+			sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
+				false /* includeAppName */, false /* forSecondaryTenant */)
+			if err != nil {
+				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
+			} else {
+				c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i), s.ServingRPCAddr(), verbose)
+			}
+			fmt.Fprintln(w)
 		}
-		fmt.Fprintln(w)
 	}
 
 	if numNodesLive == 0 {
@@ -1723,7 +1730,12 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne bool) {
 }
 
 func (c *transientCluster) printURLs(
-	w, ew io.Writer, sqlURL *pgurl.URL, uiURL *url.URL, socket unixSocketDetails, rpcAddr string,
+	w, ew io.Writer,
+	sqlURL *pgurl.URL,
+	uiURL *url.URL,
+	socket unixSocketDetails,
+	rpcAddr string,
+	verbose bool,
 ) {
 	if !c.demoCtx.Insecure {
 		// Print node ID and web UI URL. Embed the autologin feature inside the URL.
@@ -1750,11 +1762,13 @@ func (c *transientCluster) printURLs(
 	fmt.Fprintln(w, "   (cli)     ", "cockroach sql"+secArgs+portArg)
 
 	fmt.Fprintln(w, "   (sql)     ", sqlURL.ToPQ())
-	fmt.Fprintln(w, "   (sql/jdbc)", sqlURL.ToJDBC())
-	if socket.exists() {
-		fmt.Fprintln(w, "   (sql/unix)", socket)
+	if verbose {
+		fmt.Fprintln(w, "   (sql/jdbc)", sqlURL.ToJDBC())
+		if socket.exists() {
+			fmt.Fprintln(w, "   (sql/unix)", socket)
+		}
+		fmt.Fprintln(w, "   (rpc)     ", rpcAddr)
 	}
-	fmt.Fprintln(w, "   (rpc)     ", rpcAddr)
 }
 
 // genDemoPassword generates a password that prevents accidental

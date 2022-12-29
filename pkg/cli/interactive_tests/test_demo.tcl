@@ -2,31 +2,18 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-start_test "Check that demo insecure says hello properly"
-spawn $argv demo --no-line-editor --insecure=true
+start_test "Check that demo insecure says hello properly, multitenant"
+spawn $argv demo --no-line-editor --insecure=true --multitenant=true
 # Be polite.
 eexpect "Welcome"
 # Warn the user that they won't get persistence.
 eexpect "your changes to data stored in the demo session will not be saved!"
-
-# Verify the URLs for both shared and tenant server.
-eexpect "Application tenant"
+# Check that the connection URL is printed.
+eexpect "(webui)"
+eexpect "http://127.0.0.1:8080"
 eexpect "(sql)"
 eexpect "root"
 eexpect ":26257/movr"
-eexpect "sslmode=disable"
-
-eexpect "System tenant"
-eexpect "(webui)"
-eexpect "http://"
-eexpect ":8081"
-eexpect "(sql)"
-eexpect "root"
-eexpect ":26258/defaultdb"
-eexpect "sslmode=disable"
-eexpect "(sql/unix)"
-eexpect "root:unused@/defaultdb"
-eexpect "=26258"
 
 # Ensure same messages as cockroach sql.
 eexpect "Server version"
@@ -40,18 +27,36 @@ send_eof
 eexpect eof
 end_test
 
-start_test "Check that demo insecure says hello properly"
+start_test "Check that demo insecure says hello properly, singletenant"
+spawn $argv demo --no-line-editor --insecure=true --multitenant=false
+# Check that the connection URL is printed; and that we're still
+# using default ports.
+eexpect "(webui)"
+eexpect "http://127.0.0.1:8080"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26257/movr"
+eexpect "movr>"
+send_eof
+eexpect eof
+end_test
 
+start_test "Check that demo insecure, env var, says hello properly"
 # With env var.
 set ::env(COCKROACH_INSECURE) "true"
 spawn $argv demo --no-line-editor --no-example-database
 eexpect "Welcome"
 eexpect "defaultdb>"
+end_test
 
+start_test "Check the detailed URLs, insecure mode"
 # Show the URLs.
 # Also check that the default port is used.
 send "\\demo ls\r"
 eexpect "Application tenant"
+eexpect "(webui)"
+eexpect "http://"
+eexpect ":8080"
 eexpect "(sql)"
 eexpect "root@"
 eexpect ":26257"
@@ -68,7 +73,9 @@ eexpect "sslmode=disable"
 eexpect "(sql/unix)"
 eexpect "root:unused@"
 eexpect "=26258"
+
 eexpect "defaultdb>"
+end_test
 
 send_eof
 eexpect eof
@@ -97,31 +104,38 @@ end_test
 
 start_test "Check that demo secure says hello properly"
 
-
 # With env var.
 set ::env(COCKROACH_INSECURE) "false"
 spawn $argv demo --no-line-editor --no-example-database
 eexpect "Welcome"
+
+eexpect "(webui)"
+eexpect "http://127.0.0.1:8080/demologin"
+eexpect "(sql)"
+eexpect "postgresql://demo:"
+eexpect "sslmode=require"
 eexpect "Username: \"demo\", password"
 eexpect "Directory with certificate files"
+
 eexpect "defaultdb>"
 
 # Show the URLs.
 # Also check that the default port is used.
 send "\\demo ls\r"
 eexpect "Application tenant"
+eexpect "(webui)"
+eexpect "http://127.0.0.1:8080/demologin"
 eexpect "(sql)"
-eexpect "demo:"
+eexpect "postgresql://demo:"
 eexpect ":26257"
 eexpect "sslmode=require"
 eexpect "sslrootcert="
 
 eexpect "System tenant"
 eexpect "(webui)"
-eexpect "http://"
-eexpect ":8081"
+eexpect "http://127.0.0.1:8081/demologin"
 eexpect "(sql)"
-eexpect "demo:"
+eexpect "postgresql://demo:"
 eexpect ":26258"
 eexpect "sslmode=require"
 eexpect "sslrootcert="
@@ -173,8 +187,8 @@ start_test "Check that node URLs are displayed"
 spawn $argv demo --no-line-editor --insecure --no-example-database
 # Check that we see our message.
 eexpect "Connection parameters"
+eexpect "(webui)"
 eexpect "(sql)"
-eexpect "(sql/unix)"
 expect root@
 send_eof
 eexpect eof
@@ -184,18 +198,21 @@ spawn $argv demo --no-line-editor --insecure --nodes 3 --no-example-database
 
 # Check that we get a message for each node.
 eexpect "Connection parameters"
+eexpect "(webui)"
 eexpect "(sql)"
-eexpect "(sql/unix)"
 eexpect "defaultdb>"
 
 send "\\demo ls\r"
 eexpect "node 1"
+eexpect "(webui)"
 eexpect "(sql)"
 eexpect "(sql/unix)"
 eexpect "node 2"
+eexpect "(webui)"
 eexpect "(sql)"
 eexpect "(sql/unix)"
 eexpect "node 3"
+eexpect "(webui)"
 eexpect "(sql)"
 eexpect "(sql/unix)"
 eexpect "defaultdb>"
