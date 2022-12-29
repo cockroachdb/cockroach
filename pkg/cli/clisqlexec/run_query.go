@@ -167,10 +167,6 @@ func (sqlExecCtx *Context) maybeShowTimes(
 	// or SQL notices with the full timing string.
 	var stats strings.Builder
 
-	// Print a newline so that there is a visual separation between a notice and
-	// the timing information.
-	fmt.Fprintln(&stats)
-
 	// Suggested by Radu: for sub-second results, show simplified
 	// timings in milliseconds.
 	unit := "s"
