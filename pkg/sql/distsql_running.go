@@ -582,14 +582,26 @@ func (dsp *DistSQLPlanner) Run(
 			// given a LeafTxn. In order for that LeafTxn to be created later,
 			// during the flow setup, we need to populate leafInputState below,
 			// so we tell the localState that there is concurrency.
-			if execinfra.CanUseStreamer(dsp.st) {
-				for _, proc := range plan.Processors {
-					if jr := proc.Spec.Core.JoinReader; jr != nil {
-						// Both index and lookup joins, with and without
-						// ordering, are executed via the Streamer API that has
-						// concurrency.
-						localState.HasConcurrency = true
-						break
+
+			// At the moment, we disable the usage of the Streamer API for local
+			// plans when non-default key locking modes are requested on some of
+			// the processors. This is the case since the lock spans propagation
+			// doesn't happen for the leaf txns which can result in excessive
+			// contention for future reads (since the acquired locks are not
+			// cleaned up properly when the txn commits).
+			// TODO(yuzefovich): fix the propagation of the lock spans with the
+			// leaf txns and remove this check. See #94290.
+			containsNonDefaultLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking)
+			if !containsNonDefaultLocking {
+				if execinfra.CanUseStreamer(dsp.st) {
+					for _, proc := range plan.Processors {
+						if jr := proc.Spec.Core.JoinReader; jr != nil {
+							// Both index and lookup joins, with and without
+							// ordering, are executed via the Streamer API that has
+							// concurrency.
+							localState.HasConcurrency = true
+							break
+						}
 					}
 				}
 			}

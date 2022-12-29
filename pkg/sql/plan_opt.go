@@ -614,6 +614,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var containsLargeFullTableScan bool
 	var containsLargeFullIndexScan bool
 	var containsMutation bool
+	var containsNonDefaultKeyLocking bool
 	var gf *explain.PlanGistFactory
 	if !opc.p.SessionData().DisablePlanGists {
 		gf = explain.NewPlanGistFactory(f)
@@ -632,6 +633,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		containsNonDefaultKeyLocking = bld.ContainsNonDefaultKeyLocking
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
 		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
@@ -656,6 +658,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
 		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
 		containsMutation = bld.ContainsMutation
+		containsNonDefaultKeyLocking = bld.ContainsNonDefaultKeyLocking
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
 		planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts
@@ -704,6 +707,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsMutation {
 		planTop.flags.Set(planFlagContainsMutation)
+	}
+	if containsNonDefaultKeyLocking {
+		planTop.flags.Set(planFlagContainsNonDefaultLocking)
 	}
 	if planTop.instrumentation.ShouldSaveMemo() {
 		planTop.mem = mem
