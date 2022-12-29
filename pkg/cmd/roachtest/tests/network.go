@@ -140,7 +140,7 @@ SELECT $1::INT = ALL (
     SELECT lease_holder
     FROM   [SHOW CLUSTER RANGES WITH TABLES, DETAILS]
      WHERE (start_key = '/System/NodeLiveness' AND end_key = '/System/NodeLivenessMax')
-       OR  (table_name IN ('users', 'role_members', 'role_options')
+       OR  (table_name IN ('users', 'role_members', 'role_options'))
 )`
 			t.L().Printf("SQL: %s", waitLeases)
 			require.NoError(t, db.QueryRow(waitLeases, expectedLeaseholder).Scan(&ok))

@@ -512,7 +512,7 @@ func initFollowerReadsDB(
 			const q2 = `
 			SELECT
 				count(distinct substring(unnest(replica_localities), 'region=([^,]*)'))
-			FROM [SHOW RANGES FROM TABLE test]`
+			FROM [SHOW RANGES FROM TABLE test.test]`
 
 			var distinctRegions int
 			require.NoError(t, db.QueryRowContext(ctx, q2).Scan(&distinctRegions))
