@@ -203,7 +203,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:      "cdc_prev is not a function",
 			desc:      fooDesc,
 			stmt:      "SELECT *, cdc_prev() FROM foo AS bar",
-			expectErr: `function "cdc_prev" unsupported by CDC`,
+			expectErr: `unknown function: cdc_prev()`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -219,17 +219,9 @@ func TestNormalizeAndValidate(t *testing.T) {
 			}
 
 			schemaTS := s.Clock().Now()
-			err = withPlanner(ctx, &execCfg, username.RootUserName(), schemaTS, defaultDBSessionData,
-				func(ctx context.Context, execCtx sql.JobExecContext) error {
-					defer configSemaForCDC(execCtx.SemaCtx())()
-					norm, err := normalizeAndValidateSelectForTarget(
-						ctx, execCtx.ExecCfg(), tc.desc, schemaTS, target, sc,
-						false, tc.splitColFams, execCtx.SemaCtx())
-					if err == nil {
-						sc = norm.SelectClause
-					}
-					return err
-				},
+			norm, _, _, err := normalizeAndPlan(
+				ctx, &execCfg, username.RootUserName(), defaultDBSessionData, tc.desc, schemaTS,
+				target, sc, tc.splitColFams,
 			)
 
 			if tc.expectErr != "" {
@@ -238,7 +230,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			serialized := AsStringUnredacted(sc)
+			serialized := AsStringUnredacted(norm)
 			require.Equal(t, tc.expectStmt, serialized)
 
 			// Make sure we can deserialize back.

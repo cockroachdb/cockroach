@@ -4559,8 +4559,9 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Panics can mess with the test setup so run these each in their own test.
 
+	defer cdceval.TestingDisableFunctionsBlacklist()()
+
 	prep := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
-		cdceval.TestingEnableVolatileFunction(`crdb_internal.force_panic`)
 		sqlDB.Exec(t, `CREATE TABLE foo(id int primary key, s string)`)
 		sqlDB.Exec(t, `INSERT INTO foo(id, s) VALUES (0, 'hello'), (1, null)`)
 	}

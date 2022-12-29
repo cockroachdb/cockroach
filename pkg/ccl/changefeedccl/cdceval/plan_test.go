@@ -326,15 +326,11 @@ func normalizeAndPlan(
 	splitFams bool,
 ) (norm *NormalizedSelectClause, withDiff bool, plan sql.CDCExpressionPlan, err error) {
 	if err := withPlanner(ctx, execCfg, user, schemaTS, sd,
-		func(ctx context.Context, execCtx sql.JobExecContext) error {
+		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			defer cleanup()
 			defer configSemaForCDC(execCtx.SemaCtx())()
 
 			norm, withDiff, err = NormalizeExpression(ctx, execCtx, descr, schemaTS, target, sc, splitFams)
-			if err != nil {
-				return err
-			}
-
-			d, err := newEventDescriptorForTarget(descr, target, schemaTS, false, false)
 			if err != nil {
 				return err
 			}
