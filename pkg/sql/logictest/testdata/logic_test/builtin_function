@@ -3762,3 +3762,7 @@ SELECT parse_ident('ab.xyz()', false)
 
 query error string is not a valid identifier: \"ab.xyz\(\)\"
 SELECT parse_ident('ab.xyz()', true)
+
+# Test that we return an appropriate user-facing error message when trying to decode invalid bytes.
+query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid protocol message: proto: wrong wireType = 1 for field Import
+select crdb_internal.job_payload_type('invalid'::BYTES);

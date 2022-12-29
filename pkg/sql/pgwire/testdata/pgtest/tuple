@@ -92,13 +92,56 @@ ReadyForQuery
 {"Type":"ErrorResponse","Code":"0A000","Message":"error in argument for $1: could not parse \"(1,cat)\" as type tuple: cannot parse anonymous record type"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send
+Query {"String": "DROP TYPE IF EXISTS r"}
+Query {"String": "CREATE TYPE r AS (a bool)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Valid encoding.
+# 00000001 - 1 element
+# 00000010 - bool OID
+# 00000001 - 1 byte element size
+# 01 - boolean true
+send
+Parse {"Name": "s_valid_param", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_valid_param", "PreparedStatement": "s_valid_param", "ParameterFormatCodes": [1], "Parameters": [{"binary":"00000001000000100000000101"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_valid_param"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"(t)"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # empty parameter
 send
-Parse {"Name": "s_empty_param", "Query": "SELECT $1::record"}
+Parse {"Name": "s_empty_param", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_empty_param", "PreparedStatement": "s_empty_param", "ParameterFormatCodes": [1], "Parameters": [{"binary":""}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_empty_param"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"insufficient data left in message"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -111,11 +154,19 @@ ReadyForQuery
 # negative length tuple
 # FFFFFFFF - -1 element
 send
-Parse {"Name": "s_negative_tuple", "Query": "SELECT $1::record"}
+Parse {"Name": "s_negative_tuple", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_negative_tuple", "PreparedStatement": "s_negative_tuple", "ParameterFormatCodes": [1], "Parameters": [{"binary":"FFFFFFFF"}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_negative_tuple"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42804","Message":"wrong number of columns: -1, expected 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -128,11 +179,19 @@ ReadyForQuery
 # not enough bytes for element OID
 # 00000001 - 1 element
 send
-Parse {"Name": "s_element_oid_no_bytes", "Query": "SELECT $1::record"}
+Parse {"Name": "s_element_oid_no_bytes", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_element_oid_no_bytes", "PreparedStatement": "s_element_oid_no_bytes", "ParameterFormatCodes": [1], "Parameters": [{"binary":"00000001"}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_element_oid_no_bytes"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"insufficient data left in message"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -146,11 +205,19 @@ ReadyForQuery
 # 00000001 - 1 element
 # 00000000 - OID does not exist
 send
-Parse {"Name": "s_element_oid_not_found", "Query": "SELECT $1::record"}
+Parse {"Name": "s_element_oid_not_found", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_element_oid_not_found", "PreparedStatement": "s_element_oid_not_found", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000000"}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_element_oid_not_found"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42804","Message":"binary data has type 0 (-) instead of expected 16 (boolean) in record column 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -164,11 +231,19 @@ ReadyForQuery
 # 00000001 - 1 element
 # 00000010 - bool OID
 send
-Parse {"Name": "s_element_size_no_bytes", "Query": "SELECT $1::record"}
+Parse {"Name": "s_element_size_no_bytes", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_element_size_no_bytes", "PreparedStatement": "s_element_size_no_bytes", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000010"}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_element_size_no_bytes"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"insufficient data left in message"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -183,13 +258,13 @@ ReadyForQuery
 # 00000010 - bool OID
 # FFFFFFFF - -1 byte element size
 send
-Parse {"Name": "s_element_null", "Query": "SELECT $1::record"}
+Parse {"Name": "s_element_null", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_element_null", "PreparedStatement": "s_element_null", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000010FFFFFFFF"}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_element_null"}
 Sync
 ----
 
-until crdb_only
+until
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
@@ -203,11 +278,19 @@ ReadyForQuery
 # 00000010 - bool OID
 # 00000000 - 0 byte element size
 send
-Parse {"Name": "s_element_needs_bytes", "Query": "SELECT $1::record"}
-Bind {"DestinationPortal": "p_element_needs_bytes", "PreparedStatement": "s_element_needs_bytes", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000000010000001000000000"}], "ResultFormatCodes": [0]}
+Parse {"Name": "s_element_needs_bytes", "Query": "SELECT $1::r"}
+Bind {"DestinationPortal": "p_element_needs_bytes", "PreparedStatement": "s_element_needs_bytes", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000000010000001000000000"}], "ResultFormatCodes": [1]}
 Execute {"Portal": "p_element_needs_bytes"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"no data left in message"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -222,11 +305,19 @@ ReadyForQuery
 # 00000010 - bool OID
 # 00000001 - 1 byte element size
 send
-Parse {"Name": "s_element_no_bytes", "Query": "SELECT $1::record"}
+Parse {"Name": "s_element_no_bytes", "Query": "SELECT $1::r"}
 Bind {"DestinationPortal": "p_element_no_bytes", "PreparedStatement": "s_element_no_bytes", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000000010000001000000001"}], "ResultFormatCodes": [0]}
 Execute {"Portal": "p_element_no_bytes"}
 Sync
 ----
+
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"22P03","Message":"insufficient data left in message"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 until crdb_only keepErrMessage
 ErrorResponse
@@ -234,4 +325,21 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element for binary format. elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=13"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test binary encoding of a generic tuple result.
+send crdb_only
+Parse {"Name": "tuple_array", "Query": "SELECT (1::int8,'foo'::text)::record, ARRAY[(1::int8,'foo'::text)::record, (1::int8,'foo'::text)::record]"}
+Bind {"PreparedStatement": "tuple_array", "ResultFormatCodes": [1, 1]}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00000002000000140000000800000000000000010000001900000003666f6f"},{"binary":"0000000100000000000008c900000002000000010000001f00000002000000140000000800000000000000010000001900000003666f6f0000001f00000002000000140000000800000000000000010000001900000003666f6f"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
