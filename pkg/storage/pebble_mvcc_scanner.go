@@ -33,6 +33,10 @@ import (
 // Key value lengths take up 8 bytes (2 x Uint32).
 const kvLenSize = 8
 
+func pebbleSizeOf(lenKey, lenValue int) int {
+	return kvLenSize + lenKey + lenValue
+}
+
 var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
 	"mvcc-max-iters-before-seek",
 	10, /* defaultValue */
@@ -50,6 +54,37 @@ const (
 	// MVCCDecodingRequired is used when timestamps are needed.
 	MVCCDecodingRequired
 )
+
+// results abstracts away a result set where pebbleMVCCScanner put()'s KVs into.
+type results interface {
+	// clear clears the results so that its memory could be GCed.
+	clear()
+	// getNumKeys returns the number of KVs currently in the results.
+	getNumKeys() int64
+	// getNumBytes returns the current memory footprint of the results in bytes.
+	getNumBytes() int64
+	// put adds a KV into the results. An error is returned if the memory
+	// reservation is denied by the memory account.
+	put(_ context.Context, key []byte, value []byte, memAccount *mon.BoundAccount, maxNewSize int) error
+	// continuesFirstRow returns true if the given key belongs to the same SQL
+	// row as the first KV pair in the result (or if the result is empty). If
+	// either key is not a valid SQL row key, returns false.
+	continuesFirstRow(key roachpb.Key) bool
+	// maybeTrimPartialLastRow removes the last KV pairs from the result that
+	// are part of the same SQL row as the given key, returning the earliest key
+	// removed.
+	maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error)
+	// lastRowHasFinalColumnFamily returns true if the last key in the result is
+	// the maximum column family ID of the row. If so, we know that the row is
+	// complete. However, the inverse is not true: the final column families of
+	// the row may be omitted, in which case the caller has to scan to the next
+	// key to find out whether the row is complete.
+	//
+	// lastRowHasFinalColumnFamily is only called after having called put() with
+	// no error at least once, meaning that at least one key is in the results.
+	// Also, this is only called when wholeRows option is enabled.
+	lastRowHasFinalColumnFamily(reverse bool) bool
+}
 
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
 // expected by MVCCScanDecodeKeyValue.
@@ -86,10 +121,23 @@ type pebbleResults struct {
 	lastOffsetIdx      int
 }
 
+// clear implements the results interface.
 func (p *pebbleResults) clear() {
 	*p = pebbleResults{}
 }
 
+// getNumKeys implements the results interface.
+func (p *pebbleResults) getNumKeys() int64 {
+	return p.count
+}
+
+// getNumBytes implements the results interface.
+func (p *pebbleResults) getNumBytes() int64 {
+	return p.bytes
+}
+
+// put implements the results interface.
+//
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
 // <valueLen:Uint32><keyLen:Uint32><Key><Value>
 // This function adds to repr in that format.
@@ -109,7 +157,7 @@ func (p *pebbleResults) put(
 	// needs capacity greater than maxSize, we allocate exactly the size needed.
 	lenKey := len(key)
 	lenValue := len(value)
-	lenToAdd := p.sizeOf(lenKey, lenValue)
+	lenToAdd := pebbleSizeOf(lenKey, lenValue)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		// Exponential increase by default, while ensuring that we respect
 		// - a hard lower bound of lenToAdd
@@ -176,13 +224,7 @@ func (p *pebbleResults) put(
 	return nil
 }
 
-func (p *pebbleResults) sizeOf(lenKey, lenValue int) int {
-	return kvLenSize + lenKey + lenValue
-}
-
-// continuesFirstRow returns true if the given key belongs to the same SQL row
-// as the first KV pair in the result (or if the result is empty). If either
-// key is not a valid SQL row key, returns false.
+// continuesFirstRow implements the results interface.
 func (p *pebbleResults) continuesFirstRow(key roachpb.Key) bool {
 	repr := p.repr
 	if len(p.bufs) > 0 {
@@ -199,16 +241,8 @@ func (p *pebbleResults) continuesFirstRow(key roachpb.Key) bool {
 	return bytes.Equal(rowPrefix, getRowPrefix(extractResultKey(repr)))
 }
 
-// lastRowHasFinalColumnFamily returns true if the last key in the result is the
-// maximum column family ID of the row (i.e. when it equals len(lastOffsets)-1).
-// If so, we know that the row is complete. However, the inverse is not true:
-// the final column families of the row may be omitted, in which case the caller
-// has to scan to the next key to find out whether the row is complete.
+// lastRowHasFinalColumnFamily implements the results interface.
 func (p *pebbleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
-	if !p.lastOffsetsEnabled || p.count == 0 {
-		return false
-	}
-
 	lastOffsetIdx := p.lastOffsetIdx - 1 // p.lastOffsetIdx is where next offset would be stored
 	if lastOffsetIdx < 0 {
 		lastOffsetIdx = len(p.lastOffsets) - 1
@@ -226,9 +260,9 @@ func (p *pebbleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
 	return int(colFamilyID) == len(p.lastOffsets)-1
 }
 
-// maybeTrimPartialLastRow removes the last KV pairs from the result that are part
-// of the same SQL row as the given key, returning the earliest key removed. The
-// row cannot be made up of more KV pairs than given by len(lastOffsets),
+// maybeTrimPartialLastRow implements the results interface.
+//
+// The row cannot be made up of more KV pairs than given by len(lastOffsets),
 // otherwise an error is returned. Must be called before finish().
 func (p *pebbleResults) maybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error) {
 	if !p.lastOffsetsEnabled || len(p.repr) == 0 {
@@ -385,7 +419,7 @@ type pebbleMVCCScanner struct {
 	curRawValue    []byte
 	curRangeKeys   MVCCRangeKeyStack
 	savedRangeKeys MVCCRangeKeyStack
-	results        pebbleResults
+	results        results
 	intents        pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
@@ -458,13 +492,10 @@ func (p *pebbleMVCCScanner) release() {
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(
-	txn *roachpb.Transaction, ui uncertainty.Interval, trackLastOffsets int,
+	txn *roachpb.Transaction, ui uncertainty.Interval, results results,
 ) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
-	if trackLastOffsets > 0 {
-		p.results.lastOffsetsEnabled = true
-		p.results.lastOffsets = make([]int, trackLastOffsets)
-	}
+	p.results = results
 
 	if txn != nil {
 		p.txn = txn
@@ -538,7 +569,7 @@ func (p *pebbleMVCCScanner) advance() bool {
 func (p *pebbleMVCCScanner) scan(
 	ctx context.Context,
 ) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
-	if p.wholeRows && !p.results.lastOffsetsEnabled {
+	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
 
@@ -1119,11 +1150,11 @@ func (p *pebbleMVCCScanner) add(
 	}
 
 	// Check if adding the key would exceed a limit.
-	if p.targetBytes > 0 && p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(rawValue))) > p.targetBytes {
+	if p.targetBytes > 0 && p.results.getNumBytes()+int64(pebbleSizeOf(len(rawKey), len(rawValue))) > p.targetBytes {
 		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
-		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(rawValue)))
+		p.resumeNextBytes = int64(pebbleSizeOf(len(rawKey), len(rawValue)))
 
-	} else if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+	} else if p.maxKeys > 0 && p.results.getNumKeys() >= p.maxKeys {
 		p.resumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
@@ -1133,7 +1164,7 @@ func (p *pebbleMVCCScanner) add(
 		// then make sure we include the first key in the result. If wholeRows is
 		// enabled, then also make sure we complete the first SQL row.
 		if !p.allowEmpty &&
-			(p.results.count == 0 || (p.wholeRows && p.results.continuesFirstRow(key))) {
+			(p.results.getNumKeys() == 0 || (p.wholeRows && p.results.continuesFirstRow(key))) {
 			p.resumeReason = 0
 			p.resumeNextBytes = 0
 			mustPutKey = true
@@ -1164,10 +1195,10 @@ func (p *pebbleMVCCScanner) add(
 	//   p.targetBytes >= p.results.bytes + lenToAdd
 	// so maxNewSize will be sufficient.
 	var maxNewSize int
-	if p.targetBytes > 0 && p.targetBytes > p.results.bytes && !mustPutKey {
+	if p.targetBytes > 0 && p.targetBytes > p.results.getNumBytes() && !mustPutKey {
 		// INVARIANT: !mustPutKey => maxNewSize is sufficient for key-value
 		// pair.
-		maxNewSize = int(p.targetBytes - p.results.bytes)
+		maxNewSize = int(p.targetBytes - p.results.getNumBytes())
 	}
 	if err := p.results.put(ctx, rawKey, rawValue, p.memAccount, maxNewSize); err != nil {
 		p.err = errors.Wrapf(err, "scan with start key %s", p.start)
@@ -1178,7 +1209,7 @@ func (p *pebbleMVCCScanner) add(
 	// checking the key limit above on the next iteration. This has a small cost
 	// (~0.5% for large scans), but avoids the potentially large cost of scanning
 	// lots of garbage before the next key -- especially when maxKeys is small.
-	if p.maxKeys > 0 && p.results.count >= p.maxKeys {
+	if p.maxKeys > 0 && p.results.getNumKeys() >= p.maxKeys {
 		// If we're not allowed to return partial SQL rows, check whether the last
 		// KV pair in the result has the maximum column family ID of the row. If so,
 		// we can return early. However, if it doesn't then we can't know yet
