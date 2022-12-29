@@ -132,6 +132,10 @@ type Builder struct {
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
 
+	// ContainsNonDefaultKeyLocking is set to true if at least one node in the
+	// plan uses non-default key locking strength.
+	ContainsNonDefaultKeyLocking bool
+
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
 	MaxFullScanRows float64
