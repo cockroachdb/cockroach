@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -700,14 +701,45 @@ func (dsp *DistSQLPlanner) Run(
 			// given a LeafTxn. In order for that LeafTxn to be created later,
 			// during the flow setup, we need to populate leafInputState below,
 			// so we tell the localState that there is concurrency.
-			if execinfra.CanUseStreamer(dsp.st) {
+
+			// At the moment, we disable the usage of the Streamer API for local
+			// plans when non-default key locking modes are requested on some of
+			// the processors. This is the case since the lock spans propagation
+			// doesn't happen for the leaf txns which can result in excessive
+			// contention for future reads (since the acquired locks are not
+			// cleaned up properly when the txn commits).
+			// TODO(yuzefovich): fix the propagation of the lock spans with the
+			// leaf txns and remove this check.
+			var foundNonDefaultKeyLocking bool
+			if planCtx.isLocal {
 				for _, proc := range plan.Processors {
-					if jr := proc.Spec.Core.JoinReader; jr != nil {
-						// Both index and lookup joins, with and without
-						// ordering, are executed via the Streamer API that has
-						// concurrency.
-						localState.HasConcurrency = true
-						break
+					switch {
+					case proc.Spec.Core.TableReader != nil:
+						foundNonDefaultKeyLocking = foundNonDefaultKeyLocking ||
+							proc.Spec.Core.TableReader.LockingStrength != descpb.ScanLockingStrength_FOR_NONE
+					case proc.Spec.Core.JoinReader != nil:
+						foundNonDefaultKeyLocking = foundNonDefaultKeyLocking ||
+							proc.Spec.Core.JoinReader.LockingStrength != descpb.ScanLockingStrength_FOR_NONE
+					case proc.Spec.Core.ZigzagJoiner != nil:
+						foundNonDefaultKeyLocking = foundNonDefaultKeyLocking ||
+							proc.Spec.Core.ZigzagJoiner.Sides[0].LockingStrength != descpb.ScanLockingStrength_FOR_NONE ||
+							proc.Spec.Core.ZigzagJoiner.Sides[1].LockingStrength != descpb.ScanLockingStrength_FOR_NONE
+					case proc.Spec.Core.InvertedJoiner != nil:
+						foundNonDefaultKeyLocking = foundNonDefaultKeyLocking ||
+							proc.Spec.Core.InvertedJoiner.LockingStrength != descpb.ScanLockingStrength_FOR_NONE
+					}
+				}
+			}
+			if !foundNonDefaultKeyLocking {
+				if execinfra.CanUseStreamer(dsp.st) {
+					for _, proc := range plan.Processors {
+						if jr := proc.Spec.Core.JoinReader; jr != nil {
+							// Both index and lookup joins, with and without
+							// ordering, are executed via the Streamer API that has
+							// concurrency.
+							localState.HasConcurrency = true
+							break
+						}
 					}
 				}
 			}
