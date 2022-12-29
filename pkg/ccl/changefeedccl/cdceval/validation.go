@@ -294,11 +294,10 @@ func normalizeSelectClause(
 				e.Type = typ
 				return true, e, nil
 			case *tree.FuncExpr:
-				fn, err := checkFunctionSupported(ctx, e, semaCtx)
-				if err != nil {
+				if err := checkFunctionSupported(ctx, e, semaCtx); err != nil {
 					return false, e, err
 				}
-				return true, fn, nil
+				return true, expr, nil
 			case *tree.Subquery:
 				return false, e, pgerror.New(
 					pgcode.FeatureNotSupported, "sub-query expressions not supported by CDC")
