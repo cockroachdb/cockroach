@@ -1064,7 +1064,8 @@ func mvccGetWithValueHeader(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty, 0)
+	var results pebbleResults
+	mvccScanner.init(opts.Txn, opts.Uncertainty, &results)
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
@@ -1087,11 +1088,11 @@ func mvccGetWithValueHeader(
 		intent = &intents[0]
 	}
 
-	if len(mvccScanner.results.repr) == 0 {
+	if len(results.repr) == 0 {
 		return optionalValue{}, intent, enginepb.MVCCValueHeader{}, nil
 	}
 
-	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(results.repr)
 	if err != nil {
 		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
@@ -3608,11 +3609,12 @@ func mvccScanToBytes(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	var trackLastOffsets int
+	var results pebbleResults
 	if opts.WholeRowsOfSize > 1 {
-		trackLastOffsets = int(opts.WholeRowsOfSize)
+		results.lastOffsetsEnabled = true
+		results.lastOffsets = make([]int, opts.WholeRowsOfSize)
 	}
-	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
+	mvccScanner.init(opts.Txn, opts.Uncertainty, &results)
 
 	var res MVCCScanResult
 	var err error
@@ -3622,9 +3624,9 @@ func mvccScanToBytes(
 		return MVCCScanResult{}, err
 	}
 
-	res.KVData = mvccScanner.results.finish()
-	res.NumKeys = mvccScanner.results.count
-	res.NumBytes = mvccScanner.results.bytes
+	res.KVData = results.finish()
+	res.NumKeys = mvccScanner.results.getNumKeys()
+	res.NumBytes = mvccScanner.results.getNumBytes()
 
 	// If we have a trace, emit the scan stats that we produced.
 	recordIteratorStats(ctx, mvccScanner.parent)
