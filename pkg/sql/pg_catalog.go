@@ -2618,6 +2618,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					if err != nil {
 						return false, err
 					}
+					if fnDesc.Dropped() || fnDesc.GetParentID() != dbContext.GetID() {
+						return false, nil
+					}
 
 					err = addPgProcUDFRow(h, scDesc, fnDesc, addRow)
 					if err != nil {
@@ -3321,6 +3324,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, err
 				}
 
+				if typDesc.Dropped() {
+					return false, nil
+				}
+
 				// It's an entry for the implicit record type created on behalf of each
 				// table. We have special logic for this case.
 				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
@@ -3332,6 +3339,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 							return false, nil
 						}
 						return false, err
+					}
+					if !table.IsVirtualTable() && table.GetParentID() != db.GetID() {
+						// If we're looking an implicit record type for a virtual table, we
+						// always return the row regardless of the parent DB. But for real
+						// tables, we only return a row if we're in the same DB as the table.
+						return false, nil
 					}
 					if err := addPGTypeRowForTable(
 						ctx,
@@ -3345,6 +3358,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						return false, err
 					}
 					return true, nil
+				}
+
+				if typDesc.GetParentID() != db.GetID() {
+					// Don't return types that aren't in our database.
+					return false, nil
 				}
 
 				nspOid = schemaOid(sc.GetID())

@@ -118,8 +118,7 @@ func (v TableImplicitRecordType) Adding() bool {
 
 // Dropped implements the Descriptor interface.
 func (v TableImplicitRecordType) Dropped() bool {
-	v.panicNotSupported("Dropped")
-	return false
+	return v.desc.Dropped()
 }
 
 // Offline implements the Descriptor interface.
