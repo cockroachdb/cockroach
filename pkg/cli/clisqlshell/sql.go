@@ -65,6 +65,7 @@ Query Buffer
   \| CMD            run an external command and run its output as SQL statements.
 
 Connection
+  \info             display server details including connection strings.
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
@@ -679,6 +680,38 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 	}
 	fmt.Fprintf(c.iCtx.stdout, "node %v has been added with locality \"%s\"\n",
 		addedNodeID, c.sqlCtx.DemoCluster.GetLocality(addedNodeID))
+	return nextState
+}
+
+func (c *cliState) handleInfo(nextState cliStateEnum) (resState cliStateEnum) {
+	w := c.iCtx.stdout
+	si := c.conn.GetServerInfo()
+	if si.ServerExecutableVersion != "" {
+		fmt.Fprintf(w, "Server version: %s\n", si.ServerExecutableVersion)
+	}
+	if si.ClusterID != "" {
+		fmt.Fprintf(w, "Cluster ID: %s\n", si.ClusterID)
+	}
+	if si.Organization != "" {
+		fmt.Fprintf(w, "Organization: %s\n", si.Organization)
+	}
+	fmt.Fprintln(w)
+
+	// Print the current connection URL, database string and username.
+	if err := c.handleConnectInternal(nil); err != nil {
+		fmt.Fprintln(c.iCtx.stderr, err)
+	}
+	fmt.Fprintln(w)
+
+	// If running a demo shell, also print out the server details.
+	if c.sqlCtx.DemoCluster != nil {
+		fmt.Fprintf(w, "You are connected to a demo cluster with %d node(s).\n", c.sqlCtx.DemoCluster.NumNodes())
+		fmt.Fprintf(w, "Connection parameters (simplified):\n")
+		c.sqlCtx.DemoCluster.ListDemoNodes(w, w, true /* justOne */, false /* verbose */)
+		fmt.Fprintf(w, "Use the command '\\demo ls' to list nodes and detailed connection parameters to each.\n")
+		fmt.Fprintln(w)
+	}
+
 	return nextState
 }
 
@@ -1364,6 +1397,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\connect`, `\c`:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
+	case `\info`:
+		return c.handleInfo(loopState)
+
 	case `\x`:
 		format := clisqlexec.TableDisplayRecords
 		switch len(cmd) {
@@ -1575,10 +1611,6 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 		}
 	case 0:
 		// Just print the current connection settings.
-		dbName := c.iCtx.dbName
-		if dbName == "" {
-			dbName = currURL.GetDatabase()
-		}
 		fmt.Fprintf(c.iCtx.stdout, "Connection string: %s\n", currURL.ToPQRedacted())
 		fmt.Fprintf(c.iCtx.stdout, "You are connected to database %q as user %q.\n", dbName, currURL.GetUsername())
 		return nil

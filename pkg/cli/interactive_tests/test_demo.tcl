@@ -178,7 +178,7 @@ spawn $argv demo --no-line-editor --insecure --no-example-database
 eexpect "Connection parameters"
 eexpect "(webui)"
 eexpect "(sql)"
-expect root@
+expect "root@"
 send_eof
 eexpect eof
 
@@ -216,6 +216,19 @@ eexpect "sslmode=require"
 eexpect "sslrootcert="
 eexpect "defaultdb>"
 
+end_test
+
+start_test "Check that the info output includes demo node details"
+send "\\info\r"
+eexpect "Server version:"
+eexpect "Cluster ID:"
+eexpect "Connection string:"
+eexpect "You are connected to database \"defaultdb\""
+eexpect "You are connected to a demo cluster"
+eexpect "Connection parameters"
+eexpect "(webui)"
+eexpect "(sql)"
+eexpect "defaultdb>"
 end_test
 
 start_test "Check that invalid URL is rejected"
