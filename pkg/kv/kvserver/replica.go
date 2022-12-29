@@ -1556,11 +1556,6 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 		return err
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
 		return err
-	} else if r.requiresExpiringLeaseRLocked() {
-		// Ensure that the range does not require an expiration-based lease. If it
-		// does, it will never get closed timestamp updates and the rangefeed will
-		// never be able to advance its resolved timestamp.
-		return errors.New("expiration-based leases are incompatible with rangefeeds")
 	}
 	return nil
 }
