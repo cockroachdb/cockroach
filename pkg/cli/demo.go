@@ -339,6 +339,8 @@ func runDemoInternal(
 			fmt.Printf(`#   - Username: %q, password: %q
 #   - Directory with certificate files (for certain SQL drivers/tools): %s
 #
+# You can enter \info to print these details again.
+#
 `,
 				adminUser,
 				adminPassword,
