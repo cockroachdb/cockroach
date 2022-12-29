@@ -254,3 +254,20 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: integer overflow reading element for binary format. elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=10"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test binary encoding of a generic tuple result.
+send crdb_only
+Parse {"Name": "tuple_array", "Query": "SELECT (1::int8,'foo'::text)::record, ARRAY[(1::int8,'foo'::text)::record, (1::int8,'foo'::text)::record]"}
+Bind {"PreparedStatement": "tuple_array", "ResultFormatCodes": [1, 1]}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00000002000000140000000800000000000000010000001900000003666f6f"},{"binary":"0000000100000000000008c900000002000000010000001f00000002000000140000000800000000000000010000001900000003666f6f0000001f00000002000000140000000800000000000000010000001900000003666f6f"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
