@@ -12,18 +12,25 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/lib/pq/oid"
 )
 
-// CDCFunctionResolver is a function resolver specific used by CDC expression
+// cdcFunctionResolver is a function resolver specific used by CDC expression
 // evaluation.
-type CDCFunctionResolver struct {
+type cdcFunctionResolver struct {
+	wrapped tree.FunctionReferenceResolver
+}
+
+func newCDCFunctionResolver(wrapped tree.FunctionReferenceResolver) tree.FunctionReferenceResolver {
+	return &cdcFunctionResolver{wrapped: wrapped}
 }
 
 // ResolveFunction implements FunctionReferenceResolver interface.
-func (rs *CDCFunctionResolver) ResolveFunction(
+func (rs *cdcFunctionResolver) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	fn, err := name.ToFunctionName()
@@ -31,33 +38,72 @@ func (rs *CDCFunctionResolver) ResolveFunction(
 		return nil, err
 	}
 
+	fnName := func() string {
+		if !fn.ExplicitSchema {
+			return fn.Object()
+		}
+		var sb strings.Builder
+		sb.WriteString(fn.Schema())
+		sb.WriteByte('.')
+		sb.WriteString(fn.Object())
+		return sb.String()
+	}()
+
+	if _, denied := functionDenyList[fnName]; denied {
+		return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fnName)
+	}
+
 	// Check CDC function first.
-	cdcFuncDef, found := cdcFunctions[fn.Object()]
+	cdcFuncDef, found := cdcFunctions[fnName]
 	if !found {
 		// Try a bit harder
-		cdcFuncDef, found = cdcFunctions[strings.ToLower(fn.Object())]
+		cdcFuncDef, found = cdcFunctions[strings.ToLower(fnName)]
 	}
 
 	if found && cdcFuncDef != useDefaultBuiltin {
 		return cdcFuncDef, nil
 	}
 
-	// Resolve builtin.
-	funcDef, err := tree.GetBuiltinFuncDefinition(fn, path)
+	// Delegate to real resolver.
+	funcDef, err := rs.wrapped.ResolveFunction(ctx, name, path)
 	if err != nil {
 		return nil, err
 	}
-	if funcDef == nil {
-		return nil, errors.AssertionFailedf("function %s does not exist", fn.String())
+
+	// Since we may be dealing with UDFs, ensure it is something
+	// that's supported.
+	for _, overload := range funcDef.Overloads {
+		if overload.IsUDF {
+			if err := checkOverloadSupported(fnName, overload.Overload); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return funcDef, nil
 }
 
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
-func (rs *CDCFunctionResolver) ResolveFunctionByOID(
+func (rs *cdcFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (string, *tree.Overload, error) {
-	// CDC doesn't support user defined function yet, so there's no need to
-	// resolve function by OID.
-	return "", nil, errors.AssertionFailedf("unimplemented yet")
+	fnName, overload, err := rs.wrapped.ResolveFunctionByOID(ctx, oid)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := checkOverloadSupported(fnName, overload); err != nil {
+		return "", nil, err
+	}
+	return fnName, overload, err
+}
+
+// checkOverloadsSupported verifies function overload is supported by CDC.
+func checkOverloadSupported(fnName string, overload *tree.Overload) error {
+	switch overload.Class {
+	case tree.AggregateClass, tree.GeneratorClass, tree.WindowClass:
+		return pgerror.Newf(pgcode.UndefinedFunction, "aggregate, generator, or window function %q unsupported by CDC", fnName)
+	}
+	if overload.Volatility == volatility.Volatile {
+		return pgerror.Newf(pgcode.UndefinedFunction, "volatile functions %q unsupported by CDC", fnName)
+	}
+	return nil
 }

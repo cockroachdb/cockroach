@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
 // sentinel value indicating we should use default builtin
@@ -37,6 +36,23 @@ var useDefaultBuiltin *tree.ResolvedFunctionDefinition
 // context, and, in addition, eval.Context is not thread safe).
 // Instead, we have to do so through annotations object stored inside eval.Context.
 var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
+	"age":                      useDefaultBuiltin,
+	"array_to_json":            useDefaultBuiltin,
+	"array_to_string":          useDefaultBuiltin,
+	"crdb_internal.cluster_id": useDefaultBuiltin,
+	"date_part":                useDefaultBuiltin,
+	"date_trunc":               useDefaultBuiltin,
+	"extract":                  useDefaultBuiltin,
+	"format":                   useDefaultBuiltin,
+	"jsonb_build_array":        useDefaultBuiltin,
+	"jsonb_build_object":       useDefaultBuiltin,
+	"row_to_json":              useDefaultBuiltin,
+	"overlaps":                 useDefaultBuiltin,
+	"pg_collation_for":         useDefaultBuiltin,
+	"pg_typeof":                useDefaultBuiltin,
+	"quote_literal":            useDefaultBuiltin,
+	"quote_nullable":           useDefaultBuiltin,
+
 	// {statement,transaction}_timestamp  functions can be supported given that we
 	// set the statement and transaction timestamp to be equal to MVCC timestamp
 	// of the event. However, we provide our own override which uses annotation to
@@ -49,22 +65,11 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	),
 
 	"timezone": useDefaultBuiltin,
-
-	// jsonb functions are stable because they depend on eval
-	// context DataConversionConfig
-	"jsonb_build_array":  useDefaultBuiltin,
-	"jsonb_build_object": useDefaultBuiltin,
-	"to_json":            useDefaultBuiltin,
-	"to_jsonb":           useDefaultBuiltin,
-	"row_to_json":        useDefaultBuiltin,
+	"to_char":  useDefaultBuiltin,
+	"to_json":  useDefaultBuiltin,
+	"to_jsonb": useDefaultBuiltin,
 
 	// Misc functions that depend on eval context.
-	"overlaps":         useDefaultBuiltin,
-	"pg_collation_for": useDefaultBuiltin,
-	"pg_typeof":        useDefaultBuiltin,
-	"quote_literal":    useDefaultBuiltin,
-	"quote_nullable":   useDefaultBuiltin,
-
 	// TODO(yevgeniy): Support geometry.
 	//"st_asgeojson",
 	//"st_estimatedextent",
@@ -150,97 +155,34 @@ func cdcTimestampBuiltin(
 }
 
 // checkFunctionSupported checks if the function (expression) is supported.
-// Returns (possibly modified) function expression if supported; error otherwise.
 func checkFunctionSupported(
 	ctx context.Context, fnCall *tree.FuncExpr, semaCtx *tree.SemaContext,
-) (*tree.FuncExpr, error) {
-	if semaCtx.FunctionResolver == nil {
-		return nil, errors.AssertionFailedf("function resolver must be configured for CDC")
-	}
-
-	// Returns function call expression, provided the function with specified
-	// name is supported.
-	cdcFunctionWithOverride := func(name string, fnCall *tree.FuncExpr) (*tree.FuncExpr, error) {
-		funDef, isSafe := cdcFunctions[name]
-		if !isSafe {
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", name)
-		}
-		if funDef != useDefaultBuiltin {
-			// Install our override
-			fnCall.Func = tree.ResolvableFunctionReference{FunctionReference: funDef}
-		}
-		return fnCall, nil
-	}
-
+) error {
 	switch fn := fnCall.Func.FunctionReference.(type) {
 	case *tree.UnresolvedName:
-		funDef, err := semaCtx.FunctionResolver.ResolveFunction(ctx, fn, semaCtx.SearchPath)
-		if err != nil {
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fnCall.Func.String())
-		}
-		fnCall = &tree.FuncExpr{
-			Func:  tree.ResolvableFunctionReference{FunctionReference: funDef},
-			Type:  fnCall.Type,
-			Exprs: fnCall.Exprs,
-		}
-		if _, isCDCFn := cdcFunctions[funDef.Name]; isCDCFn {
-			return fnCall, nil
-		}
-		return checkFunctionSupported(ctx, fnCall, semaCtx)
+		// Unresolved names will be resolved later -- which performs
+		// the check if the function supported by CDC.
+		return nil
 	case *tree.ResolvedFunctionDefinition:
-		var fnVolatility volatility.V
-		for _, overload := range fn.Overloads {
-			// Aggregates, generators and window functions are not supported.
-			switch overload.Class {
-			case tree.AggregateClass, tree.GeneratorClass, tree.WindowClass:
-				return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fn.Name)
-			}
-			if overload.Volatility > fnVolatility {
-				fnVolatility = overload.Volatility
-			}
+		if _, denied := functionDenyList[fn.Name]; denied {
+			return pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fn.Name)
 		}
-		if fnVolatility <= volatility.Immutable {
-			// Remaining immutable functions are safe.
-			return fnCall, nil
-		}
-
-		return cdcFunctionWithOverride(fn.Name, fnCall)
 	case *tree.FunctionDefinition:
-		switch fn.Class {
-		case tree.AggregateClass, tree.GeneratorClass, tree.WindowClass:
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fn.Name)
+		if _, denied := functionDenyList[fn.Name]; denied {
+			return pgerror.Newf(pgcode.UndefinedFunction, "function %q unsupported by CDC", fn.Name)
 		}
-
-		var fnVolatility volatility.V
-		if fnCall.ResolvedOverload() != nil {
-			if _, isCDC := cdcFunctions[fn.Name]; isCDC {
-				return fnCall, nil
-			}
-			fnVolatility = fnCall.ResolvedOverload().Volatility
-		} else {
-			// Pick highest volatility overload.
-			for _, o := range fn.Definition {
-				if o.Volatility > fnVolatility {
-					fnVolatility = o.Volatility
-				}
-			}
-		}
-		if fnVolatility <= volatility.Immutable {
-			// Remaining immutable functions are safe.
-			return fnCall, nil
-		}
-
-		return cdcFunctionWithOverride(fn.Name, fnCall)
-	default:
-		return nil, errors.AssertionFailedf("unexpected function expression of type %T", fn)
 	}
+	return nil
 }
 
-// TestingEnableVolatileFunction allows functions with the given name (lowercase)
-// to be used in expressions if their volatility level would disallow them by default.
-// Used for testing.
-func TestingEnableVolatileFunction(fnName string) {
-	cdcFunctions[fnName] = useDefaultBuiltin
+// TestingDisableFunctionsBlacklist disables blacklist, thus allowing
+// all functions, including volatile ones, to be used in changefeed expressions.
+func TestingDisableFunctionsBlacklist() func() {
+	old := functionDenyList
+	functionDenyList = make(map[string]struct{})
+	return func() {
+		functionDenyList = old
+	}
 }
 
 // For some functions (specifically the volatile ones), we do
@@ -286,4 +228,33 @@ var timestampBuiltinOverloads = []tree.Overload{
 		// is not folded.
 		Volatility: volatility.Volatile,
 	},
+}
+
+var functionDenyList = make(map[string]struct{})
+
+func init() {
+	for _, fnDef := range tree.ResolvedBuiltinFuncDefs {
+		for _, overload := range fnDef.Overloads {
+			switch overload.Volatility {
+			case volatility.Volatile:
+				// There is nothing that prevents a function from having
+				// volatile and non-volatile overloads.  This, however, would be very
+				// surprising (and, at least currently, there are no such functions).
+				// Same argument applies to overload.Class -- seeing heterogeneous
+				// class would be surprising.
+				functionDenyList[fnDef.Name] = struct{}{}
+			case volatility.Stable:
+				// If the stable function is not on the white list,
+				// then it is blacklisted.
+				if _, whitelisted := cdcFunctions[fnDef.Name]; !whitelisted {
+					functionDenyList[fnDef.Name] = struct{}{}
+				}
+			}
+
+			switch overload.Class {
+			case tree.AggregateClass, tree.GeneratorClass, tree.WindowClass:
+				functionDenyList[fnDef.Name] = struct{}{}
+			}
+		}
+	}
 }

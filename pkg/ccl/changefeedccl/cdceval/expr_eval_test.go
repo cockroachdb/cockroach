@@ -63,6 +63,17 @@ CREATE TABLE foo (
   FAMILY only_c (c),
   FAMILY f_g_fam(f, g, flag)
 )`)
+	sqlDB.Exec(t, `
+CREATE FUNCTION yesterday(mvcc DECIMAL) 
+RETURNS DECIMAL IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
+  SELECT mvcc - 24 * 3600 * 1e9
+$$`)
+	sqlDB.Exec(t, `
+CREATE FUNCTION volatile() 
+RETURNS FLOAT VOLATILE LANGUAGE SQL AS $$
+  SELECT random()
+$$`)
+
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	type decodeExpectation struct {
@@ -429,7 +440,7 @@ CREATE TABLE foo (
 		{
 			testName:   "main/no_sleep",
 			familyName: "main",
-			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM _",
+			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM foo",
 			expectErr:  `function "pg_sleep" unsupported by CDC`,
 		},
 		{
@@ -499,6 +510,25 @@ CREATE TABLE foo (
 				}
 				return expectations
 			}(),
+		},
+		{
+			testName:   "user defined function",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
+			stmt:       "SELECT  crdb_internal_mvcc_timestamp - yesterday(crdb_internal_mvcc_timestamp) AS elapsed FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"1st test", "1"},
+					allValues: map[string]string{"elapsed": "86400000000000.0000000000"},
+				},
+			},
+		},
+		{
+			testName:   "disallow volatile UDF",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
+			stmt:       "SELECT  volatile() AS v FROM foo",
+			expectErr:  `volatile functions "volatile" unsupported by CDC`,
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
@@ -609,7 +639,7 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b STRING)")
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	target := changefeedbase.Target{
 		TableID:    desc.GetID(),
@@ -631,9 +661,10 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 		"generate_series(1, 10)": "generate_series",
 
 		// Unsupported functions that take arguments from foo.
-		"generate_series(1, a)":            "generate_series",
-		"crdb_internal.read_file(b)":       "crdb_internal.read_file",
-		"crdb_internal.get_namespace_id()": "crdb_internal.get_namespace_id",
+		"generate_series(1, a)": "generate_series",
+
+		"crdb_internal.read_file(b)":               "crdb_internal.read_file",
+		"crdb_internal.get_namespace_id(0, 'foo')": "crdb_internal.get_namespace_id",
 	} {
 		t.Run(fmt.Sprintf("select/%s", errFn), func(t *testing.T) {
 			_, err := newEvaluatorWithNormCheck(&execCfg, desc, execCfg.Clock.Now(), target,
