@@ -33,6 +33,7 @@ type Evaluator struct {
 	norm *NormalizedSelectClause
 
 	// Plan related state.
+	cleanup      func()
 	input        execinfra.RowReceiver
 	planGroup    ctxgroup.Group
 	errCh        chan error
@@ -185,12 +186,17 @@ func (e *Evaluator) planAndRun(ctx context.Context) (err error) {
 func (e *Evaluator) preparePlan(
 	ctx context.Context,
 ) (plan sql.CDCExpressionPlan, prevCol catalog.Column, err error) {
+	if e.cleanup != nil {
+		e.cleanup()
+		e.cleanup = nil
+	}
+
 	err = withPlanner(
 		ctx, e.execCfg, e.user, e.currDesc.SchemaTS, e.sessionData,
-		func(ctx context.Context, execCtx sql.JobExecContext) error {
+		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			e.cleanup = cleanup
 			semaCtx := execCtx.SemaCtx()
-			var r CDCFunctionResolver
-			semaCtx.FunctionResolver = &r
+			semaCtx.FunctionResolver = newCDCFunctionResolver(semaCtx.FunctionResolver)
 			semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 			semaCtx.Annotations = tree.MakeAnnotations(cdcAnnotationAddr)
 
@@ -386,6 +392,10 @@ func (e *Evaluator) closeErr() error {
 		e.input = nil
 		return e.planGroup.Wait()
 	}
+
+	if e.cleanup != nil {
+		e.cleanup()
+	}
 	return nil
 }
 
@@ -412,8 +422,7 @@ const rejectInvalidCDCExprs = tree.RejectAggregates | tree.RejectGenerators |
 // evaluation; returns cleanup function which restores previous configuration.
 func configSemaForCDC(semaCtx *tree.SemaContext) func() {
 	origProps, origResolver := semaCtx.Properties, semaCtx.FunctionResolver
-	var r CDCFunctionResolver
-	semaCtx.FunctionResolver = &r
+	semaCtx.FunctionResolver = newCDCFunctionResolver(semaCtx.FunctionResolver)
 	semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 
 	return func() {
