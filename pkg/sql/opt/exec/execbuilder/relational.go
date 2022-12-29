@@ -611,6 +611,7 @@ func (b *Builder) scanParams(
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	// Raise error if row-level locking is part of a read-only transaction.
 	// TODO(nvanbenschoten): this check should be shared across all expressions
@@ -2004,6 +2005,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	res := execPlan{outputCols: output}
 	b.recordJoinAlgorithm(exec.IndexJoin)
@@ -2292,6 +2294,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType := joinOpToJoinType(join.JoinType)
 	b.recordJoinType(joinType)
@@ -2518,6 +2521,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType := joinOpToJoinType(join.JoinType)
 	b.recordJoinType(joinType)
@@ -2592,6 +2596,7 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		leftLocking = forUpdateLocking
 		rightLocking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || leftLocking.IsLocking() || rightLocking.IsLocking()
 
 	allCols := joinOutputMap(leftColMap, rightColMap)
 
