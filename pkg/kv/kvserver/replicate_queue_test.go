@@ -274,8 +274,6 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 				}
 				return total, perStore
 			}
-			totalReplicas, _ := countReplicas()
-			totalLeases, _ := countLeases()
 
 			// The requirement for minimum leases is low because of the following: in
 			// the case of 8 stores we create 8*2=16 ranges, we also have another 52
@@ -292,10 +290,9 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			// within a minute normally.
 			const replicasThreshold = 0.9
 			const leasesThreshold = 0.7
-			minReplicas := int(math.Floor(replicasThreshold * (float64(totalReplicas) / float64(numStores))))
-			minLeases := int(math.Floor(leasesThreshold * (float64(totalLeases) / float64(numStores))))
 			testutils.SucceedsWithin(t, func() error {
-				_, replicasPerStore := countReplicas()
+				totalReplicas, replicasPerStore := countReplicas()
+				minReplicas := int(math.Floor(replicasThreshold * (float64(totalReplicas) / float64(numStores))))
 				t.Logf("current replica state (want at least %d replicas on all stores): %d", minReplicas, replicasPerStore)
 				for _, c := range replicasPerStore {
 					if c < minReplicas {
@@ -305,7 +302,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 						return err
 					}
 				}
-				_, leasesPerStore := countLeases()
+				totalLeases, leasesPerStore := countLeases()
+				minLeases := int(math.Floor(leasesThreshold * (float64(totalLeases) / float64(numStores))))
 				t.Logf("current lease state (want at least %d leases on all stores): %d", minLeases, leasesPerStore)
 				for _, c := range leasesPerStore {
 					if c < minLeases {
