@@ -525,6 +525,18 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	}(phaseCtx); err != nil {
 		return err
 	}
+
+	// Step 10: restore web sessions.
+	phaseCtx = logtags.AddTag(ctx, "phase", 10)
+	if err := func(ctx context.Context) error {
+		if err := c.restoreWebSessions(ctx); err != nil {
+			c.warnLog(ctx, "unable to restore web sessions: %v", err)
+		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -852,6 +864,9 @@ func TestingForceRandomizeDemoPorts() func() {
 }
 
 func (c *transientCluster) Close(ctx context.Context) {
+	if err := c.saveWebSessions(ctx); err != nil {
+		c.warnLog(ctx, "unable to save web sessions: %v", err)
+	}
 	if c.stopper != nil {
 		if r := recover(); r != nil {
 			// A panic here means some of the async tasks may still be
