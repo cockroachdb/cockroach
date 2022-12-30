@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -197,6 +198,7 @@ type quiescer interface {
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
 	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
+	leaseStatusAtRLocked(ctx context.Context, now hlc.ClockTimestamp) kvserverpb.LeaseStatus
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -333,11 +335,23 @@ func shouldReplicaQuiesce(
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
+	// However, we explicitly allow quiescing if the lease is
+	// expiration-based and has expired, to allow quiescing
+	// idle expiration-based ranges when
+	// kv.expiration_leases_only.enabled is true.
 	if !q.ownsValidLeaseRLocked(ctx, now) {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: not leaseholder")
+		// TODO(erikgrinaker): omit the duplicate status generation in
+		// ownsValidLeaseRLocked() and the call below, but we don't have convenient
+		// access to the store ID via the quiescer interface.
+		st := q.leaseStatusAtRLocked(ctx, now)
+		if st.Lease.Type() == roachpb.LeaseExpiration && st.State == kvserverpb.LeaseState_EXPIRED {
+			// explicitly allow expired leases to quiesce
+		} else {
+			if log.V(4) {
+				log.Infof(ctx, "not quiescing: not leaseholder")
+			}
+			return nil, nil, false
 		}
-		return nil, nil, false
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
 	// equal in order to quiesce.

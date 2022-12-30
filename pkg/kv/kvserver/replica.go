@@ -1366,7 +1366,7 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	var shouldExtend bool
+	var shouldRenew bool
 	postRUnlock := func() {}
 	r.mu.RLock()
 	defer func() {
@@ -1397,7 +1397,7 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	st, shouldExtend, err := r.checkLeaseRLocked(ctx, ba)
+	st, shouldRenew, err := r.checkLeaseRLocked(ctx, ba)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
@@ -1421,12 +1421,12 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		}
 	}
 
-	if shouldExtend {
+	if shouldRenew {
 		// If we're asked to extend the lease, trigger (async) lease renewal.
 		// Kicking this off requires an exclusive lock, and we hold a read-only lock
 		// already, so we jump through a hoop to run it in a suitably positioned
 		// defer.
-		postRUnlock = func() { r.maybeExtendLeaseAsync(ctx, st) }
+		postRUnlock = func() { r.maybeRenewLeaseAsync(ctx, st) }
 	}
 	return st, nil
 }
@@ -1508,7 +1508,7 @@ func (r *Replica) checkLeaseRLocked(
 	reqTS := ba.WriteTimestamp()
 	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 
-	var shouldExtend bool
+	var shouldRenew bool
 	// Write commands that skip the lease check in practice are exactly
 	// RequestLease and TransferLease. Both use the provided previous lease for
 	// verification below raft. We return a zero lease status from this method and
@@ -1520,7 +1520,7 @@ func (r *Replica) checkLeaseRLocked(
 	if !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != roachpb.INCONSISTENT {
 		// Check the lease.
 		var err error
-		shouldExtend, err = r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+		shouldRenew, err = r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
 		if err != nil {
 			// No valid lease, but if we can serve this request via follower reads,
 			// we may continue.
@@ -1532,13 +1532,13 @@ func (r *Replica) checkLeaseRLocked(
 			// this under the lease by zeroing out the status. We also intentionally
 			// do not pass the original status to checkTSAboveGCThreshold as
 			// this method assumes that a valid status indicates that this replica
-			// holds the lease (see #73123). `shouldExtend` is already false in this
+			// holds the lease (see #73123). `shouldRenew` is already false in this
 			// branch, but for completeness we zero it out as well.
-			st, shouldExtend, err = kvserverpb.LeaseStatus{}, false, nil
+			st, shouldRenew, err = kvserverpb.LeaseStatus{}, false, nil
 		}
 	}
 
-	return st, shouldExtend, nil
+	return st, shouldRenew, nil
 }
 
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
