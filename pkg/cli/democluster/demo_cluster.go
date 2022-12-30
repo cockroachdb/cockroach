@@ -1768,9 +1768,13 @@ func (c *transientCluster) printURLs(
 // weigh the trade-off between working to script "demo" which may
 // require non-trivial changes to their script from one version to the
 // next, and starting a regular server with "start-single-node".)
+//
+// The password can be overridden via the env var
+// COCKROACH_DEMO_PASSWORD for the benefit of test automation.
 func genDemoPassword(username string) string {
 	mypid := os.Getpid()
-	return fmt.Sprintf("%s%d", username, mypid)
+	candidatePassword := fmt.Sprintf("%s%d", username, mypid)
+	return envutil.EnvOrDefaultString("COCKROACH_DEMO_PASSWORD", candidatePassword)
 }
 
 // lockDir uses a file lock to prevent concurrent writes to the
