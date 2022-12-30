@@ -157,6 +157,17 @@ eexpect eof
 
 end_test
 
+start_test "Check that the user can override the password."
+set ::env(COCKROACH_DEMO_PASSWORD) "hunter2"
+spawn $argv demo --no-line-editor --insecure=false --no-example-database
+eexpect "Connection parameters"
+eexpect "(sql)"
+eexpect "postgresql://demo:hunter2@"
+eexpect "defaultdb>"
+send_eof
+eexpect eof
+end_test
+
 # Test that demo displays connection URLs for nodes in the cluster.
 start_test "Check that node URLs are displayed"
 spawn $argv demo --no-line-editor --insecure --no-example-database
