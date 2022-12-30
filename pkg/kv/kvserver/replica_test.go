@@ -10023,6 +10023,13 @@ func (q *testQuiescer) ownsValidLeaseRLocked(context.Context, hlc.ClockTimestamp
 	return q.ownsValidLease
 }
 
+func (q *testQuiescer) leaseStatusAtRLocked(
+	ctx context.Context, now hlc.ClockTimestamp,
+) kvserverpb.LeaseStatus {
+	// TODO(erikgrinaker): test this.
+	return kvserverpb.LeaseStatus{}
+}
+
 func (q *testQuiescer) mergeInProgressRLocked() bool {
 	return q.mergeInProgress
 }

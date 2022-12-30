@@ -74,6 +74,13 @@ var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var onlyExpirationLeases = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.expiration_leases_only.enabled",
+	"only use expiration-bases leases, not epoch-based ones",
+	false,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
@@ -257,6 +264,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	}
 
 	if p.repl.requiresExpiringLeaseRLocked() ||
+		onlyExpirationLeases.Get(&p.repl.ClusterSettings().SV) ||
 		(transfer &&
 			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2EnableLeaseUpgrade)) {
@@ -797,10 +805,17 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 // liveness table must always use expiration leases to avoid circular
 // dependencies on the node liveness table. All other ranges typically use
 // epoch-based leases, but may temporarily use expiration based leases during
-// lease transfers.
+// lease transfers, or when explicitly disabled via cluster setting.
 func (r *Replica) requiresExpiringLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+}
+
+// shouldUseExpiringLeaseRLocked returns true if this range should be using an
+// expiration-based lease, either because it requires one or because
+// kv.expiration_leases_only.enabled is enabled.
+func (r *Replica) shouldUseExpiringLeaseRLocked() bool {
+	return onlyExpirationLeases.Get(&r.ClusterSettings().SV) || r.requiresExpiringLeaseRLocked()
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
@@ -1087,18 +1102,18 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 // after the replica's read lock has been dropped.
 func (r *Replica) leaseGoodToGoRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+) (_ kvserverpb.LeaseStatus, shouldRenew bool, _ error) {
 	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
-	shouldExtend, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+	shouldRenew, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, false, err
 	}
-	return st, shouldExtend, err
+	return st, shouldRenew, err
 }
 
 func (r *Replica) leaseGoodToGoForStatusRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp, st kvserverpb.LeaseStatus,
-) (shouldExtend bool, _ error) {
+) (shouldRenew bool, _ error) {
 	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
 		// Case (1): invalid request.
 		return false, err
@@ -1152,14 +1167,14 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 		)
 	}
 	// Case (4): all good.
-	return r.shouldExtendLeaseRLocked(st), nil
+	return r.shouldRenewLeaseRLocked(st), nil
 }
 
 // leaseGoodToGo is like leaseGoodToGoRLocked, but will acquire the replica read
 // lock.
 func (r *Replica) leaseGoodToGo(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+) (_ kvserverpb.LeaseStatus, shouldRenew bool, _ error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.leaseGoodToGoRLocked(ctx, now, reqTS)
@@ -1209,10 +1224,10 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
-		status, shouldExtend, err := r.leaseGoodToGo(ctx, now, reqTS)
+		status, shouldRenew, err := r.leaseGoodToGo(ctx, now, reqTS)
 		if err == nil {
-			if shouldExtend {
-				r.maybeExtendLeaseAsync(ctx, status)
+			if shouldRenew {
+				r.maybeRenewLeaseAsync(ctx, status)
 			}
 			return status, nil
 		} else if !errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)) {
@@ -1408,40 +1423,50 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	}
 }
 
-// shouldExtendLeaseRLocked determines whether the lease should be
-// extended asynchronously, even if it is currently valid. The method
-// returns true if this range uses expiration-based leases, the lease is
-// in need of renewal, and there's not already an extension pending.
-func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
-	if st.Lease.Type() != roachpb.LeaseExpiration {
-		return false
+// shouldRenewLeaseRLocked determines whether the lease should be renewed
+// asynchronously, even if it is currently valid. The method returns true either
+// if this range uses expiration-based leases and the lease is in need of an
+// extenion, or if the lease type should be changed due to e.g. a change in
+// kv.expiration_leases_only.enabled (from epoch to expiration or vice versa).
+func (r *Replica) shouldRenewLeaseRLocked(st kvserverpb.LeaseStatus) bool {
+	var shouldRenewLease bool
+	// TODO(erikgrinaker): requiresExpiringLeaseRLocked() via
+	// shouldUseExpiringLeaseRLocked() incurs a key comparison, which is too
+	// expensive here. Only do the comparison on range descriptor changes.
+	isExpirationLease := st.Lease.Type() == roachpb.LeaseExpiration
+	if isExpirationLease != r.shouldUseExpiringLeaseRLocked() {
+		// Renew the lease if it should be using a different lease type. The caller
+		// will renew the lease using the correct type.
+		shouldRenewLease = true
+	} else if isExpirationLease {
+		renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+		shouldRenewLease = renewal.LessEq(st.Now.ToTimestamp())
 	}
-	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return false
+	if shouldRenewLease {
+		if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
+			shouldRenewLease = false
+		}
 	}
-	renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-	return renewal.LessEq(st.Now.ToTimestamp())
+	return shouldRenewLease
 }
 
-// maybeExtendLeaseAsync attempts to extend the expiration-based lease
-// asynchronously, if doing so is deemed beneficial by an earlier call
-// to shouldExtendLeaseRLocked.
-func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.LeaseStatus) {
+// maybeRenewLeaseAsync attempts to renew thelease asynchronously, if doing so
+// is deemed beneficial by an earlier call to shouldRenewLeaseRLocked.
+func (r *Replica) maybeRenewLeaseAsync(ctx context.Context, st kvserverpb.LeaseStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	r.maybeExtendLeaseAsyncLocked(ctx, st)
+	r.maybeRenewLeaseAsyncLocked(ctx, st)
 }
 
-func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb.LeaseStatus) {
-	// Check shouldExtendLeaseRLocked again, because others may have raced to
-	// extend the lease and beaten us here after we made the determination
-	// (under a shared lock) that the extension was needed.
-	if !r.shouldExtendLeaseRLocked(st) {
+func (r *Replica) maybeRenewLeaseAsyncLocked(ctx context.Context, st kvserverpb.LeaseStatus) {
+	// Check shouldRenewLeaseRLocked again, because others may have raced to
+	// renew the lease and beaten us here after we made the determination
+	// (under a shared lock) that the renewal was needed.
+	if !r.shouldRenewLeaseRLocked(st) {
 		return
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
+		log.Infof(ctx, "renewing lease %s at %s", st.Lease, st.Now)
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
 	//
