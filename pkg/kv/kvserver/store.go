@@ -1984,6 +1984,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.startLeaseRenewer(ctx)
 	}
 
+	// When kv.expiration_leases_only.enabled is activated, eagerly switch all
+	// epoch-based leases to expiration-based ones.
+	onlyExpirationLeases.SetOnChange(&s.ClusterSettings().SV, s.onOnlyExpirationLeasesChanged)
+
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
 
@@ -2179,6 +2183,35 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				return
 			}
 		}
+	})
+}
+
+// onOnlyExpirationLeasesChanged asynchronously switches all epoch-based leases
+// to expiration-based ones for leaseholders on this store.
+func (s *Store) onOnlyExpirationLeasesChanged(ctx context.Context) {
+	if !onlyExpirationLeases.Get(&s.ClusterSettings().SV) {
+		return
+	}
+	s.stopper.RunAsyncTask(ctx, "switch-epoch-leases-to-expiration", func(ctx context.Context) {
+		now := s.cfg.Clock.NowAsClockTimestamp()
+		newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+			// If the context has been cancelled, or the setting was disabled in the
+			// meanwhile, bail out early.
+			if ctx.Err() != nil || !onlyExpirationLeases.Get(&s.ClusterSettings().SV) {
+				return false
+			}
+			if repl.OwnsValidLease(ctx, now) {
+				if lease, _ := repl.GetLease(); lease.Type() != roachpb.LeaseExpiration {
+					if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+						if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+							log.Warningf(repl.AnnotateCtx(ctx),
+								"failed to switch epoch lease to expiration lease: %s", pErr)
+						}
+					}
+				}
+			}
+			return true
+		})
 	})
 }
 
