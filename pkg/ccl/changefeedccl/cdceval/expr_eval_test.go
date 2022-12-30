@@ -546,7 +546,7 @@ $$`)
 			}
 			targets.Add(target)
 
-			// Setup evaluator.
+			// Setup familyEvaluator.
 			e, err := newEvaluatorWithNormCheck(&execCfg, desc, s.Clock().Now(), target, tc.stmt)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err, err)
@@ -754,7 +754,7 @@ func readSortedRangeFeedValues(
 
 // Evaluator gets constructed w/ normalization steps already performed.
 // This test utility function adds (usually un-needed)  normalization step
-// so that errors in expression can be picked up without calling evaluator.Eval().
+// so that errors in expression can be picked up without calling familyEvaluator.Eval().
 func newEvaluatorWithNormCheck(
 	execCfg *sql.ExecutorConfig,
 	desc catalog.TableDescriptor,
