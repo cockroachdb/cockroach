@@ -9983,6 +9983,7 @@ type testQuiescer struct {
 	lastIndex       uint64
 	raftReady       bool
 	ownsValidLease  bool
+	leaseType       roachpb.LeaseType
 	mergeInProgress bool
 	isDestroyed     bool
 
@@ -10017,6 +10018,19 @@ func (q *testQuiescer) hasPendingProposalsRLocked() bool {
 
 func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
+}
+
+func (q *testQuiescer) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
+	// The only condition for an expiration-based lease is that Epoch == 0. We
+	// sanity check this in case the condition changes.
+	var lease roachpb.Lease
+	if q.leaseType != roachpb.LeaseExpiration {
+		lease.Epoch = 1
+	}
+	if lease.Type() != q.leaseType {
+		panic(fmt.Sprintf("unexpected lease type %v, expected %v", lease.Type(), q.leaseType))
+	}
+	return lease, roachpb.Lease{}
 }
 
 func (q *testQuiescer) ownsValidLeaseRLocked(context.Context, hlc.ClockTimestamp) bool {
@@ -10074,6 +10088,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
+				leaseType:      roachpb.LeaseEpoch,
 				livenessMap: livenesspb.IsLiveMap{
 					1: {IsLive: true},
 					2: {IsLive: true},
@@ -10211,6 +10226,11 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		q.paused = map[roachpb.ReplicaID]struct{}{
 			q.desc.Replicas().AsProto()[0].ReplicaID: {},
 		}
+		return q
+	})
+	// Verify no quiescence with expiration-based leases.
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseType = roachpb.LeaseExpiration
 		return q
 	})
 }
