@@ -189,13 +189,32 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 	}, scanIter(t, iter))
 }
 
-func BenchmarkWriteSSTable(b *testing.B) {
+// Benchmarks writing SSTs using a BackupSSTWriter.
+func BenchmarkWriteSSTableBackup(b *testing.B) {
 	b.StopTimer()
 	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
 	const valueSize, revisions, ssts = 100, 100, 10
 	kvs := makeIntTableKVs(b.N, valueSize, revisions)
 	approxUserDataSizePerKV := kvs[b.N/2].Key.EncodedSize() + valueSize
 	b.SetBytes(int64(approxUserDataSizePerKV * ssts))
+
+	b.ResetTimer()
+	b.StartTimer()
+	for i := 0; i < ssts; i++ {
+		_ = makePebbleSST(b, kvs, false /* ingestion */)
+	}
+	b.StopTimer()
+}
+
+// Benchmarks writing SSTs using an IngestionSSTWriter.
+func BenchmarkWriteSSTableIngestion(b *testing.B) {
+	b.StopTimer()
+	// Writing the SST 10 times keeps size needed for ~10s benchtime under 1gb.
+	const valueSize, revisions, ssts = 100, 100, 10
+	kvs := makeIntTableKVs(b.N, valueSize, revisions)
+	approxUserDataSizePerKV := kvs[b.N/2].Key.EncodedSize() + valueSize
+	b.SetBytes(int64(approxUserDataSizePerKV * ssts))
+
 	b.ResetTimer()
 	b.StartTimer()
 	for i := 0; i < ssts; i++ {
