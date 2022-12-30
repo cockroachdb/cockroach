@@ -3,6 +3,7 @@
 source [file join [file dirname $argv0] common.tcl]
 
 set ::env(COCKROACH_INSECURE) "false"
+set python "python2.7"
 
 spawn $argv demo --empty --no-line-editor --multitenant=true
 eexpect "Welcome"
@@ -71,6 +72,55 @@ eexpect "defaultdb>"
 send "\\q\r"
 eexpect eof
 end_test
+
+spawn /bin/bash
+set shell_spawn_id $spawn_id
+send "PS1=':''/# '\r"
+eexpect ":/# "
+
+start_test "Check that an auth cookie can be extracted for a demo session"
+# From the system tenant.
+send "$argv auth-session login root --certs-dir=\$HOME/.cockroach-demo -p 26258 --only-cookie >cookie_system.txt\r"
+eexpect ":/# "
+# From the app tenant.
+send "$argv auth-session login root --certs-dir=\$HOME/.cockroach-demo --only-cookie >cookie_app.txt\r"
+eexpect ":/# "
+
+# Check that the cookies work.
+set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
+
+send "$python $pyfile cookie_system.txt 'http://localhost:8081/_admin/v1/users'\r"
+eexpect "username"
+eexpect "demo"
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
+eexpect "username"
+eexpect "demo"
+end_test
+
+
+start_test "Check that login sessions are preserved across demo restarts."
+
+set spawn_id $demo_spawn_id
+send "\\q\r"
+eexpect eof
+
+spawn $argv demo --empty --no-line-editor --multitenant=true
+set demo_spawn_id $spawn_id
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+set spawn_id $shell_spawn_id
+
+send "$python $pyfile cookie_system.txt 'http://localhost:8081/_admin/v1/users'\r"
+eexpect "username"
+eexpect "demo"
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
+eexpect "username"
+eexpect "demo"
+end_test
+
+send "exit\r"
+eexpect eof
 
 set spawn_id $demo_spawn_id
 send "\\q\r"
