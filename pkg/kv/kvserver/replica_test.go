@@ -9956,6 +9956,10 @@ func (q *testQuiescer) StoreID() roachpb.StoreID {
 	return q.storeID
 }
 
+func (q *testQuiescer) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
+	return q.leaseStatus.Lease, q.leaseStatus.Lease
+}
+
 func (q *testQuiescer) mergeInProgressRLocked() bool {
 	return q.mergeInProgress
 }
@@ -10010,6 +10014,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				leaseStatus: kvserverpb.LeaseStatus{
 					State: kvserverpb.LeaseState_VALID,
 					Lease: roachpb.Lease{
+						Epoch: 1,
 						Replica: roachpb.ReplicaDescriptor{
 							NodeID:    1,
 							StoreID:   1,
@@ -10198,6 +10203,14 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.paused = map[roachpb.ReplicaID]struct{}{
 			q.desc.Replicas().AsProto()[0].ReplicaID: {},
+		}
+		return q
+	})
+	// Verify no quiescence with expiration-based leases.
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
+			WallTime: time.Now().UTC().Add(time.Minute).Unix(),
 		}
 		return q
 	})
