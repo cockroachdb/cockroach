@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -27,7 +28,13 @@ import (
 // copyToTranslater translates datums into the appropriate format for CopyTo.
 type copyToTranslater interface {
 	translateRow(datums tree.Datums, rcs colinfo.ResultColumns) ([]byte, error)
+	// headerRow returns the header row bytes, if applicable, and a bool to
+	// determine whether one needs to be written.
+	headerRow(rcs colinfo.ResultColumns) ([]byte, bool, error)
 }
+
+var _ copyToTranslater = (*textCopyToTranslater)(nil)
+var _ copyToTranslater = (*csvCopyToTranslater)(nil)
 
 // textCopyToTranslater is the default text representation of COPY TO from postgres.
 type textCopyToTranslater struct {
@@ -36,8 +43,6 @@ type textCopyToTranslater struct {
 	rowBuffer   bytes.Buffer
 	wireCtx     *tree.WireCtx
 }
-
-var _ copyToTranslater = (*textCopyToTranslater)(nil)
 
 func (t *textCopyToTranslater) translateRow(
 	datums tree.Datums, rcs colinfo.ResultColumns,
@@ -63,6 +68,69 @@ func (t *textCopyToTranslater) translateRow(
 	return t.rowBuffer.Bytes(), nil
 }
 
+func (t *textCopyToTranslater) headerRow(rcs colinfo.ResultColumns) ([]byte, bool, error) {
+	return nil, false, nil
+}
+
+// csvCopyToTranslater is the CSV representation of COPY TO from postgres.
+type csvCopyToTranslater struct {
+	copyOptions
+	b           bytes.Buffer
+	fieldBuffer bytes.Buffer
+	wireCtx     *tree.WireCtx
+	w           *csv.Writer
+}
+
+func (c *csvCopyToTranslater) translateRow(
+	datums tree.Datums, rcs colinfo.ResultColumns,
+) ([]byte, error) {
+	c.b.Reset()
+	for i, d := range datums {
+		if d == tree.DNull {
+			if err := c.w.WriteField(bytes.NewBufferString(c.null)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		c.fieldBuffer.Reset()
+		if err := d.FormatWireText(c.wireCtx, rcs[i].Typ); err != nil {
+			return nil, err
+		}
+		if c.fieldBuffer.Len() == 0 {
+			// Empty fields must force an empty quote to differentiate from NULL.
+			if err := c.w.ForceEmptyField(); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := c.w.WriteField(bytes.NewBuffer(c.fieldBuffer.Bytes())); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := c.w.FinishRecord(); err != nil {
+		return nil, err
+	}
+	c.w.Flush()
+	return c.b.Bytes(), nil
+}
+
+func (c *csvCopyToTranslater) headerRow(rcs colinfo.ResultColumns) ([]byte, bool, error) {
+	if !c.csvExpectHeader {
+		return nil, false, nil
+	}
+	c.b.Reset()
+	for _, rc := range rcs {
+		if err := c.w.WriteField(bytes.NewBufferString(rc.Name)); err != nil {
+			return nil, false, err
+		}
+	}
+	if err := c.w.FinishRecord(); err != nil {
+		return nil, false, err
+	}
+	c.w.Flush()
+	return c.b.Bytes(), true, nil
+}
+
 func runCopyTo(
 	ctx context.Context, p *planner, txn *kv.Txn, cmd CopyOut,
 ) (numOutputRows int, retErr error) {
@@ -81,7 +149,20 @@ func runCopyTo(
 			"binary format for COPY TO not implemented",
 		)
 	case tree.CopyFormatCSV:
-		return 0, unimplemented.NewWithIssue(85571, "CSV format for COPY TO not implemented")
+		csvTranslater := &csvCopyToTranslater{
+			copyOptions: copyOptions,
+		}
+		csvTranslater.wireCtx = tree.NewWireCtx(
+			&csvTranslater.fieldBuffer,
+			p.SessionData().DataConversionConfig,
+			p.SessionData().Location,
+		)
+		csvTranslater.w = csv.NewWriter(&csvTranslater.b)
+		csvTranslater.w.Comma = rune(copyOptions.delimiter)
+		if copyOptions.csvEscape != 0 {
+			csvTranslater.w.Escape = copyOptions.csvEscape
+		}
+		t = csvTranslater
 	default:
 		textTranslater := &textCopyToTranslater{
 			copyOptions: copyOptions,
@@ -137,8 +218,17 @@ func runCopyTo(
 		return 0, err
 	}
 
-	// Send all the rows out to the client.
 	if err := func() error {
+		// Send header row if requested.
+		// Send all the rows out to the client.
+		if row, ok, err := t.headerRow(it.Types()); err != nil {
+			return err
+		} else if ok {
+			if err := cmd.Conn.SendCopyData(ctx, row); err != nil {
+				return err
+			}
+		}
+
 		for {
 			next, err := it.Next(ctx)
 			if err != nil {

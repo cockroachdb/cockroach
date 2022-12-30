@@ -790,6 +790,7 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/encoding/csv",
         "//pkg/util/errorutil",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
