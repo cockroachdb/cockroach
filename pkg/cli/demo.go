@@ -375,5 +375,8 @@ func runDemoInternal(
 		defer c.SetSimulatedLatency(false /* on */)
 	}
 
+	// Ensure the last few entries in the log files are flushed at the end.
+	defer log.Flush()
+
 	return sqlCtx.Run(ctx, conn)
 }
