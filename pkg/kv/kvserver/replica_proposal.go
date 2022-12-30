@@ -369,11 +369,11 @@ func (r *Replica) leasePostApplyLocked(
 			case r.store.renewableLeasesSignal <- struct{}{}:
 			default:
 			}
-		} else {
+		} else if !onlyExpirationLeases.Get(&r.store.ClusterSettings().SV) {
 			// We received an expiration lease for a range that doesn't require it,
 			// i.e. comes after the liveness keyspan. We've also applied it before
 			// it has expired. Upgrade this lease to the more efficient epoch-based
-			// one.
+			// one, unless epoch leases are disabled.
 			if log.V(1) {
 				log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch-based one", newLease)
 			}
