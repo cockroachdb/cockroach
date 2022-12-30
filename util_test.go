@@ -139,3 +139,11 @@ func TestIsResponseMsg(t *testing.T) {
 		}
 	}
 }
+
+// TestPayloadSizeOfEmptyEntry ensures that payloadSize of empty entry is always zero.
+// This property is important because new leaders append an empty entry to their log,
+// and we don't want this to count towards the uncommitted log quota.
+func TestPayloadSizeOfEmptyEntry(t *testing.T) {
+	e := pb.Entry{Data: nil}
+	require.Equal(t, 0, int(payloadSize(e)))
+}
