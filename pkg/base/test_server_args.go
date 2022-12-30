@@ -294,6 +294,13 @@ type TestTenantArgs struct {
 	// embedded certs.
 	SSLCertsDir string
 
+	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
+	DisableTLSForHTTP bool
+
+	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
+	// which a feature unique to the demo shell.
+	EnableDemoLoginEndpoint bool
+
 	// StartingRPCAndSQLPort, if it is non-zero, is added to the tenant ID in order to
 	// determine the tenant's SQL+RPC port.
 	// If set, force disables SplitListenSQL.

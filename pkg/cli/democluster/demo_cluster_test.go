@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -53,7 +54,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 	stickyEnginesRegistry := server.NewStickyInMemEnginesRegistry()
 
 	testCases := []struct {
-		nodeID            roachpb.NodeID
+		serverIdx         int
 		joinAddr          string
 		sqlPoolMemorySize int64
 		cacheSize         int64
@@ -61,7 +62,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		expected base.TestServerArgs
 	}{
 		{
-			nodeID:            roachpb.NodeID(1),
+			serverIdx:         0,
 			joinAddr:          "127.0.0.1",
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
@@ -70,8 +71,9 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				PartOfCluster:            true,
 				JoinAddr:                 "127.0.0.1",
 				DisableTLSForHTTP:        true,
-				SQLAddr:                  ":1234",
-				HTTPAddr:                 ":4567",
+				Addr:                     "127.0.0.1:7890",
+				SQLAddr:                  "127.0.0.1:1234",
+				HTTPAddr:                 "127.0.0.1:4567",
 				SQLMemoryPoolSize:        2 << 10,
 				CacheSize:                1 << 10,
 				NoAutoInitializeCluster:  true,
@@ -84,7 +86,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			},
 		},
 		{
-			nodeID:            roachpb.NodeID(3),
+			serverIdx:         2,
 			joinAddr:          "127.0.0.1",
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
@@ -92,8 +94,9 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				DisableDefaultTestTenant: true,
 				PartOfCluster:            true,
 				JoinAddr:                 "127.0.0.1",
-				SQLAddr:                  ":1236",
-				HTTPAddr:                 ":4569",
+				Addr:                     "127.0.0.1:7892",
+				SQLAddr:                  "127.0.0.1:1236",
+				HTTPAddr:                 "127.0.0.1:4569",
 				DisableTLSForHTTP:        true,
 				SQLMemoryPoolSize:        4 << 10,
 				CacheSize:                4 << 10,
@@ -114,14 +117,14 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.SQLPoolMemorySize = tc.sqlPoolMemorySize
 			demoCtx.CacheSize = tc.cacheSize
 
-			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
+			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", 1234, 7890, 4567, stickyEnginesRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
 			assert.Len(t, actual.StoreSpecs, 1)
 			assert.Equal(
 				t,
-				fmt.Sprintf("demo-node%d", tc.nodeID),
+				fmt.Sprintf("demo-server%d", tc.serverIdx),
 				actual.StoreSpecs[0].StickyInMemoryEngineID,
 			)
 
@@ -268,8 +271,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	securityassets.ResetLoader()
 	certsDir := t.TempDir()
 
-	require.NoError(t, demoCtx.generateCerts(certsDir))
-
 	ctx := context.Background()
 
 	// Setup the transient cluster.
@@ -287,15 +288,17 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	// cancels everything controlled by the stopper.
 	defer c.Close(ctx)
 
+	require.NoError(t, c.generateCerts(ctx, certsDir))
+
 	// Also ensure the context gets canceled when the stopper
 	// terminates above.
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 
 	require.NoError(t, c.Start(ctx))
 
-	for i := 0; i < demoCtx.NumNodes; i++ {
-		url, err := c.getNetworkURLForServer(ctx, i,
-			true /* includeAppName */, true /* isTenant */)
+	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
+		url, err := c.getNetworkURLForServer(ctx, 0,
+			true /* includeAppName */, forSecondaryTenant)
 		require.NoError(t, err)
 		sqlConnCtx := clisqlclient.Context{}
 		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
@@ -307,5 +310,5 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 		// Create a table on each tenant to make sure that the tenants are separate.
 		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
-	}
+	})
 }

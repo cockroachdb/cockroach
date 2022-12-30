@@ -5,20 +5,19 @@ source [file join [file dirname $argv0] common.tcl]
 start_test "Check \\demo commands work as expected"
 # Start a demo with 5 nodes. Set multitenant=false due to unsupported
 # gossip commands below.
-spawn $argv demo movr --no-line-editor --nodes=5 --multitenant=false
+spawn $argv demo --empty --no-line-editor --nodes=5 --multitenant=false
 
-# Ensure db is movr.
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Wrong number of args
 send "\\demo node\r"
 eexpect "invalid syntax: \\\\demo node. Try \\\\? for help."
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Cannot shutdown node 1
 send "\\demo shutdown 1\r"
 eexpect "cannot shutdown node 1"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Cannot operate on a node which does not exist.
 send "\\demo shutdown 8\r"
@@ -29,17 +28,17 @@ send "\\demo decommission 8\r"
 eexpect "node 8 does not exist"
 send "\\demo recommission 8\r"
 eexpect "node 8 does not exist"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Cannot restart a node that is not shut down.
 send "\\demo restart 2\r"
 eexpect "node 2 is already running"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Shut down a separate node.
 send "\\demo shutdown 3\r"
 eexpect "node 3 has been shutdown"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
 eexpect "1 |    f     |        f        | active"
@@ -47,22 +46,22 @@ eexpect "2 |    f     |        f        | active"
 eexpect "3 |    t     |        f        | active"
 eexpect "4 |    f     |        f        | active"
 eexpect "5 |    f     |        f        | active"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Cannot shut it down again.
 send "\\demo shutdown 3\r"
 eexpect "node 3 is already shut down"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Expect queries to still work with just one node down.
-send "SELECT count(*) FROM movr.rides;\r"
-eexpect "500"
-eexpect "movr>"
+send "SELECT count(*) FROM system.users;\r"
+eexpect "1"
+eexpect "defaultdb>"
 
 # Now restart the node.
 send "\\demo restart 3\r"
 eexpect "node 3 has been restarted"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # NB: this is flaky, sometimes n3 is still marked as draining due to
 # gossip propagation delays. See:
@@ -73,12 +72,12 @@ eexpect "movr>"
 # eexpect "3 |  false   |      false      | active"
 # eexpect "4 |  false   |      false      | active"
 # eexpect "5 |  false   |      false      | active"
-# eexpect "movr>"
+# eexpect "defaultdb>"
 
 # Try commissioning commands
 send "\\demo decommission 4\r"
 eexpect "node 4 has been decommissioned"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # NB: skipping this out of an abundance of caution, see:
 # https://github.com/cockroachdb/cockroach/issues/76391
@@ -88,25 +87,25 @@ eexpect "movr>"
 # eexpect "3 |  false   |      false      | active"
 # eexpect "4 |  false   |      true       | decommissioned"
 # eexpect "5 |  false   |      false      | active"
-# eexpect "movr>"
+# eexpect "defaultdb>"
 
 send "\\demo recommission 4\r"
 eexpect "can only recommission a decommissioning node"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 send "\\demo add blah\r"
 eexpect "internal server error: tier must be in the form \"key=value\" not \"blah\""
-eexpect "movr>"
+eexpect "defaultdb>"
 
 send "\\demo add region=ca-central,zone=a\r"
 eexpect "node 6 has been added with locality \"region=ca-central,zone=a\""
-eexpect "movr>"
+eexpect "defaultdb>"
 
 send "show regions from cluster;\r"
 eexpect "ca-central | \{a\}"
 eexpect "us-east1   | \{b,c,d\}"
 eexpect "us-west1   | \{b\}"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # We use kv_node_status here because gossip_liveness is timing dependant.
 # Node 4's status entry should have been removed by now.
@@ -116,12 +115,12 @@ eexpect "2 | region=us-east1,az=c"
 eexpect "3 | region=us-east1,az=d"
 eexpect "5 | region=us-west1,az=b"
 eexpect "6 | region=ca-central,zone=a"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # Shut down the newly created node.
 send "\\demo shutdown 6\r"
 eexpect "node 6 has been shutdown"
-eexpect "movr>"
+eexpect "defaultdb>"
 
 # By now the node should have stabilized in gossip which allows us to query the more detailed information there.
 # NB: skip this to avoid flakes, see:
@@ -133,7 +132,7 @@ eexpect "movr>"
 # eexpect "4 |  false   |      true       | decommissioned"
 # eexpect "5 |  false   |      false      | active"
 # eexpect "6 |   true   |      false      | active"
-# eexpect "movr>"
+# eexpect "defaultdb>"
 
 send_eof
 eexpect eof
