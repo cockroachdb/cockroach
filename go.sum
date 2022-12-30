@@ -452,8 +452,8 @@ github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incom
 github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible/go.mod h1:v3T8+rm/HmCL0D1BwDcGaHHAQDuFPW7EsnYs2nBRqUo=
 github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292 h1:dzj1/xcivGjNPwwifh/dWTczkwcuqsXXFHY1X/TZMtw=
 github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292/go.mod h1:qRiX68mZX1lGBkTWyp3CLcenw9I94W2dLeRvMzcn9N4=
-github.com/cockroachdb/cockroach-go/v2 v2.2.19 h1:YIHyz17jZumBeXPuoZKq/0nrITsqDoDD8/KQt3/xiyc=
-github.com/cockroachdb/cockroach-go/v2 v2.2.19/go.mod h1:mzlIDDBALQfEjv/7DU12fb2AfQ/MUYTlychcMpWp9QI=
+github.com/cockroachdb/cockroach-go/v2 v2.2.20 h1:TLSzwdTdIwgsbdApHzaxunhSMrmbGf5YY6oxtaP2kvw=
+github.com/cockroachdb/cockroach-go/v2 v2.2.20/go.mod h1:73vQi5H/H7kE8SgOt+XA6729Tubvj5hxKIEgbQQhp4c=
 github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 h1:i0bnjanlWAvM50wHMT7EFyxlt5HQusznWrkwl+HBIsU=
 github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548/go.mod h1:qtkxNlt5i3rrdirfJE/bQeW/IeLajKexErv7jEIV+Uc=
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=

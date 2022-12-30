@@ -475,7 +475,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "cockroach-go-testserver-22.2-master",
 		UseCockroachGoTestserver:    true,
 		NumNodes:                    3,
-		CockroachGoBootstrapVersion: "v22.2.0-rc.1",
+		CockroachGoBootstrapVersion: "v22.2.1",
 		BootstrapVersion:            roachpb.Version{Major: 22, Minor: 2},
 	},
 	{
@@ -483,7 +483,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		UseCockroachGoTestserver:    true,
 		NumNodes:                    3,
 		CockroachGoBootstrapVersion: "v22.1.6",
-		CockroachGoUpgradeVersion:   "v22.2.0-rc.1",
+		CockroachGoUpgradeVersion:   "v22.2.1",
 		BootstrapVersion:            roachpb.Version{Major: 22, Minor: 1},
 	},
 }
