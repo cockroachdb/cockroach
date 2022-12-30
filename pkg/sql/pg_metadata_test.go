@@ -222,8 +222,11 @@ var none = struct{}{}
 // Add any function that cannot be automatically detected.
 var mappedPopulateFunctions = map[string]string{
 	// Currently pg_type cannot be found automatically by this code because it is
-	// not the populate function.
-	"addPGTypeRow": "PGCatalogType",
+	// not the populate function. Same for pg_proc.
+	"addPGTypeRow":           "PGCatalogType",
+	"addPgProcUDFRow":        "PGCatalogProc",
+	"addPgProcBuiltinRow":    "PgCatalogProc",
+	"addRowForTimezoneNames": "PgCatalogTimezoneNames",
 }
 
 // schemaCodeFixer have specific configurations to fix the files with virtual
@@ -1580,7 +1583,7 @@ func validatePGCatalogCodeParser(t *testing.T) {
 		constants := readAllVTableConstants(t)
 		for _, vTableConstant := range constants {
 			if _, ok := pgCode.fixableTables[vTableConstant]; !ok {
-				t.Errorf("virtual table with constant %s cannot be fixed because could not found populate function", vTableConstant)
+				t.Errorf("virtual table with constant %s cannot be fixed because we could not find the populate function", vTableConstant)
 			}
 		}
 

@@ -48,7 +48,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"golang.org/x/text/collate"
@@ -4012,12 +4014,45 @@ var pgCatalogStatioUserTablesTable = virtualSchemaTable{
 }
 
 var pgCatalogTimezoneNamesTable = virtualSchemaTable{
-	comment: "pg_timezone_names was created for compatibility and is currently unimplemented",
+	comment: "pg_timezone_names lists all the timezones that are supported by SET timezone",
 	schema:  vtable.PgCatalogTimezoneNames,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for _, tz := range timeutil.TimeZones() {
+			loc, err := timeutil.LoadLocation(tz)
+			if err != nil {
+				return err
+			}
+			if err := addRowForTimezoneNames(tz, p.extendedEvalCtx.StmtTimestamp.In(loc), addRow); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (bool, error) {
+				tz := string(tree.MustBeDString(unwrappedConstraint))
+				loc, err := timeutil.LoadLocation(tz)
+				if err != nil {
+					return false, nil //nolint:returnerrcheck
+				}
+				return true, addRowForTimezoneNames(tz, p.extendedEvalCtx.StmtTimestamp.In(loc), addRow)
+			},
+		},
+	},
+}
+
+func addRowForTimezoneNames(tz string, t time.Time, addRow func(...tree.Datum) error) error {
+	abbrev, offset := t.Zone()
+	utcOffsetInterval := duration.MakeDuration(int64(offset)*int64(time.Second), 0, 0)
+	return addRow(
+		tree.NewDString(tz),     // name
+		tree.NewDString(abbrev), // abbrev
+		tree.NewDInterval(utcOffsetInterval, types.DefaultIntervalTypeMetadata), // utc_offset
+		tree.MakeDBool(tree.DBool(t.IsDST())),                                   // is_dst
+	)
 }
 
 var pgCatalogTsDictTable = virtualSchemaTable{
