@@ -69,6 +69,100 @@ type copyMachineInterface interface {
 	Close(ctx context.Context)
 }
 
+type copyOptions struct {
+	csvEscape       rune
+	csvExpectHeader bool
+
+	delimiter byte
+	format    tree.CopyFormat
+	null      string
+}
+
+// TODO(#sql-sessions): copy all pre-condition checks from the PG code
+// https://github.com/postgres/postgres/blob/1de58df4fec7325d91f5a8345757314be7ac05da/src/backend/commands/copy.c#L405
+func processCopyOptions(
+	ctx context.Context, p *planner, opts tree.CopyOptions,
+) (copyOptions, error) {
+	c := copyOptions{
+		format:          opts.CopyFormat,
+		csvExpectHeader: opts.Header,
+	}
+
+	switch c.format {
+	case tree.CopyFormatText:
+		c.null = `\N`
+		c.delimiter = '\t'
+	case tree.CopyFormatCSV:
+		c.null = ""
+		c.delimiter = ','
+	}
+
+	exprEval := p.ExprEvaluator("COPY")
+	if opts.Delimiter != nil {
+		if c.format == tree.CopyFormatBinary {
+			return c, pgerror.Newf(
+				pgcode.Syntax,
+				"DELIMITER unsupported in BINARY format",
+			)
+		}
+		delim, err := exprEval.String(ctx, opts.Delimiter)
+		if err != nil {
+			return c, err
+		}
+		if len(delim) != 1 || !utf8.ValidString(delim) {
+			return c, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"delimiter must be a single-byte character",
+			)
+		}
+		c.delimiter = delim[0]
+	}
+	if opts.Null != nil {
+		if c.format == tree.CopyFormatBinary {
+			return c, pgerror.Newf(
+				pgcode.Syntax,
+				"NULL unsupported in BINARY format",
+			)
+		}
+		null, err := exprEval.String(ctx, opts.Null)
+		if err != nil {
+			return c, err
+		}
+		c.null = null
+	}
+	if opts.Escape != nil {
+		s := opts.Escape.RawString()
+		if len(s) != 1 {
+			return c, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE must be a single one-byte character",
+			)
+		}
+
+		if c.format != tree.CopyFormatCSV {
+			return c, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE can only be specified for CSV",
+			)
+		}
+
+		c.csvEscape, _ = utf8.DecodeRuneInString(s)
+	}
+
+	if opts.Header && c.format != tree.CopyFormatCSV {
+		return c, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
+	}
+
+	if opts.Destination != nil {
+		return c, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"DESTINATION can only be specified when table is external storage table",
+		)
+	}
+
+	return c, nil
+}
+
 // copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
 // machine is created by the Executor when that statement is executed; from that
 // moment on, the machine takes control of the pgwire connection until
@@ -88,15 +182,10 @@ type copyMachine struct {
 	columns                  tree.NameList
 	resultColumns            colinfo.ResultColumns
 	expectedHiddenColumnIdxs []int
-	format                   tree.CopyFormat
-	csvEscape                rune
-	delimiter                byte
+	copyOptions
 	// textDelim is delimiter converted to a []byte so that we don't have to do that per row.
 	textDelim   []byte
-	null        string
 	binaryState binaryState
-	// csvExpectHeader is true if we are expecting a header for the CSV input.
-	csvExpectHeader bool
 	// forceNotNull disables converting values matching the null string to
 	// NULL. The spec says this is only supported for CSV, and also must specify
 	// which columns it applies to.
@@ -157,19 +246,22 @@ func newCopyMachine(
 	parentMon *mon.BytesMonitor,
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
+	cOpts, err := processCopyOptions(ctx, p, n.Options)
+	if err != nil {
+		return nil, err
+	}
 	c := &copyMachine{
 		conn:        conn,
 		copyFromAST: n,
 		// TODO(georgiah): Currently, insertRows depends on Table and Columns,
 		//  but that dependency can be removed by refactoring it.
-		table:           &n.Table,
-		columns:         n.Columns,
-		format:          n.Options.CopyFormat,
-		txnOpt:          txnOpt,
-		csvExpectHeader: n.Options.Header,
-		p:               p,
-		execInsertPlan:  execInsertPlan,
-		implicitTxn:     txnOpt.txn == nil,
+		table:          &n.Table,
+		columns:        n.Columns,
+		copyOptions:    cOpts,
+		txnOpt:         txnOpt,
+		p:              p,
+		execInsertPlan: execInsertPlan,
+		implicitTxn:    txnOpt.txn == nil,
 	}
 	// We need a planner to do the initial planning, in addition
 	// to those used for the main execution of the COPY afterwards.
@@ -178,77 +270,6 @@ func newCopyMachine(
 		retErr = cleanup(ctx, retErr)
 	}()
 	c.parsingEvalCtx = c.p.EvalContext()
-
-	switch c.format {
-	case tree.CopyFormatText:
-		c.null = `\N`
-		c.delimiter = '\t'
-	case tree.CopyFormatCSV:
-		c.null = ""
-		c.delimiter = ','
-	}
-
-	if n.Options.Header && c.format != tree.CopyFormatCSV {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
-	}
-
-	exprEval := c.p.ExprEvaluator("COPY")
-	if n.Options.Delimiter != nil {
-		if c.format == tree.CopyFormatBinary {
-			return nil, pgerror.Newf(
-				pgcode.Syntax,
-				"DELIMITER unsupported in BINARY format",
-			)
-		}
-		delim, err := exprEval.String(ctx, n.Options.Delimiter)
-		if err != nil {
-			return nil, err
-		}
-		if len(delim) != 1 || !utf8.ValidString(delim) {
-			return nil, pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"delimiter must be a single-byte character",
-			)
-		}
-		c.delimiter = delim[0]
-	}
-	if n.Options.Null != nil {
-		if c.format == tree.CopyFormatBinary {
-			return nil, pgerror.Newf(
-				pgcode.Syntax,
-				"NULL unsupported in BINARY format",
-			)
-		}
-		null, err := exprEval.String(ctx, n.Options.Null)
-		if err != nil {
-			return nil, err
-		}
-		c.null = null
-	}
-	if n.Options.Escape != nil {
-		s := n.Options.Escape.RawString()
-		if len(s) != 1 {
-			return nil, pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"ESCAPE must be a single one-byte character",
-			)
-		}
-
-		if c.format != tree.CopyFormatCSV {
-			return nil, pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"ESCAPE can only be specified for CSV",
-			)
-		}
-
-		c.csvEscape, _ = utf8.DecodeRuneInString(s)
-	}
-	if n.Options.Destination != nil {
-		return nil, pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"DESTINATION can only be specified when table is external storage table",
-		)
-	}
 
 	flags := tree.ObjectLookupFlags{
 		Required:             true,
