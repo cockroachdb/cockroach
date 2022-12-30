@@ -1194,6 +1194,11 @@ func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
 	panic("unimplemented")
 }
 
+// CreateCopyOutResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateCopyOutResult(pos CmdPos) CopyOutResult {
+	panic("unimplemented")
+}
+
 // CreateDrainResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
 	panic("unimplemented")

@@ -181,6 +181,7 @@ type DriverConn interface {
 	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 	Exec(ctx context.Context, query string, args ...interface{}) error
 	CopyFrom(ctx context.Context, reader io.Reader, query string) (int64, error)
+	CopyTo(ctx context.Context, w io.Writer, query string) error
 }
 
 type driverConnAdapter struct {
@@ -208,4 +209,9 @@ func (d *driverConnAdapter) CopyFrom(
 		return -1, err
 	}
 	return cmdTag.RowsAffected(), nil
+}
+
+func (d *driverConnAdapter) CopyTo(ctx context.Context, w io.Writer, query string) error {
+	_, err := d.c.conn.PgConn().CopyTo(ctx, w, query)
+	return err
 }
