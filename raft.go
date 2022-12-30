@@ -897,11 +897,10 @@ func (r *raft) becomeLeader() {
 		// This won't happen because we just called reset() above.
 		r.logger.Panic("empty entry was dropped")
 	}
-	// As a special case, don't count the initial empty entry towards the
-	// uncommitted log quota. This is because we want to preserve the
-	// behavior of allowing one entry larger than quota if the current
-	// usage is zero.
-	r.reduceUncommittedSize(payloadSize(emptyEnt))
+	// The payloadSize of an empty entry is 0 (see TestPayloadSizeOfEmptyEntry),
+	// so the preceding log append does not count against the uncommitted log
+	// quota of the new leader. In other words, after the call to appendEntry,
+	// r.uncommittedSize is still 0.
 	r.logger.Infof("%x became leader at term %d", r.id, r.Term)
 }
 
