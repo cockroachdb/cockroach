@@ -879,6 +879,8 @@ func (ts *TestServer) StartTenant(
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
 	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
+	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
+	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
 	// in test servers.

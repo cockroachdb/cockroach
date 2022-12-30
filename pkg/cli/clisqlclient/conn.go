@@ -446,6 +446,15 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	return c.tryEnableServerExecutionTimings(ctx)
 }
 
+// GetServerInfo returns a copy of the remote server details.
+func (c *sqlConn) GetServerInfo() ServerInfo {
+	return ServerInfo{
+		ServerExecutableVersion: c.serverBuild,
+		ClusterID:               c.clusterID,
+		Organization:            c.clusterOrganization,
+	}
+}
+
 // GetServerValue retrieves the first driverValue returned by the
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.

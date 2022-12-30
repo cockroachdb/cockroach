@@ -96,6 +96,21 @@ type Conn interface {
 
 	// Cancel sends a query cancellation request to the server.
 	Cancel(ctx context.Context) error
+
+	// GetServerInfo retrieves details about the remote server. Some of
+	// the fields may be empty if there were errors while retrieving
+	// them when the connection was established.
+	GetServerInfo() ServerInfo
+}
+
+// ServerInfo describes the remote server.
+type ServerInfo struct {
+	// ServerExecutableVersion is the build version string of the remote server.
+	ServerExecutableVersion string
+	// ClusterID is the ID of the cluste the remote server is a part of.
+	ClusterID string
+	// Organization is the cluster organization of the remote server.
+	Organization string
 }
 
 // Rows describes a result set.
