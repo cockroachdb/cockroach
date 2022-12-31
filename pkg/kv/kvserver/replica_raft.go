@@ -520,7 +520,7 @@ func (r *Replica) hasPendingProposalsRLocked() bool {
 // unquiescing (leading to deadlock). See #46699.
 func (r *Replica) hasPendingProposalQuotaRLocked() bool {
 	if r.mu.proposalQuota == nil {
-		return true
+		return false
 	}
 	return !r.mu.proposalQuota.Full()
 }
