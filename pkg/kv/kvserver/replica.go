@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/tracker"
 )
 
 const (
@@ -146,6 +147,13 @@ func (c *atomicConnectionClass) get() rpc.ConnectionClass {
 // set updates the current value of the ConnectionClass.
 func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
+}
+
+// raftSparseStatus is a variant of raft.Status without Config and
+// Progress.Inflights, which are expensive to copy.
+type raftSparseStatus struct {
+	raft.BasicStatus
+	Progress map[uint64]tracker.Progress
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -1189,12 +1197,37 @@ func (r *Replica) RaftStatus() *raft.Status {
 	return r.raftStatusRLocked()
 }
 
+// raftStatusRLocked returns the current raft status of the replica, or
+// nil if the Raft group has not been initialized yet.
+//
+// NB: This incurs deep copies of Status.Config and Status.Progress.Inflights
+// and is not suitable for use in hot paths. See raftSparseStatusRLocked().
 func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
 		s := rg.Status()
 		return &s
 	}
 	return nil
+}
+
+// raftSparseStatusRLocked returns a sparse Raft status without Config and
+// Progress.Inflights which are expensive to copy, or nil if the Raft group has
+// not been initialized yet. Progress is only populated on the leader.
+func (r *Replica) raftSparseStatusRLocked() *raftSparseStatus {
+	rg := r.mu.internalRaftGroup
+	if rg == nil {
+		return nil
+	}
+	status := &raftSparseStatus{
+		BasicStatus: rg.BasicStatus(),
+	}
+	if status.RaftState == raft.StateLeader {
+		status.Progress = map[uint64]tracker.Progress{}
+		rg.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
+			status.Progress[id] = pr
+		})
+	}
+	return status
 }
 
 func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
@@ -1962,7 +1995,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
 		return
 	}
-	raftStatus := r.raftStatusRLocked()
+	raftStatus := r.raftSparseStatusRLocked()
 	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 		return
 	}

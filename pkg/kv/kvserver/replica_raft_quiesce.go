@@ -67,7 +67,7 @@ func (r *Replica) maybeUnquiesceWithOptionsLocked(campaignOnWake bool) bool {
 	}
 	// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
 	r.mu.lastUpdateTimes.updateOnUnquiesce(
-		r.mu.state.Desc.Replicas().Descriptors(), r.raftStatusRLocked().Progress, timeutil.Now(),
+		r.mu.state.Desc.Replicas().Descriptors(), r.raftSparseStatusRLocked().Progress, timeutil.Now(),
 	)
 	return true
 }
@@ -190,7 +190,7 @@ func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 
 type quiescer interface {
 	descRLocked() *roachpb.RangeDescriptor
-	raftStatusRLocked() *raft.Status
+	raftSparseStatusRLocked() *raftSparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
 	raftLastIndexRLocked() uint64
 	hasRaftReadyRLocked() bool
@@ -271,7 +271,7 @@ func shouldReplicaQuiesce(
 	now hlc.ClockTimestamp,
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
-) (*raft.Status, laggingReplicaSet, bool) {
+) (*raftSparseStatus, laggingReplicaSet, bool) {
 	if testingDisableQuiescence {
 		return nil, nil, false
 	}
@@ -311,7 +311,7 @@ func shouldReplicaQuiesce(
 		return nil, nil, false
 	}
 
-	status := q.raftStatusRLocked()
+	status := q.raftSparseStatusRLocked()
 	if status == nil {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: dormant Raft group")
@@ -412,7 +412,7 @@ func shouldReplicaQuiesce(
 }
 
 func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
-	ctx context.Context, status *raft.Status, lagging laggingReplicaSet,
+	ctx context.Context, status *raftSparseStatus, lagging laggingReplicaSet,
 ) bool {
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, r.raftMu.lastToReplica)
 	if fromErr != nil {
