@@ -11,8 +11,6 @@
 package descs
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -20,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
 type virtualDescriptors struct {
@@ -42,65 +39,46 @@ func (tc virtualDescriptors) getSchemaByName(schemaName string) catalog.SchemaDe
 }
 
 func (tc virtualDescriptors) getObjectByName(
-	schema string, object string, flags tree.ObjectLookupFlags,
-) (isVirtual bool, _ catalog.Descriptor, _ error) {
+	schema string, object string, requestedKind tree.DesiredObjectKind,
+) (virtualSchema catalog.VirtualSchema, virtualObject catalog.VirtualObject, _ error) {
 	if tc.vs == nil {
-		return false, nil, nil
+		return nil, nil, nil
 	}
-	scEntry, ok := tc.vs.GetVirtualSchema(schema)
-	if !ok {
-		return false, nil, nil
+	var found bool
+	virtualSchema, found = tc.vs.GetVirtualSchema(schema)
+	if !found {
+		return nil, nil, nil
 	}
-	obj, err := scEntry.GetObjectByName(object, flags)
-	if err != nil {
-		return true, nil, err
-	}
-	if obj == nil {
-		return true, nil, nil
-	}
-	if flags.RequireMutable {
-		return true, nil, catalog.NewMutableAccessToVirtualObjectError(scEntry, obj)
-	}
-	return true, obj.Desc(), nil
+	obj, err := virtualSchema.GetObjectByName(object, requestedKind)
+	return virtualSchema, obj, err
 }
 
-func (tc virtualDescriptors) getByID(
-	ctx context.Context, id descpb.ID, mutable bool,
-) (catalog.Descriptor, error) {
+func (tc virtualDescriptors) getObjectByID(
+	id descpb.ID,
+) (catalog.VirtualSchema, catalog.VirtualObject) {
 	if tc.vs == nil {
 		return nil, nil
 	}
-	if vd, found := tc.vs.GetVirtualObjectByID(id); found {
-		if mutable {
-			vs, found := tc.vs.GetVirtualSchemaByID(vd.Desc().GetParentSchemaID())
-			if !found {
-				return nil, errors.AssertionFailedf(
-					"cannot resolve mutable virtual descriptor %d with unknown parent schema %d",
-					id, vd.Desc().GetParentSchemaID(),
-				)
-			}
-			return nil, catalog.NewMutableAccessToVirtualObjectError(vs, vd)
-		}
-		return vd.Desc(), nil
+	vd, found := tc.vs.GetVirtualObjectByID(id)
+	if !found {
+		return nil, nil
 	}
-	return tc.getSchemaByID(ctx, id, mutable)
+	vs, found := tc.vs.GetVirtualSchemaByID(vd.Desc().GetParentSchemaID())
+	if !found {
+		return nil, vd
+	}
+	return vs, vd
 }
 
-func (tc virtualDescriptors) getSchemaByID(
-	ctx context.Context, id descpb.ID, mutable bool,
-) (catalog.SchemaDescriptor, error) {
+func (tc virtualDescriptors) getSchemaByID(id descpb.ID) catalog.VirtualSchema {
 	if tc.vs == nil {
-		return nil, nil
+		return nil
 	}
 	vs, found := tc.vs.GetVirtualSchemaByID(id)
-	switch {
-	case !found:
-		return nil, nil
-	case mutable:
-		return nil, catalog.NewMutableAccessToVirtualSchemaError(vs.Desc())
-	default:
-		return vs.Desc(), nil
+	if !found {
+		return nil
 	}
+	return vs
 }
 
 func (tc virtualDescriptors) addAllToCatalog(mc nstree.MutableCatalog) {

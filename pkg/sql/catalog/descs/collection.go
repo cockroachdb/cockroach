@@ -585,12 +585,9 @@ func (tc *Collection) lookupDescriptorID(
 	// First look up in-memory descriptors in collection,
 	// except for leased descriptors.
 	objInMemory, err := func() (catalog.Descriptor, error) {
-		flags := tree.CommonLookupFlags{
-			Required:       true,
-			AvoidLeased:    true,
-			AvoidStorage:   true,
-			IncludeOffline: true,
-		}
+		flags := defaultUnleasedFlags()
+		flags.layerFilters.withoutStorage = true
+		flags.descFilters.withoutDropped = true
 		var db catalog.DatabaseDescriptor
 		var sc catalog.SchemaDescriptor
 		expectedType := catalog.Database
@@ -618,13 +615,9 @@ func (tc *Collection) lookupDescriptorID(
 				}
 			}
 		}
-		return tc.getDescriptorByName(ctx, txn, db, sc, key.Name, flags, expectedType)
+		return getDescriptorByName(ctx, txn, tc, db, sc, key.Name, flags, expectedType)
 	}()
-	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
-		// Swallow these errors to fall back to storage lookup.
-		err = nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 		return descpb.InvalidID, err
 	}
 	if objInMemory != nil {
@@ -978,13 +971,10 @@ func (tc *Collection) aggregateAllLayers(
 	tc.uncommittedZoneConfigs.addAllToCatalog(ret)
 	// Remove deleted descriptors from consideration, re-read and add the rest.
 	tc.deletedDescs.ForEach(descIDs.Remove)
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-	}
-	allDescs, err := tc.getDescriptorsByID(ctx, txn, flags, descIDs.Ordered()...)
-	if err != nil {
+	allDescs := make([]catalog.Descriptor, descIDs.Len())
+	if err := getDescriptorsByID(
+		ctx, tc, txn, defaultUnleasedFlags(), allDescs, descIDs.Ordered()...,
+	); err != nil {
 		return nstree.MutableCatalog{}, err
 	}
 	for _, desc := range allDescs {
@@ -1002,15 +992,12 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
 	// Re-read database descriptor to have the freshest version.
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeDropped: true,
-		IncludeOffline: true,
-	}
-	var err error
-	_, db, err = tc.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
-	if err != nil {
-		return nstree.Catalog{}, err
+	{
+		var err error
+		db, err = ByIDGetter(makeGetterBase(txn, tc, defaultUnleasedFlags())).Database(ctx, db.GetID())
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
 	}
 	c, err := tc.GetAllInDatabase(ctx, txn, db)
 	if err != nil {

@@ -3560,7 +3560,13 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			h.writeUInt64(uint64(statisticsID))
 			statisticsOID := h.getOid()
 
-			tn, err := descs.GetTableNameByID(ctx, p.Txn(), p.descCollection, descpb.ID(tableID))
+			tbl, err := p.Descriptors().GetImmutableTableByID(
+				ctx, p.Txn(), descpb.ID(tableID), tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return err
+			}
+			tn, err := descs.GetObjectName(ctx, p.Txn(), p.Descriptors(), tbl)
 			if err != nil {
 				return err
 			}

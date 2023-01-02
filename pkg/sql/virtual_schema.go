@@ -469,9 +469,9 @@ func (v *virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
 }
 
 func (v *virtualSchemaEntry) GetObjectByName(
-	name string, flags tree.ObjectLookupFlags,
+	name string, kind tree.DesiredObjectKind,
 ) (catalog.VirtualObject, error) {
-	switch flags.DesiredObjectKind {
+	switch kind {
 	case tree.TypeObject:
 		// Currently, we don't allow creation of types in virtual schemas, so
 		// the only types present in the virtual schemas that have types (i.e.
@@ -492,8 +492,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 			typ, ok := tree.GetStaticallyKnownType(typRef)
 			if ok {
 				return &virtualTypeEntry{
-					desc:    typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
-					mutable: flags.RequireMutable,
+					desc: typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
 				}, nil
 			}
 		}
@@ -502,20 +501,13 @@ func (v *virtualSchemaEntry) GetObjectByName(
 		fallthrough
 	case tree.TableObject:
 		if def, ok := v.defs[name]; ok {
-			if flags.RequireMutable {
-				return &mutableVirtualDefEntry{
-					desc: tabledesc.NewBuilder(def.desc.TableDesc()).BuildExistingMutableTable(),
-				}, nil
-			}
 			return def, nil
 		}
 		if _, ok := v.undefinedTables[name]; ok {
 			return nil, newUnimplementedVirtualTableError(v.desc.GetName(), name)
 		}
-		return nil, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
+	return nil, nil
 }
 
 type virtualDefEntry struct {
@@ -537,22 +529,11 @@ func canQueryVirtualTable(evalCtx *eval.Context, e *virtualDefEntry) bool {
 		evalCtx.SessionData().StubCatalogTablesEnabled
 }
 
-type mutableVirtualDefEntry struct {
-	desc *tabledesc.Mutable
-}
-
-func (e *mutableVirtualDefEntry) Desc() catalog.Descriptor {
-	return e.desc
-}
-
 type virtualTypeEntry struct {
-	desc    catalog.TypeDescriptor
-	mutable bool
+	desc catalog.TypeDescriptor
 }
 
 func (e *virtualTypeEntry) Desc() catalog.Descriptor {
-	// TODO(ajwerner): Should this be allowed? I think no. Let's just store an
-	// ImmutableTypeDesc off of this thing.
 	return e.desc
 }
 
