@@ -1563,43 +1563,11 @@ with &2 (v)
            └── mapping:
                 └──  a:5 => a:8
 
-# Verify the addition of casts to the "initial" query.
+# Verify a missing explicit cast in the "initial" query errors out.
 build
 WITH RECURSIVE cte(x) AS (SELECT a FROM x UNION ALL SELECT x::FLOAT FROM cte WHERE x < 10) SELECT * FROM cte;
 ----
-with &2 (cte)
- ├── columns: x:10
- ├── recursive-c-t-e
- │    ├── columns: x:6
- │    ├── working table binding: &1
- │    ├── initial columns: a:9
- │    ├── recursive columns: x:8
- │    ├── fake-rel
- │    │    └── columns: x:6
- │    ├── project
- │    │    ├── columns: a:9
- │    │    ├── project
- │    │    │    ├── columns: x.a:1
- │    │    │    └── scan x
- │    │    │         └── columns: x.a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
- │    │    └── projections
- │    │         └── x.a:1::FLOAT8 [as=a:9]
- │    └── project
- │         ├── columns: x:8!null
- │         ├── select
- │         │    ├── columns: x:7!null
- │         │    ├── with-scan &1 (cte)
- │         │    │    ├── columns: x:7
- │         │    │    └── mapping:
- │         │    │         └──  x:6 => x:7
- │         │    └── filters
- │         │         └── x:7 < 10
- │         └── projections
- │              └── x:7::FLOAT8 [as=x:8]
- └── with-scan &2 (cte)
-      ├── columns: x:10
-      └── mapping:
-           └──  x:6 => x:10
+error (42804): UNION types int and float cannot be matched for WITH RECURSIVE
 
 exec-ddl
 CREATE TABLE graph_node (
@@ -1608,7 +1576,7 @@ CREATE TABLE graph_node (
 )
 ----
 
-# The 'A' in the initial query needs a cast to VARCHAR(16).
+# Verify a missing explicit cast in the "initial" query errors out.
 build
 WITH RECURSIVE nodes AS (
   SELECT 'A' AS id
@@ -1617,41 +1585,7 @@ WITH RECURSIVE nodes AS (
 )
 SELECT * FROM nodes;
 ----
-with &2 (nodes)
- ├── columns: id:9
- ├── recursive-c-t-e
- │    ├── columns: id:2
- │    ├── working table binding: &1
- │    ├── initial columns: id:8
- │    ├── recursive columns: graph_node.id:3
- │    ├── fake-rel
- │    │    └── columns: id:2
- │    ├── project
- │    │    ├── columns: id:8!null
- │    │    ├── project
- │    │    │    ├── columns: id:1!null
- │    │    │    ├── values
- │    │    │    │    └── ()
- │    │    │    └── projections
- │    │    │         └── 'A' [as=id:1]
- │    │    └── projections
- │    │         └── id:1::VARCHAR(16) [as=id:8]
- │    └── project
- │         ├── columns: graph_node.id:3!null
- │         └── inner-join (hash)
- │              ├── columns: graph_node.id:3!null parent:4!null crdb_internal_mvcc_timestamp:5 tableoid:6 id:7!null
- │              ├── scan graph_node
- │              │    └── columns: graph_node.id:3!null parent:4 crdb_internal_mvcc_timestamp:5 tableoid:6
- │              ├── with-scan &1 (nodes)
- │              │    ├── columns: id:7
- │              │    └── mapping:
- │              │         └──  id:2 => id:7
- │              └── filters
- │                   └── parent:4 = id:7
- └── with-scan &2 (nodes)
-      ├── columns: id:9
-      └── mapping:
-           └──  id:2 => id:9
+error (42804): UNION types string and varchar cannot be matched for WITH RECURSIVE
 
 # Mutating WITHs not allowed at non-root positions.
 build

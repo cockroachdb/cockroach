@@ -1746,20 +1746,20 @@ project
 # Case with a window function.
 norm expect=TryAddLimitToRecursiveBranch
 WITH RECURSIVE cte (i, j) AS (
-  (SELECT 1, 2)
+  (SELECT 1, 2::numeric)
   UNION ALL
   (SELECT i+1, sum(i) OVER (ORDER BY j) FROM cte WHERE i <= 10)
 )
 SELECT i, j FROM cte;
 ----
 project
- ├── columns: i:10 j:11
+ ├── columns: i:9 j:10
  ├── cardinality: [1 - ]
  ├── immutable
  ├── recursive-c-t-e
  │    ├── columns: i:3 j:4
  │    ├── working table binding: &2
- │    ├── initial columns: "?column?":1 "?column?":9
+ │    ├── initial columns: "?column?":1 numeric:2
  │    ├── recursive columns: "?column?":8 sum:7
  │    ├── cardinality: [1 - ]
  │    ├── immutable
@@ -1769,10 +1769,10 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    ├── values
- │    │    ├── columns: "?column?":1!null "?column?":9!null
+ │    │    ├── columns: "?column?":1!null numeric:2!null
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,9)
+ │    │    ├── fd: ()-->(1,2)
  │    │    └── (1, 2)
  │    └── project
  │         ├── columns: "?column?":8!null sum:7
@@ -1805,8 +1805,8 @@ project
  │         └── projections
  │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
  └── projections
-      ├── i:3 [as=i:10, outer=(3)]
-      └── j:4 [as=j:11, outer=(4)]
+      ├── i:3 [as=i:9, outer=(3)]
+      └── j:4 [as=j:10, outer=(4)]
 
 # Case with DistinctOn.
 norm expect=TryAddLimitToRecursiveBranch
@@ -1873,64 +1873,7 @@ WITH RECURSIVE cte (i, j) AS (
 )
 SELECT i, j FROM cte;
 ----
-project
- ├── columns: i:10 j:11
- ├── cardinality: [1 - ]
- ├── immutable
- ├── recursive-c-t-e
- │    ├── columns: i:3 j:4
- │    ├── working table binding: &2
- │    ├── initial columns: "?column?":1 "?column?":9
- │    ├── recursive columns: "?column?":8 sum:7
- │    ├── cardinality: [1 - ]
- │    ├── immutable
- │    ├── fake-rel
- │    │    ├── columns: i:3 j:4
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(3,4)
- │    ├── values
- │    │    ├── columns: "?column?":1!null "?column?":9!null
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,9)
- │    │    └── (1, 2)
- │    └── project
- │         ├── columns: "?column?":8!null sum:7
- │         ├── cardinality: [0 - 1]
- │         ├── immutable
- │         ├── key: ()
- │         ├── fd: ()-->(7,8)
- │         ├── group-by (streaming)
- │         │    ├── columns: i:5!null sum:7
- │         │    ├── cardinality: [0 - 1]
- │         │    ├── key: ()
- │         │    ├── fd: ()-->(5,7)
- │         │    ├── select
- │         │    │    ├── columns: i:5!null j:6
- │         │    │    ├── cardinality: [0 - 1]
- │         │    │    ├── key: ()
- │         │    │    ├── fd: ()-->(5,6)
- │         │    │    ├── with-scan &2 (cte)
- │         │    │    │    ├── columns: i:5 j:6
- │         │    │    │    ├── mapping:
- │         │    │    │    │    ├──  i:3 => i:5
- │         │    │    │    │    └──  j:4 => j:6
- │         │    │    │    ├── cardinality: [1 - 1]
- │         │    │    │    ├── key: ()
- │         │    │    │    └── fd: ()-->(5,6)
- │         │    │    └── filters
- │         │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
- │         │    └── aggregations
- │         │         ├── sum [as=sum:7, outer=(6)]
- │         │         │    └── j:6
- │         │         └── const-agg [as=i:5, outer=(5)]
- │         │              └── i:5
- │         └── projections
- │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
- └── projections
-      ├── i:3 [as=i:10, outer=(3)]
-      └── j:4 [as=j:11, outer=(4)]
+error (42804): UNION types int and decimal cannot be matched for WITH RECURSIVE
 
 # Case with InnerJoin.
 norm expect=TryAddLimitToRecursiveBranch
@@ -2480,75 +2423,7 @@ WITH RECURSIVE cte (i, j) AS (
 )
 SELECT i, j FROM cte;
 ----
-project
- ├── columns: i:14 j:15
- ├── cardinality: [1 - ]
- ├── immutable
- ├── recursive-c-t-e
- │    ├── columns: i:3 j:4
- │    ├── working table binding: &2
- │    ├── initial columns: "?column?":1 "?column?":13
- │    ├── recursive columns: "?column?":12 sum:11
- │    ├── cardinality: [1 - ]
- │    ├── immutable
- │    ├── fake-rel
- │    │    ├── columns: i:3 j:4
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(3,4)
- │    ├── values
- │    │    ├── columns: "?column?":1!null "?column?":13!null
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,13)
- │    │    └── (1, 2)
- │    └── project
- │         ├── columns: "?column?":12!null sum:11!null
- │         ├── cardinality: [0 - 1]
- │         ├── immutable
- │         ├── key: ()
- │         ├── fd: ()-->(11,12)
- │         ├── group-by (streaming)
- │         │    ├── columns: i:5!null sum:11!null
- │         │    ├── cardinality: [0 - 1]
- │         │    ├── key: ()
- │         │    ├── fd: ()-->(5,11)
- │         │    ├── inner-join (hash)
- │         │    │    ├── columns: i:5!null j:6!null x:7!null y:8!null
- │         │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- │         │    │    ├── key: (7)
- │         │    │    ├── fd: ()-->(5,6,8), (6)==(8), (8)==(6)
- │         │    │    ├── select
- │         │    │    │    ├── columns: i:5!null j:6
- │         │    │    │    ├── cardinality: [0 - 1]
- │         │    │    │    ├── key: ()
- │         │    │    │    ├── fd: ()-->(5,6)
- │         │    │    │    ├── with-scan &2 (cte)
- │         │    │    │    │    ├── columns: i:5 j:6
- │         │    │    │    │    ├── mapping:
- │         │    │    │    │    │    ├──  i:3 => i:5
- │         │    │    │    │    │    └──  j:4 => j:6
- │         │    │    │    │    ├── cardinality: [1 - 1]
- │         │    │    │    │    ├── key: ()
- │         │    │    │    │    └── fd: ()-->(5,6)
- │         │    │    │    └── filters
- │         │    │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
- │         │    │    ├── scan xy
- │         │    │    │    ├── columns: x:7!null y:8
- │         │    │    │    ├── key: (7)
- │         │    │    │    └── fd: (7)-->(8)
- │         │    │    └── filters
- │         │    │         └── j:6 = y:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │         │    └── aggregations
- │         │         ├── sum [as=sum:11, outer=(7)]
- │         │         │    └── x:7
- │         │         └── const-agg [as=i:5, outer=(5)]
- │         │              └── i:5
- │         └── projections
- │              └── i:5 + 1 [as="?column?":12, outer=(5), immutable]
- └── projections
-      ├── i:3 [as=i:14, outer=(3)]
-      └── j:4 [as=j:15, outer=(4)]
+error (42804): UNION types int and decimal cannot be matched for WITH RECURSIVE
 
 # No-op because the recursive branch already has a limit.
 norm expect-not=TryAddLimitToRecursiveBranch

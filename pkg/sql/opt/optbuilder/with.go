@@ -333,7 +333,16 @@ func (b *Builder) buildCTE(
 	// query.
 	outTypes, leftCastsNeeded, rightCastsNeeded := b.typeCheckSetOp(initialScope, recursiveScope, "UNION")
 	if leftCastsNeeded {
-		initialScope = b.addCasts(initialScope, outTypes)
+		// We don't support casts on the initial expression; error out.
+		for i := range outTypes {
+			if !outTypes[i].Identical(initialScope.cols[i].typ) {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"UNION types %s and %s cannot be matched for WITH RECURSIVE",
+					initialScope.cols[i].typ, recursiveScope.cols[i].typ,
+				))
+			}
+		}
 	}
 	if rightCastsNeeded {
 		recursiveScope = b.addCasts(recursiveScope, outTypes)

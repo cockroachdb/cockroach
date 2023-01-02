@@ -733,18 +733,22 @@ INSERT INTO graph_node (id, parent) VALUES
   ('C', 'B'),
   ('D', 'C')
 
-query T rowsort
+# The recursive query seed column types must match the output columns types.
+query error pgcode 42804 UNION types string and varchar cannot be matched for WITH RECURSIVE
 WITH RECURSIVE nodes AS (
   SELECT 'A' AS id
   UNION ALL
   SELECT graph_node.id FROM graph_node JOIN nodes ON graph_node.parent = nodes.id
 )
 SELECT * FROM nodes
-----
-A
-B
-C
-D
+
+# The recursive query seed column types must match the output columns types.
+query error pgcode 42804 UNION types int and decimal cannot be matched for WITH RECURSIVE
+WITH RECURSIVE foo(i) AS
+    (SELECT i FROM (VALUES(1),(2)) t(i)
+    UNION ALL
+    SELECT (i+1)::numeric(10,0) FROM foo WHERE i < 10)
+SELECT * FROM foo
 
 # Tests with correlated CTEs.
 statement ok
