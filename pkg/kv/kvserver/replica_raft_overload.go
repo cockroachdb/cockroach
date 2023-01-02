@@ -312,7 +312,7 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		return
 	}
 
-	if r.replicaID != r.mu.leaderID {
+	if !r.isRaftLeaderRLocked() {
 		// Only the raft leader pauses followers. Followers never send meaningful
 		// amounts of data in raft messages, so pausing doesn't make sense on them.
 		return
