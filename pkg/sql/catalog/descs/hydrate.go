@@ -272,7 +272,7 @@ func makeTypeLookupFuncForHydration(
 		case catalog.TypeDescriptor:
 			typ = t
 		case catalog.TableDescriptor:
-			if !typedesc.TableIsHydrated(t) {
+			if isHydratable(t) {
 				if err := hydrate(ctx, t, typeLookupFunc); err != nil {
 					return tree.TypeName{}, nil, err
 				}
