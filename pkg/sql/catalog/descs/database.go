@@ -12,15 +12,12 @@ package descs
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/errors"
 )
 
 // GetMutableDatabaseByName returns a mutable database descriptor with
@@ -28,12 +25,7 @@ import (
 func (tc *Collection) GetMutableDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Mutable, error) {
-	flags.RequireMutable = true
-	desc, err := tc.getDatabaseByName(ctx, txn, name, flags)
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	return desc.(*dbdesc.Mutable), nil
+	return tc.ByName(txn).WithFlags(flags).Mutable().Database(ctx, name)
 }
 
 // GetImmutableDatabaseByName returns an immutable database descriptor with
@@ -41,33 +33,7 @@ func (tc *Collection) GetMutableDatabaseByName(
 func (tc *Collection) GetImmutableDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
-	flags.RequireMutable = false
-	return tc.getDatabaseByName(ctx, txn, name, flags)
-}
-
-// getDatabaseByName returns a database descriptor with properties according to
-// the provided lookup flags.
-func (tc *Collection) getDatabaseByName(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (catalog.DatabaseDescriptor, error) {
-	desc, err := tc.getDescriptorByName(ctx, txn, nil /* db */, nil /* sc */, name, flags, catalog.Database)
-	if err != nil {
-		return nil, err
-	}
-	if desc == nil {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedDatabaseError(name)
-		}
-		return nil, nil
-	}
-	db, ok := desc.(catalog.DatabaseDescriptor)
-	if !ok {
-		if flags.Required {
-			return nil, sqlerrors.NewUndefinedDatabaseError(name)
-		}
-		return nil, nil
-	}
-	return db, nil
+	return tc.ByName(txn).WithFlags(flags).Immutable().Database(ctx, name)
 }
 
 // GetImmutableDatabaseByID returns an immutable database descriptor with
@@ -75,26 +41,6 @@ func (tc *Collection) getDatabaseByName(
 func (tc *Collection) GetImmutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
 ) (bool, catalog.DatabaseDescriptor, error) {
-	flags.RequireMutable = false
-	return tc.getDatabaseByID(ctx, txn, dbID, flags)
-}
-
-func (tc *Collection) getDatabaseByID(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (bool, catalog.DatabaseDescriptor, error) {
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, dbID)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if flags.Required {
-				return false, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
-			}
-			return false, nil, nil
-		}
-		return false, nil, err
-	}
-	db, ok := descs[0].(catalog.DatabaseDescriptor)
-	if !ok {
-		return false, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
-	}
-	return true, db, nil
+	db, err := tc.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dbID)
+	return db != nil, db, err
 }

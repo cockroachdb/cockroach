@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -6416,6 +6418,9 @@ func TestImportPgDumpSchemas(t *testing.T) {
 					IncludeDropped: true,
 					IncludeOffline: true,
 				})
+				if pgerror.GetPGCode(err) == pgcode.InvalidSchemaName {
+					return nil
+				}
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

@@ -153,9 +153,10 @@ func (s storage) acquire(
 		if err != nil {
 			return err
 		}
-		if err := catalog.FilterDescriptorState(
-			desc, tree.CommonLookupFlags{IncludeOffline: true}, // filter dropped only
-		); err != nil {
+		if err := catalog.FilterAddingDescriptor(desc); err != nil {
+			return err
+		}
+		if err := catalog.FilterDroppedDescriptor(desc); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)

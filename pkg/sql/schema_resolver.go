@@ -41,7 +41,7 @@ import (
 
 var _ resolver.SchemaResolver = &schemaResolver{}
 
-// schemaResolve implements the resolver.SchemaResolver interface.
+// schemaResolver implements the resolver.SchemaResolver interface.
 // Currently, this is only being embedded in the planner but also a convenience
 // for inejcting it into the declarative schema changer.
 // It holds sessionDataStack and a transaction handle which are reset when
@@ -150,8 +150,45 @@ func (sr *schemaResolver) LookupObject(
 		}
 	}
 
-	prefix, objMeta, err = sr.descCollection.GetObjectByName(ctx, sr.txn, dbName, scName, obName, flags)
+	prefix, objMeta, err = sr.GetObjectByName(
+		ctx, dbName, scName, obName, flags,
+	)
 	return objMeta != nil, prefix, objMeta, err
+}
+
+// GetObjectByName returns an object descriptor by name.
+func (sr *schemaResolver) GetObjectByName(
+	ctx context.Context, catalogName, schemaName, objectName string, flags tree.ObjectLookupFlags,
+) (prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
+	b := sr.descCollection.ByName(sr.txn).WithObjFlags(flags)
+	g := b.Immutable()
+	if catalogName != "" {
+		prefix.Database, err = g.Database(ctx, catalogName)
+		if err != nil || prefix.Database == nil {
+			return prefix, nil, err
+		}
+	}
+	prefix.Schema, err = g.Schema(ctx, prefix.Database, schemaName)
+	if err != nil || prefix.Schema == nil {
+		return prefix, nil, err
+	}
+	if flags.RequireMutable {
+		g = b.Mutable().AsByNameGetter()
+	}
+	switch flags.DesiredObjectKind {
+	case tree.TableObject:
+		desc, err = g.Table(ctx, prefix.Database, prefix.Schema, objectName)
+	case tree.TypeObject:
+		desc, err = g.Type(ctx, prefix.Database, prefix.Schema, objectName)
+	default:
+		return prefix, nil, errors.AssertionFailedf(
+			"unknown desired object kind %v", flags.DesiredObjectKind,
+		)
+	}
+	if errors.Is(err, catalog.ErrDescriptorWrongType) && !flags.Required {
+		return prefix, nil, nil
+	}
+	return prefix, desc, err
 }
 
 // LookupSchema implements the resolver.ObjectNameTargetResolver interface.
@@ -560,7 +597,6 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	}
 
 	flags := sr.CommonLookupFlagsRequired()
-	flags.AvoidLeased = sr.skipDescriptorCache
 	flags.ParentID = sr.typeResolutionDbID
 	descID, err := funcdesc.UserDefinedFunctionOIDToID(oid)
 	if err != nil {

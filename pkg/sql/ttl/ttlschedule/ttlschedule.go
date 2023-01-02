@@ -71,7 +71,13 @@ func (s rowLevelTTLExecutor) OnDrop(
 	}
 
 	if !canDrop {
-		tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
+		tbl, err := descsCol.GetImmutableTableByID(
+			ctx, txn, args.TableID, tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return 0, err
+		}
+		tn, err := descs.GetObjectName(ctx, txn, descsCol, tbl)
 		if err != nil {
 			return 0, err
 		}
@@ -204,14 +210,20 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
-	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
+	tbl, err := descsCol.GetImmutableTableByID(
+		ctx, txn, args.TableID, tree.ObjectLookupFlagsWithRequired(),
+	)
+	if err != nil {
+		return "", err
+	}
+	tn, err := descs.GetObjectName(ctx, txn, descsCol, tbl)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, tn.FQString()), nil
 }
 
-func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn *tree.TableName) string {
+func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn tree.ObjectName) string {
 	pkColumns := tableDesc.GetPrimaryIndex().IndexDesc().KeyColumnNames
 	pkColumnNamesSQL := ttlbase.MakeColumnNamesSQL(pkColumns)
 	selectQuery := fmt.Sprintf(
@@ -250,7 +262,7 @@ func createRowLevelTTLJob(
 	if err != nil {
 		return 0, err
 	}
-	tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, tableDesc)
+	tn, err := descs.GetObjectName(ctx, txn, descsCol, tableDesc)
 	if err != nil {
 		return 0, err
 	}
