@@ -698,7 +698,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg)
+	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder)
 	if err != nil {
 		return stopper, tenantServer, err
 	}
