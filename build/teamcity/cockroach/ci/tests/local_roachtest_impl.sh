@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -euox pipefail
 
 if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
   export CROSSLINUX_CONFIG="crosslinuxarm"
