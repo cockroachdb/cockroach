@@ -525,6 +525,18 @@ func (r *Replica) hasPendingProposalQuotaRLocked() bool {
 	return !r.mu.proposalQuota.Full()
 }
 
+// isRaftLeader returns true if this replica believes it is the current
+// Raft leader.
+//
+// NB: This can race with Raft ready processing, where the Raft group has
+// processed a leader change before updating the replica state in a separate
+// critical section. The caller should always verify this against the Raft
+// status where necessary.
+func (r *Replica) isRaftLeaderRLocked() bool {
+	// Defensively check replicaID != 0.
+	return r.replicaID != 0 && r.replicaID == r.mu.leaderID
+}
+
 var errRemoved = errors.New("replica removed")
 
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
@@ -1141,7 +1153,7 @@ func (r *Replica) tick(
 	//
 	// This is likely unintentional, and the leader should likely consider itself
 	// live even when quiesced.
-	if r.replicaID == r.mu.leaderID {
+	if r.isRaftLeaderRLocked() {
 		r.mu.lastUpdateTimes.update(r.replicaID, timeutil.Now())
 	}
 

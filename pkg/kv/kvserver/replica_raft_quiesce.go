@@ -190,6 +190,7 @@ func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 
 type quiescer interface {
 	descRLocked() *roachpb.RangeDescriptor
+	isRaftLeaderRLocked() bool
 	raftSparseStatusRLocked() *raftSparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
 	raftLastIndexRLocked() uint64
@@ -273,6 +274,12 @@ func shouldReplicaQuiesce(
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raftSparseStatus, laggingReplicaSet, bool) {
 	if testingDisableQuiescence {
+		return nil, nil, false
+	}
+	if !q.isRaftLeaderRLocked() { // fast path
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: not leader")
+		}
 		return nil, nil, false
 	}
 	if q.hasPendingProposalsRLocked() {
