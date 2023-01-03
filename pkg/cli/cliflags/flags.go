@@ -942,7 +942,7 @@ memory that the store may consume, for example:
 Optionally, to configure admission control enforcement to prevent disk
 bandwidth saturation, the "provisioned-rate" field can be specified with
 the "disk-name" and an optional "bandwidth". The bandwidth is used to override
-the value of the cluster setting, kv.store.admission.provisioned_bandwidth.
+the value of the cluster setting, kvadmission.store.provisioned_bandwidth.
 For example:
 <PRE>
 
