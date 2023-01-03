@@ -268,7 +268,7 @@ func collectTableMVCCStatsOrFatal(
 	rows, err := conn.Query(fmt.Sprintf(`
 SELECT range_id, raw_start_key, crdb_internal.range_stats(raw_start_key)
 FROM [SHOW RANGES FROM TABLE %s.%s WITH KEYS]
-ORDER BY r.start_key`,
+ORDER BY start_key`,
 		tree.NameString(m.databaseName), tree.NameString(m.tableName)))
 	if err != nil {
 		t.Fatalf("failed to run consistency check query on table: %s", err)
