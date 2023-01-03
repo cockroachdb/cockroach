@@ -658,7 +658,8 @@ func (dsp *DistSQLPlanner) Run(
 	// a transaction that has already created or updated some types. If we do not
 	// use the local descs.Collection, we would attempt to acquire a lease on
 	// modified types when accessing them, which would error out.
-	if planCtx.planner != nil && !planCtx.planner.isInternalPlanner {
+	if planCtx.planner != nil &&
+		(!planCtx.planner.isInternalPlanner || planCtx.usePlannerDescriptorsForLocalFlow) {
 		localState.Collection = planCtx.planner.Descriptors()
 	}
 
@@ -1545,7 +1546,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	}
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
 	dsp.PlanAndRun(
-		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv,
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, nil, /* finishedSetupFn */
 	)
 	if recv.commErr != nil || recv.getError() != nil {
 		return recv.commErr
@@ -1781,6 +1782,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *kv.Txn,
 	plan planMaybePhysical,
 	recv *DistSQLReceiver,
+	finishedSetupFn func(),
 ) {
 	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
@@ -1792,7 +1794,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	}
 	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 }
 
 // PlanAndRunCascadesAndChecks runs any cascade and check queries.
