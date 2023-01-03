@@ -24,14 +24,16 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
- │         └── 11 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Ordinal":1,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":2,"Kind":2,"TableID":104}
  │              ├── SetIndexName {"IndexID":2,"Name":"id1","TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":104}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":3,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":104}

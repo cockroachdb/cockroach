@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -55,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3074,25 +3072,10 @@ func (sc *SchemaChanger) getDependentMutationsJobs(
 	return dependentJobs, nil
 }
 
-func (sc *SchemaChanger) shouldSplitAndScatter(
-	tableDesc *tabledesc.Mutable, m catalog.Mutation, idx catalog.Index,
-) bool {
-	if idx == nil {
-		return false
-	}
-
-	if m.Adding() && idx.IsSharded() {
-		return m.Backfilling() || (idx.IsTemporaryIndexForBackfill() && m.DeleteOnly())
-	}
-	return false
-
-}
-
 func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) error {
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
 		tableDesc, err := descsCol.GetMutableTableByID(
 			ctx, txn, sc.descID,
 			tree.ObjectLookupFlags{
@@ -3119,60 +3102,10 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 				break
 			}
 
-			if idx := m.AsIndex(); sc.shouldSplitAndScatter(tableDesc, m, idx) {
-				// Iterate through all partitioning lists to get all possible list
-				// partitioning key prefix. Hash sharded index only allows implicit
-				// partitioning, and implicit partitioning does not support
-				// subpartition. So it's safe not to consider subpartitions. Range
-				// partition is not considered here as well, because it's hard to
-				// predict the sampling points within each range to make the pre-split
-				// on shard boundaries helpful.
-				var partitionKeyPrefixes []roachpb.Key
-				partitioning := idx.GetPartitioning()
-				if err := partitioning.ForEachList(
-					func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
-						for _, tupleBytes := range values {
-							_, key, err := rowenc.DecodePartitionTuple(
-								&tree.DatumAlloc{},
-								sc.execCfg.Codec,
-								tableDesc,
-								idx,
-								partitioning,
-								tupleBytes,
-								tree.Datums{},
-							)
-							if err != nil {
-								return err
-							}
-							partitionKeyPrefixes = append(partitionKeyPrefixes, key)
-						}
-						return nil
-					},
-				); err != nil {
+			if idx := m.AsIndex(); idx != nil {
+				err := sc.execCfg.IndexSpanSplitter.MaybeSplitIndexSpansForPartitioning(ctx, tableDesc, idx)
+				if err != nil {
 					return err
-				}
-
-				splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
-				if len(partitionKeyPrefixes) == 0 {
-					// If there is no partitioning on the index, only pre-split on
-					// selected shard boundaries.
-					for _, shard := range splitAtShards {
-						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
-						splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
-						if err := splitAndScatter(ctx, sc.db, splitKey, hour); err != nil {
-							return err
-						}
-					}
-				} else {
-					// If there are partitioning prefixes, pre-split each of them.
-					for _, partPrefix := range partitionKeyPrefixes {
-						for _, shard := range splitAtShards {
-							splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
-							if err := splitAndScatter(ctx, sc.db, splitKey, hour); err != nil {
-								return err
-							}
-						}
-					}
 				}
 			}
 		}

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -59,6 +58,7 @@ func NewExecutorDependencies(
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
 	backfiller scexec.Backfiller,
+	spanSplitter scexec.IndexSpanSplitter,
 	merger scexec.Merger,
 	backfillTracker scexec.BackfillerTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
@@ -87,6 +87,7 @@ func NewExecutorDependencies(
 			settings:           settings,
 		},
 		backfiller:              backfiller,
+		spanSplitter:            spanSplitter,
 		merger:                  merger,
 		backfillerTracker:       backfillTracker,
 		metadataUpdater:         metadataUpdater,
@@ -315,23 +316,6 @@ func (d *txnDeps) CreatedJobs() []jobspb.JobID {
 	return d.createdJobs
 }
 
-var _ scexec.IndexSpanSplitter = (*txnDeps)(nil)
-
-// MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
-func (d *txnDeps) MaybeSplitIndexSpans(
-	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
-) error {
-	// Only perform splits on the system tenant.
-	if !d.codec.ForSystemTenant() {
-		return nil
-	}
-
-	span := table.IndexSpan(d.codec, indexToBackfill.GetID())
-	const backfillSplitExpiration = time.Hour
-	expirationTime := d.txn.DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
-	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime, oppurpose.SplitSchema)
-}
-
 // GetResumeSpans implements the scexec.BackfillerTracker interface.
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
@@ -361,6 +345,7 @@ type execDeps struct {
 	clock                   scmutationexec.Clock
 	metadataUpdater         scexec.DescriptorMetadataUpdater
 	backfiller              scexec.Backfiller
+	spanSplitter            scexec.IndexSpanSplitter
 	merger                  scexec.Merger
 	backfillerTracker       scexec.BackfillerTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
@@ -407,10 +392,10 @@ func (d *execDeps) Validator() scexec.Validator {
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (d *execDeps) IndexSpanSplitter() scexec.IndexSpanSplitter {
-	return d
+	return d.spanSplitter
 }
 
-// TransactionalJobCreator implements the scexec.Dependencies interface.
+// TransactionalJobRegistry implements the scexec.Dependencies interface.
 func (d *execDeps) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	return d
 }

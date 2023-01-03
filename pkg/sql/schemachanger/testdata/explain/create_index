@@ -20,13 +20,15 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → PUBLIC        SecondaryIndexPartial:{DescID: 106, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
- │         └── 9 Mutation operations
+ │         └── 11 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":106}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"(v = 'a')","IndexID":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
  │              ├── SetIndexName {"IndexID":2,"Name":"idx1","TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":106}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"(v = 'a')","IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":106}
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}

@@ -39,7 +39,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.alter_primary_key
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -292,7 +292,7 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 8 MutationType ops
+## PostCommitPhase stage 8 of 15 with 9 MutationType ops
 upsert descriptor #104
   ...
      - direction: ADD

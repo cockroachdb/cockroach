@@ -72,16 +72,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    ├── 2 elements transitioning toward ABSENT
  │    │    │    ├── PUBLIC    → VALIDATED     PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
  │    │    │    └── PUBLIC    → ABSENT        IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
- │    │    └── 13 Mutation operations
+ │    │    └── 15 Mutation operations
  │    │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │    │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │    │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
  │    │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}
  │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":5,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":5,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"Kind":1,"TableID":104}
  │    │         ├── SetIndexName {"IndexID":5,"Name":"idx","TableID":104}
  │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":6,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":3,"IndexID":6,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":6,"Kind":1,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}

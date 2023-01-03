@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 ops
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-StatementPhase stage 1 of 1 with 9 MutationType ops
+StatementPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -25,6 +25,9 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
         TableID: 104
         TemporaryIndexID: 3
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
@@ -50,6 +53,9 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
         SourceIndexID: 1
         TableID: 104
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
@@ -365,7 +371,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
 ----
-StatementPhase stage 1 of 1 with 7 MutationType ops
+StatementPhase stage 1 of 1 with 9 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -385,6 +391,9 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         TableID: 104
         TemporaryIndexID: 3
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
@@ -407,6 +416,9 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         SourceIndexID: 1
         TableID: 104
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3

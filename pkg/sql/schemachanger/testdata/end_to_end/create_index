@@ -48,7 +48,7 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
 increment telemetry for sql.schema.partial_index
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
   ...
      id: 106

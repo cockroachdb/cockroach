@@ -36,6 +36,7 @@ func NewJobRunDependencies(
 	ieFactory descs.TxnManager,
 	db *kv.DB,
 	backfiller scexec.Backfiller,
+	spanSplitter scexec.IndexSpanSplitter,
 	merger scexec.Merger,
 	rangeCounter backfiller.RangeCounter,
 	eventLoggerFactory EventLoggerFactory,
@@ -56,6 +57,7 @@ func NewJobRunDependencies(
 		internalExecutorFactory: ieFactory,
 		db:                      db,
 		backfiller:              backfiller,
+		spanSplitter:            spanSplitter,
 		merger:                  merger,
 		rangeCounter:            rangeCounter,
 		eventLoggerFactory:      eventLoggerFactory,
@@ -80,6 +82,7 @@ type jobExecutionDeps struct {
 	eventLoggerFactory      func(txn *kv.Txn) scexec.EventLogger
 	statsRefresher          scexec.StatsRefresher
 	backfiller              scexec.Backfiller
+	spanSplitter            scexec.IndexSpanSplitter
 	merger                  scexec.Merger
 	commentUpdaterFactory   MetadataUpdaterFactory
 	rangeCounter            backfiller.RangeCounter
@@ -125,8 +128,9 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				kvTrace:            d.kvTrace,
 				settings:           d.settings,
 			},
-			backfiller: d.backfiller,
-			merger:     d.merger,
+			backfiller:   d.backfiller,
+			merger:       d.merger,
+			spanSplitter: d.spanSplitter,
 			backfillerTracker: backfiller.NewTracker(
 				d.codec,
 				d.rangeCounter,

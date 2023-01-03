@@ -91,7 +91,7 @@ increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -313,7 +313,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 13 MutationType ops
+## PostCommitPhase stage 8 of 15 with 15 MutationType ops
 upsert descriptor #106
   ...
      - direction: ADD
