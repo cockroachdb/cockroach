@@ -294,7 +294,8 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 
 	partition := colexecutils.NewSpillingBuffer(
 		testCfg.allocator, testCfg.memLimit, testCfg.queueCfg,
-		colexecop.NewTestingSemaphore(2), []*types.T{testCfg.typ, types.Bool}, testDiskAcc,
+		colexecop.NewTestingSemaphore(2), []*types.T{testCfg.typ, types.Bool},
+		testDiskAcc, testMemAcc,
 	)
 	insertBatch := testCfg.allocator.NewMemBatchWithFixedCapacity(
 		[]*types.T{testCfg.typ, types.Bool},

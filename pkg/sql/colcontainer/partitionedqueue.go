@@ -119,7 +119,12 @@ type PartitionedDiskQueue struct {
 
 	numOpenFDs  int
 	fdSemaphore semaphore.Semaphore
-	diskAcc     *mon.BoundAccount
+	// Note that the accounts below are shared among all disk queues; however,
+	// since there is no concurrency between using those queues, it is ok to
+	// share the accounts given that they only grow or shrink and never get
+	// closed.
+	diskAcc         *mon.BoundAccount
+	converterMemAcc *mon.BoundAccount
 }
 
 var _ PartitionedQueue = &PartitionedDiskQueue{}
@@ -140,6 +145,7 @@ func NewPartitionedDiskQueue(
 	fdSemaphore semaphore.Semaphore,
 	partitionerStrategy PartitionerStrategy,
 	diskAcc *mon.BoundAccount,
+	converterMemAcc *mon.BoundAccount,
 ) *PartitionedDiskQueue {
 	return &PartitionedDiskQueue{
 		typs:                     typs,
@@ -150,6 +156,7 @@ func NewPartitionedDiskQueue(
 		lastEnqueuedPartitionIdx: -1,
 		fdSemaphore:              fdSemaphore,
 		diskAcc:                  diskAcc,
+		converterMemAcc:          converterMemAcc,
 	}
 }
 
@@ -243,7 +250,7 @@ func (p *PartitionedDiskQueue) Enqueue(
 			p.acquireNewFD(ctx)
 		}
 		// Partition has not been created yet.
-		q, err := NewDiskQueue(ctx, p.typs, p.cfg, p.diskAcc)
+		q, err := NewDiskQueue(ctx, p.typs, p.cfg, p.diskAcc, p.converterMemAcc)
 		if err != nil {
 			return err
 		}

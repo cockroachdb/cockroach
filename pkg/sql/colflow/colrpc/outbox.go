@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -85,11 +86,12 @@ type Outbox struct {
 //     operators that are in the same tree as this Outbox.
 func NewOutbox(
 	unlimitedAllocator *colmem.Allocator,
+	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.BatchToArrowOnly)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BatchToArrowOnly, converterMemAcc)
 	if err != nil {
 		return nil, err
 	}
@@ -113,10 +115,10 @@ func NewOutbox(
 	return o, nil
 }
 
-func (o *Outbox) close() {
+func (o *Outbox) close(ctx context.Context) {
 	o.scratch.buf = nil
 	o.scratch.msg = nil
-	o.converter.Release()
+	o.converter.Release(ctx)
 	// Unset the input (which is a deselector operator) so that its output batch
 	// could be garbage collected. This allows us to release all memory
 	// registered with the allocator (the allocator is shared by the outbox and
@@ -217,7 +219,7 @@ func (o *Outbox) Run(
 		return nil
 	}(); err != nil {
 		// error during stream set up.
-		o.close()
+		o.close(ctx)
 		return
 	}
 
@@ -282,7 +284,7 @@ func (o *Outbox) sendBatches(
 			// to perform the conversion, and we consciously choose to ignore it
 			// for the purposes of the memory accounting because the references
 			// to those slices are lost in Serialize call below.
-			d, err := o.converter.BatchToArrow(batch)
+			d, err := o.converter.BatchToArrow(ctx, batch)
 			if err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
 			}
@@ -417,6 +419,6 @@ func (o *Outbox) runWithStream(
 		}
 	}
 
-	o.close()
+	o.close(ctx)
 	<-waitCh
 }

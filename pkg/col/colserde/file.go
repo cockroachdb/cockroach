@@ -12,6 +12,7 @@ package colserde
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	mmap "github.com/edsrzf/mmap-go"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -54,9 +56,11 @@ type FileSerializer struct {
 }
 
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
-// responsible for closing the given writer.
-func NewFileSerializer(w io.Writer, typs []*types.T) (*FileSerializer, error) {
-	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly)
+// responsible for closing the given writer as well as the given memory account.
+func NewFileSerializer(
+	w io.Writer, typs []*types.T, acc *mon.BoundAccount,
+) (*FileSerializer, error) {
+	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly, acc)
 	if err != nil {
 		return nil, err
 	}
@@ -104,10 +108,10 @@ func (s *FileSerializer) Reset(w io.Writer) error {
 }
 
 // AppendBatch adds one batch of columnar data to the file.
-func (s *FileSerializer) AppendBatch(batch coldata.Batch) error {
+func (s *FileSerializer) AppendBatch(ctx context.Context, batch coldata.Batch) error {
 	offset := int64(s.w.written)
 
-	arrow, err := s.a.BatchToArrow(batch)
+	arrow, err := s.a.BatchToArrow(ctx, batch)
 	if err != nil {
 		return err
 	}
@@ -153,8 +157,8 @@ func (s *FileSerializer) Finish() error {
 }
 
 // Close releases the resources of the serializer.
-func (s *FileSerializer) Close() {
-	s.a.Release()
+func (s *FileSerializer) Close(ctx context.Context) {
+	s.a.Release(ctx)
 }
 
 // FileDeserializer decodes columnar data batches from files encoded according
@@ -213,7 +217,7 @@ func newFileDeserializer(
 	}
 	d.typs = typs
 
-	if d.a, err = NewArrowBatchConverter(typs, ArrowToBatchOnly); err != nil {
+	if d.a, err = NewArrowBatchConverter(typs, ArrowToBatchOnly, nil /* acc */); err != nil {
 		return nil, err
 	}
 	if d.rb, err = NewRecordBatchSerializer(typs); err != nil {
@@ -225,8 +229,8 @@ func newFileDeserializer(
 }
 
 // Close releases any resources held by this deserializer.
-func (d *FileDeserializer) Close() error {
-	d.a.Release()
+func (d *FileDeserializer) Close(ctx context.Context) error {
+	d.a.Release(ctx)
 	return d.bufCloseFn()
 }
 

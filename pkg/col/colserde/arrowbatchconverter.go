@@ -11,6 +11,7 @@
 package colserde
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"reflect"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,8 +49,14 @@ const (
 type ArrowBatchConverter struct {
 	typs []*types.T
 
-	// TODO(yuzefovich): perform memory accounting for these slices.
-	scratch struct {
+	// Fields below are only used during batch-to-arrow conversion.
+
+	// usesOffsets indicates whether at least one vector needs values and
+	// offsets scratch slices (in other words, it needs three buffers).
+	usesOffsets  bool
+	acc          *mon.BoundAccount
+	accountedFor int64
+	scratch      struct {
 		// arrowData is used as scratch space returned as the corresponding
 		// conversion result.
 		arrowData []array.Data
@@ -68,12 +76,22 @@ type ArrowBatchConverter struct {
 // NewArrowBatchConverter converts coldata.Batches to []array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
-func NewArrowBatchConverter(typs []*types.T, mode ConversionMode) (*ArrowBatchConverter, error) {
-	c := &ArrowBatchConverter{typs: typs}
+//
+// acc must be a non-nil unlimited memory account unless ArrowToBatchOnly mode
+// is used. The account will be shrunk in Release, however, it is the caller's
+// responsibility to close the account.
+// NOTE: Release can only be called before the account is closed.
+func NewArrowBatchConverter(
+	typs []*types.T, mode ConversionMode, acc *mon.BoundAccount,
+) (*ArrowBatchConverter, error) {
+	c := &ArrowBatchConverter{typs: typs, acc: acc}
 	if mode == ArrowToBatchOnly {
 		// All the allocations below are only used in BatchToArrow, so we don't
 		// need to allocate them.
 		return c, nil
+	}
+	if acc == nil {
+		return nil, errors.AssertionFailedf("nil account is given with the conversion mode other than ArrowToBatchOnly")
 	}
 	c.scratch.arrowData = make([]array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
@@ -99,6 +117,7 @@ func NewArrowBatchConverter(typs []*types.T, mode ConversionMode) (*ArrowBatchCo
 		}
 	}
 	if needOffsets {
+		c.usesOffsets = true
 		c.scratch.values = make([][]byte, len(typs))
 		c.scratch.offsets = make([][]int32, len(typs))
 	}
@@ -109,7 +128,9 @@ func NewArrowBatchConverter(typs []*types.T, mode ConversionMode) (*ArrowBatchCo
 // arrow []array.Data. It is assumed that the batch is not larger than
 // coldata.BatchSize(). The returned []array.Data may only be used until the
 // next call to BatchToArrow.
-func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, error) {
+func (c *ArrowBatchConverter) BatchToArrow(
+	ctx context.Context, batch coldata.Batch,
+) ([]array.Data, error) {
 	if batch.Width() != len(c.typs) {
 		return nil, errors.AssertionFailedf("mismatched batch width and schema length: %d != %d", batch.Width(), len(c.typs))
 	}
@@ -314,7 +335,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]array.Data, e
 			nil /* dtype */, n, c.scratch.buffers[vecIdx], nil /* childData */, 0 /* nulls */, 0, /* offset */
 		)
 	}
-	return c.scratch.arrowData, nil
+	return c.scratch.arrowData, c.accountForScratch(ctx)
 }
 
 // unsafeCastOffsetsArray unsafe-casts the input offsetsBytes slice to point at
@@ -326,6 +347,26 @@ func unsafeCastOffsetsArray(offsetsInt32 []int32, offsetsBytes *[]byte) {
 	bytesHeader.Data = int32Header.Data
 	bytesHeader.Len = int32Header.Len * int(memsize.Int32)
 	bytesHeader.Cap = int32Header.Cap * int(memsize.Int32)
+}
+
+// accountForScratch performs memory accounting for values and offsets scratch
+// slices. Note that we ignore the overhead of the slices themselves as well as
+// of other scratch objects since those should be negligible in footprint.
+func (c *ArrowBatchConverter) accountForScratch(ctx context.Context) error {
+	if !c.usesOffsets {
+		return nil
+	}
+	var footprint int64
+	for i := range c.scratch.values {
+		// Some of these might be nil in which case footprint won't change.
+		footprint += int64(cap(c.scratch.values[i]))
+		footprint += int64(cap(c.scratch.offsets[i])) * memsize.Int32
+	}
+	if err := c.acc.Resize(ctx, c.accountedFor, footprint); err != nil {
+		return err
+	}
+	c.accountedFor = footprint
+	return nil
 }
 
 // ArrowToBatch converts []array.Data to a coldata.Batch. There must not be
@@ -528,6 +569,9 @@ func getValueBytesAndOffsets(
 
 // Release should be called once the converter is no longer needed so that its
 // memory could be GCed.
-func (c *ArrowBatchConverter) Release() {
+func (c *ArrowBatchConverter) Release(ctx context.Context) {
+	if c.acc != nil {
+		c.acc.Shrink(ctx, c.accountedFor)
+	}
 	*c = ArrowBatchConverter{}
 }

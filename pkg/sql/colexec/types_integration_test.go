@@ -81,8 +81,9 @@ func TestSQLTypesIntegration(t *testing.T) {
 
 			columnarizer := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 0 /* processorID */, source)
 
-			c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
+			c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 			require.NoError(t, err)
+			defer c.Release(ctx)
 			r, err := colserde.NewRecordBatchSerializer(typs)
 			require.NoError(t, err)
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
@@ -147,7 +148,7 @@ func (a *arrowTestOperator) Next() coldata.Batch {
 	batchIn := a.Input.Next()
 	// Note that we don't need to handle zero-length batches in a special way.
 	var buf bytes.Buffer
-	arrowDataIn, err := a.c.BatchToArrow(batchIn)
+	arrowDataIn, err := a.c.BatchToArrow(a.Ctx, batchIn)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
