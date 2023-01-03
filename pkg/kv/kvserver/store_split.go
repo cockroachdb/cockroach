@@ -245,7 +245,7 @@ func prepareRightReplicaForSplit(
 	// If we know that the RHS has already been removed at this replica ID
 	// then we also know that its data has already been removed by the preApply
 	// so we skip initializing it as the RHS of the split.
-	if rightRepl.isNewerThanSplitRLocked(split) {
+	if rightRepl.isNewerThanSplit(split) {
 		return nil
 	}
 
