@@ -196,6 +196,8 @@ type instrumentationHelper struct {
 
 	// indexesUsed list the indexes used in the query with format tableID@indexID.
 	indexesUsed []string
+
+	previousRedactable bool
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -346,7 +348,15 @@ func (ih *instrumentationHelper) Setup(
 		// testing callback.
 		recType = tracingpb.RecordingVerbose
 	}
-	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
+	//if ih.explainFlags.Redact&explain.RedactPII != 0 {
+	//ih.previousRedactable = cfg.AmbientCtx.Tracer.Redactable()
+	//cfg.AmbientCtx.Tracer.SetRedactable(true)
+	//}
+	if ih.explainFlags.Redact&explain.RedactPII != 0 {
+		newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType), tracing.WithRedactable())
+	} else {
+		newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
+	}
 	ih.shouldFinishSpan = true
 	return newCtx, true
 }
@@ -401,18 +411,26 @@ func (ih *instrumentationHelper) Finish(
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
 			placeholders := p.extendedEvalCtx.Placeholders
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(
-				explain.Flags{Verbose: true, ShowTypes: true},
+				explain.Flags{
+					Verbose:   true,
+					ShowTypes: true,
+					Redact:    ih.explainFlags.Redact & explain.RedactPII,
+				},
 				phaseTimes,
 				queryLevelStats,
 			)
 			warnings = ob.GetWarnings()
 			bundle = buildStatementBundle(
 				ctx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
+				ih.explainFlags.Redact,
 			)
 			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
 		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
+		if ih.explainFlags.Redact&explain.RedactPII != 0 {
+			cfg.AmbientCtx.Tracer.SetRedactable(ih.previousRedactable)
+		}
 	}
 
 	// If there was a communication error already, no point in setting any

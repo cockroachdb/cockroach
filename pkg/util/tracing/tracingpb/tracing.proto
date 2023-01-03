@@ -43,5 +43,6 @@ message TraceInfo {
   }
 
   OtelInfo otel = 4;
-}
 
+  bool redactable = 5;
+}
