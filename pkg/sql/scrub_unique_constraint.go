@@ -121,8 +121,7 @@ func (o *sqlUniqueConstraintCheckOperation) Start(params runParams) error {
 	}
 	asOf := ""
 	if o.asOf != hlc.MaxTimestamp {
-		asOf = fmt.Sprintf("AS OF SYSTEM TIME %[1]d",
-			o.asOf.WallTime)
+		asOf = fmt.Sprintf("AS OF SYSTEM TIME '%s'", o.asOf.AsOfSystemTime())
 	}
 	tableName := fmt.Sprintf("%s.%s", o.tableName.Catalog(), o.tableName.Table())
 	dup, _, err := duplicateRowQuery(o.tableDesc, o.cols, o.predicate, false /* limitResults */)
