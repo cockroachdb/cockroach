@@ -93,6 +93,12 @@ type unionNode struct {
 	// the limit is reached before executing the right node. The limit is
 	// guaranteed but the short-circuit behavior is not.
 	hardLimit uint64
+
+	// enforceHomeRegion is true if this UNION ALL is a locality-optimized search
+	// and the session setting `enforce_home_region` is true, indicating the
+	// operation should error out if the query cannot be satisfied by accessing
+	// only rows in the local region.
+	enforceHomeRegion bool
 }
 
 func (p *planner) newUnionNode(
@@ -102,6 +108,7 @@ func (p *planner) newUnionNode(
 	streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering ReqOrdering,
 	hardLimit uint64,
+	enforceHomeRegion bool,
 ) (planNode, error) {
 	emitAll := false
 	switch typ {
@@ -162,6 +169,7 @@ func (p *planner) newUnionNode(
 		streamingOrdering: streamingOrdering,
 		reqOrdering:       reqOrdering,
 		hardLimit:         hardLimit,
+		enforceHomeRegion: enforceHomeRegion,
 	}
 	return node, nil
 }

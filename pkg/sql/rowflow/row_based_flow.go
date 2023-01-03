@@ -328,7 +328,18 @@ func (f *rowBasedFlow) setupInputSyncs(
 				if is.Type == execinfrapb.InputSyncSpec_ORDERED {
 					ordering = execinfrapb.ConvertToColumnOrdering(is.Ordering)
 				}
-				sync, err = makeSerialSync(ordering, f.EvalCtx, streams)
+				var pushErrorFunc func()
+				if is.EnforceHomeRegionError != nil {
+					exceedsSrcIndexExclusiveUpperBoundError := is.EnforceHomeRegionError.ErrorDetail(ctx)
+					pushErrorFunc = func() {
+						rowSyncFlowConsumer := f.GetRowSyncFlowConsumer()
+						rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: exceedsSrcIndexExclusiveUpperBoundError})
+					}
+				}
+				sync, err = makeSerialSync(ordering, f.EvalCtx, streams,
+					is.EnforceHomeRegionStreamExclusiveUpperBound,
+					pushErrorFunc,
+				)
 				if err != nil {
 					return nil, err
 				}

@@ -135,6 +135,17 @@ message InputSyncSpec {
 
   // Schema for the streams entering this synchronizer.
   repeated sql.sem.types.T column_types = 4;
+
+  // EnforceHomeRegionStreamExclusiveUpperBound is one greater than the maximum
+  // stream input index this synchronizer will read into. It is only used if
+  // non-zero. Attempts to read a stream input index greater than or equal to
+  // this value will cause the query to error out before the read attempt is
+  // made.
+  optional uint32 enforce_home_region_stream_exclusive_upper_bound = 5 [(gogoproto.nullable) = false];
+
+  // EnforceHomeRegionError is the error to return when
+  // EnforceHomeRegionStreamExclusiveUpperBound is exceeded.
+  optional Error enforce_home_region_error = 6;
 }
 
 // OutputRouterSpec is the specification for the output router of a processor;

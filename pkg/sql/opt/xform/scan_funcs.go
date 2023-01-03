@@ -264,15 +264,18 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		copy(remoteScanPrivate.InvertedConstraint, scanPrivate.InvertedConstraint)
 	}
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
+	enforceHomeRegion := c.e.evalCtx.SessionData().EnforceHomeRegion &&
+		c.e.evalCtx.Planner != nil && c.e.evalCtx.Planner.IsANSIDML()
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.
 	locOptSearch := memo.LocalityOptimizedSearchExpr{
 		Local:  localScan,
 		Remote: remoteScan,
 		SetPrivate: memo.SetPrivate{
-			LeftCols:  localScan.Relational().OutputCols.ToList(),
-			RightCols: remoteScan.Relational().OutputCols.ToList(),
-			OutCols:   grp.Relational().OutputCols.ToList(),
+			LeftCols:          localScan.Relational().OutputCols.ToList(),
+			RightCols:         remoteScan.Relational().OutputCols.ToList(),
+			OutCols:           grp.Relational().OutputCols.ToList(),
+			EnforceHomeRegion: enforceHomeRegion,
 		},
 	}
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)

@@ -619,11 +619,7 @@
         )
     )
     $on
-    (CreateLocalityOptimizedLookupJoinPrivate
-        $remoteExpr
-        (EmptyFiltersExpr)
-        $private
-    )
+    (CreateRemoteOnlyLookupJoinPrivate $remoteExpr $private)
 )
 
 # GenerateLocalityOptimizedLookupJoin converts a semi, inner, or left lookup
