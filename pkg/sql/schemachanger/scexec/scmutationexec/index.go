@@ -486,3 +486,10 @@ func (i *immediateVisitor) RemoveColumnFromIndex(
 	}
 	return nil
 }
+
+func (m *deferredVisitor) MaybeAddSplitForIndex(
+	_ context.Context, op scop.MaybeAddSplitForIndex,
+) error {
+	m.AddIndexForMaybeSplitAndScatter(op.TableID, op.IndexID)
+	return nil
+}

@@ -700,6 +700,20 @@ func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2)
 }
 
+// MaybeSplitIndexSpansForPartitioning mocks base method.
+func (m *MockIndexSpanSplitter) MaybeSplitIndexSpansForPartitioning(arg0 context.Context, arg1 catalog.TableDescriptor, arg2 catalog.Index) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaybeSplitIndexSpansForPartitioning", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MaybeSplitIndexSpansForPartitioning indicates an expected call of MaybeSplitIndexSpansForPartitioning.
+func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpansForPartitioning(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpansForPartitioning", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpansForPartitioning), arg0, arg1, arg2)
+}
+
 // MockPeriodicProgressFlusher is a mock of PeriodicProgressFlusher interface.
 type MockPeriodicProgressFlusher struct {
 	ctrl     *gomock.Controller

@@ -249,7 +249,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -295,6 +295,9 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
@@ -311,6 +314,9 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
@@ -631,7 +637,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 18 MutationType ops
+PreCommitPhase stage 2 of 2 with 20 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -709,6 +715,9 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
@@ -725,6 +734,9 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
@@ -1017,7 +1029,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 11 MutationType ops
+PreCommitPhase stage 2 of 2 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1061,6 +1073,9 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
@@ -1077,6 +1092,9 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
@@ -1582,7 +1600,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 15 MutationType ops
+PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1608,6 +1626,9 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
         SourceIndexID: 1
         TableID: 108
         TemporaryIndexID: 3
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 108
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 2
@@ -1624,6 +1645,9 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 108
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 108
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 3
@@ -1642,6 +1666,9 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
         TableID: 108
         TemporaryIndexID: 5
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 4
+      TableID: 108
     *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         ConstraintID: 5
@@ -1650,6 +1677,9 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
         SourceIndexID: 1
         TableID: 108
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 5
+      TableID: 108
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 4
@@ -1979,7 +2009,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
     [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: g, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -2026,6 +2056,9 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         SourceIndexID: 1
         TableID: 109
         TemporaryIndexID: 3
+    *scop.MaybeAddSplitForIndex
+      IndexID: 2
+      TableID: 109
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 2
@@ -2042,6 +2075,9 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 109
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 109
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
@@ -2138,7 +2174,7 @@ PostCommitPhase stage 7 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 2
       TableID: 109
-PostCommitPhase stage 8 of 15 with 13 MutationType ops
+PostCommitPhase stage 8 of 15 with 15 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: baz_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -2176,6 +2212,9 @@ PostCommitPhase stage 8 of 15 with 13 MutationType ops
         TableID: 109
         TemporaryIndexID: 5
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 4
+      TableID: 109
     *scop.SetIndexName
       IndexID: 4
       Name: baz_g_key
@@ -2188,6 +2227,9 @@ PostCommitPhase stage 8 of 15 with 13 MutationType ops
         SourceIndexID: 2
         TableID: 109
       IsSecondaryIndex: true
+    *scop.MaybeAddSplitForIndex
+      IndexID: 5
+      TableID: 109
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 4

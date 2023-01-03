@@ -32,11 +32,17 @@ type deferredState struct {
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	scheduleIDsToDelete          []int64
 	statsToRefresh               catalog.DescriptorIDSet
+	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	gcJobs
 }
 
 type databaseRoleSettingToDelete struct {
 	dbID catid.DescID
+}
+
+type indexesToSplitAndScatter struct {
+	tableID catid.DescID
+	indexID catid.IndexID
 }
 
 type schemaChangerJobUpdate struct {
@@ -53,6 +59,16 @@ func (s *deferredState) DeleteDatabaseRoleSettings(ctx context.Context, dbID des
 			dbID: dbID,
 		})
 	return nil
+}
+
+func (s *deferredState) AddIndexForMaybeSplitAndScatter(
+	tableID catid.DescID, indexID catid.IndexID,
+) {
+	s.indexesToSplitAndScatter = append(s.indexesToSplitAndScatter,
+		indexesToSplitAndScatter{
+			tableID: tableID,
+			indexID: indexID,
+		})
 }
 
 func (s *deferredState) DeleteSchedule(scheduleID int64) {
@@ -153,6 +169,7 @@ func (s *deferredState) exec(
 	tjr TransactionalJobRegistry,
 	m DescriptorMetadataUpdater,
 	q StatsRefreshQueue,
+	iss IndexSpanSplitter,
 ) error {
 	dbZoneConfigsToDelete, gcJobRecords := s.gcJobs.makeRecords(tjr.MakeJobID, !tjr.UseLegacyGCJob(ctx))
 	// Any databases being GCed should have an entry even if none of its tables
@@ -173,6 +190,20 @@ func (s *deferredState) exec(
 	}
 	for _, scheduleID := range s.scheduleIDsToDelete {
 		if err := m.DeleteSchedule(ctx, scheduleID); err != nil {
+			return err
+		}
+	}
+	for _, idx := range s.indexesToSplitAndScatter {
+		descs, err := c.MustReadImmutableDescriptors(ctx, idx.tableID)
+		if err != nil {
+			return err
+		}
+		tableDesc := descs[0].(catalog.TableDescriptor)
+		idxDesc, err := catalog.MustFindIndexByID(tableDesc, idx.indexID)
+		if err != nil {
+			return err
+		}
+		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
 			return err
 		}
 	}

@@ -220,8 +220,13 @@ type Validator interface {
 // prior to backfilling.
 type IndexSpanSplitter interface {
 
-	// MaybeSplitIndexSpans will attempt to split the backfilled index span.
+	// MaybeSplitIndexSpans will attempt to split the backfilled index span, if
+	// the index is in the system tenant or is partitioned.
 	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+
+	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
+	// across hash-sharded index boundaries if applicable.
+	MaybeSplitIndexSpansForPartitioning(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
 }
 
 // BackfillProgress tracks the progress for a Backfill.

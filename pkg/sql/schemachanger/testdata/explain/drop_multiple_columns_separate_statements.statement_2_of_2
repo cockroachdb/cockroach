@@ -52,12 +52,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: j, ColumnID: 2}
  │         │    └── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
- │         └── 13 Mutation operations
+ │         └── 15 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}

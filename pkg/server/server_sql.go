@@ -1110,6 +1110,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.InternalDB = internalDB
 	jobRegistry.SetInternalDB(internalDB)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
+	execCfg.IndexSpanSplitter = sql.NewIndexSplitAndScatter(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
 	execCfg.ProtectedTimestampManager = jobsprotectedts.NewManager(
 		execCfg.InternalDB,

@@ -34,6 +34,7 @@ func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db descs.DB,
 	backfiller scexec.Backfiller,
+	spanSplitter scexec.IndexSpanSplitter,
 	merger scexec.Merger,
 	rangeCounter backfiller.RangeCounter,
 	eventLoggerFactory func(isql.Txn) scrun.EventLogger,
@@ -53,6 +54,7 @@ func NewJobRunDependencies(
 		collectionFactory:     collectionFactory,
 		db:                    db,
 		backfiller:            backfiller,
+		spanSplitter:          spanSplitter,
 		merger:                merger,
 		rangeCounter:          rangeCounter,
 		eventLoggerFactory:    eventLoggerFactory,
@@ -75,6 +77,7 @@ type jobExecutionDeps struct {
 	db                    descs.DB
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
+	spanSplitter          scexec.IndexSpanSplitter
 	merger                scexec.Merger
 	commentUpdaterFactory MetadataUpdaterFactory
 	rangeCounter          backfiller.RangeCounter
@@ -120,8 +123,9 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				kvTrace:            d.kvTrace,
 				settings:           d.settings,
 			},
-			backfiller: d.backfiller,
-			merger:     d.merger,
+			backfiller:   d.backfiller,
+			merger:       d.merger,
+			spanSplitter: d.spanSplitter,
 			backfillerTracker: backfiller.NewTracker(
 				d.codec,
 				d.rangeCounter,
