@@ -671,7 +671,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec
+	// Auto-commit is disallowed during statement execution, if we previously executed any DDL.
+	// This is because may potentially create jobs and do other operations rather than
+	// a KV commit. Insteadand carry out any extra operations needed for DDL.he auto-connection executor will commit after this statement,
+	// in this scenario.
+	// This prevents commit during statement execution, but the connection executor,
+	// will still commit this transaction after this statement executes.
+	p.autoCommit = canAutoCommit &&
+		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
 	p.extendedEvalCtx.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
 	ex.extraTxnState.firstStmtExecuted = true
 
