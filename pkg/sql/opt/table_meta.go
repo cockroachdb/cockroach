@@ -378,13 +378,22 @@ func (tm *TableMeta) OrigCheckConstraintsStats(
 	return nil, false
 }
 
-// AddIndexPartitionLocality adds a PrefixSorter to the table's metadata for the
-// index with IndexOrdinal ord.
-func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps partition.PrefixSorter) {
-	if tm.indexPartitionLocalities == nil {
-		tm.indexPartitionLocalities = make([]partition.PrefixSorter, tm.Table.IndexCount())
+// CacheIndexPartitionLocalities caches locality prefix sorters in the table
+// metadata for indexes that have a mix of local and remote partitions. It can
+// be called multiple times if necessary to update with new indexes.
+func (tm *TableMeta) CacheIndexPartitionLocalities(evalCtx *eval.Context) {
+	tab := tm.Table
+	if cap(tm.indexPartitionLocalities) < tab.IndexCount() {
+		tm.indexPartitionLocalities = make([]partition.PrefixSorter, tab.IndexCount())
 	}
-	tm.indexPartitionLocalities[ord] = ps
+	tm.indexPartitionLocalities = tm.indexPartitionLocalities[:tab.IndexCount()]
+	for indexOrd, n := 0, tab.IndexCount(); indexOrd < n; indexOrd++ {
+		index := tab.Index(indexOrd)
+		if localPartitions, ok := partition.HasMixOfLocalAndRemotePartitions(evalCtx, index); ok {
+			ps := partition.GetSortedPrefixes(index, localPartitions, evalCtx)
+			tm.indexPartitionLocalities[indexOrd] = ps
+		}
+	}
 }
 
 // IndexPartitionLocality returns the given index's PrefixSorter. An empty
@@ -392,6 +401,11 @@ func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps partitio
 // partitions.
 func (tm *TableMeta) IndexPartitionLocality(ord cat.IndexOrdinal) (ps partition.PrefixSorter) {
 	if tm.indexPartitionLocalities != nil {
+		if ord >= len(tm.indexPartitionLocalities) {
+			panic(errors.AssertionFailedf(
+				"index ordinal %d greater than length of indexPartitionLocalities", ord,
+			))
+		}
 		ps := tm.indexPartitionLocalities[ord]
 		return ps
 	}
