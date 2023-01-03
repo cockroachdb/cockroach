@@ -920,7 +920,7 @@ func describeEnum(strs ...string) string {
 // ValidateForCreateChangefeed checks that the provided options are
 // valid for a CREATE CHANGEFEED statement using the type assertions
 // in ChangefeedOptionExpectValues.
-func (s StatementOptions) ValidateForCreateChangefeed() error {
+func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool) error {
 	err := s.validateAgainst(ChangefeedOptionExpectValues)
 	if err != nil {
 		return err
@@ -948,8 +948,17 @@ func (s StatementOptions) ValidateForCreateChangefeed() error {
 	}
 	// Right now parquet does not support any of these options
 	if s.m[OptFormat] == string(OptFormatParquet) {
-		if err := validateInitialScanUnsupportedOptions(string(OptFormatParquet)); err != nil {
-			return err
+		if isPredicateChangefeed {
+			// Diff option is allowed when using predicate changefeeds with parquet format.
+			for o := range InitialScanOnlyUnsupportedOptions {
+				if _, ok := s.m[o]; ok && o != OptDiff {
+					return errors.Newf(`cannot specify both format='%s' and %s`, OptFormatParquet, o)
+				}
+			}
+		} else {
+			if err := validateInitialScanUnsupportedOptions(string(OptFormatParquet)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
