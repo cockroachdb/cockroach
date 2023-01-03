@@ -4846,6 +4846,7 @@ optimizer                                             on
 optimizer_use_forecasts                               on
 optimizer_use_histograms                              on
 optimizer_use_improved_disjunction_stats              on
+optimizer_use_limit_ordering_for_streaming_group_by   on
 optimizer_use_multicol_stats                          on
 optimizer_use_not_visible_indexes                     off
 override_multi_region_zone_config                     off
