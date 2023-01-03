@@ -227,11 +227,8 @@ func (r *Replica) setTombstoneKey(
 ) error {
 	r.mu.Lock()
 	nextReplicaID := r.mu.state.Desc.NextReplicaID
-	if nextReplicaID < externalNextReplicaID {
+	if externalNextReplicaID > nextReplicaID {
 		nextReplicaID = externalNextReplicaID
-	}
-	if nextReplicaID > r.mu.tombstoneMinReplicaID {
-		r.mu.tombstoneMinReplicaID = nextReplicaID
 	}
 	r.mu.Unlock()
 	return writeTombstoneKey(ctx, writer, r.RangeID, nextReplicaID)

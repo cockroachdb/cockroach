@@ -339,6 +339,9 @@ type Replica struct {
 		// scheduled for destruction or has been GCed.
 		// destroyStatus should only be set while also holding the raftMu and
 		// readOnlyCmdMu.
+		//
+		// When this replica is being removed, the destroyStatus is updated and
+		// RangeTombstone is written in the same raftMu critical section.
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -494,9 +497,6 @@ type Replica struct {
 		applyingEntries bool
 		// The replica's Raft group "node".
 		internalRaftGroup *raft.RawNode
-		// The minimum allowed ID for this replica. Initialized from
-		// RangeTombstone.NextReplicaID.
-		tombstoneMinReplicaID roachpb.ReplicaID
 
 		// The ID of the leader replica within the Raft group. NB: this is updated
 		// in a separate critical section from the Raft group, and can therefore
@@ -1734,8 +1734,7 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 // have been removed from this store after the split.
 //
 // TODO(tbg): the below is true as of 22.2: we persist any Replica's ReplicaID
-// under RaftReplicaIDKey, so the below caveats should be addressed now and we
-// should be able to simplify isNewerThanSplit to just compare replicaIDs.
+// under RaftReplicaIDKey, so the below caveats should be addressed now.
 //
 // TODO(ajwerner):  There is one false negative where false will be returned but
 // the hard state may be due to a newer replica which is outlined below. It
@@ -1763,21 +1762,12 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 //
 // See TestProcessSplitAfterRightHandSideHasBeenRemoved.
 func (r *Replica) isNewerThanSplit(split *roachpb.SplitTrigger) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.isNewerThanSplitRLocked(split)
-}
-
-func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 	rightDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	// If we have written a tombstone for this range then we know that the RHS
-	// must have already been removed at the split replica ID.
-	return r.mu.tombstoneMinReplicaID != 0 ||
-		// If the first raft message we received for the RHS range was for a replica
-		// ID which is above the replica ID of the split then we would not have
-		// written a tombstone but we will have a replica ID that will exceed the
-		// split replica ID.
-		r.replicaID > rightDesc.ReplicaID
+	// If the first raft message we received for the RHS range was for a replica
+	// ID which is above the replica ID of the split then we would not have
+	// written a tombstone but we will have a replica ID that will exceed the
+	// split replica ID.
+	return r.replicaID > rightDesc.ReplicaID
 }
 
 // WatchForMerge is like maybeWatchForMergeLocked, except it expects a merge to

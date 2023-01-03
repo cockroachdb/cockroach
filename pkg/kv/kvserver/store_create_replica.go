@@ -25,10 +25,37 @@ import (
 
 var errRetry = errors.New("retry: orphaned replica")
 
-// getOrCreateReplica returns a replica for the given RangeID, creating an
-// uninitialized replica if necessary. The caller must not hold the store's
-// lock. The returned replica has Replica.raftMu locked and it is the caller's
-// responsibility to unlock it.
+// getOrCreateReplica returns an existing or newly created replica with the
+// given replicaID for the given rangeID, or roachpb.RaftGroupDeletedError if
+// this replicaID has been deleted. A returned replica's Replica.raftMu is
+// locked, and the caller is responsible for unlocking it.
+//
+// Commonly, if the requested replica is present in Store's memory and is not
+// being destroyed, it gets returned. Otherwise, this replica is either deleted
+// (which is confirmed by reading the RangeTombstone), or gets created (as an
+// uninitialized replica) in memory and storage, and loaded from storage if it
+// was stored before.
+//
+// The above assertions and actions on the in-memory (Store, Replica) and stored
+// (RaftReplicaID, RangeTombstone) state can't all be done atomically, but this
+// method effectively makes them appear atomically done under the returned
+// replica's Replica.raftMu.
+//
+// In particular, if getOrCreateReplica returns a replica, the guarantee is that
+// the following invariants (derived from raftMu and Store invariants) are true
+// while Replica.raftMu is held:
+//
+//   - Store.GetReplica(rangeID) successfully returns this and only this replica
+//   - The Replica is not being removed as seen by its Replica.mu.destroyStatus
+//   - The RangeTombstone in storage does not see this replica as removed
+//
+// If getOrCreateReplica returns roachpb.RaftGroupDeletedError, the guarantee is:
+//
+//   - getOrCreateReplica will never return this replica
+//   - Store.GetReplica(rangeID) can now only return replicas with higher IDs
+//   - The RangeTombstone in storage does see this replica as removed
+//
+// The caller must not hold the store's lock.
 func (s *Store) getOrCreateReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
@@ -167,7 +194,6 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-	repl.mu.tombstoneMinReplicaID = tombstone.NextReplicaID
 
 	// NB: A Replica should never be in the store's replicas map with a nil
 	// descriptor. Assign it directly here. In the case that the Replica should
