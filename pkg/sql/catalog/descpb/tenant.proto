@@ -14,6 +14,7 @@ option go_package = "descpb";
 
 import "gogoproto/gogo.proto";
 import "roachpb/api.proto";
+import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 
 // TenantInfo represents a tenant in a multi-tenant cluster and is
 // stored in the "info" column of the "system.tenants" table. The
@@ -51,6 +52,12 @@ message TenantInfo {
      (gogoproto.nullable) = false,
      (gogoproto.customname) = "TenantReplicationJobID",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // Capabilities encapsulate a set of capabilities that a specific tenant
+  // possesses.
+  optional multitenant.tenantcapabilities.tenantcapabilitiespb.TenantCapabilities capabilities = 6 [
+    (gogoproto.nullable) = false
+  ];
 }
 
 // TenantInfoAndUsage contains the information for a tenant in a multi-tenant
