@@ -556,7 +556,7 @@ func (b *Bytes) elementsAsBytes(n int) []byte {
 var zeroInt32Slice []int32
 
 func init() {
-	zeroInt32Slice = make([]int32, BatchSize())
+	zeroInt32Slice = make([]int32, MaxBatchSize)
 }
 
 // Serialize converts b into the "arrow-like" (which is arrow-compatible)
@@ -579,7 +579,7 @@ func init() {
 //	 buffer = [<b.elements as []byte><b.buffer]
 //	offsets = [0, 0, ..., 0, len(<b.elements as []byte>), len(<b.elements as []byte>) + len(buffer)]
 //
-// Note: it is assumed that n is not larger than BatchSize().
+// Note: it is assumed that n is not larger than MaxBatchSize.
 func (b *Bytes) Serialize(n int, dataScratch []byte, offsetsScratch []int32) ([]byte, []int32) {
 	if buildutil.CrdbTestBuild {
 		if n > BatchSize() {
