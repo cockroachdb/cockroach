@@ -127,3 +127,9 @@ func (s *indexSpanSplitter) MaybeSplitIndexSpans(
 ) error {
 	return nil
 }
+
+func (s *indexSpanSplitter) MaybeSplitIndexSpansForPartitioning(
+	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
+) error {
+	return nil
+}

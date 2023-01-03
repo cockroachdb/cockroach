@@ -292,7 +292,7 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
@@ -330,6 +330,10 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
 │           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 104
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 1
@@ -595,7 +599,7 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
 │   │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
 │   │   │             rule: "index no longer public before dependents"
 │   │   │
-│   │   └── • 8 Mutation operations
+│   │   └── • 9 Mutation operations
 │   │       │
 │   │       ├── • MakePublicPrimaryIndexWriteOnly
 │   │       │     IndexID: 1
@@ -622,6 +626,10 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
 │   │       │       IsUnique: true
 │   │       │       SourceIndexID: 2
 │   │       │       TableID: 104
+│   │       │
+│   │       ├── • MaybeAddSplitForIndex
+│   │       │     IndexID: 5
+│   │       │     TableID: 104
 │   │       │
 │   │       ├── • AddColumnToIndex
 │   │       │     ColumnID: 1

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
 // Clock is used to provide a timestamp to track loosely when something
@@ -115,4 +116,10 @@ type DeferredMutationStateUpdater interface {
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
+
+	// AddIndexForMaybeSplitAndScatter adds an index to maybe split and scatter,
+	// if it makes sense.
+	AddIndexForMaybeSplitAndScatter(
+		tableID catid.DescID, indexID catid.IndexID,
+	)
 }

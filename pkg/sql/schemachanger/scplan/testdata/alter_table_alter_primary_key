@@ -112,7 +112,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 15 MutationType ops
+PreCommitPhase stage 2 of 2 with 16 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -167,6 +167,9 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 104
+    *scop.MaybeAddSplitForIndex
+      IndexID: 3
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 3
@@ -282,7 +285,7 @@ PostCommitPhase stage 7 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 2
       TableID: 104
-PostCommitPhase stage 8 of 15 with 9 MutationType ops
+PostCommitPhase stage 8 of 15 with 10 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -313,6 +316,9 @@ PostCommitPhase stage 8 of 15 with 9 MutationType ops
         IsUnique: true
         SourceIndexID: 2
         TableID: 104
+    *scop.MaybeAddSplitForIndex
+      IndexID: 5
+      TableID: 104
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 5

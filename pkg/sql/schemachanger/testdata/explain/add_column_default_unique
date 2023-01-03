@@ -63,7 +63,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"PgAttributeNum":2,"TableID":106}}
  │              ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":106}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":106}}
@@ -72,6 +72,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":106}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
@@ -140,14 +141,16 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    ├── 2 elements transitioning toward ABSENT
  │    │    │    ├── PUBLIC    → VALIDATED     PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
  │    │    │    └── PUBLIC    → ABSENT        IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
- │    │    └── 13 Mutation operations
+ │    │    └── 15 Mutation operations
  │    │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
  │    │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
  │    │         ├── SetIndexName {"IndexID":2,"Name":"tbl_pkey","TableID":106}
  │    │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":106}
  │    │         ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":106}
  │    │         ├── SetIndexName {"IndexID":4,"Name":"tbl_j_key","TableID":106}
  │    │         ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │    │         ├── MaybeAddSplitForIndex {"IndexID":5,"TableID":106}
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":4,"TableID":106}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"Kind":1,"TableID":106}
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":5,"TableID":106}

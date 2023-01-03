@@ -222,6 +222,9 @@ type IndexSpanSplitter interface {
 
 	// MaybeSplitIndexSpans will attempt to split the backfilled index span.
 	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+
+	// MaybeSplitIndexSpansForPartitioning will attempt to split the backfilled index span.
+	MaybeSplitIndexSpansForPartitioning(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
 }
 
 // BackfillProgress tracks the progress for a Backfill.

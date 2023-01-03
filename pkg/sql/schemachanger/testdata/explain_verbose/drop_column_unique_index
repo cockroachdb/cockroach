@@ -282,7 +282,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3
@@ -329,6 +329,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │           │       IsUnique: true
 │           │       SourceIndexID: 4
 │           │       TableID: 106
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 7
+│           │     TableID: 106
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 1

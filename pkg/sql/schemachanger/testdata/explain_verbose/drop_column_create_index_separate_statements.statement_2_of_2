@@ -154,7 +154,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 13 Mutation operations
+│       └── • 14 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
@@ -185,6 +185,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
 │           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 4
+│           │     TableID: 104
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 4
@@ -500,7 +504,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
 │   │   │             rule: "index no longer public before dependents"
 │   │   │
-│   │   └── • 13 Mutation operations
+│   │   └── • 15 Mutation operations
 │   │       │
 │   │       ├── • MakePublicPrimaryIndexWriteOnly
 │   │       │     IndexID: 1
@@ -530,6 +534,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │       TemporaryIndexID: 6
 │   │       │     IsSecondaryIndex: true
 │   │       │
+│   │       ├── • MaybeAddSplitForIndex
+│   │       │     IndexID: 5
+│   │       │     TableID: 104
+│   │       │
 │   │       ├── • AddColumnToIndex
 │   │       │     ColumnID: 3
 │   │       │     IndexID: 5
@@ -554,6 +562,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │       SourceIndexID: 3
 │   │       │       TableID: 104
 │   │       │     IsSecondaryIndex: true
+│   │       │
+│   │       ├── • MaybeAddSplitForIndex
+│   │       │     IndexID: 6
+│   │       │     TableID: 104
 │   │       │
 │   │       ├── • AddColumnToIndex
 │   │       │     ColumnID: 3

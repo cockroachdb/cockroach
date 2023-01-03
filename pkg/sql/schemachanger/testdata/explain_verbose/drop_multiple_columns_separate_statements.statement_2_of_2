@@ -185,7 +185,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 13 Mutation operations
+│       └── • 14 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
@@ -216,6 +216,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
 │           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 4
+│           │     TableID: 104
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3

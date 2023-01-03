@@ -65,6 +65,7 @@ func (ti testInfra) newExecDeps(txn descs.Txn) scexec.Dependencies {
 		txn.Descriptors(),
 		noopJobRegistry{},
 		noopBackfiller{},
+		noopIndexSpanSplitter{},
 		noopMerger{},
 		scdeps.NewNoOpBackfillerTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
@@ -408,6 +409,24 @@ func (n noopBackfiller) BackfillIndexes(
 	progress scexec.BackfillProgress,
 	writer scexec.BackfillerProgressWriter,
 	descriptor catalog.TableDescriptor,
+) error {
+	return nil
+}
+
+type noopIndexSpanSplitter struct{}
+
+var _ scexec.IndexSpanSplitter = (*noopIndexSpanSplitter)(nil)
+
+// MaybeSplitIndexSpans will attempt to split the backfilled index span.
+func (n noopIndexSpanSplitter) MaybeSplitIndexSpans(
+	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
+) error {
+	return nil
+}
+
+// MaybeSplitIndexSpansForPartitioning will attempt to split the backfilled index span.
+func (n noopIndexSpanSplitter) MaybeSplitIndexSpansForPartitioning(
+	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
 ) error {
 	return nil
 }
