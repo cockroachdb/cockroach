@@ -320,28 +320,37 @@ func (r *Replica) evalAndPropose(
 // the method returns, all access to the command must be performed while holding
 // Replica.mu and Replica.raftMu.
 //
-// propose takes ownership of the supplied token; the caller should tok.Move()
-// it into this method. It will be used to untrack the request once it comes out
-// of the proposal buffer.
+// propose takes ownership of the supplied token, even on error; the caller
+// should tok.Move() it into this method. It will be used to untrack the request
+// once it comes out of the proposal buffer.
+//
+// The ProposalData must not be reproposed or reused should an error be returned
+// from this method. Its MaxLeaseIndex and encodedCommand fields must be empty.
+// Reproposals are a rich source of complexity. See the comment on `r.mu.proposals`
+// for details.
 func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
 ) (pErr *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 
-	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
-	// Failure to propose will propagate to the client. An invariant of this
-	// package is that proposals which are finished carry a raft command with a
-	// MaxLeaseIndex equal to the proposal command's max lease index.
-	defer func(prev uint64) {
+	defer func() {
+		// An error for this method
 		if pErr != nil {
-			p.command.MaxLeaseIndex = prev
+			p.encodedCommand = nil
 		}
-	}(p.command.MaxLeaseIndex)
+	}()
 
-	// Make sure the maximum lease index is unset. This field will be set in
-	// propBuf.Insert and its encoded bytes will be appended to the encoding
-	// buffer as a MaxLeaseFooter.
-	p.command.MaxLeaseIndex = 0
+	if p.command.MaxLeaseIndex > 0 {
+		// MaxLeaseIndex should not be populated now. It is set only when the proposal buffer
+		// flushes this proposal into the local raft instance.
+		return roachpb.NewError(errors.AssertionFailedf("MaxLeaseIndex set: %+v", p))
+	}
+	if p.encodedCommand != nil {
+		// This indicates someone took an existing proposal and handed it to this method
+		// again. The caller needs to properly reset the proposal if they're going to do
+		// that.
+		return roachpb.NewError(errors.AssertionFailedf("encodedCommand set: %+v", p))
+	}
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
