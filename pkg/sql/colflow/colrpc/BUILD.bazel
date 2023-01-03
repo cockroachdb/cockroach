@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/cancelchecker",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
+        "//pkg/util/mon",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_apache_arrow_go_arrow//array",

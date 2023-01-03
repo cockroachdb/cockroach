@@ -523,6 +523,7 @@ type admissionOptions struct {
 type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
+		converterMemAcc *mon.BoundAccount,
 		input colexecargs.OpWithMetaInfo,
 		typs []*types.T,
 		getStats func(context.Context) []*execinfrapb.ComponentStats,
@@ -540,11 +541,12 @@ type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
+	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, getStats)
+	return colrpc.NewOutbox(allocator, converterMemAcc, input, typs, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -742,6 +744,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 ) (execopnode.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
+		s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 		op, outputTyps, getStats,
 	)
 	if err != nil {
@@ -792,15 +795,21 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	mmName := "hash-router-[" + streamIDs + "]"
 
-	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccountsWithName(ctx, flowCtx, mmName, len(output.Streams))
-	allocators := make([]*colmem.Allocator, len(output.Streams))
+	numOutputs := len(output.Streams)
+	// We need to create two memory accounts for each output (one for the
+	// allocator and another one for the converter).
+	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccountsWithName(
+		ctx, flowCtx, mmName, 2*numOutputs,
+	)
+	allocatorAccounts, converterAccounts := accounts[:numOutputs], accounts[numOutputs:]
+	allocators := make([]*colmem.Allocator, numOutputs)
 	for i := range allocators {
-		allocators[i] = colmem.NewAllocator(ctx, accounts[i], factory)
+		allocators[i] = colmem.NewAllocator(ctx, allocatorAccounts[i], factory)
 	}
-	diskMon, diskAccounts := s.monitorRegistry.CreateDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	diskMon, diskAccounts := s.monitorRegistry.CreateDiskAccounts(ctx, flowCtx, mmName, numOutputs)
 	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx),
-		s.diskQueueCfg, s.fdSemaphore, diskAccounts,
+		s.diskQueueCfg, s.fdSemaphore, diskAccounts, converterAccounts,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(logtags.AddTag(ctx, "hashRouterID", streamIDs))

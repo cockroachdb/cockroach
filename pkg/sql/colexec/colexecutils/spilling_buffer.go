@@ -57,10 +57,11 @@ type SpillingBuffer struct {
 	// because it only provides a window into input data after disk spilling.
 	scratch coldata.Batch
 
-	diskQueueCfg colcontainer.DiskQueueCfg
-	diskQueue    colcontainer.RewindableQueue
-	fdSemaphore  semaphore.Semaphore
-	diskAcc      *mon.BoundAccount
+	diskQueueCfg    colcontainer.DiskQueueCfg
+	diskQueue       colcontainer.RewindableQueue
+	fdSemaphore     semaphore.Semaphore
+	diskAcc         *mon.BoundAccount
+	converterMemAcc *mon.BoundAccount
 
 	dequeueScratch            coldata.Batch
 	lastDequeuedBatchMemUsage int64
@@ -103,6 +104,7 @@ func NewSpillingBuffer(
 	fdSemaphore semaphore.Semaphore,
 	inputTypes []*types.T,
 	diskAcc *mon.BoundAccount,
+	converterMemAcc *mon.BoundAccount,
 	colIdxs ...int,
 ) *SpillingBuffer {
 	if colIdxs == nil {
@@ -136,6 +138,7 @@ func NewSpillingBuffer(
 		diskQueueCfg:       diskQueueCfg,
 		fdSemaphore:        fdSemaphore,
 		diskAcc:            diskAcc,
+		converterMemAcc:    converterMemAcc,
 	}
 }
 
@@ -179,7 +182,8 @@ func (b *SpillingBuffer) AppendTuples(
 			}
 		}
 		if b.diskQueue, err = colcontainer.NewRewindableDiskQueue(
-			ctx, b.storedTypes, b.diskQueueCfg, b.diskAcc); err != nil {
+			ctx, b.storedTypes, b.diskQueueCfg, b.diskAcc, b.converterMemAcc,
+		); err != nil {
 			colexecerror.InternalError(err)
 		}
 		log.VEvent(ctx, 1, "spilled to disk")
@@ -240,7 +244,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 		// The idx'th tuple is located before the current head of the queue, so we
 		// need to rewind. TODO(drewk): look for a more efficient way to handle
 		// spilling.
-		if err = b.diskQueue.Rewind(); err != nil {
+		if err = b.diskQueue.Rewind(ctx); err != nil {
 			colexecerror.InternalError(err)
 		}
 		b.numDequeued = 0
