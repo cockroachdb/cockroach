@@ -90,7 +90,7 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	}
 
 	latency := timeutil.Since(highwaterTime)
-	if latency < lv.targetSteadyLatency/2 {
+	if lv.targetSteadyLatency == 0 || latency < lv.targetSteadyLatency/2 {
 		lv.latencyBecameSteady = true
 	}
 	if !lv.latencyBecameSteady {
