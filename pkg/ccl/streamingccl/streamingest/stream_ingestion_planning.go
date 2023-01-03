@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
@@ -34,7 +33,7 @@ import (
 
 // defaultRetentionTTLSeconds is the default value for how long
 // replicated data will be retained.
-const defaultRetentionTTLSeconds = 25 * 60 * 60
+const defaultRetentionTTLSeconds = int32(25 * 60 * 60)
 
 func streamIngestionJobDescription(
 	p sql.PlanHookState, streamIngestion *tree.CreateTenantFromReplication,
@@ -99,19 +98,13 @@ func ingestionPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	options, err := evalTenantReplicationOptions(ctx, ingestionStmt.Options, exprEval)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
 	retentionTTLSeconds := defaultRetentionTTLSeconds
-	if ingestionStmt.Options.Retention != nil {
-		retentionStr, err := exprEval.String(ctx, ingestionStmt.Options.Retention)
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
-		if retentionStr != "" {
-			r, err := time.ParseDuration(retentionStr)
-			if err != nil {
-				return nil, nil, nil, false, err
-			}
-			retentionTTLSeconds = int(r.Seconds())
-		}
+	if ret, ok := options.GetRetention(); ok {
+		retentionTTLSeconds = ret
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -200,7 +193,7 @@ func ingestionPlanHook(
 			DestinationTenantID:   destinationTenantID,
 			SourceTenantName:      roachpb.TenantName(sourceTenant),
 			DestinationTenantName: roachpb.TenantName(destinationTenant),
-			ReplicationTTLSeconds: int32(retentionTTLSeconds),
+			ReplicationTTLSeconds: retentionTTLSeconds,
 			ReplicationStartTime:  replicationProducerSpec.ReplicationStartTime,
 		}
 

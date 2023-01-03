@@ -21,6 +21,7 @@ type AlterTenantReplication struct {
 	TenantName Expr
 	Command    JobCommand
 	Cutover    *ReplicationCutoverTime
+	Options    TenantReplicationOptions
 }
 
 var _ Statement = &AlterTenantReplication{}
@@ -38,6 +39,9 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 			ctx.WriteString("SYSTEM TIME ")
 			ctx.FormatNode(n.Cutover.Timestamp)
 		}
+	} else if !n.Options.IsDefault() {
+		ctx.WriteString("SET REPLICATION ")
+		ctx.FormatNode(&n.Options)
 	} else if n.Command == PauseJob || n.Command == ResumeJob {
 		ctx.WriteString(JobCommandToStatement[n.Command])
 		ctx.WriteString(" REPLICATION")
