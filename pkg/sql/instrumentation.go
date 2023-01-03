@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -360,6 +361,7 @@ func (ih *instrumentationHelper) Finish(
 	ast tree.Statement,
 	stmtRawSQL string,
 	res RestrictedCommandResult,
+	retPayload fsm.EventPayload,
 	retErr error,
 ) error {
 	ctx := ih.origCtx
@@ -406,10 +408,17 @@ func (ih *instrumentationHelper) Finish(
 				queryLevelStats,
 			)
 			warnings = ob.GetWarnings()
+			var payloadErr error
+			if pwe, ok := retPayload.(payloadWithError); ok {
+				payloadErr = pwe.errorCause()
+			}
 			bundle = buildStatementBundle(
-				ctx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
+				ctx, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan, ob.BuildString(), trace,
+				placeholders, res.Err(), payloadErr, retErr,
 			)
-			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest)
+			bundle.insert(
+				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
 		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)

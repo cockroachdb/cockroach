@@ -98,7 +98,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html")
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html errors.txt")
 	})
 
 	// #92920 Make sure schema and opt files are created.
