@@ -95,7 +95,8 @@ func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 		r.updateInstanceMap(instancerow{
 			region:     self.Region,
 			instanceID: self.InstanceID,
-			addr:       self.InstanceAddr,
+			sqlAddr:    self.InstanceSQLAddr,
+			rpcAddr:    self.InstanceRPCAddr,
 			sessionID:  self.SessionID,
 			locality:   self.Locality,
 			timestamp:  hlc.Timestamp{}, // intentionally zero
@@ -188,10 +189,11 @@ func (r *Reader) GetInstance(
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
 	instanceInfo := sqlinstance.InstanceInfo{
-		InstanceID:   instance.instanceID,
-		InstanceAddr: instance.addr,
-		SessionID:    instance.sessionID,
-		Locality:     instance.locality,
+		InstanceID:      instance.instanceID,
+		InstanceRPCAddr: instance.rpcAddr,
+		InstanceSQLAddr: instance.sqlAddr,
+		SessionID:       instance.sessionID,
+		Locality:        instance.locality,
 	}
 	return instanceInfo, nil
 }
@@ -212,10 +214,11 @@ func (r *Reader) GetAllInstances(
 	}
 	for _, liveInstance := range liveInstances {
 		instanceInfo := sqlinstance.InstanceInfo{
-			InstanceID:   liveInstance.instanceID,
-			InstanceAddr: liveInstance.addr,
-			SessionID:    liveInstance.sessionID,
-			Locality:     liveInstance.locality,
+			InstanceID:      liveInstance.instanceID,
+			InstanceRPCAddr: liveInstance.rpcAddr,
+			InstanceSQLAddr: liveInstance.sqlAddr,
+			SessionID:       liveInstance.sessionID,
+			Locality:        liveInstance.locality,
 		}
 		sqlInstances = append(sqlInstances, instanceInfo)
 	}
@@ -243,16 +246,16 @@ func (r *Reader) getAllLiveInstances(ctx context.Context) ([]instancerow, error)
 		rows = truncated
 	}
 	sort.Slice(rows, func(idx1, idx2 int) bool {
-		if rows[idx1].addr == rows[idx2].addr {
+		if rows[idx1].sqlAddr == rows[idx2].sqlAddr {
 			return !rows[idx1].timestamp.Less(rows[idx2].timestamp) // decreasing timestamp order
 		}
-		return rows[idx1].addr < rows[idx2].addr
+		return rows[idx1].sqlAddr < rows[idx2].sqlAddr
 	})
 	// Only provide the latest entry for a given address.
 	{
 		truncated := rows[:0]
 		for i := 0; i < len(rows); i++ {
-			if i == 0 || rows[i].addr != rows[i-1].addr {
+			if i == 0 || rows[i].sqlAddr != rows[i-1].sqlAddr {
 				truncated = append(truncated, rows[i])
 			}
 		}

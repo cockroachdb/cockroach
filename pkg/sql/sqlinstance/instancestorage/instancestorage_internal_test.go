@@ -81,7 +81,8 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 		// Pre-allocate four instances.
 		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{4, 3, 2, 1}
-		addresses := [...]string{"addr4", "addr3", "addr2", "addr1"}
+		rpcAddresses := [...]string{"addr4", "addr3", "addr2", "addr1"}
+		sqlAddresses := [...]string{"addr8", "addr7", "addr6", "addr5"}
 		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession()}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 		for _, id := range instanceIDs {
@@ -90,6 +91,7 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 				region,
 				id,
 				"",
+				"",
 				sqlliveness.SessionID([]byte{}),
 				sessionExpiry,
 				roachpb.Locality{},
@@ -97,20 +99,20 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 		}
 
 		// Take instance 4. 1 should be prioritized.
-		claim(ctx, t, instanceIDs[0], addresses[0], sessionIDs[0], sessionExpiry, storage, slStorage)
+		claim(ctx, t, instanceIDs[0], rpcAddresses[0], sqlAddresses[0], sessionIDs[0], sessionExpiry, storage, slStorage)
 		id, err := getAvailableInstanceID(storage, region)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(1), id)
 
 		// Take instance 1 and 2. 3 should be prioritized.
-		claim(ctx, t, instanceIDs[2], addresses[2], sessionIDs[2], sessionExpiry, storage, slStorage)
-		claim(ctx, t, instanceIDs[3], addresses[3], sessionIDs[3], sessionExpiry, storage, slStorage)
+		claim(ctx, t, instanceIDs[2], rpcAddresses[2], sqlAddresses[2], sessionIDs[2], sessionExpiry, storage, slStorage)
+		claim(ctx, t, instanceIDs[3], rpcAddresses[3], sqlAddresses[3], sessionIDs[3], sessionExpiry, storage, slStorage)
 		id, err = getAvailableInstanceID(storage, region)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(3), id)
 
 		// Take instance 3. No rows left.
-		claim(ctx, t, instanceIDs[1], addresses[1], sessionIDs[1], sessionExpiry, storage, slStorage)
+		claim(ctx, t, instanceIDs[1], rpcAddresses[1], sqlAddresses[1], sessionIDs[1], sessionExpiry, storage, slStorage)
 		id, err = getAvailableInstanceID(storage, region)
 		require.Error(t, err, errNoPreallocatedRows.Error())
 		require.Equal(t, base.SQLInstanceID(0), id)
@@ -312,7 +314,8 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 		for i := 1; i <= preallocatedCount; i++ {
 			require.Equal(t, base.SQLInstanceID(i), instances[i-1].InstanceID)
 			require.Empty(t, instances[i-1].SessionID)
-			require.Empty(t, instances[i-1].InstanceAddr)
+			require.Empty(t, instances[i-1].InstanceRPCAddr)
+			require.Empty(t, instances[i-1].InstanceSQLAddr)
 		}
 	})
 
@@ -324,7 +327,8 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 
 		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 3, 5, 8}
-		addresses := [...]string{"addr1", "addr3", "addr5", "addr8"}
+		rpcAddresses := [...]string{"addr1", "addr3", "addr5", "addr8"}
+		sqlAddresses := [...]string{"addr9", "addr10", "addr11", "addr12"}
 		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession()}
 
 		// Preallocate first two, and claim the other two (have not expired)
@@ -334,13 +338,14 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 				region,
 				instanceIDs[i],
 				"",
+				"",
 				sqlliveness.SessionID([]byte{}),
 				sessionExpiry,
 				roachpb.Locality{},
 			))
 		}
 		for _, i := range []int{2, 3} {
-			claim(ctx, t, instanceIDs[i], addresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
+			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
 		}
 
 		// Generate available rows.
@@ -355,12 +360,14 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 			for i := 0; i < preallocatedCount; i++ {
 				foundIDs = append(foundIDs, instances[i].InstanceID)
 				require.Empty(t, instances[i].SessionID)
-				require.Empty(t, instances[i].InstanceAddr)
+				require.Empty(t, instances[i].InstanceRPCAddr)
+				require.Empty(t, instances[i].InstanceSQLAddr)
 			}
 			for i := preallocatedCount; i < preallocatedCount+2; i++ {
 				foundIDs = append(foundIDs, instances[i].InstanceID)
 				require.NotEmpty(t, instances[i].SessionID)
-				require.NotEmpty(t, instances[i].InstanceAddr)
+				require.NotEmpty(t, instances[i].InstanceRPCAddr)
+				require.NotEmpty(t, instances[i].InstanceSQLAddr)
 			}
 			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 6, 5, 8}, foundIDs)
 		}
@@ -382,14 +389,15 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 			for i := 0; i < preallocatedCount; i++ {
 				foundIDs = append(foundIDs, instances[i].InstanceID)
 				require.Empty(t, instances[i].SessionID)
-				require.Empty(t, instances[i].InstanceAddr)
+				require.Empty(t, instances[i].InstanceRPCAddr)
+				require.Empty(t, instances[i].InstanceSQLAddr)
 			}
 			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 5}, foundIDs)
 		}
 
 		// Claim 1 and 3, and make them expire.
 		for i := 0; i < 2; i++ {
-			claim(ctx, t, instanceIDs[i], addresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
+			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
 			require.NoError(t, slStorage.Delete(ctx, sessionIDs[i]))
 		}
 
@@ -405,7 +413,8 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 			for i := 0; i < preallocatedCount; i++ {
 				foundIDs = append(foundIDs, instances[i].InstanceID)
 				require.Empty(t, instances[i].SessionID)
-				require.Empty(t, instances[i].InstanceAddr)
+				require.Empty(t, instances[i].InstanceRPCAddr)
+				require.Empty(t, instances[i].InstanceSQLAddr)
 			}
 			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 5}, foundIDs)
 		}
@@ -428,7 +437,7 @@ func getTableID(
 
 func sortInstancesForTest(instances []sqlinstance.InstanceInfo) {
 	sort.SliceStable(instances, func(idx1, idx2 int) bool {
-		addr1, addr2 := instances[idx1].InstanceAddr, instances[idx2].InstanceAddr
+		addr1, addr2 := instances[idx1].InstanceRPCAddr, instances[idx2].InstanceRPCAddr
 		switch {
 		case addr1 == "" && addr2 == "":
 			// Both are available.
@@ -468,7 +477,8 @@ func claim(
 	ctx context.Context,
 	t *testing.T,
 	instanceID base.SQLInstanceID,
-	addr string,
+	rpcAddr string,
+	sqlAddr string,
 	sessionID sqlliveness.SessionID,
 	sessionExpiration hlc.Timestamp,
 	storage *Storage,
@@ -479,6 +489,6 @@ func claim(
 	require.NoError(t, err)
 	require.NoError(t, slStorage.Insert(ctx, sessionID, sessionExpiration))
 	require.NoError(t, storage.CreateInstanceDataForTest(
-		ctx, region, instanceID, addr, sessionID, sessionExpiration, roachpb.Locality{},
+		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID, sessionExpiration, roachpb.Locality{},
 	))
 }
