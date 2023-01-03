@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -65,8 +66,119 @@ type clusterInfo struct {
 }
 
 type c2cSetup struct {
-	src clusterInfo
-	dst clusterInfo
+	src     clusterInfo
+	dst     clusterInfo
+	metrics c2cMetrics
+}
+
+// DiskUsageTracker can grab the disk usage of the provided cluster.
+//
+// TODO(msbutler): move DiskUsageTracker, exportedMetric,
+// SizeTime and helper methods to an external package that all
+// roachtests can use.
+type DiskUsageTracker struct {
+	c cluster.Cluster
+	l *logger.Logger
+}
+
+// GetDiskUsage sums the disk usage for the given nodes in megabytes.
+func (du *DiskUsageTracker) GetDiskUsage(ctx context.Context, nodes option.NodeListOption) int {
+	var usage int
+	for _, n := range nodes {
+		cur, err := getDiskUsageInBytes(ctx, du.c, du.l, n)
+		if err != nil {
+			du.l.Printf("Unable to get disk usage for node %d", n)
+			return 0
+		}
+		usage += cur
+	}
+	return usage / 1e6
+}
+
+func NewDiskUsageTracker(
+	c cluster.Cluster, parentLogger *logger.Logger,
+) (*DiskUsageTracker, error) {
+	diskLogger, err := parentLogger.ChildLogger("disk-usage", logger.QuietStdout)
+	if err != nil {
+		return nil, err
+	}
+	return &DiskUsageTracker{c: c, l: diskLogger}, nil
+}
+
+// exportedMetric describes a measurement created in the roachtest process that will export to
+// roachperf or a prom/grafana instance.
+//
+// TODO(msbutler): currently, the exported metrics are merely printed at end of
+// the roachtest. Add method(s) to actually export this stuff to roachperf
+// or prom/grafana
+type exportedMetric struct {
+	metric float64
+	unit   string
+}
+
+// newMetric creates a new exportedMetric
+func newMetric(metric float64, unit string) exportedMetric {
+	return exportedMetric{metric, unit}
+}
+
+func (em exportedMetric) String() string {
+	return fmt.Sprintf("%.2f %s", em.metric, em.unit)
+}
+
+// sizeTime captures the disk size of the nodes at some moment in time
+type sizeTime struct {
+	// size is the megabytes of the objects
+	size      int
+	time      time.Time
+	nodeCount int
+}
+
+func newSizeTime(ctx context.Context, du *DiskUsageTracker, nodes option.NodeListOption) sizeTime {
+	return sizeTime{
+		size:      du.GetDiskUsage(ctx, nodes),
+		time:      timeutil.Now(),
+		nodeCount: len(nodes),
+	}
+}
+
+// diskDiffThroughput estimates throughput between two time intervals as mb/s/node by assuming
+// that the total bytes written between the time intervals is diskUsage_End - diskUsage_Start.
+//
+// TODO(msbutler): move this to a general perf helper package for all roachtests
+func diskDiffThroughput(start sizeTime, end sizeTime) float64 {
+	if start.nodeCount != end.nodeCount {
+		return 0
+	}
+	return (float64(end.size-start.size) / end.time.Sub(start.time).Seconds()) / float64(start.nodeCount)
+}
+
+type c2cMetrics struct {
+	start sizeTime
+
+	initialScanEnd sizeTime
+
+	cutoverStart sizeTime
+
+	cutoverEnd sizeTime
+}
+
+func (m c2cMetrics) export() map[string]exportedMetric {
+	metrics := map[string]exportedMetric{}
+
+	populate := func(start sizeTime, end sizeTime, label string) {
+		metrics[label+"Duration"] = newMetric(end.time.Sub(start.time).Minutes(), "Minutes")
+		metrics[label+"Size"] = newMetric(float64(end.size-start.size), "MB")
+		metrics[label+"Throughput"] = newMetric(diskDiffThroughput(start, end), "MB/S/Node")
+
+	}
+	if m.initialScanEnd.nodeCount != 0 {
+		populate(m.start, m.initialScanEnd, "InitialScan")
+	}
+
+	if m.cutoverEnd.nodeCount != 0 {
+		populate(m.cutoverStart, m.cutoverEnd, "Cutover")
+	}
+	return metrics
 }
 
 func setupC2C(
@@ -148,8 +260,9 @@ func setupC2C(
 	createSystemRole(t, srcTenantInfo.name, srcTenantInfo.sql)
 	createSystemRole(t, destTenantInfo.name, destTenantInfo.sql)
 	return &c2cSetup{
-		src: srcTenantInfo,
-		dst: destTenantInfo}, cleanup
+		src:     srcTenantInfo,
+		dst:     destTenantInfo,
+		metrics: c2cMetrics{}}, cleanup
 }
 
 // createSystemRole creates a role that can be used to log into the cluster's db console
@@ -314,15 +427,18 @@ func registerClusterToCluster(r registry.Registry) {
 				setup, cleanup := setupC2C(ctx, t, c, sp.srcKVNodes, sp.dstKVNodes)
 				defer cleanup()
 				m := c.NewMonitor(ctx, setup.src.kvNodes.Merge(setup.dst.kvNodes))
-
-				t.Status("populating source cluster before replication")
-				initStartTime := timeutil.Now()
+				du, err := NewDiskUsageTracker(c, t.L())
+				require.NoError(t, err)
+				var initDuration time.Duration
 				if initCmd := sp.workload.sourceInitCmd(setup.src.tenant.secureURL()); initCmd != "" {
+					t.Status("populating source cluster before replication")
+					setup.metrics.start = newSizeTime(ctx, du, setup.src.kvNodes)
 					c.Run(ctx, c.Node(setup.src.sqlNode), initCmd)
+					setup.metrics.initialScanEnd = newSizeTime(ctx, du, setup.src.kvNodes)
+
+					initDuration = setup.metrics.initialScanEnd.time.Sub(setup.metrics.start.time)
+					t.L().Printf("src cluster workload initialization took %d minutes", int(initDuration.Minutes()))
 				}
-				initEndTime := timeutil.Now()
-				initDuration := initEndTime.Sub(initStartTime)
-				t.L().Printf("src cluster workload initialization took %d minutes", int(initDuration.Minutes()))
 
 				t.Status("starting replication stream")
 				streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
@@ -360,15 +476,15 @@ func registerClusterToCluster(r registry.Registry) {
 				})
 
 				t.Status("waiting for replication stream to finish ingesting initial scan")
-				// TODO(msbutler): measure initial ingestion perf.
 				waitForHighWatermark(t, setup.dst.db, ingestionJobID, sp.timeout/2)
 
 				t.Status("waiting for src cluster workload to complete")
 				m.Wait()
 
 				t.Status("waiting for replication stream to cutover")
-				// TODO(msbutler): measure cutover perf.
+				setup.metrics.cutoverStart = newSizeTime(ctx, du, setup.dst.kvNodes)
 				stopReplicationStream(t, setup.dst.sql, ingestionJobID, cutoverTime)
+				setup.metrics.cutoverEnd = newSizeTime(ctx, du, setup.dst.kvNodes)
 
 				t.Status("comparing fingerprints")
 				// Currently, it takes about 15 minutes to generate a fingerprint for
@@ -384,9 +500,15 @@ func registerClusterToCluster(r registry.Registry) {
 					setup,
 					hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
 				lv.assertValid(t)
+
+				// TODO(msbutler): export metrics to roachperf or prom/grafana
+				exportedMetrics := setup.metrics.export()
+				for key, metric := range exportedMetrics {
+					t.L().Printf("%s: %s", key, metric.String())
+				}
 			},
 		})
-	} //
+	}
 }
 
 func chooseCutover(
