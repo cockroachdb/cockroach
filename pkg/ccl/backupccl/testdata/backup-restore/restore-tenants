@@ -21,9 +21,9 @@ SELECT crdb_internal.destroy_tenant(5);
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -49,9 +49,9 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster'
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 exec-sql
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
@@ -60,7 +60,7 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-7 true {"droppedName": "", "id": "7", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+7 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "7", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}

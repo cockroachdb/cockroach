@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    16      system
+1   true    18      system
 
 # Create three tenants.
 
@@ -37,10 +37,10 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   true    NULL                  {"droppedName": "", "id": "5", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1   true    system                {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5   true    NULL                  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 # Check we can add a name where none existed before.
 query I
@@ -113,10 +113,10 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   false   NULL                  {"droppedName": "my-new-tenant-name", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1   true    system                {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5   false   NULL                  {"capabilities": {"canAdminSplit": false}, "droppedName": "my-new-tenant-name", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 
 # Try to recreate an existing tenant.
@@ -223,9 +223,9 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-1   true    {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    {"droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-10  true    {"droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1   true    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+2   true    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+10  true    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)

@@ -1,0 +1,32 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.multitenant.tenantcapabilities.tenantcapabilitiespb;
+option go_package = "tenantcapabilitiespb";
+
+import "gogoproto/gogo.proto";
+
+// TenantCapabilities encapsulates a set of capabilities[1] for a specific
+// tenant. Capabilities for a specific tenant are stored in the system.tenants
+// table and are checked against in KV when the tenant performs a privileged
+// operation.
+//
+// [1] Certain requests in the system are considered "privileged", and as such,
+// tenants are only allowed to perform them if they have the appropriate
+// capability. For example, performing an AdminSplit.
+message TenantCapabilities {
+  option (gogoproto.equal) = true;
+
+  // CanAdminSplit, if set to true, grants grants the tenant the ability to
+  // successfully perform `AdminSplit` requests.
+  bool can_admin_split = 1;
+};
+
