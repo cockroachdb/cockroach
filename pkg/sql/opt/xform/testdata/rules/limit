@@ -2737,7 +2737,7 @@ ALTER TABLE t93410_2 INJECT STATISTICS '[
 ----
 
 # A streaming group-by with no TopK operation should be generated.
-opt expect=GenerateStreamingGroupByLimitOrderingHint
+opt set=optimizer_use_limit_ordering_for_streaming_group_by=true expect=GenerateStreamingGroupByLimitOrderingHint
 SELECT
   DISTINCT
   t1.col1,
@@ -2860,7 +2860,7 @@ project
 
 # GenerateStreamingGroupByLimitOrderingHint should not fire if there is no
 # overlap between the grouping columns and order-by columns.
-opt expect-not=GenerateStreamingGroupByLimitOrderingHint
+opt set=optimizer_use_limit_ordering_for_streaming_group_by=true expect-not=GenerateStreamingGroupByLimitOrderingHint
 SELECT
   DISTINCT
   t2.col1,
@@ -2929,7 +2929,7 @@ top-k
            └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
 
 # A distinct-on which satisfies the required ordering should be used.
-opt expect=GenerateStreamingGroupByLimitOrderingHint
+opt set=optimizer_use_limit_ordering_for_streaming_group_by=true expect=GenerateStreamingGroupByLimitOrderingHint
 SELECT
   DISTINCT ON (t1.col5, t1.col9) t2.col2
 FROM
@@ -2984,7 +2984,7 @@ limit
  └── 20
 
 # This should generate a partial streaming aggregation.
-opt expect=GenerateStreamingGroupByLimitOrderingHint
+opt set=optimizer_use_limit_ordering_for_streaming_group_by=true expect=GenerateStreamingGroupByLimitOrderingHint
 SELECT
   count(*)
 FROM

@@ -2806,6 +2806,7 @@ opt_split_scan_limit                                  2048                NULL  
 optimizer_use_forecasts                               on                  NULL      NULL        NULL        string
 optimizer_use_histograms                              on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats              off                 NULL      NULL        NULL        string
+optimizer_use_limit_ordering_for_streaming_group_by   off                 NULL      NULL        NULL        string
 optimizer_use_multicol_stats                          on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                     off                 NULL      NULL        NULL        string
 override_multi_region_zone_config                     off                 NULL      NULL        NULL        string
@@ -2943,6 +2944,7 @@ opt_split_scan_limit                                  2048                NULL  
 optimizer_use_forecasts                               on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                              on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats              off                 NULL  user     NULL      off                 off
+optimizer_use_limit_ordering_for_streaming_group_by   off                 NULL  user     NULL      off                 off
 optimizer_use_multicol_stats                          on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                     off                 NULL  user     NULL      off                 off
 override_multi_region_zone_config                     off                 NULL  user     NULL      off                 off
@@ -3078,6 +3080,7 @@ optimizer                                             NULL    NULL     NULL     
 optimizer_use_forecasts                               NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                              NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats              NULL    NULL     NULL     NULL        NULL
+optimizer_use_limit_ordering_for_streaming_group_by   NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_not_visible_indexes                     NULL    NULL     NULL     NULL        NULL
 override_multi_region_zone_config                     NULL    NULL     NULL     NULL        NULL

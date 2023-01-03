@@ -228,6 +228,10 @@ func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
 	groupingCols opt.ColSet,
 	newOrdering props.OrderingChoice,
 ) {
+	if !c.e.evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy {
+		// This transformation rule is explicitly disabled.
+		return
+	}
 	newPrivate := *private
 	newPrivate.Ordering = newOrdering
 	newPrivate.GroupingCols = groupingCols
