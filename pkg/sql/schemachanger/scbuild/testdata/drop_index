@@ -17,8 +17,8 @@ DROP INDEX idx1 CASCADE
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 2, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 2, isCreatedExplicitly: true, tableId: 104}
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, indexId: 2, isCreatedExplicitly: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT], PUBLIC]
   {indexId: 2, name: idx1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC]
@@ -39,8 +39,8 @@ DROP INDEX idx2 CASCADE
   {columnId: 3, indexId: 4, kind: KEY_SUFFIX, tableId: 104}
 - [[SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]
   {expr: i > 0, indexId: 4, referencedColumnIds: [1], tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 4, isCreatedExplicitly: true, tableId: 104}
+- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4}, ABSENT], PUBLIC]
+  {constraintId: 4, indexId: 4, isCreatedExplicitly: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT], PUBLIC]
   {indexId: 4, name: idx2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]
@@ -61,13 +61,13 @@ DROP INDEX idx3 CASCADE
   {columnId: 1, indexId: 6, ordinalInKind: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 6, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 6, isCreatedExplicitly: true, sharding: {columnNames: [i], isSharded: true, name: crdb_internal_i_shard_16, shardBuckets: 16}, tableId: 104}
+- [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 6}, ABSENT], PUBLIC]
+  {constraintId: 6, indexId: 6, isCreatedExplicitly: true, sharding: {columnNames: [i], isSharded: true, name: crdb_internal_i_shard_16, shardBuckets: 16}, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT], PUBLIC]
   {indexId: 6, name: idx3, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 6}, ABSENT], PUBLIC]
   {indexId: 6, tableId: 104}
-- [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC]
-  {columnIds: [5], constraintId: 2, expr: 'crdb_internal_i_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)', fromHashShardedColumn: true, referencedColumnIds: [5], tableId: 104}
-- [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC]
-  {constraintId: 2, name: check_crdb_internal_i_shard_16, tableId: 104}
+- [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 8}, ABSENT], PUBLIC]
+  {columnIds: [5], constraintId: 8, expr: '"crdb_internal_i_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)', fromHashShardedColumn: true, referencedColumnIds: [5], tableId: 104}
+- [[ConstraintWithoutIndexName:{DescID: 104, Name: crdb_internal_constraint_8_name_placeholder, ConstraintID: 8}, ABSENT], PUBLIC]
+  {constraintId: 8, name: crdb_internal_constraint_8_name_placeholder, tableId: 104}

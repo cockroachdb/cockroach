@@ -24,7 +24,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         ├── 27 elements transitioning toward ABSENT
  │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
  │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
- │         │    ├── PUBLIC      → VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+ │         │    ├── PUBLIC      → VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2}
  │         │    ├── PUBLIC      → ABSENT    Namespace:{DescID: 106, Name: v3, ReferencedDescID: 100}
  │         │    ├── PUBLIC      → ABSENT    Owner:{DescID: 106}
  │         │    ├── PUBLIC      → ABSENT    UserPrivileges:{DescID: 106, Name: admin}
@@ -66,7 +66,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 5 elements transitioning toward ABSENT
-      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2}
       │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 105, Name: idx, IndexID: 2}
       │    │    ├── DROPPED   → ABSENT      View:{DescID: 106}
       │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106, IndexID: 1}
@@ -82,7 +82,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 105, IndexID: 2}
            └── 4 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":105}

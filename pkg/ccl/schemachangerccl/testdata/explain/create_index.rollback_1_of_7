@@ -12,14 +12,14 @@ Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.pu
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 12 elements transitioning toward ABSENT
-           │    ├── BACKFILL_ONLY    → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── BACKFILL_ONLY    → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
            │    ├── PUBLIC           → ABSENT IndexPartitioning:{DescID: 104, IndexID: 2}
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
            │    ├── PUBLIC           → ABSENT IndexData:{DescID: 104, IndexID: 2}
            │    ├── PUBLIC           → ABSENT IndexName:{DescID: 104, Name: id1, IndexID: 2}
-           │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+           │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            │    ├── TRANSIENT_ABSENT → ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}

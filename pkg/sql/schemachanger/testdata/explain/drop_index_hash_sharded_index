@@ -11,13 +11,13 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         ├── 5 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
- │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
- │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
+ │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}
+ │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 4}
+ │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: crdb_internal_constraint_4_name_placeholder, ConstraintID: 4}
  │         └── 6 Mutation operations
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
- │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
- │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicCheckConstraintValidated {"ConstraintID":4,"TableID":104}
+ │              ├── SetConstraintName {"ConstraintID":4,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
  │              ├── LogEvent {"TargetStatus":1}
  │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
@@ -34,12 +34,12 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 104, ColumnID: 3}
-      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 104, Name: idx, IndexID: 2}
-      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+      │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 4}
       │    └── 7 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
-      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── RemoveCheckConstraint {"ConstraintID":4,"TableID":104}
       │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
@@ -49,7 +49,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
            ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104, ColumnID: 3}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 2}
            └── 5 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}

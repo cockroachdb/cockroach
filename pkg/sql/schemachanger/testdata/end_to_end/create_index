@@ -56,6 +56,7 @@ upsert descriptor #106
   +  mutations:
   +  - direction: ADD
   +    index:
+  +      constraintId: 2
   +      createdAtNanos: "1640998800000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
@@ -80,7 +81,7 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 1
+  +      constraintId: 3
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -105,7 +106,8 @@ upsert descriptor #106
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3
-     nextConstraintId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 4
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 4
@@ -245,7 +247,8 @@ upsert descriptor #106
      formatVersion: 3
      id: 106
   +  indexes:
-  +  - createdAtNanos: "1640998800000000000"
+  +  - constraintId: 2
+  +    createdAtNanos: "1640998800000000000"
   +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
@@ -270,6 +273,7 @@ upsert descriptor #106
   -  - direction: ADD
   +  - direction: DROP
        index:
+  -      constraintId: 2
   -      createdAtNanos: "1640998800000000000"
   -      createdExplicitly: true
   -      foreignKey: {}
@@ -294,7 +298,7 @@ upsert descriptor #106
   -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
-         constraintId: 1
+         constraintId: 3
          createdExplicitly: true
   ...
          name: crdb_internal_index_3_name_placeholder
@@ -346,7 +350,7 @@ upsert descriptor #106
   -  mutations:
   -  - direction: DROP
   -    index:
-  -      constraintId: 1
+  -      constraintId: 3
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

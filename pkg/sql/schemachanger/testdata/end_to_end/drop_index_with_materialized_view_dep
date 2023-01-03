@@ -82,7 +82,8 @@ upsert descriptor #105
      formatVersion: 3
      id: 105
   -  indexes:
-  -  - createdAtNanos: "1640995200000000000"
+  -  - constraintId: 2
+  -    createdAtNanos: "1640995200000000000"
   -    createdExplicitly: true
   -    foreignKey: {}
   -    geoConfig: {}
@@ -106,6 +107,7 @@ upsert descriptor #105
   +  mutations:
   +  - direction: DROP
   +    index:
+  +      constraintId: 2
   +      createdAtNanos: "1640995200000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
@@ -224,6 +226,7 @@ upsert descriptor #105
   -  mutations:
   -  - direction: DROP
   -    index:
+  -      constraintId: 2
   -      createdAtNanos: "1640995200000000000"
   -      createdExplicitly: true
   -      foreignKey: {}

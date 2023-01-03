@@ -11,7 +11,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 3}
- │         │    └── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+ │         │    └── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}
  │         └── 4 Mutation operations
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
@@ -29,7 +29,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 104, ColumnID: 3}
-      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}
       │    │    └── PUBLIC     → ABSENT      IndexName:{DescID: 104, Name: idx, IndexID: 2}
       │    └── 6 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
@@ -43,7 +43,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104, ColumnID: 3}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
            │    ├── PUBLIC      → ABSENT SecondaryIndexPartial:{DescID: 104, IndexID: 2}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 2}
            └── 6 Mutation operations
                 ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":104}
