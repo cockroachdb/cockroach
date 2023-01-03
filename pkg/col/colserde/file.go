@@ -56,7 +56,7 @@ type FileSerializer struct {
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer.
 func NewFileSerializer(w io.Writer, typs []*types.T) (*FileSerializer, error) {
-	a, err := NewArrowBatchConverter(typs)
+	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +152,11 @@ func (s *FileSerializer) Finish() error {
 	return err
 }
 
+// Close releases the resources of the serializer.
+func (s *FileSerializer) Close() {
+	s.a.Release()
+}
+
 // FileDeserializer decodes columnar data batches from files encoded according
 // to the arrow spec.
 type FileDeserializer struct {
@@ -166,7 +171,7 @@ type FileDeserializer struct {
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
 
-	arrowScratch []*array.Data
+	arrowScratch []array.Data
 }
 
 // NewFileDeserializerFromBytes constructs a FileDeserializer for an in-memory
@@ -175,9 +180,9 @@ func NewFileDeserializerFromBytes(typs []*types.T, buf []byte) (*FileDeserialize
 	return newFileDeserializer(typs, buf, func() error { return nil })
 }
 
-// NewFileDeserializerFromPath constructs a FileDeserializer by reading it from
-// a file.
-func NewFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserializer, error) {
+// NewTestFileDeserializerFromPath constructs a FileDeserializer by reading it
+// from a file. It is only used in tests.
+func NewTestFileDeserializerFromPath(typs []*types.T, path string) (*FileDeserializer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `opening %s`, path)
@@ -208,19 +213,20 @@ func newFileDeserializer(
 	}
 	d.typs = typs
 
-	if d.a, err = NewArrowBatchConverter(typs); err != nil {
+	if d.a, err = NewArrowBatchConverter(typs, ArrowToBatchOnly); err != nil {
 		return nil, err
 	}
 	if d.rb, err = NewRecordBatchSerializer(typs); err != nil {
 		return nil, err
 	}
-	d.arrowScratch = make([]*array.Data, 0, len(typs))
+	d.arrowScratch = make([]array.Data, 0, len(typs))
 
 	return d, nil
 }
 
 // Close releases any resources held by this deserializer.
 func (d *FileDeserializer) Close() error {
+	d.a.Release()
 	return d.bufCloseFn()
 }
 

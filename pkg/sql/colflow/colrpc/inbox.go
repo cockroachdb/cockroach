@@ -123,7 +123,7 @@ type Inbox struct {
 	deserializationStopWatch *timeutil.StopWatch
 
 	scratch struct {
-		data []*array.Data
+		data []array.Data
 		b    coldata.Batch
 	}
 }
@@ -134,7 +134,7 @@ var _ colexecop.Operator = &Inbox{}
 func NewInbox(
 	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.ArrowToBatchOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func NewInbox(
 		errCh:                    make(chan error, 1),
 		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
-	i.scratch.data = make([]*array.Data, len(typs))
+	i.scratch.data = make([]array.Data, len(typs))
 	return i, nil
 }
 
@@ -485,8 +485,10 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	// Eagerly lose the reference to the metadata since it might be of
 	// non-trivial footprint.
 	i.bufferedMeta = nil
-	// We also no longer need the scratch batch.
+	// We also no longer need the scratch batch nor the arrow-to-batch
+	// converter.
 	i.scratch.b = nil
+	i.converter.Release()
 	// The allocator tracks the memory usage for a few things (the scratch batch
 	// as well as the metadata), and when this function returns, we no longer
 	// reference any of those, so we can release all of the allocations.
