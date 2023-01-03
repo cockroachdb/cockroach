@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +51,7 @@ func TestMetricsUpdateForError(t *testing.T) {
 			for _, counter := range tc.counters {
 				before = append(before, counter.Count())
 			}
-			m.updateForError(newErrorf(tc.code, "test error"))
+			m.updateForError(withCode(errors.New("test error"), tc.code))
 			for i, counter := range tc.counters {
 				require.Equal(t, counter.Count(), before[i]+1)
 			}
