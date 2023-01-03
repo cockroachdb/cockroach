@@ -1286,6 +1286,18 @@ func (c *CustomFuncs) EmptyFiltersExpr() memo.FiltersExpr {
 	return memo.EmptyFiltersExpr
 }
 
+// CreateRemoteOnlyLookupJoinPrivate creates a new lookup join private from the
+// given private and replaces the LookupExpr with the given filter. It also
+// marks the private as locality optimized and as a join which only does lookups
+// into remote regions.
+func (c *CustomFuncs) CreateRemoteOnlyLookupJoinPrivate(
+	remoteLookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
+) *memo.LookupJoinPrivate {
+	newPrivate := c.CreateLocalityOptimizedLookupJoinPrivate(remoteLookupExpr, c.e.funcs.EmptyFiltersExpr(), private)
+	newPrivate.RemoteOnlyLookups = true
+	return newPrivate
+}
+
 // CreateLocalityOptimizedLookupJoinPrivate creates a new lookup join private
 // from the given private and replaces the LookupExpr and RemoteLookupExpr with
 // the given filters. It also marks the private as locality optimized.
@@ -2148,5 +2160,6 @@ func (c *CustomFuncs) mapInputSideOfLookupJoin(
 	constFilters := c.e.f.RemapCols(&lookupJoinExpr.ConstFilters, colMap).(*memo.FiltersExpr)
 	mappedLookupJoinExpr.ConstFilters = *constFilters
 	mappedLookupJoinExpr.Locking = lookupJoinExpr.Locking
+	mappedLookupJoinExpr.RemoteOnlyLookups = lookupJoinExpr.RemoteOnlyLookups
 	return mappedLookupJoinExpr
 }

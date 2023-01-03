@@ -547,7 +547,7 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForPlanNode(n.plan)
 
 	case *lookupJoinNode:
-		if n.remoteLookupExpr != nil {
+		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
 			// This is a locality optimized join.
 			return cannotDistribute, nil
 		}
@@ -2547,7 +2547,9 @@ func (dsp *DistSQLPlanner) planAggregators(
 		// Connect the streams.
 		for bucket := 0; bucket < len(p.ResultRouters); bucket++ {
 			pIdx := pIdxStart + physicalplan.ProcessorIdx(bucket)
-			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
+			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
+				physicalplan.SerialStreamErrorSpec{},
+			)
 		}
 
 		// Set the new result routers.
@@ -2678,6 +2680,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
 		LimitHint:                         n.limitHint,
+		RemoteOnlyLookups:                 n.remoteOnlyLookups,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
@@ -3513,7 +3516,9 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	if firstNotWrapped != nil {
 		// If we found a DistSQL-plannable subtree, we need to add a result stream
 		// between it and the physicalPlan we're creating here.
-		p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
+		p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
+			physicalplan.SerialStreamErrorSpec{},
+		)
 	}
 	// ResultRouters gets overwritten each time we add a new PhysicalPlan. We will
 	// just have a single result router, since local processors aren't
@@ -3957,6 +3962,16 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			}
 			p.AddSingleGroupStage(dsp.gatewaySQLInstanceID, distinctSpec, execinfrapb.PostProcessSpec{}, resultTypes)
 		} else {
+			var serialStreamErrorSpec physicalplan.SerialStreamErrorSpec
+			if n.enforceHomeRegion {
+				serialStreamErrorSpec.Ctx = ctx
+				// When inputIdx of the SerialUnorderedSynchronizer is incremented to 1,
+				// error out.
+				serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound = 1
+				serialStreamErrorSpec.ExceedsInputIdxExclusiveUpperBoundError =
+					pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+						"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
+			}
 			// With UNION ALL, we can end up with multiple streams on the same node.
 			// We don't want to have unnecessary routers and cross-node streams, so
 			// merge these streams now.
@@ -3971,7 +3986,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// multiple streams on the same node, we force the serialization of the
 				// merge operation (otherwise, it would be possible that we have a
 				// source of unbounded parallelism, see #51548).
-				p.EnsureSingleStreamPerNode(true /* forceSerialization */, execinfrapb.PostProcessSpec{})
+				p.EnsureSingleStreamPerNode(true /* forceSerialization */, execinfrapb.PostProcessSpec{}, serialStreamErrorSpec)
 			} else {
 				if p.GetLastStageDistribution() != physicalplan.LocalPlan {
 					return nil, errors.AssertionFailedf("we expect that limited UNION ALL queries are only planned locally")
@@ -3988,6 +4003,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				p.EnsureSingleStreamPerNode(
 					true, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
+					serialStreamErrorSpec,
 				)
 			}
 

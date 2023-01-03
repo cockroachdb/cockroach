@@ -557,6 +557,7 @@ func (ef *execFactory) ConstructHashSetOp(
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
 		typ, all, left.(planNode), right.(planNode), nil, nil, 0, /* hardLimit */
+		false, /* enforceHomeRegion */
 	)
 }
 
@@ -575,13 +576,14 @@ func (ef *execFactory) ConstructStreamingSetOp(
 		right.(planNode),
 		streamingOrdering,
 		ReqOrdering(reqOrdering),
-		0, /* hardLimit */
+		0,     /* hardLimit */
+		false, /* enforceHomeRegion */
 	)
 }
 
 // ConstructUnionAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructUnionAll(
-	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64, enforceHomeRegion bool,
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
 		tree.UnionOp,
@@ -591,6 +593,7 @@ func (ef *execFactory) ConstructUnionAll(
 		colinfo.ColumnOrdering(reqOrdering),
 		ReqOrdering(reqOrdering),
 		hardLimit,
+		enforceHomeRegion,
 	)
 }
 
@@ -689,6 +692,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	reqOrdering exec.OutputOrdering,
 	locking opt.Locking,
 	limitHint int64,
+	remoteOnlyLookups bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
@@ -723,6 +727,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
 		reqOrdering:                ReqOrdering(reqOrdering),
 		limitHint:                  limitHint,
+		remoteOnlyLookups:          remoteOnlyLookups,
 	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
