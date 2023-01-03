@@ -289,7 +289,7 @@ func (rs *ReplicaStats) rotateLocked() {
 // amount of time over which the stats were accumulated. Note that the replica stats
 // stats are exponentially decayed such that newer requests are weighted more
 // heavily than older requests.
-func (rs *ReplicaStats) PerLocalityDecayingRate() (PerLocalityCounts, time.Duration) {
+func (rs *ReplicaStats) PerLocalityDecayingRate() PerLocalityCounts {
 	now := timeutil.Unix(0, rs.clock.PhysicalNow())
 
 	rs.Mu.Lock()
@@ -326,7 +326,7 @@ func (rs *ReplicaStats) PerLocalityDecayingRate() (PerLocalityCounts, time.Durat
 			counts[k] = counts[k] / duration.Seconds()
 		}
 	}
-	return counts, now.Sub(rs.Mu.lastReset)
+	return counts
 }
 
 // SumLocked returns the sum of all queries currently recorded.
@@ -357,7 +357,7 @@ func (rs *ReplicaStats) AverageRatePerSecond() (float64, time.Duration) {
 	rs.Mu.Lock()
 	defer rs.Mu.Unlock()
 	if rs.Mu.avgRateForTesting != 0 {
-		return rs.Mu.avgRateForTesting, 0
+		return rs.Mu.avgRateForTesting, MinStatsDuration
 	}
 
 	rs.maybeRotateLocked(now)
@@ -393,12 +393,12 @@ func (rs *ReplicaStats) ResetRequestCounts() {
 // current replica stats state, summarized by arithmetic mean count,
 // per-locality count and duration recorded over.
 func (rs *ReplicaStats) SnapshotRatedSummary() *RatedSummary {
-	qps, _ := rs.AverageRatePerSecond()
-	localityCounts, interval := rs.PerLocalityDecayingRate()
+	qps, duration := rs.AverageRatePerSecond()
+	localityCounts := rs.PerLocalityDecayingRate()
 	return &RatedSummary{
 		QPS:            qps,
 		LocalityCounts: localityCounts,
-		Duration:       interval,
+		Duration:       duration,
 	}
 }
 

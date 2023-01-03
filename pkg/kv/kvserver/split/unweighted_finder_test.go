@@ -25,6 +25,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type DFLargestRandSource struct{}
+
+func (r DFLargestRandSource) Float64() float64 {
+	return 0
+}
+
+// Intn returns the largest number possible in [0, n)
+func (r DFLargestRandSource) Intn(n int) int {
+	var result int
+	if n > 0 {
+		result = n - 1
+	}
+	return result
+}
+
 // TestSplitFinderKey verifies the Key() method correctly
 // finds an appropriate split point for the range.
 func TestSplitFinderKey(t *testing.T) {
@@ -151,8 +166,9 @@ func TestSplitFinderKey(t *testing.T) {
 		{multipleSpanReservoir, keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 	}
 
+	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
-		finder := NewFinder(timeutil.Now())
+		finder := NewUnweightedFinder(timeutil.Now(), randSource)
 		finder.samples = test.reservoir
 		if splitByLoadKey := finder.Key(); !bytes.Equal(splitByLoadKey, test.splitByLoadKey) {
 			t.Errorf(
@@ -170,18 +186,6 @@ func TestSplitFinderRecorder(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	const ReservoirKeyOffset = 1000
-
-	// getLargest is an IntN function that returns the largest number possible in [0, n)
-	getLargest := func(n int) int {
-		var result int
-		if n > 0 {
-			result = n - 1
-		}
-		return result
-	}
-
-	// getZero is an IntN function that returns 0
-	getZero := func(n int) int { return 0 }
 
 	// Test recording a key query before the reservoir is full.
 	basicReservoir := [splitKeySampleSize]sample{}
@@ -246,26 +250,26 @@ func TestSplitFinderRecorder(t *testing.T) {
 
 	testCases := []struct {
 		recordSpan        roachpb.Span
-		intNFn            func(int) int
+		randSource        RandSource
 		currCount         int
 		currReservoir     [splitKeySampleSize]sample
 		expectedReservoir [splitKeySampleSize]sample
 	}{
 		// Test recording a key query before the reservoir is full.
-		{basicSpan, getLargest, 0, basicReservoir, expectedBasicReservoir},
+		{basicSpan, DFLargestRandSource{}, 0, basicReservoir, expectedBasicReservoir},
 		// Test recording a key query after the reservoir is full with replacement.
-		{replacementSpan, getZero, splitKeySampleSize + 1, replacementReservoir, expectedReplacementReservoir},
+		{replacementSpan, ZeroRandSource{}, splitKeySampleSize + 1, replacementReservoir, expectedReplacementReservoir},
 		// Test recording a key query after the reservoir is full without replacement.
-		{fullSpan, getLargest, splitKeySampleSize + 1, fullReservoir, expectedFullReservoir},
+		{fullSpan, DFLargestRandSource{}, splitKeySampleSize + 1, fullReservoir, expectedFullReservoir},
 		// Test recording a spanning query.
-		{spanningSpan, getLargest, splitKeySampleSize + 1, spanningReservoir, expectedSpanningReservoir},
+		{spanningSpan, DFLargestRandSource{}, splitKeySampleSize + 1, spanningReservoir, expectedSpanningReservoir},
 	}
 
 	for i, test := range testCases {
-		finder := NewFinder(timeutil.Now())
+		finder := NewUnweightedFinder(timeutil.Now(), test.randSource)
 		finder.samples = test.currReservoir
 		finder.count = test.currCount
-		finder.Record(test.recordSpan, test.intNFn)
+		finder.Record(test.recordSpan, 1)
 		if !reflect.DeepEqual(finder.samples, test.expectedReservoir) {
 			t.Errorf(
 				"%d: expected reservoir: %v, but got reservoir: %v",
@@ -278,7 +282,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 	samples := [splitKeySampleSize]sample{}
 	for i, idx := range rand.Perm(splitKeySampleSize) {
 		if i < 5 {
-			// insufficient counters
+			// Insufficient counters.
 			samples[idx] = sample{
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      0,
@@ -286,7 +290,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				contained: splitKeyMinCounter - 1,
 			}
 		} else if i < 7 {
-			// imbalance
+			// Imbalance and too many contained counters.
 			deviationLeft := rand.Intn(5)
 			deviationRight := rand.Intn(5)
 			samples[idx] = sample{
@@ -296,7 +300,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				contained: int(max(float64(splitKeyMinCounter-40-deviationLeft+deviationRight), float64(40+deviationLeft-deviationRight))),
 			}
 		} else if i < 13 {
-			// imbalance
+			// Imbalance counters.
 			deviationLeft := rand.Intn(5)
 			deviationRight := rand.Intn(5)
 			samples[idx] = sample{
@@ -306,7 +310,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				contained: int(max(float64(splitKeyMinCounter-80-deviationLeft+deviationRight), 0)),
 			}
 		} else {
-			// too many contained
+			// Too many contained counters.
 			contained := int(splitKeyMinCounter*splitKeyContainedThreshold + 1)
 			left := (splitKeyMinCounter - contained) / 2
 			samples[idx] = sample{
@@ -318,9 +322,10 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 		}
 	}
 
-	finder := NewFinder(timeutil.Now())
+	randSource := rand.New(rand.NewSource(2022))
+	finder := NewUnweightedFinder(timeutil.Now(), randSource)
 	finder.samples = samples
-	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.NoSplitKeyCause()
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.noSplitKeyCause()
 	assert.Equal(t, 5, insufficientCounters, "unexpected insufficient counters")
 	assert.Equal(t, 6, imbalance, "unexpected imbalance counters")
 	assert.Equal(t, 7, tooManyContained, "unexpected too many contained counters")
@@ -392,8 +397,10 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 		{fiftyFivePercentPopularKeySample, 0.55},
 		{sameKeySample, 1},
 	}
+
+	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
-		finder := NewFinder(timeutil.Now())
+		finder := NewUnweightedFinder(timeutil.Now(), randSource)
 		finder.samples = test.samples
 		popularKeyFrequency := finder.PopularKeyFrequency()
 		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
