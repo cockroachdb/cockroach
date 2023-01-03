@@ -1940,15 +1940,17 @@ type ledgerWorkload struct {
 }
 
 func (lw *ledgerWorkload) install(ctx context.Context, c cluster.Cluster) {
+	// TODO(#94136): remove --data-loader=INSERT
 	c.Run(ctx, lw.workloadNodes.RandNode(), fmt.Sprintf(
-		`./workload init ledger {pgurl%s}`,
+		`./workload init ledger --data-loader=INSERT {pgurl%s}`,
 		lw.sqlNodes.RandNode(),
 	))
 }
 
 func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
+	// TODO(#94136): remove --data-loader=INSERT
 	c.Run(ctx, lw.workloadNodes, fmt.Sprintf(
-		`./workload run ledger --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
+		`./workload run ledger --data-loader=INSERT --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
 		lw.sqlNodes,
 		workloadDuration,
 	))

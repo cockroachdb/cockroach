@@ -23,15 +23,11 @@ import (
 )
 
 const (
-	awsAccessKeyIDKey      = "AWS_ACCESS_KEY_ID"
-	awsSecretAccessKeyKey  = "AWS_SECRET_ACCESS_KEY"
 	teamcityBuildBranchKey = "TC_BUILD_BRANCH"
 )
 
 func main() {
-	var s3Bucket string
 	var gcsBucket string
-	flag.StringVar(&s3Bucket, "bucket", "", "S3 bucket")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.Parse()
 
@@ -45,25 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Creating GCS session: %s", err)
 	}
-	var providers []release.ObjectPutGetter
-	providers = append(providers, gcs)
-
-	if s3Bucket != "" {
-		log.Printf("Using S3 bucket: %s", s3Bucket)
-		if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
-			log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
-		}
-		if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
-			log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
-		}
-		s3, err := release.NewS3("us-east-1", s3Bucket)
-		if err != nil {
-			log.Fatalf("Creating AWS S3 session: %s", err)
-		}
-		providers = append(providers, s3)
-	} else {
-		log.Println("Not using S3 bucket")
-	}
+	providers := []release.ObjectPutGetter{gcs}
 
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
 	if !ok {
