@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +59,8 @@ type replicaAppBatch struct {
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
 
-	start time.Time // time at NewBatch()
+	start                   time.Time // time at NewBatch()
+	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
@@ -137,9 +139,16 @@ func (b *replicaAppBatch) Stage(
 		return nil, err
 	}
 
-	// Run any triggers that should occur before the batch is applied
-	// but after the write batch is staged in the batch.
-	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd); err != nil {
+	// Run any triggers that should occur before the (entire) batch is applied but
+	// after the (current) write batch is staged in the batch. Note that additional
+	// calls to `Stage` (for subsequent log entries) may occur before the batch
+	// will be committed, but all of these commands will be `IsTrivial()`.
+	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
+		st:          b.r.store.cfg.Settings,
+		eng:         b.r.store.engine,
+		sideloaded:  b.r.raftMu.sideloaded,
+		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -218,6 +227,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// `ApplyToStateMachine`) and then finalize the in- memory portion of the
 	// split/merge in `(stateMachine).ApplySideEffects), following which
 	// splitMergeUnlock is called.
+	//
+	// NB: none of this is necessary in standalone log application, as long
+	// as we don't concurrently apply multiple raft logs.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
 		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
 			err = errors.Wrap(err, "unable to acquire split lock")
@@ -233,11 +245,15 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 
 	// NB: we need to do this update early, as some fields are zeroed out below
 	// (AddSST for example).
+	//
+	// We don't track these stats in standalone log application since they depend
+	// on whether the proposer is still waiting locally, and this concept does not
+	// apply in a standalone context.
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.ab.followerStoreWriteBytes.NumEntries++
-		b.ab.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.ab.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		b.followerStoreWriteBytes.NumEntries++
+		b.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
 	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
@@ -245,6 +261,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// expected to ensure that no rangefeeds are currently active across such
 	// spans, but as a safeguard we disconnect the overlapping rangefeeds
 	// with a non-retriable error anyway.
+	//
+	// The are no rangefeeds in standalone mode, so we don't have to do anything
+	// for this on appBatch.
 	if res.MVCCHistoryMutation != nil {
 		for _, span := range res.MVCCHistoryMutation.Spans {
 			b.r.disconnectRangefeedSpanWithErr(span, roachpb.NewError(&roachpb.MVCCHistoryMutationError{
@@ -253,34 +272,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		}
 	}
 
-	// AddSSTable ingestions run before the actual batch gets written to the
-	// storage engine. This makes sure that when the Raft command is applied,
-	// the ingestion has definitely succeeded. Note that we have taken
-	// precautions during command evaluation to avoid having mutations in the
-	// WriteBatch that affect the SSTable. Not doing so could result in order
-	// reversal (and missing values) here.
-	//
-	// NB: any command which has an AddSSTable is non-trivial and will be
-	// applied in its own batch so it's not possible that any other commands
-	// which precede this command can shadow writes from this SSTable.
 	if res.AddSSTable != nil {
-		copied := addSSTablePreApply(
-			ctx,
-			b.r.store.cfg.Settings,
-			b.r.store.engine,
-			b.r.raftMu.sideloaded,
-			cmd.Term,
-			cmd.Index(),
-			*res.AddSSTable,
-			b.r.store.limiters.BulkIOWriteRate,
-		)
-		b.r.store.metrics.AddSSTableApplications.Inc(1)
-		if copied {
-			b.r.store.metrics.AddSSTableApplicationCopies.Inc(1)
-		}
-		if added := res.Delta.KeyCount; added > 0 {
-			b.r.loadStats.writeKeys.RecordCount(float64(added), 0)
-		}
+		// We've ingested the SST already (via the appBatch), so all that's left
+		// to do here is notify the rangefeed, if appropriate.
 		if res.AddSSTable.AtWriteTimestamp {
 			b.r.handleSSTableRaftMuLocked(
 				ctx, res.AddSSTable.Data, res.AddSSTable.Span, res.WriteTimestamp)
@@ -612,6 +606,8 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.
+	//
+	// This also records the number of keys ingested via AddSST.
 	b.r.loadStats.writeKeys.RecordCount(float64(b.ab.numMutations), 0)
 
 	now := timeutil.Now()
@@ -645,6 +641,14 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
+	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+
+	if n := b.ab.numAddSST; n > 0 {
+		b.r.store.metrics.AddSSTableApplications.Inc(int64(n))
+	}
+	if n := b.ab.numAddSSTCopies; n > 0 {
+		b.r.store.metrics.AddSSTableApplicationCopies.Inc(int64(n))
+	}
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
