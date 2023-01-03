@@ -53,6 +53,7 @@ go_library(
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timetz",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
