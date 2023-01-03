@@ -38,12 +38,9 @@ upsert descriptor #104
   ...
        - 3
        constraintId: 2
-  -    expr: crdb_internal_j_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8,
-  -      5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8,
-  -      13:::INT8, 14:::INT8, 15:::INT8)
-  +    expr: crdb_internal_column_3_name_placeholder IN (0:::INT8, 1:::INT8, 2:::INT8,
-  +      3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
-  +      11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  -    expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  +    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+  +      10, 11, 12, 13, 14, 15)
        fromHashShardedColumn: true
   -    name: check_crdb_internal_j_shard_16
   +    name: crdb_internal_constraint_2_name_placeholder
@@ -57,6 +54,7 @@ upsert descriptor #104
   -    hidden: true
   -    id: 3
   -    name: crdb_internal_j_shard_16
+  -    pgAttributeNum: 3
   -    type:
   -      family: IntFamily
   -      oid: 20
@@ -93,7 +91,7 @@ upsert descriptor #104
   -      isSharded: true
   -      name: crdb_internal_j_shard_16
   -      shardBuckets: 16
-  -    version: 3
+  -    version: 4
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -124,17 +122,16 @@ upsert descriptor #104
   +        isSharded: true
   +        name: crdb_internal_j_shard_16
   +        shardBuckets: 16
-  +      version: 3
-  +    mutationId: 2
+  +      version: 4
+  +    mutationId: 1
   +    state: WRITE_ONLY
   +  - constraint:
   +      check:
   +        columnIds:
   +        - 3
   +        constraintId: 2
-  +        expr: crdb_internal_column_3_name_placeholder IN (0:::INT8, 1:::INT8, 2:::INT8,
-  +          3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
-  +          11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  +        expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7,
+  +          8, 9, 10, 11, 12, 13, 14, 15)
   +        fromHashShardedColumn: true
   +        name: check_crdb_internal_j_shard_16
   +        validity: Dropping
@@ -142,20 +139,21 @@ upsert descriptor #104
   +      name: check_crdb_internal_j_shard_16
   +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
-  +    mutationId: 2
+  +    mutationId: 1
   +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
   +      hidden: true
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
+  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
   +        width: 64
   +      virtual: true
   +    direction: DROP
-  +    mutationId: 2
+  +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
      nextColumnId: 4
@@ -331,9 +329,8 @@ upsert descriptor #104
   -  - columnIds:
   -    - 3
   -    constraintId: 2
-  -    expr: crdb_internal_column_3_name_placeholder IN (0:::INT8, 1:::INT8, 2:::INT8,
-  -      3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
-  -      11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  -    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+  -      10, 11, 12, 13, 14, 15)
   -    fromHashShardedColumn: true
   -    name: crdb_internal_constraint_2_name_placeholder
   -    validity: Dropping
@@ -348,17 +345,16 @@ upsert descriptor #104
          partitioning: {}
          sharded:
   ...
-         version: 3
-       mutationId: 2
+         version: 4
+       mutationId: 1
   -    state: WRITE_ONLY
   -  - constraint:
   -      check:
   -        columnIds:
   -        - 3
   -        constraintId: 2
-  -        expr: crdb_internal_column_3_name_placeholder IN (0:::INT8, 1:::INT8, 2:::INT8,
-  -          3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8,
-  -          11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)
+  -        expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7,
+  -          8, 9, 10, 11, 12, 13, 14, 15)
   -        fromHashShardedColumn: true
   -        name: check_crdb_internal_j_shard_16
   -        validity: Dropping
@@ -366,14 +362,14 @@ upsert descriptor #104
   -      name: check_crdb_internal_j_shard_16
   -      uniqueWithoutIndexConstraint: {}
   -    direction: DROP
-  -    mutationId: 2
+  -    mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
          computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
   ...
        direction: DROP
-       mutationId: 2
+       mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
@@ -437,21 +433,22 @@ upsert descriptor #104
   -        isSharded: true
   -        name: crdb_internal_j_shard_16
   -        shardBuckets: 16
-  -      version: 3
-  -    mutationId: 2
+  -      version: 4
+  -    mutationId: 1
   -    state: DELETE_ONLY
   -  - column:
   -      computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
   -      hidden: true
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
+  -      pgAttributeNum: 3
   -      type:
   -        family: IntFamily
   -        oid: 20
   -        width: 64
   -      virtual: true
   -    direction: DROP
-  -    mutationId: 2
+  -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
      name: t
