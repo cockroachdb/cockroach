@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
@@ -717,7 +718,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
 
-	recorder := status.NewMetricsRecorder(clock, nodeLiveness, rpcContext, g, st)
+	systemTenantNameContainer := roachpb.NewTenantNameContainer(catconstants.SystemTenantName)
+
+	recorder := status.NewMetricsRecorder(
+		clock,
+		nodeLiveness,
+		rpcContext,
+		g,
+		st,
+		systemTenantNameContainer,
+	)
 	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
 
 	updates := &diagnostics.UpdateChecker{
@@ -997,7 +1007,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Create a server controller.
 	sc := newServerController(ctx, stopper, st,
-		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer})
+		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer}, systemTenantNameContainer)
 
 	// Create the debug API server.
 	debugServer := debug.NewServer(

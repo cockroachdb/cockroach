@@ -17,6 +17,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -180,4 +181,31 @@ func (n TenantName) IsValid() error {
 			"Tenant names must start and end with a lowercase letter or digit, contain only lowercase letters, digits or hyphens, with a maximum of 100 characters.")
 	}
 	return nil
+}
+
+// TenantNameContainer is a shared object between the
+// server controller and the tenant server that holds
+// a reference to the current name of the tenant and
+// updates it if needed. This facilitates some
+// observability use cases where we need to tag data
+// by tenant name.
+type TenantNameContainer syncutil.AtomicString
+
+func NewTenantNameContainer(name TenantName) *TenantNameContainer {
+	t := &TenantNameContainer{}
+	t.Set(name)
+	return t
+}
+
+func (c *TenantNameContainer) Set(name TenantName) {
+	(*syncutil.AtomicString)(c).Set(string(name))
+}
+
+func (c *TenantNameContainer) Get() TenantName {
+	return TenantName(c.String())
+}
+
+// String implements the fmt.Strinter interface.
+func (c *TenantNameContainer) String() string {
+	return (*syncutil.AtomicString)(c).Get()
 }
