@@ -3218,7 +3218,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 			disjunctionSelectivity := combineOredSelectivities(selectivities)
 			s.RowCount *= disjunctionSelectivity.AsFloat()
 			s.Selectivity.Multiply(disjunctionSelectivity)
-		} else {
+		} else if numUnappliedDisjuncts == 0 {
 			// The filters are one or more disjunctions and tight constraint
 			// sets could be built for each.
 			var tmpStats, unionStats props.Statistics
@@ -3239,6 +3239,8 @@ func (sb *statisticsBuilder) applyFiltersItem(
 			// unioned stats and the input stats.
 			s.Selectivity = props.MinSelectivity(s.Selectivity, unionStats.Selectivity)
 			s.RowCount = min(s.RowCount, unionStats.RowCount)
+		} else {
+			numUnappliedConjuncts++
 		}
 	} else {
 		numUnappliedConjuncts++
