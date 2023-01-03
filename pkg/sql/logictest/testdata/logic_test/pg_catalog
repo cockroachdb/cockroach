@@ -2767,7 +2767,7 @@ enforce_home_region                                   off                 NULL  
 escape_string_warning                                 on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy         off                 NULL      NULL        NULL        string
 experimental_distsql_planning                         off                 NULL      NULL        NULL        string
-experimental_enable_auto_rehoming                     off                  NULL      NULL        NULL        string
+experimental_enable_auto_rehoming                     off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning      off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                       off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints  on                  NULL      NULL        NULL        string
@@ -2805,6 +2805,7 @@ on_update_rehome_row_enabled                          on                  NULL  
 opt_split_scan_limit                                  2048                NULL      NULL        NULL        string
 optimizer_use_forecasts                               on                  NULL      NULL        NULL        string
 optimizer_use_histograms                              on                  NULL      NULL        NULL        string
+optimizer_use_limit_ordering_for_streaming_group_by   off                 NULL      NULL        NULL        string
 optimizer_use_multicol_stats                          on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                     off                 NULL      NULL        NULL        string
 override_multi_region_zone_config                     off                 NULL      NULL        NULL        string
@@ -2941,6 +2942,7 @@ on_update_rehome_row_enabled                          on                  NULL  
 opt_split_scan_limit                                  2048                NULL  user     NULL      2048                2048
 optimizer_use_forecasts                               on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                              on                  NULL  user     NULL      on                  on
+optimizer_use_limit_ordering_for_streaming_group_by   off                 NULL  user     NULL      off                 off
 optimizer_use_multicol_stats                          on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                     off                 NULL  user     NULL      off                 off
 override_multi_region_zone_config                     off                 NULL  user     NULL      off                 off
@@ -3075,6 +3077,7 @@ opt_split_scan_limit                                  NULL    NULL     NULL     
 optimizer                                             NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                               NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                              NULL    NULL     NULL     NULL        NULL
+optimizer_use_limit_ordering_for_streaming_group_by   NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_not_visible_indexes                     NULL    NULL     NULL     NULL        NULL
 override_multi_region_zone_config                     NULL    NULL     NULL     NULL        NULL

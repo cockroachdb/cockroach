@@ -2315,6 +2315,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_limit_ordering_for_streaming_group_by`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_limit_ordering_for_streaming_group_by`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_limit_ordering_for_streaming_group_by", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseLimitOrderingForStreamingGroupBy(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

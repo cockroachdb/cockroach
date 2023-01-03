@@ -158,6 +158,7 @@ type Memo struct {
 	testingOptimizerDisableRuleProbability float64
 	enforceHomeRegion                      bool
 	variableInequalityLookupJoinEnabled    bool
+	useLimitOrderingForStreamingGroupBy    bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -211,6 +212,7 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
 		enforceHomeRegion:                      evalCtx.SessionData().EnforceHomeRegion,
 		variableInequalityLookupJoinEnabled:    evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
+		useLimitOrderingForStreamingGroupBy:    evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
@@ -347,7 +349,8 @@ func (m *Memo) IsStale(
 		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
 		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
 		m.enforceHomeRegion != evalCtx.SessionData().EnforceHomeRegion ||
-		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled {
+		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled ||
+		m.useLimitOrderingForStreamingGroupBy != evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy {
 		return true, nil
 	}
 
