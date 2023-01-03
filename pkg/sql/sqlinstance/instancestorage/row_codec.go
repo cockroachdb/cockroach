@@ -167,7 +167,7 @@ func (d *rowCodec) decodeRow(key roachpb.Key, value *roachpb.Value) (instancerow
 		return r, nil
 	}
 
-	r.addr, r.sessionID, r.locality, r.timestamp, err = d.decodeValue(*value)
+	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.timestamp, err = d.decodeValue(*value)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "failed to decode value for: %v", key)
 	}
@@ -177,16 +177,23 @@ func (d *rowCodec) decodeRow(key roachpb.Key, value *roachpb.Value) (instancerow
 
 // encodeValue encodes the sql_instance columns into a kv value.
 func (d *rowCodec) encodeValue(
-	addr string, sessionID sqlliveness.SessionID, locality roachpb.Locality,
+	rpcAddr string, sqlAddr string, sessionID sqlliveness.SessionID, locality roachpb.Locality,
 ) (*roachpb.Value, error) {
 	var valueBuf []byte
 
-	addrDatum := tree.DNull
-	if addr != "" {
-		addrDatum = tree.NewDString(addr)
+	rpcAddrDatum := tree.DNull
+	if rpcAddr != "" {
+		rpcAddrDatum = tree.NewDString(rpcAddr)
 	}
+	sqlAddrDatum := tree.DNull
+	if sqlAddr != "" {
+		sqlAddrDatum = tree.NewDString(sqlAddr)
+	}
+
+	// Ordering of the values below needs to remain stable for backwards
+	// compatibility. New values should be appended to the end.
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), valueside.MakeColumnIDDelta(0, d.columns[1].GetID()), addrDatum, []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, d.columns[1].GetID()), rpcAddrDatum, []byte(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +221,19 @@ func (d *rowCodec) encodeValue(
 		return nil, err
 	}
 
+	valueBuf, err = valueside.Encode(valueBuf,
+		valueside.MakeColumnIDDelta(d.columns[3].GetID(), d.columns[4].GetID()), sqlAddrDatum, []byte(nil))
+	if err != nil {
+		return nil, err
+	}
+
 	v := &roachpb.Value{}
 	v.SetTuple(valueBuf)
 	return v, nil
 }
 
 func (d *rowCodec) encodeAvailableValue() (*roachpb.Value, error) {
-	value, err := d.encodeValue("", sqlliveness.SessionID([]byte{}), roachpb.Locality{})
+	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}), roachpb.Locality{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode available sql_instances value")
 	}
@@ -231,7 +244,8 @@ func (d *rowCodec) encodeAvailableValue() (*roachpb.Value, error) {
 func (d *rowCodec) decodeValue(
 	value roachpb.Value,
 ) (
-	addr string,
+	rpcAddr string,
+	sqlAddr string,
 	sessionID sqlliveness.SessionID,
 	locality roachpb.Locality,
 	timestamp hlc.Timestamp,
@@ -240,16 +254,22 @@ func (d *rowCodec) decodeValue(
 	// The rest of the columns are stored as a family.
 	bytes, err := value.GetTuple()
 	if err != nil {
-		return "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 	}
 
 	datums, err := d.decoder.Decode(&tree.DatumAlloc{}, bytes)
 	if err != nil {
-		return "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 	}
 
 	if addrVal := datums[1]; addrVal != tree.DNull {
-		addr = string(tree.MustBeDString(addrVal))
+		rpcAddr = string(tree.MustBeDString(addrVal))
+	}
+	if sqlAddrVal := datums[4]; sqlAddrVal != tree.DNull {
+		sqlAddr = string(tree.MustBeDString(sqlAddrVal))
+	} else {
+		// Backwards compatible with single-address version.
+		sqlAddr = rpcAddr
 	}
 	if sessionIDVal := datums[2]; sessionIDVal != tree.DNull {
 		sessionID = sqlliveness.SessionID(tree.MustBeDBytes(sessionIDVal))
@@ -258,20 +278,20 @@ func (d *rowCodec) decodeValue(
 		localityJ := tree.MustBeDJSON(localityVal)
 		v, err := localityJ.FetchValKey("Tiers")
 		if err != nil {
-			return "", "", roachpb.Locality{}, hlc.Timestamp{}, errors.Wrap(err, "failed to find Tiers attribute in locality")
+			return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, errors.Wrap(err, "failed to find Tiers attribute in locality")
 		}
 		if v != nil {
 			vStr, err := v.AsText()
 			if err != nil {
-				return "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+				return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 			}
 			if len(*vStr) > 0 {
 				if err := locality.Set(*vStr); err != nil {
-					return "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+					return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 				}
 			}
 		}
 	}
 
-	return addr, sessionID, locality, value.Timestamp, nil
+	return rpcAddr, sqlAddr, sessionID, locality, value.Timestamp, nil
 }

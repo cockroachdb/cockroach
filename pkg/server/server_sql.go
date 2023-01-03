@@ -521,7 +521,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceAddr}, nil
+			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, nil
 		}
 		cfg.podNodeDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 	} else {
@@ -1368,7 +1368,7 @@ func (s *SQLServer) preStart(
 		}
 		// Acquire our instance row.
 		instance, err := s.sqlInstanceStorage.CreateInstance(
-			ctx, session.ID(), session.Expiration(), s.cfg.AdvertiseAddr, s.distSQLServer.Locality)
+			ctx, session.ID(), session.Expiration(), s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality)
 		if err != nil {
 			return err
 		}

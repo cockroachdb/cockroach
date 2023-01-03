@@ -91,12 +91,10 @@ func (t *tenantFanoutClient) nodesList(ctx context.Context) (*serverpb.NodesList
 	}
 	var resp serverpb.NodesListResponse
 	for _, instance := range instances {
-		// For SQL only servers, the (RPC) Address and SQL address is the same.
-		// TODO(#76175): We should split the instance address into SQL and RPC addresses.
 		nodeDetails := serverpb.NodeDetails{
 			NodeID:     int32(instance.InstanceID),
-			Address:    util.MakeUnresolvedAddr("tcp", instance.InstanceAddr),
-			SQLAddress: util.MakeUnresolvedAddr("tcp", instance.InstanceAddr),
+			Address:    util.MakeUnresolvedAddr("tcp", instance.InstanceRPCAddr),
+			SQLAddress: util.MakeUnresolvedAddr("tcp", instance.InstanceSQLAddr),
 		}
 		resp.Nodes = append(resp.Nodes, nodeDetails)
 	}
@@ -115,16 +113,22 @@ func (t *tenantFanoutClient) getServerIDAddress(
 	}
 	return &util.UnresolvedAddr{
 		NetworkField: "tcp",
-		AddressField: instance.InstanceAddr,
+		AddressField: instance.InstanceRPCAddr,
 	}, nil
 }
 
-// TODO(davidh): This implementation is incorrect and should be fixed
-// see https://github.com/cockroachdb/cockroach/issues/76175
 func (t *tenantFanoutClient) getServerIDSQLAddress(
-	ctx context.Context, id serverID,
+	ctx context.Context, serverID serverID,
 ) (*util.UnresolvedAddr, error) {
-	return t.getServerIDAddress(ctx, id)
+	id := base.SQLInstanceID(serverID)
+	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &util.UnresolvedAddr{
+		NetworkField: "tcp",
+		AddressField: instance.InstanceSQLAddr,
+	}, nil
 }
 
 func (t *tenantFanoutClient) getID() serverID {
@@ -139,7 +143,7 @@ func (t *tenantFanoutClient) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	return t.rpcCtx.GRPCDialPod(instance.InstanceAddr, id, rpc.DefaultClass).Connect(ctx)
+	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, rpc.DefaultClass).Connect(ctx)
 }
 
 func (t *tenantFanoutClient) getAllNodes(
