@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -euox pipefail
 
 if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
   export CROSSLINUX_CONFIG="crosslinuxarm"
 else
   export CROSSLINUX_CONFIG="crosslinux"
 fi
+
+env
 
 bazel build --config=$CROSSLINUX_CONFIG --config=ci //pkg/cmd/cockroach-short \
       //pkg/cmd/roachtest \
