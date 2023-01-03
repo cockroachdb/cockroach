@@ -12,6 +12,7 @@ package colserde_test
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/apache/arrow/go/arrow/array"
@@ -22,8 +23,9 @@ import (
 )
 
 func BenchmarkConversion(b *testing.B) {
+	ctx := context.Background()
 	createSerializer := func(typ *types.T) (*colserde.ArrowBatchConverter, *colserde.RecordBatchSerializer) {
-		c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BatchToArrowOnly)
+		c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BatchToArrowOnly, testMemAcc)
 		require.NoError(b, err)
 		s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
 		require.NoError(b, err)
@@ -34,10 +36,11 @@ func BenchmarkConversion(b *testing.B) {
 		"Serialize",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
 			c, s := createSerializer(typ)
+			defer c.Release(ctx)
 			var buf bytes.Buffer
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				data, _ := c.BatchToArrow(batch)
+				data, _ := c.BatchToArrow(ctx, batch)
 				if len(data) != 1 {
 					b.Fatal("expected arrow batch of length 1")
 				}
@@ -56,8 +59,9 @@ func BenchmarkConversion(b *testing.B) {
 			var serialized []byte
 			{
 				c, s := createSerializer(typ)
+				defer c.Release(ctx)
 				var buf bytes.Buffer
-				data, _ := c.BatchToArrow(batch)
+				data, _ := c.BatchToArrow(ctx, batch)
 				if len(data) != 1 {
 					b.Fatal("expected arrow batch of length 1")
 				}
@@ -70,7 +74,7 @@ func BenchmarkConversion(b *testing.B) {
 				}
 				serialized = buf.Bytes()
 			}
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.ArrowToBatchOnly)
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.ArrowToBatchOnly, nil /* acc */)
 			require.NoError(b, err)
 			s, err := colserde.NewRecordBatchSerializer([]*types.T{typ})
 			require.NoError(b, err)
