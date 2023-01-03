@@ -470,6 +470,7 @@ type Replica struct {
 		// Instead, the buffer internally holds a reference to mu and will use
 		// it appropriately.
 		proposalBuf propBuf
+
 		// proposals stores the Raft in-flight commands which originated at
 		// this Replica, i.e. all commands for which propose has been called,
 		// but which have not yet applied.
@@ -481,12 +482,128 @@ type Replica struct {
 		// underneath raft. See comments on ProposalData fields for synchronization
 		// requirements.
 		//
-		// Due to Raft reproposals, multiple in-flight Raft entries can have
-		// the same CmdIDKey, all corresponding to the same KV request. However,
-		// not all Raft entries with a given command ID will correspond directly
-		// to the *RaftCommand contained in its associated *ProposalData. This
-		// is because the *RaftCommand can be mutated during reproposals by
-		// Replica.tryReproposeWithNewLeaseIndex.
+		// Due to Raft reproposals, multiple in-flight Raft entries can have the
+		// same CmdIDKey. There are two kinds of reproposals:
+		//
+		// (1) the exact same entry is handed to raft (possibly despite already being
+		// present in the log), usually after a timeout[^1].
+		//
+		// (2)  an existing proposal is updated with a new MaxLeaseIndex and handed to
+		// raft, i.e. we're intentionally creating a duplicate. This exists because
+		// for pipelined proposals, the client's goroutine returns without waiting
+		// for the proposal to apply.[^2][^3] When (2) is carried out, the existing
+		// copies of the proposal in the log will be "Superseded", see below.
+		//
+		// To understand reproposals, we need a broad overview of entry application,
+		// which is batched (i.e. may process multiple log entries to be applied in
+		// a batched fashion). In entry application, the following steps are taken:
+		//
+		// 1. retrieve all local proposals: iterate through the entries in order,
+		//    and look them up in the proposals map. For each "local" entry (i.e.
+		//    tracked in the map), remove it from the map (unless the proposal
+		//    is not superseded, see below) and attach the value to the entry.
+		// 2. for each entry:
+		//				- stage written and in-memory effects of the entry (some may apply as no-ops
+		//          if they fail below-raft checks such as the MaxLeaseIndex check)
+		//        - Assuming the MaxLeaseIndex is violated and additional constraints are
+		//          satisfied, carry out (2) from above. On success, we know now that there
+		//          will be a reproposal in the log that can successfully apply. We unbind
+		//          the local proposal (so we don't signal it) and apply the current entry
+		//          as a no-op.
+		// 3. carry out additional side effects of the entire batch (stats updates etc).
+		//
+		// A prerequisite for (2) is that there currently aren't any copies of the proposal
+		// in the log that may ultimately apply, or we risk doubly applying commands - a
+		// correctness bug. After (2), any copies of the entry present in the log will have
+		// a MaxLeaseIndex strictly less than that of the in-memory command, and will be
+		// Superseded() by it.
+		//
+		// We can always safely create an identical copy (i.e. (1)) because of the
+		// replay protection conferred by the MaxLeaseIndex - all but the first
+		// proposal will be rejected (i.e. apply as a no-op).
+		//
+		// However, the combination of (1) and (2) is problematic because it
+		// complicates the determination of when (2) is safe. Without (1)[^4], in (2) we
+		// could "simply" go ahead and do the reproposal during application of the
+		// entry, since we now know that there is only ever one unapplied copy of the
+		// entry in the log (since we're creating one only as we consume one). With (1),
+		// we have to assume there are many copies ahead of us in the log, and possibly
+		// with various different MaxLeaseIndex values, in effect meaning that the
+		// MaxLeaseIndex of the in-memory proposal must be compared against that of
+		// the entry currently being applied - only if they match is the current entry
+		// the most recent copy, or, in other words, only if the current entry isn't
+		// superseded as indicated by the in-memory proposal's MaxLeaseIndex.
+		//
+		// An example follows. Consider the following situation (where N is some base
+		// index not relevant to the example) in which we have one inflight proposal which
+		// has been triplicated in the log (due to [^1]):
+		//
+		//     proposals[id] = p{Cmd{MaxLeaseIndex: 100, ...}}
+		//
+		//     ... (unrelated entries)
+		//     raftlog[N] = Cmd{MaxLeaseIndex: 100, ...}
+		//     ... (unrelated entries)
+		//     raftlog[N+12] = (same as N)
+		//     ... (unrelated entries)
+		//     raftlog[N+15] = (same as N)
+		//
+		// where we assume that the `MaxLeaseIndex` 100 is invalid, i.e. when we see the
+		// first copy of the command being applied, we've already applied some command
+		// with a higher `MaxLeaseIndex`. In a world without mechanism (2), `N` would
+		// be rejected, and would finalize the proposal (i.e. signal the client with
+		// an error and remove the entry from `proposals`). Later, `N+12` and `N+15`
+		// would similarly be rejected (but they wouldn't even be regarded as local
+		// proposals any more due to not being present in `proposals`).
+		//
+		// However, (2) exists and it will engage during application of `N`: realizing
+		// that the current copies of the entry are all going to be rejected, it will
+		// modify the proposal by assigning a new `MaxLeaseIndex` to it, and handing
+		// it to `(*Replica).propose` again (which hands it to the proposal buffer,
+		// which will at some point flush it, leading to re-insertion into the raft
+		// log and the `proposals` map). The result will be this picture:
+		//
+		//     proposals[id] = p{Cmd{MaxLeaseIndex: 192, ...}}   <-- modified
+		//
+		//     ... (unrelated entries)
+		//     raftlog[N] = Cmd{MaxLeaseIndex: 100, ...}         <-- applied (as no-op)
+		//     ... (unrelated entries)
+		//     raftlog[N+12] = (same as N)                       (superseded)
+		//     ... (unrelated entries)
+		//     raftlog[N+15] = (same as N)                       (superseded)
+		//     ... (unrelated entries)
+		//     raftlog[N+18] = Cmd{MaxLeaseIndex: 192, ...}      <-- modified
+		//
+		// `N+18` might (in fact, is likely to) apply successfully. As a result, when
+		// we consider `N+12` or `N+15` for application, we must *not* carry out (2)
+		// again, or we break replay protection. In other words, the `MaxLeaseIndex`
+		// of the command being applied must be compared with the `MaxLeaseIndex` of
+		// the command in the proposals map; only if they match do we know that this
+		// is the most recent (in MaxLeaseIndex order) copy of the command, and only
+		// then can (2) engage. In addition, an entry that doesn't pass this equality
+		// check must not signal the proposer and/or unlink from the proposals map (as a
+		// newer reproposal is likely in the log)[^4].
+		//
+		// Another way of framing the above is that `proposals[id].Cmd.MaxLeaseIndex`
+		// actually tracks the maximum `MaxLeaseIndex` of all copies that may be present in
+		// the log.
+		//
+		// If (2) results in an error (for example, since the proposal now fails to
+		// respect the closed timestamp), that error will finalize the proposal and
+		// is returned to the client.
+		//
+		// [^1]: https://github.com/cockroachdb/cockroach/blob/59ce13b6052a99a0318e3dfe017908ff5630db30/pkg/kv/kvserver/replica_raft.go#L1224
+		// [^2]: https://github.com/cockroachdb/cockroach/blob/59ce13b6052a99a0318e3dfe017908ff5630db30/pkg/kv/kvserver/replica_application_result.go#L148
+		// [^3]: it's debatable how useful this is. It was introduced in
+		// https://github.com/cockroachdb/cockroach/pull/35261, and perhaps could be
+		// phased out again if we also did
+		// https://github.com/cockroachdb/cockroach/issues/21849. Historical
+		// evidence points to https://github.com/cockroachdb/cockroach/issues/28876
+		// as the motivation for introducing this mechanism, i.e. it was about
+		// reducing failure rates early in the life of a cluster when raft
+		// leaderships were being determined. Perhaps we could "simply" disable
+		// async writes unless leadership was stable instead, by blocking on the
+		// proposal anyway.
+		// [^4]: https://github.com/cockroachdb/cockroach/blob/ab6a8650621ae798377f12bbfc1eee2fbec95480/pkg/kv/kvserver/replica_application_decoder.go#L100-L114
 		proposals map[kvserverbase.CmdIDKey]*ProposalData
 		// Indicates that the replica is in the process of applying log entries.
 		// Updated to true in handleRaftReady before entries are removed from

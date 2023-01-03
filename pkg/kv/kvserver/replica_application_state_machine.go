@@ -220,30 +220,30 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
-		rejected := cmd.Rejected()
-		higherReproposalsExist := cmd.Cmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
-		if !rejected && higherReproposalsExist {
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
+			// If the command wasn't rejected, we just applied it and no higher
+			// reproposal must exist (since that one may also apply).
+			//
+			// If the command was rejected with ProposalRejectionPermanent, no higher
+			// reproposal should exist (after all, whoever made that reproposal should
+			// also have seen a permanent rejection).
+			//
+			// If it was rejected with ProposalRejectionIllegalLeaseIndex, then the
+			// subsequent call to tryReproposeWithNewLeaseIndex[^1] must have returned an
+			// error (or the proposal would not be IsLocal() now). But that call
+			// cannot return an error for a proposal that is already superseded
+			// initially.
+			//
+			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
+			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index: %+v", cmd)
 		}
-		if !rejected && cmd.proposal.applied {
+		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
 			// application again because it should only be able to apply successfully
 			// once. We expect that when any reproposal for the same command attempts
 			// to apply it will be rejected by the below raft lease sequence or lease
 			// index check in checkForcedErr.
 			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
-		}
-		// If any reproposals at a higher MaxLeaseIndex exist we know that they will
-		// never successfully apply, remove them from the map to avoid future
-		// reproposals. If there is no command referencing this proposal at a higher
-		// MaxLeaseIndex then it will already have been removed (see
-		// shouldRemove in replicaDecoder.retrieveLocalProposals()). It is possible
-		// that a later command in this batch referred to this proposal but it must
-		// have failed because it carried the same MaxLeaseIndex.
-		if higherReproposalsExist {
-			sm.r.mu.Lock()
-			delete(sm.r.mu.proposals, cmd.ID)
-			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true
 	}
