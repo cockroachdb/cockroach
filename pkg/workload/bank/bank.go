@@ -198,10 +198,15 @@ func (b *bank) Ops(
 		WHERE id IN ($1, $2)
 	`)
 	if err != nil {
-		return workload.QueryLoad{}, err
+		return workload.QueryLoad{}, errors.CombineErrors(err, db.Close())
 	}
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{
+		SQLDatabase: sqlDatabase,
+		Close: func(_ context.Context) {
+			_ = db.Close()
+		},
+	}
 	for i := 0; i < b.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(b.seed))
 		hists := reg.GetHandle()
