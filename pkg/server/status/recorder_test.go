@@ -11,6 +11,7 @@
 package status
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 // byTimeAndName is a slice of tspb.TimeSeriesData.
@@ -97,6 +100,62 @@ func (fs fakeStore) Registry() *metric.Registry {
 	return fs.registry
 }
 
+func TestMetricsRecorderTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	nodeDesc := roachpb.NodeDescriptor{
+		NodeID: roachpb.NodeID(1),
+	}
+	reg1 := metric.NewRegistry()
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	st := cluster.MakeTestingClusterSettings()
+	rpcCtx := &rpc.Context{
+		ContextOptions: rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+		},
+	}
+	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, rpcCtx, nil, st)
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+
+	nodeDescTenant := roachpb.NodeDescriptor{
+		NodeID: roachpb.NodeID(1),
+	}
+	reg2 := metric.NewRegistry()
+	stTenant := cluster.MakeTestingClusterSettings()
+	id, err := roachpb.MakeTenantID(123)
+	require.NoError(t, err)
+	rpcCtxTenant := &rpc.Context{
+		ContextOptions: rpc.ContextOptions{
+			TenantID: id,
+		},
+	}
+	recorderTenant := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, rpcCtxTenant, nil, stTenant)
+	recorderTenant.AddNode(reg2, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+
+	g := metric.NewGauge(metric.Metadata{Name: "some_metric"})
+	reg1.AddMetric(g)
+	g.Update(123)
+
+	g2 := metric.NewGauge(metric.Metadata{Name: "some_metric"})
+	reg2.AddMetric(g2)
+	g2.Update(456)
+
+	recorder.AddTenantRecorder(recorderTenant)
+
+	buf := bytes.NewBuffer([]byte{})
+	err = recorder.PrintAsText(buf)
+	require.NoError(t, err)
+
+	require.Contains(t, buf.String(), `some_metric{tenant_id="system"} 123`)
+	require.Contains(t, buf.String(), `some_metric{tenant_id="123"} 456`)
+
+	bufTenant := bytes.NewBuffer([]byte{})
+	err = recorderTenant.PrintAsText(bufTenant)
+	require.NoError(t, err)
+
+	require.NotContains(t, bufTenant.String(), `some_metric{tenant_id="system"} 123`)
+	require.Contains(t, bufTenant.String(), `some_metric{tenant_id="123"} 456`)
+}
+
 // TestMetricsRecorder verifies that the metrics recorder properly formats the
 // statistics from various registries, both for Time Series and for Status
 // Summaries.
@@ -143,7 +202,13 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
 	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, nil, nil, st /* maxOffset */)
+	rpcCtx := &rpc.Context{
+		ContextOptions: rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+		},
+	}
+
+	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, rpcCtx, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")

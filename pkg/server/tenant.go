@@ -141,7 +141,11 @@ func (s *SQLServerWrapper) Drain(
 // The caller is responsible for listening to the server's ShutdownRequested()
 // channel and stopping cfg.stopper when signaled.
 func NewTenantServer(
-	ctx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+	parentRecorder *status.MetricsRecorder,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -154,7 +158,7 @@ func NewTenantServer(
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
 
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, parentRecorder)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +736,11 @@ func (s *SQLServerWrapper) ShutdownRequested() <-chan ShutdownRequest {
 }
 
 func makeTenantSQLServerArgs(
-	startupCtx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
+	startupCtx context.Context,
+	stopper *stop.Stopper,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+	parentRecorder *status.MetricsRecorder,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -866,6 +874,9 @@ func makeTenantSQLServerArgs(
 	protectedTSProvider = tenantProtectedTSProvider{Provider: pp, st: st}
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
+	if parentRecorder != nil {
+		parentRecorder.AddTenantRecorder(recorder)
+	}
 
 	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
 	registry.AddMetricStruct(runtime)
