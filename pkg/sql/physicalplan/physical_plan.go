@@ -156,6 +156,23 @@ var infraPool = sync.Pool{
 	},
 }
 
+// SerialStreamErrorSpec specifies when to error out serial unordered stream
+// execution, and the error to use.
+type SerialStreamErrorSpec struct {
+	// SerialInputIdxExclusiveUpperBound indicates the InputIdx to error out on
+	// should execution fail to halt prior to this input. This is only valid if
+	// non-zero.
+	SerialInputIdxExclusiveUpperBound uint32
+
+	// ExceedsInputIdxExclusiveUpperBoundError is the error to return when
+	// `SerialInputIdxExclusiveUpperBound` - 1 streams have been executed to
+	// completion without satisfying the query.
+	ExceedsInputIdxExclusiveUpperBoundError error
+
+	// Ctx is the context for setting up the Error.
+	Ctx context.Context
+}
+
 // NewPhysicalInfrastructure initializes a PhysicalInfrastructure that can then
 // be used with MakePhysicalPlan.
 func NewPhysicalInfrastructure(
@@ -352,6 +369,7 @@ func (p *PhysicalPlan) MergeResultStreams(
 	destProcessor ProcessorIdx,
 	destInput int,
 	forceSerialization bool,
+	serialStreamErrorSpec SerialStreamErrorSpec,
 ) {
 	proc := &p.Processors[destProcessor]
 	if len(ordering.Columns) > 0 && len(resultRouters) > 1 {
@@ -362,6 +380,16 @@ func (p *PhysicalPlan) MergeResultStreams(
 			// If we're forced to serialize the streams and we have multiple
 			// result routers, we have to use a slower serial unordered sync.
 			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_SERIAL_UNORDERED
+
+			// If the serial unordered stream is limited to executing the first branch
+			// of a locality-optimized search due to the `enforce_home_region` session
+			// flag being set, set up the erroring info in the destination input spec.
+			if serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound > 0 {
+				proc.Spec.Input[destInput].EnforceHomeRegionStreamExclusiveUpperBound =
+					serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound
+				proc.Spec.Input[destInput].EnforceHomeRegionError =
+					execinfrapb.NewError(serialStreamErrorSpec.Ctx, serialStreamErrorSpec.ExceedsInputIdxExclusiveUpperBoundError)
+			}
 		} else {
 			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_PARALLEL_UNORDERED
 		}
@@ -409,7 +437,9 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	pIdx := p.AddProcessor(proc)
 
 	// Connect the result routers to the processor.
-	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
+	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
+		SerialStreamErrorSpec{},
+	)
 
 	// We now have a single result stream.
 	p.ResultRouters = p.ResultRouters[:1]
@@ -999,9 +1029,13 @@ func (p *PhysicalPlan) AddJoinStage(
 
 		// Connect left routers to the processor's first input. Currently the join
 		// node doesn't care about the orderings of the left and right results.
-		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0, false /* forceSerialization */)
+		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0, false, /* forceSerialization */
+			SerialStreamErrorSpec{},
+		)
 		// Connect right routers to the processor's second input if it has one.
-		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1, false /* forceSerialization */)
+		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1, false, /* forceSerialization */
+			SerialStreamErrorSpec{},
+		)
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
@@ -1052,7 +1086,9 @@ func (p *PhysicalPlan) AddStageOnNodes(
 	// Connect the result streams to the processors.
 	for bucket := 0; bucket < len(sqlInstanceIDs); bucket++ {
 		pIdx := ProcessorIdx(pIdxStart + bucket)
-		p.MergeResultStreams(routers, bucket, mergeOrd, pIdx, 0, false /* forceSerialization */)
+		p.MergeResultStreams(routers, bucket, mergeOrd, pIdx, 0, false, /* forceSerialization */
+			SerialStreamErrorSpec{},
+		)
 	}
 
 	// Set the new result routers.
@@ -1146,7 +1182,9 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 // same node. A fix for that is much more complicated, requiring remembering
 // extra state in the PhysicalPlan.
 func (p *PhysicalPlan) EnsureSingleStreamPerNode(
-	forceSerialization bool, post execinfrapb.PostProcessSpec,
+	forceSerialization bool,
+	post execinfrapb.PostProcessSpec,
+	serialStreamErrorSpec SerialStreamErrorSpec,
 ) {
 	// Fast path - check if we need to do anything.
 	var nodes intsets.Fast
@@ -1199,7 +1237,9 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(
 			},
 		}
 		mergedProcIdx := p.AddProcessor(proc)
-		p.MergeResultStreams(streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx, 0 /* destInput */, forceSerialization)
+		p.MergeResultStreams(streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx,
+			0 /* destInput */, forceSerialization, serialStreamErrorSpec,
+		)
 		p.ResultRouters[i] = mergedProcIdx
 	}
 }

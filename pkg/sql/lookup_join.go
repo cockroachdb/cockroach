@@ -72,6 +72,11 @@ type lookupJoinNode struct {
 	reqOrdering ReqOrdering
 
 	limitHint int64
+
+	// remoteOnlyLookups is true when this join is defined with only lookups
+	// that read into remote regions, though the lookups are defined in
+	// lookupExpr, not remoteLookupExpr.
+	remoteOnlyLookups bool
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {
