@@ -88,7 +88,13 @@ type serverEntry struct {
 // If the specified tenant name is invalid (tenant does not exist or
 // is not active), the returned error will contain the
 // ErrInvalidTenant mark, which can be checked with errors.Is.
-type newServerFn func(ctx context.Context, tenantName roachpb.TenantName, index int, deregister func()) (onDemandServer, error)
+type newServerFn func(
+	ctx context.Context,
+	tenantName roachpb.TenantName,
+	index int,
+	deregister func(),
+	opts *BaseConfig,
+) (onDemandServer, error)
 
 // serverController manages a fleet of multiple servers side-by-side.
 // They are instantiated on demand the first time they are accessed.
@@ -100,6 +106,10 @@ type serverController struct {
 
 	// stopper is the parent stopper.
 	stopper *stop.Stopper
+
+	// tenantBaseCfg allows overriding of the baseCfg for all new tenants.
+	// Used for testing.
+	tenantBaseCfg *BaseConfig
 
 	mu struct {
 		syncutil.Mutex
@@ -159,7 +169,7 @@ func (c *serverController) getOrCreateServer(
 	// Server does not exist yet: instantiate and start it.
 	c.mu.nextServerIdx++
 	idx := c.mu.nextServerIdx
-	s, err := c.newServerFn(ctx, tenantName, idx, deregisterFn)
+	s, err := c.newServerFn(ctx, tenantName, idx, deregisterFn, c.tenantBaseCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +470,11 @@ var ErrInvalidTenant error = errInvalidTenantMarker{}
 // is not active), the returned error will contain the
 // ErrInvalidTenant mark, which can be checked with errors.Is.
 func (s *Server) newServerForTenant(
-	ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
+	ctx context.Context,
+	tenantName roachpb.TenantName,
+	index int,
+	deregister func(),
+	baseCfg *BaseConfig,
 ) (onDemandServer, error) {
 	// Look up the ID of the requested tenant.
 	//
@@ -488,7 +502,7 @@ func (s *Server) newServerForTenant(
 	}
 
 	// Start the tenant server.
-	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index)
+	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index, baseCfg)
 	if err != nil {
 		// Abandon any work done so far.
 		tenantStopper.Stop(ctx)
@@ -556,7 +570,7 @@ func (t *systemServerWrapper) testingGetSQLAddr() string {
 // simultaneously running server. This can be used to allocate
 // distinct but predictable network listeners.
 func (s *Server) startInMemoryTenantServerInternal(
-	ctx context.Context, tenantID roachpb.TenantID, index int,
+	ctx context.Context, tenantID roachpb.TenantID, index int, baseCfgOverride *BaseConfig,
 ) (stopper *stop.Stopper, tenantServer *SQLServerWrapper, err error) {
 	stopper = stop.NewStopper()
 
@@ -567,6 +581,9 @@ func (s *Server) startInMemoryTenantServerInternal(
 	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, index, parentCfg, stopper)
 	if err != nil {
 		return stopper, nil, err
+	}
+	if baseCfgOverride != nil {
+		baseCfg = *baseCfgOverride
 	}
 
 	// Create a child stopper for this tenant's server.

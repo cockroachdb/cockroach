@@ -444,6 +444,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 							},
 						},
 					},
+					InProcessTenant: c.demoCtx.InProcessTenant,
 				})
 				c.stopper.AddCloser(stop.CloserFn(func() {
 					stopCtx := context.Background()
