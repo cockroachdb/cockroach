@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -78,7 +79,7 @@ func makeTestConfig(st *cluster.Settings, tr *tracing.Tracer) Config {
 	return Config{
 		BaseConfig: makeTestBaseConfig(st, tr),
 		KVConfig:   makeTestKVConfig(),
-		SQLConfig:  makeTestSQLConfig(st, roachpb.SystemTenantID),
+		SQLConfig:  makeTestSQLConfig(st, roachpb.SystemTenantID, catconstants.SystemTenantName),
 	}
 }
 
@@ -117,8 +118,10 @@ func makeTestKVConfig() KVConfig {
 	return kvCfg
 }
 
-func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
-	return MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
+func makeTestSQLConfig(
+	st *cluster.Settings, tenID roachpb.TenantID, tenantName roachpb.TenantName,
+) SQLConfig {
+	return MakeSQLConfig(tenID, tenantName, base.DefaultTestTempStorageConfig(st))
 }
 
 func initTraceDir(dir string) error {
@@ -886,7 +889,7 @@ func (ts *TestServer) StartTenant(
 	}
 
 	st.ExternalIODir = params.ExternalIODir
-	sqlCfg := makeTestSQLConfig(st, params.TenantID)
+	sqlCfg := makeTestSQLConfig(st, params.TenantID, params.TenantName)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
 	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	if params.MemoryPoolSize != 0 {
@@ -991,6 +994,7 @@ func (ts *TestServer) StartTenant(
 		stopper,
 		baseCfg,
 		sqlCfg,
+		ts.recorder,
 	)
 	if err != nil {
 		return nil, err

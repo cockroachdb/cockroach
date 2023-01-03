@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -446,6 +447,9 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
+	// Then tenant name that the SQL server should identify as.
+	TenantName roachpb.TenantName
+
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
@@ -481,9 +485,12 @@ type SQLConfig struct {
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
-func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig) SQLConfig {
+func MakeSQLConfig(
+	tenID roachpb.TenantID, tenantName roachpb.TenantName, tempStorageCfg base.TempStorageConfig,
+) SQLConfig {
 	sqlCfg := SQLConfig{
-		TenantID: tenID,
+		TenantID:   tenID,
+		TenantName: tenantName,
 	}
 	sqlCfg.SetDefaults(tempStorageCfg)
 	return sqlCfg
@@ -493,7 +500,8 @@ func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig
 // multiple times.
 func (sqlCfg *SQLConfig) SetDefaults(tempStorageCfg base.TempStorageConfig) {
 	tenID := sqlCfg.TenantID
-	*sqlCfg = SQLConfig{TenantID: tenID}
+	tenantName := sqlCfg.TenantName
+	*sqlCfg = SQLConfig{TenantID: tenID, TenantName: tenantName}
 	sqlCfg.MemoryPoolSize = defaultSQLMemoryPoolSize
 	sqlCfg.TableStatCacheSize = defaultSQLTableStatCacheSize
 	sqlCfg.QueryCacheSize = defaultSQLQueryCacheSize
@@ -531,7 +539,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 // MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
-	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
+	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, catconstants.SystemTenantName, tempStorageCfg)
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 	baseCfg := MakeBaseConfig(st, tr, storeSpec)
 	kvCfg := MakeKVConfig()

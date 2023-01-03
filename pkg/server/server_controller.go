@@ -581,7 +581,7 @@ func (s *Server) newServerForTenant(
 	}
 
 	// Start the tenant server.
-	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index)
+	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, tenantName, index)
 	if err != nil {
 		// Abandon any work done so far.
 		tenantStopper.Stop(ctx)
@@ -673,7 +673,7 @@ func (t *systemServerWrapper) serveConn(
 // simultaneously running server. This can be used to allocate
 // distinct but predictable network listeners.
 func (s *Server) startInMemoryTenantServerInternal(
-	ctx context.Context, tenantID roachpb.TenantID, index int,
+	ctx context.Context, tenantID roachpb.TenantID, tenantName roachpb.TenantName, index int,
 ) (stopper *stop.Stopper, tenantServer *SQLServerWrapper, err error) {
 	stopper = stop.NewStopper()
 
@@ -681,7 +681,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 	// TODO(knz): Maybe enforce the SQL Instance ID to be equal to the KV node ID?
 	// See: https://github.com/cockroachdb/cockroach/issues/84602
 	parentCfg := s.cfg
-	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, index, parentCfg, stopper)
+	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, tenantName, index, parentCfg, stopper)
 	if err != nil {
 		return stopper, nil, err
 	}
@@ -698,7 +698,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg)
+	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder)
 	if err != nil {
 		return stopper, tenantServer, err
 	}
@@ -734,6 +734,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 func makeInMemoryTenantServerConfig(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
+	tenantName roachpb.TenantName,
 	index int,
 	kvServerCfg Config,
 	stopper *stop.Stopper,
@@ -853,7 +854,7 @@ func makeInMemoryTenantServerConfig(
 		}
 	}
 
-	sqlCfg = MakeSQLConfig(tenantID, tempStorageCfg)
+	sqlCfg = MakeSQLConfig(tenantID, tenantName, tempStorageCfg)
 
 	// Split for each tenant, see https://github.com/cockroachdb/cockroach/issues/84588.
 	sqlCfg.ExternalIODirConfig = kvServerCfg.SQLConfig.ExternalIODirConfig
