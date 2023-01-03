@@ -109,7 +109,7 @@ var _ upgrade.JobDeps = (*Manager)(nil)
 
 // safeToUpgradeTenant ensures that we don't allow for tenant upgrade if it's
 // not safe to do so. Safety is defined as preventing a secondary tenant's
-// cluster version from ever exceeding the host cluster version. It is always
+// cluster version from ever exceeding the storage cluster version. It is always
 // safe to upgrade the system tenant.
 func safeToUpgradeTenant(
 	ctx context.Context,
@@ -125,33 +125,33 @@ func safeToUpgradeTenant(
 	if overrides == nil {
 		return false, errors.AssertionFailedf("overrides informer is nil in secondary tenant")
 	}
-	hostClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
-	if hostClusterVersion.Less(tenantClusterVersion.Version) {
+	storageClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
+	if storageClusterVersion.Less(tenantClusterVersion.Version) {
 		// We assert here if we find a tenant with a higher cluster version than
-		// the host cluster. It's dangerous to run in this mode because the
-		// tenant may expect upgrades to be present on the host cluster which
+		// the storage cluster. It's dangerous to run in this mode because the
+		// tenant may expect upgrades to be present on the storage cluster which
 		// haven't yet been run. It's also not clear how we could get into this
 		// state, since a tenant can't be created at a higher level
-		// than the host cluster, and will be prevented from upgrading beyond
-		// the host cluster version by the code below.
+		// than the storage cluster, and will be prevented from upgrading beyond
+		// the storage cluster version by the code below.
 		return false, errors.AssertionFailedf("tenant found at higher cluster version "+
-			"than host cluster: host cluster at version %v, tenant at version"+
-			" %v.", hostClusterVersion, tenantClusterVersion)
+			"than storage cluster: storage cluster at version %v, tenant at version"+
+			" %v.", storageClusterVersion, tenantClusterVersion)
 	}
-	if tenantClusterVersion == hostClusterVersion {
+	if tenantClusterVersion == storageClusterVersion {
 		// The cluster version of the tenant is equal to the cluster version of
-		// the host cluster. If we allow the upgrade it will push the tenant
-		// to a higher cluster version than the host cluster. Block the upgrade.
+		// the storage cluster. If we allow the upgrade it will push the tenant
+		// to a higher cluster version than the storage cluster. Block the upgrade.
 		return false, errors.Newf("preventing tenant upgrade from running "+
-			"as the host cluster has not yet been upgraded: "+
-			"host cluster version = %v, tenant cluster version = %v",
-			hostClusterVersion, tenantClusterVersion)
+			"as the storage cluster has not yet been upgraded: "+
+			"storage cluster version = %v, tenant cluster version = %v",
+			storageClusterVersion, tenantClusterVersion)
 	}
 
-	// The cluster version of the tenant is less than that of the host
+	// The cluster version of the tenant is less than that of the storage
 	// cluster. It's safe to run the upgrade.
-	log.Infof(ctx, "safe to upgrade tenant: host cluster at version %v, tenant at version"+
-		" %v", hostClusterVersion, tenantClusterVersion)
+	log.Infof(ctx, "safe to upgrade tenant: storage cluster at version %v, tenant at version"+
+		" %v", storageClusterVersion, tenantClusterVersion)
 	return true, nil
 }
 
