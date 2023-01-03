@@ -2235,6 +2235,7 @@ system         public        sql_instances                    addr              
 system         public        sql_instances                    id                                                                                                        1
 system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3
+system         public        sql_instances                    sql_addr                                                                                                  5
 system         public        sqlliveness                      expiration                                                                                                2
 system         public        sqlliveness                      session_id                                                                                                1
 system         public        statement_bundle_chunks          data                                                                                                      3
