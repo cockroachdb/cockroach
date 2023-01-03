@@ -777,6 +777,10 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
+	if params.TenantName == "" {
+		params.TenantName = roachpb.TenantName(fmt.Sprintf("test-%s", params.TenantID.String()))
+	}
+
 	// Determine if we need to create the tenant before starting it.
 	if !params.DisableCreateTenant {
 		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
@@ -797,7 +801,7 @@ func (ts *TestServer) StartTenant(
 			}
 		} else if params.TenantName != "" {
 			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, "rename-test-tenant", nil,
-				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID, params.TenantName)
+				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID.ToUint64(), params.TenantName)
 			if err != nil {
 				return nil, err
 			}
@@ -871,95 +875,116 @@ func (ts *TestServer) StartTenant(
 		stopper.SetTracer(tr)
 	}
 
-	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
-	baseCfg.TestingKnobs = params.TestingKnobs
-	baseCfg.Insecure = params.ForceInsecure
-	baseCfg.Locality = params.Locality
-	baseCfg.HeapProfileDirName = params.HeapProfileDirName
-	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
-	baseCfg.ClusterName = ts.Cfg.ClusterName
-	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
-	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
-	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
+	if !params.InProcessTenant {
+		baseCfg := makeTestBaseConfig(st, stopper.Tracer())
+		baseCfg.TestingKnobs = params.TestingKnobs
+		baseCfg.Insecure = params.ForceInsecure
+		baseCfg.Locality = params.Locality
+		baseCfg.HeapProfileDirName = params.HeapProfileDirName
+		baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
+		baseCfg.ClusterName = ts.Cfg.ClusterName
+		baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
+		baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
+		baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
-	// For now, we don't support split RPC/SQL ports for secondary tenants
-	// in test servers.
-	// TODO(knz): Lift this limitation. It seems arbitrary.
-	baseCfg.SplitListenSQL = false
-
-	localNodeIDContainer := &base.NodeIDContainer{}
-	localNodeIDContainer.Set(ctx, ts.NodeID())
-	blobClientFactory := blobs.NewBlobClientFactory(
-		localNodeIDContainer,
-		ts.Server.nodeDialer,
-		params.ExternalIODir,
-	)
-	tk := &baseCfg.TestingKnobs
-	if serverKnobs, ok := tk.Server.(*TestingKnobs); ok {
-		serverKnobs.BlobClientFactory = blobClientFactory
-	} else {
-		tk.Server = &TestingKnobs{
-			BlobClientFactory: blobClientFactory,
-		}
-	}
-
-	if params.SSLCertsDir != "" {
-		baseCfg.SSLCertsDir = params.SSLCertsDir
-	}
-	if params.StartingRPCAndSQLPort > 0 {
+		// For now, we don't support split RPC/SQL ports for secondary tenants
+		// in test servers.
+		// TODO(knz): Lift this limitation. It seems arbitrary.
 		baseCfg.SplitListenSQL = false
-		addr, _, err := addrutil.SplitHostPort(baseCfg.Addr, strconv.Itoa(params.StartingRPCAndSQLPort))
+
+		localNodeIDContainer := &base.NodeIDContainer{}
+		localNodeIDContainer.Set(ctx, ts.NodeID())
+		blobClientFactory := blobs.NewBlobClientFactory(
+			localNodeIDContainer,
+			ts.Server.nodeDialer,
+			params.ExternalIODir,
+		)
+		tk := &baseCfg.TestingKnobs
+		if serverKnobs, ok := tk.Server.(*TestingKnobs); ok {
+			serverKnobs.BlobClientFactory = blobClientFactory
+		} else {
+			tk.Server = &TestingKnobs{
+				BlobClientFactory: blobClientFactory,
+			}
+		}
+
+		if params.SSLCertsDir != "" {
+			baseCfg.SSLCertsDir = params.SSLCertsDir
+		}
+		if params.StartingRPCAndSQLPort > 0 {
+			baseCfg.SplitListenSQL = false
+			addr, _, err := addrutil.SplitHostPort(baseCfg.Addr, strconv.Itoa(params.StartingRPCAndSQLPort))
+			if err != nil {
+				return nil, err
+			}
+			newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingRPCAndSQLPort+int(params.TenantID.ToUint64())))
+			baseCfg.Addr = newAddr
+			baseCfg.AdvertiseAddr = newAddr
+			baseCfg.SQLAddr = newAddr
+			baseCfg.SQLAdvertiseAddr = newAddr
+		}
+		if params.StartingHTTPPort > 0 {
+			addr, _, err := addrutil.SplitHostPort(baseCfg.HTTPAddr, strconv.Itoa(params.StartingHTTPPort))
+			if err != nil {
+				return nil, err
+			}
+			newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingHTTPPort+int(params.TenantID.ToUint64())))
+			baseCfg.HTTPAddr = newAddr
+			baseCfg.HTTPAdvertiseAddr = newAddr
+		}
+		sw, err := NewTenantServer(
+			ctx,
+			stopper,
+			baseCfg,
+			sqlCfg,
+		)
 		if err != nil {
 			return nil, err
 		}
-		newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingRPCAndSQLPort+int(params.TenantID.ToUint64())))
-		baseCfg.Addr = newAddr
-		baseCfg.AdvertiseAddr = newAddr
-		baseCfg.SQLAddr = newAddr
-		baseCfg.SQLAdvertiseAddr = newAddr
-	}
-	if params.StartingHTTPPort > 0 {
-		addr, _, err := addrutil.SplitHostPort(baseCfg.HTTPAddr, strconv.Itoa(params.StartingHTTPPort))
-		if err != nil {
+		go func() {
+			// If the server requests a shutdown, do that simply by stopping the
+			// tenant's stopper.
+			select {
+			case <-sw.ShutdownRequested():
+				stopper.Stop(sw.AnnotateCtx(context.Background()))
+			case <-stopper.ShouldQuiesce():
+			}
+		}()
+
+		if err := sw.Start(ctx); err != nil {
 			return nil, err
 		}
-		newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingHTTPPort+int(params.TenantID.ToUint64())))
-		baseCfg.HTTPAddr = newAddr
-		baseCfg.HTTPAdvertiseAddr = newAddr
+
+		hts := &httpTestServer{}
+		hts.t.authentication = sw.authentication
+		hts.t.sqlServer = sw.sqlServer
+
+		return &TestTenant{
+			SQLServer:      sw.sqlServer,
+			Cfg:            &baseCfg,
+			httpTestServer: hts,
+			drain:          sw.drainServer,
+		}, err
 	}
-	sw, err := NewTenantServer(
-		ctx,
-		stopper,
-		baseCfg,
-		sqlCfg,
-	)
+
+	onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		// If the server requests a shutdown, do that simply by stopping the
-		// tenant's stopper.
-		select {
-		case <-sw.ShutdownRequested():
-			stopper.Stop(sw.AnnotateCtx(context.Background()))
-		case <-stopper.ShouldQuiesce():
-		}
-	}()
-
-	if err := sw.Start(ctx); err != nil {
-		return nil, err
-	}
+	sw := onDemandServer.(*tenantServerWrapper)
 
 	hts := &httpTestServer{}
-	hts.t.authentication = sw.authentication
-	hts.t.sqlServer = sw.sqlServer
+	hts.t.authentication = sw.server.authentication
+	hts.t.sqlServer = sw.server.sqlServer
+	hts.t.tenantName = params.TenantName
 
 	return &TestTenant{
-		SQLServer:      sw.sqlServer,
-		Cfg:            &baseCfg,
+		SQLServer:      sw.server.sqlServer,
+		Cfg:            sw.server.sqlServer.cfg,
 		httpTestServer: hts,
-		drain:          sw.drainServer,
+		drain:          sw.server.drainServer,
 	}, err
+
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
