@@ -3200,4 +3200,7 @@ message ScanStats {
   uint64 value_bytes = 8;
   uint64 point_count = 9;
   uint64 points_covered_by_range_tombstones = 10;
+  uint64 range_key_count = 11;
+  uint64 range_key_contained_points = 12;
+  uint64 range_key_skipped_points = 13;
 }
