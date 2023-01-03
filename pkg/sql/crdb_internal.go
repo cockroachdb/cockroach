@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -3982,9 +3983,13 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		}
 
 		alive := make(map[roachpb.NodeID]tree.DBool)
+		now := timeutil.Now()
 		for _, d := range descriptors {
-			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
-				alive[d.NodeID] = true
+			var gossipLiveness livenesspb.Liveness
+			if err := g.GetInfoProto(gossip.MakeNodeLivenessKey(d.NodeID), &gossipLiveness); err == nil {
+				if now.Before(gossipLiveness.Expiration.ToTimestamp().GoTime()) {
+					alive[d.NodeID] = true
+				}
 			}
 		}
 
@@ -4283,26 +4288,9 @@ CREATE TABLE crdb_internal.gossip_network (
   source_id       INT NOT NULL,    -- source node of a gossip connection
   target_id       INT NOT NULL     -- target node of a gossip connection
 )
-	`,
+`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_network"); err != nil {
-			return err
-		}
-
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
-		if err != nil {
-			return err
-		}
-
-		c := g.Connectivity()
-		for _, conn := range c.ClientConns {
-			if err := addRow(
-				tree.NewDInt(tree.DInt(conn.SourceID)),
-				tree.NewDInt(tree.DInt(conn.TargetID)),
-			); err != nil {
-				return err
-			}
-		}
+		p.BufferClientNotice(ctx, pgnotice.Newf("This table is no longer supported/populated, and will be removed in a future version."))
 		return nil
 	},
 }

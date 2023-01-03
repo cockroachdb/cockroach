@@ -78,7 +78,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt... done
-[node 1] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/1/crdb_internal.gossip_network.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
@@ -177,9 +176,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 2] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/2/crdb_internal.gossip_liveness.txt...
 [node 2] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: dial tcp ...
 [node 2] retrieving SQL data for crdb_internal.gossip_liveness: creating error output: debug/nodes/2/crdb_internal.gossip_liveness.txt.err.txt... done
-[node 2] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/2/crdb_internal.gossip_network.txt...
-[node 2] retrieving SQL data for crdb_internal.gossip_network: last request failed: dial tcp ...
-[node 2] retrieving SQL data for crdb_internal.gossip_network: creating error output: debug/nodes/2/crdb_internal.gossip_network.txt.err.txt... done
 [node 2] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/2/crdb_internal.gossip_nodes.txt...
 [node 2] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: dial tcp ...
 [node 2] retrieving SQL data for crdb_internal.gossip_nodes: creating error output: debug/nodes/2/crdb_internal.gossip_nodes.txt.err.txt... done
@@ -261,7 +257,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 3] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/3/crdb_internal.feature_usage.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/3/crdb_internal.gossip_alerts.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/3/crdb_internal.gossip_liveness.txt... done
-[node 3] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/3/crdb_internal.gossip_network.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/3/crdb_internal.gossip_nodes.txt... done
 [node 3] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/3/crdb_internal.leases.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/3/crdb_internal.node_build_info.txt... done
