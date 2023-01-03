@@ -420,26 +420,59 @@ func (r *Registry) runJob(
 		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
 
-	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
 	r.maybeRecordExecutionFailure(ctx, err, job)
+	// NB: After this point, the job may no longer have the claim
+	// and further updates to the job record from this node may
+	// fail.
+	r.maybeClearLease(job, err)
+	r.maybeDumpTrace(ctx, resumer, int64(job.ID()), int64(span.TraceID()), err)
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine()
 	}
 	return err
 }
 
+const clearClaimQuery = `
+   UPDATE system.jobs
+      SET claim_session_id = NULL, claim_instance_id = NULL
+    WHERE id = $1
+      AND claim_session_id = $2
+      AND claim_instance_id = $3`
+
+// maybeClearLease clears the claim on the given job, provided that
+// the current lease matches our liveness Session.
+func (r *Registry) maybeClearLease(job *Job, jobErr error) {
+	if jobErr == nil {
+		return
+	}
+	r.clearLeaseForJobID(job.ID(), nil /* txn */)
+}
+
+func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, txn *kv.Txn) {
+	// We use the serverCtx here rather than the context from the
+	// caller since the caller's context may have been canceled.
+	r.withSession(r.serverCtx, func(ctx context.Context, s sqlliveness.Session) {
+		n, err := r.ex.ExecEx(ctx, "clear-job-claim", txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
+		if err != nil {
+			log.Warningf(ctx, "could not clear job claim: %s", err.Error())
+			return
+		}
+		log.VEventf(ctx, 2, "cleared leases for %d jobs", n)
+	})
+}
+
 const pauseAndCancelUpdate = `
    UPDATE system.jobs
-      SET status = 
+      SET status =
           CASE
 						 WHEN status = '` + string(StatusPauseRequested) + `' THEN '` + string(StatusPaused) + `'
 						 WHEN status = '` + string(StatusCancelRequested) + `' THEN '` + string(StatusReverting) + `'
 						 ELSE status
           END,
 					num_runs = 0,
-					last_run = NULL,
-          claim_session_id = NULL,
-          claim_instance_id = NULL
+					last_run = NULL
     WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
 RETURNING id, status
@@ -469,11 +502,26 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			statusString := *row[1].(*tree.DString)
 			switch Status(statusString) {
 			case StatusPaused:
-				r.cancelRegisteredJobContext(id)
+				if !r.cancelRegisteredJobContext(id) {
+					// If we didn't already have a running job for this lease,
+					// clear out the lease here since it won't be cleared be
+					// cleared out on Resume exit.
+					r.clearLeaseForJobID(id, txn)
+				}
 				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
 				if err := job.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-					r.cancelRegisteredJobContext(id)
+					if !r.cancelRegisteredJobContext(id) {
+						// If we didn't already have a running job for this
+						// lease, clear out the lease here since it won't be
+						// cleared be cleared out on Resume exit.
+						//
+						// NB: This working as part of the update depends on
+						// the fact that the job struct does not have a
+						// claim set and thus won't validate the claim on
+						// update.
+						r.clearLeaseForJobID(id, txn)
+					}
 					md.Payload.Error = errJobCanceled.Error()
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr

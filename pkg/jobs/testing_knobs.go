@@ -71,6 +71,9 @@ type TestingKnobs struct {
 
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
+
+	// DisableRegistryLifecycleManagement
+	DisableRegistryLifecycleManagent bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
