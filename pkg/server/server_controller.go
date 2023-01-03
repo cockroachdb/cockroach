@@ -74,6 +74,15 @@ type serverEntry struct {
 	// server is the actual server.
 	server onDemandServer
 
+	// nameContainer holds a shared reference to the current
+	// name of the tenant within this serverEntry. If the
+	// tenant's name is updated, the `Set` method on
+	// nameContainer should be called in order to update
+	// any subscribers within the tenant. These are typically
+	// observability-related features that label data with
+	// the current tenant name.
+	nameContainer *roachpb.TenantNameContainer
+
 	// shouldStop indicates whether shutting down the controller
 	// should cause this server to stop. This is true for all
 	// servers except the one serving the system tenant.
@@ -94,7 +103,7 @@ type serverEntry struct {
 // ErrInvalidTenant mark, which can be checked with errors.Is.
 type newServerFn func(
 	ctx context.Context,
-	tenantName roachpb.TenantName,
+	tenantNameContainer *roachpb.TenantNameContainer,
 	index int,
 	deregister func(),
 ) (onDemandServer, error)
@@ -142,8 +151,9 @@ func newServerController(
 	}
 	c.mu.servers = map[roachpb.TenantName]serverEntry{
 		catconstants.SystemTenantName: {
-			server:     systemServer,
-			shouldStop: false,
+			server:        systemServer,
+			shouldStop:    false,
+			nameContainer: roachpb.NewTenantNameContainer(catconstants.SystemTenantName),
 		},
 	}
 	parentStopper.AddCloser(c)
@@ -173,13 +183,15 @@ func (c *serverController) getOrCreateServer(
 	// Server does not exist yet: instantiate and start it.
 	c.mu.nextServerIdx++
 	idx := c.mu.nextServerIdx
-	s, err := c.newServerFn(ctx, tenantName, idx, deregisterFn)
+	nameContainer := roachpb.NewTenantNameContainer(tenantName)
+	s, err := c.newServerFn(ctx, nameContainer, idx, deregisterFn)
 	if err != nil {
 		return nil, err
 	}
 	c.mu.servers[tenantName] = serverEntry{
-		server:     s,
-		shouldStop: true,
+		server:        s,
+		shouldStop:    true,
+		nameContainer: nameContainer,
 	}
 	return s, nil
 }
@@ -553,8 +565,13 @@ var ErrInvalidTenant error = errInvalidTenantMarker{}
 // is not active), the returned error will contain the
 // ErrInvalidTenant mark, which can be checked with errors.Is.
 func (s *Server) newServerForTenant(
-	ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
+	ctx context.Context,
+	tenantNameContainer *roachpb.TenantNameContainer,
+	index int,
+	deregister func(),
 ) (onDemandServer, error) {
+	tenantName := tenantNameContainer.Get()
+
 	// Look up the ID of the requested tenant.
 	//
 	// TODO(knz): use a flag or capability to decide whether to start in-memory.
@@ -581,7 +598,7 @@ func (s *Server) newServerForTenant(
 	}
 
 	// Start the tenant server.
-	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index)
+	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, tenantNameContainer, index)
 	if err != nil {
 		// Abandon any work done so far.
 		tenantStopper.Stop(ctx)
@@ -673,7 +690,10 @@ func (t *systemServerWrapper) serveConn(
 // simultaneously running server. This can be used to allocate
 // distinct but predictable network listeners.
 func (s *Server) startInMemoryTenantServerInternal(
-	ctx context.Context, tenantID roachpb.TenantID, index int,
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	tenantNameContainer *roachpb.TenantNameContainer,
+	index int,
 ) (stopper *stop.Stopper, tenantServer *SQLServerWrapper, err error) {
 	stopper = stop.NewStopper()
 
@@ -698,7 +718,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg)
+	tenantServer, err = NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer)
 	if err != nil {
 		return stopper, tenantServer, err
 	}

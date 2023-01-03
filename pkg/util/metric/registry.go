@@ -59,6 +59,16 @@ func (r *Registry) AddLabel(name, value string) {
 		})
 }
 
+func (r *Registry) UpdateLabel(name, value string) {
+	r.Lock()
+	defer r.Unlock()
+	for _, l := range r.labels {
+		if l.GetName() == exportedLabel(name) {
+			l.Value = proto.String(value)
+		}
+	}
+}
+
 func (r *Registry) getLabels() []*prometheusgo.LabelPair {
 	r.Lock()
 	defer r.Unlock()

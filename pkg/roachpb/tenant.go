@@ -17,6 +17,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -180,4 +181,53 @@ func (n TenantName) IsValid() error {
 			"Tenant names must start and end with a lowercase letter or digit, contain only lowercase letters, digits or hyphens, with a maximum of 100 characters.")
 	}
 	return nil
+}
+
+// TenantNameContainer is a shared object between the
+// server controller and the tenant server that holds
+// a reference to the current name of the tenant and
+// updates it if needed. This facilitates some
+// observability use cases where we need to tag data
+// by tenant name.
+type TenantNameContainer struct {
+	syncutil.Mutex
+
+	// tenantName is the currently active name for this
+	// tenantContainer. It may be updated at runtime and
+	// should be accessed dynamically via `Get` or a
+	// consumer can subscribe to updates via `AddCallback`.
+	tenantName TenantName
+
+	// updateCallbacks are executed when `Set` is called
+	// with a new TenantName. Callbacks *must not* reference
+	// this container since the lock will be held until all
+	// callbacks finish executing.
+	updateCallbacks []func(TenantName)
+}
+
+func NewTenantNameContainer(name TenantName) *TenantNameContainer {
+	t := &TenantNameContainer{}
+	t.tenantName = name
+	return t
+}
+
+func (c *TenantNameContainer) Set(name TenantName) {
+	c.Lock()
+	defer c.Unlock()
+	c.tenantName = name
+	for _, f := range c.updateCallbacks {
+		f(c.tenantName)
+	}
+}
+
+func (c *TenantNameContainer) AddCallback(f func(TenantName)) {
+	c.Lock()
+	defer c.Unlock()
+	c.updateCallbacks = append(c.updateCallbacks, f)
+}
+
+func (c *TenantNameContainer) Get() TenantName {
+	c.Lock()
+	defer c.Unlock()
+	return c.tenantName
 }

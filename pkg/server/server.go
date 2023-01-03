@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
@@ -717,7 +718,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
 
-	recorder := status.NewMetricsRecorder(clock, nodeLiveness, rpcContext, g, st)
+	recorder := status.NewMetricsRecorder(
+		clock,
+		nodeLiveness,
+		rpcContext,
+		g,
+		st,
+		roachpb.NewTenantNameContainer(catconstants.SystemTenantName),
+	)
 	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
 
 	updates := &diagnostics.UpdateChecker{
