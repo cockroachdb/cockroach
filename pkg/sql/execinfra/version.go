@@ -64,17 +64,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 70
+const Version execinfrapb.DistSQLVersion = 71
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 70
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 71
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 71 (MinAcceptedVersion: 71)
+  - On-wire representation of booleans and bytes-like values in the Arrow format
+    has changed.
 
 - Version: 70 (MinAcceptedVersion: 70)
   - HashGroupJoinerSpec has been introduced.

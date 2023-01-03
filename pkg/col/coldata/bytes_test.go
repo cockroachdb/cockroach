@@ -510,12 +510,12 @@ func TestProportionalSize(t *testing.T) {
 
 const letters = "abcdefghijklmnopqrstuvwxyz"
 
-func TestToArrowSerializationFormat(t *testing.T) {
+func TestArrowConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	rng, _ := randutil.NewTestRand()
 	nullChance := 0.2
-	maxStringLength := 10
+	maxStringLength := BytesMaxInlineLength * 2
 	numElements := 1 + rng.Intn(BatchSize())
 
 	b := NewBytes(numElements)
@@ -527,16 +527,23 @@ func TestToArrowSerializationFormat(t *testing.T) {
 		b.Set(i, element)
 	}
 
-	startIdx := rng.Intn(numElements)
-	endIdx := startIdx + rng.Intn(numElements-startIdx)
-	if endIdx == startIdx {
-		endIdx++
+	source := b
+	if rng.Float64() < 0.5 {
+		// Sometimes use a window into Bytes to increase test coverage.
+		startIdx := rng.Intn(numElements)
+		endIdx := startIdx + rng.Intn(numElements-startIdx)
+		if endIdx == startIdx {
+			endIdx++
+		}
+		source = b.Window(startIdx, endIdx)
 	}
-	wind := b.Window(startIdx, endIdx)
+	n := source.Len()
 
-	data, offsets := wind.ToArrowSerializationFormat(wind.Len())
+	var data []byte
+	var offsets []int32
+	data, offsets = source.Serialize(n, data, offsets)
 
-	require.Equal(t, wind.Len(), len(offsets)-1)
+	require.Equal(t, n, len(offsets)-1)
 	require.Equal(t, int32(0), offsets[0])
 	require.Equal(t, len(data), int(offsets[len(offsets)-1]))
 
@@ -545,15 +552,26 @@ func TestToArrowSerializationFormat(t *testing.T) {
 		require.GreaterOrEqualf(t, offsets[i], offsets[i-1], "unexpectedly found decreasing offsets: %v", offsets)
 	}
 
+	converted := NewBytes(n)
+	if rng.Float64() < 0.5 {
+		// Make a copy sometimes to simulate data and offsets being sent across
+		// the wire.
+		data = append([]byte(nil), data...)
+		offsets = append([]int32(nil), offsets...)
+	}
+	converted.Deserialize(data, offsets)
 	// Verify that the data contains the correct values.
-	for i := 0; i < len(offsets)-1; i++ {
-		element := data[offsets[i]:offsets[i+1]]
-		if len(element) == 0 {
-			// Bytes.Get returns a nil []byte value for NULL values whereas the
-			// slicing above will make it a zero-length []byte value. Override
-			// the latter to the former.
-			element = nil
+	for i := 0; i < n; i++ {
+		expected, actual := source.Get(i), converted.Get(i)
+		// When values are NULL or zero-length, they can have different
+		// representations ([]byte{nil} and []byte{}), so we convert both to the
+		// former.
+		if len(expected) == 0 {
+			expected = nil
 		}
-		require.Equal(t, wind.Get(i), element)
+		if len(actual) == 0 {
+			actual = nil
+		}
+		require.Equal(t, expected, actual)
 	}
 }

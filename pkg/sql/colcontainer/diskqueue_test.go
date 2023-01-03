@@ -232,7 +232,8 @@ func BenchmarkDiskQueue(b *testing.B) {
 
 	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int}
-	batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
+	args := coldatatestutils.RandomVecArgs{Rand: rng}
+	batch := coldatatestutils.RandomBatch(testAllocator, args, typs, coldata.BatchSize(), 0 /* length */)
 	op := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {

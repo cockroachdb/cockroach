@@ -13,6 +13,7 @@ package coldata
 import (
 	"encoding/binary"
 	"fmt"
+	"reflect"
 	"strings"
 	"unsafe"
 
@@ -104,14 +105,6 @@ func (e *element) get(b *Bytes) []byte {
 //gcassert:inline
 func (e *element) getNonInlined(b *Bytes) []byte {
 	return b.buffer[e.header.bufferOffset : e.header.bufferOffset+e.header.len : e.header.bufferOffset+e.header.cap]
-}
-
-//gcassert:inline
-func (e *element) len() int {
-	if e.inlined {
-		return int(e.inlinedLength)
-	}
-	return e.header.len
 }
 
 func (e *element) set(v []byte, b *Bytes) {
@@ -549,37 +542,103 @@ func (b *Bytes) String() string {
 	return builder.String()
 }
 
-// BytesFromArrowSerializationFormat takes an Arrow byte slice and accompanying
-// offsets and populates b.
-func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
-	numElements := len(offsets) - 1
-	if cap(b.elements) < numElements {
-		b.elements = make([]element, numElements)
-		b.buffer = b.buffer[:0]
-	} else {
-		b.Reset()
-		b.elements = b.elements[:numElements]
-	}
-	for i := 0; i < numElements; i++ {
-		b.Set(i, data[offsets[i]:offsets[i+1]])
-	}
+// elementsAsBytes unsafely casts b.elements[:n] to []byte.
+func (b *Bytes) elementsAsBytes(n int) []byte {
+	var bytes []byte
+	elementsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&b.elements))
+	bytesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
+	bytesHeader.Data = elementsHeader.Data
+	bytesHeader.Len = int(ElementSize) * n
+	bytesHeader.Cap = int(ElementSize) * n
+	return bytes
 }
 
-// ToArrowSerializationFormat returns a bytes slice and offsets that are
-// Arrow-compatible. n is the number of elements to serialize.
-func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
-	// Calculate the size of the flat byte slice that will contain all elements.
-	var dataSize int
-	for _, e := range b.elements[:n] {
-		dataSize += e.len()
+var zeroInt32Slice []int32
+
+func init() {
+	zeroInt32Slice = make([]int32, BatchSize())
+}
+
+// Serialize converts b into the "arrow-like" (which is arrow-compatible)
+// format.
+//
+// We call this "arrow-like" because we're abusing the arrow format to get the
+// best speed, possibly at the cost of increased allocations (when Bytes vector
+// has been modified in-place many times via Sets at arbitrary positions with
+// values of different lengths).
+//
+// In particular, the arrow format represents bytes values via two slices - the
+// flat []byte buffer and the offsets where len(offsets) = n + 1 (where n is the
+// number of elements). ith element is then buffer[offsets[i]:offsets[i+1].
+// However, we squash b.elements (which is []element) and b.buffer to be stored
+// in that flat byte slice, and we only need two positions in offsets to
+// indicate the boundary between the two as well as the total data length. As a
+// result, we have the following representation (which defeats the spirit of the
+// arrow format but doesn't cause any issues anywhere):
+//
+//	 buffer = [<b.elements as []byte><b.buffer]
+//	offsets = [0, 0, ..., 0, len(<b.elements as []byte>), len(<b.elements as []byte>) + len(buffer)]
+//
+// Note: it is assumed that n is not larger than BatchSize().
+func (b *Bytes) Serialize(n int, dataScratch []byte, offsetsScratch []int32) ([]byte, []int32) {
+	if buildutil.CrdbTestBuild {
+		if n > BatchSize() {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"too many bytes elements to serialize: %d vs BatchSize() of %d", n, BatchSize(),
+			))
+		}
 	}
-	data := make([]byte, 0, dataSize)
-	offsets := make([]int32, 1, n+1)
-	for _, e := range b.elements[:n] {
-		data = append(data, e.get(b)...)
+	data := dataScratch[:0]
+	offsets := offsetsScratch[:0]
+
+	// Handle the cases of 0 and 1 elements separately since then we cannot
+	// store two offsets that we need.
+	if n == 0 {
+		offsets = append(offsets, 0)
+		return data, offsets
+	} else if n == 1 {
+		data = append(data, b.Get(0)...)
+		offsets = append(offsets, 0)
 		offsets = append(offsets, int32(len(data)))
+		return data, offsets
 	}
+
+	// Copy over b.elements treated as []byte as well as b.buffer into data.
+	bytes := b.elementsAsBytes(n)
+	if cap(data) < len(bytes)+len(b.buffer) {
+		data = make([]byte, 0, len(bytes)+len(b.buffer))
+	}
+	data = append(data, bytes...)
+	data = append(data, b.buffer...)
+
+	// Now populate the offsets slice which conforms to the arrow format and has
+	// the correct length.
+	offsets = append(offsets, zeroInt32Slice[:n-1]...)
+	offsets = append(offsets, int32(len(bytes)))
+	offsets = append(offsets, int32(len(data)))
 	return data, offsets
+}
+
+// Deserialize updates b according to the "arrow-like" format that was produced
+// by Serialize.
+func (b *Bytes) Deserialize(data []byte, offsets []int32) {
+	n := len(offsets) - 1
+	if cap(b.elements) < n {
+		b.elements = make([]element, n)
+	} else {
+		b.elements = b.elements[:n]
+	}
+	b.buffer = b.buffer[:0]
+	if n == 0 {
+		return
+	} else if n == 1 {
+		b.elements[0] = element{}
+		b.Set(0, data)
+		return
+	}
+	bytes := b.elementsAsBytes(n)
+	copy(bytes, data)
+	b.buffer = append(b.buffer, data[len(bytes):]...)
 }
 
 // ProportionalSize calls the method of the same name on bytes-like vectors,
