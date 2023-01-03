@@ -14,7 +14,7 @@ SET sql_safe_updates = false;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -84,6 +84,9 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 107
+    *scop.MaybeAddSplitForIndex
+      IndexID: 4
+      TableID: 107
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 4
@@ -961,7 +964,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -1009,6 +1012,9 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         IsUnique: true
         SourceIndexID: 1
         TableID: 107
+    *scop.MaybeAddSplitForIndex
+      IndexID: 4
+      TableID: 107
     *scop.AddColumnToIndex
       ColumnID: 1
       IndexID: 4

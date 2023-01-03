@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
@@ -120,4 +121,10 @@ type MutationVisitorStateUpdater interface {
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
+
+	// AddIndexForMaybeSplitAndScatter adds an index to maybe split and scatter,
+	// if it makes sense.
+	AddIndexForMaybeSplitAndScatter(
+		tableID catid.DescID, indexID catid.IndexID,
+	)
 }

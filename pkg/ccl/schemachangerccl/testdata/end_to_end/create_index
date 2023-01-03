@@ -13,7 +13,7 @@ CREATE INDEX id1
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #104
   ...
      id: 104

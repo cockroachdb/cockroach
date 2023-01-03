@@ -106,6 +106,7 @@ type MutationVisitor interface {
 	RefreshStats(context.Context, RefreshStats) error
 	AddColumnToIndex(context.Context, AddColumnToIndex) error
 	RemoveColumnFromIndex(context.Context, RemoveColumnFromIndex) error
+	MaybeAddSplitForIndex(context.Context, MaybeAddSplitForIndex) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -526,4 +527,9 @@ func (op AddColumnToIndex) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op RemoveColumnFromIndex) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveColumnFromIndex(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MaybeAddSplitForIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MaybeAddSplitForIndex(ctx, op)
 }

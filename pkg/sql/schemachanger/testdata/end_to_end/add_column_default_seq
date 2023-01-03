@@ -54,7 +54,7 @@ increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:

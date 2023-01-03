@@ -36,7 +36,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.alter_primary_key
-## StatementPhase stage 1 of 1 with 13 MutationType ops
+## StatementPhase stage 1 of 1 with 16 MutationType ops
 upsert descriptor #104
   ...
      id: 104

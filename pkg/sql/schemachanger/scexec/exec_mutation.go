@@ -82,6 +82,11 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		deps.StatsRefresher()); err != nil {
 		return err
 	}
+	if err := maybeSplitAndScatterIndexes(ctx,
+		mvs,
+		deps.IndexSpanSplitter()); err != nil {
+		return err
+	}
 	return manageJobs(
 		ctx,
 		gcJobRecords,
@@ -296,6 +301,26 @@ func refreshStatsForDescriptors(
 	return nil
 }
 
+func maybeSplitAndScatterIndexes(
+	ctx context.Context, mvs *mutationVisitorState, splitter IndexSpanSplitter,
+) error {
+	for _, idx := range mvs.indexesToSplitAndScatter {
+		desc, err := mvs.GetDescriptor(ctx, idx.tableID)
+		if err != nil {
+			return err
+		}
+		tableDesc := desc.(catalog.TableDescriptor)
+		idxDesc, err := catalog.MustFindIndexByID(tableDesc, idx.indexID)
+		if err != nil {
+			return err
+		}
+		if err := splitter.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func manageJobs(
 	ctx context.Context,
 	gcJobs []jobs.Record,
@@ -386,7 +411,13 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
+	indexesToSplitAndScatter     []indexToSplitAndScatter
 	gcJobs
+}
+
+type indexToSplitAndScatter struct {
+	tableID catid.DescID
+	indexID catid.IndexID
 }
 
 type commentToUpdate struct {
@@ -605,4 +636,16 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 		},
 	)
 	return nil
+}
+
+// AddIndexForMaybeSplitAndScatter implements the scmutationexec.MutationVisitorStateUpdater
+// // interface.
+func (mvs *mutationVisitorState) AddIndexForMaybeSplitAndScatter(
+	tableID catid.DescID, indexID catid.IndexID,
+) {
+	mvs.indexesToSplitAndScatter = append(mvs.indexesToSplitAndScatter,
+		indexToSplitAndScatter{
+			tableID: tableID,
+			indexID: indexID,
+		})
 }

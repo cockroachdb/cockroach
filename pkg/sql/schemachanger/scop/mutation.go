@@ -710,3 +710,10 @@ type RemoveColumnFromIndex struct {
 	Ordinal      uint32
 	InvertedKind catpb.InvertedIndexColumnKind
 }
+
+// MaybeAddSplitForIndex adds a admin split range temproarily on this index.
+type MaybeAddSplitForIndex struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}

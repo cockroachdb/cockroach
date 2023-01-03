@@ -314,6 +314,7 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
+		execCfg.IndexSpanSplitter,
 		execCfg.IndexMerger,
 		// Use a no-op tracker and flusher because while backfilling in a
 		// transaction because we know there's no existing progress and there's

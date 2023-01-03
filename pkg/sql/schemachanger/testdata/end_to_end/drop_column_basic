@@ -39,7 +39,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_column
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
