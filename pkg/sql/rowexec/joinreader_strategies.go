@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -185,6 +187,11 @@ func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []i
 	gen, ok := s.joinReaderSpanGenerator.(*localityOptimizedSpanGenerator)
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
+	}
+
+	if s.EvalCtx.SessionData().EnforceHomeRegion && s.EvalCtx.Planner.IsANSIDML() {
+		return nil, nil, pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
 	}
 	s.remoteSpansGenerated = true
 	return gen.generateRemoteSpans(s.Ctx(), s.inputRows)
@@ -590,6 +597,10 @@ func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []int
 	gen, ok := s.joinReaderSpanGenerator.(*localityOptimizedSpanGenerator)
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
+	}
+	if s.EvalCtx.SessionData().EnforceHomeRegion && s.EvalCtx.Planner.IsANSIDML() {
+		return nil, nil, pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
 	}
 	s.remoteSpansGenerated = true
 	return gen.generateRemoteSpans(s.Ctx(), s.inputRows)
