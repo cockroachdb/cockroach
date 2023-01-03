@@ -2250,7 +2250,7 @@ func (ot *OptTester) optimizeExpr(
 		return nil, err
 	}
 	if tables != nil {
-		o.Memo().Metadata().UpdateTableMeta(tables)
+		o.Memo().Metadata().UpdateTableMeta(&ot.evalCtx, tables)
 	}
 	root, err := o.Optimize()
 	if err != nil {
