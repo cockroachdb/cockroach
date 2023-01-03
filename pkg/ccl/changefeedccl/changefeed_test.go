@@ -6873,8 +6873,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long under race")
-	// TODO(#85143): remove this skip.
-	skip.WithIssue(t, 85143)
+	defer TestingSetIncludeParquetMetadata()()
 
 	setupSQL := []string{
 		`CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`,
@@ -6891,8 +6890,8 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		`INSERT INTO foo (a, b, c, e) VALUES (2, 'two', 'c string', 'open')`,
 	}
 	initialPayload := []string{
-		`foo: [1, "one"]->{"after": {"a": 1, "b": "one", "c": null, "e": "inactive"}}`,
-		`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": "c string", "e": "open"}}`,
+		`foo: [1, "one"]->{"a": 1, "b": "one", "c": null, "e": "inactive"}`,
+		`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 	}
 
 	type testCase struct {
@@ -6987,7 +6986,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT a, b, c, e FROM foo",
 			initialPayload: initialPayload,
 			alterStmt:      "ALTER TABLE foo DROP COLUMN c",
-			expectErr:      `column "foo.c" does not exist`,
+			expectErr:      `column "c" does not exist`,
 		},
 		{
 			name:           "drop referenced column filter",
@@ -6996,7 +6995,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 			},
 			alterStmt: "ALTER TABLE foo DROP COLUMN c",
-			expectErr: `column "foo.c" does not exist`,
+			expectErr: `column "c" does not exist`,
 		},
 		{
 			name:           "rename referenced column projection",
@@ -7004,7 +7003,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			initialPayload: initialPayload,
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "foo.c" does not exist`,
+			expectErr:      `column "c" does not exist`,
 		},
 		{
 			name:           "rename referenced column filter",
@@ -7014,7 +7013,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			},
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "foo.c" does not exist`,
+			expectErr:      `column "c" does not exist`,
 		},
 		{
 			name:           "alter enum",
@@ -7030,7 +7029,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			name:           "alter enum value fails",
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT * FROM foo WHERE e = 'open'",
 			initialPayload: []string{
-				`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": "c string", "e": "open"}}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 			},
 			alterStmt:      "ALTER TYPE status RENAME VALUE 'open' TO 'active'",
 			afterAlterStmt: "INSERT INTO foo (a, b, e) VALUES (3, 'tres', 'active')",
@@ -7048,6 +7047,39 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			payload: []string{
 				`foo: [1, "one"]->{"e": "done", "prev_e": "inactive"}`,
 			},
+		},
+		{
+			// Alter and rename a column  The changefeed expression does not
+			// explicitly involve the column in question (c) -- so, schema change works
+			// fine. Note: we get 2 backfill events -- one for each logical change
+			// (rename column, then add column).
+			name:           "add and rename column",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT *, (cdc_prev).e as old_e FROM foo",
+			initialPayload: []string{
+				`foo: [1, "one"]->{"a": 1, "b": "one", "c": null, "e": "inactive", "old_e": null}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open", "old_e": null}`,
+			},
+			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
+			payload: []string{
+				`foo: [1, "one"]->{"a": 1, "b": "one", "c": 42, "c_old": null, "e": "inactive", "old_e": "inactive"}`,
+				`foo: [1, "one"]->{"a": 1, "b": "one", "c_old": null, "e": "inactive", "old_e": "inactive"}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c": 42, "c_old": "c string", "e": "open", "old_e": "open"}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c_old": "c string", "e": "open", "old_e": "open"}`,
+			},
+		},
+		{
+			// Alter and rename a column  The changefeed expression does
+			// explicitly involve the column in question (c) -- so we expect
+			// to get an error because as soon as the first rename goes through, column
+			// no longer exists.
+			name:           "add and rename column error",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT c, (cdc_prev).c AS prev_c FROM foo",
+			initialPayload: []string{
+				`foo: [1, "one"]->{"c": null, "prev_c": null}`,
+				`foo: [2, "two"]->{"c": "c string", "prev_c": null}`,
+			},
+			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
+			expectErr: `column "c" does not exist`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

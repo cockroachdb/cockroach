@@ -218,11 +218,7 @@ func (e *Evaluator) preparePlan(
 			}
 
 			plan, err = sql.PlanCDCExpression(ctx, execCtx, e.norm.SelectStatementForFamily(), opts...)
-
-			if err != nil {
-				return err
-			}
-			return nil
+			return err
 		},
 	)
 	if err != nil {

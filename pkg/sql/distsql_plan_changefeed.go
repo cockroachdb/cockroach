@@ -186,10 +186,22 @@ func RunCDCEvaluation(
 		return err
 	}
 
-	// Execute.
+	// Execute the flow.  Force the use of planner descriptor cache when setting
+	// up this local flow.  This is necessary so that as soon as the local flow
+	// setup completes, and all descriptors have been resolved (including leases
+	// for user defined types), we can release those descriptors. If we don't,
+	// then the descriptor leases acquired will be held for the
+	// DefaultDescriptorLeaseDuration (5 minutes), blocking potential schema
+	// changes.
+	cdcPlan.PlanCtx.usePlannerDescriptorsForLocalFlow = true
 	p := cdcPlan.PlanCtx.planner
+	releaseDescriptors := func() {
+		p.Descriptors().ReleaseAll(ctx)
+	}
+
 	p.DistSQLPlanner().PlanAndRun(
-		ctx, &p.extendedEvalCtx, cdcPlan.PlanCtx, p.txn, cdcPlan.Plan, receiver)
+		ctx, &p.extendedEvalCtx, cdcPlan.PlanCtx, p.txn, cdcPlan.Plan, receiver, releaseDescriptors,
+	)
 	return nil
 }
 

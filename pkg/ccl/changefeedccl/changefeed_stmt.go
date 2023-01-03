@@ -877,10 +877,9 @@ func logSanitizedChangefeedDestination(ctx context.Context, destination string) 
 func validateDetailsAndOptions(
 	details jobspb.ChangefeedDetails, opts changefeedbase.StatementOptions,
 ) error {
-	if err := opts.ValidateForCreateChangefeed(); err != nil {
+	if err := opts.ValidateForCreateChangefeed(details.Select != ""); err != nil {
 		return err
 	}
-
 	if opts.HasEndTime() {
 		scanType, err := opts.GetInitialScanType()
 		if err != nil {
