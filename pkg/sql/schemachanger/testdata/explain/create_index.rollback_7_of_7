@@ -10,11 +10,11 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 8 elements transitioning toward ABSENT
-      │    │    ├── WRITE_ONLY → DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 106, Name: idx1, IndexID: 2}
-      │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
       │    │    ├── PUBLIC     → ABSENT      SecondaryIndexPartial:{DescID: 106, IndexID: 3}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
@@ -28,10 +28,10 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 5 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
            │    ├── PUBLIC      → ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 2}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 2}
-           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 3}
            └── 7 Mutation operations
                 ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":106}

@@ -40,7 +40,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT], PUBLIC] -> VALIDATED
     [[Sequence:{DescID: 110}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[View:{DescID: 111}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -101,7 +101,7 @@ PreCommitPhase stage 1 of 1 with 42 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> ABSENT
+    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT], VALIDATED] -> ABSENT
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -748,7 +748,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
@@ -772,7 +772,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT]
@@ -788,7 +788,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
@@ -808,7 +808,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
 - from: [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT]
@@ -847,36 +847,36 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT]
   to:   [IndexData:{DescID: 109, IndexID: 2}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, DELETE_ONLY]
   to:   [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, VALIDATED]
   to:   [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, VALIDATED]
   to:   [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
 - from: [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [Sequence:{DescID: 110}, ABSENT]

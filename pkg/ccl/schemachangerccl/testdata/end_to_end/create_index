@@ -21,6 +21,7 @@ upsert descriptor #104
   +  mutations:
   +  - direction: ADD
   +    index:
+  +      constraintId: 2
   +      createdAtNanos: "1640998800000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
@@ -54,7 +55,7 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 1
+  +      constraintId: 3
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -88,7 +89,8 @@ upsert descriptor #104
   +    state: DELETE_ONLY
      name: t1
      nextColumnId: 4
-     nextConstraintId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 4
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 4
@@ -230,7 +232,8 @@ upsert descriptor #104
      formatVersion: 3
      id: 104
   +  indexes:
-  +  - createdAtNanos: "1640998800000000000"
+  +  - constraintId: 2
+  +    createdAtNanos: "1640998800000000000"
   +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
@@ -264,6 +267,7 @@ upsert descriptor #104
   -  - direction: ADD
   +  - direction: DROP
        index:
+  -      constraintId: 2
   -      createdAtNanos: "1640998800000000000"
   -      createdExplicitly: true
   -      foreignKey: {}
@@ -297,7 +301,7 @@ upsert descriptor #104
   -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
-         constraintId: 1
+         constraintId: 3
          createdExplicitly: true
   ...
          version: 4
@@ -345,7 +349,7 @@ upsert descriptor #104
   -  mutations:
   -  - direction: DROP
   -    index:
-  -      constraintId: 1
+  -      constraintId: 3
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}

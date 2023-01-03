@@ -11,7 +11,10 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -28,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -172,6 +174,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// and made a new primary key above.
 	idxSpec.secondary.SourceIndexID = sourceIndex.IndexID
 	idxSpec.secondary.IndexID = nextRelationIndexID(b, relation)
+	idxSpec.secondary.ConstraintID = b.NextTableConstraintID(idxSpec.secondary.TableID)
 	idxSpec.secondary.TemporaryIndexID = idxSpec.secondary.IndexID + 1
 	// Add columns for the secondary index.
 	addColumnsForSecondaryIndex(b, n, relation, &idxSpec)
@@ -423,6 +426,27 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 		})
 	}
 	if n.PartitionByIndex.ContainsPartitions() || idxSpec.partitioning != nil {
+		// Detect if the partitioning overlaps with any of the secondary index
+		// columns.
+		{
+			implicitColumns := make(map[catid.ColumnID]struct{})
+			_, _, primaryIdx := scpb.FindPrimaryIndex(relationElts)
+			scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+				if e.IndexID == primaryIdx.IndexID {
+					if e.Implicit {
+						implicitColumns[e.ColumnID] = struct{}{}
+					}
+				}
+			})
+			for _, col := range idxSpec.columns {
+				if _, ok := implicitColumns[col.ColumnID]; !col.Implicit && ok {
+					panic(pgerror.New(
+						pgcode.FeatureNotSupported,
+						`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
+					))
+				}
+			}
+		}
 		if idxSpec.partitioning == nil {
 			idxSpec.partitioning = &scpb.IndexPartitioning{
 				TableID: idxSpec.secondary.TableID,
@@ -603,6 +627,7 @@ func addColumnsForSecondaryIndex(
 			OrdinalInKind: uint32(i),
 			Kind:          scpb.IndexColumn_KEY_SUFFIX,
 			Direction:     c.Direction,
+			Implicit:      c.Implicit,
 		}
 		idxSpec.columns = append(idxSpec.columns, ic)
 	}
@@ -630,7 +655,7 @@ func addColumnsForSecondaryIndex(
 		if err != nil {
 			panic(err)
 		}
-		shardColName := maybeCreateAndAddShardCol(b, int(buckets), relation.(*scpb.Table), keyColNames, n)
+		shardColName, shardColumnCreated := maybeCreateAndAddShardCol(b, int(buckets), relation.(*scpb.Table), keyColNames, n)
 		idxSpec.secondary.Sharding = &catpb.ShardedDescriptor{
 			IsSharded:    true,
 			Name:         shardColName,
@@ -658,7 +683,32 @@ func addColumnsForSecondaryIndex(
 			}
 		}
 		idxSpec.columns = append([]*scpb.IndexColumn{indexColumn}, idxSpec.columns...)
-		panic(scerrors.NotImplementedErrorf(n.Sharded, "split and scatter support are missing"))
+		// Create a new check constraint for the hash sharded index
+		if shardColumnCreated {
+			checkConstraintBucketValues := strings.Builder{}
+			checkConstraintBucketValues.WriteString(fmt.Sprintf("%q IN (", shardColName))
+			for bucket := int32(0); bucket < buckets; bucket++ {
+				checkConstraintBucketValues.WriteString(strconv.Itoa(int(bucket)))
+				if bucket != buckets-1 {
+					checkConstraintBucketValues.WriteString(",")
+				}
+			}
+			checkConstraintBucketValues.WriteString(")")
+			_, err = parser.ParseExpr(checkConstraintBucketValues.String())
+			if err != nil {
+				panic(err)
+			}
+			shardCheckConstraint := &scpb.CheckConstraint{
+				TableID:      idxSpec.secondary.TableID,
+				ConstraintID: idxSpec.secondary.ConstraintID + 2,
+				Expression: scpb.Expression{
+					Expr:                catpb.Expression(checkConstraintBucketValues.String()),
+					ReferencedColumnIDs: []catid.ColumnID{indexColumn.ColumnID},
+				},
+				FromHashShardedColumn: true,
+			}
+			b.Add(shardCheckConstraint)
+		}
 	}
 }
 
@@ -667,7 +717,7 @@ func addColumnsForSecondaryIndex(
 // buckets.
 func maybeCreateAndAddShardCol(
 	b BuildCtx, shardBuckets int, tbl *scpb.Table, colNames []string, n tree.NodeFormatter,
-) (shardColName string) {
+) (shardColName string, created bool) {
 	shardColName = tabledesc.GetShardColumnName(colNames, int32(shardBuckets))
 	elts := b.QueryByID(tbl.TableID)
 	// TODO(ajwerner): In what ways is the column referenced by
@@ -688,7 +738,7 @@ func maybeCreateAndAddShardCol(
 		}
 	})
 	if existingShardColID != 0 {
-		return shardColName
+		return shardColName, false
 	}
 	expr := schemaexpr.MakeHashShardComputeExpr(colNames, shardBuckets)
 	parsedExpr, err := parser.ParseExpr(*expr)
@@ -717,10 +767,9 @@ func maybeCreateAndAddShardCol(
 			IsVirtual:   true,
 			IsNullable:  false,
 		},
-		//TODO(fqazi): Add a check constraint for the hash sharded column.
 	}
 	addColumn(b, spec, n)
-	return shardColName
+	return shardColName, true
 }
 
 func maybeCreateVirtualColumnForIndex(

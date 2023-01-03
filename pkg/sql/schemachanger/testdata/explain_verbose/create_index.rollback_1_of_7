@@ -14,10 +14,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │
         ├── • 10 elements transitioning toward ABSENT
         │   │
-        │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
         │   │   │
         │   │   ├── • SameStagePrecedence dependency from ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 2}
@@ -51,19 +51,19 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexData:{DescID: 106, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │         rule: "index removed before garbage collection"
         │   │
         │   ├── • IndexName:{DescID: 106, Name: idx1, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │         rule: "index no longer public before index name"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 3}
