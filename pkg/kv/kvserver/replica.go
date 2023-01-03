@@ -498,8 +498,9 @@ type Replica struct {
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
 
-		// The ID of the leader replica within the Raft group. Used to determine
-		// when the leadership changes.
+		// The ID of the leader replica within the Raft group. NB: this is updated
+		// in a separate critical section from the Raft group, and can therefore
+		// briefly be out of sync with the Raft status.
 		leaderID roachpb.ReplicaID
 		// The most recently added replica for the range and when it was added.
 		// Used to determine whether a replica is new enough that we shouldn't
@@ -1989,6 +1990,9 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	ctx context.Context, now hlc.ClockTimestamp,
 ) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
+		return
+	}
+	if !r.isRaftLeaderRLocked() { // fast path
 		return
 	}
 	status := r.leaseStatusAtRLocked(ctx, now)

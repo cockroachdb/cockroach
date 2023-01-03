@@ -9995,6 +9995,10 @@ func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
 	return &q.desc
 }
 
+func (q *testQuiescer) isRaftLeaderRLocked() bool {
+	return q.status != nil && q.status.RaftState == raft.StateLeader
+}
+
 func (q *testQuiescer) raftSparseStatusRLocked() *raftSparseStatus {
 	return q.status
 }
