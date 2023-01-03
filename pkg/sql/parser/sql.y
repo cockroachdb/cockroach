@@ -6126,6 +6126,7 @@ alter_tenant_stmt:
 // ALTER TENANT '<tenant_name>' RESUME REPLICATION
 // ALTER TENANT '<tenant_name>' COMPLETE REPLICATION TO LATEST
 // ALTER TENANT '<tenant_name>' COMPLETE REPLICATION TO SYSTEM TIME 'time'
+// ALTER TENANT '<tenant_name>' SET REPLICATION opt=value,...
 alter_tenant_replication_stmt:
   ALTER TENANT d_expr PAUSE REPLICATION
   {
@@ -6163,6 +6164,15 @@ alter_tenant_replication_stmt:
       },
     }
   }
+| ALTER TENANT d_expr SET REPLICATION tenant_replication_options_list
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantName: $3.expr(),
+      Options: *$6.tenantReplicationOptions(),
+    }
+  }
+
 
 // %Help: ALTER TENANT CLUSTER SETTING - alter tenant cluster settings
 // %Category: Group

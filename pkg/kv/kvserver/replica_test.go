@@ -9979,7 +9979,7 @@ type testQuiescer struct {
 	desc            roachpb.RangeDescriptor
 	numProposals    int
 	pendingQuota    bool
-	status          *raft.Status
+	status          *raftSparseStatus
 	lastIndex       uint64
 	raftReady       bool
 	ownsValidLease  bool
@@ -9995,7 +9995,7 @@ func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
 	return &q.desc
 }
 
-func (q *testQuiescer) raftStatusRLocked() *raft.Status {
+func (q *testQuiescer) raftSparseStatusRLocked() *raftSparseStatus {
 	return q.status
 }
 
@@ -10053,7 +10053,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						{NodeID: 3, ReplicaID: 3},
 					},
 				},
-				status: &raft.Status{
+				status: &raftSparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 1,
 						HardState: raftpb.HardState{
@@ -10225,7 +10225,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 	) {
 		t.Run("", func(t *testing.T) {
 			q := &testQuiescer{
-				status: &raft.Status{
+				status: &raftSparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 2,
 						HardState: raftpb.HardState{
