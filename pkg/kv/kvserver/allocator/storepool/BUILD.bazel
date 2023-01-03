@@ -15,6 +15,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",

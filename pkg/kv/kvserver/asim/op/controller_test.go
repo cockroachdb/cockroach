@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -99,7 +100,13 @@ func TestLeaseTransferOp(t *testing.T) {
 
 				for _, transfers := range tc.transfers[tick] {
 					rangeID, target := transfers[0], transfers[1]
-					op := NewTransferLeaseOp(state.OffsetTick(start, tick), roachpb.RangeID(rangeID), 0, roachpb.StoreID(target), 0)
+					op := NewTransferLeaseOp(
+						state.OffsetTick(start, tick),
+						roachpb.RangeID(rangeID),
+						0,
+						roachpb.StoreID(target),
+						allocator.RangeUsageInfo{},
+					)
 					ticket := controller.Dispatch(ctx, state.OffsetTick(start, tick), s, op)
 					pending = append(pending, ticket)
 				}

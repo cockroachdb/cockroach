@@ -1,0 +1,15 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "load",
+    srcs = [
+        "dimension.go",
+        "load.go",
+        "vector.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load",
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
