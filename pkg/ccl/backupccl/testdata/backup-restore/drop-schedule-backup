@@ -28,4 +28,3 @@ query-sql
 SELECT * FROM [SHOW SCHEDULES] WHERE label='hello';
 ----
 
-
