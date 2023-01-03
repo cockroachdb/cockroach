@@ -89,7 +89,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -98,6 +98,10 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │           │       TableID: 104
 │           │       TemporaryIndexID: 3
 │           │     IsSecondaryIndex: true
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 2
+│           │     TableID: 104
 │           │
 │           ├── • AddIndexPartitionInfo
 │           │     Partitioning:
@@ -145,6 +149,10 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │           │       SourceIndexID: 1
 │           │       TableID: 104
 │           │     IsSecondaryIndex: true
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 104
 │           │
 │           ├── • AddIndexPartitionInfo
 │           │     Partitioning:

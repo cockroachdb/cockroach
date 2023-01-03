@@ -1258,6 +1258,9 @@ type ExecutorConfig struct {
 	// IndexMerger is also used to backfill indexes and is also rather circular.
 	IndexMerger *IndexBackfillerMergePlanner
 
+	// IndexSpanSplitter is used to split and scatter indexes before backfill.
+	IndexSpanSplitter scexec.IndexSpanSplitter
+
 	// Validator is used to validate indexes and check constraints.
 	Validator scexec.Validator
 

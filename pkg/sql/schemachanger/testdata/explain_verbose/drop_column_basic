@@ -58,7 +58,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 7 Mutation operations
+│       └── • 8 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
@@ -106,6 +106,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
 │           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 104
 │           │
 │           └── • AddColumnToIndex
 │                 ColumnID: 1

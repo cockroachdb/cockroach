@@ -22,7 +22,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 4}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
  │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
- │         └── 13 Mutation operations
+ │         └── 14 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
@@ -31,6 +31,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}
