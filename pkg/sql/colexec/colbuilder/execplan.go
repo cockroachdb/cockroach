@@ -425,7 +425,7 @@ func (r opResult) createDiskBackedSort(
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
 			accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
-				ctx, flowCtx, opName, processorID, 3, /* numAccounts */
+				ctx, flowCtx, opName, processorID, 4, /* numAccounts */
 			)
 			sortUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[1], factory)
@@ -444,6 +444,7 @@ func (r opResult) createDiskBackedSort(
 				args.DiskQueueCfg,
 				args.FDSemaphore,
 				diskAccount,
+				accounts[3],
 				flowCtx.TestingKnobs().VecFDsToAcquire,
 			)
 			r.ToClose = append(r.ToClose, es.(colexecop.Closer))
@@ -689,14 +690,15 @@ func makeNewHashAggregatorArgs(
 	hashTableMemAccount := args.MonitorRegistry.CreateExtraMemAccountForSpillStrategy(
 		string(hashAggregatorMemMonitorName),
 	)
-	// We need to create four unlimited memory accounts so that each component
+	// We need to create five unlimited memory accounts so that each component
 	// could track precisely its own usage. The components are
 	// - the hash aggregator
 	// - the hash table
 	// - output batch of the hash aggregator
-	// - the spilling queue for the input tuples tracking.
+	// - the spilling queue for the input tuples tracking (which requires two
+	//   accounts).
 	accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
-		ctx, flowCtx, opName, args.Spec.ProcessorID, 4, /* numAccounts */
+		ctx, flowCtx, opName, args.Spec.ProcessorID, 5, /* numAccounts */
 	)
 	newAggArgs.Allocator = colmem.NewLimitedAllocator(ctx, hashAggregatorMemAccount, accounts[0], factory)
 	newAggArgs.MemAccount = hashAggregatorMemAccount
@@ -714,6 +716,7 @@ func makeNewHashAggregatorArgs(
 			DiskAcc: args.MonitorRegistry.CreateDiskAccount(
 				ctx, flowCtx, hashAggregatorMemMonitorName+"-spilling-queue", args.Spec.ProcessorID,
 			),
+			ConverterMemAcc: accounts[4],
 		},
 		hashAggregatorMemMonitorName
 }
@@ -974,7 +977,7 @@ func NewColOperator(
 					)
 					ehaOpName := redact.RedactableString("external-hash-aggregator")
 					ehaAccounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
-						ctx, flowCtx, ehaOpName, spec.ProcessorID, 3, /* numAccounts */
+						ctx, flowCtx, ehaOpName, spec.ProcessorID, 4, /* numAccounts */
 					)
 					ehaMemAccount := ehaAccounts[0]
 					// Note that we will use an unlimited memory account here
@@ -1008,6 +1011,7 @@ func NewColOperator(
 								},
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
 								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
+								ehaAccounts[3],
 								spec.Core.Aggregator.OutputOrdering,
 							)
 							result.ToClose = append(result.ToClose, toClose)
@@ -1063,9 +1067,10 @@ func NewColOperator(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
-						unlimitedAllocator := colmem.NewAllocator(
-							ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
+						accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
+							ctx, flowCtx, edOpName, spec.ProcessorID, 2, /* numAccounts */
 						)
+						unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 						ed, toClose := colexecdisk.NewExternalDistinct(
 							unlimitedAllocator,
 							flowCtx,
@@ -1075,6 +1080,7 @@ func NewColOperator(
 							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, edOpName, factory),
 							inMemoryUnorderedDistinct,
 							diskAccount,
+							accounts[1],
 						)
 						result.ToClose = append(result.ToClose, toClose)
 						return ed
@@ -1104,9 +1110,9 @@ func NewColOperator(
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
 				opName := redact.RedactableString("cross-joiner")
-				crossJoinerMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
+				accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, spec.ProcessorID, 2 /* numAccounts */)
 				crossJoinerDiskAcc := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
-				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
+				unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 				leftTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 				copy(leftTypes, spec.Input[0].ColumnTypes)
 				rightTypes := make([]*types.T, len(spec.Input[1].ColumnTypes))
@@ -1120,6 +1126,7 @@ func NewColOperator(
 					inputs[0].Root, inputs[1].Root,
 					leftTypes, rightTypes,
 					crossJoinerDiskAcc,
+					accounts[1],
 				)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			} else {
@@ -1145,9 +1152,10 @@ func NewColOperator(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						[]redact.RedactableString{hashJoinerMemMonitorName},
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
-							unlimitedAllocator := colmem.NewAllocator(
-								ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
+								ctx, flowCtx, opName, spec.ProcessorID, 2, /* numAccounts */
 							)
+							unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 							ehj := colexecdisk.NewExternalHashJoiner(
 								unlimitedAllocator,
 								flowCtx,
@@ -1156,6 +1164,7 @@ func NewColOperator(
 								inputOne, inputTwo,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
 								diskAccount,
+								accounts[1],
 							)
 							result.ToClose = append(result.ToClose, ehj)
 							return ehj
@@ -1205,17 +1214,15 @@ func NewColOperator(
 			// We are using an unlimited memory monitor here because merge
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
-			unlimitedAllocator := colmem.NewAllocator(
-				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
-					ctx, flowCtx, opName, spec.ProcessorID,
-				), factory)
+			accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, spec.ProcessorID, 2 /* numAccounts */)
+			unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 			mj := colexecjoin.NewMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0].Root, inputs[1].Root, leftTypes, rightTypes,
 				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
-				diskAccount, flowCtx.EvalCtx,
+				diskAccount, accounts[1], flowCtx.EvalCtx,
 			)
 
 			result.Root = mj
@@ -1303,7 +1310,7 @@ func NewColOperator(
 
 			ehgjOpName := redact.RedactableString("external-hash-group-joiner")
 			ehgjAccounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
-				ctx, flowCtx, ehgjOpName, spec.ProcessorID, 4, /* numAccounts */
+				ctx, flowCtx, ehgjOpName, spec.ProcessorID, 6, /* numAccounts */
 			)
 			ehjMemAccount := ehgjAccounts[0]
 			ehaMemAccount := ehgjAccounts[1]
@@ -1328,6 +1335,7 @@ func NewColOperator(
 						inputOne, inputTwo,
 						result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-join", factory),
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-join", spec.ProcessorID),
+						ehgjAccounts[2],
 					)
 					result.ToClose = append(result.ToClose, ehj)
 
@@ -1349,12 +1357,13 @@ func NewColOperator(
 						args,
 						&colexecagg.NewHashAggregatorArgs{
 							NewAggregatorArgs:        &newAggArgs,
-							HashTableAllocator:       colmem.NewAllocator(ctx, ehgjAccounts[2], factory),
-							OutputUnlimitedAllocator: colmem.NewAllocator(ctx, ehgjAccounts[3], factory),
+							HashTableAllocator:       colmem.NewAllocator(ctx, ehgjAccounts[3], factory),
+							OutputUnlimitedAllocator: colmem.NewAllocator(ctx, ehgjAccounts[4], factory),
 							MaxOutputBatchMemSize:    newHashAggArgs.MaxOutputBatchMemSize,
 						},
 						result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-agg", factory),
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-agg", spec.ProcessorID),
+						ehgjAccounts[5],
 						// TODO(yuzefovich): think through whether the hash
 						// group-join needs to maintain the ordering.
 						execinfrapb.Ordering{}, /* outputOrdering */
@@ -1946,11 +1955,14 @@ func (r opResult) finishBufferedWindowerArgs(
 	args.DiskAcc = monitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 	var mainAcc *mon.BoundAccount
 	if needsBuffer {
-		accounts := monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 2 /* numAccounts */)
+		accounts := monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 3 /* numAccounts */)
 		mainAcc = accounts[0]
 		args.BufferAllocator = colmem.NewAllocator(ctx, accounts[1], factory)
+		args.ConverterMemAcc = accounts[2]
 	} else {
-		mainAcc = monitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+		accounts := monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 2 /* numAccounts */)
+		mainAcc = accounts[0]
+		args.ConverterMemAcc = accounts[1]
 	}
 	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
 }

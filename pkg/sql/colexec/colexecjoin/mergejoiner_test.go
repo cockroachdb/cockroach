@@ -101,7 +101,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		leftMJSource, rightMJSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc, evalCtx,
+		testDiskAcc, testMemAcc, evalCtx,
 	)
 	mj.Init(ctx)
 	hj := NewHashJoiner(NewHashJoinerArgs{
@@ -195,7 +195,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-			testDiskAcc,
+			testDiskAcc, testMemAcc,
 		)
 		return &mergeJoinInnerOp{mergeJoinBase: base}
 	}

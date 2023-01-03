@@ -1756,7 +1756,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc, &evalCtx,
+		testDiskAcc, testMemAcc, &evalCtx,
 	)
 	a.Init(ctx)
 	i, count, expVal := 0, 0, int64(0)
@@ -1826,7 +1826,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc, &evalCtx,
+					testDiskAcc, testMemAcc, &evalCtx,
 				)
 				a.Init(ctx)
 				i := 0
@@ -1901,7 +1901,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc, &evalCtx,
+						testDiskAcc, testMemAcc, &evalCtx,
 					)
 					a.Init(ctx)
 					i := 0
@@ -2031,7 +2031,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc, &evalCtx,
+						testDiskAcc, testMemAcc, &evalCtx,
 					)
 					a.Init(ctx)
 					i := 0

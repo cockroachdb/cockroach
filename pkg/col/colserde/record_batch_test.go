@@ -12,6 +12,7 @@ package colserde_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -346,8 +347,9 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	}
 	src.SetLength(coldata.BatchSize())
 
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 	require.NoError(t, err)
+	defer c.Release(context.Background())
 	r, err := colserde.NewRecordBatchSerializer(typs)
 	require.NoError(t, err)
 	require.NoError(t, roundTripBatch(src, dest, c, r))

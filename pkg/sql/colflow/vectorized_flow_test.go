@@ -35,21 +35,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colmem.Allocator, colexecargs.OpWithMetaInfo, []*types.T) (*colrpc.Outbox, error)
+	newOutboxFn func(*colmem.Allocator, *mon.BoundAccount, colexecargs.OpWithMetaInfo, []*types.T) (*colrpc.Outbox, error)
 	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
+var _ remoteComponentCreator = &callbackRemoteComponentCreator{}
+
 func (c callbackRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
+	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	_ func(context.Context) []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
-	return c.newOutboxFn(allocator, input, typs)
+	return c.newOutboxFn(allocator, converterMemAcc, input, typs)
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
@@ -202,6 +206,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	componentCreator := callbackRemoteComponentCreator{
 		newOutboxFn: func(
 			allocator *colmem.Allocator,
+			converterMemAcc *mon.BoundAccount,
 			input colexecargs.OpWithMetaInfo,
 			typs []*types.T,
 		) (*colrpc.Outbox, error) {
@@ -214,7 +219,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, input.MetadataSources, 1)
 			inbox := colexec.MaybeUnwrapInvariantsChecker(input.MetadataSources[0].(colexecop.Operator)).(*colrpc.Inbox)
 			require.Len(t, inboxToNumInputTypes[inbox], numInputTypesToOutbox)
-			return colrpc.NewOutbox(allocator, input, typs, nil /* getStats */)
+			return colrpc.NewOutbox(allocator, converterMemAcc, input, typs, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
