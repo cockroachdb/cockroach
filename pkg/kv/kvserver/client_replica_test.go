@@ -3131,11 +3131,14 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		// the lease transfer rejection came after the previous lease was revoked,
 		// then node 0 must have re-acquired the lease (with a new sequence number)
 		// in order to transfer it to node 2.
+		// NB: we use LessOrEqual and not Equal to avoid flakiness if the lease is
+		// lost and reacquired multiple times. This assertion is not the focus of
+		// the test.
 		expSeq := preLease.Sequence + 1
 		if rejectAfterRevoke {
 			expSeq++
 		}
-		require.Equal(t, expSeq, postLease.Sequence)
+		require.LessOrEqual(t, expSeq, postLease.Sequence)
 	})
 }
 
