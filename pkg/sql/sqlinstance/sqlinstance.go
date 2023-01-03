@@ -30,20 +30,22 @@ import (
 // InstanceInfo exposes information on a SQL instance such as ID, network
 // address, the associated sqlliveness.SessionID, and the instance's locality.
 type InstanceInfo struct {
-	Region       []byte
-	InstanceID   base.SQLInstanceID
-	InstanceAddr string
-	SessionID    sqlliveness.SessionID
-	Locality     roachpb.Locality
+	Region          []byte
+	InstanceID      base.SQLInstanceID
+	InstanceSQLAddr string
+	InstanceRPCAddr string
+	SessionID       sqlliveness.SessionID
+	Locality        roachpb.Locality
 }
 
 // SafeFormat implements redact.SafeFormatter.
 func (ii InstanceInfo) SafeFormat(s interfaces.SafePrinter, verb rune) {
 	s.Printf(
-		"Instance{RegionPrefix: %v, InstanceID: %d, Addr: %v, SessionID: %s, Locality: %v}",
+		"Instance{RegionPrefix: %v, InstanceID: %d, SQLAddr: %v, RPCAddr: %v, SessionID: %s, Locality: %v}",
 		redact.SafeString(base64.StdEncoding.EncodeToString(ii.Region)),
 		ii.InstanceID,
-		ii.InstanceAddr,
+		ii.InstanceSQLAddr,
+		ii.InstanceRPCAddr,
 		ii.SessionID,
 		ii.Locality,
 	)

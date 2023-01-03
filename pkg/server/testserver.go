@@ -884,8 +884,7 @@ func (ts *TestServer) StartTenant(
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
 	// in test servers.
-	// TODO(knz): Lift this limitation. It seems arbitrary.
-	baseCfg.SplitListenSQL = false
+	baseCfg.SplitListenSQL = true
 
 	localNodeIDContainer := &base.NodeIDContainer{}
 	localNodeIDContainer.Set(ctx, ts.NodeID())
