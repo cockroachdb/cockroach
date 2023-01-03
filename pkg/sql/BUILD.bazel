@@ -124,6 +124,7 @@ go_library(
         "group.go",
         "index_backfiller.go",
         "index_join.go",
+        "index_split_scatter.go",
         "information_schema.go",
         "insert.go",
         "insert_fast_path.go",

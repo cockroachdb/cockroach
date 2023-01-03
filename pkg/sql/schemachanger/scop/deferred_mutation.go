@@ -89,3 +89,10 @@ type RefreshStats struct {
 	deferredMutationOp
 	TableID descpb.ID
 }
+
+// MaybeAddSplitForIndex adds a admin split range temproarily on this index.
+type MaybeAddSplitForIndex struct {
+	deferredMutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}

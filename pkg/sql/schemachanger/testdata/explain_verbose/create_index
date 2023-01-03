@@ -249,7 +249,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -258,6 +258,10 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │       TableID: 106
 │           │       TemporaryIndexID: 3
 │           │     IsSecondaryIndex: true
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 2
+│           │     TableID: 106
 │           │
 │           ├── • SetAddedIndexPartialPredicate
 │           │     Expr: (v = 'a')
@@ -287,6 +291,10 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │       SourceIndexID: 1
 │           │       TableID: 106
 │           │     IsSecondaryIndex: true
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 106
 │           │
 │           ├── • SetAddedIndexPartialPredicate
 │           │     Expr: (v = 'a')

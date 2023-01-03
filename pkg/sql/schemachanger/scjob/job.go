@@ -80,6 +80,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.CollectionFactory,
 		execCfg.InternalDB,
 		execCfg.IndexBackfiller,
+		execCfg.IndexSpanSplitter,
 		execCfg.IndexMerger,
 		NewRangeCounter(execCfg.DB, execCfg.DistSQLPlanner),
 		func(txn isql.Txn) scrun.EventLogger {
