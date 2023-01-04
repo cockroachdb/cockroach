@@ -295,6 +295,10 @@ message LocalOnlySessionData {
   // be allowed to consider lookup joins with inequality conditions, in
   // addition to the other restrictions on when they are planned.
   bool variable_inequality_lookup_join_enabled = 80;
+  // OptimizerUseImprovedDisjunctionStats, when true, indicates that the
+  // optimizer should use improved statistics calculations for disjunctive
+  // filters.
+  bool optimizer_use_improved_disjunction_stats = 86;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

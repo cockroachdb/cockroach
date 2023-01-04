@@ -4759,6 +4759,7 @@ opt_split_scan_limit                                  2048
 optimizer                                             on
 optimizer_use_forecasts                               on
 optimizer_use_histograms                              on
+optimizer_use_improved_disjunction_stats              off
 optimizer_use_multicol_stats                          on
 optimizer_use_not_visible_indexes                     off
 override_multi_region_zone_config                     off
