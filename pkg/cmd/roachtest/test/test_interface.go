@@ -13,6 +13,7 @@ package test
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 // Test is the interface through which roachtests interact with the
@@ -59,4 +60,7 @@ type Test interface {
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
 	DeprecatedWorkload() string
+
+	// PrometheusFatory returns a factory which can register prometheus metrics.
+	PromFactory() promauto.Factory
 }

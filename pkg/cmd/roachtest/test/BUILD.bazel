@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/roachprod/logger",
         "//pkg/util/version",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
     ],
 )
 

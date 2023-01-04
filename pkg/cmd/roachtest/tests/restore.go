@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -706,7 +707,8 @@ func registerRestore(r registry.Registry) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				m := c.NewMonitor(ctx)
-
+				promGauge := t.PromFactory().NewGauge(prometheus.GaugeOpts{Namespace: registry.PrometheusNameSpace,
+					Subsystem: sp.name, Name: "duration"})
 				// Run the disk usage logger in the monitor to guarantee its
 				// having terminated when the test ends.
 				dul := NewDiskUsageLogger(t, c)
@@ -720,9 +722,11 @@ func registerRestore(r registry.Registry) {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
+					startTime := timeutil.Now()
 					tick()
 					sp.run(ctx, c)
 					tick()
+					promGauge.Set(timeutil.Since(startTime).Minutes())
 
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.

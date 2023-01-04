@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,6 +104,10 @@ func (t testWrapper) WorkerProgress(f float64) {
 
 func (t testWrapper) IsDebug() bool {
 	return false
+}
+
+func (t testWrapper) PromFactory() promauto.Factory {
+	panic("implement me")
 }
 
 var _ test2.Test = testWrapper{}

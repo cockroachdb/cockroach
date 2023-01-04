@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var (
@@ -57,6 +59,9 @@ var (
 
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
+
+	prometheusNameSpace      = "roachtest"
+	prometheusScrapeInterval = time.Second * 10
 )
 
 // testRunner runs tests.
@@ -188,6 +193,7 @@ func (c clustersOpt) validate() error {
 type testOpts struct {
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+	promPort               int
 }
 
 // Run runs tests.
@@ -259,6 +265,17 @@ func (r *testRunner) Run(
 		clusterAllocator = defaultClusterAllocator(r, clustersOpt, lopt)
 	}
 
+	promReg := prometheus.NewRegistry()
+	if err := r.stopper.RunAsyncTask(ctx, "promEndpoint", func(ctx context.Context) {
+		if err := http.ListenAndServe(
+			fmt.Sprintf(":%d", topt.promPort),
+			promhttp.HandlerFor(promReg, promhttp.HandlerOpts{}),
+		); err != nil {
+			log.Errorf(ctx, "error serving prometheus: %v", err)
+		}
+	}); err != nil {
+		log.Errorf(ctx, "stopped prometheus endpoint")
+	}
 	// Seed the default rand source so that different runs get different cluster
 	// IDs.
 	rand.Seed(timeutil.Now().UnixNano())
@@ -295,6 +312,7 @@ func (r *testRunner) Run(
 				clusterAllocator,
 				topt,
 				l,
+				promReg,
 			)
 
 			if err != nil {
@@ -322,6 +340,7 @@ func (r *testRunner) Run(
 
 	// Wait for all the workers to finish.
 	wg.Wait()
+	shutdownStart := timeutil.Now()
 	r.cr.destroyAllClusters(ctx, l)
 
 	if errs.Err() != nil {
@@ -339,6 +358,9 @@ func (r *testRunner) Run(
 	if len(r.status.fail) > 0 {
 		return errTestsFailed
 	}
+	// To ensure all prometheus metrics have been scraped, ensure shutdown takes
+	// at least one scrapeInterval.
+	time.Sleep(prometheusScrapeInterval - timeutil.Since(shutdownStart))
 	return nil
 }
 
@@ -475,6 +497,7 @@ func (r *testRunner) runWorker(
 	allocateCluster clusterAllocatorFn,
 	topt testOpts,
 	l *logger.Logger,
+	promReg *prometheus.Registry,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
 	wStatus := r.addWorker(ctx, name)
@@ -634,6 +657,7 @@ func (r *testRunner) runWorker(
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  debugMode.IsDebug(),
+			promRegistry:           promReg,
 		}
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)

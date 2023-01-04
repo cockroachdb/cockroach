@@ -84,6 +84,7 @@ func main() {
 	// ##teamcity[publishArtifacts] in Teamcity mode.
 	var literalArtifacts string
 	var httpPort int
+	var promPort int
 	var debugOnFailure bool
 	var debugAlways bool
 	var runSkipped bool
@@ -237,6 +238,7 @@ runner itself.
 				debugMode:              debugModeFromOpts(),
 				skipInit:               skipInit,
 				httpPort:               httpPort,
+				promPort:               promPort,
 				parallelism:            parallelism,
 				artifactsDir:           artifacts,
 				literalArtifactsDir:    literalArtifacts,
@@ -259,6 +261,9 @@ runner itself.
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
 	runCmd.Flags().BoolVar(
 		&disableIssue, "disable-issue", false, "disable posting GitHub issue for failures")
+	runCmd.Flags().IntVar(
+		&promPort, "prom-port", 2112,
+		"the http port on which to expose prom metrics from the roachtest process")
 
 	var benchCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -377,6 +382,7 @@ type cliCfg struct {
 	runSkipped             bool
 	skipInit               bool
 	httpPort               int
+	promPort               int
 	parallelism            int
 	artifactsDir           string
 	literalArtifactsDir    string
@@ -465,6 +471,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
 			skipInit:               cfg.skipInit,
+			promPort:               cfg.promPort,
 		},
 		lopt, nil /* clusterAllocator */)
 

@@ -22,6 +22,10 @@ import (
 // LibGEOS is a list of native libraries for libgeos.
 var LibGEOS = []string{"libgeos", "libgeos_c"}
 
+// PrometheusNameSpace is the namespace which all metrics exposed on the roachtest
+// endpoint should use.
+var PrometheusNameSpace = "roachtest"
+
 // TestSpec is a spec for a roachtest.
 type TestSpec struct {
 	Skip string // if non-empty, test will be skipped
