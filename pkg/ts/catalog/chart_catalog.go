@@ -2196,6 +2196,8 @@ var charts = []sectionDescription{
 					"sql.hydrated_udf_cache.misses",
 					"sql.hydrated_schema_cache.hits",
 					"sql.hydrated_schema_cache.misses",
+					"sql.hydrated_type_cache.hits",
+					"sql.hydrated_type_cache.misses",
 				},
 			},
 		},

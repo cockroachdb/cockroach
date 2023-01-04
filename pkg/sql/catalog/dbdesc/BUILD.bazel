@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",

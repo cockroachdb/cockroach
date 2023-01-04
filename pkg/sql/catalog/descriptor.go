@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -235,17 +236,11 @@ type Descriptor interface {
 	// GetRawBytesInStorage returns the raw bytes (tag + data) of the descriptor in storage.
 	// It is exclusively used in the CPut when persisting an updated descriptor to storage.
 	GetRawBytesInStorage() []byte
-}
 
-// HydratableDescriptor represent a Descriptor which needs user-define type
-// hydration if it contains any UDT.
-type HydratableDescriptor interface {
-	Descriptor
-
-	// ContainsUserDefinedTypes returns whether or not this descriptor uses any
-	// user defined types. For example, a table column table can use user defined
-	// type and a function can use user defined type as an argument type.
-	ContainsUserDefinedTypes() bool
+	// ForEachUDTDependentForHydration iterates over all the user-defined types.T
+	// referenced by this descriptor which must be hydrated prior to using it.
+	// iterutil.StopIteration is supported.
+	ForEachUDTDependentForHydration(func(t *types.T) error) error
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -284,7 +279,7 @@ type DatabaseDescriptor interface {
 
 // TableDescriptor is an interface around the table descriptor types.
 type TableDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// TableDesc returns the backing protobuf for this database.
 	TableDesc() *descpb.TableDescriptor
@@ -779,15 +774,6 @@ type TypeDescriptor interface {
 	Descriptor
 	// TypeDesc returns the backing descriptor for this type, if one exists.
 	TypeDesc() *descpb.TypeDescriptor
-	// HydrateTypeInfoWithName fills in user defined type metadata for
-	// a type and also sets the name in the metadata to the passed in name.
-	// This is used when hydrating a type with a known qualified name.
-	//
-	// Note that if the passed type is already hydrated, regardless of the version
-	// with which it has been hydrated, this is a no-op.
-	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
-	// MakeTypesT creates a types.T from the input type descriptor.
-	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	// HasPendingSchemaChanges returns whether or not this descriptor has schema
 	// changes that need to be completed.
 	HasPendingSchemaChanges() bool
@@ -802,7 +788,10 @@ type TypeDescriptor interface {
 	// array type for this type. It is only set when the type descriptor points to
 	// a non-array type.
 	GetArrayTypeID() descpb.ID
-
+	// AsTypesT returns a reference to a types.T corresponding to this type
+	// descriptor. No guarantees are provided as to whether this object is a
+	// singleton or not, or whether it's hydrated or not.
+	AsTypesT() *types.T
 	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
 
@@ -884,7 +873,7 @@ type DefaultPrivilegeDescriptor interface {
 
 // FunctionDescriptor is an interface around the function descriptor types.
 type FunctionDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// GetReturnType returns the function's return type.
 	GetReturnType() descpb.FunctionDescriptor_ReturnType
@@ -1032,4 +1021,14 @@ func IsSystemDescriptor(desc Descriptor) bool {
 // for the legacy schema changer).
 func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
 	return desc.GetDeclarativeSchemaChangerState() != nil
+}
+
+// MaybeRequiresHydration returns false if the descriptor definitely does not
+// depend on any types.T being hydrated.
+func MaybeRequiresHydration(desc Descriptor) (ret bool) {
+	_ = desc.ForEachUDTDependentForHydration(func(t *types.T) error {
+		ret = true
+		return iterutil.StopIteration()
+	})
+	return ret
 }

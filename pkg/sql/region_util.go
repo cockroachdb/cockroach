@@ -30,9 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2496,14 +2498,18 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	}
 
 	// Convert the enum descriptor into a type
-	enumName := tree.MakeQualifiedTypeName(systemDB.GetName(), "public", enumTypeDesc.GetName())
-	enumType, err := enumTypeDesc.MakeTypesT(ctx, &enumName, nil)
+	enumTypeName := tree.MakeQualifiedTypeName(
+		catconstants.SystemDatabaseName, catconstants.PublicSchemaName, enumTypeDesc.GetName(),
+	)
+	enumType, err := typedesc.HydratedTFromDesc(ctx, &enumTypeName, enumTypeDesc, p)
 	if err != nil {
 		return err
 	}
 
 	getDescriptor := func(name string) (*tabledesc.Mutable, error) {
-		tableName := tree.MakeTableNameWithSchema(tree.Name("system"), tree.Name("public"), tree.Name(name))
+		tableName := tree.MakeTableNameWithSchema(
+			catconstants.SystemDatabaseName, catconstants.PublicSchemaName, tree.Name(name),
+		)
 		required := true
 		_, desc, err := resolver.ResolveMutableExistingTableObject(
 			ctx, p, &tableName, required, tree.ResolveRequireTableDesc)

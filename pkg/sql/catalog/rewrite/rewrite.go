@@ -310,11 +310,7 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 		tree.FmtSerializable,
 		tree.FmtIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 			newRef := ref
-			var id descpb.ID
-			id, err = typedesc.UserDefinedTypeOIDToID(ref.OID)
-			if err != nil {
-				return
-			}
+			id := typedesc.UserDefinedTypeOIDToID(ref.OID)
 			if rw, ok := rewrites[id]; ok {
 				newRef = &tree.OIDTypeReference{OID: catid.TypeIDToOID(rw.ID)}
 			}
@@ -322,9 +318,6 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 		}),
 	)
 	ctx.FormatNode(parsed)
-	if err != nil {
-		return "", err
-	}
 	return ctx.CloseAndGetString(), nil
 }
 
@@ -409,20 +402,14 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	if !typ.UserDefined() {
 		return nil
 	}
-	tid, err := typedesc.GetUserDefinedTypeDescID(typ)
-	if err != nil {
-		return err
-	}
+	tid := typedesc.GetUserDefinedTypeDescID(typ)
 	// Collect potential new OID values.
 	var newOID, newArrayOID oid.Oid
 	if rw, ok := descriptorRewrites[tid]; ok {
 		newOID = catid.TypeIDToOID(rw.ID)
 	}
 	if typ.Family() != types.ArrayFamily {
-		tid, err = typedesc.GetUserDefinedArrayTypeDescID(typ)
-		if err != nil {
-			return err
-		}
+		tid = typedesc.GetUserDefinedArrayTypeDescID(typ)
 		if rw, ok := descriptorRewrites[tid]; ok {
 			newArrayOID = catid.TypeIDToOID(rw.ID)
 		}

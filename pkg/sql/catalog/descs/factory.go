@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -32,7 +32,7 @@ type CollectionFactory struct {
 	codec                                keys.SQLCodec
 	leaseMgr                             *lease.Manager
 	virtualSchemas                       catalog.VirtualSchemas
-	hydrated                             *hydrateddesc.Cache
+	hydrated                             *hydrateddesccache.Cache
 	systemDatabase                       *catkv.SystemDatabaseCache
 	spanConfigSplitter                   spanconfig.Splitter
 	spanConfigLimiter                    spanconfig.Limiter
@@ -87,7 +87,7 @@ func NewCollectionFactory(
 	settings *cluster.Settings,
 	leaseMgr *lease.Manager,
 	virtualSchemas catalog.VirtualSchemas,
-	hydrated *hydrateddesc.Cache,
+	hydrated *hydrateddesccache.Cache,
 	spanConfigSplitter spanconfig.Splitter,
 	spanConfigLimiter spanconfig.Limiter,
 	defaultDescriptorSessionDataProvider DescriptorSessionDataProvider,

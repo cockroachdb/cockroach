@@ -9010,8 +9010,8 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return m
 	}
-	status := func(lead uint64, progress map[uint64]tracker.Progress) *raft.Status {
-		status := &raft.Status{
+	status := func(lead uint64, progress map[uint64]tracker.Progress) *raftSparseStatus {
+		status := &raftSparseStatus{
 			Progress: progress,
 		}
 		// The commit index is set so that a progress.Match value of 1 is behind
@@ -9055,7 +9055,7 @@ func TestReplicaMetrics(t *testing.T) {
 		replicas    int32
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
-		raftStatus  *raft.Status
+		raftStatus  *raftSparseStatus
 		liveness    livenesspb.IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics

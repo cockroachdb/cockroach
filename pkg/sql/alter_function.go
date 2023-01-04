@@ -384,10 +384,7 @@ func (p *planner) mustGetMutableFunctionForAlter(
 	if err != nil {
 		return nil, err
 	}
-	fnID, err := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
-	if err != nil {
-		return nil, err
-	}
+	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
 	mut, err := p.checkPrivilegesForDropFunction(ctx, fnID)
 	if err != nil {
 		return nil, err

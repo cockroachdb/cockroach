@@ -11,15 +11,11 @@
 package typedesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -31,12 +27,6 @@ import (
 type TableImplicitRecordType struct {
 	// desc is the TableDescriptor that this implicit record type is created from.
 	desc catalog.TableDescriptor
-
-	// typ is the fully-hydrated types.T that is represented by this
-	// TypeDescriptor. It'll always be a tuple. The elements of the tuple will
-	// be the visible column types of the table, in order, and the labels will
-	// be the names of those columns.
-	typ *types.T
 	// privs holds the privileges for this implicit record type. It's calculated
 	// by examining the privileges for the table that the record type corresponds
 	// to, and providing the USAGE privilege if the table had the SELECT
@@ -52,37 +42,6 @@ var _ catalog.TypeDescriptor = (*TableImplicitRecordType)(nil)
 func CreateImplicitRecordTypeFromTableDesc(
 	descriptor catalog.TableDescriptor,
 ) (catalog.TypeDescriptor, error) {
-
-	cols := descriptor.VisibleColumns()
-	typs := make([]*types.T, len(cols))
-	names := make([]string, len(cols))
-	for i, col := range cols {
-		if !ColumnIsHydrated(col) {
-			return nil, errors.AssertionFailedf("encountered unhydrated col %s while creating implicit record type from"+
-				" table %s", col.ColName(), descriptor.GetName())
-		}
-		typs[i] = col.GetType()
-		names[i] = col.GetName()
-	}
-	// The TypeDescriptor will be an alias to this Tuple type, which contains
-	// all of the table's visible columns in order, labeled by the table's column
-	// names.
-	typ := types.MakeLabeledTuple(typs, names)
-	tableID := descriptor.GetID()
-	typeOID := TableIDToImplicitTypeOID(tableID)
-	// Setting the type's OID allows us to properly report and display this type
-	// as having ID <tableID> + 100000 in the pg_type table and ::REGTYPE casts.
-	// It will also be used to serialize expressions casted to this type for
-	// distribution with DistSQL. The receiver of such a serialized expression
-	// will then be able to look up and rehydrate this type via the type cache.
-	typ.InternalType.Oid = typeOID
-	typ.TypeMeta = types.UserDefinedTypeMetadata{
-		Name: &types.UserDefinedTypeName{
-			Name: descriptor.GetName(),
-		},
-		Version:            uint32(descriptor.GetVersion()),
-		ImplicitRecordType: true,
-	}
 
 	// Note: Implicit types for virtual tables are hardcoded to have USAGE
 	// privileges and this can't be modified. The virtual table itself does have
@@ -102,28 +61,12 @@ func CreateImplicitRecordTypeFromTableDesc(
 
 	return &TableImplicitRecordType{
 		desc: descriptor,
-		typ:  typ,
 		privs: &catpb.PrivilegeDescriptor{
 			Users:      newPrivs,
 			OwnerProto: tablePrivs.OwnerProto,
 			Version:    tablePrivs.Version,
 		},
 	}, nil
-}
-
-// TableIsHydrated checks if all visible columns of a table are hydrated.
-func TableIsHydrated(tbl catalog.TableDescriptor) bool {
-	for _, col := range tbl.VisibleColumns() {
-		if !ColumnIsHydrated(col) {
-			return false
-		}
-	}
-	return true
-}
-
-// ColumnIsHydrated checks if a column is type hydrated.
-func ColumnIsHydrated(col catalog.Column) bool {
-	return !col.GetType().UserDefined() || col.GetType().IsHydrated()
 }
 
 // GetName implements the Namespace interface.
@@ -200,9 +143,6 @@ func (v TableImplicitRecordType) DescriptorProto() *descpb.Descriptor {
 // ByteSize implements the Descriptor interface.
 func (v TableImplicitRecordType) ByteSize() int64 {
 	mem := v.desc.ByteSize()
-	if v.typ != nil {
-		mem += int64(v.typ.Size())
-	}
 	if v.privs != nil {
 		mem += int64(v.privs.Size())
 	}
@@ -248,42 +188,46 @@ func (v TableImplicitRecordType) GetRawBytesInStorage() []byte {
 	return nil
 }
 
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (v TableImplicitRecordType) ForEachUDTDependentForHydration(_ func(t *types.T) error) error {
+	return nil
+}
+
 // TypeDesc implements the TypeDescriptor interface.
 func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	v.panicNotSupported("TypeDesc")
 	return nil
 }
 
-// HydrateTypeInfoWithName implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) HydrateTypeInfoWithName(
-	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
-) error {
-	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(v.desc.GetVersion()) {
-		return nil
+// AsTypesT implements the TypeDescriptor interface.
+func (v TableImplicitRecordType) AsTypesT() *types.T {
+	cols := v.desc.VisibleColumns()
+	typs := make([]*types.T, len(cols))
+	names := make([]string, len(cols))
+	for i, col := range cols {
+		typs[i] = col.GetType()
+		names[i] = col.GetName()
 	}
-	if typ.Family() != types.TupleFamily {
-		return errors.AssertionFailedf("unexpected hydration of non-tuple type %s with table implicit record type %d",
-			typ, v.GetID())
+	// The TypeDescriptor will be an alias to this Tuple type, which contains
+	// all of the table's visible columns in order, labeled by the table's column
+	// names.
+	typ := types.MakeLabeledTuple(typs, names)
+	tableID := v.desc.GetID()
+	typeOID := TableIDToImplicitTypeOID(tableID)
+	// Setting the type's OID allows us to properly report and display this type
+	// as having ID <tableID> + 100000 in the pg_type table and ::REGTYPE casts.
+	// It will also be used to serialize expressions casted to this type for
+	// distribution with DistSQL. The receiver of such a serialized expression
+	// will then be able to look up and rehydrate this type via the type cache.
+	typ.InternalType.Oid = typeOID
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Name: v.desc.GetName(),
+		},
+		Version:            uint32(v.desc.GetVersion()),
+		ImplicitRecordType: true,
 	}
-	if typ.Oid() != catid.TypeIDToOID(v.GetID()) {
-		return errors.AssertionFailedf("unexpected mismatch during table implicit record type hydration: "+
-			"type %s has id %d, descriptor has id %d", typ, typ.Oid(), v.GetID())
-	}
-	typ.TypeMeta.Name = &types.UserDefinedTypeName{
-		Catalog:        name.Catalog(),
-		ExplicitSchema: name.ExplicitSchema,
-		Schema:         name.Schema(),
-		Name:           name.Object(),
-	}
-	typ.TypeMeta.Version = uint32(v.desc.GetVersion())
-	return EnsureTypeIsHydrated(ctx, typ, res)
-}
-
-// MakeTypesT implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) MakeTypesT(
-	_ context.Context, _ *tree.TypeName, _ catalog.TypeDescriptorResolver,
-) (*types.T, error) {
-	return v.typ, nil
+	return typ
 }
 
 // HasPendingSchemaChanges implements the TypeDescriptor interface.

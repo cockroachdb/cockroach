@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -138,12 +139,13 @@ func (p synthetic) ForEachFunctionOverload(
 	return nil
 }
 
-func (p synthetic) GetRawBytesInStorage() []byte {
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (p synthetic) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
 	return nil
 }
 
-func (p synthetic) ContainsUserDefinedTypes() bool {
-	return false
+func (p synthetic) GetRawBytesInStorage() []byte {
+	return nil
 }
 
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.

@@ -225,7 +225,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), &resolver); err != nil {
+		if err := typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
@@ -653,9 +653,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
-		if err = typedesc.HydrateTypesInTableDescriptor(
-			ctx, desc.TableDesc(), &resolver,
-		); err != nil {
+		if err = typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.

@@ -87,11 +87,7 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 			if !types.IsOIDUserDefinedType(oid) {
 				continue
 			}
-			id, err := typedesc.UserDefinedTypeOIDToID(oid)
-			if err != nil {
-				// This should never happen.
-				return nil, err
-			}
+			id := typedesc.UserDefinedTypeOIDToID(oid)
 			if _, found := w.cachedTypeIDClosures[id]; !found {
 				desc := w.lookupFn(id)
 				typ, err := catalog.AsTypeDescriptor(desc)

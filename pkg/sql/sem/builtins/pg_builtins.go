@@ -662,11 +662,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				getFuncQuery := `SELECT prosrc FROM pg_proc WHERE oid=$1`
 				if catid.IsOIDUserDefined(oid.Oid(idToQuery)) {
 					getFuncQuery = `SELECT create_statement FROM crdb_internal.create_function_statements WHERE function_id=$1`
-					var err error
-					idToQuery, err = catid.UserDefinedOIDToID(oid.Oid(idToQuery))
-					if err != nil {
-						return nil, err
-					}
+					idToQuery = catid.UserDefinedOIDToID(oid.Oid(idToQuery))
 				}
 				results, err := evalCtx.Planner.QueryRowEx(
 					ctx, "pg_get_functiondef",

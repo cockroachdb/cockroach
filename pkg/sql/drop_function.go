@@ -60,10 +60,7 @@ func (p *planner) DropFunction(
 		if ol == nil {
 			continue
 		}
-		fnID, err := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
-		if err != nil {
-			return nil, err
-		}
+		fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
 		if fnResolved.Contains(int(fnID)) {
 			continue
 		}
