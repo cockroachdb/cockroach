@@ -89,8 +89,7 @@ func (p *planner) alterDefaultPrivileges(
 		if immSchema.SchemaKind() != catalog.SchemaUserDefined {
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "%s is not a physical schema", immSchema.GetName())
 		}
-		mutFlags := tree.SchemaLookupFlags{Required: true}
-		mutableSchemaDesc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, immSchema.GetID(), mutFlags)
+		mutableSchemaDesc, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, immSchema.GetID())
 		if err != nil {
 			return nil, err
 		}

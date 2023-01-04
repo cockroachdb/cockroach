@@ -92,7 +92,7 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		return p.Descriptors().GetMutableSchemaByID(ctx, p.txn, sc.GetID(), flags)
+		return p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, sc.GetID())
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:

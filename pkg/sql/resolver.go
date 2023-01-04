@@ -314,10 +314,6 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 	ctx context.Context, targets tree.GrantTargetList,
 ) ([]DescriptorWithObjectType, error) {
 	const required = true
-	flags := tree.CommonLookupFlags{
-		Required:    required,
-		AvoidLeased: p.skipDescriptorCache,
-	}
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
@@ -325,7 +321,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		descs := make([]DescriptorWithObjectType, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
 			descriptor, err := p.Descriptors().
-				GetMutableDatabaseByName(ctx, p.txn, string(database), flags)
+				GetMutableDatabaseByName(ctx, p.txn, string(database), tree.DatabaseLookupFlags{})
 			if err != nil {
 				return nil, err
 			}
@@ -403,7 +399,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				if scName.ExplicitCatalog {
 					dbName = scName.Catalog()
 				}
-				db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, flags)
+				db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, tree.DatabaseLookupFlags{})
 				if err != nil {
 					return nil, err
 				}
@@ -461,7 +457,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				if scName.ExplicitCatalog {
 					dbName = scName.Catalog()
 				}
-				db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, flags)
+				db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, tree.DatabaseLookupFlags{})
 				if err != nil {
 					return nil, err
 				}
@@ -502,7 +498,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			if sc.ExplicitCatalog {
 				dbName = sc.Catalog()
 			}
-			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, flags)
+			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName, tree.DatabaseLookupFlags{})
 			if err != nil {
 				return nil, err
 			}
@@ -513,6 +509,10 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for _, sc := range targetSchemas {
+			flags := tree.CommonLookupFlags{
+				Required:    required,
+				AvoidLeased: p.skipDescriptorCache,
+			}
 			resSchema, err := p.Descriptors().GetImmutableSchemaByName(
 				ctx, p.txn, sc.dbDesc, sc.schema, flags,
 			)
@@ -521,9 +521,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			}
 			switch resSchema.SchemaKind() {
 			case catalog.SchemaUserDefined:
-				mutSchema, err := p.Descriptors().GetMutableSchemaByID(
-					ctx, p.txn, resSchema.GetID(), flags,
-				)
+				mutSchema, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, resSchema.GetID())
 				if err != nil {
 					return nil, err
 				}

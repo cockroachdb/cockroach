@@ -53,14 +53,6 @@ func (tc *Collection) GetImmutableSchemaByName(
 	return tc.ByName(txn).WithFlags(flags).Immutable().Schema(ctx, db, scName)
 }
 
-// GetMutableSchemaByID returns a mutable schema descriptor with the given
-// schema ID. An error is always returned if the descriptor is not physical.
-func (tc *Collection) GetMutableSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
-) (*schemadesc.Mutable, error) {
-	return tc.ByID(txn).WithFlags(flags).Mutable().Schema(ctx, schemaID)
-}
-
 // InsertDescriptorlessPublicSchemaToBatch adds the creation of a new descriptorless public
 // schema to the batch.
 func (tc *Collection) InsertDescriptorlessPublicSchemaToBatch(

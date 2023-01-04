@@ -57,8 +57,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 		return nil, err
 	}
 
-	schemaDesc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn,
-		db.GetSchemaID(n.Name.Schema()), tree.SchemaLookupFlags{Required: true})
+	schemaDesc, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, db.GetSchemaID(n.Name.Schema()))
 	if err != nil {
 		return nil, err
 	}

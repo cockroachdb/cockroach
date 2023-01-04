@@ -74,8 +74,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		flags := p.CommonLookupFlagsRequired()
-		desc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, schema.GetID(), flags)
+		desc, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, schema.GetID())
 		if err != nil {
 			return nil, err
 		}

@@ -167,9 +167,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, err := p.Descriptors().GetMutableSchemaByID(
-				ctx, p.txn, schemaToDelete.GetID(), p.CommonLookupFlagsRequired(),
-			)
+			mutDesc, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, schemaToDelete.GetID())
 			if err != nil {
 				return err
 			}

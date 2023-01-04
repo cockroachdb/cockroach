@@ -1243,7 +1243,7 @@ SELECT id
 		}
 
 		// Rename a schema synthetically, make sure that that propagates.
-		scDesc, err := descriptors.GetMutableSchemaByID(ctx, txn, scID, tree.SchemaLookupFlags{})
+		scDesc, err := descriptors.ByID(txn).Mutable().Schema(ctx, scID)
 		if err != nil {
 			return err
 		}

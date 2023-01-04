@@ -146,9 +146,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		sc := n.d.schemasToDelete[i].schema
 		schemaIDs[i] = sc.GetID()
 		db := n.d.schemasToDelete[i].dbDesc
-		mutDesc, err := p.Descriptors().GetMutableSchemaByID(
-			ctx, p.txn, sc.GetID(), p.CommonLookupFlagsRequired(),
-		)
+		mutDesc, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, sc.GetID())
 		if err != nil {
 			return err
 		}

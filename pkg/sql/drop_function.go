@@ -211,9 +211,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 	}
 
 	// Remove function signature from schema.
-	scDesc, err := p.Descriptors().GetMutableSchemaByID(
-		ctx, p.Txn(), fnMutable.ParentSchemaID, tree.ObjectLookupFlagsWithRequired().CommonLookupFlags,
-	)
+	scDesc, err := p.Descriptors().ByID(p.Txn()).Mutable().Schema(ctx, fnMutable.ParentSchemaID)
 	if err != nil {
 		return err
 	}
