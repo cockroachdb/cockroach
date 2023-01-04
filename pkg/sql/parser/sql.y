@@ -5537,13 +5537,20 @@ backup_kms:
 
 // %Help: SHOW TENANT - display tenant information
 // %Category: Misc
-// %Text: SHOW TENANT <tenant_name> [WITH REPLICATION STATUS]
+// %Text:
+// SHOW TENANT <tenant_name> [WITH REPLICATION STATUS]
+// SHOW TENANTS
 show_tenant_stmt:
-  SHOW TENANT d_expr
+  SHOW TENANTS
+  {
+   $$.val = &tree.ShowTenant{
+     All: true,
+   }
+  }
+| SHOW TENANT d_expr
   {
    $$.val = &tree.ShowTenant{
      Name: $3.expr(),
-     WithReplication: false,
    }
   }
 | SHOW TENANT d_expr WITH REPLICATION STATUS
@@ -16009,6 +16016,7 @@ unreserved_keyword:
 | TEMPLATE
 | TEMPORARY
 | TENANT
+| TENANTS
 | TESTING_RELOCATE
 | TEXT
 | TIES
