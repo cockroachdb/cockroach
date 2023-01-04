@@ -2460,12 +2460,7 @@ func (r *restoreResumer) dropDescriptors(
 
 	for i := range details.FunctionDescs {
 		fnDesc := details.FunctionDescs[i]
-		mutFn, err := descsCol.GetMutableFunctionByID(ctx, txn, fnDesc.ID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeOffline: true,
-			},
-		})
+		mutFn, err := descsCol.ByID(txn).Mutable().Function(ctx, fnDesc.ID)
 		if err != nil {
 			return err
 		}

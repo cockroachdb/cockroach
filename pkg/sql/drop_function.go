@@ -134,7 +134,7 @@ func (p *planner) matchUDF(
 func (p *planner) checkPrivilegesForDropFunction(
 	ctx context.Context, fnID descpb.ID,
 ) (*funcdesc.Mutable, error) {
-	mutable, err := p.Descriptors().GetMutableFunctionByID(ctx, p.Txn(), fnID, tree.ObjectLookupFlagsWithRequired())
+	mutable, err := p.Descriptors().ByID(p.Txn()).Mutable().Function(ctx, fnID)
 	if err != nil {
 		return nil, err
 	}

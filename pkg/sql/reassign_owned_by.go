@@ -341,9 +341,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 func (n *reassignOwnedByNode) reassignFunctionOwner(
 	fnDesc catalog.FunctionDescriptor, params runParams,
 ) error {
-	mutableDesc, err := params.p.Descriptors().GetMutableFunctionByID(
-		params.ctx, params.p.txn, fnDesc.GetID(), tree.ObjectLookupFlagsWithRequired(),
-	)
+	mutableDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Function(params.ctx, fnDesc.GetID())
 	if err != nil {
 		return err
 	}

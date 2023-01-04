@@ -375,7 +375,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				continue
 			}
 			fnResolved.Add(fnID)
-			fnDesc, err := p.Descriptors().GetMutableFunctionByID(ctx, p.txn, fnID, tree.ObjectLookupFlagsWithRequired())
+			fnDesc, err := p.Descriptors().ByID(p.txn).Mutable().Function(ctx, fnID)
 			if err != nil {
 				return nil, err
 			}
@@ -468,7 +468,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					return nil, err
 				}
 				err = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fn, err := p.Descriptors().GetMutableFunctionByID(ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired())
+					fn, err := p.Descriptors().ByID(p.txn).Mutable().Function(ctx, overload.ID)
 					if err != nil {
 						return err
 					}

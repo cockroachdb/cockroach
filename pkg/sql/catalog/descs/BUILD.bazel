@@ -10,7 +10,6 @@ go_library(
         "dist_sql_type_resolver.go",
         "errors.go",
         "factory.go",
-        "function.go",
         "getters.go",
         "helpers.go",
         "hydrate.go",
