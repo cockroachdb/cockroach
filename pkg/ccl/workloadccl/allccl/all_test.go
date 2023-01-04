@@ -245,8 +245,6 @@ func hashTableInitialData(
 func TestDeterministicInitialData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 93958, "flaky test")
-
 	// There are other tests that run initial data generation under race, so we
 	// don't get anything from running this one under race as well.
 	skip.UnderRace(t, "uninteresting under race")
@@ -272,7 +270,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
-		`tpch`:       0xe013881749bb67e8,
+		`tpch`:       0xe4fd28db230b9149,
 		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 
