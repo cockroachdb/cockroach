@@ -45,6 +45,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper(stop.WithTracer(tracer))
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
+			// TODO(aaditya): can this be used for app tenants as well?
 			TenantID: roachpb.SystemTenantID,
 			Config:   cfg.Config,
 			Clock:    clock,

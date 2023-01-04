@@ -339,6 +339,9 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	//TODO(aaditya): maybe a list?
+	appTenantPorts []string
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This

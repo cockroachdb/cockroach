@@ -49,6 +49,7 @@ type debugZipContext struct {
 	timeout        time.Duration
 	admin          serverpb.AdminClient
 	status         serverpb.StatusClient
+	prefix         string
 
 	firstNodeSQLConn clisqlclient.Conn
 
@@ -145,6 +146,22 @@ func (zc *debugZipContext) forAllNodes(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
+func runDebugZipUA(_ *cobra.Command, args []string) (retErr error) {
+	return nil
+}
+
+type debugMetadata struct {
+	port string
+}
+
+// TODO(aaditya):
+// - Q: clarify NodeList returning tentantID/name
+//   - RPC context
+//   - dir prefix
+//
+// - replace all usages of debug prefix
+// - run this against demo/signe-node
+// - remove the Nodes RPC in favor of NodesList
 func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err
@@ -160,58 +177,19 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 		zipCtx.redact = true
 	}
 
-	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	s := zr.start("parsing host address")
+	host, port, err := net.SplitHostPort(serverCfg.AdvertiseAddr)
 	if err != nil {
 		return s.fail(err)
 	}
-	defer finish()
 
-	status := serverpb.NewStatusClient(conn)
-	admin := serverpb.NewAdminClient(conn)
-	s.done()
-
-	s = zr.start("retrieving the node status to get the SQL address")
-	firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
-	if err != nil {
-		return s.fail(err)
+	metadataList := []debugMetadata{{
+		port: port,
+	}}
+	for _, p := range zipCtx.appTenantPorts {
+		metadataList = append(metadataList, debugMetadata{port: p})
 	}
 	s.done()
-
-	sqlAddr := firstNodeDetails.SQLAddress
-	if sqlAddr.IsEmpty() {
-		// No SQL address: either a pre-19.2 node, or same address for both
-		// SQL and RPC.
-		sqlAddr = firstNodeDetails.Address
-	}
-	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
-
-	cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr.AddressField)
-	if err != nil {
-		return s.fail(err)
-	}
-
-	// We're going to use the SQL code, but in non-interactive mode.
-	// Override whatever terminal-driven defaults there may be out there.
-	cliCtx.IsInteractive = false
-	sqlExecCtx.TerminalOutput = false
-	sqlExecCtx.ShowTimes = false
-	// Use a streaming format to avoid accumulating all rows in RAM.
-	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
-
-	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
-	// The zip output is sent directly into a text file, so the results should
-	// be scanned into strings.
-	sqlConn.SetAlwaysInferResultTypes(false)
-	if err != nil {
-		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
-	} else {
-		// Note: we're not printing "connection established" because the driver we're using
-		// does late binding.
-		defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
-		s.progress("using SQL connection URL: %s", sqlConn.GetURL())
-		s.done()
-	}
 
 	name := args[0]
 	s = zr.start("creating output file %s", name)
@@ -227,75 +205,132 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	}()
 	s.done()
 
-	timeout := 10 * time.Second
-	if cliCtx.cmdTimeout != 0 {
-		timeout = cliCtx.cmdTimeout
-	}
+	for _, metadata := range metadataList {
+		if err := func() error {
+			cfg := serverCfg
+			cfg.AdvertiseAddr = net.JoinHostPort(host, metadata.port)
 
-	zc := debugZipContext{
-		clusterPrinter:   zr,
-		z:                z,
-		timeout:          timeout,
-		admin:            admin,
-		status:           status,
-		firstNodeSQLConn: sqlConn,
-		sem:              semaphore.New(zipCtx.concurrency),
-	}
+			s := zr.start("establishing RPC connection to %s", cfg.AdvertiseAddr)
+			conn, _, finish, err := getClientGRPCConn(ctx, cfg)
+			if err != nil {
+				return s.fail(err)
+			}
+			defer finish()
 
-	// Fetch the cluster-wide details.
-	// For a SQL only server, the nodeList will be a list of SQL nodes
-	// and livenessByNodeID is null. For a KV server, the nodeList will
-	// be a list of KV nodes along with the corresponding node liveness data.
-	ni, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
-	if err != nil {
-		return err
-	}
-	// Collect the CPU profiles, before the other per-node requests
-	// below possibly influences the nodes and thus CPU profiles.
-	if err := zc.collectCPUProfiles(ctx, ni, livenessByNodeID); err != nil {
-		return err
-	}
+			status := serverpb.NewStatusClient(conn)
+			admin := serverpb.NewAdminClient(conn)
+			s.done()
 
-	// Collect the per-node data.
-	if err := zc.forAllNodes(ctx, ni, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
-		return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
-	}); err != nil {
-		return err
-	}
+			s = zr.start("retrieving the node status to get the SQL address")
+			firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+			if err != nil {
+				return s.fail(err)
+			}
+			s.done()
 
-	// Add a little helper script to draw attention to the existence of tags in
-	// the profiles.
-	{
-		s := zc.clusterPrinter.start("pprof summary script")
-		if err := z.createRaw(s, debugBase+"/pprof-summary.sh", []byte(`#!/bin/sh
+			sqlAddr := firstNodeDetails.SQLAddress
+			if sqlAddr.IsEmpty() {
+				// No SQL address: either a pre-19.2 node, or same address for both
+				// SQL and RPC.
+				sqlAddr = firstNodeDetails.Address
+			}
+			s = zr.start("using SQL address: %s", sqlAddr.AddressField)
+
+			cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr.AddressField)
+			if err != nil {
+				return s.fail(err)
+			}
+
+			// We're going to use the SQL code, but in non-interactive mode.
+			// Override whatever terminal-driven defaults there may be out there.
+			cliCtx.IsInteractive = false
+			sqlExecCtx.TerminalOutput = false
+			sqlExecCtx.ShowTimes = false
+			// Use a streaming format to avoid accumulating all rows in RAM.
+			sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+
+			sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
+			// The zip output is sent directly into a text file, so the results should
+			// be scanned into strings.
+			sqlConn.SetAlwaysInferResultTypes(false)
+			if err != nil {
+				_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
+			} else {
+				// Note: we're not printing "connection established" because the driver we're using
+				// does late binding.
+				defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
+				s.progress("using SQL connection URL: %s", sqlConn.GetURL())
+				s.done()
+			}
+
+			timeout := 10 * time.Second
+			if cliCtx.cmdTimeout != 0 {
+				timeout = cliCtx.cmdTimeout
+			}
+
+			zc := debugZipContext{
+				clusterPrinter:   zr,
+				z:                z,
+				timeout:          timeout,
+				admin:            admin,
+				status:           status,
+				firstNodeSQLConn: sqlConn,
+				sem:              semaphore.New(zipCtx.concurrency),
+				prefix:           debugBase + "/" + metadata.port,
+			}
+
+			// Fetch the cluster-wide details.
+			// For a SQL only server, the nodeList will be a list of SQL nodes
+			// and livenessByNodeID is null. For a KV server, the nodeList will
+			// be a list of KV nodes along with the corresponding node liveness data.
+			ni, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
+			if err != nil {
+				return err
+			}
+			// Collect the CPU profiles, before the other per-node requests
+			// below possibly influences the nodes and thus CPU profiles.
+			if err := zc.collectCPUProfiles(ctx, ni, livenessByNodeID); err != nil {
+				return err
+			}
+
+			// Collect the per-node data.
+			if err := zc.forAllNodes(ctx, ni, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
+				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
+			}); err != nil {
+				return err
+			}
+
+			// Add a little helper script to draw attention to the existence of tags in
+			// the profiles.
+			{
+				s := zc.clusterPrinter.start("pprof summary script")
+				if err := z.createRaw(s, zc.prefix+"/pprof-summary.sh", []byte(`#!/bin/sh
 find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 `)); err != nil {
-			return err
-		}
-	}
+					return err
+				}
+			}
 
-	// A script to summarize the hottest ranges for a storage server's range reports.
-	{
-		s := zc.clusterPrinter.start("hot range summary script")
-		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
-for stat in "queries" "writes" "reads" "write_bytes" "read_bytes"; do
-	echo "$stat"
-	find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
-done
+			// A script to summarize the hottest ranges for a storage server's range reports.
+			{
+				s := zc.clusterPrinter.start("hot range summary script")
+				if err := z.createRaw(s, zc.prefix+"/hot-ranges.sh", []byte(`#!/bin/sh
+find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
-			return err
-		}
-	}
+					return err
+				}
+			}
 
-	// A script to summarize the hottest ranges for a tenant's range report.
-	{
-		s := zc.clusterPrinter.start("tenant hot range summary script")
-		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
-for stat in "queries" "writes" "reads" "write_bytes" "read_bytes"; do
-    echo "$stat"_per_second
-    find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
-done
-`)); err != nil {
+			// A script to summarize the hottest ranges for a tenant's range report.
+			{
+				s := zc.clusterPrinter.start("tenant hot range summary script")
+				if err := z.createRaw(s, zc.prefix+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20`)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}(); err != nil {
 			return err
 		}
 	}
