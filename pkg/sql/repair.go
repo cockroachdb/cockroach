@@ -422,7 +422,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	flags.IncludeDropped = true
 	flags.IncludeOffline = true
 	validateDescriptor := func() error {
-		desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), descID, flags)
+		desc, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Desc(ctx, descID)
 		if err != nil && descID != keys.PublicSchemaID {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
@@ -456,7 +456,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentID == descpb.InvalidID {
 			return nil
 		}
-		parent, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentID, flags)
+		parent, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Desc(ctx, parentID)
 		if err != nil {
 			return errors.Wrapf(err, "failed to look up parent %d", parentID)
 		}
@@ -470,7 +470,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentSchemaID == descpb.InvalidID || parentSchemaID == keys.PublicSchemaID {
 			return nil
 		}
-		schema, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentSchemaID, flags)
+		schema, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Desc(ctx, parentSchemaID)
 		if err != nil {
 			return err
 		}

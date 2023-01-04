@@ -44,13 +44,6 @@ func (tc *Collection) GetMutableDescriptorByID(
 	return tc.ByID(txn).Mutable().Desc(ctx, id)
 }
 
-// GetImmutableDescriptorByID delegates to GetImmutableDescriptorsByID.
-func (tc *Collection) GetImmutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
-) (catalog.Descriptor, error) {
-	return tc.ByID(txn).WithFlags(flags).Immutable().Desc(ctx, id)
-}
-
 // GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
 func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {

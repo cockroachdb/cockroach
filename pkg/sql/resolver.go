@@ -598,14 +598,11 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 	ctx context.Context, ids []descpb.ID,
 ) (fullyQualifiedNames []string, _ error) {
 	for _, id := range ids {
-		desc, err := p.Descriptors().GetImmutableDescriptorByID(
-			ctx, p.txn, id,
-			tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			},
-		)
+		desc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+		}).Immutable().Desc(ctx, id)
 		if err != nil {
 			return nil, err
 		}

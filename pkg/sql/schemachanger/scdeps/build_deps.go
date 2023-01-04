@@ -231,13 +231,11 @@ func (d *buildDeps) CurrentDatabase() string {
 // MustReadDescriptor implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor {
 	flags := tree.CommonLookupFlags{
-		Required:       true,
-		RequireMutable: false,
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
-	desc, err := d.descsCollection.GetImmutableDescriptorByID(ctx, d.txn, id, flags)
+	desc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Desc(ctx, id)
 	if err != nil {
 		panic(err)
 	}

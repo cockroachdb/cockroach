@@ -585,11 +585,10 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	) (err error) {
 		flags := tree.CommonLookupFlags{
 			AvoidLeased:    true,
-			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
 		}
-		desc, err = descriptors.GetImmutableDescriptorByID(ctx, txn, sc.descID, flags)
+		desc, err = descriptors.ByID(txn).WithFlags(flags).Immutable().Desc(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err

@@ -182,9 +182,6 @@ func (s *SQLTranslator) Translate(
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.
 var descLookupFlags = tree.CommonLookupFlags{
-	// We act on errors being surfaced when the descriptor being looked up is
-	// not found.
-	Required: true,
 	// We can (do) generate span configurations for dropped and offline tables.
 	IncludeDropped: true,
 	IncludeOffline: true,
@@ -261,7 +258,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	}
 
 	// We're dealing with a SQL object.
-	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, descLookupFlags)
+	desc, err := descsCol.ByID(txn).WithFlags(descLookupFlags).Immutable().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here
@@ -542,7 +539,7 @@ func (s *SQLTranslator) findDescendantLeafIDs(
 func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) (descpb.IDs, error) {
-	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, descLookupFlags)
+	desc, err := descsCol.ByID(txn).WithFlags(descLookupFlags).Immutable().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here

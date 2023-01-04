@@ -471,9 +471,7 @@ func makeFunctionParam(
 }
 
 func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(
-		ctx, p.Txn(), id, tree.ObjectLookupFlagsWithRequired().CommonLookupFlags,
-	)
+	desc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.CommonLookupFlags{}).Immutable().Desc(ctx, id)
 	if err != nil {
 		return false, err
 	}

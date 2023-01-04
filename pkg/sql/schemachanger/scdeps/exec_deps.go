@@ -144,15 +144,12 @@ func (d *txnDeps) MustReadImmutableDescriptors(
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
 	flags := tree.CommonLookupFlags{
-		Required:       true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 		AvoidLeased:    true,
 		AvoidSynthetic: true,
 	}
-	objectDesc, err := d.descsCollection.GetImmutableDescriptorByID(
-		ctx, d.txn, id, flags,
-	)
+	objectDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Desc(ctx, id)
 	if err != nil {
 		return "", err
 	}

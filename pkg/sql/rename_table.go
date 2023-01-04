@@ -252,7 +252,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentError(
 	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
 ) error {
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, id, tree.CommonLookupFlags{Required: true})
+	desc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{}).Immutable().Desc(ctx, id)
 	if err != nil {
 		return err
 	}

@@ -643,12 +643,11 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 			continue // nothing to do
 		}
 
-		desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, descriptorUpdate.ID, tree.CommonLookupFlags{
-			Required:       true, // we want to error out for missing descriptors
+		desc, err := descsCol.ByID(txn).WithFlags(tree.CommonLookupFlags{
 			IncludeDropped: true,
 			IncludeOffline: true,
 			AvoidLeased:    true, // we want consistent reads
-		})
+		}).Immutable().Desc(ctx, descriptorUpdate.ID)
 
 		considerAsMissing := false
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
