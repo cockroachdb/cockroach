@@ -34,11 +34,11 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, _, err := col.GetImmutableDatabaseByID(ctx, txn, keys.SystemDatabaseID, tree.CommonLookupFlags{
+		_, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
 			AvoidLeased:    true,
 			IncludeDropped: true,
 			IncludeOffline: true,
-		})
+		}).Immutable().Database(ctx, keys.SystemDatabaseID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

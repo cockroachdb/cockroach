@@ -922,11 +922,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			// be unset by default) when executing the query constructed above. This is
 			// because the enum value may be used in a view expression, which is
 			// name resolved in the context of the type's database.
-			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+			dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, typeDesc.ParentID)
 			const validationErr = "could not validate removal of enum value %q"
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
@@ -1148,11 +1144,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, arrayTypeDesc.GetParentID(), tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, arrayTypeDesc.GetParentID())
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}

@@ -1182,7 +1182,7 @@ func getQualifiedTableNameObj(
 		IncludeDropped: true,
 		IncludeOffline: true,
 	}
-	_, db, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), flags)
+	db, err := col.ByID(txn).WithFlags(flags).Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return tree.TableName{}, err
 	}

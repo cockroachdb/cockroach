@@ -297,11 +297,7 @@ func resolveUDTsUsedByImportInto(
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, table.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		dbDesc, err = descriptors.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, table.GetParentID())
 		if err != nil {
 			return err
 		}

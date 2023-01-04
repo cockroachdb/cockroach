@@ -115,11 +115,11 @@ func getIngestingPrivilegesForTableOrSchema(
 				privilege.ListFromBitField(u.Privileges, privilegeType).ToBitField()
 		}
 	} else if descCoverage == tree.RequestedDescriptors {
-		_, parentDB, err := descsCol.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		parentDB, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
 			AvoidLeased:    true,
 			IncludeDropped: true,
 			IncludeOffline: true,
-		})
+		}).Immutable().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}

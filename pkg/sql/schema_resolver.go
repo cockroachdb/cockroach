@@ -238,13 +238,11 @@ func (sr *schemaResolver) GetQualifiedTableNameByID(
 func (sr *schemaResolver) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(),
-		tree.DatabaseLookupFlags{
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-			AvoidLeased:    true,
-		})
+	dbDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(tree.DatabaseLookupFlags{
+		IncludeOffline: true,
+		IncludeDropped: true,
+		AvoidLeased:    true,
+	}).Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -294,12 +292,11 @@ func (sr *schemaResolver) getQualifiedFunctionName(
 	ctx context.Context, fnDesc catalog.FunctionDescriptor,
 ) (*tree.FunctionName, error) {
 	lookupFlags := tree.CommonLookupFlags{
-		Required:       true,
 		IncludeOffline: true,
 		IncludeDropped: true,
 		AvoidLeased:    true,
 	}
-	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, fnDesc.GetParentID(), lookupFlags)
+	dbDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(lookupFlags).Immutable().Database(ctx, fnDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +372,7 @@ func (sr *schemaResolver) GetTypeDescriptor(
 	}
 	dbName := sr.CurrentDatabase()
 	if !descpb.IsVirtualTable(desc.GetID()) {
-		_, db, err := tc.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), flags)
+		db, err := tc.ByID(sr.txn).WithFlags(flags).Immutable().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}

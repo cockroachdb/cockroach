@@ -1278,15 +1278,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 // database's zone configuration to match what would have originally been set by
 // the multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx,
-		p.txn,
-		descpb.ID(id),
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		},
-	)
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, descpb.ID(id))
 	if err != nil {
 		return err
 	}
@@ -1592,11 +1584,10 @@ func getDBAndRegionEnumDescs(
 	useCache bool,
 	includeOffline bool,
 ) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+	dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
 		AvoidLeased:    !useCache,
-		Required:       true,
 		IncludeOffline: includeOffline,
-	})
+	}).Immutable().Database(ctx, dbID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2478,11 +2469,8 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 
 	// Retrieve the system database descriptor and ensure it supports
 	// multi-region
-	options := tree.CommonLookupFlags{
-		AvoidLeased: true,
-		Required:    true,
-	}
-	_, systemDB, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, keys.SystemDatabaseID, options)
+	options := tree.CommonLookupFlags{AvoidLeased: true}
+	systemDB, err := p.Descriptors().ByID(p.txn).WithFlags(options).Immutable().Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return err
 	}

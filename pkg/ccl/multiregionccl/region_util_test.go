@@ -124,8 +124,7 @@ func getEnumMembers(
 	t.Helper()
 	enumMembers := make(map[string][]byte)
 	err := sql.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID,
-			tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, dbID)
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		require.NoError(t, err)

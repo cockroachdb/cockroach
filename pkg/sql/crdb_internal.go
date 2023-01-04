@@ -504,10 +504,9 @@ CREATE TABLE crdb_internal.tables (
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
 				flags := p.CommonLookupFlagsRequired()
-				flags.Required = false
 				flags.IncludeOffline = true
-				ok, db, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID, flags)
-				if !ok || err != nil {
+				db, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Database(ctx, dbID)
+				if err != nil {
 					return false, err
 				}
 				return crdbInternalTablesDatabaseLookupFunc(ctx, p, db, addRow)
@@ -4039,10 +4038,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				_, database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, descpb.ID(id), tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+				database, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -7096,8 +7092,8 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		ok, dbDesc, err := desc.GetImmutableDatabaseByID(ctx, p.txn, tableDesc.GetParentID(), tree.DatabaseLookupFlags{})
-		if err != nil || !ok {
+		dbDesc, err := desc.ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, tableDesc.GetParentID())
+		if err != nil {
 			return nil, err
 		}
 

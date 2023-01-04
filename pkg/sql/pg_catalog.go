@@ -1063,9 +1063,7 @@ type oneAtATimeSchemaResolver struct {
 func (r oneAtATimeSchemaResolver) getDatabaseByID(
 	id descpb.ID,
 ) (catalog.DatabaseDescriptor, error) {
-	_, desc, err := r.p.Descriptors().GetImmutableDatabaseByID(
-		r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{Required: true},
-	)
+	desc, err := r.p.Descriptors().ByID(r.p.txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(r.ctx, id)
 	return desc, err
 }
 

@@ -61,15 +61,7 @@ func newDatabaseRegionChangeFinalizer(
 
 	var regionalByRowTables []*tabledesc.Mutable
 	if err := func() error {
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			dbID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, dbID)
 		if err != nil {
 			return err
 		}
@@ -173,15 +165,7 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 
 	descsCol := r.localPlanner.Descriptors()
 
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx,
-		txn,
-		r.dbID,
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		},
-	)
+	dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, r.dbID)
 	if err != nil {
 		return err
 	}

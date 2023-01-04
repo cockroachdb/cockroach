@@ -313,7 +313,7 @@ func cleanupTempSchemaObjects(
 					if err != nil {
 						return err
 					}
-					_, db, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dTableDesc.GetParentID(), flags)
+					db, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}

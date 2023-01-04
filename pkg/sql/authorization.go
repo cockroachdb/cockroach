@@ -758,8 +758,7 @@ func (p *planner) canCreateOnSchema(
 			// The caller wishes to skip this check.
 			return nil
 		}
-		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, dbID)
 		if err != nil {
 			return err
 		}

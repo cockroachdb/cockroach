@@ -157,9 +157,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	// we can fetch the fully qualified names.
 	if objectDesc.DescriptorType() != catalog.Database &&
 		objectDesc.DescriptorType() != catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(
-			ctx, d.txn, objectDesc.GetParentID(), flags,
-		)
+		databaseDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Database(ctx, objectDesc.GetParentID())
 		if err != nil {
 			return "", err
 		}
@@ -178,9 +176,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	} else if objectDesc.DescriptorType() == catalog.Database {
 		return objectDesc.GetName(), nil
 	} else if objectDesc.DescriptorType() == catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(ctx,
-			d.txn, objectDesc.GetParentID(), flags,
-		)
+		databaseDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Database(ctx, objectDesc.GetParentID())
 		if err != nil {
 			return "", err
 		}

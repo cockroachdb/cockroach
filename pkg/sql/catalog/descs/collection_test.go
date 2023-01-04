@@ -252,7 +252,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Equal(t, dbID, immByName.GetID())
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
-			_, immByID, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
+			immByID, err := descriptors.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByName, immByID)
 
@@ -282,7 +282,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Equal(t, mut.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), immByNameAfter.DescriptorProto())
 
-			_, immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
+			immByIDAfter, err := descriptors.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
 
@@ -1225,7 +1225,7 @@ SELECT id
 		newDB := dbdesc.NewInitial(newDBID, "newDB", username.RootUserName())
 		descriptors.AddSyntheticDescriptor(newDB)
 
-		_, curDatabase, err := descriptors.GetImmutableDatabaseByID(ctx, txn, curDatabaseID, tree.DatabaseLookupFlags{})
+		curDatabase, err := descriptors.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, curDatabaseID)
 		if err != nil {
 			return err
 		}

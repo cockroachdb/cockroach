@@ -154,8 +154,7 @@ func upgradeSetUpForTableOrView(
 	}
 
 	// Get the database of the table to pass to the planner constructor.
-	_, dbDesc, err := descriptors.GetImmutableDatabaseByID(
-		ctx, txn, tableDesc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := descriptors.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		return nil, nil, nil, err
 	}

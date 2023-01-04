@@ -133,11 +133,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, tbDesc.GetParentID(), tree.CommonLookupFlags{
+		dbDesc, err = col.ByID(txn).WithFlags(tree.CommonLookupFlags{
 			AvoidLeased:    true,
 			IncludeDropped: true,
 			IncludeOffline: true,
-		})
+		}).Immutable().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -303,11 +303,11 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, tbDesc.GetParentID(), tree.CommonLookupFlags{
+		dbDesc, err = col.ByID(txn).WithFlags(tree.CommonLookupFlags{
 			AvoidLeased:    true,
 			IncludeDropped: true,
 			IncludeOffline: true,
-		})
+		}).Immutable().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 

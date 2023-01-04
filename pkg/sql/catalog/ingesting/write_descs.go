@@ -239,12 +239,10 @@ func WriteDescriptors(
 func processTableForMultiRegion(
 	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, table catalog.TableDescriptor,
 ) error {
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
-			Required:       true,
-			AvoidLeased:    true,
-			IncludeOffline: true,
-		})
+	dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
+		AvoidLeased:    true,
+		IncludeOffline: true,
+	}).Immutable().Database(ctx, table.GetParentID())
 	if err != nil {
 		return err
 	}

@@ -438,9 +438,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 
 	dbID := desc.GetParentID()
-	_, dbDesc, err := oc.planner.Descriptors().GetImmutableDatabaseByID(
-		ctx, txn, dbID, tree.DatabaseLookupFlags{AvoidLeased: true},
-	)
+	dbDesc, err := oc.planner.Descriptors().ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}

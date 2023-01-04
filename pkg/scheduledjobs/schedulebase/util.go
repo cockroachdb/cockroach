@@ -191,13 +191,9 @@ func FullyQualifyTables(
 				}
 
 				// Resolve the database.
-				found, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, tableDesc.GetParentID(),
-					tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := col.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, tableDesc.GetParentID())
 				if err != nil {
 					return err
-				}
-				if !found {
-					return errors.Newf("database of target table %s could not be resolved", tp.String())
 				}
 
 				// Resolve the schema.

@@ -134,7 +134,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				}
 
 				// The public schema is expected to always be present in the database for 22.2+.
-				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, details.ParentID, tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, details.ParentID)
 				if err != nil {
 					return err
 				}
@@ -149,8 +149,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 				// Telemetry for multi-region.
 				for _, table := range preparedDetails.Tables {
-					_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-						ctx, txn, table.Desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+					dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, table.Desc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -753,10 +752,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) (err error) {
-				_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+				dbDesc, err = descriptors.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, parentID)
 				if err != nil {
 					return err
 				}

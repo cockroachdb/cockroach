@@ -75,7 +75,7 @@ func (p *planner) createDatabase(
 				IncludeDropped: true,
 				IncludeOffline: true,
 			}
-			_, desc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, dbID, flags)
+			desc, err := p.Descriptors().ByID(p.txn).WithFlags(flags).Immutable().Database(ctx, dbID)
 			if err != nil {
 				return nil, false, err
 			}

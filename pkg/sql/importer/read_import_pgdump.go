@@ -278,10 +278,7 @@ func createPostgresSchemas(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		schemaDescs = nil // reset for retries
-		_, dbDesc, err := descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+		dbDesc, err := descriptors.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, parentID)
 		if err != nil {
 			return err
 		}
@@ -877,11 +874,11 @@ func readPostgresStmt(
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.CommonLookupFlags{
+				dbDesc, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
 					AvoidLeased:    true,
 					IncludeDropped: true,
 					IncludeOffline: true,
-				})
+				}).Immutable().Database(ctx, parentID)
 				if err != nil {
 					return err
 				}

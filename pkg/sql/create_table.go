@@ -445,15 +445,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-			params.ctx,
-			params.p.txn,
-			desc.ParentID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(params.ctx, desc.ParentID)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}

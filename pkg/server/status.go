@@ -2470,10 +2470,7 @@ func (s *statusServer) HotRangesV2(
 					} else {
 						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
 							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
-								commonLookupFlags := tree.CommonLookupFlags{
-									Required:    false,
-									AvoidLeased: true,
-								}
+								commonLookupFlags := tree.CommonLookupFlags{AvoidLeased: true}
 								desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
 									CommonLookupFlags: commonLookupFlags,
 								})
@@ -2494,9 +2491,9 @@ func (s *statusServer) HotRangesV2(
 									}
 								}
 
-								if ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags); err != nil {
+								if dbDesc, err := col.ByID(txn).WithFlags(commonLookupFlags).Immutable().Database(ctx, desc.GetParentID()); err != nil {
 									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
-								} else if ok {
+								} else {
 									dbName = dbDesc.GetName()
 								}
 

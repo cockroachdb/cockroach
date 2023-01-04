@@ -195,9 +195,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			ctx, p.txn, *specifier.DatabaseName, tree.DatabaseLookupFlags{Required: true},
 		)
 	} else if specifier.DatabaseOID != nil {
-		_, database, err := p.Descriptors().GetImmutableDatabaseByID(
-			ctx, p.txn, descpb.ID(*specifier.DatabaseOID), tree.DatabaseLookupFlags{},
-		)
+		database, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, descpb.ID(*specifier.DatabaseOID))
 		// When a DatabaseOID is specified and the database is not found,
 		// we return NULL.
 		if err != nil && sqlerrors.IsUndefinedDatabaseError(err) {
@@ -629,11 +627,7 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 func (p *planner) getQualifiedSchemaName(
 	ctx context.Context, desc catalog.SchemaDescriptor,
 ) (*tree.ObjectNamePrefix, error) {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -650,11 +644,7 @@ func (p *planner) getQualifiedSchemaName(
 func (p *planner) getQualifiedTypeName(
 	ctx context.Context, desc catalog.TypeDescriptor,
 ) (*tree.TypeName, error) {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}

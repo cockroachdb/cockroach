@@ -104,9 +104,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	) error {
 		// Add a hack to not wait for one version on the descriptors.
 		defer descsCol.ReleaseAll(ctx)
-		_, defaultDB, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, namesToID["defaultdb"], tree.CommonLookupFlags{AvoidLeased: true},
-		)
+		defaultDB, err := descsCol.ByID(txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, namesToID["defaultdb"])
 		if err != nil {
 			return err
 		}
