@@ -52,7 +52,7 @@ id  name    status
 query ITT colnames
 SHOW TENANT "tenant-one"
 ----
-id  name          status
+id  name        status
 2   tenant-one  ACTIVE
 
 query ITT colnames
@@ -73,13 +73,22 @@ SHOW TENANT three
 id  name   status
 4   three  ACTIVE
 
+query ITT colnames
+SHOW TENANTS
+----
+id  name        status
+1   system      ACTIVE
+2   tenant-one  ACTIVE
+3   two         ACTIVE
+4   three       ACTIVE
+
 statement error tenant "seven" does not exist
 SHOW TENANT seven
 
-statement error tenant "tenant-one" does not have an active replication job
+query error pq: tenant "tenant-one" does not have an active replication job
 SHOW TENANT "tenant-one" WITH REPLICATION STATUS
 
-statement error tenant "two" does not have an active replication job
+query error pq: tenant "two" does not have an active replication job
 SHOW TENANT two WITH REPLICATION STATUS
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
@@ -154,6 +163,9 @@ user testuser
 statement error only users with the admin role are allowed to destroy tenant
 DROP TENANT "not-allowed"
 
+statement error only users with the admin role are allowed to show tenant
+SHOW TENANTS
+
 user root
 
 subtest reclaim_name
@@ -187,3 +199,16 @@ statement ok
 CREATE TENANT "1";
 CREATE TENANT "a-b";
 CREATE TENANT "hello-100"
+
+query ITT colnames
+SHOW TENANTS
+----
+id   name             status
+1    system           ACTIVE
+2    tenant-one       ACTIVE
+3    two              ACTIVE
+4    three            ACTIVE
+8    to-be-reclaimed  ACTIVE
+9    1                ACTIVE
+10   a-b              ACTIVE
+11   hello-100        ACTIVE

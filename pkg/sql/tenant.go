@@ -201,6 +201,36 @@ func CreateTenantRecord(
 	)
 }
 
+// GetAllNonDropTenantIDs returns all tenants in the system table, excluding
+// those in the DROP state.
+func GetAllNonDropTenantIDs(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn,
+) ([]roachpb.TenantID, error) {
+	rows, err := execCfg.InternalExecutor.QueryBuffered(
+		ctx, "get-tenant-ids", txn, `
+		 SELECT id
+		 FROM system.tenants
+		 WHERE crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)->>'state' != 'DROP'
+		 ORDER BY id
+		 `)
+	if err != nil {
+		return nil, err
+	}
+
+	tenants := make([]roachpb.TenantID, 0, len(rows))
+	for _, tenant := range rows {
+		iTenantId := uint64(tree.MustBeDInt(tenant[0]))
+		tenantId, err := roachpb.MakeTenantID(iTenantId)
+		if err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(
+				err, "stored tenant ID %d does not convert to TenantID", iTenantId)
+		}
+		tenants = append(tenants, tenantId)
+	}
+
+	return tenants, nil
+}
+
 // GetTenantRecordByName retrieves a tenant with the provided name from
 // system.tenants.
 func GetTenantRecordByName(
