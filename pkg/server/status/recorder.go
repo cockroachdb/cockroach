@@ -318,7 +318,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	now := mr.clock.PhysicalNow()
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
-		format:         nodeTimeSeriesPrefix,
+		format:         fmt.Sprintf("%s.%s", mr.tenantID.String(), nodeTimeSeriesPrefix),
 		source:         strconv.FormatInt(int64(mr.mu.desc.NodeID), 10),
 		timestampNanos: now,
 	}
@@ -328,11 +328,14 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	for storeID, r := range mr.mu.storeRegistries {
 		storeRecorder := registryRecorder{
 			registry:       r,
-			format:         storeTimeSeriesPrefix,
+			format:         fmt.Sprintf("%s.%s", mr.tenantID.String(), storeTimeSeriesPrefix),
 			source:         strconv.FormatInt(int64(storeID), 10),
 			timestampNanos: now,
 		}
 		storeRecorder.record(&data)
+	}
+	for _, childRec := range mr.mu.tenantRecorders {
+		data = append(data, childRec.GetTimeSeriesData()...)
 	}
 	atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
 	return data
