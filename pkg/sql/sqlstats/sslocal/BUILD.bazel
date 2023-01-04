@@ -45,6 +45,7 @@ go_test(
     deps = [
         ":sslocal",
         "//pkg/base",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
