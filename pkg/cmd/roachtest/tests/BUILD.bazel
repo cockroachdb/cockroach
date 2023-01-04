@@ -202,7 +202,6 @@ go_library(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
