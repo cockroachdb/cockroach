@@ -42,7 +42,11 @@ type KVFetcher struct {
 var _ storage.NextKVer = &KVFetcher{}
 
 // newTxnKVFetcher creates a new txnKVFetcher.
+//
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
+// The fetcher only grows and shrinks the account according to its own use, so
+// the memory account can be shared by the caller with other components (as long
+// as there is no concurrency).
 func newTxnKVFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
@@ -102,7 +106,11 @@ func newTxnKVFetcher(
 }
 
 // NewKVFetcher creates a new KVFetcher.
+//
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
+// The fetcher only grows and shrinks the account according to its own use, so
+// the memory account can be shared by the caller with other components (as long
+// as there is no concurrency).
 func NewKVFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
