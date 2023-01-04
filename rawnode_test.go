@@ -1239,6 +1239,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...uint64) {
 	if applied < uint64(b.N) {
 		b.Fatalf("did not apply everything: %d < %d", applied, b.N)
 	}
+	b.ReportAllocs()
 	b.ReportMetric(float64(s.callStats.firstIndex)/float64(b.N), "firstIndex/op")
 	b.ReportMetric(float64(s.callStats.lastIndex)/float64(b.N), "lastIndex/op")
 	b.ReportMetric(float64(s.callStats.term)/float64(b.N), "term/op")

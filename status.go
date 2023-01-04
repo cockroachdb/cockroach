@@ -59,7 +59,7 @@ func getBasicStatus(r *raft) BasicStatus {
 		LeadTransferee: r.leadTransferee,
 	}
 	s.HardState = r.hardState()
-	s.SoftState = *r.softState()
+	s.SoftState = r.softState()
 	s.Applied = r.raftLog.applied
 	return s
 }
