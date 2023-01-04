@@ -13,8 +13,10 @@ package main
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,5 +43,16 @@ func TestMakeTestRegistry(t *testing.T) {
 		require.EqualValues(t, 4, s.CPUs)
 		require.True(t, s.TerminateOnMigration)
 	})
+}
 
+func TestPrometheus(t *testing.T) {
+	r, err := makeTestRegistry(spec.AWS, "foo", "zone123", true)
+	require.NoError(t, err)
+
+	f := r.PromFactory()
+
+	rawName := "restore/nodes=4/duration"
+	promName := registry.PromSub(rawName)
+	require.Equal(t, "restore_nodes_4_duration", promName)
+	f.NewGauge(prometheus.GaugeOpts{Namespace: prometheusNameSpace, Name: promName})
 }

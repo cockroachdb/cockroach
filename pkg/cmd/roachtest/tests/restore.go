@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -662,6 +663,9 @@ func registerRestore(r registry.Registry) {
 		},
 	})
 
+	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
+		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test"})
+
 	for _, sp := range []restoreSpecs{
 		{
 			name:     "restore/nodes=4",
@@ -720,10 +724,12 @@ func registerRestore(r registry.Registry) {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
+					startTime := timeutil.Now()
 					tick()
 					sp.run(ctx, c)
 					tick()
-
+					promLabel := registry.PromSub(strings.Replace(sp.name, "restore/", "", 1)) + "_seconds"
+					durationGauge.WithLabelValues(promLabel).Set(timeutil.Since(startTime).Seconds())
 					// Upload the perf artifacts to any one of the nodes so that the test
 					// runner copies it into an appropriate directory path.
 					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")

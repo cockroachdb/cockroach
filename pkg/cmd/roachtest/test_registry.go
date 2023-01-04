@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var loadTeams = func() (team.Map, error) {
@@ -43,6 +45,8 @@ type testRegistryImpl struct {
 	preferSSD    bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
+
+	promRegistry *prometheus.Registry
 }
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
@@ -55,6 +59,7 @@ func makeTestRegistry(
 		zones:        zones,
 		preferSSD:    preferSSD,
 		m:            make(map[string]*registry.TestSpec),
+		promRegistry: prometheus.NewRegistry(),
 	}
 	v := buildTag
 	if v == "" {
@@ -153,6 +158,9 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	}
 
 	return nil
+}
+func (r *testRegistryImpl) PromFactory() promauto.Factory {
+	return promauto.With(r.promRegistry)
 }
 
 // GetTests returns all the tests that match the given regexp.
