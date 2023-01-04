@@ -332,11 +332,7 @@ func allocateDescriptorRewrites(
 				} else {
 					// If we found an existing schema, then we need to remap all references
 					// to this schema to the existing one.
-					desc, err := col.GetImmutableSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					})
+					desc, err := col.ByID(txn).Get().Schema(ctx, id)
 					if err != nil {
 						return err
 					}
@@ -385,11 +381,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// Check privileges.
-				_, parentDB, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				})
+				parentDB, err := col.ByID(txn).Get().Database(ctx, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -454,11 +446,7 @@ func allocateDescriptorRewrites(
 						targetDB, typ.Name)
 				}
 				// Check privileges on the parent DB.
-				_, parentDB, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				})
+				parentDB, err := col.ByID(txn).Get().Database(ctx, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -706,11 +694,7 @@ func getDatabaseIDAndDesc(
 		return dbID, nil, errors.Errorf("a database named %q needs to exist", targetDB)
 	}
 	// Check privileges on the parent DB.
-	_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidLeased:    true,
-		IncludeDropped: true,
-		IncludeOffline: true,
-	})
+	dbDesc, err = col.ByID(txn).Get().Database(ctx, dbID)
 	if err != nil {
 		return 0, nil, errors.Wrapf(err,
 			"failed to lookup parent DB %d", errors.Safe(dbID))
@@ -2050,7 +2034,7 @@ func renameTargetDatabaseDescriptor(
 	}
 	db, ok := restoreDBs[0].(*dbdesc.Mutable)
 	if !ok {
-		return errors.AssertionFailedf("expected *dbdesc.Mutable but found %T", db)
+		return errors.AssertionFailedf("expected *dbdesc.mutable but found %T", db)
 	}
 	db.SetName(newDBName)
 	return nil

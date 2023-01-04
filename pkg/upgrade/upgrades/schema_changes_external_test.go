@@ -385,12 +385,7 @@ func testMigrationWithFailures(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) (err error) {
 				tn := tree.MakeTableNameWithSchema("test", "public", "test_table")
-				_, desc, err = descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+				_, desc, err = descs.PrefixAndTable(ctx, descriptors.ByName(txn).Get(), &tn)
 				return err
 			}))
 			tdb.Exec(t, "DROP TABLE test.test_table")

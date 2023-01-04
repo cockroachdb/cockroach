@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -1504,12 +1503,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		timeoutCtx, cancel := context.WithTimeout(ctx, base.DefaultDescriptorLeaseDuration/2)
 		defer cancel()
 		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			flags := tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required: true, AvoidLeased: true,
-				},
-			}
-			tbl, err := col.GetMutableTableByID(ctx, txn, tableDesc.GetID(), flags)
+			tbl, err := col.MutableByID(txn).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}

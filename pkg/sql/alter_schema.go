@@ -52,16 +52,11 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if n.Schema.ExplicitCatalog {
 		dbName = n.Schema.Catalog()
 	}
-	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
-		tree.DatabaseLookupFlags{Required: true})
+	db, err := p.Descriptors().MutableByName(p.txn).Database(ctx, dbName)
 	if err != nil {
 		return nil, err
 	}
-	schema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db,
-		string(n.Schema.SchemaName), tree.SchemaLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	schema, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, db, string(n.Schema.SchemaName))
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +68,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		flags := p.CommonLookupFlagsRequired()
-		desc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, schema.GetID(), flags)
+		desc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, schema.GetID())
 		if err != nil {
 			return nil, err
 		}
@@ -123,9 +117,8 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			return sqlerrors.NewSchemaAlreadyExistsError(newName)
 		}
 
-		lookupFlags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
 		if err := maybeFailOnDependentDescInRename(
-			params.ctx, params.p, n.db, n.desc, lookupFlags, catalog.Schema,
+			params.ctx, params.p, n.db, n.desc, false /* withLeased */, catalog.Schema,
 		); err != nil {
 			return err
 		}
@@ -173,7 +166,7 @@ func (p *planner) alterSchemaOwner(
 	}
 
 	// The user must also have CREATE privilege on the schema's database.
-	parentDBDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, scDesc.GetParentID())
+	parentDBDesc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, scDesc.GetParentID())
 	if err != nil {
 		return err
 	}

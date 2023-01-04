@@ -297,22 +297,13 @@ func resolveUDTsUsedByImportInto(
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, table.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		dbDesc, err = descriptors.ByID(txn).WithoutNonPublic().Get().Database(ctx, table.GetParentID())
 		if err != nil {
 			return err
 		}
 		typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+				immutDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}
@@ -323,12 +314,7 @@ func resolveUDTsUsedByImportInto(
 		}
 
 		for _, typeID := range typeIDs {
-			immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				},
-			})
+			immutDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Type(ctx, typeID)
 			if err != nil {
 				return err
 			}

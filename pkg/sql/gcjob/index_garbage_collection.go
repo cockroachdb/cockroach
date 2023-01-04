@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -122,15 +121,7 @@ func gcIndexes(
 		removeIndexZoneConfigs := func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			freshParentTableDesc, err := descriptors.GetMutableTableByID(
-				ctx, txn, parentID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						Required:       true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+			freshParentTableDesc, err := descriptors.MutableByID(txn).Table(ctx, parentID)
 			if err != nil {
 				return err
 			}
@@ -211,15 +202,7 @@ func deleteIndexZoneConfigsAfterGC(
 		removeIndexZoneConfigs := func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			freshParentTableDesc, err := descriptors.GetMutableTableByID(
-				ctx, txn, parentID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						Required:       true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+			freshParentTableDesc, err := descriptors.MutableByID(txn).Table(ctx, parentID)
 			if err != nil {
 				return err
 			}

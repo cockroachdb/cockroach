@@ -442,13 +442,7 @@ CREATE TABLE test.tt (x test.t);
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
 		if err := TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			typeDesc, err = col.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				},
-			})
+			typeDesc, err = col.ByID(txn).Get().Type(ctx, id)
 			return err
 		}); err != nil {
 			return tree.TypeName{}, nil, err

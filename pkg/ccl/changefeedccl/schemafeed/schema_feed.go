@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -273,9 +272,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		// Note that all targets are currently guaranteed to be tables.
 		return tf.targets.EachTableID(func(id descpb.ID) error {
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
+			tableDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -643,12 +642,7 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 			continue // nothing to do
 		}
 
-		desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, descriptorUpdate.ID, tree.CommonLookupFlags{
-			Required:       true, // we want to error out for missing descriptors
-			IncludeDropped: true,
-			IncludeOffline: true,
-			AvoidLeased:    true, // we want consistent reads
-		})
+		desc, err := descsCol.ByID(txn).Get().Desc(ctx, descriptorUpdate.ID)
 
 		considerAsMissing := false
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {

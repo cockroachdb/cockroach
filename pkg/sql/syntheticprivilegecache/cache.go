@@ -71,12 +71,7 @@ func New(
 func (c *Cache) Get(
 	ctx context.Context, txn *kv.Txn, col *descs.Collection, spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	_, desc, err := col.GetImmutableTableByName(
-		ctx,
-		txn,
-		syntheticprivilege.SystemPrivilegesTableName,
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), syntheticprivilege.SystemPrivilegesTableName)
 	if err != nil {
 		return nil, err
 	}
@@ -217,12 +212,7 @@ func (c *Cache) start(ctx context.Context) error {
 	)
 	if err := c.ief.DescsTxnWithExecutor(ctx, c.db, nil /* sessionData */, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (retErr error) {
-		_, systemPrivDesc, err := descsCol.GetImmutableTableByName(
-			ctx,
-			txn,
-			syntheticprivilege.SystemPrivilegesTableName,
-			tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, systemPrivDesc, err := descs.PrefixAndTable(ctx, descsCol.ByNameWithLeased(txn).Get(), syntheticprivilege.SystemPrivilegesTableName)
 		if err != nil {
 			return err
 		}

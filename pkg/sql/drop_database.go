@@ -61,14 +61,14 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: !n.IfExists})
+	if db, err := p.Descriptors().ByName(p.txn).MaybeGet().Database(ctx, string(n.Name)); err != nil {
+		return nil, err
+	} else if db == nil && n.IfExists {
+		return newZeroNode(nil /* columns */), nil
+	}
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
-	}
-	if dbDesc == nil {
-		// IfExists was specified and database was not found.
-		return newZeroNode(nil /* columns */), nil
 	}
 
 	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
@@ -83,12 +83,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		res, err := p.Descriptors().GetImmutableSchemaByName(
-			ctx, p.txn, dbDesc, schema, tree.SchemaLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		res, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, dbDesc, schema)
 		if err != nil {
 			return nil, err
 		}
@@ -167,9 +162,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, err := p.Descriptors().GetMutableSchemaByID(
-				ctx, p.txn, schemaToDelete.GetID(), p.CommonLookupFlagsRequired(),
-			)
+			mutDesc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, schemaToDelete.GetID())
 			if err != nil {
 				return err
 			}
@@ -296,7 +289,7 @@ func (p *planner) accumulateOwnedSequences(
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
-			ownedSeqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, seqID, p.txn)
+			ownedSeqDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, seqID)
 			if err != nil {
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
@@ -323,7 +316,7 @@ func (p *planner) accumulateCascadingViews(
 	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
-		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, ref.ID)
+		desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, ref.ID)
 		if err != nil {
 			return err
 		}

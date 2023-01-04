@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -70,8 +70,14 @@ func (g *testSchemaGenerator) objNamesInSchema(
 func (g *testSchemaGenerator) lookupSchema(
 	ctx context.Context, db catalog.DatabaseDescriptor, scName string, required bool,
 ) catalog.SchemaDescriptor {
-	sc, err := g.ext.coll.GetImmutableSchemaByName(ctx,
-		g.ext.txn, db, scName, tree.SchemaLookupFlags{Required: required})
+	b := g.ext.coll.ByName(g.ext.txn)
+	var bng descs.ByNameGetter
+	if required {
+		bng = b.Get()
+	} else {
+		bng = b.MaybeGet()
+	}
+	sc, err := bng.Schema(ctx, db, scName)
 	if err != nil {
 		panic(genError{err})
 	}
@@ -80,8 +86,7 @@ func (g *testSchemaGenerator) lookupSchema(
 
 // lookupSchema looks up the descriptor for the given database.
 func (g *testSchemaGenerator) lookupDatabase(ctx context.Context, dbName string) *dbdesc.Mutable {
-	db, err := g.ext.coll.GetMutableDatabaseByName(ctx,
-		g.ext.txn, dbName, tree.DatabaseLookupFlags{Required: true})
+	db, err := g.ext.coll.MutableByName(g.ext.txn).Database(ctx, dbName)
 	if err != nil {
 		panic(genError{err})
 	}

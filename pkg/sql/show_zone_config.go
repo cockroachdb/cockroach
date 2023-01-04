@@ -103,12 +103,7 @@ func getShowZoneConfigRow(
 			return nil, err
 		}
 	} else if zoneSpecifier.Database != "" {
-		database, err := p.Descriptors().GetImmutableDatabaseByName(
-			ctx,
-			p.txn,
-			string(zoneSpecifier.Database),
-			tree.DatabaseLookupFlags{Required: true},
-		)
+		database, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(zoneSpecifier.Database))
 		if err != nil {
 			return nil, err
 		}

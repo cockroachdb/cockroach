@@ -128,7 +128,8 @@ func ResolveMutableExistingTableObject(
 	requiredType tree.RequiredTableKind,
 ) (prefix catalog.ResolvedObjectPrefix, res *tabledesc.Mutable, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:    tree.CommonLookupFlags{Required: required, RequireMutable: true},
+		Required:             required,
+		RequireMutable:       true,
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
 	}
@@ -151,7 +152,8 @@ func ResolveMutableType(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
 ) (catalog.ResolvedObjectPrefix, *typedesc.Mutable, error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: true},
+		Required:          required,
+		RequireMutable:    true,
 		DesiredObjectKind: tree.TypeObject,
 	}
 	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)
@@ -198,7 +200,14 @@ func ResolveExistingObject(
 					return nil, prefix, sqlerrors.NewUndefinedSchemaError(un.Schema())
 				}
 			}
-			return nil, prefix, sqlerrors.NewUndefinedObjectError(un, lookupFlags.DesiredObjectKind)
+			switch lookupFlags.DesiredObjectKind {
+			case tree.TableObject:
+				return nil, prefix, sqlerrors.NewUndefinedRelationError(un)
+			case tree.TypeObject:
+				return nil, prefix, sqlerrors.NewUndefinedTypeError(un)
+			default:
+				return nil, prefix, errors.AssertionFailedf("unknown object kind %d", lookupFlags.DesiredObjectKind)
+			}
 		}
 		return nil, prefix, nil
 	}
@@ -493,10 +502,8 @@ func ResolveIndex(
 ) {
 	if tableIndexName.Table.ObjectName != "" {
 		lflags := tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:       flag.Required,
-				IncludeOffline: flag.IncludeOfflineTable,
-			},
+			Required:             flag.Required,
+			IncludeOffline:       flag.IncludeOfflineTable,
 			DesiredObjectKind:    tree.TableObject,
 			DesiredTableDescKind: tree.ResolveRequireTableOrViewDesc,
 		}
@@ -715,9 +722,7 @@ func findTableContainingIndex(
 	}
 
 	lflags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			IncludeOffline: true,
-		},
+		IncludeOffline:       true,
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: tree.ResolveAnyTableKind,
 	}

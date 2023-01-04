@@ -655,7 +655,7 @@ func GetSystemTableIDsToExcludeFromClusterBackup(
 		if backupConfig.shouldIncludeInClusterBackup == optOutOfClusterBackup {
 			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				tn := tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(systemTableName))
-				found, desc, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+				_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).MaybeGet(), &tn)
 				isNotFoundErr := errors.Is(err, catalog.ErrDescriptorNotFound)
 				if err != nil && !isNotFoundErr {
 					return err
@@ -664,7 +664,7 @@ func GetSystemTableIDsToExcludeFromClusterBackup(
 				// Some system tables are not present when running inside a secondary
 				// tenant egs: `systemschema.TenantsTable`. In such situations we are
 				// print a warning and move on.
-				if !found || isNotFoundErr {
+				if desc == nil || isNotFoundErr {
 					log.Warningf(ctx, "could not find system table descriptor %q", systemTableName)
 					return nil
 				}

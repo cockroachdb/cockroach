@@ -117,17 +117,11 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if !newTn.ExplicitSchema && !newTn.ExplicitCatalog {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
-		targetDbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-			string(oldTn.CatalogName), tree.DatabaseLookupFlags{Required: true})
+		targetDbDesc, err = p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(oldTn.CatalogName))
 		if err != nil {
 			return err
 		}
-
-		targetSchemaDesc, err = p.Descriptors().GetImmutableSchemaByName(
-			ctx, p.txn, targetDbDesc, oldTn.Schema(), tree.SchemaLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		targetSchemaDesc, err = p.Descriptors().ByName(p.txn).Get().Schema(ctx, targetDbDesc, oldTn.Schema())
 		if err != nil {
 			return err
 		}
@@ -252,7 +246,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentError(
 	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
 ) error {
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, id, tree.CommonLookupFlags{Required: true})
+	desc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Desc(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -324,13 +318,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tableID = fk.GetOriginTableID()
 		}
 
-		referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				},
-			})
+		referencedTable, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
@@ -354,12 +342,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	type crossDBDepType int
 	const owner, reference crossDBDepType = 0, 1
 	checkDepForCrossDbRef := func(depID descpb.ID, depType crossDBDepType) error {
-		dependentObject, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, depID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				}})
+		dependentObject, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Table(ctx, depID)
 		if err != nil {
 			return err
 		}
@@ -455,12 +438,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		if allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
 			return nil
 		}
-		dependentObject, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, depID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				}})
+		dependentObject, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Type(ctx, depID)
 		if err != nil {
 			return err
 		}

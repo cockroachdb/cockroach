@@ -18,7 +18,6 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
-        "//pkg/sql/sem/tree",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlutil",
         "//pkg/util/hlc",

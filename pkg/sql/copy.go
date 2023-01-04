@@ -246,7 +246,11 @@ func newCopyMachine(
 		)
 	}
 
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	flags := tree.ObjectLookupFlags{
+		Required:             true,
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: tree.ResolveRequireTableDesc,
+	}
 	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, c.p, &n.Table, flags)
 	if err != nil {
 		return nil, err

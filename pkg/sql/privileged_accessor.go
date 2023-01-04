@@ -80,16 +80,7 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 // to check the permissions of a descriptor given its ID, or the id given
 // is not a descriptor of a table or database.
 func (p *planner) checkDescriptorPermissions(ctx context.Context, id descpb.ID) error {
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(
-		ctx, p.txn, id,
-		tree.CommonLookupFlags{
-			IncludeDropped: true,
-			IncludeOffline: true,
-			// Note that currently the ByID API implies required regardless of whether it
-			// is set. Set it just to be explicit.
-			Required: true,
-		},
-	)
+	desc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Desc(ctx, id)
 	if err != nil {
 		// Filter the error due to the descriptor not existing.
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
